@@ -131,16 +131,12 @@ function filesOfSize(folder: string, size: number, since: number): string[] {
 
 /**
  * The files of the archive's size the client may have left since this case began, in its temporary folder and in the
- * run's user data. Only files changed since the case began count, so another run's files never do.
+ * launch's user data. Only files changed since the case began count, so another run's files never do.
  */
 export function archiveCopiesLeft(label: string, size: number): string[] {
   const since = caseStart(label);
   return [
     ...filesOfSize(tmpdir(), size, since),
-    ...filesOfSize(
-      path.join(runVariable('HARNESS_RUN_FOLDER'), 'user-data'),
-      size,
-      since,
-    ),
+    ...filesOfSize(runVariable('HARNESS_USER_DATA'), size, since),
   ];
 }

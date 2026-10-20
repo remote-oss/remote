@@ -384,6 +384,9 @@ const LAUNCH_ORDER = [
   'no-proposals',
   'explorer',
   'explorer-alone',
+  'explorer-trust',
+  'explorer-home',
+  'explorer-rows',
   'explorer-no-proposals',
   'explorer-standdown',
   'trust',
@@ -883,8 +886,12 @@ describe('acceptance', () => {
       workspace.root,
       '/run/ssh_config',
       {'remote.SSH.useLocalServer': false},
-      undefined,
-      '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+      {
+        label: 'platform-tail',
+        runner: 'runner-remote',
+        suite: 'suite-platform',
+        settingsTail: '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+      },
     );
     strictEqual(
       readFileSync(
@@ -892,6 +899,50 @@ describe('acceptance', () => {
         'utf8',
       ),
       '{\n  "remote.SSH.configFile": "/run/ssh_config",\n  "remote.SSH.useLocalServer": false\n  "acceptance.broken": 1 "acceptance.brokenToo": 2\n}\n',
+    );
+  });
+
+  it("tooling-66: a plain launch's settings go into its own profile, and a runner launch's into the run's, each with the launch's copy", () => {
+    writeUserSettings(
+      workspace.root,
+      '/run/ssh_config',
+      {'remote.explorerType': 'ssh'},
+      {label: 'explorer', kind: 'plain', suite: 'explorer'},
+    );
+    writeUserSettings(
+      workspace.root,
+      '/run/ssh_config',
+      {},
+      {
+        label: 'remote',
+        runner: 'runner-remote',
+        suite: 'suite-remote',
+      },
+    );
+    function settingsOf(...names: string[]): unknown {
+      return JSON.parse(
+        readFileSync(path.join(workspace.root, ...names), 'utf8'),
+      );
+    }
+    deepStrictEqual(
+      [
+        settingsOf('user-data-explorer', 'User', 'settings.json'),
+        settingsOf('explorer-settings.json'),
+        settingsOf('user-data', 'User', 'settings.json'),
+        settingsOf('remote-settings.json'),
+      ],
+      [
+        {
+          'remote.SSH.configFile': '/run/ssh_config',
+          'remote.explorerType': 'ssh',
+        },
+        {
+          'remote.SSH.configFile': '/run/ssh_config',
+          'remote.explorerType': 'ssh',
+        },
+        {'remote.SSH.configFile': '/run/ssh_config'},
+        {'remote.SSH.configFile': '/run/ssh_config'},
+      ],
     );
   });
 
@@ -976,6 +1027,9 @@ describe('acceptance', () => {
           ...[
             'explorer',
             'explorer-alone',
+            'explorer-trust',
+            'explorer-home',
+            'explorer-rows',
             'explorer-no-proposals',
             'explorer-standdown',
           ].map(label => ({
@@ -1517,35 +1571,39 @@ describe('acceptance', () => {
       );
     });
 
-    it("each launch runs the helper stop program on the run's user-data folder once it has run, when it holds records", async () => {
-      const userData = path.join(workspace.root, 'user-data');
-      const namespaceFolder = path.join(
-        userData,
-        'User',
-        'globalStorage',
-        'ext.a',
-        'registry',
-        'watch',
+    it("each launch runs the helper stop program on its user-data folder once it has run, when it holds records: the run's for a runner launch, its own for a plain one", async () => {
+      const userDataFolders = ['user-data', 'user-data-containers'].map(name =>
+        path.join(workspace.root, name),
       );
-      mkdirSync(namespaceFolder, {recursive: true});
-      writeFileSync(
-        path.join(
-          namespaceFolder,
-          `${createHash('sha256').update('one').digest('hex').slice(0, 32)}.json`,
-        ),
-        JSON.stringify({
-          namespace: 'watch',
-          recordKey: 'one',
-          nonce: 'n1',
-          endpoint: '/run/one.sock',
-        }),
-      );
+      for (const userData of userDataFolders) {
+        const namespaceFolder = path.join(
+          userData,
+          'User',
+          'globalStorage',
+          'ext.a',
+          'registry',
+          'watch',
+        );
+        mkdirSync(namespaceFolder, {recursive: true});
+        writeFileSync(
+          path.join(
+            namespaceFolder,
+            `${createHash('sha256').update('one').digest('hex').slice(0, 32)}.json`,
+          ),
+          JSON.stringify({
+            namespace: 'watch',
+            recordKey: 'one',
+            nonce: 'n1',
+            endpoint: '/run/one.sock',
+          }),
+        );
+      }
       const {calls, command} = recordingCommand();
       const {sleep} = recordingSleeper();
       await runLaunches(
         workspace.root,
         '/run/ssh_config',
-        [TERMINAL, REMOTE],
+        [TERMINAL, CONTAINERS, REMOTE],
         command,
         '',
         sleep,
@@ -1554,10 +1612,21 @@ describe('acceptance', () => {
           return Promise.resolve({exitCode: 0, output: ''});
         },
       );
-      const stopLine = [process.execPath, STOP_PROGRAM, userData].join(' ');
+      const [sharedStop, ownStop] = userDataFolders.map(userData =>
+        [process.execPath, STOP_PROGRAM, userData].join(' '),
+      );
       deepStrictEqual(
-        calls.filter(call => call.startsWith('ran ') || call === stopLine),
-        ['ran terminal', stopLine, 'ran remote', stopLine],
+        calls.filter(
+          call => call.startsWith('ran ') || call.includes(STOP_PROGRAM),
+        ),
+        [
+          'ran terminal',
+          sharedStop,
+          'ran containers',
+          ownStop,
+          'ran remote',
+          sharedStop,
+        ],
       );
     });
 
@@ -2021,6 +2090,14 @@ describe('acceptance', () => {
         acceptanceConfiguration('/repo', {HARNESS_CONTAINER: CONTAINER}).env
           .HARNESS_CONTAINER,
         CONTAINER,
+      );
+    });
+
+    it("tooling-66: tells the extension host the run's user-data folder, the one its editor starts on", () => {
+      strictEqual(
+        acceptanceConfiguration('/repo', {HARNESS_RUN_FOLDER: '/run'}).env
+          .HARNESS_USER_DATA,
+        '/run/user-data',
       );
     });
   });
@@ -2629,7 +2706,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('D-85: a launch with no environment adds its log file and its windows folder to the harness variables', () => {
+    it("D-85, tooling-66: a launch with no environment adds its log file, its windows folder and the run's user-data folder to the harness variables", () => {
       deepStrictEqual(
         vscodiumConfiguration(
           workspace.root,
@@ -2646,6 +2723,7 @@ describe('acceptance', () => {
             'agent',
             'pids',
           ),
+          HARNESS_USER_DATA: path.join('/run', 'user-data'),
         },
       );
     });

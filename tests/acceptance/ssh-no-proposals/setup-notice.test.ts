@@ -28,24 +28,6 @@ const SETUP_START =
 const MISSING_LINE =
   'Missing proposed APIs: resolvers, tunnels, terminalDataWriteEvent';
 
-/**
- * Waits for `found` and, when it times out, says why the notice may be missing: the gate tells a profile once, and a
- * "Not Now" in an earlier launch of the run (the VSCodium `no-proposals` launch) keeps it silent until a probe passes.
- */
-async function noticeWithin(
-  description: string,
-  found: () => Promise<boolean>,
-): Promise<void> {
-  try {
-    await waitFor(description, found, NOTICE_MILLISECONDS);
-  } catch (caught) {
-    throw new Error(
-      `${caught instanceof Error ? caught.message : String(caught)}; an earlier launch of this run that dismissed the setup notice silences it for the profile: make this launch after genuine, or in a run without no-proposals`,
-      {cause: caught},
-    );
-  }
-}
-
 /** How long a row waits for the notice, and for a window that must not open. */
 const NOTICE_MILLISECONDS = 20_000;
 
@@ -100,12 +82,13 @@ describe('genuine VS Code without the proposed APIs (card connect-84)', function
     await openWindow('harness', 'np-direct');
     try {
       // Core's purge hides the toast after about 10 s beside its own sticky offer, so the row reads the centre.
-      await noticeWithin(
+      await waitFor(
         'the setup notice in the notification centre of window np-direct',
         async () =>
           (await notificationCentre('np-direct')).some(text =>
             text.startsWith(SETUP_START),
           ),
+        NOTICE_MILLISECONDS,
       );
       deepStrictEqual(
         {

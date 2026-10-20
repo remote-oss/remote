@@ -76,15 +76,10 @@ describe('a remote-internal command in a fresh window (F-2202)', function () {
   it("F-2202 AC-24: a keybinding's remote-internal.getConfiguredHostnames activates the extension in a fresh window and changes nothing", async () => {
     const runFolder = variable('HARNESS_RUN_FOLDER');
     const sshConfig = variable('HARNESS_SSH_CONFIG');
-    const settingsPath = path.join(
-      runFolder,
-      'user-data',
-      'User',
-      'settings.json',
-    );
+    const userData = variable('HARNESS_USER_DATA');
+    const settingsPath = path.join(userData, 'User', 'settings.json');
     const storagePath = path.join(
-      runFolder,
-      'user-data',
+      userData,
       'User',
       'globalStorage',
       'remote-oss.remote-ssh',

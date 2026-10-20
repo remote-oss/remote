@@ -11,6 +11,7 @@ import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
+import type {AuthoringPort} from './author-first.ts';
 import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
 
@@ -35,7 +36,7 @@ interface EnginePort {
 }
 
 /** Everything the command needs. */
-export interface ReopenPorts {
+export interface ReopenPorts extends AuthoringPort {
   /** The guard of the open path, which holds the command back while a proposal it needs is missing. */
   gate: OpenGatePorts;
   window: WindowPort;

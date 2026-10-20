@@ -22,10 +22,11 @@ C2 (the engine CLI).
 | C8 recovery | classifies a setup failure into F-0410's dialog variants (S018, S019, S034, S420) with Retry, Edit and More Actions... | F-0410 (the dialog only) | lib-authority's `FailurePresenter` |
 | C10 container-connector | the `Connector` behind lib-authority's resolver host for `dev-container`: runs C2's checks, C7, the server install and start over C11 through lib-server, the host listener and relay; maps every failure to `Failed` | F-0502, F-0503 (with lib-server), F-0504's facts, F-0505's install list | lib-authority, lib-server, lib-forwarding (the host listener), C2, C7, C11 |
 | C11 exec-channel | a lib-host `HostChannel` over `docker exec -i`; the per-connection exec relay into the container's loopback | none of its own (contributes to F-0502, F-0503) | C2 |
+| C14 authoring (increment 2, remote#1242) | the wizard that adds a dev container configuration to a folder: the catalogue fetch, the folder's facts (a bounded walk), the stage list (`stagesOf`, in `wizard-stages.ts`) and its runner (`walkStages`, `runWizard`), then the template write; never reloads, opens an editor or starts a container, so each caller continues: the Add Dev Container Configuration Files command (preview and reopen notification), Open Folder in Container and Reopen in Container (C6, which choose again over the written file) and S113's Use Template (C4) | F-0801, F-0802 | the catalogue port, C3's `applyTemplate` and `templateMetadata`, the file-copy port |
 | C15 explorer-data (0.4, remote#960) | the "Dev Containers" view (`targetsContainers`) and the "Details (Containers)" view (`detailsContainers`) in core's `remote` view container: a pure model from the containers' facts, the window's facts and the time to the tree; the tree adapter, created only when `<viewId>.focus` exists; the rebuild on Refresh, on coalesced Docker container events (only while the view is visible) and on becoming visible, never on a timer; the row actions of F-0902 that 0.4 builds | F-0906 (registration of those two views), F-0901, F-0902 (open, start, stop, remove, inspect, log, show details), F-0903 | C2 (`run`, and `spawn` for `docker events`), C7's `lifecycle/labels.ts` (exported, never copied), C10's connection facts for the window's own container, C6 and C5 for the open actions, lib-authority's opener; no `lib-companion` (F-1404) |
 
-C9 (shutdown), C12 (attach), C13 (volumes), C14 (authoring), C16 (personalization), C17 (ports), C18 (diagnostics) and
-C19 (remote engines) aren't built in release 1. The brief's increment 2 and "Later" lists say when. C15 is built for
+C9 (shutdown), C12 (attach), C13 (volumes), C16 (personalization), C17 (ports), C18 (diagnostics) and
+C19 (remote engines) aren't built in release 1; C14 (authoring) is built in increment 2. The brief's increment 2 and "Later" lists say when. C15 is built for
 0.4 without F-0904 (Dev Volumes, with C13), F-0905 (Clean Up) and F-0902's attach and recent-folder actions (with C12).
 C15 spawns nothing itself: its `docker events` process is C2's.
 
@@ -47,6 +48,9 @@ C15 spawns nothing itself: its `docker events` process is C2's.
    failed rebuild still shows F-0410's dialog in the container window.
 6. **No code of ours runs in the container** except lib-server's install and start scripts, C11's relay script, and
    C10's root step for the `vscode` volume's shared folders (contracts §5.2; amended 2026-10-14) (brief ruling 1).
+7. **What C14 does and its callers do:** C14 writes the configuration and ends. Opening it in an editor, offering the reopen
+   notification and reloading into the container are the callers' (C6 and the command), after the wizard's outcome; trust is
+   asked where the caller asked it before (brief ruling 2): Reopen asks first, Open Folder asks after the reload began.
 
 ## 3. Dependencies
 

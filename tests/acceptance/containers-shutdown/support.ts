@@ -207,7 +207,7 @@ export function chainOf(processId: string): string[] {
   return chain;
 }
 
-/** The id of the run's editor's main process: the one on the run's user data folder that is no helper of the editor. */
+/** The id of the launch's editor's main process: the one on its user data folder that is no helper of the editor. */
 export async function editorMainProcess(userData: string): Promise<string[]> {
   try {
     const {stdout} = await execFileAsync('pgrep', [

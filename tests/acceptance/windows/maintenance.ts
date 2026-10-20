@@ -169,10 +169,10 @@ export async function setting(
   );
 }
 
-/** The bytes of the run's user settings file, as text. */
+/** The bytes of the launch's user settings file, as text. */
 export function settingsText(): string {
   return readFileSync(
-    path.join(variable('HARNESS_RUN_FOLDER'), 'user-data/User/settings.json'),
+    path.join(variable('HARNESS_USER_DATA'), 'User/settings.json'),
     'utf8',
   );
 }

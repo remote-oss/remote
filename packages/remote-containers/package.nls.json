@@ -4,6 +4,7 @@
   "configuration.title": "Dev Containers",
   "commands.Reopenincontainer.title": "Reopen in Container",
   "commands.Openfolder.title": "Open Folder in Container...",
+  "commands.Createdevcontainerfile.title": "Add Dev Container Configuration Files...",
   "commands.Rebuildcontainer.title": "Rebuild Container",
   "commands.Rebuildcontainerwithoutcache.title": "Rebuild Container Without Cache",
   "commands.Showreopenincontainernotificationreset.title": "Reset Don't Show Reopen Notification",

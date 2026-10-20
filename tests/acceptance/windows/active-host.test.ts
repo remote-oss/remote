@@ -122,8 +122,8 @@ function emptyConnectedWithin(
 /** The entries of the profile's global state, by key: the editor's `state.vscdb`, read between its writes. */
 async function globalState(): Promise<Map<string, string>> {
   const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data/User/globalStorage/state.vscdb',
+    variable('HARNESS_USER_DATA'),
+    'User/globalStorage/state.vscdb',
   );
   for (let attempt = 1; ; attempt += 1) {
     const database = new DatabaseSync(file, {readOnly: true});

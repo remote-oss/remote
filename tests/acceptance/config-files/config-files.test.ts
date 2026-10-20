@@ -1,7 +1,7 @@
 /**
  * @fileoverview The configuration-file rows of F-2201 (card coverage-20, #142): which SSH configuration files are
  * read when the hosts are listed and when a window connects, in a plain editor whose `HOME` is a folder of the run
- * and whose `SSH_AUTH_SOCK` is empty. A row sets `remote.SSH.configFile` through the run's user settings (absent
+ * and whose `SSH_AUTH_SOCK` is empty. A row sets `remote.SSH.configFile` through the launch's user settings (absent
  * means the key removed), and observes the host pick, the configuration file pick, the connects and the log. The
  * run's base setting is replaced row by row, the launch's `HOME` is made empty before the rows, and no row writes
  * the account's own files or the client's system file.
@@ -425,7 +425,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
 
   /**
    * The snapshots AC-29 compares, and only what the product could write: the launch's `HOME/.ssh` entry names
-   * and the account's own `~/.ssh` tree, untouched by the rows, plus the run's user settings at their last written
+   * and the account's own `~/.ssh` tree, untouched by the rows, plus the launch's user settings at their last written
    * bytes. The editor's own files (its dot-folders in the launch's `HOME` and its `User/*.json`) are left out:
    * they differ by machine, and the product does not write them.
    */

@@ -117,11 +117,11 @@ async function removedWithin(file: string): Promise<void> {
   }
 }
 
-/** The bytes of the run's keybindings file, or nothing when it doesn't exist. */
+/** The bytes of the launch's keybindings file, or nothing when it doesn't exist. */
 function keybindingsText(): string | undefined {
   const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data/User/keybindings.json',
+    variable('HARNESS_USER_DATA'),
+    'User/keybindings.json',
   );
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }

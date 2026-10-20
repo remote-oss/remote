@@ -12,6 +12,7 @@ import {
   reloadWindow,
   reopenInContainer,
   reopenStarted,
+  startInWindow,
   variable,
 } from '../windows/harness.ts';
 import {
@@ -297,9 +298,7 @@ describe('F-0408 the connect progress (card containers-53)', function () {
     const name = await openFolderWindow(folder);
     try {
       const sampler = sampling(name);
-      void inWindow(name, 'remote-containers.reopenInContainer').catch(
-        () => undefined,
-      );
+      await startInWindow(name, 'remote-containers.reopenInContainer');
       const dialog = await waitForDialog(name, 300_000);
       const samples = await sampler.stop();
       const atDialog = await toastDetails(name);

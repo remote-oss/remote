@@ -7,7 +7,7 @@
 import {devContainerTargetOf} from '../authority/payload.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {openPathAllowed} from './open-gate.ts';
-import {commandBeforeReload} from './pre-reload.ts';
+import {chooseOrAuthor} from './author-first.ts';
 import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
@@ -28,6 +28,7 @@ export interface OpenFolderPorts extends Pick<
   | 'progress'
   | 'bridge'
   | 'opener'
+  | 'authoring'
   | 'shutdown'
   | 'logger'
 > {
@@ -100,17 +101,12 @@ export function openFolderInContainer(
       return;
     }
     const folder = picked.fsPath;
-    const {choice, progress} = await commandBeforeReload(
+    const {choice, progress} = await chooseOrAuthor(
       ports,
       () => Promise.resolve('proceed'),
-      folder,
-      executable.file,
+      {title: TITLE, folder, dockerPath: executable.file},
     );
     try {
-      if (choice.kind === 'noConfiguration') {
-        logger.info(`${TITLE} found no configuration in ${folder}`);
-        return;
-      }
       if (choice.kind !== 'chosen') {
         return;
       }

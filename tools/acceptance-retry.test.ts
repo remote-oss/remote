@@ -236,7 +236,7 @@ describe('a launch past its limits', () => {
     );
   });
 
-  it("launchLimits: the leftovers are the editors on the run's profile folder, killed by their command line", () => {
+  it("launchLimits, tooling-66: the leftovers are the editors on the run's profile folders, its own and each plain launch's, killed by their command line", () => {
     const calls: string[][] = [];
     const limitsOfRun = launchLimits(
       '/tmp/acceptance-7-abc',
@@ -253,7 +253,7 @@ describe('a launch past its limits', () => {
         calls,
       ],
       [
-        180_000,
+        60_000,
         1_200_000,
         [
           [
@@ -261,7 +261,7 @@ describe('a launch past its limits', () => {
             '-KILL',
             '-f',
             '--',
-            '/tmp/acceptance-7-abc/user-data( |$)',
+            '/tmp/acceptance-7-abc/user-data(-[a-z0-9-]+)?( |$)',
           ],
         ],
       ],

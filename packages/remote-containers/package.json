@@ -65,6 +65,11 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.createDevContainerFile",
+        "title": "%commands.Createdevcontainerfile.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.rebuildContainer",
         "title": "%commands.Rebuildcontainer.title%",
         "category": "Dev Containers",
@@ -121,6 +126,10 @@
         {
           "command": "remote-containers.openFolder",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.createDevContainerFile",
+          "when": "!remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -186,6 +195,11 @@
           "command": "remote-containers.openFolder",
           "group": "remote_30_dev-container_2_actions@8",
           "when": "!hideConnectCommands && workspaceFolderCount == 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.createDevContainerFile",
+          "group": "remote_30_dev-container_2_actions@4",
+          "when": "workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",

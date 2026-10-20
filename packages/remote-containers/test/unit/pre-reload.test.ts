@@ -118,9 +118,6 @@ function portsOf(scene: Scene): PreReloadPorts {
           later(scene, 'preview');
           return Promise.resolve();
         },
-        showInformation: () => {
-          later(scene, 'information');
-        },
       },
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       cli: {
@@ -129,6 +126,7 @@ function portsOf(scene: Scene): PreReloadPorts {
           return scene.read;
         },
       },
+      useTemplate: () => Promise.resolve(),
       compare: (left, right) => left.localeCompare(right, 'en'),
       translate: template => template,
       logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
@@ -272,8 +270,6 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     picker.tree = TWO_FILES;
     const warned = sceneOf();
     warned.contents[MAIN] = '{"name":"x"}';
-    const information = sceneOf();
-    information.tree = {};
     const preview = sceneOf();
     preview.contents[MAIN] = '';
     const refused = sceneOf();
@@ -282,14 +278,7 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       workspaceFolder: 'src',
     });
     const seen: unknown[] = [];
-    for (const scene of [
-      dialog,
-      picker,
-      warned,
-      information,
-      preview,
-      refused,
-    ]) {
+    for (const scene of [dialog, picker, warned, preview, refused]) {
       await slowRun(scene);
       const from = scene.order.findIndex(entry =>
         entry.startsWith('progress shown'),
@@ -300,7 +289,6 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       [`progress shown ${START}`, 'progress closed', 'check dialog Docker'],
       [`progress shown ${START}`, 'progress closed', 'pick'],
       [`progress shown ${START}`, 'progress closed', 'warning'],
-      [`progress shown ${START}`, 'progress closed', 'information'],
       [`progress shown ${START}`, 'progress closed', 'preview'],
       [
         `progress shown ${START}`,

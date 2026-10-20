@@ -184,16 +184,27 @@ describe('the run stops the helpers its windows leave running', () => {
       ]);
     });
 
-    it("names the run's user-data folders as the run names its folder", () => {
+    it("names the run's user-data folders, the run's and each plain launch's, in the folders named as the run names its folder", () => {
       for (const name of [
-        'acceptance-local-9-Ab12',
-        'acceptance-local-9-',
-        'acceptance-local-90-Ab12',
+        'acceptance-local-9-Ab12/user-data',
+        'acceptance-local-9-Ab12/user-data-explorer-rows',
+        'acceptance-local-9-Ab12/user-data-',
+        'acceptance-local-9-Ab12/user-data-Upper',
+        'acceptance-local-9-Ab12/extensions',
+        'acceptance-local-9-Cd34',
+        'acceptance-local-9-/user-data',
+        'acceptance-local-90-Ab12/user-data',
       ] as const) {
-        mkdirSync(path.join(root, name));
+        mkdirSync(path.join(root, name), {recursive: true});
       }
+      writeFileSync(path.join(root, 'acceptance-local-9-Ef56'), '');
+      writeFileSync(
+        path.join(root, 'acceptance-local-9-Ab12', 'user-data-file'),
+        '',
+      );
       deepStrictEqual(runUserDataFolders(root, 'local-9'), [
         path.join(root, 'acceptance-local-9-Ab12', 'user-data'),
+        path.join(root, 'acceptance-local-9-Ab12', 'user-data-explorer-rows'),
       ]);
     });
   });

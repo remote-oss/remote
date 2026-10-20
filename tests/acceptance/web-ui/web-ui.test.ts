@@ -168,9 +168,9 @@ async function storedOf() {
   };
 }
 
-/** The run's user data `User` folder. */
+/** The launch's user data `User` folder. */
 function userFolder(): string {
-  return path.join(variable('HARNESS_RUN_FOLDER'), 'user-data', 'User');
+  return path.join(variable('HARNESS_USER_DATA'), 'User');
 }
 
 describe('Open Web UI (card coverage-48)', function () {
