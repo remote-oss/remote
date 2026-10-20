@@ -2,7 +2,7 @@
  * @fileoverview package-extensions: packages each bundled extension into a VSIX with `vsce package
  * --no-dependencies` (ADR-0002, decision 5) and fails when a VSIX would hold a `node_modules` file.
  *
- *     node tools/package-extensions.ts                  every extension whose bundle exists
+ *     node tools/package-extensions.ts                  every extension whose bundle exists, and every code-less pack
  *     node tools/package-extensions.ts remote-ssh-edit  the named package folders
  *
  * Run `pnpm build` first. The VSIX files are written to `dist/` at the repository root.
@@ -26,6 +26,21 @@ interface Manifest {
   name?: string;
   version?: string;
   main?: string;
+  extensionPack?: string[];
+}
+
+/** Whether a manifest is a code-less pack: it lists an `extensionPack` and has no `main`, so there is no bundle to build. */
+function isCodeless(manifest: Manifest): boolean {
+  return manifest.main === undefined && manifest.extensionPack !== undefined;
+}
+
+/** The manifest of package folder `folder`, or nothing when it has none. */
+function manifestOf(root: string, folder: string): Manifest | undefined {
+  const file = path.join(root, 'packages', folder, 'package.json');
+  // A package.json is a JSON object; the fields read here are checked where they are used.
+  return existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as Manifest)
+    : undefined;
 }
 
 function runVsce(vsceArguments: string[], folder: string): string {
@@ -44,8 +59,8 @@ function runVsce(vsceArguments: string[], folder: string): string {
 
 /**
  * Packages the named package folders under `<root>/packages`, or every folder whose manifest has a `main` that is
- * built, and returns one line per VSIX written. Throws for a folder that does not exist, an unbuilt bundle, or a
- * file list that holds `node_modules`.
+ * built or is a code-less pack, and returns one line per VSIX written. Throws for a folder that does not exist, an
+ * unbuilt bundle, or a file list that holds `node_modules`.
  */
 export function packageExtensions(
   root: string,
@@ -55,8 +70,10 @@ export function packageExtensions(
   const selected =
     folders.length > 0
       ? folders
-      : packageFolders(root).filter(folder =>
-          existsSync(path.join(root, 'packages', folder, 'dist')),
+      : packageFolders(root).filter(
+          folder =>
+            existsSync(path.join(root, 'packages', folder, 'dist')) ||
+            isCodeless(manifestOf(root, folder) ?? {}),
         );
   const outcomes: string[] = [];
   for (const folder of selected) {
@@ -64,13 +81,11 @@ export function packageExtensions(
     if (!existsSync(path.join(directory, 'package.json'))) {
       throw new Error(`no package folder packages/${folder}`);
     }
-    // A package.json is a JSON object; the fields read here are checked below.
-    const manifest = JSON.parse(
-      readFileSync(path.join(directory, 'package.json'), 'utf8'),
-    ) as Manifest;
+    const manifest = manifestOf(root, folder) ?? {};
     if (
-      manifest.main === undefined ||
-      !existsSync(path.join(directory, manifest.main))
+      !isCodeless(manifest) &&
+      (manifest.main === undefined ||
+        !existsSync(path.join(directory, manifest.main)))
     ) {
       throw new Error(
         `packages/${folder}: no built ${manifest.main ?? 'main'}; run pnpm build`,
