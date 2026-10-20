@@ -844,6 +844,23 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
+  it("F-2704 AC-11: a shared login that fails as a timeout, with no reason of ssh's, gets the connect wait's reason", () => {
+    deepStrictEqual(
+      ofConnection({
+        kind: 'loginFailed',
+        failure: 'timeout',
+        hints: [],
+        exitStatus: 255,
+      }),
+      {
+        kind: 'timeout',
+        reason: {id: 'sshTimedOut'},
+        hints: [],
+        sshExitStatus: 255,
+      },
+    );
+  });
+
   it('a login failure with no reason has none', () => {
     deepStrictEqual(
       ofConnection({kind: 'loginFailed', failure: 'unreachable', hints: []}),
