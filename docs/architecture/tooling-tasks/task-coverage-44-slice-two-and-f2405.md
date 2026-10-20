@@ -27,13 +27,17 @@ Tag each new line by containers-41's (#1050) §1 rules: `deferred` with a reason
 those, add the `F-2xxx AC-n` cite to the start of the existing row's name (a lower-case `[a-z0-9-]` label in
 parentheses) instead of writing a second row. Grep the test names for each feature id to find them.
 
-**F-2104** is the P0, and its gate cases are recorded from the dirty side's observations (D-65). Its criteria that a
-recorded case proves are `recorded`. The ones that need a recording not yet made stay `todo` and are listed in the
-PR. Don't write a row that stands in for a recording.
+**F-2104** is the P0, and its gate cases are recorded from the dirty side's observations (D-65). Its criteria aren't
+`recorded` until the recording exists and a green x86_64 replay passes (athena on #1120). Until then they stay `todo`,
+listed in the PR. Don't write a row that stands in for a recording.
 
 ## 3. Rows (PRs b, c, …, one per feature or two)
 
-For each feature, write the rows its in-release criteria still lack, measured against main before they're asserted
+**Each feature's rows wait for its spec's review** (athena on #1120): all nine are `spec:draft` today. PR a seeds and
+tags now. A feature's rows start when its spec is `spec:reviewed`. Re-seed that feature first if the review renumbered
+its criteria.
+
+Once a feature's spec is reviewed, write the rows its in-release criteria still lack, measured against main before they're asserted
 (containers-41 §3). Order, by what gates 0.2:
 1. F-2405 (the server's download, which 0.2's install path uses);
 2. F-2410;

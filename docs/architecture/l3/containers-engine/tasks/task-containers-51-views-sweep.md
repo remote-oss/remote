@@ -15,10 +15,11 @@ containers-37 (#992) merges.
 
 Features: **F-0901** (#76), **F-0902** (#80), **F-0903** (#94), **F-0906** (#72). Cards on main: containers-29 to
 33 (the targets model, the view, its events, the coverage lines, the Details view).
-- **F-0902 is slice B** (open, start, stop, remove, inspect, log). Check on the issue which of its actions are
-  registered on main.
-  - An action that's built gets its rows.
-  - An action that isn't built is an open row (§6 of #1050). Don't write the product for it: daedalus cards it.
+- **F-0902 is slice B** (open, start, stop, remove, inspect, log), in release 1 only after F-0902's review (brief
+  §2), and F-0902 is still `spec:draft` (athena on #1120).
+  - An action that's registered on main gets its rows.
+  - An action that isn't built stays `todo`, and the PR names the condition: F-0902's review. It's not an open row
+    and not a product card.
 - **F-0904, F-0905 and F-0902's attach and recent-folder actions** stay `deferred` with the file's existing reasons.
 - **#1025 (triton)** owns the targets-view and targets-events rows that fail on main today. Leave those to it.
 
