@@ -67,6 +67,7 @@ import {
   linkAgent,
   planForwarding,
 } from './forwarding-step.ts';
+import type {PreconnectPorts} from '../preconnect/ports.ts';
 import {preconnectStep} from './preconnect-step.ts';
 import {
   createServerSteps,
@@ -135,6 +136,8 @@ interface CliWiring {
 export interface WiringPorts {
   /** The hosts of the configuration files in effect, the reading the host pick uses: the connect's first check. */
   configuredHosts(): HostListResult;
+  /** The pre-connection step's machine and editor ports. */
+  preconnect: PreconnectPorts;
   settings: WiringSettings;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
@@ -445,7 +448,11 @@ export function stepsOf(
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
-      logger: ports.logger,
+      ports: ports.preconnect,
+      onRunning: () => {
+        onPhase({kind: 'runningPreconnectScript'});
+      },
+      prompting,
     }),
     decideTerms: terms.decideTerms,
     lookupBeforeConnection: () => ports.locate.mode() === 'terminal',

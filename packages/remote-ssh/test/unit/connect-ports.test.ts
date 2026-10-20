@@ -101,6 +101,11 @@ function assemblyInputs(
     profile: PROFILE,
     platform: 'linux',
     homeFolder: '/home/alex',
+    workingDirectory: '/work',
+    preconnectFiles: {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      exists: () => Promise.resolve(false),
+    },
     processEnvironment: {PATH: '/usr/bin', UNSET: undefined},
     clientSearch: {searchPath: '/usr/bin', programFilesFolder: ''},
     spawner: spawnerOf(
@@ -458,6 +463,26 @@ describe("the assembled ports' settings", () => {
         loggerOf(recorded),
       ).settings.preconnect(),
       '/home/alex/renew.sh',
+    );
+  });
+
+  it('F-2108: the pre-connection ports are the machine with its set environment, its working directory and its home', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({});
+    const ports = wiringPortsOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).preconnect;
+    deepStrictEqual(
+      [
+        ports.environment,
+        ports.workingDirectory,
+        ports.home,
+        ports.spawner === machine.spawner,
+        ports.dialog === surfaces.preconnectDialog,
+        ports.approvals === surfaces.preconnectApprovals,
+      ],
+      [{PATH: '/usr/bin'}, '/work', '/home/alex', true, true, true],
     );
   });
 

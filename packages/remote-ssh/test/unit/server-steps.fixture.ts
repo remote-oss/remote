@@ -226,6 +226,11 @@ export function surfacesOf(
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     licenceModal: modalAnswering('accept', []),
     acceptances: storeOf(),
+    preconnectDialog: {askUser: () => Promise.resolve('skip')},
+    preconnectApprovals: {
+      hashFor: () => undefined,
+      remember: () => Promise.resolve(),
+    },
     presenter: {present: () => Promise.resolve('handled')},
     downloadProgress: SILENT_PROGRESS,
     revealLog,

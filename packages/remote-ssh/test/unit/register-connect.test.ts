@@ -89,6 +89,7 @@ async function registered(
       environment: {},
       homeFolder: '/home/alex',
       temporaryFolder: '/tmp',
+      workingDirectory: '/work',
     },
   );
   const assembly = connectAssemblyOf(surfacesInUse, machine, logger);

@@ -20,6 +20,7 @@ import {
 import {type ClientPlatform, nodeLocalFiles, nodeProcessSpawner} from 'lib-ssh';
 import {HELPER_CLIENT_WAITS} from './pipeline/bounds.ts';
 import type {ConnectMachine} from './connect-ports.ts';
+import {nodePreconnectFiles} from './preconnect/node-files.ts';
 
 /** What the extension knows of its own place: its folder, its storage, the editor's runtime and product. */
 export interface MachinePlaces {
@@ -42,6 +43,8 @@ export interface MachineFacts {
   environment: Readonly<Record<string, string | undefined>>;
   homeFolder: string;
   temporaryFolder: string;
+  /** `process.cwd()`. */
+  workingDirectory: string;
 }
 
 /** The client platform of a Node platform: Linux for every one that is neither macOS nor Windows. */
@@ -97,6 +100,8 @@ export function nodeMachineOf(
     profile: places.profile,
     platform: clientPlatformOf(facts.platform),
     homeFolder: facts.homeFolder,
+    workingDirectory: facts.workingDirectory,
+    preconnectFiles: nodePreconnectFiles,
     processEnvironment: facts.environment,
     clientSearch: clientSearchOf(facts.environment),
     spawner: nodeProcessSpawner,
@@ -146,5 +151,6 @@ export function nodeFacts(): MachineFacts {
     environment: process.env,
     homeFolder: homedir(),
     temporaryFolder: tmpdir(),
+    workingDirectory: process.cwd(),
   };
 }
