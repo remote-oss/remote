@@ -1059,7 +1059,7 @@ R4:
 
 ## 8. remote-server tunnel client: blocked
 
-Frozen pending D-55 (the user). F-8902 is accepted: sign-in through `vscode.authentication` only. F-8201 Q1 is
+Not built: the user decided on 2026-10-07 to ship without Remote - Tunnels (D-55, the dev tunnels terms of service), and to revisit only if the terms change. What follows is kept for that day. F-8902 is accepted: sign-in through `vscode.authentication` only. F-8201 Q1 is
 ruled "three quirks fixed", which T4 and B's `currentConnection` follow. A spike of option (c) runs as an
 investigation by `remote-coding-worker-1`.
 

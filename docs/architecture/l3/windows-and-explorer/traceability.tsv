@@ -66,7 +66,7 @@ F-6602	remote-wsl	38	wsl.package		19	0	D/B boundary agreed with area D (PR #25);
 F-7901	remote-wsl	11	wsl.package	identifiers.tables; standdown.guard	0	0	D/B boundary agreed with area D (PR #25)
 F-8001	remote-server	8	server.package	standdown.guard; authority.proposed-api-gate	26	0	given by area A; spec keeps startup activation for the check
 F-8002	remote-server	9	server.package	identifiers.command-registry	19	0	given by area A
-F-8201	remote-server	14	tunnels.explorer-endpoints	companion.protocol; authority.window-opener; tunnel client (A)	26	0	explorer side data-only; Q1 decided: three quirks fixed; tunnel client frozen pending the user (area A)
+F-8201	remote-server	14	tunnels.explorer-endpoints	companion.protocol; authority.window-opener; tunnel client (A)	26	0	explorer side data-only; Q1 decided: three quirks fixed; tunnel client not built (D-55)
 F-8301	remote-server	17	tunnels.web-surfaces	authority.codecs	14	0	given by area A; web-only link
 F-8302	remote-server	18	tunnels.web-surfaces		12	0	given by area A; declarative welcome and webOpener
 F-8901	remote-server	7	server.package	identifiers.tables; standdown.guard	17	0	spec keeps a startup activation for the check (constraint 26)
