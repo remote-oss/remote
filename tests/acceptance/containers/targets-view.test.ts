@@ -18,7 +18,11 @@ import {
   welcomeLink,
   welcomeText,
 } from '../windows/renderer.ts';
-import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
+import {
+  openFolderWindow,
+  clearEarlierRows,
+  setUserSetting,
+} from '../windows/folder-windows.ts';
 import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 
 const execFileAsync = promisify(execFile);
@@ -34,6 +38,8 @@ function labelsOf(rows: readonly RowDetails[]): string[] {
 
 describe('the Dev Containers view of the Remote Explorer (card containers-30)', function () {
   this.timeout(600_000);
+
+  beforeEach(clearEarlierRows);
 
   it('F-0906 AC-1, F-0901 AC-7 (gate-row-13): the view lists the dev container of a reopened folder under Dev Containers by the folder name, and a plain container under Other Containers by its image; the dev container window shows its own row with vm-active and Connected (gate-row-16, F-0901 AC-4)', async () => {
     const image = variable('HARNESS_DEVCONTAINER_IMAGE');
