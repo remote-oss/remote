@@ -11,6 +11,7 @@ import re
 import sys
 
 import caselib
+import clientports
 import redact
 
 WRITER_KEYS = ("id", "feature", "title", "ac", "atoms", "kind", "covers", "profile", "fixtures", "fixture", "steps", "notes",
@@ -179,6 +180,8 @@ def _observe_errors(where, arg, seen):
                     errs.append(f"{where}: one notification_order per observe")
             elif k == "panel" and v != {}:
                 errs.append(f"{where}: panel takes no arguments (panel: {{}})")
+            elif k == "target_logins" and v != {}:   # kit #289, K3: a count of accepted logins, as a delta
+                errs.append(f"{where}: target_logins takes no arguments (target_logins: {{}})")
             elif k == "target_files":   # athena on #218 (item 3): names, size changes, executable names; never contents
                 if not (isinstance(v, dict) and "path" in v and not set(v) - {"path", "interval"}
                         and isinstance(v["path"], str) and TARGET_FILES_PATH.fullmatch(v["path"])
@@ -200,7 +203,8 @@ def _observe_errors(where, arg, seen):
                                 f"plain form `contextmenu`")
             elif k in EDITOR_WHATS:
                 errs += _editor_arg_errors(where, k, v)
-            elif k not in ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "notification_order"):
+            elif k not in ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "notification_order",
+                           "target_logins"):
                 errs.append(f"{where}: unknown observation {k!r}")
         else:
             errs.append(f"{where}: bad observation {w!r}")
@@ -373,7 +377,7 @@ def _fixture_errors(fx, case, profile):
         errs.append("fixture.default_title: the first step must be a wait for the end state (until: dialog, title, "
                     "notification or statusbar)")
     bad = set(fx) - {"workspace", "files", "settings", "keybindings", "challenges", "default_title", "containers", "volumes", "extensions",
-                     "workspace_fixture", "workspace_paths", "links", "modes", "env", "window_start"}
+                     "workspace_fixture", "workspace_paths", "links", "modes", "env", "window_start", "client_ports", "ssh_options"}
     if bad:
         errs.append(f"fixture: unknown keys {sorted(bad)}")
     if fx.get("workspace", "folder") not in ("folder", "empty-window"):
@@ -449,6 +453,40 @@ def _fixture_errors(fx, case, profile):
         elif caselib.FIXTURE_EXTENSIONS[ext][1] and caselib.FIXTURE_EXTENSIONS[ext][1] != case.get("feature"):
             errs.append(f"fixture.extensions: {ext} is only for {caselib.FIXTURE_EXTENSIONS[ext][1]}")
     return errs
+
+
+PORT_PLACEHOLDER = re.compile(r"\$\{(PORT_[A-Z0-9_]+)\}")
+
+
+def client_port_errors(case):
+    """fixture.client_ports (kit #289, K1) and the ${PORT_<NAME>} placeholders: each one a case uses names a port of
+    its own fixture.client_ports."""
+    fx = case.get("fixture") if isinstance(case.get("fixture"), dict) else {}
+    ports = fx.get("client_ports")
+    errs = clientports.fixture_errors(ports) if ports is not None else []
+    named = {clientports.placeholder(p["name"]) for p in ports or [] if isinstance(p, dict) and isinstance(p.get("name"), str)}
+    used = set(PORT_PLACEHOLDER.findall(json.dumps(case)))
+    errs += [f"${{{name}}} names no port of fixture.client_ports" for name in sorted(used - named)]
+    return errs
+
+
+def ssh_option_errors(case, profile):
+    """fixture.ssh_options (kit #289, K4): the case's own SSH options for its per-case target, checked as sshtarget
+    checks them at up, with each ${PORT_<NAME>} standing for one of the case's client ports."""
+    fx = case.get("fixture") if isinstance(case.get("fixture"), dict) else {}
+    if fx.get("ssh_options") is None:
+        return []
+    errs = [] if profile is None or caselib.ssh_variant(profile) else [
+        "fixture.ssh_options needs a per-case SSH target (an sshtarget environment's variant)"]
+    try:
+        import sshtarget
+    except ImportError:   # the public runner has no sshtarget plugin: there a variant case is not-applicable (R-103(b))
+        return errs
+    names = [clientports.placeholder(p["name"]) for p in fx.get("client_ports") or []
+             if isinstance(p, dict) and isinstance(p.get("name"), str)]
+    stand_in = {n: 40000 + i for i, n in enumerate(names)}
+    text = PORT_PLACEHOLDER.sub(lambda m: str(stand_in.get(m.group(1), m.group(0))), json.dumps(fx["ssh_options"]))
+    return errs + sshtarget.host_option_errors(json.loads(text), list(stand_in.values()))
 
 
 SECRET_PLACEHOLDERS = {"SSH_PASSWORD": {"password", "otp", "pwchange"}, "SSH_PASSPHRASE": {"passphrase"}, "SSH_OTP": {"otp"},
@@ -895,6 +933,8 @@ def validate_case(path, case=None, for_recording=False):
     errs += _fixture_errors(case.get("fixture"), case, profile)
     errs += _engine_use_errors(case, profile)
     errs += secret_placeholder_errors(case, profile)
+    errs += client_port_errors(case)
+    errs += ssh_option_errors(case, profile)
     errs += target_files_errors(case, profile)
     errs += challenge_errors(case.get("fixture") if isinstance(case.get("fixture"), dict) else None, profile)
     n_chal = len(((case.get("fixture") or {}) if isinstance(case.get("fixture"), dict) else {}).get("challenges") or [])

@@ -11,7 +11,7 @@ import yaml
 
 import redact
 
-NORM_VERSION = 17  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
+NORM_VERSION = 18  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
 #                  5: environment noise dropped from notification observations (ENV_NOISE)
 #                  6: the extension's host temp root (per window since the R-42 temp-root amendment)
 #                  7: VS Code core's keychain-write warning is environment noise (kit parity, 2026-10-02)
@@ -32,6 +32,8 @@ NORM_VERSION = 17  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines
 #                 17: Docker Compose's own container label com.docker.compose.version is <COMPOSE_VERSION>, not the
 #                     engine fixture's Compose plugin version (dirty-side, 2026-10-14: 5.5.1 in the arm64 captures, 5.6.0
 #                     in the pinned x86_64 one; the reference extension never sets it)
+#                 18: ${PORT_<NAME>}, a client port the case's fixture.client_ports made (kit #289, K1): a whole number,
+#                     never part of a longer one (only runs with client ports; nothing an older expect holds changes)
 # athena on kit #236: the versions whose rules RENAME a placeholder an older expect already holds, so "an older version
 # compares as before" cannot hold for such an expect. Versions that only add a placeholder for text an older expect held
 # literally are not listed. An expect recorded before a version here, holding that version's old-form token, is
@@ -133,6 +135,12 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 # start of a longer dotted name ("sshlab-x." ends a sentence; "sshlab-x.example" is another host).
 NAME_END = r"(?![\w-]|\.[\w-])"
 ADDR_END = r"(?!\w|\.\w)"
+
+
+def _client_ports(ctx):
+    """The run's client ports (kit #289, K1), longest number first so a port is never cut by a shorter one."""
+    return sorted(((k, str(v)) for k, v in ctx.items() if k.startswith("PORT_") and str(v).isdigit()),
+                  key=lambda kv: (-len(kv[1]), kv[0]))
 ELLIPSIS = "\u2026"
 # athena on #229: core cuts the remote indicator's host label to its first LABEL_MAX characters plus "…" (F-2502 BR-9 and
 # AC-19; [oss] remoteIndicator.ts REMOTE_STATUS_LABEL_MAX_LENGTH), so "SSH: <alias>" keeps 35 characters of the alias.
@@ -251,6 +259,8 @@ def rules_used(ctx):
               ] if ctx.get("SSH_HOST") else []
     binds += [{"rule": "ssh-target-addr", "placeholder": "${SSH_TARGET_ADDR}",
                "applies": "whole addresses (a per-run SSH target's address)"}] if ctx.get("SSH_TARGET_ADDR") else []
+    binds += [{"rule": "client-port", "placeholder": "${" + k + "}",
+               "applies": "whole numbers (a client port of the case's fixture.client_ports)"} for k, _ in _client_ports(ctx)]
     noise = [{"rule": n, "placeholder": "(dropped)", "applies": "notifications, notification_center: " + why}
              for n, _, why in ENV_NOISE]
     noise += [{"rule": n, "placeholder": "(dropped)", "applies": "notifications, notification_center with no source and "
@@ -317,6 +327,8 @@ def norm_str(s, ctx, key=None):
             s = s.replace(cut_label(label), SSH_LABEL + "${SSH_HOST}")
     if ctx.get("SSH_TARGET_ADDR"):   # a per-run target's address (an IPv4 address; never part of a longer one)
         s = re.sub(r"(?<![\w.])" + re.escape(str(ctx["SSH_TARGET_ADDR"])) + ADDR_END, "${SSH_TARGET_ADDR}", s)
+    for name, port in _client_ports(ctx):   # version 18: a client port, a whole number (127.0.0.1:<port>, port <port>)
+        s = re.sub(r"(?<![\d.])" + re.escape(port) + r"(?!\d|\.\d)", "${" + name + "}", s)
     if key == "source":
         for side in ("reference", "reimplementation"):
             dn = (ident.get(side) or {}).get("display_name")
