@@ -10,6 +10,7 @@
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
+import {stopHelpersUnder} from './acceptance-helper-stop.ts';
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {
   type RunRegistry,
@@ -905,6 +906,7 @@ export async function runLaunches(
   report: (line: string) => void = line => {
     console.log(line);
   },
+  stopHelpers: (userDataFolder: string) => void = stopHelpersUnder,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -942,6 +944,8 @@ export async function runLaunches(
           return await runLaunch(launch);
         } finally {
           await held.release();
+          // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
+          stopHelpers(path.join(runFolder, 'user-data'));
         }
       }, report),
     );

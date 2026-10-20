@@ -1352,6 +1352,38 @@ describe('acceptance', () => {
       ]);
     });
 
+    it("each launch stops the helpers recorded under the run's user-data folder once it has run", async () => {
+      const happened: string[] = [];
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL, REMOTE],
+        command,
+        '',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        launch => {
+          happened.push(`began ${launch.label}`);
+          return Promise.resolve();
+        },
+        {},
+        () => Promise.resolve({release: () => Promise.resolve()}),
+        () => undefined,
+        userDataFolder => {
+          happened.push(`stopped the helpers under ${userDataFolder}`);
+        },
+      );
+      const userData = path.join(workspace.root, 'user-data');
+      deepStrictEqual(happened, [
+        'began terminal',
+        `stopped the helpers under ${userData}`,
+        'began remote',
+        `stopped the helpers under ${userData}`,
+      ]);
+    });
+
     it('D-85: a launch with settings finds them over the base settings', async () => {
       deepStrictEqual((await settingsSeen(TERMINAL, REMOTE)).get('terminal'), {
         ...BASE,
