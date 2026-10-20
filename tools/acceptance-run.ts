@@ -198,8 +198,24 @@ export function runNetworkOf(runId: string): string {
   return `remote-oss-acceptance-${runId}`;
 }
 
-/** The format of a network's `inspect` line: its creation time in seconds, and how many containers it holds. */
-const NETWORK_AGE_FORMAT = '{{.Created.Unix}} {{len .Containers}}';
+/**
+ * The format of a network's `inspect` line: its creation time as a JSON string, and how many containers it holds.
+ * `docker network inspect` formats a network as plain JSON, where the creation time is text with no `Unix` of its
+ * own, and its plain form depends on the rest of the template; `json` gives one RFC 3339 string either way.
+ */
+export const NETWORK_AGE_FORMAT = '{{json .Created}} {{len .Containers}}';
+
+/** A creation time that `{{json .Created}}` printed, in seconds; undefined when it isn't one. */
+export function createdSecondsOf(field: string): number | undefined {
+  try {
+    const created = JSON.parse(field) as unknown;
+    const milliseconds =
+      typeof created === 'string' ? Date.parse(created) : Number.NaN;
+    return Number.isNaN(milliseconds) ? undefined : milliseconds / 1000;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Removes the networks that a killed or cancelled run left: each with the run label of any run, older than two hours
@@ -228,15 +244,13 @@ function sweepStaleNetworks(
       NETWORK_AGE_FORMAT,
       networkId,
     ]);
-    const fields = /^(\d+) (\d+)$/.exec(inspected.stdout.trim());
-    if (inspected.status !== 0 || fields === null) {
+    const fields = /^(\S+) (\d+)$/.exec(inspected.stdout.trim());
+    const created =
+      fields === null ? undefined : createdSecondsOf(fields[1] ?? '');
+    if (inspected.status !== 0 || fields === null || created === undefined) {
       continue;
     }
-    const [, created = '', containers = ''] = fields;
-    if (
-      nowSeconds - Number(created) > STALE_RUN_SECONDS &&
-      Number(containers) === 0
-    ) {
+    if (nowSeconds - created > STALE_RUN_SECONDS && Number(fields[2]) === 0) {
       command('docker', ['network', 'rm', networkId]);
     }
   }

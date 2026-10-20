@@ -7,7 +7,7 @@
  * finds it.
  */
 
-import {RUN_LABEL} from './acceptance-run.ts';
+import {createdSecondsOf, RUN_LABEL} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 
 /** The lock's network: one per daemon, whoever holds it. */
@@ -37,8 +37,29 @@ export const NO_LOCK: LaunchLock = {
 /** The label of the lock's host: a holder named `local-<pid>` on this host can be checked by its process. */
 export const HOST_LABEL = 'remote-oss.acceptance.lock-host';
 
-/** The lock's network id, creation time in seconds, holder's run and host, as `docker network inspect` gives them. */
-const HOLDER_FORMAT = `{{.Id}} {{.Created.Unix}} {{index .Labels "${RUN_LABEL}"}} {{index .Labels "${HOST_LABEL}"}}`;
+/** The lock's network id, creation time (a JSON string), holder's run and host, as `docker network inspect` gives them. */
+export const HOLDER_FORMAT = `{{.Id}} {{json .Created}} {{index .Labels "${RUN_LABEL}"}} {{index .Labels "${HOST_LABEL}"}}`;
+
+/** The lock as HOLDER_FORMAT printed it. */
+export interface Holder {
+  networkId: string;
+  createdSeconds: number | undefined;
+  holderRun: string;
+  holderHost: string;
+}
+
+/** The lock's holder from an `inspect` line in HOLDER_FORMAT. */
+export function holderOf(line: string): Holder {
+  const [networkId = '', created = '', holderRun = '', holderHost = ''] = line
+    .trim()
+    .split(' ');
+  return {
+    networkId,
+    createdSeconds: createdSecondsOf(created),
+    holderRun,
+    holderHost,
+  };
+}
 
 /** A local run's id: `local-<pid>` (CI runs are named by their job). */
 const LOCAL_RUN = /^local-(\d+)$/;
@@ -96,6 +117,7 @@ export function daemonLock(
     async take() {
       const started = world.now();
       let reportedAt: number | undefined;
+      let unreadable = 0;
       for (;;) {
         const created = command('docker', [
           'network',
@@ -118,20 +140,25 @@ export function daemonLock(
           LOCK_NETWORK,
         ]);
         if (holder.status !== 0) {
-          if (created.stderr.includes('already exists')) {
-            // Released between the create and the inspect: the next create takes it.
-            continue;
+          if (!created.stderr.includes('already exists')) {
+            throw new Error(
+              `docker network create ${LOCK_NETWORK}: ${created.stderr.trim()}`,
+            );
           }
-          throw new Error(
-            `docker network create ${LOCK_NETWORK}: ${created.stderr.trim()}`,
-          );
+          // Released between the create and the inspect, the next create takes it; a lock that exists and still can't
+          // be read twice in a row is the inspect's own failure, never a loop.
+          unreadable += 1;
+          if (unreadable > 1) {
+            throw new Error(
+              `docker network inspect ${LOCK_NETWORK}: ${holder.stderr.trim()}`,
+            );
+          }
+          continue;
         }
-        const [
-          networkId = '',
-          createdSeconds = '0',
-          holderRun = '',
-          holderHost = '',
-        ] = holder.stdout.trim().split(' ');
+        unreadable = 0;
+        const {networkId, createdSeconds, holderRun, holderHost} = holderOf(
+          holder.stdout,
+        );
         if (holderGone(world, holderRun, holderHost)) {
           report(
             `acceptance: the Docker daemon's dev container lock of run ${holderRun} is left from a run that has ended; removing it`,
@@ -139,7 +166,10 @@ export function daemonLock(
           command('docker', ['network', 'rm', networkId]);
           continue;
         }
-        const heldFor = `${String(Math.round(world.now() / 1000 - Number(createdSeconds)))} s`;
+        const heldFor =
+          createdSeconds === undefined
+            ? 'an unknown time'
+            : `${String(Math.round(world.now() / 1000 - createdSeconds))} s`;
         if (world.now() - started >= LOCK_WAIT_MILLISECONDS) {
           throw new Error(
             `the Docker daemon's dev container lock is still held by run ${holderRun} after ${String(LOCK_WAIT_MILLISECONDS / 60_000)} minutes (held for ${heldFor})`,
