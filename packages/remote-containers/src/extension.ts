@@ -8,7 +8,11 @@ import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import {familySetupPortsOf, resolverEditorOf} from 'lib-authority';
+import {
+  familySetupPortsOf,
+  PORTS_VIEW_KEY,
+  resolverEditorOf,
+} from 'lib-authority';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
 import {nodeTimer} from 'lib-helper';
 import {identifierHost} from 'lib-identifiers';
@@ -732,6 +736,10 @@ export async function activate(
       {
         resolverEditor: resolverEditorOf(vscode, RESOLVER_EDITOR_OPTIONS),
         labels: vscode.workspace,
+        portsView: {
+          enablePortsView: () =>
+            vscode.commands.executeCommand('setContext', PORTS_VIEW_KEY, true),
+        },
         commands: host,
         recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
         presenter: recoveryPortsOf(vscode, {

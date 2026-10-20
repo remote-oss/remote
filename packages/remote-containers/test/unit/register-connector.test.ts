@@ -67,6 +67,7 @@ async function registered(
   const forwarded: Array<DeclaredPorts | undefined> = [];
   const shown: string[][] = [];
   const requests: ProgressRequest[] = [];
+  let portsViewCalls = 0;
   const formatters: ResourceLabelFormatter[] = [];
   const disposed: string[] = [];
   const recentAdded: string[] = [];
@@ -172,6 +173,12 @@ async function registered(
           return Promise.resolve();
         },
       },
+      portsView: {
+        enablePortsView: () => {
+          portsViewCalls += 1;
+          return Promise.resolve();
+        },
+      },
     },
     connector,
     {
@@ -192,6 +199,7 @@ async function registered(
     events,
     forwarded,
     shown,
+    portsViewCalls: () => portsViewCalls,
     requests,
     formatters,
     disposed,
@@ -264,6 +272,20 @@ describe('the registration of the container connector (card containers-08)', () 
     });
     await settledResolve(seen, 1);
     deepStrictEqual(seen.forwarded, []);
+  });
+
+  it('F-1102 duty 2: the resolver gives core no tunnel factory, no tunnel features and no candidatePortSource, and the window sets forwardedPortsViewEnabled once connected', async () => {
+    const connectedRow = await registered();
+    await settledResolve(connectedRow, 1);
+    const failedRow = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(failedRow, 1);
+    deepStrictEqual(
+      [connectedRow.portsViewCalls(), failedRow.portsViewCalls()],
+      [1, 0],
+    );
   });
 
   it('contracts §3.2: the resolver of dev-container is registered when the editor grants the proposal', async () => {

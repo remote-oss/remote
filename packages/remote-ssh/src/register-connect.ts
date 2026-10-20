@@ -6,8 +6,10 @@
  */
 
 import {
+  enablePortsViewWhenConnected,
   type LabelFormatterHost,
   type LastResolve,
+  type PortsViewHost,
   type SshTarget,
   type Registration,
   registerResolver,
@@ -33,11 +35,7 @@ import {commands, runtimeCommands} from './identifiers.generated.ts';
 import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
 import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
 import type {NoticePort} from './surfaces/notice.ts';
-import {
-  enablePortsViewWhenConnected,
-  type PortsViewHost,
-  registerWindowLabel,
-} from './surfaces/label-formatter.ts';
+import {registerWindowLabel} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
 import type {Logger} from 'lib-log';

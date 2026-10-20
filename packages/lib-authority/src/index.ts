@@ -76,6 +76,11 @@ export {openLocalCommand, openRemoteCommand} from './opener/arguments.ts';
 export type {FailedLike, ResolverOutcome} from './resolver/failure-mapping.ts';
 export {mapFailure} from './resolver/failure-mapping.ts';
 export {
+  enablePortsViewWhenConnected,
+  PORTS_VIEW_KEY,
+  type PortsViewHost,
+} from './resolver/ports-view.ts';
+export {
   closeRemote,
   openLocal,
   type OpenOutcome,
