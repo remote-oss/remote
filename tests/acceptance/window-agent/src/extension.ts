@@ -321,7 +321,7 @@ export function activate(context: vscode.ExtensionContext): void {
           event: 'extension',
           extensionId,
           present: extension !== undefined,
-          active: extension?.isActive === true,
+          extensionActive: extension?.isActive === true,
         });
       },
     ),
