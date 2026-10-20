@@ -121,8 +121,6 @@ export interface Scene {
   }>;
   stopped: number;
   revealed: number;
-  /** The `DOCKER_HOST` of the editor's environment, when it has one. */
-  dockerHost: string | undefined;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
   readsAtShutdown: number[];
@@ -237,7 +235,6 @@ export function sceneOf(
     relays: [],
     stopped: 0,
     revealed: 0,
-    dockerHost: undefined,
     shutdownSent: [],
     readsAtShutdown: [],
     metadata: '',
