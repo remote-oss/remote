@@ -43,7 +43,6 @@
   "Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.": "Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.",
   "Workspace folder in devcontainer.json must be an absolute path.": "Workspace folder in devcontainer.json must be an absolute path.",
   "Cancelled container configuration selection.": "Cancelled container configuration selection.",
-  "No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.": "No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.",
   "Main": "Main",
   "Project Root": "Project Root",
   "Configuring...": "Configuring...",
@@ -121,5 +120,8 @@
   "Show All Templates...": "Show All Templates...",
   "Show all available predefined container templates.": "Show all available predefined container templates.",
   "Use '{0}' as template...": "Use '{0}' as template...",
-  "Use a base configuration from the container template registry": "Use a base configuration from the container template registry"
+  "Use a base configuration from the container template registry": "Use a base configuration from the container template registry",
+  "Use Template": "Use Template",
+  "Open a folder to create the configuration files in first.": "Open a folder to create the configuration files in first.",
+  "Open Folder": "Open Folder"
 }

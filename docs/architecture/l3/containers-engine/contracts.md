@@ -154,3 +154,24 @@ its content:
   the program unchanged (F-0201).
 - **Pure parts first:** the payload codec, the label matching (F-0409's tiers), the CLI argument builder and the
   JSON-line parser are pure modules with their own rows before any adapter is written.
+
+## 7. C14 authoring (increment 2)
+
+```ts
+export type WizardOutcome =
+  | {kind: 'written'; files: string[]; target: string}
+  | {kind: 'cancelled'}
+  | {kind: 'failed'; detail: string};
+export function runWizard(request: {title: string; folder: string; target?: WizardTarget}, ports: WizardPorts, cancellation: AbortSignal): Promise<WizardOutcome>;
+```
+
+- The catalogue is fetched first; a failure is shown (`showCatalogueFailure`) and gives `failed`, with no screen shown before it.
+- The stage list is `stagesOf(catalogue, ports)`; `walkStages` runs it. A stage returns `next` (with `shown`), `back` (with
+  `keep`), `cancelled` or `done`; Back returns to the last stage that showed something, with the state it was entered with.
+- After the last stage the template is written with the state's `templateArgs`, `features` and `omitPaths`, into the workspace folder
+  or the store's slot (`configs/<slot>`).
+- A Dockerfile-family entry the user picked is written into `build.dockerfile` (`../<entry>`) in the write's scratch folder, by a
+  JSONC edit, when the template's own default names another file: `WriteRequest.adjust(scratchFolder)` runs after the apply and
+  before the questions, so a Skip leaves the user's own file alone and a failure writes nothing.
+- The curated table's prefix is the folder of the ids of the templates in the collection whose repository is the
+  specification's (`https://github.com/devcontainers/templates`); with no such collection the flat list shows.

@@ -31,46 +31,6 @@
       "card": "#884",
       "slice": "containers release 1",
       "decision": "F-0405 3.2 (2026-09-27): defined, never set"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/authoring/catalogue-download.ts",
-      "card": "#1239",
-      "slice": "containers increment 2",
-      "decision": "read by the template wizard, card containers-80 (#1242)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/authoring/catalogue.ts",
-      "card": "#1239",
-      "slice": "containers increment 2",
-      "decision": "read by the template wizard, card containers-80 (#1242)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/authoring/write.ts",
-      "card": "#1240",
-      "slice": "containers increment 2",
-      "decision": "read by the template wizard, card containers-80 (#1242)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/authoring/curated-templates.ts",
-      "card": "#1241",
-      "slice": "containers increment 2",
-      "decision": "read by the template wizard, card containers-80 (#1242)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/authoring/template-pick.ts",
-      "card": "#1241",
-      "slice": "containers increment 2",
-      "decision": "read by the template wizard, card containers-80 (#1242)"
     }
   ]
 }

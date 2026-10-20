@@ -46,7 +46,7 @@ export type TemplateChoice =
       templateId: string;
       metadata?: Readonly<Record<string, unknown>>;
     }
-  | {kind: 'reuse'; templateId: string; entry: string}
+  | {kind: 'reuse'; template: CatalogueTemplate; entry: string}
   | {kind: 'learnMore'}
   | {kind: 'cancelled'}
   | {kind: 'failed'; cause: string};
@@ -61,7 +61,7 @@ type RowAction =
   | {kind: 'learnMore'};
 
 /** One row of the pick, with what it does. */
-interface PickRow {
+export interface PickRow {
   label: string;
   description?: string;
   detail?: string;
@@ -350,7 +350,7 @@ async function chooserPick(
                 kind: 'failed',
                 cause: `the catalogue has no ${EXISTING_DOCKERFILE} template`,
               }
-            : {kind: 'reuse', templateId: existing.id, entry},
+            : {kind: 'reuse', template: existing, entry},
         );
       }
     });

@@ -5,13 +5,19 @@
  * and patterns observed to leave the full list on (`readme.txt`, `foo.txt`, `requirements.txt`, `README.md`,
  * `data.json`, `package.json`, `Makefile`, `Gemfile`), generalised. Once the curated list shows, every file present
  * adds its language matches, neutral ones included, once: the eight core templates are always in it. A match whose
- * id is not in the catalogue is left out.
+ * id is not in the catalogue is left out. The specification's own collection is the one whose repository is
+ * `SPECIFICATION_TEMPLATES_REPOSITORY`, as the index publishes it: its templates carry the verified mark, and the
+ * folder their ids share is the prefix the curated table matches under.
  */
 
 import type {CatalogueTemplate} from './catalogue.ts';
 
+/** The repository of the specification's own collection of templates, matched exactly. */
+const SPECIFICATION_TEMPLATES_REPOSITORY =
+  'https://github.com/devcontainers/templates';
+
 /** One entry of the folder's root. */
-interface RootEntry {
+export interface RootEntry {
   name: string;
   kind: 'file' | 'folder' | 'other';
 }
@@ -151,4 +157,36 @@ export function curatedTemplates(
     template =>
       template.id.startsWith(prefix) && wanted.has(lastPartOf(template)),
   );
+}
+
+/** Whether the template belongs to the specification's own collection, which is what the verified mark means. */
+export function isSpecificationTemplate(template: CatalogueTemplate): boolean {
+  return template.collectionRepository === SPECIFICATION_TEMPLATES_REPOSITORY;
+}
+
+/** The folder of an id, with its last `/`. */
+function folderOf(template: CatalogueTemplate): string {
+  return template.id.slice(0, template.id.lastIndexOf('/') + 1);
+}
+
+/**
+ * The prefix of the specification's collection: the folder its templates' ids share. Nothing when the catalogue has no
+ * such template or their folders differ, which leaves the flat list; `report` is told why, once.
+ */
+export function curatedPrefixOf(
+  templates: readonly CatalogueTemplate[],
+  report: (line: string) => void,
+): string | undefined {
+  const folders = new Set(
+    templates.filter(isSpecificationTemplate).map(folderOf),
+  );
+  if (folders.size === 1) {
+    return [...folders][0];
+  }
+  report(
+    folders.size === 0
+      ? 'the catalogue has no specification template collection; the flat list is shown'
+      : 'the specification template collection has no common folder; the flat list is shown',
+  );
+  return undefined;
 }

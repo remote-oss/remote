@@ -26,6 +26,8 @@ interface Scene {
   answer: PickerAnswer;
   /** What the error dialogs answer. */
   errorAnswer: string | undefined;
+  /** What the warning answers. */
+  warningAnswer: string | undefined;
   read: ConfigurationResult | CliFailure;
   /** What the CLI's read answers when a row wants to settle it by hand; else `read` is the answer. */
   reading: Promise<ConfigurationResult | CliFailure> | undefined;
@@ -56,6 +58,7 @@ function sceneOf(contents: Scene['contents']): Scene {
     contents,
     answer: {kind: 'picked', index: 0},
     errorAnswer: undefined,
+    warningAnswer: undefined,
     read: configurationOf('/workspaces/p'),
     reading: undefined,
     engineCheck: Promise.resolve('proceed'),
@@ -146,15 +149,16 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
           scene.calls.push(
             `showWarning ${JSON.stringify([message, detail, items])}`,
           );
-          return Promise.resolve(undefined);
+          return Promise.resolve(scene.warningAnswer);
         },
         openPreview: file => {
           scene.calls.push(`openPreview ${file.slice(FOLDER.length + 1)}`);
           return Promise.resolve();
         },
-        showInformation: message => {
-          scene.calls.push(`showInformation ${message}`);
-        },
+      },
+      useTemplate: folder => {
+        scene.calls.push(`useTemplate ${folder}`);
+        return Promise.resolve();
       },
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       cli: {
@@ -326,7 +330,7 @@ describe('choosing the configuration (card containers-13)', () => {
           `showError ${JSON.stringify(['', S181('.devcontainer/b/devcontainer.json'), ['Show Log']])}`,
         ],
         [
-          `showWarning ${JSON.stringify(['', S113('.devcontainer/c/devcontainer.json'), []])}`,
+          `showWarning ${JSON.stringify(['', S113('.devcontainer/c/devcontainer.json'), ['Use Template']])}`,
         ],
       ],
     );
@@ -413,10 +417,23 @@ describe('choosing the configuration (card containers-13)', () => {
       [
         {kind: 'rejected'},
         [
-          `showWarning ${JSON.stringify(['', S113(ONLY), []])}`,
+          `showWarning ${JSON.stringify(['', S113(ONLY), ['Use Template']])}`,
           `openPreview ${ONLY}`,
         ],
       ],
+    );
+  });
+
+  it('F-0301 7.E2: Use Template on the warning adds a configuration to the folder, opens no file and ends the choice', async () => {
+    const scene = sceneOf({[ONLY]: '{"name":"x"}'});
+    scene.warningAnswer = 'Use Template';
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => /^(openPreview|useTemplate)/.test(call)),
+      ],
+      [{kind: 'rejected'}, [`useTemplate ${FOLDER}`]],
     );
   });
 
@@ -455,16 +472,14 @@ describe('choosing the configuration (card containers-13)', () => {
     );
   });
 
-  it('F-0301 6.2: no configuration is one notice of ours and the answer noConfiguration, with nothing else shown', async () => {
+  it('F-0301 6.2: no configuration is the answer noConfiguration, with nothing shown', async () => {
     const scene = sceneOf({});
     const choice = await choose(scene);
     deepStrictEqual(
       [choice, scene.calls, lines(scene)],
       [
         {kind: 'noConfiguration'},
-        [
-          'showInformation No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.',
-        ],
+        [],
         ['info: no dev container configuration in /w/p'],
       ],
     );
@@ -560,9 +575,7 @@ describe('choosing the configuration (card containers-13)', () => {
 /** The calls of a scene that reached a surface. */
 function surfaceCalls(scene: Scene): string[] {
   return scene.calls.filter(call =>
-    /^(pick|showError|showWarning|openPreview|showInformation|revealLog)/.test(
-      call,
-    ),
+    /^(pick|showError|showWarning|openPreview|revealLog)/.test(call),
   );
 }
 

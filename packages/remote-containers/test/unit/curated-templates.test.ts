@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type {CatalogueTemplate} from '../../src/authoring/catalogue.ts';
 import {
+  curatedPrefixOf,
   curatedTemplates,
   type FolderFacts,
   isCurated,
+  isSpecificationTemplate,
 } from '../../src/authoring/curated-templates.ts';
 
 const PREFIX = 'ghcr.io/devcontainers/templates/';
@@ -193,6 +195,107 @@ describe('our curated table (card containers-79)', () => {
         ),
       ),
       ['debian'],
+    );
+  });
+});
+
+describe('the specification’s collection (card containers-80)', () => {
+  const SPECIFICATION = 'https://github.com/devcontainers/templates';
+
+  function inCollection(
+    part: string,
+    prefix: string,
+    repository: string | null = SPECIFICATION,
+  ): CatalogueTemplate {
+    return {
+      ...templateOf(part, prefix),
+      ...(repository === null ? {} : {collectionRepository: repository}),
+    };
+  }
+
+  function loggedBy(
+    templates: CatalogueTemplate[],
+  ): [string | undefined, string[]] {
+    const lines: string[] = [];
+    return [
+      curatedPrefixOf(templates, line => {
+        lines.push(line);
+      }),
+      lines,
+    ];
+  }
+
+  it('F-0802 BR-14: the prefix is the folder of the ids of the templates of the specification’s collection, in the public index’s shape and in the run’s, and nothing is logged', () => {
+    deepStrictEqual(
+      [
+        loggedBy([
+          inCollection('alpine', PREFIX),
+          inCollection('debian', PREFIX),
+          inCollection(
+            'x',
+            'ghcr.io/someone/templates/',
+            'https://github.com/someone/templates',
+          ),
+        ]),
+        loggedBy([
+          inCollection('alpine', '127.0.0.1:5000/devcontainers/templates/'),
+        ]),
+      ],
+      [
+        [PREFIX, []],
+        ['127.0.0.1:5000/devcontainers/templates/', []],
+      ],
+    );
+  });
+
+  it('F-0802 BR-14: with no template of the collection there is no prefix, and one line says why', () => {
+    deepStrictEqual(
+      loggedBy([
+        inCollection(
+          'x',
+          'ghcr.io/someone/templates/',
+          'https://github.com/someone/templates',
+        ),
+        inCollection('y', PREFIX, null),
+      ]),
+      [
+        undefined,
+        [
+          'the catalogue has no specification template collection; the flat list is shown',
+        ],
+      ],
+    );
+  });
+
+  it('F-0802 BR-14: folders that differ give no prefix either, with one line that says so', () => {
+    deepStrictEqual(
+      loggedBy([
+        inCollection('a', PREFIX),
+        inCollection('b', 'ghcr.io/mirror/templates/'),
+      ]),
+      [
+        undefined,
+        [
+          'the specification template collection has no common folder; the flat list is shown',
+        ],
+      ],
+    );
+  });
+
+  it('F-0802 BR-5: a template is verified exactly when its collection’s repository is the specification’s, whatever its owner', () => {
+    deepStrictEqual(
+      [
+        isSpecificationTemplate(inCollection('a', PREFIX)),
+        isSpecificationTemplate({...templateOf('b'), owner: 'devcontainers'}),
+        isSpecificationTemplate(
+          inCollection(
+            'c',
+            PREFIX,
+            'https://github.com/devcontainers/templates/',
+          ),
+        ),
+      ],
+      [true, false, false],
     );
   });
 });

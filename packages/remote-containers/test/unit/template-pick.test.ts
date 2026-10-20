@@ -4,72 +4,13 @@ import type {CatalogueTemplate} from '../../src/authoring/catalogue.ts';
 import {
   pickTemplate,
   type TemplateChoice,
-  type TemplatePicker,
   type TemplatePickPorts,
 } from '../../src/authoring/template-pick.ts';
 import type {FolderFacts} from '../../src/authoring/curated-templates.ts';
+import {FakePicker} from './template-picker.fixture.ts';
 import {CONTAINERS_INTRODUCTION} from '../../src/surfaces/recovery-presenter.ts';
 
 const PREFIX = 'ghcr.io/devcontainers/templates/';
-
-type Row = TemplatePicker['items'][number];
-
-/** A quick pick that records what the pick sets and lets a row play the user. */
-class FakePicker implements TemplatePicker {
-  items: readonly Row[] = [];
-  activeItems: readonly Row[] = [];
-  selectedItems: readonly Row[] = [];
-  title: string | undefined = undefined;
-  placeholder: string | undefined = undefined;
-  value = '';
-  matchOnDescription = true;
-  matchOnDetail = true;
-  ignoreFocusOut = true;
-  shown = false;
-  hidden = false;
-  disposed = false;
-  private readonly accepting: Array<() => void> = [];
-  private readonly changing: Array<(value: string) => void> = [];
-  private readonly hiding: Array<() => void> = [];
-  onDidAccept(listener: () => void): void {
-    this.accepting.push(listener);
-  }
-  onDidChangeValue(listener: (value: string) => void): void {
-    this.changing.push(listener);
-  }
-  onDidHide(listener: () => void): void {
-    this.hiding.push(listener);
-  }
-  show(): void {
-    this.shown = true;
-  }
-  hide(): void {
-    if (!this.hidden) {
-      this.hidden = true;
-      this.hiding.forEach(listener => {
-        listener();
-      });
-    }
-  }
-  dispose(): void {
-    this.disposed = true;
-  }
-  /** The user types `value`. */
-  type(value: string): void {
-    this.value = value;
-    this.changing.forEach(listener => {
-      listener(value);
-    });
-  }
-  /** The user accepts the row with `label`. */
-  accept(label: string): void {
-    const found = this.items.find(each => each.label === label);
-    this.selectedItems = found === undefined ? [] : [found];
-    this.accepting.forEach(listener => {
-      listener();
-    });
-  }
-}
 
 function templateOf(
   part: string,
@@ -577,11 +518,11 @@ describe('the chooser that offers an existing Dockerfile (card containers-79)', 
       WITH_EXISTING,
     );
     picker.accept("From 'api.Dockerfile'");
-    deepStrictEqual(await result, {
-      kind: 'reuse',
-      templateId: `${PREFIX}docker-existing-dockerfile`,
-      entry: 'api.Dockerfile',
-    });
+    const choice = await result;
+    deepStrictEqual(
+      choice.kind === 'reuse' ? [choice.template.id, choice.entry] : choice,
+      [`${PREFIX}docker-existing-dockerfile`, 'api.Dockerfile'],
+    );
   });
 
   it('F-0802 AC-22: a From row with no such template in the catalogue fails the pick with the cause', async () => {
