@@ -4,8 +4,8 @@
  */
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {recordLines, waitFor, windowEvents} from '../windows/harness.ts';
-import {notifications, viewRows, type ViewRow} from '../windows/renderer.ts';
+import {recordLines, waitFor, windowEvents} from './harness.ts';
+import {notifications, viewRows, type ViewRow} from './renderer.ts';
 
 /** The view of the explorer's SSH group. */
 export const VIEW = 'Remotes (Tunnels/SSH)';

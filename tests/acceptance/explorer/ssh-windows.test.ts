@@ -28,7 +28,12 @@ import {
   statusItem,
   titleAction,
 } from '../windows/renderer.ts';
-import {nothingFails, rowsOf, rowsSettled, VIEW} from './explorer-rows.ts';
+import {
+  nothingFails,
+  rowsOf,
+  rowsSettled,
+  VIEW,
+} from '../windows/explorer-rows.ts';
 
 const IN_NEW = 'Connect in New Window...';
 const CURRENT = 'Connect in Current Window...';

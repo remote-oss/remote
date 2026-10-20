@@ -118,6 +118,8 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/preconnect/tsconfig.json',
   './tests/acceptance/explorer/tsconfig.json',
   './tests/acceptance/explorer-alone/tsconfig.json',
+  './tests/acceptance/explorer-trust/tsconfig.json',
+  './tests/acceptance/explorer-home/tsconfig.json',
   './tests/acceptance/explorer-no-proposals/tsconfig.json',
   './tests/acceptance/explorer-standdown/tsconfig.json',
   './tests/acceptance/trust/tsconfig.json',

@@ -21,7 +21,7 @@ import {
   rowAction,
   selectRemote,
 } from '../windows/renderer.ts';
-import {rowsOf, rowsSettled, VIEW} from '../explorer/explorer-rows.ts';
+import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
 const SHOW_REMOTE_EXPLORER = 'workbench.view.remote';

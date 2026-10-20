@@ -23,7 +23,7 @@ import {
   rowDetails,
   titleAction,
 } from '../windows/renderer.ts';
-import {rowsOf, rowsSettled, VIEW} from './explorer-rows.ts';
+import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 
 /** The rows the main flow's configuration gives (F-5102 5.0 step 2), without the system file's hosts. */
 const MAIN_FLOW_HOSTS = [
@@ -198,7 +198,11 @@ describe('the hosts of a configuration file in the SSH group (card coverage-25c,
     ];
     await listed(written('ac26.conf', oddLines), expected);
     await listed(
-      written('ac26-empty-host.conf', [...oddLines, 'Host', 'Host after-empty']),
+      written('ac26-empty-host.conf', [
+        ...oddLines,
+        'Host',
+        'Host after-empty',
+      ]),
       expected,
     );
     deepStrictEqual(await notifications(window), []);

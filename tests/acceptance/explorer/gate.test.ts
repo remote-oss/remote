@@ -18,7 +18,12 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {rowAction, titleAction} from '../windows/renderer.ts';
-import {nothingFails, rowsOf, rowsSettled, VIEW} from './explorer-rows.ts';
+import {
+  nothingFails,
+  rowsOf,
+  rowsSettled,
+  VIEW,
+} from '../windows/explorer-rows.ts';
 
 /** The launch's first window and the windows the connects open, and the view and its actions. */
 const LOCAL = 'local';

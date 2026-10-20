@@ -24,7 +24,7 @@ import {
   toggleRow,
   viewRows,
 } from '../windows/renderer.ts';
-import {VIEW} from './explorer-rows.ts';
+import {VIEW} from '../windows/explorer-rows.ts';
 
 const SHOW_REMOTE_EXPLORER = 'workbench.view.remote';
 const SHOW_FILE_EXPLORER = 'workbench.view.explorer';

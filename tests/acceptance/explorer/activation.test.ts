@@ -20,7 +20,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {notifications, viewRows} from '../windows/renderer.ts';
-import {rowsOf, rowsSettled, VIEW} from './explorer-rows.ts';
+import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
 const SSH_COMPANION = 'remote-oss.remote-ssh';

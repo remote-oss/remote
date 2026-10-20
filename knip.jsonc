@@ -52,6 +52,8 @@
         "preconnect/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
+        "explorer-trust/*.test.ts",
+        "explorer-home/*.test.ts",
         "explorer-no-proposals/*.test.ts",
         "explorer-standdown/*.test.ts",
         "trust/*.test.ts",

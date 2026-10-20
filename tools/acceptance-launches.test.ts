@@ -75,7 +75,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the six explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -101,6 +101,8 @@ describe('the launches of the VSCodium run', () => {
         'no-proposals',
         'explorer',
         'explorer-alone',
+        'explorer-trust',
+        'explorer-home',
         'explorer-no-proposals',
         'explorer-standdown',
         'trust',
@@ -195,6 +197,8 @@ describe('the launches of the VSCodium run', () => {
           true,
           ['remote-oss.remote-ssh'],
         ],
+        ['explorer-trust', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-home', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-no-proposals',
           ['remote-oss.remote-explorer'],
@@ -346,7 +350,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-33, containers-12: the two trust launches, web-ui-trust and containers-trust are the only ones with workspace trust on; trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and web-ui-trust and containers-trust turn the prompt off', () => {
+  it('tooling-33, containers-12, coverage-25c: explorer-trust, the two trust launches, web-ui-trust and containers-trust are the only ones with workspace trust on; explorer-trust keeps the explorer’s title, trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and web-ui-trust and containers-trust turn the prompt off', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' && launch.workspaceTrust !== undefined
@@ -354,6 +358,11 @@ describe('the launches of the VSCodium run', () => {
           : [],
       ),
       [
+        [
+          'explorer-trust',
+          true,
+          {'window.title': '[${rootName}]${remoteName}'},
+        ],
         [
           'trust',
           true,
@@ -498,6 +507,8 @@ describe('the launches of the VSCodium run', () => {
         'default-ports',
         'explorer',
         'explorer-alone',
+        'explorer-trust',
+        'explorer-home',
         'explorer-no-proposals',
         'explorer-standdown',
         'trust',
@@ -523,7 +534,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 4}, () => ({
+      Array.from({length: 6}, () => ({
         'window.title': '[${rootName}]${remoteName}',
       })),
     );
