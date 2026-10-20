@@ -75,36 +75,38 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
-  it('F-2704 BR-2: the probed login shell is logged once, after the platform', async () => {
-    const {recording, options, logSink} = setup();
-    await connect(INPUT, steps(recording), options);
-    deepStrictEqual(
-      logSink.lines
-        .map(line => line.message)
-        .filter(message => message.startsWith("the host's login shell")),
-      ["the host's login shell is /bin/sh (sh)"],
-    );
-  });
-
-  it('F-2704 BR-2: a host that reports no login shell gets no shell line', async () => {
+  /** The login shell lines a connect writes, with the probe's host given by `loginShell` or the fixture's. */
+  async function shellLines(loginShell?: string): Promise<string[]> {
     const {recording, options, logSink} = setup();
     await connect(
       INPUT,
-      steps(recording, {
-        probe: () =>
-          Promise.resolve({
-            kind: 'probed',
-            host: {...HOST, loginShell: ''},
-          }),
-      }),
+      steps(
+        recording,
+        loginShell === undefined
+          ? {}
+          : {
+              probe: () =>
+                Promise.resolve({
+                  kind: 'probed',
+                  host: {...HOST, loginShell},
+                }),
+            },
+      ),
       options,
     );
-    deepStrictEqual(
-      logSink.lines.filter(line =>
-        line.message.startsWith("the host's login shell"),
-      ),
-      [],
-    );
+    return logSink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith("the host's login shell"));
+  }
+
+  it('F-2704 BR-2: the probed login shell is logged once, after the platform', async () => {
+    deepStrictEqual(await shellLines(), [
+      "the host's login shell is /bin/sh (sh)",
+    ]);
+  });
+
+  it('F-2704 BR-2: a host that reports no login shell gets no shell line', async () => {
+    deepStrictEqual(await shellLines(''), []);
   });
 
   it('F-2206 §9: no platform line is written when the connect ends before the probe', async () => {

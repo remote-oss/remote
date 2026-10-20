@@ -30,6 +30,7 @@ export interface ProbedHost {
   release: string;
   home: string;
   temporaryFolder: string;
+  /** The host's `$SHELL` as the startup files left it: a path, or empty when the host reports none. */
   loginShell: string;
   /** The tools the host has, from `wget`, `curl`, `tar`, `unzip`, `flock` and `gzip`, in that order. */
   tools: readonly string[];
