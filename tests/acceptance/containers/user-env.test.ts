@@ -117,9 +117,29 @@ async function resultAfter(name: string, label: string): Promise<string> {
   return found ?? '';
 }
 
+/** Removes the containers of `folder` and the images the CLI built for it (`vsc-<name>-…`). */
+async function cleanUp(folder: string): Promise<void> {
+  await removeContainers(folder);
+  const prefix = `vsc-${path.basename(folder).toLowerCase()}-`;
+  const made = (await docker('images', '--format', '{{.Repository}}'))
+    .split('\n')
+    .filter(each => each.startsWith(prefix));
+  if (made.length > 0) {
+    await docker('image', 'rm', '-f', ...made).catch(() => '');
+  }
+}
+
 /** The ids of the engine's images, sorted: the order `docker images` lists them in changes with their use. */
 async function imageIds(): Promise<string[]> {
   return (await docker('images', '--format', '{{.ID}}')).split('\n').sort();
+}
+
+/** Reloads window `name` and gives the milliseconds until it is connected to its container again. */
+async function reconnectMilliseconds(name: string): Promise<number> {
+  const started = Date.now();
+  await reloadWindow(name);
+  await connectedToContainer(name, 120_000);
+  return Date.now() - started;
 }
 
 /** The command that prints each of `variables` on a line of its own, `<label><index>:<value>`. */
@@ -177,7 +197,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -229,7 +249,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -250,7 +270,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -268,7 +288,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       ]);
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -288,7 +308,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -326,7 +346,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
         seen.push([mode ?? 'default', visible, atStart]);
         await closeWindow(name);
       } finally {
-        await removeContainers(folder);
+        await cleanUp(folder);
       }
     }
     deepStrictEqual(
@@ -354,7 +374,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -377,7 +397,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -398,23 +418,25 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
-  it('F-0416 AC-46 (x46): a /etc/profile that never ends delays the connect by the probe’s limit, with no dialog and no notice, and its earlier export is not in the terminal', async () => {
+  it('F-0416 AC-46 (x46): a /etc/profile that never ends delays a connect by the probe’s limit of about 10 s and no more, with no dialog and no notice, and its earlier export is not in the terminal', async () => {
     const folder = envFolder(
       'c42-profile-sleeps',
-      profileLines('export EARLY=early\\nsleep 120\\n'),
+      profileLines('export EARLY=early\\n[ -e /tmp/c42-slow ] && sleep 120\\n'),
     );
     try {
-      const name = await openFolderWindow(folder);
-      const started = Date.now();
-      await reopenInContainer(name);
-      const elapsed = Date.now() - started;
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const control = await reconnectMilliseconds(name);
+      await docker('exec', containerId, 'touch', '/tmp/c42-slow');
+      const slowed = await reconnectMilliseconds(name);
+      const delay = slowed - control;
       deepStrictEqual(
         [
-          elapsed >= 10_000 ? true : elapsed,
+          delay >= 8000 && delay <= 14_000 ? true : delay,
           await printed(name, 'early', ['EARLY']),
           await dialogOf(name),
           await notifications(name),
@@ -423,7 +445,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
@@ -454,11 +476,11 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       });
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 
-  it('F-0416 AC-31 (x31): editing only userEnvProbe to none and reloading takes the login file’s variable out of a new terminal, with no new container or image', async () => {
+  it('F-0416 AC-31 (x31): by ruling 15, editing only userEnvProbe to none and reloading takes the login file’s variable out of a new terminal, with no new container or image', async () => {
     const folder = envFolder(
       'c42-probe-edit',
       profileLines('export PROBE_PROFILE=profile\\n'),
@@ -490,7 +512,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
-      await removeContainers(folder);
+      await cleanUp(folder);
     }
   });
 });
