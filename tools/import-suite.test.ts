@@ -204,6 +204,30 @@ describe('import-suite', () => {
     );
   });
 
+  it('a -dirty staging repository is refused before any fetch, in any case', () => {
+    deepStrictEqual(
+      ['remote-oss/remote-ssh-dirty', 'x/foo-DIRTY'].map(staging =>
+        refusalOf(() => importRequestOf([staging, BRANCH, TARGET])),
+      ),
+      [
+        'remote-oss/remote-ssh-dirty is a -dirty repository, which this side never reads',
+        'x/foo-DIRTY is a -dirty repository, which this side never reads',
+      ],
+    );
+  });
+
+  it('a staging repository that is the target is refused before any fetch, in any case', () => {
+    deepStrictEqual(
+      [TARGET, 'Remote-OSS/Remote-SSH'].map(staging =>
+        refusalOf(() => importRequestOf([staging, BRANCH, TARGET])),
+      ),
+      [
+        `the staging repository ${TARGET} is the target repository`,
+        'the staging repository Remote-OSS/Remote-SSH is the target repository',
+      ],
+    );
+  });
+
   it('paths outside tests/conformance/ are refused by name, so is a branch with none, and a suite alone passes', () => {
     deepStrictEqual(
       [

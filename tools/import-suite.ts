@@ -79,6 +79,17 @@ export function importRequestOf(
       throw new ImportRefusal(`${repository} is not an owner/name repository`);
     }
   }
+  // Repository names ignore case on GitHub: both checks compare them folded.
+  if (staging.toLowerCase().endsWith('-dirty')) {
+    throw new ImportRefusal(
+      `${staging} is a -dirty repository, which this side never reads`,
+    );
+  }
+  if (staging.toLowerCase() === target.toLowerCase()) {
+    throw new ImportRefusal(
+      `the staging repository ${staging} is the target repository`,
+    );
+  }
   const [, date = '', digest = ''] = match;
   return {staging, branch, target, date, digest};
 }
