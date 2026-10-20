@@ -117,6 +117,11 @@ async function resultAfter(name: string, label: string): Promise<string> {
   return found ?? '';
 }
 
+/** The ids of the engine's images, sorted: the order `docker images` lists them in changes with their use. */
+async function imageIds(): Promise<string[]> {
+  return (await docker('images', '--format', '{{.ID}}')).split('\n').sort();
+}
+
 /** The command that prints each of `variables` on a line of its own, `<label><index>:<value>`. */
 function printing(label: string, variables: readonly string[]): string {
   return variables
@@ -433,7 +438,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
     try {
       const name = await reopened(folder);
       const containerId = await containerOf(folder);
-      const imagesBefore = await docker('images', '--format', '{{.ID}}');
+      const imagesBefore = await imageIds();
       const before = await printed(name, 'before', ['PROBE_PROFILE']);
       const file = path.join(folder, '.devcontainer', 'devcontainer.json');
       const configuration = JSON.parse(readFileSync(file, 'utf8')) as Record<
@@ -451,7 +456,7 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
           before,
           await printed(name, 'after', ['PROBE_PROFILE']),
           await containerOf(folder),
-          await docker('images', '--format', '{{.ID}}'),
+          await imageIds(),
         ],
         [['profile'], [''], containerId, imagesBefore],
       );
