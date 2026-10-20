@@ -83,6 +83,22 @@ describe('the remote output in the log (card connect-67)', () => {
     ]);
   });
 
+  it('F-2003 BR-14: an address keeps its scheme, host and path, and loses its user, password, query and fragment', async () => {
+    const {written} = await runsOf(
+      channelPrinting([
+        'fetching https://u:p@host/path/x.tar.gz?token=abc123 now',
+        "wget 'http://[::1:bad/x?token=abc123'",
+        'see ftp://u2@mirror/y#frag',
+      ]),
+      requestWith(),
+    );
+    deepStrictEqual(written, [
+      '[remote] fetching https://host/path/x.tar.gz now',
+      "[remote] wget 'http://[::1:bad/x'",
+      '[remote] see ftp://mirror/y',
+    ]);
+  });
+
   it('ADR-0010 rule 1: a remote line that looks like ours changes nothing', async () => {
     const lines = [
       'remote-oss-server-result-begin',

@@ -1,8 +1,8 @@
 /**
  * @fileoverview The remote side's script output in the log: each line a run prints is logged as remote output before
  * its reader gets it. The result block stays out of the log, line by line, and is logged once as the summary of its
- * parse. The connection token is masked, and a value the run was given in its environment is logged by its name. No
- * code reads what is logged.
+ * parse. The connection token is masked, an address keeps no user, password, query or fragment, and a value the run
+ * was given in its environment is logged by its name. No code reads what is logged.
  */
 
 import {type HostChannel, hostPathOf} from 'lib-host';
@@ -13,13 +13,30 @@ import {masked, serverResultLine} from '../diagnostics/log-content.ts';
 /** The shortest value of a run's environment that the log names instead of showing; a shorter one is too common to hide. */
 const SECRET_LENGTH = 8;
 
-/** `line` with the token masked and each long environment value of the run replaced by its name. */
+/** An address in a line: a scheme, `://`, then everything up to white space or a quote. */
+const ADDRESS = /\b[a-z][a-z0-9+.-]*:\/\/[^\s'"]+/gi;
+
+/**
+ * `address` with its user and password, query and fragment left out, which may hold a token; its scheme, host and
+ * path are kept. Text that doesn't parse as an address keeps only what comes before its first `?` or `#`, with no `@`
+ * part.
+ */
+function addressShown(address: string): string {
+  if (URL.canParse(address)) {
+    const parsed = new URL(address);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  }
+  const [beforeQuery = ''] = address.split(/[?#]/, 1);
+  return beforeQuery.replace(/:\/\/[^/]*@/, '://');
+}
+
+/** `line` with the token masked, each address's secrets left out, and each long environment value named. */
 function scrubbed(
   line: string,
   token: string | undefined,
   environment: Readonly<Record<string, string>>,
 ): string {
-  let text = masked(line, token);
+  let text = masked(line, token).replace(ADDRESS, addressShown);
   for (const [variable, value] of Object.entries(environment)) {
     if (value.length >= SECRET_LENGTH) {
       text = text.replaceAll(value, () => `\${${variable}}`);
