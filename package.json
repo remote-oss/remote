@@ -29,6 +29,7 @@
     "check-string-tables": "node tools/string-tables.ts",
     "check-coverage": "node tools/check-coverage.ts",
     "check-ci-gate": "node tools/check-ci-gate.ts",
+    "check-workflow-tokens": "node tools/check-workflow-tokens.ts",
     "package": "node tools/package-run.ts",
     "acceptance:clean": "node tools/acceptance-run.ts --clean",
     "test:acceptance": "pnpm package && node tools/acceptance.ts",
