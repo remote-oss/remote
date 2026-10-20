@@ -3,7 +3,8 @@
  * `vscode` volume, which a launch may remove and make again, so two runs that share a daemon take turns. The lock is a
  * network that the daemon names uniquely, labelled with the run that holds it: a create either makes it or finds it,
  * at once for every process and runner that shares the daemon. A run's own clean-up removes it with the run's
- * other networks, and the sweep of empty run networks older than two hours removes one that a killed run left.
+ * other networks; a lock whose run has no container or network left on the daemon is one a killed run left, and the
+ * next launch that finds it removes it and takes the lock (a live run keeps its own network from start to end).
  */
 
 import {RUN_LABEL} from './acceptance-run.ts';
@@ -42,10 +43,42 @@ export interface LockClock {
 /** The holder's run and the lock's creation time in seconds, as `docker network inspect` gives them. */
 const HOLDER_FORMAT = `{{index .Labels "${RUN_LABEL}"}} {{.Created.Unix}}`;
 
+/** Whether run `holderRun` still has a container, or a network besides the lock, on the daemon. */
+function holderLives(command: CommandRunner, holderRun: string): boolean {
+  const filter = `label=${RUN_LABEL}=${holderRun}`;
+  const containers = command('docker', [
+    'ps',
+    '--all',
+    '--quiet',
+    '--filter',
+    filter,
+  ]);
+  const networks = command('docker', [
+    'network',
+    'ls',
+    '--format',
+    '{{.Name}}',
+    '--filter',
+    filter,
+  ]);
+  const others = networks.stdout
+    .split('\n')
+    .map(name => name.trim())
+    .filter(name => name !== '' && name !== LOCK_NETWORK);
+  // A listing that fails says nothing: the holder counts as alive, and the launch waits.
+  return (
+    containers.status !== 0 ||
+    networks.status !== 0 ||
+    containers.stdout.trim() !== '' ||
+    others.length > 0
+  );
+}
+
 /**
  * The daemon's dev container lock for run `runId`. `take` makes the lock's network, or waits while another run's
  * exists, saying once a minute which run holds it and for how long, and fails after LOCK_WAIT_MILLISECONDS. A create
- * that fails while no lock exists is the daemon's own failure, not a wait. `release` removes the network.
+ * that fails while no lock exists is the daemon's own failure, not a wait. A lock whose run left nothing else on the
+ * daemon is removed and taken. `release` removes the network.
  */
 export function daemonLock(
   command: CommandRunner,
@@ -87,6 +120,13 @@ export function daemonLock(
         const [holderRun = '', createdSeconds = '0'] = holder.stdout
           .trim()
           .split(' ');
+        if (!holderLives(command, holderRun)) {
+          report(
+            `acceptance: the Docker daemon's dev container lock of run ${holderRun} is left from a run that is gone; removing it`,
+          );
+          command('docker', ['network', 'rm', LOCK_NETWORK]);
+          continue;
+        }
         const heldFor = `${String(Math.round(clock.now() / 1000 - Number(createdSeconds)))} s`;
         if (clock.now() - started >= LOCK_WAIT_MILLISECONDS) {
           throw new Error(
