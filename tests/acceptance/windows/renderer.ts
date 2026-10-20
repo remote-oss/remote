@@ -728,6 +728,24 @@ export async function extensionContextMenu(
   return menu;
 }
 
+/**
+ * Whether the entry `displayName` of the Extensions view in window `name` shows its status marker, the icon core puts
+ * on an extension that Restricted Mode limits or disables; `undefined` when the view lists no such entry.
+ */
+export async function extensionStatusShown(
+  name: string,
+  displayName: string,
+): Promise<boolean | undefined> {
+  return evaluate<boolean | undefined>(
+    name,
+    `(() => {
+      const row = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].find(each => each.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const status = row?.querySelector('.extension-status');
+      return status === undefined || status === null ? undefined : !status.classList.contains('hide');
+    })()`,
+  );
+}
+
 /** One row of core's Ports view. */
 export interface PortsRow {
   /** The Port column as shown: `<label> (<port or key>)`, or the port or key alone. */
