@@ -292,19 +292,25 @@ jobs:
   # SSH host. The harness downloads the pinned release itself and checks its sha256, so the job needs nothing placed on
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
   acceptance-vscodium:
-    name: acceptance (vscodium)
+    name: acceptance (vscodium, ${{ matrix.launches }})
     if: inputs.vscodium || github.event.schedule == '17 */2 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group, where
-    # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
-    # theirs, fed one at a time, so the backstop never displaces them.
+    # Every launch of the suite (`all`) runs as three parts on three runners at once: the ssh launches, the containers
+    # launches, and the explorer and host-case launches together. The genuine group has its own job. A dispatch that names
+    # its launches runs them as one part.
+    strategy:
+      fail-fast: false
+      matrix:
+        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh","@containers","@explorer,@hosts"]') }}
+    # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
+    # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
+    # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
     concurrency:
-      group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
+      group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.launches }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
-    # the whole VSCodium suite outgrew 30 minutes in October 2026: main's backstop was cut at 30 every time, so it never
-    # reported (050079f: started 23:38:16, cancelled 00:08:41). It outgrew 60 on 2026-10-20: the first scheduled backstop
-    # ran 07:32:30 to 08:32:53 and was cancelled (39387179525), and the containers launch alone takes 44 minutes. 120
-    # holds the suite until it is split across runners
+    # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
+    # at 60), so it runs in parts; the containers launch alone takes 44 minutes. A dispatch of every launch named in one
+    # part still fits in 120
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
@@ -319,15 +325,15 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      # a dispatch may name the launches; a push to main and a release tag make every launch
+      # the part's launches: a group selection, or the launches a dispatch names
       - run: |
           if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches "${LAUNCHES:-all}"
+            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "${LAUNCHES:-all}"
+            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           fi
         env:
-          LAUNCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.launches || 'all' }}
+          LAUNCHES: ${{ matrix.launches }}
       - if: always()
         run: pnpm acceptance:clean
 
