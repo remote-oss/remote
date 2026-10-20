@@ -51,6 +51,7 @@
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "explorer-no-proposals/*.test.ts",
+        "explorer-standdown/*.test.ts",
         "trust/*.test.ts",
         "trust-terminal/*.test.ts",
         "containers/*.test.ts",

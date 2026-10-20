@@ -349,6 +349,7 @@ const LAUNCH_ORDER = [
   'explorer',
   'explorer-alone',
   'explorer-no-proposals',
+  'explorer-standdown',
   'trust',
   'trust-terminal',
   'containers',
@@ -379,6 +380,10 @@ describe('acceptance', () => {
     harness = new FakeHarness();
     workspace.write(
       'packages/remote-containers/package.json',
+      JSON.stringify({engines: {vscode: '^1.139.0'}}),
+    );
+    workspace.write(
+      'packages/remote-explorer/package.json',
       JSON.stringify({engines: {vscode: '^1.139.0'}}),
     );
     workspace.write(
@@ -900,16 +905,19 @@ describe('acceptance', () => {
             folder: path.join('/run', 'extensions'),
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
           },
-          ...['explorer', 'explorer-alone', 'explorer-no-proposals'].map(
-            label => ({
-              folder: path.join('/run', `extensions-${label}`),
-              files: [
-                '/dist/remote-ssh.vsix',
-                '/run/window-agent.vsix',
-                path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
-              ],
-            }),
-          ),
+          ...[
+            'explorer',
+            'explorer-alone',
+            'explorer-no-proposals',
+            'explorer-standdown',
+          ].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
+          })),
           ...[
             'containers',
             'containers-standdown',

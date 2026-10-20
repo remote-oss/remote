@@ -290,12 +290,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'acceptance.agent.writeFile',
       async (writeName: string, text: string) => {
+        // A full URI is written as it is, so a window with no folder can write through its remote file system.
         const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
-        if (folder === undefined) {
+        const target = writeName.includes('://')
+          ? vscode.Uri.parse(writeName)
+          : folder === undefined
+            ? undefined
+            : vscode.Uri.joinPath(folder, writeName);
+        if (target === undefined) {
           throw new Error('the window has no folder');
         }
         await vscode.workspace.fs.writeFile(
-          vscode.Uri.joinPath(folder, writeName),
+          target,
           new TextEncoder().encode(text),
         );
       },
