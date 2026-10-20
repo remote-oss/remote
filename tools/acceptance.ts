@@ -66,6 +66,8 @@ import {
   hostExtensionFolder,
   failureLabel,
   LAUNCH_EXTENSIONS,
+  LAUNCH_GROUPS,
+  launchGroupOf,
   type HostSetupEntry,
   type Launch,
   type RunnerLaunch,
@@ -1478,11 +1480,32 @@ export function editorExecutableOf(
 
 /** What a run prints when its arguments are not understood. */
 export const USAGE =
-  'usage: node tools/acceptance.ts [--editor vscode|vscodium [--launches all|none|<label>,...]]';
+  'usage: node tools/acceptance.ts [--editor vscode|vscodium [--launches all|none|<entry>,...]], an entry being a ' +
+  'label, all, @<group> or !<label>|!@<group>';
+
+/** The launches one entry of a selection names: a label, `all`, or `@<group>`; none for an unknown name. */
+function launchesNamed(
+  launches: readonly Launch[],
+  name: string,
+): Launch[] | undefined {
+  if (name === 'all') {
+    return launches.filter(launch => launch.namedOnly !== true);
+  }
+  if (name.startsWith('@')) {
+    const group = LAUNCH_GROUPS.find(each => `@${each}` === name);
+    return group === undefined
+      ? undefined
+      : launches.filter(launch => launchGroupOf(launch) === group);
+  }
+  const named = launches.filter(launch => launch.label === name);
+  return named.length === 0 ? undefined : named;
+}
 
 /**
- * The launches a run makes: every one that is not `namedOnly` when `selected` is undefined, else those whose label it
- * names, in the run's order; an error text naming the known labels when it names an unknown one.
+ * The launches a run makes, in the run's order: every one that is not `namedOnly` when `selected` is undefined, else
+ * what its entries name, each in turn. An entry is a label, `all`, or `@<group>` (every launch of the group, a
+ * `namedOnly` one included), and `!` before one takes out what the entries before it put in. An entry that names
+ * nothing known gives an error text naming the known labels and groups.
  */
 export function chosenLaunches(
   launches: readonly Launch[],
@@ -1491,12 +1514,47 @@ export function chosenLaunches(
   if (selected === undefined) {
     return launches.filter(launch => launch.namedOnly !== true);
   }
-  const known = launches.map(launch => launch.label);
-  const unknown = selected.filter(label => !known.includes(label));
-  if (unknown.length > 0) {
-    return `unknown launch label(s): ${unknown.join(', ')}; the known ones: ${known.join(', ')}`;
+  const chosen = new Set<Launch>();
+  const unknown: string[] = [];
+  for (const entry of selected) {
+    const removing = entry.startsWith('!');
+    const name = removing ? entry.slice(1) : entry;
+    const named = launchesNamed(launches, name);
+    if (named === undefined) {
+      unknown.push(entry);
+      continue;
+    }
+    for (const launch of named) {
+      if (removing) {
+        chosen.delete(launch);
+      } else {
+        chosen.add(launch);
+      }
+    }
   }
-  return launches.filter(launch => selected.includes(launch.label));
+  if (unknown.length > 0) {
+    const known = launches.map(launch => launch.label);
+    const groups = LAUNCH_GROUPS.map(group => `@${group}`);
+    return `unknown launch label(s): ${unknown.join(', ')}; the known ones: ${known.join(', ')}; the groups: ${groups.join(', ')}`;
+  }
+  return launches.filter(launch => chosen.has(launch));
+}
+
+/** The line a selected run prints: the launches it makes, with their groups, and the ones it skips. */
+export function selectionLine(
+  launches: readonly Launch[],
+  chosen: readonly Launch[],
+): string {
+  const made = chosen.map(launch => launch.label);
+  const skipped = launches
+    .map(launch => launch.label)
+    .filter(label => !made.includes(label));
+  const groups = LAUNCH_GROUPS.filter(group =>
+    chosen.some(launch => launchGroupOf(launch) === group),
+  ).map(group => `@${group}`);
+  return made.length === 0
+    ? `no launch reachable: none made, ${String(skipped.length)} skipped`
+    : `launches made (${String(made.length)}, groups ${groups.join(', ')}): ${made.join(', ')}; skipped (${String(skipped.length)}): ${skipped.join(', ') || '-'}`;
 }
 
 /** Prints the launches a selected run makes and skips, and adds them to the job's summary when there is one. */
@@ -1504,14 +1562,7 @@ function reportSelection(
   launches: readonly Launch[],
   chosen: readonly Launch[],
 ): void {
-  const made = chosen.map(launch => launch.label);
-  const skipped = launches
-    .map(launch => launch.label)
-    .filter(label => !made.includes(label));
-  const text =
-    made.length === 0
-      ? `no launch reachable: none made, ${String(skipped.length)} skipped`
-      : `launches made (${String(made.length)}): ${made.join(', ')}; skipped (${String(skipped.length)}): ${skipped.join(', ') || '-'}`;
+  const text = selectionLine(launches, chosen);
   console.log(`acceptance: ${text}`);
   const summary = process.env.GITHUB_STEP_SUMMARY;
   if (summary !== undefined && summary !== '') {

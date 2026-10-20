@@ -251,6 +251,29 @@ failure that comes in about the first second after the window connects, whatever
 card containers-61: the dialog came in 0 to 3 of 5 stops made at once, and in 12 of 12 made from two seconds on, while
 the extension's answer was the same in all of them).
 
+**Choosing launches.** `--launches` takes `all` (every launch that isn't named only), `none`, or a comma list of
+entries, applied in turn:
+- a label;
+- `all`;
+- `@<group>`, every launch of a group, named-only ones included;
+- `!` before any of these, which takes out what the entries before it put in.
+
+The launches are made in the table's order whatever the order of the entries. Every launch is in one group, computed
+from the table (`launchGroupOf`):
+- `genuine`: the genuine client;
+- `containers`: installs Dev Containers;
+- `explorer`: installs Remote Explorer and not Dev Containers;
+- `hosts`: the ports, install and platform cases;
+- `ssh`: every other.
+
+An entry that names no label or group fails, listing both. The backstop splits across three runners this way:
+
+    node tools/acceptance.ts --editor vscodium --launches @ssh
+    node tools/acceptance.ts --editor vscodium --launches @containers
+    node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
+
+`@ssh,!terminal` is the ssh group without one launch.
+
 To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
 in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root
 `tsconfig.json`'s `references` and in `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`. Either kind's test files go in the

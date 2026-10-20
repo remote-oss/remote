@@ -757,6 +757,41 @@ export function launchLabelled(
   return found;
 }
 
+/** The groups a run can name with `@<group>`, in the order a selection line lists them. */
+export const LAUNCH_GROUPS = [
+  'ssh',
+  'hosts',
+  'explorer',
+  'containers',
+  'genuine',
+] as const;
+
+/** One of the groups of launches. */
+export type LaunchGroup = (typeof LAUNCH_GROUPS)[number];
+
+/**
+ * The one group of `launch`, from the table alone: `genuine` for the genuine client, `containers` for a launch that
+ * installs Dev Containers, `explorer` for one that installs Remote Explorer and not Dev Containers, `hosts` for the
+ * host-case launches, `ssh` for every other.
+ */
+export function launchGroupOf(launch: Launch): LaunchGroup {
+  if (launch.kind === 'plain') {
+    const extensions = launch.withExtensions ?? [];
+    if (launch.client === 'vscode') {
+      return 'genuine';
+    }
+    if (extensions.includes('remote-oss.remote-containers')) {
+      return 'containers';
+    }
+    return extensions.includes('remote-oss.remote-explorer')
+      ? 'explorer'
+      : 'ssh';
+  }
+  return HOST_CASE_SUITES.some(suite => suite.suite === launch.suite)
+    ? 'hosts'
+    : 'ssh';
+}
+
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */
 export function needsDevContainerImage(launch: Launch): boolean {
   return (
