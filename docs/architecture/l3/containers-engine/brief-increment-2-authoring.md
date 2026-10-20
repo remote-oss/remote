@@ -52,7 +52,7 @@ for this answer is now in scope, and none of (B)'s deviations apply.
    `written {files, target}`, `cancelled` or `failed {detail}`. It never reloads and never starts a container. Each
    caller continues on its own:
    - F-0801's command opens the file as a preview and raises F-0402's notification (the folder variant, or the
-     user-data variant under (A));
+     user-data variant for the user-data target);
    - F-0403 Flow A reloads into the container through C6's existing `commandBeforeReload` and `reloadIntoContainer`,
      with no editor and no notification (5.0 step 9b);
    - Reopen and rebuild-and-reopen go on with release 1's connect on the written file;
@@ -68,7 +68,7 @@ for this answer is now in scope, and none of (B)'s deviations apply.
    - *Source:* `https://containers.dev/static/devcontainer-index.json`. *Measured:* about 2 MB, with 183 templates and
      1460 Features, each template carrying its `options` and `optionalPaths`.
    - *When:* once at the start of each wizard run, never reused (F-0802 BR-1), and one fetch feeds both the template
-     list and, under (A), the Feature list.
+     list and the Feature list.
    - *How:* the extension host's `https` module, which core makes follow `http.proxy`.
    - *Failure:* the preferred outcome, our own message naming the network cause, before any screen (F-0801 7.E10,
      F-0802 7.E3). Its text is ours (ADR-0008), so it's a spec question for an `[adaptation]` string, with a
@@ -135,9 +135,8 @@ for this answer is now in scope, and none of (B)'s deviations apply.
 
 - **The 21 `increment 2 (authoring)` rows** of `coverage-containers-r1.tsv` (F-0106, F-0301, F-0401, F-0403, F-0405)
   become `acceptance`.
-- **F-0801 (43) and F-0802 (37) are seeded and tagged,** less the criteria ruled `later` above (Compose, F-0105) and,
-  under (B), §2's deviations.
-- **Under (A),** F-0803, F-0804 and F-0805 are seeded too.
+- **F-0801 (43) and F-0802 (37) are seeded and tagged,** less the criteria ruled `later` above (Compose, F-0105).
+- **F-0803, F-0804 and F-0805 are seeded too** (D-100).
 
 ## 6. Spec questions, open
 
