@@ -554,17 +554,23 @@ export async function notifications(name: string): Promise<string[]> {
   );
 }
 
-/** The connecting toast of a window: its message and its bar, which core draws as `infinite` or `discrete`. */
+/** The state of a toast's progress bar, read in the page: core draws `infinite` on an indeterminate bar's `.monaco-progress-container` ([oss] `src/vs/base/browser/ui/progressbar/progressbar.ts`). */
+const TOAST_PROGRESS = `(() => {
+    const bar = item.parentElement?.querySelector('.monaco-progress-container') ?? null;
+    const shown = bar !== null && bar.classList.contains('active') && !bar.classList.contains('done');
+    return !shown ? 'none' : bar.classList.contains('infinite') ? 'infinite' : 'discrete';
+  })()`;
+
+/** The state of a toast's progress bar: `infinite` or `discrete`, or `none` when it shows no progress. */
+type ToastProgress = 'infinite' | 'discrete' | 'none';
+
+/** The connecting toast of a window: its message and its bar. */
 export interface ConnectingToast {
   message: string;
-  progress: 'infinite' | 'discrete' | 'none';
+  progress: ToastProgress;
 }
 
-/**
- * The toast of window `name` whose message starts with `messageStart`, with the state of its progress bar, or nothing
- * when there is none. Core draws an indeterminate bar with the class `infinite` on the toast's `.monaco-progress-container`
- * and a determinate one without it ([oss] `src/vs/base/browser/ui/progressbar/progressbar.ts`).
- */
+/** The toast of window `name` whose message starts with `messageStart`, with the state of its progress bar, or nothing when there is none. */
 export async function notificationProgress(
   name: string,
   messageStart: string,
@@ -576,14 +582,64 @@ export async function notificationProgress(
   if (item === undefined) {
     return null;
   }
-  const bar = item.parentElement?.querySelector('.monaco-progress-container') ?? null;
-  const shown = bar !== null && bar.classList.contains('active') && !bar.classList.contains('done');
   return {
     message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
-    progress: !shown ? 'none' : bar.classList.contains('infinite') ? 'infinite' : 'discrete',
+    progress: ${TOAST_PROGRESS},
   };
 })()`,
   ).then(found => found ?? undefined);
+}
+
+/** Puts the keyboard focus on the toast list of window `name`, as "Notifications: Focus Notification Toast" does; false when no toast is shown. */
+export async function focusToasts(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(() => {
+  const list = document.querySelector('.notifications-toasts .monaco-list');
+  list?.focus();
+  return list !== null;
+})()`,
+  );
+}
+
+/** Presses Delete in window `name` wherever its page has the focus, as the keyboard does. */
+export async function pressDelete(name: string): Promise<void> {
+  await pressKey(await pageOf(name), name, 'Delete');
+}
+
+/** The text of the status bar item `itemId` of window `name`, read at once with no hover; empty when there is none. */
+export async function statusBarText(
+  name: string,
+  itemId: string,
+): Promise<string> {
+  return evaluate<string>(
+    name,
+    `(document.getElementById(${JSON.stringify(itemId)})?.textContent ?? '').trim()`,
+  );
+}
+
+/** One notification toast as the window shows it: its text, links, buttons, toolbar actions and progress bar. */
+export interface ToastDetails extends ConnectingToast {
+  /** The words and the address of each link in the message. */
+  links: NotificationLink[];
+  /** The labels of the buttons. */
+  buttons: string[];
+  /** The accessible names of the toolbar's actions. */
+  toolbar: string[];
+}
+
+/** The toasts on screen of window `name` in the order shown, each with what a user sees and can click on it. */
+export async function toastDetails(name: string): Promise<ToastDetails[]> {
+  return evaluate<ToastDetails[]>(
+    name,
+    `[...document.querySelectorAll('.notifications-toasts .notification-list-item')].map(item => ({
+  message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+  links: [...item.querySelectorAll('.notification-list-item-message a')].map(each => ({text: each.textContent ?? '', href: each.getAttribute('href') ?? each.getAttribute('data-href') ?? ''})),
+  buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => each.textContent ?? ''),
+  toolbar: [...item.querySelectorAll('.notification-list-item-toolbar-container .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+  progress: ${TOAST_PROGRESS},
+}))`,
+  );
 }
 
 /** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */
