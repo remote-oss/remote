@@ -97,7 +97,9 @@ function dependencies(loop: HostLockLoop = runOnce): {
 async function start(
   channel: RecordingChannel,
   options: Partial<RuntimeOptions> = {},
-  allowed: ReadonlyArray<'fileWatcherPolling' | 'useHostProxy'> = [],
+  allowed: ReadonlyArray<
+    'fileWatcherPolling' | 'useHostProxy' | 'forceDisableUserEnv'
+  > = [],
   loop?: HostLockLoop,
   requirementsCheck: 'serverBundled' | 'bundledHelper' = 'serverBundled',
   extensionEntries: 'identifiersOnly' | 'asWritten' = 'identifiersOnly',
@@ -991,6 +993,26 @@ describe('startOrReuse (V7) over a real shell', () => {
     const channel = recording(STARTED);
     await start(channel, {}, ['useHostProxy']);
     deepStrictEqual(scriptOf(channel).includes("'--use-host-proxy'"), true);
+  });
+
+  it('#737: the option that leaves the login-shell environment to the extension goes after the host-proxy option when the policy allows both', async () => {
+    const channel = recording(STARTED);
+    await start(channel, {}, ['useHostProxy', 'forceDisableUserEnv']);
+    const script = scriptOf(channel);
+    deepStrictEqual(
+      script.indexOf("'--use-host-proxy'") <
+        script.indexOf("'--force-disable-user-env'"),
+      true,
+    );
+  });
+
+  it('#737: that option stays out when the policy does not allow it', async () => {
+    const channel = recording(STARTED);
+    await start(channel, {}, ['useHostProxy']);
+    deepStrictEqual(
+      scriptOf(channel).includes('--force-disable-user-env'),
+      false,
+    );
   });
 
   it('F-0503 BR-18: the host-proxy option stays out when the policy does not allow it', async () => {

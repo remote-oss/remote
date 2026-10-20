@@ -35,7 +35,7 @@ import type {
   ContainerRequest,
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
-import {fakeEngine, type SpawnPlan} from './fake-engine.ts';
+import {fakeEngine, type ProcessScript, type SpawnPlan} from './fake-engine.ts';
 
 /** The connection token of the fixture's server, a secret no log may hold. */
 export const SECRET_TOKEN = 'tok-s3cret';
@@ -148,6 +148,9 @@ export interface Scene {
   killStatuses: number[];
   /** What the runs over the channel were given on their input, as text. */
   killScripts: string[];
+  /** What the environment probe's process does, and the probe scripts it was given. */
+  probe: ProcessScript;
+  probeScripts: string[];
   /** Holds the opening of the relay until it settles. */
   relayGate: (() => Promise<void>) | undefined;
   /** Whether the editor says the folder is trusted, and what its trust request answers: true, false or a refusal. */
@@ -160,6 +163,10 @@ export interface Scene {
   /** How many reads of the configuration had run, and how many engine calls had been made, when trust was read. */
   atTrust: {reads: number; engineCalls: number} | undefined;
 }
+
+/** What a probe that worked prints: noise, the markers and two variables. */
+const PROBE_OUTPUT =
+  'motd\nremote-oss-env-probe-begin\nALPHA=probe\0BRAVO=probe\0\nremote-oss-env-probe-end\n';
 
 /** A container prepared and ready. */
 export const READY: Extract<ContainerOutcome, {kind: 'ready'}> = {
@@ -235,6 +242,11 @@ export function sceneOf(
     deprecatedDefaultExtensions: undefined,
     killStatuses: [],
     killScripts: [],
+    probe: process => {
+      process.print(PROBE_OUTPUT);
+      process.exit(0);
+    },
+    probeScripts: [],
     relayGate: undefined,
     trusted: true,
     trustAnswer: true,
@@ -248,7 +260,13 @@ export function sceneOf(
   const kills = fakeEngine(
     ...Array.from({length: 8}, (): SpawnPlan => async process => {
       await process.stdinEnded;
-      scene.killScripts.push(process.stdin().toString('utf8'));
+      const script = process.stdin().toString('utf8');
+      if (script.includes('remote-oss-env-probe-begin')) {
+        scene.probeScripts.push(script);
+        await scene.probe(process);
+        return;
+      }
+      scene.killScripts.push(script);
       process.exit(scene.killStatuses.shift() ?? 0);
     }),
   );

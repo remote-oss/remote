@@ -1,9 +1,10 @@
 /**
- * @fileoverview What the Dev Containers rows share: a local window opened on a folder, a user setting changed and read
- * back, and the containers of a folder removed.
+ * @fileoverview What the Dev Containers rows share: a local window opened on a folder or a workspace file, a user setting
+ * changed and read back, and the containers of a folder removed.
  */
 
 import {execFile} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
@@ -22,14 +23,13 @@ export function activations(name: string): number {
   return windowEvents(name).filter(each => each.event === 'activated').length;
 }
 
-/** Opens a local window on `folder` and waits for its agent; the window is named after the folder. */
-export async function openFolderWindow(folder: string): Promise<string> {
-  const name = path.basename(folder);
+/** Opens a local window on `target` from the local window, and waits for the agent of the window named `name`. */
+async function openLocalWindow(target: string, name: string): Promise<string> {
   const before = activations(name);
   await inWindow(
     'local',
     'acceptance.agent.openWindow',
-    pathToFileURL(folder).href,
+    pathToFileURL(target).href,
   );
   await waitFor(
     `window ${name} to activate its agent`,
@@ -37,6 +37,30 @@ export async function openFolderWindow(folder: string): Promise<string> {
     60_000,
   );
   return name;
+}
+
+/** Opens a local window on `folder` and waits for its agent; the window is named after the folder. */
+export function openFolderWindow(folder: string): Promise<string> {
+  return openLocalWindow(folder, path.basename(folder));
+}
+
+/**
+ * Opens a local window on the `.code-workspace` file `workspaceFile` and waits for its agent. The window is named
+ * after the workspace's first folder, as the agent names every window with folders, so the file must list one.
+ */
+export function openWorkspaceWindow(workspaceFile: string): Promise<string> {
+  const listed = (
+    JSON.parse(readFileSync(workspaceFile, 'utf8')) as {
+      folders?: Array<{path?: string}>;
+    }
+  ).folders?.[0]?.path;
+  if (listed === undefined) {
+    throw new Error(`${workspaceFile} lists no folder to name its window by`);
+  }
+  return openLocalWindow(
+    workspaceFile,
+    path.basename(path.resolve(path.dirname(workspaceFile), listed)),
+  );
 }
 
 /** Sets a user setting from the local window and waits until the local window reads it back. */

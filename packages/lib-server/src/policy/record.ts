@@ -18,7 +18,8 @@ export type RequirementsCheck =
 export type ExtensionEntries = 'identifiersOnly' | 'asWritten';
 
 /** An extra start option the record allows the extension to add. */
-export type ExtraStartOption = 'fileWatcherPolling' | 'useHostProxy';
+export type ExtraStartOption =
+  'fileWatcherPolling' | 'useHostProxy' | 'forceDisableUserEnv';
 
 /** What happens to older installs after a new one. */
 export type Cleanup =

@@ -128,6 +128,7 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
       extensions: options.defaultExtensions,
       fileWatcherPollingMilliseconds: options.fileWatcherPollingMilliseconds,
       useHostProxy: false,
+      forceDisableUserEnv: false,
       requirementsHelper: false,
       readySeconds: options.readySeconds,
       socketMode: options.socketMode,

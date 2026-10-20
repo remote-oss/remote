@@ -74,6 +74,8 @@ export interface StartParameters {
   fileWatcherPollingMilliseconds: number;
   /** Whether the server starts in host-proxy mode, when the policy allows it. */
   useHostProxy: boolean;
+  /** Whether the server leaves the user's login-shell environment to the extension, when the policy allows it. */
+  forceDisableUserEnv: boolean;
   /** Whether the server's own requirements helper runs before a launch (policy `bundledHelper`). */
   requirementsHelper: boolean;
   /** How many seconds the start waits for the ready line before it fails. */
@@ -218,6 +220,7 @@ function startOptions(start: StartParameters): string {
       ? ['--file-watcher-polling', String(start.fileWatcherPollingMilliseconds)]
       : []),
     ...(start.useHostProxy ? ['--use-host-proxy'] : []),
+    ...(start.forceDisableUserEnv ? ['--force-disable-user-env'] : []),
   ];
   const words = [
     shellQuote('--start-server'),

@@ -383,6 +383,21 @@ describe('the scripts of a server without a tree (card containers-05)', () => {
     });
   }
 
+  for (const [forceDisableUserEnv, count] of [
+    [true, 1],
+    [false, 0],
+  ] as const) {
+    it(`#737: the start script of forceDisableUserEnv ${String(forceDisableUserEnv)} holds the option ${String(count)} time`, () => {
+      const parameters = parametersFor();
+      parameters.start.forceDisableUserEnv = forceDisableUserEnv;
+      const text = scriptFor(single('start'), 'posixShell', parameters);
+      deepStrictEqual(
+        text.split("'--force-disable-user-env'").length - 1,
+        count,
+      );
+    });
+  }
+
   for (const [useHostProxy, count] of [
     [true, 1],
     [false, 0],
