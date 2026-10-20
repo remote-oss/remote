@@ -2,10 +2,13 @@
  * @fileoverview The run's registry against a recording command runner and a fake clock.
  */
 
-import {deepStrictEqual, rejects} from 'node:assert';
+import {deepStrictEqual, ok, rejects} from 'node:assert';
+import {createServer} from 'node:http';
+import type {AddressInfo} from 'node:net';
 import {
   REGISTRY_IMAGE,
   type RegistryClock,
+  SYSTEM_CLOCK,
   startRunRegistry,
 } from './acceptance-registry.ts';
 import {DEVCONTAINER_LABEL, RUN_LABEL} from './acceptance-run.ts';
@@ -141,5 +144,27 @@ describe('the run’s registry (card containers-59)', () => {
       startRunRegistry(command, clockOf([200]).clock, RUN_ID),
       /publishes no port/,
     );
+  });
+
+  it('reads the status of a server that answers, and none from an address nobody listens on', async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(200).end();
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const {port} = server.address() as AddressInfo;
+    const answered = await SYSTEM_CLOCK.status(
+      `http://127.0.0.1:${String(port)}/v2/`,
+    );
+    await new Promise(resolve => server.close(resolve));
+    const closed = await SYSTEM_CLOCK.status(
+      `http://127.0.0.1:${String(port)}/v2/`,
+    );
+    deepStrictEqual([answered, closed], [200, undefined]);
+  });
+
+  it('tells the system time and sleeps for the milliseconds it is given', async () => {
+    const before = SYSTEM_CLOCK.now();
+    await SYSTEM_CLOCK.sleep(20);
+    ok(SYSTEM_CLOCK.now() - before >= 15);
   });
 });
