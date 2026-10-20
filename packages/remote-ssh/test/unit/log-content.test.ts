@@ -1,4 +1,5 @@
 import {deepStrictEqual, ok} from 'node:assert';
+import type {ResultBlock} from 'lib-server';
 import {
   bannerLine,
   checkingLine,
@@ -10,6 +11,7 @@ import {
   type ResolveRecord,
   resolveLogLines,
   searchedLines,
+  serverResultLine,
   usingLine,
 } from '../../src/diagnostics/log-content.ts';
 
@@ -723,6 +725,42 @@ describe('the lines of the client search and the probed platform (card connect-2
     deepStrictEqual(
       hostPlatformLine({operatingSystem: 'linux', architecture: 'arm64'}),
       'Host platform: linux arm64',
+    );
+  });
+});
+
+describe('the server result and the progress in the log (card connect-67)', () => {
+  /** A parsed block with `facts`, as lib-server gives it. */
+  function parsedBlock(
+    facts: Partial<Pick<ResultBlock, 'hostFacts' | 'serverFacts' | 'timings'>>,
+  ): ResultBlock {
+    return {
+      status: 'Ok',
+      hostFacts: {},
+      serverFacts: {},
+      cliFacts: {},
+      timings: {},
+      ...facts,
+    };
+  }
+
+  it('F-2003 BR-6 item 8: the result is logged as one summary line from the parsed block', () => {
+    deepStrictEqual(
+      serverResultLine(
+        parsedBlock({
+          hostFacts: {os: 'linux', arch: 'x64', display: ':10'},
+          serverFacts: {port: '41234', token: 'secret'},
+          timings: {download: 1200, install: 800, start: 90},
+        }),
+      ),
+      'Server result: Ok, port 41234, os linux, architecture x64, download 1200 ms, install 800 ms',
+    );
+  });
+
+  it('F-2003 BR-14: the summary has only the parts the block has, and no other fact', () => {
+    deepStrictEqual(
+      serverResultLine(parsedBlock({hostFacts: {sshAuthSock: '/tmp/a'}})),
+      'Server result: Ok',
     );
   });
 });

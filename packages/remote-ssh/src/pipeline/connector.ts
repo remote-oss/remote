@@ -140,6 +140,15 @@ function isConnection(result: Connection | Failed): result is Connection {
   return 'connected' in result;
 }
 
+/** The line a step of the connect's notification gives the log, or its percent for the server download. */
+function progressLine(
+  event: Exclude<PhaseEvent, {kind: 'promptShown'}>,
+): string {
+  return event.kind === 'serverDownloadPercent'
+    ? `Downloading VS Code Server: ${String(event.percent)}%`
+    : `Progress: ${event.kind}`;
+}
+
 /** The connector of Remote - SSH over its pipeline. */
 export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   const phases = new Listeners<ConnectPhase>();
@@ -174,6 +183,10 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           if (event.kind === 'promptShown') {
             phases.tell(promptedStage(told));
             return;
+          }
+          if (event.kind !== 'initializing' || event.quiet !== true) {
+            // A quiet step shows no notification, so the log, which follows the notification, skips it too.
+            dependencies.options.logger.info(progressLine(event));
           }
           told = phaseOf(event, terminalMode);
           phases.tell(told);

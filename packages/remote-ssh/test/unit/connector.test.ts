@@ -366,6 +366,61 @@ describe('the connector over the connect pipeline', () => {
     return heard;
   }
 
+  /** The progress lines a connect whose connection step reports `events` writes to the log. */
+  async function progressLogged(...events: PhaseEvent[]): Promise<string[]> {
+    const {recording, options, logSink} = setup();
+    const connector = connectorOf({
+      stepsFor: onPhase =>
+        steps(recording, {
+          openConnection: (...given) => {
+            events.forEach(onPhase);
+            return steps(recording).openConnection(...given);
+          },
+        }),
+      terminalMode: () => false,
+      options: connectorOptions(options),
+      revealLog: () => undefined,
+      applyTerminalEnvironment: () => undefined,
+    });
+    await connector.connect(HOST_INPUT);
+    return logSink.lines
+      .map(line => line.message)
+      .filter(
+        message =>
+          message.startsWith('Progress:') ||
+          message.startsWith('Downloading VS Code Server:'),
+      );
+  }
+
+  it('F-2003 BR-6 item 8: the steps and percents the notification shows are logged', async () => {
+    deepStrictEqual(
+      await progressLogged(
+        {kind: 'installing'},
+        {kind: 'serverDownloadPercent', percent: 0},
+        {kind: 'serverDownloadPercent', percent: 50},
+        {kind: 'serverDownloadPercent', percent: 100},
+      ),
+      [
+        'Progress: installing',
+        'Downloading VS Code Server: 0%',
+        'Downloading VS Code Server: 50%',
+        'Downloading VS Code Server: 100%',
+        'Progress: settingUpTunnel',
+      ],
+    );
+  });
+
+  it('F-2003 BR-6 item 8: a quiet step and a shown prompt, which change no step of the notification, log no progress', async () => {
+    deepStrictEqual(
+      await progressLogged(
+        {kind: 'initializing', quiet: true},
+        {kind: 'promptShown'},
+        {kind: 'initializing'},
+      ),
+      ['Progress: initializing', 'Progress: settingUpTunnel'],
+    );
+  });
+
   it('contracts: a stage a step reports through the listener it was given reaches the phase listeners', async () => {
     deepStrictEqual(
       (await phasesHeardAfter({kind: 'waitingForOtherWindow'})).some(

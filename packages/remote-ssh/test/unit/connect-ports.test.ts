@@ -1134,3 +1134,50 @@ describe("the assembled ports' CLI path", () => {
     });
   });
 });
+
+describe('the logged channel of both connect modes (card connect-67)', () => {
+  it('F-2003 BR-16, AC-29: the channel a terminal-mode connect gets logs its runs, as a shared-mode one does', async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    // The terminal step gives `channelFor` its terminal's runner where the shared step gives its session: one port.
+    const terminalRunner = {
+      runOnSession: (
+        sessionRun: unknown,
+        onLine: (line: string) => void,
+      ): Promise<{kind: 'ended'; status: number}> => {
+        onLine('a');
+        return Promise.resolve({kind: 'ended', status: 0});
+      },
+    };
+    const channel = wiringPortsOf(
+      {...surfaces, prompts: SILENT_PROMPTS},
+      machine,
+      loggerOf(recorded),
+    ).channelFor(terminalRunner, {
+      hostString: 'alex@dev:22',
+      base: RUN_BASE,
+      terms: TERMS,
+      connectWait: {
+        connectTimeoutSeconds: 15,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      },
+      displayHost: 'dev',
+    });
+    await channel.runScript(
+      {
+        script: 'echo a',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation: new AbortController().signal,
+      },
+      () => undefined,
+    );
+    deepStrictEqual(
+      recorded.sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('[remote] ')),
+      ['[remote] a'],
+    );
+  });
+});
