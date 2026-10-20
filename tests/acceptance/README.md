@@ -395,8 +395,8 @@ it:
 A recorded run keeps its failed rows in full (title, launch, the first line of the failure) and a short key for each row
 that passed. The folder keeps the newest 30 runs. The ledger lists each row that failed in a recorded run over its
 latest 10 runs: those that failed and passed, and those that failed every time. A row that failed in two or more of
-them is marked "(issue)". The recorded runs and the ledger are kept on the branch `qa/flake-ledger`, updated after
-each scheduled run, not on main.
+them is marked "(issue)". The recorded runs and the ledger are kept on the branch `qa/flakes`, updated after each
+scheduled run, not on main.
 
 ## Download host
 
