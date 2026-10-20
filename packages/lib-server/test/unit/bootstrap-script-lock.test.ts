@@ -328,7 +328,7 @@ describe('the POSIX bootstrap script', () => {
         `${String(stranger.pid)}\n`,
       );
       runScript(host, single('kill'), parametersFor());
-      untilQuiet(marker);
+      spawnSync('/bin/sleep', ['1.5']);
       deepStrictEqual(existsSync(marker), false);
     });
 
@@ -350,33 +350,38 @@ describe('the POSIX bootstrap script', () => {
       return typeof markers === 'string' ? [markers] : Object.values(markers);
     }
 
-    /** Waits, for up to five seconds, until every process of `markers` has put its trap in place. */
-    function untilUp(markers: string | Record<string, string>): void {
+    /** Waits, for up to five seconds, until every marker of `markers` has a file with the `suffix`; fails naming the ones that do not. */
+    function untilFiles(
+      markers: string | Record<string, string>,
+      suffix: string,
+      what: string,
+    ): void {
+      function missing(): string[] {
+        return markerPaths(markers).filter(
+          marker => !existsSync(`${marker}${suffix}`),
+        );
+      }
       const deadline = Date.now() + 5000;
-      while (
-        !markerPaths(markers).every(marker => existsSync(`${marker}.up`)) &&
-        Date.now() < deadline
-      ) {
+      while (missing().length > 0 && Date.now() < deadline) {
         spawnSync('/bin/sleep', ['0.02']);
+      }
+      if (missing().length > 0) {
+        throw new Error(
+          `${what} within 5 s: ${missing()
+            .map(marker => path.basename(marker))
+            .join(', ')}`,
+        );
       }
     }
 
-    /**
-     * Waits until no marker of `markers` has appeared for 0.3 s. A process sent TERM writes its marker within
-     * milliseconds, so a marker that is not there by then is not coming.
-     */
-    function untilQuiet(markers: string | Record<string, string>): void {
-      function written(): number {
-        return markerPaths(markers).filter(marker => existsSync(marker)).length;
-      }
-      let seen = written();
-      let quiet = 0;
-      while (quiet < 6) {
-        spawnSync('/bin/sleep', ['0.05']);
-        const now = written();
-        quiet = now === seen ? quiet + 1 : 0;
-        seen = now;
-      }
+    /** Waits until every process of `markers` has put its trap in place. */
+    function untilUp(markers: string | Record<string, string>): void {
+      untilFiles(markers, '.up', 'no trap was put in place');
+    }
+
+    /** Waits until every process of `markers` has recorded the TERM it was sent. */
+    function untilSignalled(markers: string | Record<string, string>): void {
+      untilFiles(markers, '', 'no TERM was recorded');
     }
 
     /** Starts a shell as `program` with these arguments after its script; returns the marker its TERM writes. */
@@ -436,17 +441,34 @@ describe('the POSIX bootstrap script', () => {
       return marker;
     }
 
-    /** Runs the step, gives the signals time to arrive, and says which of the markers were written. */
+    /**
+     * Runs the step and waits a fixed time for signals to arrive, so that a marker that is not there means no TERM was
+     * sent: for the rows whose point is that a process is left alone.
+     */
     function afterStep(
       step: 'kill' | 'uninstall',
       markers: Record<string, string>,
       parameters: ScriptParameters = parametersFor(),
     ): string[] {
       runScript(host, single(step), parameters);
-      untilQuiet(markers);
+      spawnSync('/bin/sleep', ['1.5']);
       return Object.keys(markers).filter(name =>
         existsSync(markers[name] ?? ''),
       );
+    }
+
+    /**
+     * Runs the step and waits until every process of `markers` has recorded its TERM: for the rows whose point is that
+     * the processes are stopped.
+     */
+    function afterStepSignalled(
+      step: 'kill' | 'uninstall',
+      markers: Record<string, string>,
+      parameters: ScriptParameters = parametersFor(),
+    ): string[] {
+      runScript(host, single(step), parameters);
+      untilSignalled(markers);
+      return Object.keys(markers);
     }
 
     function serverFile(): string {
@@ -462,7 +484,7 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {server: started('server', serverFile())};
       untilUp(markers);
-      deepStrictEqual(afterStep('kill', markers), ['server']);
+      deepStrictEqual(afterStepSignalled('kill', markers), ['server']);
     });
 
     it("F-2411.BR-3: kill stops the server's launcher, a shell running a script under cli/servers/", () => {
@@ -471,7 +493,7 @@ describe('the POSIX bootstrap script', () => {
         launcher: startedScript('launcher', 'sh', launcherScript()),
       };
       untilUp(markers);
-      deepStrictEqual(afterStep('kill', markers), ['launcher']);
+      deepStrictEqual(afterStepSignalled('kill', markers), ['launcher']);
     });
 
     it('F-2412 AC-27: kill leaves a sleep that only names a path under cli/servers/', () => {
@@ -553,7 +575,7 @@ describe('the POSIX bootstrap script', () => {
         ]),
       };
       untilUp(markers);
-      deepStrictEqual(afterStep('kill', markers), ['extensionHost']);
+      deepStrictEqual(afterStepSignalled('kill', markers), ['extensionHost']);
     });
 
     it('F-2411.BR-3: kill stops a file watcher whose parent has gone', () => {
@@ -565,7 +587,7 @@ describe('the POSIX bootstrap script', () => {
         ]),
       };
       untilUp(markers);
-      deepStrictEqual(afterStep('kill', markers), ['fileWatcher']);
+      deepStrictEqual(afterStepSignalled('kill', markers), ['fileWatcher']);
     });
 
     it('F-2411.BR-3: kill stops a launcher shell running a script under bin/', () => {
@@ -578,7 +600,7 @@ describe('the POSIX bootstrap script', () => {
         ),
       };
       untilUp(markers);
-      deepStrictEqual(afterStep('kill', markers), ['launcher']);
+      deepStrictEqual(afterStepSignalled('kill', markers), ['launcher']);
     });
 
     it('F-2412 AC-27: kill leaves a sleep that only names a path under bin/', () => {
@@ -646,7 +668,7 @@ describe('the POSIX bootstrap script', () => {
       const marker = started('server', serverFile());
       untilUp(marker);
       runScript(host, single('uninstall'), parametersFor());
-      untilQuiet(marker);
+      untilSignalled(marker);
       deepStrictEqual(existsSync(marker), true);
     });
 
@@ -657,7 +679,7 @@ describe('the POSIX bootstrap script', () => {
     function customRootUninstall(serverPath: string): string[] {
       const marker = started('server', serverPath);
       untilUp(marker);
-      return afterStep(
+      return afterStepSignalled(
         'uninstall',
         {server: marker},
         {
