@@ -101,6 +101,7 @@ describe('the process tree read from stat lines', () => {
     writeFileSync(path.join(folder, '100'), statLine(100, 'node', 1, 100));
     writeFileSync(path.join(folder, '200'), statLine(200, 'code', 100, 200));
     rmSync(path.join(folder, '200'));
+    mkdirSync(path.join(folder, '300'));
     deepStrictEqual([...processTreeOf(folder).keys()], [100]);
   });
 
