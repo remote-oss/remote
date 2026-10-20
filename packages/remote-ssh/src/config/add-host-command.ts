@@ -66,6 +66,8 @@ export interface AddHostPorts {
   configFile: () => string;
   /** An English template into the display language. */
   translate: Translate;
+  /** Tells Remote Explorer that the configured hosts may have changed. */
+  hostsChanged: () => void;
 }
 
 /** What registration supplies: the ports of the command besides the notices, the translation and the new window. */
@@ -121,6 +123,7 @@ export function addNewSshHostHandler(ports: AddHostPorts): CommandHandler {
         file,
         writeHostBlock(created.exists ? fileText : '', parsed.block),
       );
+      ports.hostsChanged();
       const openConfig = ownText({id: 'S099', values: []}, translate);
       const connectNow = ownText({id: 'S025', values: []}, translate);
       const button = await ports.notice.showInformation(
