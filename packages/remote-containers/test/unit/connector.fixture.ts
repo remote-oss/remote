@@ -354,6 +354,10 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    applyTemplate: () =>
+      Promise.reject(new Error('the connector never applies a template')),
+    templateMetadata: () =>
+      Promise.reject(new Error('the connector never reads template metadata')),
   };
   const lifecycle: ContainerLifecycle = {
     prepare: async (request, onStep, onCliEvent) => {

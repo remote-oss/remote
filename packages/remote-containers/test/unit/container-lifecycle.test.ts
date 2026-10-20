@@ -192,6 +192,8 @@ function fakeBridge(): FakeBridge {
       return bridge.runResult;
     },
     readConfiguration: () => Promise.reject(new Error('never read')),
+    applyTemplate: () => Promise.reject(new Error('never applied')),
+    templateMetadata: () => Promise.reject(new Error('never read')),
   };
   return bridge;
 }
