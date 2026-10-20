@@ -130,6 +130,17 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
     }
   });
 
+  it("F-5001 AC-25 (details-editor): opening the explorer's details editor in a fresh window does not activate it", async () => {
+    const name = await folderWindow('activation-details');
+    try {
+      await inWindow(name, 'extension.open', EXPLORER);
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+      deepStrictEqual(await extensionActive(name, EXPLORER), false);
+    } finally {
+      await closeWindow(name);
+    }
+  });
+
   it('F-5001 AC-14, F-5101 AC-36 (reload): with the Remote Explorer in front, Reload Window brings it back, activated with its rows, without user action', async () => {
     const name = await folderWindow('activation-reload');
     try {
