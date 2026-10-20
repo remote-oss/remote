@@ -317,6 +317,16 @@ C-14.
   - `extensionsAny` is always requested (Option B), with the stable same-host lookup as the silent fallback.
   - Still open: the F-3906 side, which lands when remote-ssh#83 is edited. The interface document is frozen at
     1.0 then.
+- **Companion interface 1.0, increment 2 settled** (athena, 2026-10-19, #745; `brief-explorer-increment-2.md` §2).
+  No field is added, and the interface stays 1.0.
+  - The store holds no duplicates, and the explorer renders repeats it receives.
+  - A delete that empties a host drops the host, so no host is ever sent with no entries.
+  - Any window whose authority isn't `ssh-remote` pushes as a local window: outcome `"none"`, no host key.
+  - `folders` is never sent.
+  - Each trigger sends one `sshHostsChanged`, with no debounce.
+  - `sshHostsChanged` is a push.
+  - Both sides take the host key from `hostKeyOfAuthority`.
+  - The explorer decides a row's kind from its path (F-5104 BR-15), and remote-ssh opens by the kind it is sent.
 - F-8201 Q1 is decided as "three quirks fixed": `currentConnection` answers from the window's own connection in every
   tunnel window, and the history is read from storage on every query.
 - Provisional (lab), held under D-60: the `ssh-remote` codec's handling of Windows client user names (F-2301 Q2) and
