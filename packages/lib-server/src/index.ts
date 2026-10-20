@@ -121,6 +121,7 @@ export type {
   DownloadResult,
 } from './transfer/ports.ts';
 export {
+  addressForLog,
   type ArchiveCache,
   DISCARD_DEADLINE_MILLISECONDS,
   type DownloadPlan,
