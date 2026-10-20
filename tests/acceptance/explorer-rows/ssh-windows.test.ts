@@ -24,6 +24,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {
+  rememberPage,
   rowAction,
   rowDetails,
   statusItem,
@@ -78,6 +79,8 @@ async function placeOf(name: string): Promise<[string | null, string[]]> {
 
 describe('the view in SSH windows and its connect actions (card coverage-25c, part b)', function () {
   this.timeout(360_000);
+
+  before(() => rememberPage('local'));
 
   it("F-5001 AC-7, F-5101 AC-18, F-5901 AC-9, F-5103 AC-37 (ssh-window): an SSH window's view lists the client's hosts with the connected one marked, Refresh works, nothing is shown, and the server's extensions folder holds nothing of the explorer", async () => {
     const name = 'xp-ssh-view';
@@ -207,6 +210,44 @@ describe('the view in SSH windows and its connect actions (card coverage-25c, pa
       await nothingFails(from);
     } finally {
       for (const window of [recovered, failed, from]) {
+        if (window !== '' && isOpen(window)) {
+          await closeWindow(window);
+        }
+      }
+    }
+  });
+
+  it('F-5103 AC-18 (unresolvable): Connect in Current Window on a name that never resolves shows the connection error and writes nothing, and after Close Remote Connection the window is usable and connects to a reachable host', async () => {
+    const from = await localViewWindow('connect-nowhere');
+    const settingsBefore = readFileSync(userSettingsFile(), 'utf8');
+    const failed = await nextEmptyWindow(() =>
+      rowAction(from, VIEW, 'nowhere', CURRENT),
+    );
+    let closed = '';
+    let connected = '';
+    try {
+      await waitFor(
+        `window ${failed} to show the connection error`,
+        () => recordLines('failureDialog', failed).length > 0,
+        120_000,
+      );
+      const settingsAfter = readFileSync(userSettingsFile(), 'utf8');
+      closed = await nextEmptyWindow(() =>
+        inWindow(failed, 'workbench.action.remote.close'),
+      );
+      await inWindow(closed, SHOW_REMOTE_EXPLORER);
+      await rowsSettled(closed, rowsOf(HOSTS, undefined));
+      const remoteAfterClose = (await placeOf(closed))[0];
+      connected = await nextEmptyWindow(() =>
+        rowAction(closed, VIEW, 'harness', CURRENT),
+      );
+      await connectedTo(connected, 'harness');
+      deepStrictEqual(
+        [settingsAfter === settingsBefore, remoteAfterClose],
+        [true, null],
+      );
+    } finally {
+      for (const window of [connected, closed, failed]) {
         if (window !== '' && isOpen(window)) {
           await closeWindow(window);
         }

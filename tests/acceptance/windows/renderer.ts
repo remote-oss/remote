@@ -284,6 +284,14 @@ export async function pageOf(
   );
 }
 
+/**
+ * Remembers the page window `name` has now, so that a later window with the same title, a further folder-less local
+ * one, is told apart from it. A suite that opens such a window calls it for `local` before the first one opens.
+ */
+export async function rememberPage(name: string): Promise<void> {
+  await pageOf(name);
+}
+
 /** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
 async function evaluateAt<Value>(
   address: string,
