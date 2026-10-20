@@ -72,13 +72,9 @@ async function settled<Value>(
   }
 }
 
-/** The port the editor chose, from the file it writes in the run's user-data folder. */
+/** The port the editor chose, from the file it writes in the launch's user-data folder. */
 async function debuggingPort(): Promise<number> {
-  const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data',
-    'DevToolsActivePort',
-  );
+  const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
     () => {

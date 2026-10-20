@@ -6,11 +6,10 @@ import {openWindow, recordLines, windowState} from '../windows/harness.ts';
 /** How long the user settings file may take to gain the platform after the window connects, in milliseconds. */
 const SETTINGS_WAIT_MILLISECONDS = 10_000;
 
-/** The `remote.SSH.remotePlatform` entry of the run's user settings, or nothing while it is not written. */
+/** The `remote.SSH.remotePlatform` entry of the launch's user settings, or nothing while it is not written. */
 function storedPlatform(): unknown {
   const file = path.join(
-    process.env.HARNESS_RUN_FOLDER ?? '',
-    'user-data',
+    process.env.HARNESS_USER_DATA ?? '',
     'User',
     'settings.json',
   );

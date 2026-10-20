@@ -40,6 +40,7 @@ The extension host sees these variables:
 | `HARNESS_SSH_CONFIG` | The `ssh_config` with `Host harness`, also set as `remote.SSH.configFile` in the user settings. |
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
+| `HARNESS_USER_DATA` | The launch's user-data folder, the one its editor starts on: `<run>/user-data-<label>` for a plain launch, `<run>/user-data` for the others. A test reads the editor's settings, state and logs there. |
 | `HARNESS_VSIX_FILES` | The VSIX files installed, separated by the platform's path delimiter. |
 | `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. An entry with an `after` is a held one: it answers only after the signal file of that name in `REMOTE_OSS_ACCEPTANCE_SIGNALS` exists. |
 | `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`, a held entry's waiting line is `held` and its withdrawal `withdrawn`) and whether an entry matched. |
@@ -104,9 +105,9 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   (its grace is 3 s) and clears `calls.log`, because a live helper is reused without any check. The launches run in
   every VSCodium run.
 
-- `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
+- `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, a user-data folder of its own (`<run>/user-data-<label>`, so nothing an earlier launch stored reaches it) and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
 
-- `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the run's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
+- `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the launch's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
 
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
@@ -199,7 +200,7 @@ that `acceptance:clean` ends an editor a killed job left behind.
 
 The explorer launches install Remote Explorer and its proposed API into `<run>/extensions-<label>`, so no other launch
 has it, and start the editor with a debugging port that only the run reads (`--remote-debugging-port=0`; the editor
-writes the port it chose into the user-data folder). Each window's title is its folder name in brackets, `[]` for a
+writes the port it chose into the launch's user-data folder). Each window's title is its folder name in brackets, `[]` for a
 window with none. `windows/renderer.ts` finds a window's page by that title and, over the Chrome DevTools Protocol,
 reads a view's rows (`viewRows`) and clicks a row's inline action (`rowAction`) or a view's title action
 (`titleAction`), as a user does. A test shows the view first with its focus command. The selectors read the workbench
@@ -579,9 +580,8 @@ removes both in its `finally`. The container's removal at the end of the run is 
 
 `ssh-no-proposals` is the same client and settings with the proposed API not enabled (`proposedApi: false`), for F-2001
 §3.4's setup notice in the editor the family's users start from. It also comes last and only when named, after
-`genuine`. The family's gate tells a profile once, and a "Not Now" keeps it silent until a probe passes. So in a run
-that also makes the VSCodium `no-proposals` launch, whose rows dismiss the notice, this launch's rows find none and say
-so. `genuine` before it clears the flag, because its probe passes:
+`genuine`. The family's gate tells a profile once, and a "Not Now" keeps it silent until a probe passes; the launch has
+a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's rows never reaches it:
 
     node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
 

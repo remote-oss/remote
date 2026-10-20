@@ -387,8 +387,8 @@ export function startHostContainer(
 }
 
 /**
- * Removes the run's containers (by the run's label, forced) and its networks, ends an editor still on the run's
- * user-data folder, and removes its image tags and its dev containers' images; what is already gone is not an
+ * Removes the run's containers (by the run's label, forced) and its networks, ends an editor still on one of the run's
+ * user-data folders, and removes its image tags and its dev containers' images; what is already gone is not an
  * error. A container or a network that still carries the run's label afterwards makes it throw, naming the ids, so a
  * failed removal fails the run instead of keeping the run's state on the shared machine.
  */
@@ -423,7 +423,8 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   )) {
     checked(command, 'docker', ['network', 'rm', networkId]);
   }
-  // An editor that a killed job left holds the run's user-data folder, named by the run's id; none running is no error.
+  // An editor that a killed job left holds one of the run's user-data folders, `user-data` or a plain launch's
+  // `user-data-<label>`, under the folder named by the run's id; none running is no error.
   command('pkill', ['-f', '--', `acceptance-${runId}-[A-Za-z0-9]+/user-data`]);
   // So does one that a runner left from an earlier CI run, whose id this run does not know: CI ids are numeric, local
   // ones are not, and only an editor older than any job's time limit is taken to be left over, not another job's.
