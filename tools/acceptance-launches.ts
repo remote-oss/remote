@@ -579,10 +579,11 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      ...RENDERER_LAUNCH,
       label: 'default-ports',
-      kind: 'plain',
       suite: 'default-ports',
       settings: {
+        ...RENDERER_LAUNCH.settings,
         'remote.SSH.defaultForwardedPorts': [
           {name: 'web', remotePort: 8632, localPort: 18632},
         ],

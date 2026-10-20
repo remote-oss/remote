@@ -123,7 +123,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09: only the explorer launches install the explorer and the containers launches Dev Containers, they and the trust launches open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -141,6 +141,7 @@ describe('the launches of the VSCodium run', () => {
           : [],
       ),
       [
+        ['default-ports', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',

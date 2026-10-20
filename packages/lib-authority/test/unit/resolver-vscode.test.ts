@@ -40,6 +40,7 @@ function fakeEditor(
 ): typeof vscode {
   return {
     ResolvedAuthority: FakeResolvedAuthority,
+    CandidatePortSource: {None: 0, Process: 1, Output: 2, Hybrid: 3},
     ProgressLocation: {Notification: 'notification'},
     RemoteAuthorityResolverError: {
       NotAvailable: (message?: string, handled?: boolean) =>
@@ -172,10 +173,28 @@ describe('the editor behind the resolver host', () => {
     deepStrictEqual(result.isTrusted, true);
   });
 
+  it('F-2507 BR-8: with the output source declared, the registered resolver carries it before any resolve', () => {
+    const seen: Seen = {events: []};
+    resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+      candidatePortSource: 'output',
+    }).registerRemoteAuthorityResolver('ssh-remote', hostResolver(CONNECTION));
+    deepStrictEqual(seen.registered?.candidatePortSource, 2);
+  });
+
+  it('F-2507 BR-8: without a declared source, the registered resolver has no candidatePortSource key', () => {
+    const seen: Seen = {events: []};
+    resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+    }).registerRemoteAuthorityResolver('ssh-remote', hostResolver(CONNECTION));
+    deepStrictEqual('candidatePortSource' in (seen.registered ?? {}), false);
+  });
+
   it('F-2507 6.3, BR-9: the editor gets neither tunnel features nor a tunnel factory, before and after a resolve', async () => {
     const seen: Seen = {events: []};
     resolverEditorOf(fakeEditor(seen), {
       detailsCommand: DETAILS,
+      candidatePortSource: 'output',
     }).registerRemoteAuthorityResolver('ssh-remote', hostResolver(CONNECTION));
     const before = 'tunnelFactory' in (seen.registered ?? {});
     const result = await seen.registered?.resolve('ssh-remote+box', {
