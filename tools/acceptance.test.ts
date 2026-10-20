@@ -634,6 +634,15 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-43: Host harness-fish logs in to harness-fish with the run key', () => {
+    strictEqual(
+      accountBlock('harness-fish'),
+      [...sharedLines('harness-fish', 'harness-fish'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
+    );
+  });
+
   it("connect-39: Hosts agentfwd and agentfwd-off log in to harness with the run key and forward the run's agent by its path", () => {
     deepStrictEqual(
       ['agentfwd', 'agentfwd-off'].map(alias => accountBlock(alias)),
