@@ -57,6 +57,14 @@ export type UpResult =
 /** What `run-user-commands` gives. */
 export type RunUserCommandsResult = {kind: 'done'} | CliFailure;
 
+/** What `templates apply` gives. */
+export type ApplyTemplateResult =
+  {kind: 'applied'; files: string[]} | CliFailure;
+
+/** What `templates metadata` gives. */
+export type TemplateMetadataResult =
+  {kind: 'metadata'; metadata: Readonly<Record<string, unknown>>} | CliFailure;
+
 /** What `read-configuration` gives. */
 export interface ConfigurationResult {
   kind: 'configuration';
@@ -332,4 +340,44 @@ export function readConfigurationResult(
       ? mergedConfiguration
       : undefined,
   };
+}
+
+/**
+ * The result line of a `templates` subcommand as an object: they have no `outcome`, so a failure is a non-zero status
+ * or a line that is no object. Stderr is never read for meaning.
+ */
+function templateFields(
+  result: string | undefined,
+  status: number | null,
+): Parsed {
+  return status === 0
+    ? parsedResult(result, status)
+    : {failure: {kind: 'noResult', status}};
+}
+
+/** What `templates apply` gave: the files it wrote, from its one JSON line. */
+export function readApplyTemplateResult(
+  result: string | undefined,
+  status: number | null,
+): ApplyTemplateResult {
+  const parsed = templateFields(result, status);
+  if ('failure' in parsed) {
+    return parsed.failure;
+  }
+  const {files} = parsed.fields;
+  return Array.isArray(files) &&
+    files.every((file): file is string => typeof file === 'string')
+    ? {kind: 'applied', files}
+    : {kind: 'malformedResult', field: 'files'};
+}
+
+/** What `templates metadata` gave: the template's metadata, from its one JSON line. */
+export function readTemplateMetadataResult(
+  result: string | undefined,
+  status: number | null,
+): TemplateMetadataResult {
+  const parsed = templateFields(result, status);
+  return 'failure' in parsed
+    ? parsed.failure
+    : {kind: 'metadata', metadata: parsed.fields};
 }
