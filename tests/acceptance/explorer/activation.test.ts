@@ -105,7 +105,7 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
     }
   });
 
-  it('F-5001 AC-4, F-5002 AC-5, F-5101 AC-21 (by-command): Refresh run by its id before the view was ever shown activates the explorer with no notification, leaves the side bar as it was, and a host added before it is listed when the view is next shown', async () => {
+  it('F-5001 AC-4, F-5002 AC-5 (by-command): Refresh run by its id before the view was ever shown activates the explorer with no notification and leaves the side bar as it was, and the view then shows the hosts', async () => {
     const name = await folderWindow('activation-command');
     try {
       await inWindow(name, 'remote-explorer.refresh');
