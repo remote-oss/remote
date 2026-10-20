@@ -702,6 +702,26 @@ export async function dockerVolumes(): Promise<string[]> {
     .sort();
 }
 
+/** The ids of the engine's images, sorted. */
+export async function dockerImages(): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', [
+    'image',
+    'ls',
+    '--all',
+    '--quiet',
+  ]);
+  return [...new Set(stdout.split('\n').filter(line => line !== ''))].sort();
+}
+
+/** The ids of the engine's containers, running or not, sorted. */
+export async function dockerContainers(): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', ['ps', '--all', '--quiet']);
+  return stdout
+    .split('\n')
+    .filter(line => line !== '')
+    .sort();
+}
+
 /** Closes window `name` and resolves once its agent has deactivated. */
 export async function closeWindow(name: string): Promise<void> {
   const before = countOf(name, 'deactivated');
