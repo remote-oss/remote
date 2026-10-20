@@ -102,5 +102,12 @@
   "Failed to parse feature identifier.": "Failed to parse feature identifier.",
   "GitHub release feature id contains invalid characters": "GitHub release feature id contains invalid characters",
   "OCI Feature id contains invalid characters": "OCI Feature id contains invalid characters",
-  "Legacy feature not supported. Please check https://containers.dev/features for replacements.": "Legacy feature not supported. Please check https://containers.dev/features for replacements."
+  "Legacy feature not supported. Please check https://containers.dev/features for replacements.": "Legacy feature not supported. Please check https://containers.dev/features for replacements.",
+  "Adding Dev Container Configuration Files...": "Adding Dev Container Configuration Files...",
+  "Application of the template failed.": "Application of the template failed.",
+  "File '{0}' already exists, overwrite?": "File '{0}' already exists, overwrite?",
+  "Overwrite": "Overwrite",
+  "Skip": "Skip",
+  "It has unsaved changes in an editor.": "It has unsaved changes in an editor.",
+  "The configuration couldn't be written to {0}: {1}": "The configuration couldn't be written to {0}: {1}"
 }
