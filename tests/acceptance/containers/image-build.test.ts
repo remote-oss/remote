@@ -565,15 +565,20 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       const containers = (await devContainersOf(folder)).length;
       await closeWindow(name);
       return {
-        imported: lines
-          .filter(line =>
-            /importing cache manifest from|inferred cache manifest type/.test(
-              line,
-            ),
-          )
-          .map(line =>
-            line.replace(/^#\d+ /, '').replace(/:\d+\//, ':<port>/'),
+        // The log can hold the import more than once when the machine is loaded: each distinct line counts.
+        imported: [
+          ...new Set(
+            lines
+              .filter(line =>
+                /importing cache manifest from|inferred cache manifest type/.test(
+                  line,
+                ),
+              )
+              .map(line =>
+                line.replace(/^#\d+ /, '').replace(/:\d+\//, ':<port>/'),
+              ),
           ),
+        ],
         failed: lines.filter(
           line => /cache/i.test(line) && /fail|error/i.test(line),
         ),
