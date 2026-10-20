@@ -23,6 +23,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-0416 7.E4 and AC-35 describe a failed connect instead (ruling 16 on #737; spec question on
     remote-oss/remote-containers#63).
 
+- **A port the configuration publishes with `appPort` shows no running process, and the status item lists the published
+  ports in the order of `appPort`.** The row's Running Process stays empty and its icon is the one without a process,
+  even while something listens on the port. The status item reads `Forwarded Ports: <first>, <second>`, in the order
+  the configuration lists them.
+  - F-1101 AC-40 describes the process, the icon with a process and the ports in the order `<container port>, <number>`.
+    Core 1.139.1 takes a static row's process only when the authority resolves, and later processes update only the
+    forwarded rows; the order is the one our resolver gives (athena on #1334; spec question on
+    remote-oss/remote-containers#42).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild

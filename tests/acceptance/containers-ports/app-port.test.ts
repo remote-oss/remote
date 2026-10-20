@@ -127,32 +127,29 @@ describe('the appPort rows (card containers-74)', function () {
     );
   });
 
-  it('F-1101 AC-24 (app-port-actions): a Statically Forwarded row offers copying the address, opening in the browser and previewing, and the menu adds only Forward a Port', async () => {
+  it('F-1101 AC-24 (app-port-actions): a Statically Forwarded row offers copying the address, opening in the browser and previewing, and the menu adds only Forward a Port, with or without a process listening', async () => {
     const port = await freePort();
     const window = await connectedWith('c74-ac24', {appPort: [port]});
     await showPorts(window);
     await rowsWhen(window, shown => shown.length > 0);
-    const actions = await portRowActions(window, String(port));
-    const offered = [
-      'Copy Local Address',
-      'Open in Browser',
-      'Preview in Editor',
-    ];
-    deepStrictEqual(
-      [actions.inline, actions.menu],
-      [
-        offered,
-        [
-          'Open in Browser',
-          'Preview in Editor',
-          'Copy Local Address',
-          'Forward a Port',
-        ],
+    const without = await portRowActions(window, String(port));
+    const [containerId = ''] = await devContainersOf(folderOf('c74-ac24'));
+    const stop = await listenIn(containerId, port);
+    const listening = await portRowActions(window, String(port));
+    await stop();
+    const offered = {
+      inline: ['Copy Local Address', 'Open in Browser', 'Preview in Editor'],
+      menu: [
+        'Open in Browser',
+        'Preview in Editor',
+        'Copy Local Address',
+        'Forward a Port',
       ],
-    );
+    };
+    deepStrictEqual([without, listening], [offered, offered]);
   });
 
-  it('F-1101 AC-40 (app-port-readout): a host:container row shows the tooltip of its container port at the host port on [::1], no Auto Forwarded row comes for it, and the status item names the ports', async () => {
+  it('F-1101 AC-40 (ruling-1334): a host:container row shows the tooltip of its container port at the host port on [::1] and no running process, no Auto Forwarded row comes for it, and the status item names the ports in the order of appPort', async () => {
     const [number, host, container] = [
       await freePort(),
       await freePort(),
@@ -171,10 +168,12 @@ describe('the appPort rows (card containers-74)', function () {
     deepStrictEqual(
       {
         tooltip: shown?.tooltip,
+        process: shown?.runningProcess,
         origins: rows.map(each => each.origin).sort(),
         status: (await statusItem(window, 'status.forwardedPorts')).ariaLabel,
       },
       {
+        process: '',
         tooltip: `Remote port 0.0.0.0:${String(container)} forwarded to local address [::1]:${String(host)}.`,
         origins: ['Statically Forwarded', 'Statically Forwarded'],
         status: `Forwarded Ports: ${String(number)}, ${String(container)}`,
