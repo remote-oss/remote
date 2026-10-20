@@ -25,14 +25,12 @@ import {
   readUpResult,
   type RunUserCommandsResult,
   type UpResult,
+  withoutControlSequences,
 } from './cli-lines.ts';
 import {rawHoldOf} from './cli-raw-lines.ts';
 import {referencedSecrets, scrubbed, type Secret} from './cli-secrets.ts';
 import {dropsImage, overrideText} from './override-pre-pass.ts';
 import type {OverrideStore} from './override-files.ts';
-
-/** The colour codes of a terminal line. */
-const COLOUR_CODES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 
 /** How long the CLI may keep running after its result line before it is ended. */
 const GUARD_MILLISECONDS = 30_000;
@@ -68,12 +66,12 @@ export interface CliBridge {
   ): Promise<ConfigurationResult | CliFailure>;
 }
 
-/** The last refusal the Docker client's words in `text` say, one line at a time with colour codes and the CR gone. */
+/** The last refusal the Docker client's words in `text` say, one line at a time with control sequences and the CR gone. */
 function refusalIn(text: string): DaemonRefusal | undefined {
   return text
     .split('\n')
     .map(line =>
-      daemonRefusalOf(line.replace(COLOUR_CODES, '').replace(/\r$/u, '')),
+      daemonRefusalOf(withoutControlSequences(line).replace(/\r$/u, '')),
     )
     .findLast(found => found !== undefined);
 }

@@ -11,6 +11,7 @@ import type {
 } from '../endpoint/protocol.ts';
 import {claim} from '../registry/claim.ts';
 import {recordPath, type RegistryFilePort} from '../registry/file-port.ts';
+import {instanceRegistryFolder} from '../registry/instance-folder.ts';
 import {removeOwnRecord} from '../registry/own-record.ts';
 import {isStale, replaceStale} from '../registry/stale.ts';
 import {
@@ -54,10 +55,24 @@ export type PreparedStart<Refusal> =
     }
   | {kind: 'refused'; refusal: Refusal};
 
-/** One helper to acquire. */
-export interface AcquireRequest<Refusal = never> {
-  /** The registry folder: per profile or per user, as the consumer needs. */
-  folder: string;
+/**
+ * A registry folder: a folder path, per profile or per user as the consumer needs, or the folder of the editor
+ * instance whose extension has the global storage folder `instanceOf`, shared by the instance's profiles.
+ */
+export type RegistryFolder = string | {instanceOf: string};
+
+/**
+ * How the helper is started: as a child of the acquirer's process, or through the launcher script
+ * `launcherScript`, which starts it outside the acquirer's process tree so that it outlives that tree.
+ */
+export type StartForm =
+  | {leaveStarterTree?: never; launcherScript?: never}
+  | {leaveStarterTree: true; launcherScript: string};
+
+/** The fields of every acquire request. */
+interface AcquireRequestFields<Refusal> {
+  /** The registry folder. */
+  folder: RegistryFolder;
   namespace: string;
   helperKey: string;
   /** The bundled helper script and its own start values. */
@@ -71,15 +86,28 @@ export interface AcquireRequest<Refusal = never> {
   cancellation: AbortSignal;
 }
 
+/** One helper to acquire. */
+export type AcquireRequest<Refusal = never> = AcquireRequestFields<Refusal> &
+  StartForm;
+
 /** Why no lease was acquired. */
 export type AcquireFailure =
-  'spawnFailed' | 'endpointUnreachable' | 'cancelled';
+  'spawnFailed' | 'endpointUnreachable' | 'cancelled' | 'registryUnresolved';
 
 /** A lease, or why there is none. */
 export type AcquireOutcome<Refusal = never> =
   | {kind: 'acquired'; lease: HelperLease}
   | ([Refusal] extends [never] ? never : {kind: 'refused'; refusal: Refusal})
   | {kind: 'failed'; failure: AcquireFailure};
+
+/** The folder path of a registry folder, or undefined when an instance's folder can't be found. */
+function folderPath(folder: RegistryFolder): string | undefined {
+  if (typeof folder === 'string') {
+    return folder;
+  }
+  const instance = instanceRegistryFolder(folder.instanceOf);
+  return instance.kind === 'resolved' ? instance.folder : undefined;
+}
 
 function waitFor(timer: Timer, milliseconds: number): Promise<void> {
   return new Promise(resolve => {
@@ -168,14 +196,11 @@ function isAborted(signal: AbortSignal): boolean {
 async function start<Refusal>(
   environment: ClientEnvironment,
   request: AcquireRequest<Refusal>,
+  folder: string,
   record: HelperRecord,
   prepared: Extract<PreparedStart<Refusal>, {kind: 'ready'}>,
 ): Promise<AcquireOutcome<Refusal>> {
-  const recordFile = recordPath(
-    request.folder,
-    request.namespace,
-    request.helperKey,
-  );
+  const recordFile = recordPath(folder, request.namespace, request.helperKey);
   try {
     await environment.spawn(
       spawnSpecification(
@@ -190,6 +215,7 @@ async function start<Refusal>(
           options: prepared.options,
         },
         environment.parentEnvironment,
+        request.launcherScript,
       ),
     );
   } catch {
@@ -231,7 +257,8 @@ async function joined<Refusal>(
  * counts from, is stamped after the lookup the preparation may do and covers the spawn and the hello alone. A record
  * whose helper stays silent past its starter's window is replaced once; a helper that cannot be reached after that
  * is `endpointUnreachable`. The record carries no payload: the lease's payload is the one the helper welcomes with,
- * which the starter made in its preparation.
+ * which the starter made in its preparation. An instance's folder that can't be found is `registryUnresolved`,
+ * before any record is read or claimed.
  */
 export async function acquire<Refusal = never>(
   environment: ClientEnvironment,
@@ -240,9 +267,12 @@ export async function acquire<Refusal = never>(
   if (isAborted(request.cancellation)) {
     return {kind: 'failed', failure: 'cancelled'};
   }
-  const text = await environment.files.read(
-    recordPath(request.folder, request.namespace, request.helperKey),
-  );
+  const folder = folderPath(request.folder);
+  if (folder === undefined) {
+    return {kind: 'failed', failure: 'registryUnresolved'};
+  }
+  const file = recordPath(folder, request.namespace, request.helperKey);
+  const text = await environment.files.read(file);
   const present = text === undefined ? undefined : parseRecord(text);
   if (present !== undefined) {
     const lease = await joined(environment, request, present);
@@ -278,13 +308,13 @@ export async function acquire<Refusal = never>(
   if (text === undefined) {
     const claimed = await claim(
       environment.files,
-      request.folder,
+      folder,
       request.namespace,
       request.helperKey,
       record,
     );
     if (claimed.outcome === 'claimed') {
-      return start(environment, request, record, prepared);
+      return start(environment, request, folder, record, prepared);
     }
     if (claimed.outcome === 'existing') {
       const lease = await joined(environment, request, claimed.record);
@@ -294,22 +324,19 @@ export async function acquire<Refusal = never>(
       staleText = serializeRecord(claimed.record);
     } else {
       // A corrupt file that a rival left: what is there now is what gets replaced.
-      staleText =
-        (await environment.files.read(
-          recordPath(request.folder, request.namespace, request.helperKey),
-        )) ?? '';
+      staleText = (await environment.files.read(file)) ?? '';
     }
   }
   const replaced = await replaceStale(
     environment.files,
-    request.folder,
+    folder,
     request.namespace,
     request.helperKey,
     record,
     staleText,
   );
   if (replaced.outcome === 'claimed') {
-    return start(environment, request, record, prepared);
+    return start(environment, request, folder, record, prepared);
   }
   const lease =
     replaced.outcome === 'existing'
@@ -341,15 +368,20 @@ function closesAfterStop(
 /**
  * Tells the helper that holds the key to end and waits for it to close, which means it has removed its own record.
  * A helper that does not answer or does not close within the limit is gone or hung: its record is removed then, if it
- * still carries the nonce read here. Done also when no helper runs.
+ * still carries the nonce read here. Done also when no helper runs, and at once for an instance's folder that can't
+ * be found, where no helper can have been registered.
  */
 export async function stop(
   environment: ClientEnvironment,
-  folder: string,
+  folder: RegistryFolder,
   namespace: string,
   helperKey: string,
 ): Promise<void> {
-  const recordFile = recordPath(folder, namespace, helperKey);
+  const resolved = folderPath(folder);
+  if (resolved === undefined) {
+    return;
+  }
+  const recordFile = recordPath(resolved, namespace, helperKey);
   const text = await environment.files.read(recordFile);
   const record = text === undefined ? undefined : parseRecord(text);
   if (record === undefined) {

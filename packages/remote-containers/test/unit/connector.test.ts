@@ -19,6 +19,7 @@ import {
   REBUILD_INTENTS_KEY,
   storeRebuildIntent,
 } from '../../src/open/rebuild-intent.ts';
+import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
 function tick(): Promise<unknown> {
@@ -110,6 +111,86 @@ describe('the container connector: the connect (card containers-08)', () => {
         [],
       ],
     );
+  });
+
+  it("F-0301 AC-11: an image that is a number ends the connect with S081 and the configuration's path, before any container step", async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 42},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [result, scene.prepared],
+      [
+        {
+          kind: 'configurationInvalid',
+          reason: {
+            id: 'S081',
+            values: ['/work/proj/.devcontainer/devcontainer.json'],
+          },
+          retryable: false,
+          silent: false,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+        [],
+      ],
+    );
+  });
+
+  it('F-0301 AC-11: after an invalid configuration the next connect reads it again', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 42},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    const first = await scene.connector.connect(inputOf(PAYLOAD));
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 'node:22'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    const second = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        failedKind(first),
+        failedKind(second),
+        scene.configurationReads.filter(read => read.containerId === undefined)
+          .length,
+        scene.prepared.length,
+      ],
+      ['configurationInvalid', 'connected', 2, 1],
+    );
+  });
+
+  it("F-0410 AC-13: an image that is a string that doesn't exist still reaches the container step", async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 'nope:latest'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await connected(scene);
+    deepStrictEqual(scene.prepared.length, 1);
+  });
+
+  it("F-0301 7.E3: a configuration read that fails isn't checked, and the connect goes on", async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    await connected(scene);
+    deepStrictEqual(scene.prepared.length, 1);
   });
 
   it('contracts §2 step 3: unusable, discovery failed, a build failure and a cancel are rows 4, 5, 5 and 11', async () => {
@@ -745,27 +826,117 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  it('F-0408 BR-6: the CLI’s error events are logged as errors and the rest as debug lines', async () => {
+  /** A `log` event of the CLI with the level, type and text given. */
+  function cliLog(
+    level: number,
+    type: 'raw' | 'start' | 'stop' | 'text',
+    text: string,
+  ): CliEvent {
+    return {
+      kind: 'log',
+      level,
+      text,
+      channel: undefined,
+      type,
+      timestamp: undefined,
+      startTimestamp: undefined,
+    };
+  }
+
+  /** What the connect writes to the log for `events`, as [level, message] of the lines they gave. */
+  async function loggedFor(
+    events: CliEvent[],
+    only: string[],
+  ): Promise<string[][]> {
+    const scene = sceneOf();
+    scene.cliEvents = events;
+    await connected(scene);
+    const lines = scene.sink.lines
+      .filter(line => only.includes(line.message))
+      .map(line => [line.level, line.message]);
+    // The connect prepares the container and reads its configuration, and each hands the events to the log.
+    return lines.slice(0, lines.length / 2);
+  }
+
+  it('contracts §2 step 3: a text of level 5 is logged as an error', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(5, 'text', 'it broke')], ['it broke']),
+      [['error', 'it broke']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 4 is logged as a warning', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(4, 'text', 'be careful')], ['be careful']),
+      [['warn', 'be careful']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 3 is logged as info', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(3, 'text', 'it ran')], ['it ran']),
+      [['info', 'it ran']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 2, and a start of level 3, are logged as debug', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [cliLog(2, 'text', 'detail'), cliLog(3, 'start', 'Running: x')],
+        ['detail', 'Running: x'],
+      ),
+      [
+        ['debug', 'detail'],
+        ['debug', 'Running: x'],
+      ],
+    );
+  });
+
+  it('F-0412 AC-11: Docker’s own output is logged as info, one line for each line of its text, without control sequences or empty lines', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            2,
+            'raw',
+            '#5 [2/3] RUN false\r\n\n  \r\n\u001b[31mfailed to solve\u001b[0m: exit code 1\n\n',
+          ),
+        ],
+        ['#5 [2/3] RUN false', 'failed to solve: exit code 1', '', '  '],
+      ),
+      [
+        ['info', '#5 [2/3] RUN false'],
+        ['info', 'failed to solve: exit code 1'],
+      ],
+    );
+  });
+
+  it('F-0405 AC-10: a failed lifecycle command’s line is logged as an error without its colour codes and line end', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            5,
+            'text',
+            '\u001b[1m\u001b[31mpostCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.\u001b[39m\u001b[22m\r',
+          ),
+        ],
+        [
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ),
+      [
+        [
+          'error',
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ],
+    );
+  });
+
+  it('F-0408 BR-6: a progress event is logged as a debug line', async () => {
     const scene = sceneOf();
     scene.cliEvents = [
-      {
-        kind: 'log',
-        level: 5,
-        text: 'it broke',
-        channel: undefined,
-        type: 'text',
-        timestamp: undefined,
-        startTimestamp: undefined,
-      },
-      {
-        kind: 'log',
-        level: 3,
-        text: 'it ran',
-        channel: undefined,
-        type: 'text',
-        timestamp: undefined,
-        startTimestamp: undefined,
-      },
       {
         kind: 'progress',
         name: 'Running',
@@ -776,18 +947,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     await connected(scene);
     deepStrictEqual(
       scene.sink.lines
-        .filter(line =>
-          ['it broke', 'it ran', 'Running: succeeded'].includes(line.message),
-        )
-        .map(line => [line.level, line.message]),
-      [
-        ['error', 'it broke'],
-        ['debug', 'it ran'],
-        ['debug', 'Running: succeeded'],
-        ['error', 'it broke'],
-        ['debug', 'it ran'],
-        ['debug', 'Running: succeeded'],
-      ],
+        .filter(line => line.message === 'Running: succeeded')
+        .map(line => line.level),
+      ['debug', 'debug'],
     );
   });
 
@@ -1799,6 +1961,62 @@ describe('the container connector: the remote environment (card containers-45)',
     deepStrictEqual(
       scene.probeScripts.map(script => script.includes(' -i -c ')),
       [true],
+    );
+  });
+});
+
+describe('the container connector: the declared ports (card containers-72)', () => {
+  function configurationWith(
+    mergedConfiguration: Record<string, unknown> | undefined,
+  ): Scene['configuration'] {
+    return {
+      kind: 'configuration',
+      configuration: {name: 'Proj'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration,
+    };
+  }
+
+  it('F-1101 BR-1: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({
+      forwardPorts: [3000, 'side:4000'],
+      portsAttributes: {'3000': {label: 'web'}},
+      otherPortsAttributes: {onAutoForward: 'silent'},
+    });
+    await connected(scene);
+    deepStrictEqual(scene.connector.heldPorts(), {
+      forwardPorts: [3000, 'side:4000'],
+      portsAttributes: {'3000': {label: 'web'}},
+      otherPortsAttributes: {onAutoForward: 'silent'},
+    });
+  });
+
+  it('F-1101 AC-11, AC-30: a reconnect keeps the ports read when the connection was made', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({forwardPorts: [3000]});
+    await connected(scene);
+    scene.configuration = configurationWith({forwardPorts: [4000]});
+    await scene.connector.connect({...inputOf(PAYLOAD), isReconnection: true});
+    deepStrictEqual(scene.connector.heldPorts()?.forwardPorts, [3000]);
+  });
+
+  it('F-1101 AC-1: a configuration that cannot be read declares no ports, and a connector that never connected holds none', async () => {
+    const scene = sceneOf();
+    const before = scene.connector.heldPorts();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    await connected(scene);
+    deepStrictEqual(
+      [before, scene.connector.heldPorts()],
+      [
+        undefined,
+        {
+          forwardPorts: undefined,
+          portsAttributes: undefined,
+          otherPortsAttributes: undefined,
+        },
+      ],
     );
   });
 });

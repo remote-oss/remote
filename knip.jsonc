@@ -62,6 +62,7 @@
         "containers-trust/*.test.ts",
         "containers-volume/*.test.ts",
         "containers-explorer/*.test.ts",
+        "containers-ports/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
         "containers-cli/*.test.ts",

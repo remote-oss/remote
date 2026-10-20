@@ -88,6 +88,17 @@ export type CliEvent =
       startTimestamp: number | undefined;
     };
 
+/** The control sequences of a terminal line: its colours and its cursor moves. */
+const CONTROL_SEQUENCES = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`,
+  'gu',
+);
+
+/** The text without its control sequences. */
+export function withoutControlSequences(text: string): string {
+  return text.replace(CONTROL_SEQUENCES, '');
+}
+
 /** The level of a line that is not an event: Node's own warnings and stack lines. */
 const PLAIN_LINE_LEVEL = 3;
 

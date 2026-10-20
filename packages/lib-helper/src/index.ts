@@ -45,12 +45,18 @@ export {
   type ServeOptions,
 } from './runtime/serve.ts';
 export {
+  type InstanceFolder,
+  instanceRegistryFolder,
+} from './registry/instance-folder.ts';
+export {
   acquire,
   type AcquireFailure,
   type AcquireOutcome,
   type AcquireRequest,
   type PreparedStart,
   type ClientEnvironment,
+  type RegistryFolder,
+  type StartForm,
   stop,
 } from './client/acquire.ts';
 export {
@@ -63,6 +69,9 @@ export {
   type ClientWaits,
   nodeClientEnvironment,
   nodeTimer,
+  type ProcessSpawn,
+  spawnerOf,
+  type StartedProcess,
 } from './client/node-environment.ts';
 export {
   type HelperParameters,
@@ -75,3 +84,8 @@ export {
   inheritedEnvironment,
   runHelper,
 } from './runtime/helper-main.ts';
+export {
+  type LauncherProcess,
+  nodeLauncherProcess,
+  runTreeLeavingLauncher,
+} from './runtime/tree-leaving-launcher.ts';

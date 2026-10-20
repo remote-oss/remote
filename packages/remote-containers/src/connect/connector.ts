@@ -21,9 +21,14 @@ import {
 } from '../authority/payload.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import type {CliEvent} from '../cli/cli-lines.ts';
+import {
+  type ConfigurationResult,
+  type CliEvent,
+  withoutControlSequences,
+} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {executableOf} from '../engine/executable.ts';
+import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf} from '../exec/exec-channel.ts';
 import {
@@ -58,6 +63,7 @@ import {
 } from './remote-environment.ts';
 import {
   cancelled,
+  configurationInvalid,
   containerGone,
   containerSetupFailed,
   containerUnusable,
@@ -84,8 +90,11 @@ import type {
   StartedContainerServer,
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
+import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 
-/** The CLI's level for an error event. */
+/** The CLI's levels for an info, a warning and an error event. */
+const CLI_INFO_LEVEL = 3;
+const CLI_WARNING_LEVEL = 4;
 const CLI_ERROR_LEVEL = 5;
 
 /** How many characters of a container's identifier the log shows. */
@@ -117,6 +126,8 @@ export interface ContainerConnector extends Connector {
   failedContainer(): FailedContainer | undefined;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
+  /** The ports the connection the window holds declared; nothing before the first connect. */
+  heldPorts(): DeclaredPorts | undefined;
   /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
   heldConnection(): HeldConnection | undefined;
   /** Calls the listener when the connection the window holds is made or given back; gives the way to stop listening. */
@@ -249,6 +260,8 @@ interface Held {
   relay: OpenRelay;
   identity: WindowIdentity;
   connected: Connected;
+  /** The ports the merged configuration declared when the connection was made; a reconnect keeps them. */
+  ports: DeclaredPorts;
 }
 
 /** The state of a container, or why it is not known. */
@@ -386,8 +399,8 @@ export function containerConnectorOf(
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
   let checking = false;
-  /** The folder each payload's container shows, read once per payload for the canonical requests (windows contracts §3.2). */
-  const reads = new Map<string, Promise<string | undefined>>();
+  /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
+  const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
 
   /** Gives back the connection the window holds, and stops hearing its relay. */
   function releaseHeld(): void {
@@ -473,14 +486,30 @@ export function containerConnectorOf(
     return outcome.kind === 'exited' && outcome.status === 0;
   }
 
-  /** Writes a CLI event to the log: errors as errors, the rest as debug lines. */
+  /**
+   * Writes a CLI event to the log: Docker's and BuildKit's own output (`raw`) as info lines, one per line of its text
+   * and without control sequences or empty lines; a text by its level (info, warning, error, else debug), also without control sequences; progress as debug.
+   */
   function logCliEvent(event: CliEvent): void {
     if (event.kind === 'progress') {
       logger.debug(`${event.name}: ${event.status}`);
+      return;
+    }
+    const text = withoutControlSequences(event.text).trimEnd();
+    if (event.type === 'raw') {
+      for (const line of text.split(/\r?\n|\r/u)) {
+        if (line.trim() !== '') {
+          logger.info(line);
+        }
+      }
     } else if (event.level >= CLI_ERROR_LEVEL) {
-      logger.error(event.text);
+      logger.error(text);
+    } else if (event.level >= CLI_WARNING_LEVEL) {
+      logger.warn(text);
+    } else if (event.level >= CLI_INFO_LEVEL && event.type === 'text') {
+      logger.info(text);
     } else {
-      logger.debug(event.text);
+      logger.debug(text);
     }
   }
 
@@ -632,7 +661,7 @@ export function containerConnectorOf(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<string | undefined> {
+  ): Promise<ConfigurationResult | undefined> {
     const kept = reads.get(payload);
     if (kept !== undefined) {
       return kept;
@@ -653,7 +682,7 @@ export function containerConnectorOf(
           );
           return undefined;
         }
-        return result.workspaceFolder;
+        return result;
       });
     reads.set(payload, reading);
     return reading;
@@ -664,7 +693,7 @@ export function containerConnectorOf(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<string | undefined> {
+  ): Promise<ConfigurationResult | undefined> {
     return new Promise(resolve => {
       const stop = dependencies.preflight.setTimer(
         CANONICAL_READ_MILLISECONDS,
@@ -697,7 +726,7 @@ export function containerConnectorOf(
       connection === undefined
         ? await readWithinCap(payload, decoded)
         : undefined;
-    const root = connection?.remoteWorkspaceFolder ?? read;
+    const root = connection?.remoteWorkspaceFolder ?? read?.workspaceFolder;
     const local =
       root === undefined ? undefined : mappedPath(root, decoded.hostPath, path);
     if (local !== undefined) {
@@ -767,7 +796,7 @@ export function containerConnectorOf(
     failedContainer = undefined;
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
-    await readWithinCap(payload, folder, tools);
+    const read = await readWithinCap(payload, folder, tools);
     if (!(await trustedFolder(folder, cancellation))) {
       return trustDeclined();
     }
@@ -783,6 +812,14 @@ export function containerConnectorOf(
     );
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
+    }
+    if (read !== undefined && !sourceTypesValid(read.configuration)) {
+      // The next attempt reads the file again, so a fix the user saves is seen by Retry.
+      reads.delete(payload);
+      logger.error(
+        `the configuration ${configFile} is not valid: its image or Dockerfile entry is not a string`,
+      );
+      return configurationInvalid(configFile);
     }
     lifecycle = dependencies.lifecycleFor(
       engine,
@@ -951,6 +988,11 @@ export function containerConnectorOf(
       relay,
       identity: {name, context: folder.context},
       connected,
+      ports: {
+        forwardPorts: mergedConfiguration?.forwardPorts,
+        portsAttributes: mergedConfiguration?.portsAttributes,
+        otherPortsAttributes: mergedConfiguration?.otherPortsAttributes,
+      },
     };
     const connection = held;
     owner.connection = connection;
@@ -1010,6 +1052,7 @@ export function containerConnectorOf(
     },
     failedContainer: () => failedContainer,
     heldIdentity: () => held?.identity,
+    heldPorts: () => held?.ports,
     heldConnection: () =>
       held === undefined
         ? undefined

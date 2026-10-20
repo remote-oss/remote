@@ -115,6 +115,10 @@ def lab_args(verb, arg):
         return ["rowaction", arg["view"], arg["row"], arg["action"]]
     if verb == "viewaction":
         return ["viewaction", arg["view"], arg["action"]]
+    if verb == "settings_search":
+        return ["settings-search", arg]
+    if verb == "setting_input":
+        return ["setting-input", json.dumps(arg)]
     raise ValueError(verb)
 
 
@@ -153,6 +157,15 @@ def recording_lock():
             fcntl.flock(fh, fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def case_runs():
+    """All runs of one case under one hold of the recording lock (the dirty side, 2026-10-14: a confirm's two runs, each
+    holding the lock alone, let a follower move land between them, leaving the pair on two kit commits). run_once inside
+    takes its own shared hold too, which a shared hold of the same process never blocks."""
+    with recording_lock():
+        yield
+
+
 def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counterparts=False):
     """One run of a case, under the room's recording lock (shared)."""
     with recording_lock():
@@ -172,6 +185,7 @@ def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counte
         known = [c["name"] for c in (case.get("fixture") or {}).get("containers") or []] + run.known_names
         sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log, run_target=run.run_target())
         sess.user_settings = lambda keys: run.read_user_settings(keys)
+        sess.client_listeners = lambda: run.client_listeners()
         sess.mark_urls()   # opened_urls counts from here: this case's URLs only
         run.start_window()
         run.ready(sess)
@@ -222,6 +236,8 @@ def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counte
                 res = run.merge_settings(arg)
             elif verb == "target":
                 res = run.target_action(arg)
+            elif verb == "client_ports":   # kit #289, F-2104 AC-16: `client_ports: free` ends the holder mid-case
+                res = run.free_client_ports()
             elif verb == "restart":
                 try:
                     res = run.restart(sess)
@@ -356,11 +372,12 @@ def record_case(path, runs, host, slot, log=print, allow_platform_change=False):
         return "not-applicable"
     log(f"{case['id']}: recording {runs} run(s) on {host} slot {slot}")
     trs = []
-    for k in range(1, runs + 1):
-        tr = run_once(case, profile, slot, host, new_run_id(host, slot, k), log=log)
-        trs.append(tr)
-        if tr["failure"]:
-            break
+    with case_runs():   # every run of the case on one kit commit
+        for k in range(1, runs + 1):
+            tr = run_once(case, profile, slot, host, new_run_id(host, slot, k), log=log)
+            trs.append(tr)
+            if tr["failure"]:
+                break
     recorded = {
         "reference_version": trs[0].get("reference_version"), "vscode_version": trs[0].get("vscode_version"),
         "platform": trs[0].get("platform"), "host": host, "engine": trs[0].get("engine"), "profile": case["profile"],
@@ -558,16 +575,17 @@ def confirm_case(path, runs, host, slot, log=print):
         log(f"{case['id']}: not confirmed: {norm_version_refusal(case)}")
         return "not-comparable"
     trs, mism = [], []
-    for k in range(1, runs + 1):
-        tr = run_once(case, profile, slot, host, new_run_id(host, slot, f"c{k}"), log=log, counterparts=True)
-        trs.append(tr)
-        if tr["failure"]:
-            log(f"{case['id']}: confirmation run {tr['run_id']} failed: {str(tr['failure'].get('error'))[:300]}")
-            return "failed"
-        d = [x for oid in set(case["expect"]) | set(tr["normalized"])
-             for x in normalize.diff(case["expect"].get(oid), tr["normalized"].get(oid), "/" + oid)]
-        if d:
-            mism.append((tr["run_id"], d))
+    with case_runs():   # the pair of a confirm on one kit commit
+        for k in range(1, runs + 1):
+            tr = run_once(case, profile, slot, host, new_run_id(host, slot, f"c{k}"), log=log, counterparts=True)
+            trs.append(tr)
+            if tr["failure"]:
+                log(f"{case['id']}: confirmation run {tr['run_id']} failed: {str(tr['failure'].get('error'))[:300]}")
+                return "failed"
+            d = [x for oid in set(case["expect"]) | set(tr["normalized"])
+                 for x in normalize.diff(case["expect"].get(oid), tr["normalized"].get(oid), "/" + oid)]
+            if d:
+                mism.append((tr["run_id"], d))
     if mism:
         for rid, d in mism:
             log(f"  {case['id']}: run {rid} differs from the expect recorded on {case['recorded'].get('platform')}:\n    "

@@ -86,7 +86,7 @@ describe('F-0301 configuration errors (card containers-50)', function () {
     buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
   };
 
-  /** The configuration of a folder whose `image` is a number, which the CLI rejects. */
+  /** The configuration of a folder whose `image` is a number, which the connect rejects before the CLI runs. */
   const NUMBER_IMAGE = {name: 'Bad', image: 42};
 
   it('F-0301 AC-9, AC-53 (e1): an empty configuration file shows the read-failure dialog with the file open behind it, and Show Log closes the dialog and leaves the file open and the window local', async () => {
@@ -123,7 +123,7 @@ describe('F-0301 configuration errors (card containers-50)', function () {
     );
   });
 
-  it('F-0301 AC-11, AC-55, AC-56 (e2): a configuration the CLI rejects shows the generic dialog and makes no container, the title is unchanged while it is open, and More Actions... shows the four-item pick and then the disconnected title and status', async () => {
+  it("F-0301 AC-11, AC-55, AC-56 (e2): an image that is a number shows S081 with the configuration's path and makes no container, the title is unchanged while it is open, and More Actions... shows the four-item pick and then the disconnected title and status", async () => {
     const folder = configFolder('c50-number', {
       '.devcontainer/devcontainer.json': NUMBER_IMAGE,
     });
@@ -156,7 +156,10 @@ describe('F-0301 configuration errors (card containers-50)', function () {
         ],
       },
       {
-        dialog: FAILED_SETUP,
+        dialog: {
+          ...FAILED_SETUP,
+          details: `Configuration "${path.join(folder, '.devcontainer', 'devcontainer.json')}" not valid.`,
+        },
         containers: [],
         file: true,
         titleOpen: '[c50-number]',
@@ -257,7 +260,16 @@ describe('F-0301 configuration errors (card containers-50)', function () {
         containers: await devContainersOf(folder),
       },
       {
-        dialogs: [FAILED_SETUP, FAILED_SETUP],
+        dialogs: [
+          {
+            ...FAILED_SETUP,
+            details: `Configuration "${path.join(folder, '.devcontainer', 'a', 'devcontainer.json')}" not valid.`,
+          },
+          {
+            ...FAILED_SETUP,
+            details: `Configuration "${path.join(folder, '.devcontainer', 'a', 'devcontainer.json')}" not valid.`,
+          },
+        ],
         picker: undefined,
         containers: [],
       },
