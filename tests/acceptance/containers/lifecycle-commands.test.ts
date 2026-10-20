@@ -202,7 +202,7 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
     }
   });
 
-  it('F-0415 AC-18, AC-18b (c18): a failing entry lets its sibling finish, and only then shows the dialog and skips the later commands; the dialog stays', async () => {
+  it('F-0415 AC-18 (c18): a failing entry lets its sibling finish, and only then shows the dialog and skips the later commands; the dialog stays', async () => {
     const folder = devContainerFolder('c44-object-fails', {
       name: 'Object Fails',
       updateContentCommand: {
@@ -224,14 +224,6 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
       })();
       const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
       const labelsAtDialog = await labelsOf(containerId, folder);
-      // The shutdown helper stops the container of a failed connect about ten seconds after it, so the state is read
-      // while the dialog shows, before the wait that checks the dialog stays.
-      const status = await docker(
-        'inspect',
-        '-f',
-        '{{.State.Status}}',
-        containerId,
-      );
       await new Promise(resolve => setTimeout(resolve, IDLE_MILLISECONDS));
       const stillShown = await dialogOf(name);
       const indicator = (await statusItem(name, 'status.host')).text;
@@ -243,15 +235,70 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
           stillShown:
             stillShown === undefined ? undefined : sayingAndButtons(stillShown),
           indicator,
-          status,
         },
         {
           saying: {details: S034, buttons: RECOVERY_BUTTONS},
           labelsAtDialog: ['sibling-done'],
           stillShown: {details: S034, buttons: RECOVERY_BUTTONS},
           indicator: 'Opening Remote...',
-          status: 'running',
         },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0415 AC-18b (ruling-1331): after the setup failure the container is running when the dialog appears and exited within about 15 s, while the dialog stays', async () => {
+    const folder = devContainerFolder('c44-failure-stops', {
+      name: 'Failure Stops',
+      updateContentCommand: 'exit 3',
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenStarted(name);
+      await waitFor(
+        'the container',
+        async () => (await devContainersOf(folder)).length === 1,
+        DIALOG_MILLISECONDS,
+      );
+      const [containerId = ''] = await devContainersOf(folder);
+      await waitForDialog(name, DIALOG_MILLISECONDS);
+      const shown = Date.now();
+      const atDialog = await docker(
+        'inspect',
+        '-f',
+        '{{.State.Status}}',
+        containerId,
+      );
+      let exitedAfter: number | undefined;
+      while (exitedAfter === undefined && Date.now() - shown < 25_000) {
+        const status = await docker(
+          'inspect',
+          '-f',
+          '{{.State.Status}}',
+          containerId,
+        );
+        if (status === 'exited') {
+          exitedAfter = (Date.now() - shown) / 1000;
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      const stillShown = await dialogOf(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          atDialog,
+          exitedWithinAbout15: exitedAfter !== undefined && exitedAfter <= 17,
+          dialog:
+            stillShown === undefined ? undefined : sayingAndButtons(stillShown),
+        },
+        {
+          atDialog: 'running',
+          exitedWithinAbout15: true,
+          dialog: {details: S034, buttons: RECOVERY_BUTTONS},
+        },
+        `exited ${String(exitedAfter)} s after the dialog`,
       );
     } finally {
       await removeContainers(folder);

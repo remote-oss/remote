@@ -736,6 +736,17 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(scene.shutdownSent, []);
   });
 
+  it('F-0417 BR-5: a folder not trusted at the start and trusted at the gate registers after the answer, and tells the container', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = true;
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.shutdownSent.map(request => request.type),
+      ['register', 'container'],
+    );
+  });
+
   it('F-0417 BR-9: a malformed or legacy authority and an outer hop tell the helper nothing', async () => {
     const scene = sceneOf();
     await scene.connector.connect(inputOf('not hex'));
