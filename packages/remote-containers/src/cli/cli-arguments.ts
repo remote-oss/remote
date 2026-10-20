@@ -107,3 +107,41 @@ export function readConfigurationArguments(
       : ['--container-id', containerId, '--include-merged-configuration']),
   ];
 }
+
+/** What `templates apply` is asked to do: the template, its options, the Features to add and the paths to leave out. */
+export interface TemplateRequest {
+  /** The scratch folder the template is applied into. */
+  workspaceFolder: string;
+  templateId: string;
+  templateArgs: Readonly<Record<string, string | boolean>>;
+  features: ReadonlyArray<{
+    id: string;
+    options: Readonly<Record<string, unknown>>;
+  }>;
+  omitPaths: readonly string[];
+}
+
+/** Applies a template into the request's folder; the options, Features and omitted paths go as JSON texts. */
+export function applyTemplateArguments(request: TemplateRequest): string[] {
+  return [
+    'templates',
+    'apply',
+    '-w',
+    request.workspaceFolder,
+    '-t',
+    request.templateId,
+    '-a',
+    JSON.stringify(request.templateArgs),
+    '-f',
+    JSON.stringify(request.features),
+    '--omit-paths',
+    JSON.stringify(request.omitPaths),
+    '--log-level',
+    'info',
+  ];
+}
+
+/** Reads a template's metadata from its registry. */
+export function templateMetadataArguments(templateId: string): string[] {
+  return ['templates', 'metadata', templateId, '--log-level', 'info'];
+}
