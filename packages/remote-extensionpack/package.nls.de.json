@@ -1,4 +1,4 @@
 {
   "displayName": "Remoteentwicklung",
-  "description": "Ein Erweiterungspaket aus dem Projekt remote-oss, das die Erweiterungen Dev Containers und Remote - SSH gemeinsam installiert."
+  "description": "An extension pack from the remote-oss project that installs the Dev Containers and Remote - SSH extensions together."
 }

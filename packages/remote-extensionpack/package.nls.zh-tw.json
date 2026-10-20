@@ -1,4 +1,4 @@
 {
   "displayName": "遠端開發",
-  "description": "來自 remote-oss 專案的延伸模組套件，可一併安裝 Dev Containers 與 Remote - SSH 延伸模組。"
+  "description": "An extension pack from the remote-oss project that installs the Dev Containers and Remote - SSH extensions together."
 }

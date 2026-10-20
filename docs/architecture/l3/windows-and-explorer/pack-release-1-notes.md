@@ -5,7 +5,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
-- **The pack's Repository and Issues links lead to the project's repository,** `remote-oss/remote`, where the
-  family's extensions are developed together, and to its issues page.
-  - F-9001 AC-6 and F-9901 AC-15 name `remote-oss/remote-extensionpack` instead (athena's ruling on #1158, after
-    D-56; spec question on remote-oss/remote-extensionpack #5 and #10).
+- **The pack's description is the same English sentence in every display language.** Only its name is translated into
+  the 14 languages. The extensions of the family do the same.
+  - F-9001 AC-4 and BR-4 ask for a translated description in each of the 13 other bundles (D-56; spec question on
+    remote-oss/remote-extensionpack #5).
+
+- **The readme does not say that the pack and its members are not Microsoft's.** It says that packs or extensions
+  naming Microsoft's extension ids do not install or activate the family's extensions, and that installing the pack
+  together with Microsoft's pack is unsupported.
+  - F-9002 AC-7 and BR-3 ask for the statement (D-56: no notice of affiliation anywhere; D-59; spec question on
+    remote-oss/remote-extensionpack #6).

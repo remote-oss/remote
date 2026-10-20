@@ -247,7 +247,7 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
-  it('F-9001 AC-4, F-9901 AC-10: the package holds package.nls.json and the 14 bundles and no l10n folder, with the reference’s display names and descriptions of its own', () => {
+  it('F-9001 AC-4, F-9901 AC-10 (ruling-d56-english): the package holds package.nls.json and the 14 bundles and no l10n folder, with the reference’s display names, and in every bundle the English description, which is not the reference’s', () => {
     const bundles = packageFiles()
       .filter(file => /^package\.nls\..+\.json$/.test(file))
       .map(file => file.slice('package.nls.'.length, -'.json'.length))
@@ -266,8 +266,7 @@ describe('the pack’s package (card pack-01)', () => {
         descriptions: [...DISPLAY_NAMES.keys()].map(language => {
           const {description} = tableOf(language);
           return (
-            description !== '' &&
-            description !== ENGLISH_DESCRIPTION &&
+            description === ENGLISH_DESCRIPTION &&
             description !== REFERENCE_DESCRIPTIONS.get(language)
           );
         }),
@@ -368,7 +367,7 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
-  it('F-9002 AC-6, AC-7: the title names Remote Development and remote-oss, not Visual Studio Code or Microsoft, the introduction names only a container and a remote machine over SSH, and the readme says the pack is not Microsoft’s', () => {
+  it('F-9002 AC-6, AC-7 (ruling-d56-affiliation): the title names Remote Development and remote-oss, not Visual Studio Code or Microsoft, the introduction names only a container and a remote machine over SSH, and the readme says that packs naming Microsoft’s ids do not install or activate the family’s extensions', () => {
     const [title = ''] = readme().split('\n');
     const introduction = readme().split('\n## ')[0] ?? '';
     deepStrictEqual(
@@ -377,8 +376,7 @@ describe('the pack’s package (card pack-01)', () => {
         /Visual Studio Code|Microsoft/.test(title),
         introduction.includes('container') && introduction.includes('SSH'),
         /WSL|tunnel/i.test(introduction),
-        flat(introduction).includes("not Microsoft's") &&
-          flat(introduction).includes('do not install or activate'),
+        flat(introduction).includes('do not install or activate'),
       ],
       [true, false, true, false, true],
     );

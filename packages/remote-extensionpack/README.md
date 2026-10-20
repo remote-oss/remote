@@ -3,8 +3,7 @@
 This extension pack lets you open a folder inside a container, or on a remote machine over SSH, and keep working with
 the full feature set of your editor. It installs the extensions below in one step.
 
-The pack and its members are the `remote-oss` family's own extensions, not Microsoft's. Packs or extensions that name
-Microsoft's extension ids do not install or activate the family's extensions.
+Packs or extensions that name Microsoft's extension ids do not install or activate the family's extensions.
 
 ## The members
 

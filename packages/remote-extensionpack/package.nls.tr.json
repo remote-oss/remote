@@ -1,4 +1,4 @@
 {
   "displayName": "Uzak Geliştirme",
-  "description": "Dev Containers ve Remote - SSH uzantılarını birlikte yükleyen, remote-oss projesine ait bir uzantı paketi."
+  "description": "An extension pack from the remote-oss project that installs the Dev Containers and Remote - SSH extensions together."
 }
