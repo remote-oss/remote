@@ -126,6 +126,25 @@ describe('Reopen in Container', () => {
     );
   });
 
+  it('F-0417 BR-9: the window tells the shutdown helper that it leaves, once and just before the reload; a flow that stops before the reload tells nothing', async () => {
+    const reloaded = setup();
+    await reopened(reloaded);
+    await settled();
+    const stopped = setup();
+    stopped.check = 'stopped';
+    await reopened(stopped);
+    deepStrictEqual(
+      [
+        [reloaded.left, reloaded.order.filter(step => step !== 'store')],
+        [stopped.left, stopped.commands.length],
+      ],
+      [
+        [1, ['leave', 'open']],
+        [0, 0],
+      ],
+    );
+  });
+
   it('F-0411 AC-35, AC-37: the worktree setting, as the boolean or as the string, reaches the read the window\u2019s folder comes from', async () => {
     const reads: unknown[] = [];
     for (const value of [undefined, true, 'true', 'false']) {
@@ -267,7 +286,7 @@ describe('Reopen in Container', () => {
         await reopenedSlowly(state),
         state.timers.map(timer => timer.milliseconds),
       ],
-      [[`progress shown ${START}`, 'progress closed', 'open'], [500]],
+      [[`progress shown ${START}`, 'leave', 'progress closed', 'open'], [500]],
     );
   });
 

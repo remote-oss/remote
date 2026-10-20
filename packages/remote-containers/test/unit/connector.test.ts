@@ -196,7 +196,7 @@ describe('the container connector: the connect (card containers-08)', () => {
   it('contracts §2 step 3: unusable, discovery failed, a build failure and a cancel are rows 4, 5, 5 and 11', async () => {
     const kinds: string[] = [];
     for (const outcome of [
-      {kind: 'unusable', containerId: 'c1', status: 'exited'},
+      {kind: 'unusable', containerId: 'c1c1c1c1c1c1c1c1', status: 'exited'},
       {kind: 'discoveryFailed', detail: 'x'},
       {kind: 'buildFailed', message: 'x'},
       {kind: 'cancelled'},
@@ -548,6 +548,163 @@ describe('the container connector: the connect (card containers-08)', () => {
         scene.prepared,
       ],
       [{id: 'S339'}, 0, []],
+    );
+  });
+
+  it('F-0417 BR-5, BR-13: a connect registers its connection with the shutdown helper after the trust gate, with the folder, the configuration file and the engine as it was', async () => {
+    const scene = sceneOf({dockerPath: '/opt/docker'});
+    scene.dockerHost = 'unix:///run/docker.sock';
+    await connected(scene);
+    deepStrictEqual(scene.shutdownSent[0], {
+      type: 'register',
+      connectionId: 'connection-1',
+      identity: {
+        hostPath: '/work/proj',
+        configFile: '/work/proj/.devcontainer/devcontainer.json',
+      },
+      engine: {
+        dockerPath: '/opt/docker',
+        environment: {DOCKER_HOST: 'unix:///run/docker.sock'},
+      },
+    });
+  });
+
+  it('F-0417 BR-13: a Docker context in the authority reaches the helper as DOCKER_CONTEXT, and an empty DOCKER_HOST is no variable', async () => {
+    const scene = sceneOf();
+    scene.dockerHost = '';
+    await scene.connector.connect(
+      inputOf(devContainerPayloadOf({...FOLDER, context: 'colima'})),
+    );
+    const [register] = scene.shutdownSent;
+    deepStrictEqual(
+      register?.type === 'register' ? register.engine.environment : register,
+      {DOCKER_CONTEXT: 'colima'},
+    );
+  });
+
+  it('F-0417 BR-8, BR-2: the container is told once it is ready, with the action its recorded label gives, and with the file’s value when the container has no label', async () => {
+    const labelled = sceneOf();
+    labelled.metadata = '[{"id":"base"},{"shutdownAction":"none"}]';
+    await connected(labelled);
+    const unlabelled = sceneOf();
+    unlabelled.configuration = {
+      kind: 'configuration',
+      configuration: {name: 'Proj', shutdownAction: 'none'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await connected(unlabelled);
+    deepStrictEqual(
+      [labelled, unlabelled].map(scene => scene.shutdownSent[1]),
+      [
+        {
+          type: 'container',
+          connectionId: 'connection-1',
+          containerId: 'c1c1c1c1c1c1c1c1',
+          action: 'none',
+        },
+        {
+          type: 'container',
+          connectionId: 'connection-1',
+          containerId: 'c1c1c1c1c1c1c1c1',
+          action: 'none',
+        },
+      ],
+    );
+  });
+
+  it('F-0417 BR-2: a label without shutdownAction gives the default whatever the file says, and a label that cannot be read leaves the file’s value', async () => {
+    const answers: Array<[string, unknown]> = [
+      ['[{"id":"base"}]', 'none'],
+      ['fails', 'none'],
+      ['', undefined],
+    ];
+    const actions = [];
+    for (const [metadata, written] of answers) {
+      const scene = sceneOf();
+      scene.metadata = metadata;
+      scene.configuration = {
+        kind: 'configuration',
+        configuration: {name: 'Proj', shutdownAction: written},
+        workspaceFolder: '/workspaces/proj',
+        workspaceMount: undefined,
+        mergedConfiguration: undefined,
+      };
+      await connected(scene);
+      const told = scene.shutdownSent[1];
+      actions.push(told?.type === 'container' ? told.action : told);
+    }
+    deepStrictEqual(actions, ['stop', 'none', 'stop']);
+  });
+
+  it('F-0417 AC-60, BR-8: a connect that fails after its container is ready has told the helper which container the window holds', async () => {
+    const scene = sceneOf();
+    const failure: Failed = {
+      kind: 'serverFailed',
+      reason: {id: 'S034'},
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    };
+    scene.server = {kind: 'failed', failure};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.shutdownSent.map(request => request.type),
+      ['register', 'container'],
+    );
+  });
+
+  it('F-0417 BR-8: a retry or a reconnection is the same connection and registers nothing again, and a new first attempt is a new connection', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf(PAYLOAD));
+    await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.shutdownSent.map(request =>
+        request.type === 'register'
+          ? `register ${request.connectionId}`
+          : `${request.type} ${request.connectionId}`,
+      ),
+      [
+        'register connection-1',
+        'container connection-1',
+        'container connection-1',
+        'register connection-2',
+        'container connection-2',
+      ],
+    );
+  });
+
+  it('F-0417 BR-5: a folder the user did not trust registers nothing, since the helper would run its Docker program', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(scene.shutdownSent, []);
+  });
+
+  it('F-0417 BR-9: a malformed or legacy authority and an outer hop tell the helper nothing', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf('not hex'));
+    await scene.connector.connect(
+      inputOf(Buffer.from('/work/proj').toString('hex')),
+    );
+    deepStrictEqual(scene.shutdownSent, []);
+  });
+
+  it('F-0417 BR-9: leaving tells the helper once for the connection the window holds, and nothing when it holds none', async () => {
+    const none = sceneOf();
+    await none.connector.leaveShutdown();
+    const scene = sceneOf();
+    await connected(scene);
+    await scene.connector.leaveShutdown();
+    await scene.connector.leaveShutdown();
+    deepStrictEqual(
+      [none.shutdownSent, scene.shutdownSent.slice(2)],
+      [[], [{type: 'leave', connectionId: 'connection-1'}]],
     );
   });
 

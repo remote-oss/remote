@@ -28,6 +28,13 @@ import {
 } from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {executableOf} from '../engine/executable.ts';
+import {effectiveAction} from '../shutdown/effective-action.ts';
+import type {EngineCoordinates} from '../shutdown/protocol.ts';
+import {
+  metadataArguments,
+  recordedMetadataOf,
+} from '../shutdown/recorded-metadata.ts';
+import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf} from '../exec/exec-channel.ts';
@@ -132,6 +139,8 @@ export interface ContainerConnector extends Connector {
   heldConnection(): HeldConnection | undefined;
   /** Calls the listener when the connection the window holds is made or given back; gives the way to stop listening. */
   onHeldChanged(listener: () => void): () => void;
+  /** Tells the shutdown helper that the window leaves the container it holds, before the window reloads elsewhere. */
+  leaveShutdown(): Promise<void>;
   /** The local path a URI of this window's container folder stands for; nothing otherwise. */
   canonicalPathOf(authority: string, path: string): Promise<string | undefined>;
 }
@@ -191,6 +200,10 @@ export interface ContainerConnectorDependencies {
   showDeclined(message: string, detail: string): Promise<void>;
   /** Opens `hostPath` as a local folder in this window. */
   reopenLocally(hostPath: string): Promise<void>;
+  /** What tells the shutdown helper about this window's connection. */
+  shutdown: ShutdownMessenger;
+  /** A fresh id for each connection of the window to a container. */
+  newConnectionId(): string;
   clock: () => number;
   logger: Logger;
   revealLog(): void;
@@ -398,6 +411,8 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
+  /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
+  let shutdownConnection: string | undefined;
   let checking = false;
   /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
   const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
@@ -626,6 +641,76 @@ export function containerConnectorOf(
     }
   }
 
+  /** The engine of `tools`, as the shutdown helper must reach it: the program and the variables that pick the engine. */
+  function engineCoordinatesOf(
+    folder: DevContainerFolder,
+    tools: Pick<Tools, 'dockerPath'>,
+  ): EngineCoordinates {
+    const dockerHost = dependencies.editorEnvironment.DOCKER_HOST;
+    return {
+      dockerPath: tools.dockerPath,
+      environment: {
+        ...(folder.context === undefined
+          ? {}
+          : {DOCKER_CONTEXT: folder.context}),
+        ...(dockerHost === undefined || dockerHost === ''
+          ? {}
+          : {DOCKER_HOST: dockerHost}),
+      },
+    };
+  }
+
+  /**
+   * Tells the shutdown helper about this window's connection, once: a reconnection or a retry is the same connection.
+   * It runs after the trust gate, so the helper never runs a folder's program for a folder that was not trusted. It
+   * does not wait for the helper.
+   */
+  function registerWithShutdown(
+    folder: DevContainerFolder,
+    tools: Pick<Tools, 'configFile' | 'dockerPath'>,
+  ): string {
+    if (shutdownConnection !== undefined) {
+      return shutdownConnection;
+    }
+    const connectionId = dependencies.newConnectionId();
+    shutdownConnection = connectionId;
+    void dependencies.shutdown.send({
+      type: 'register',
+      connectionId,
+      identity: {hostPath: folder.hostPath, configFile: tools.configFile},
+      engine: engineCoordinatesOf(folder, tools),
+    });
+    return connectionId;
+  }
+
+  /**
+   * Tells the shutdown helper which container the connection holds and what its end owes it: the value recorded on the
+   * container, or the file's when it has no metadata label. It does not wait for the helper.
+   */
+  async function tellShutdownContainer(
+    connectionId: string,
+    containerId: string,
+    fileValue: unknown,
+    engine: EngineHost,
+    cancellation: AbortSignal,
+  ): Promise<void> {
+    const outcome = await engine.run(
+      metadataArguments(containerId),
+      {kind: 'none'},
+      {cancellation},
+    );
+    const recorded =
+      outcome.kind === 'ran' && outcome.status === 0
+        ? recordedMetadataOf(outcome.stdout)
+        : undefined;
+    void dependencies.shutdown.send({
+      type: 'container',
+      connectionId,
+      containerId,
+      action: effectiveAction(recorded, fileValue),
+    });
+  }
+
   /** The settings, the program, the engine and the CLI a connect or a read of `folder` uses, made the same way for both. */
   function toolsOf(folder: DevContainerFolder): Tools {
     const settings = dependencies.settings();
@@ -800,6 +885,7 @@ export function containerConnectorOf(
     if (!(await trustedFolder(folder, cancellation))) {
       return trustDeclined();
     }
+    const connectionId = registerWithShutdown(folder, tools);
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {
@@ -861,6 +947,13 @@ export function containerConnectorOf(
     }
     logger.info(
       `container ${shortId(prepared.containerId)} was ${prepared.created ? 'newly started' : 'already running'}`,
+    );
+    await tellShutdownContainer(
+      connectionId,
+      prepared.containerId,
+      read?.configuration.shutdownAction,
+      engine,
+      cancellation,
     );
     const configuration = await bridge.readConfiguration(
       cliTargetOf(folder, tools),
@@ -1018,6 +1111,9 @@ export function containerConnectorOf(
           return await reconnect(held, controller.signal);
         }
         releaseHeld();
+        if (input.attempt === 1 && !input.isReconnection) {
+          shutdownConnection = undefined;
+        }
         if (target.outer !== undefined) {
           return remoteEngine();
         }
@@ -1062,6 +1158,13 @@ export function containerConnectorOf(
             remoteWorkspaceFolder: held.remoteWorkspaceFolder,
             engine: held.engine,
           },
+    leaveShutdown: async () => {
+      const connectionId = shutdownConnection;
+      shutdownConnection = undefined;
+      if (connectionId !== undefined) {
+        await dependencies.shutdown.send({type: 'leave', connectionId});
+      }
+    },
     canonicalPathOf,
     onHeldChanged: listener => heldChanges.subscribe(listener),
     onPhase: listener => phases.subscribe(listener),

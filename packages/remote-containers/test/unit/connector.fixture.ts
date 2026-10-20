@@ -29,6 +29,8 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {cacheVolumeOf} from '../../src/lifecycle/cache-volume.ts';
+import type {ShutdownRequest} from '../../src/shutdown/protocol.ts';
+import {metadataArguments} from '../../src/shutdown/recorded-metadata.ts';
 import type {
   ContainerLifecycle,
   ContainerOutcome,
@@ -117,6 +119,12 @@ export interface Scene {
   }>;
   stopped: number;
   revealed: number;
+  /** The `DOCKER_HOST` of the editor's environment, when it has one. */
+  dockerHost: string | undefined;
+  /** What the shutdown helper was told, in order. */
+  shutdownSent: ShutdownRequest[];
+  /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
+  metadata: string;
   sink: MemorySink;
   /** The outcome of `prepare`; a function to hold it. */
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
@@ -225,6 +233,9 @@ export function sceneOf(
     relays: [],
     stopped: 0,
     revealed: 0,
+    dockerHost: undefined,
+    shutdownSent: [],
+    metadata: '',
     sink,
     outcome: READY,
     steps: [],
@@ -287,6 +298,16 @@ export function sceneOf(
         stdout: '',
         stderr: scene.version.stderr,
       };
+    }
+    if (argv[0] === 'inspect' && argv[4] === metadataArguments('')[4]) {
+      return scene.metadata === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: `${scene.metadata}\n`, stderr: ''};
     }
     const {answer} = scene.inspect;
     if (answer === 'unreachable') {
@@ -372,7 +393,18 @@ export function sceneOf(
       scene.stopped += 1;
     },
   };
+  let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
+    shutdown: {
+      send: request => {
+        scene.shutdownSent.push(request);
+        return Promise.resolve();
+      },
+    },
+    newConnectionId: () => {
+      connections += 1;
+      return `connection-${String(connections)}`;
+    },
     engineFor: file => {
       scene.engineFiles.push(file);
       return engine;
@@ -418,7 +450,15 @@ export function sceneOf(
       translate: template => template,
       dialogs: silentDialogs(),
     },
-    editorEnvironment: {HOME: '/home/u', GITHUB_TOKEN: 's3cr3t-token'},
+    get editorEnvironment() {
+      return {
+        HOME: '/home/u',
+        GITHUB_TOKEN: 's3cr3t-token',
+        ...(scene.dockerHost === undefined
+          ? {}
+          : {DOCKER_HOST: scene.dockerHost}),
+      };
+    },
     intents: {
       get: () => {
         if (scene.intentError !== undefined) {

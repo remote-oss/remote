@@ -20,6 +20,8 @@ export interface RebuildPorts {
   };
   intents: IntentMemento;
   now(): number;
+  /** Tells the shutdown helper that this window leaves the container it holds, before the reload. */
+  shutdown: {leave(): Promise<void>};
   logger: Logger;
 }
 
@@ -61,6 +63,7 @@ export function rebuildContainer(
     logger.info(
       `rebuilding the dev container (no cache: ${String(options.buildNoCache)})`,
     );
+    await ports.shutdown.leave();
     await window.reload();
   }
 

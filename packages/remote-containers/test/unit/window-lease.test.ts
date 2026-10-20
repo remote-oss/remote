@@ -3,6 +3,7 @@ import type {HelperEvent, PlainData, RequestOutcome} from 'lib-helper';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {ShutdownRequest} from '../../src/shutdown/protocol.ts';
+import {pendingOf} from './pending.ts';
 import {
   createWindowLease,
   type LeaseAcquired,
@@ -49,7 +50,11 @@ function fakeLease(
   return {
     lease,
     asked,
-    say: (event: HelperEvent) => listeners.forEach(each => each(event)),
+    emit: (event: HelperEvent) => {
+      for (const listener of listeners) {
+        listener(event);
+      }
+    },
   };
 }
 
@@ -59,11 +64,16 @@ function sceneOf(...outcomes: Array<LeaseAcquired | Error>) {
   const acquires = {count: 0};
   const messenger = createWindowLease({
     acquire: () => {
-      const outcome = outcomes[Math.min(acquires.count, outcomes.length - 1)];
+      const outcome = outcomes[
+        Math.min(acquires.count, outcomes.length - 1)
+      ] ?? {
+        kind: 'failed',
+        failure: 'none given',
+      };
       acquires.count += 1;
       return outcome instanceof Error
         ? Promise.reject(outcome)
-        : Promise.resolve(outcome as LeaseAcquired);
+        : Promise.resolve(outcome);
     },
     logger: createLogger(sink, {minimumLevel: () => 'info'}),
   });
@@ -157,8 +167,8 @@ describe('the window’s lease on the shutdown helper (card containers-69)', () 
       {kind: 'acquired', lease: third.lease},
     );
     await messenger.send(REGISTER);
-    first.say({kind: 'message', body: 'noise'});
-    first.say({kind: 'helperGone'});
+    first.emit({kind: 'message', body: 'noise'});
+    first.emit({kind: 'helperGone'});
     await messenger.send(CONTAINER);
     await messenger.send({...REGISTER, connectionId: 'b'});
     await messenger.send({...CONTAINER, connectionId: 'b'});
@@ -176,14 +186,11 @@ describe('the window’s lease on the shutdown helper (card containers-69)', () 
 
   it('F-0417 BR-9: a message that arrives while an earlier one is still being answered waits for it', async () => {
     const order: string[] = [];
-    let release: () => void = () => undefined;
-    const held = new Promise<void>(resolve => {
-      release = resolve;
-    });
+    const held = pendingOf<undefined>();
     const helper = fakeLease(async body => {
       order.push(`start ${String((body as {type?: unknown}).type)}`);
       if ((body as {type?: unknown}).type === 'register') {
-        await held;
+        await held.promise;
       }
       order.push(`end ${String((body as {type?: unknown}).type)}`);
       return ACCEPTED;
@@ -192,7 +199,7 @@ describe('the window’s lease on the shutdown helper (card containers-69)', () 
     const first = messenger.send(REGISTER);
     const second = messenger.send(CONTAINER);
     await new Promise(resolve => setImmediate(resolve));
-    release();
+    held.resolve(undefined);
     await Promise.all([first, second]);
     deepStrictEqual(order, [
       'start register',
@@ -219,7 +226,9 @@ describe('the window’s lease on the shutdown helper (card containers-69)', () 
   it('F-0417 BR-10: a throw that is not an error is told by its text', async () => {
     const sink = new MemorySink();
     const messenger = createWindowLease({
-      acquire: () => Promise.reject('plain text' as unknown as Error),
+      // The row on a rejection that is not an error needs exactly that.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      acquire: () => Promise.reject('plain text'),
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     });
     await messenger.send(REGISTER);

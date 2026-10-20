@@ -61,6 +61,8 @@ export interface Setup {
   order: string[];
   /** What the progress asked the clock for. */
   timers: Array<{milliseconds: number; callback: () => void}>;
+  /** How many times the window told the shutdown helper that it leaves its container. */
+  left: number;
 }
 
 /** A setup of a trusted local window on the folder, with its configuration and a passing engine. */
@@ -92,6 +94,7 @@ export function setup(): Setup {
     targets: [],
     order: [],
     timers: [],
+    left: 0,
   };
 }
 
@@ -223,6 +226,13 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         state.targets.push(target);
         state.calls.push(`readConfiguration ${target.workspaceFolder}`);
         return Promise.resolve(state.read);
+      },
+    },
+    shutdown: {
+      leave: () => {
+        state.left += 1;
+        state.order.push('leave');
+        return Promise.resolve();
       },
     },
     opener: {
