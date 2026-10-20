@@ -234,6 +234,96 @@ describe('the connect pipeline, when it works', () => {
   });
 });
 
+describe('the connect pipeline, what the log says of a resolve (card connect-65)', () => {
+  /** The messages of a connect's log that belong to the resolve's own lines. */
+  function resolveLines(logSink: MemorySink): string[] {
+    return logSink.lines
+      .map(line => line.message)
+      .filter(
+        message =>
+          message.startsWith('Resolving ') ||
+          message.startsWith('Remote server listening') ||
+          message.startsWith('Resolved '),
+      );
+  }
+
+  it('F-2003 BR-6: items 1, 9 and 10 in order on a successful resolve', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(resolveLines(logSink), [
+      'Resolving ssh-remote+dev, attempt 1',
+      'Remote server listening on port 4321',
+      'Resolved ssh-remote+dev to local port 50000',
+    ]);
+  });
+
+  it('F-2003 BR-6 item 1: a reconnection is marked', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(
+      {...INPUT, attempt: 3, isReconnection: true},
+      steps(recording),
+      options,
+    );
+    deepStrictEqual(
+      resolveLines(logSink)[0],
+      'Resolving ssh-remote+dev, attempt 3, reconnection',
+    );
+  });
+
+  it('F-2003 BR-6 item 1: the resolver line comes before the first phase', async () => {
+    const {recording, options, logSink} = setup();
+    const seen: string[] = [];
+    await connect(INPUT, steps(recording), {
+      ...options,
+      onPhase: event => {
+        if (seen.length === 0) {
+          seen.push(
+            `${event.kind} after ${String(resolveLines(logSink).length)} resolve lines`,
+          );
+        }
+      },
+    });
+    deepStrictEqual(seen, ['initializing after 1 resolve lines']);
+  });
+
+  it('F-2003 BR-7: a failed resolve writes no listening or resolved line', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        locateClient: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'unknown'}}),
+      }),
+      options,
+    );
+    deepStrictEqual(resolveLines(logSink), [
+      'Resolving ssh-remote+dev, attempt 1',
+    ]);
+  });
+
+  it('F-2003 BR-6 item 9: a server on a socket has no listening line', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        start: () =>
+          Promise.resolve({
+            ...STARTED,
+            server: {
+              ...STARTED.server,
+              endpoint: {kind: 'socket', path: '/tmp/server.sock'},
+            },
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      resolveLines(logSink).filter(line => line.startsWith('Remote server')),
+      [],
+    );
+  });
+});
+
 describe('the connect pipeline, when a step fails', () => {
   it('a target that does not validate fails first, before anything is opened', async () => {
     const {recording, options} = setup();
