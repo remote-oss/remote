@@ -229,10 +229,10 @@ describe('F-0301 configuration discovery and picker (card containers-50)', funct
     await shown.running.catch(() => undefined);
     const connected = await connectedAs(window);
     deepStrictEqual(
-      [shown.rows.map(entry => entry.label), connected.indicator],
+      [shown.rows.map(entry => entry.label), connected.title],
       [
         ['Plain', 'Run ${localEnv:HARNESS_RUN_ID}'],
-        `Dev Container: Run ${variable('HARNESS_RUN_ID')}`,
+        `[c50-variable [Dev Container: Run ${variable('HARNESS_RUN_ID')}]]`,
       ],
     );
   });
