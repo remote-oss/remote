@@ -38,6 +38,47 @@ features.
 Not in 0.2: F-2008 is a boundary note, not a feature to build; F-2606 is not built (F-3907); F-3907 is a decision;
 F-2509 is built (option (a), B's window surfaces) but belongs to slice 3, not "not built".
 
+## Slice 3: the pre-connection script, Open Web UI and fish hosts (athena, 2026-10-20, #1205)
+
+Three features, and nothing else joins. The commands D-86 put in 0.2 (F-2204, F-2411, F-2412, `clearAllSessionHints`
+of F-2605, F-2302, F-2303) are already in slices 1 and 2. F-2605 beyond `clearAllSessionHints` stays out (D-86).
+F-2606 and F-3907 stay as above.
+
+All three specs are `spec:draft`. A card that seeds coverage or builds against a criterion waits for the spec's review,
+so that the criterion ids it cites are final. The harness card (fish) doesn't wait.
+
+**F-2108, the pre-connection script (P2): to build.** `steps.preconnect` in `pipeline/connect.ts` is the seam, already
+bounded by `PRECONNECT_MILLISECONDS`. It is empty today.
+- *Component:* `ssh.preconnect-runner` in `remote-ssh` (catalogue), behind a `PreconnectPorts` port in
+  `connect-ports.ts`: the setting's value, a file reader (content and executable bit), a process spawner and the
+  approval memory. It needs no new library: the spawn goes through `lib-host`'s local process port, and the lines through
+  `lib-log` with its masking.
+- *Which script:* `remote.SSH.preconnect` as F-2108 resolves it: one path, or a map from host alias to path. That
+  includes workspace-file and remote-folder settings and Restricted Mode (BR-15). The confirmation dialog is what
+  guards a script someone else put in a folder's settings, so it must show for every script that isn't remembered,
+  whatever layer named it (AC-32).
+- *Approval memory:* "Allow and Don't Ask Again" remembers the path with the SHA-256 of the file's content, in
+  `globalState`, never synced (`setKeysForSync` leaves it out). Changed content asks again, with the spec's changed
+  message. Nothing else of the script is stored.
+- *During the run:* F-2304's progress text "Running pre-connection script (show log)", and every output line in the log
+  as `[preconnect] <line>`, masked like any line (R-26).
+- *Outcomes:* Skip continues, and Cancel ends the connect as F-2304's cancel. Exit non-zero, no start, unreadable or not
+  found go to F-2601's failure dialog with the spec's reason. The `PreconnectScriptFailure` row of the troubleshooting
+  terminal is F-2605's, so its criteria are `deferred` with D-86's reason.
+- *Rows:* unit on the alias map, the hash memory and every outcome. Acceptance in a launch with a local script fixture,
+  where the scripted surface answers the dialog.
+
+**F-2509, Open Web UI (P3): built** (card remote-ssh-16, option (a)). Slice 3 only seeds its criteria after the
+review and tags them. A product change follows only where a row fails.
+
+**F-2704's fish hosts (P2): harness first.** The host image gains its `fish` variant: a Dockerfile argument, as
+planned above. A launch runs F-2704's login-shell rows against it, and the existing fish rows (#1103, `ruling-fish`)
+move there. A product change follows only where a row fails. Coverage seeding waits for the review.
+
+**0.2's recorded gate (D-63, D-65):** the eight slice-1 features of D-65 (F-2301, F-2304, F-2305, F-2306, F-2403,
+F-2409, F-2601, F-2502) and F-2104 with slice 2. That's 9 features, recorded by the kit on pull when 0.2 reaches QA.
+Slice 3 has no P0 feature, so it adds none. The other 11 P0 features are acceptance-tested only, as D-65 says.
+
 ## Acceptance tests and the harness (D-63)
 
 Coding gate per slice: tests derived from the acceptance criteria, run in CI on Linux and locally. Release gate: a
