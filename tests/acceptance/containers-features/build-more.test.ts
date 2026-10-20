@@ -3,7 +3,13 @@ import {execFile} from 'node:child_process';
 import {rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {runLabelArguments, variable, waitFor} from '../windows/harness.ts';
+import {
+  devContainersOf,
+  reopenInContainer,
+  runLabelArguments,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
 import {
   featureBuilds,
@@ -116,7 +122,7 @@ describe('what a build with Features makes and keeps (card containers-93)', func
     );
   });
 
-  it('F-0414 AC-43 (order-edit-reuses): an edit that only changes overrideFeatureInstallOrder reuses the container, whose metadata order stays', async () => {
+  it('F-0414 AC-43 (order-edit-reuses): an edit that only changes overrideFeatureInstallOrder reuses the container, whose metadata order stays until a rebuild shows the new one', async () => {
     const built = await build(
       'c93-ac43',
       {features: {'./alpha': {}, './beta': {}}},
@@ -135,9 +141,22 @@ describe('what a build with Features makes and keeps (card containers-93)', func
       }),
     );
     const again = await reopen(built, false);
+    const reused = [
+      again.containerId,
+      idsOf(await metadataOf(again.containerId)),
+    ];
+    await reopenInContainer(
+      again.window,
+      600_000,
+      'remote-containers.rebuildContainer',
+    );
+    const [rebuiltId = ''] = await devContainersOf(built.folder);
     deepStrictEqual(
-      [again.containerId, idsOf(await metadataOf(again.containerId))],
-      [built.containerId, ['./alpha', './beta']],
+      [reused, idsOf(await metadataOf(rebuiltId))],
+      [
+        [built.containerId, ['./alpha', './beta']],
+        ['./beta', './alpha'],
+      ],
     );
   });
 
