@@ -48,8 +48,11 @@ function eventsOf(on: unknown): string[] {
   return typeof on === 'object' && on !== null ? Object.keys(on) : [];
 }
 
-/** The operands of the top-level `&&` of an expression, each trimmed of spaces and of `${{ }}` around the whole. */
-function conjunctsOf(expression: string): string[] {
+/**
+ * The operands of the top-level `&&` of an expression, each trimmed, with `${{ }}` around the whole taken off; none
+ * when the expression has a top-level `||`, since `||` binds looser and its other side would run the job alone.
+ */
+function conjunctsOf(expression: string): string[] | undefined {
   const text = expression
     .trim()
     .replace(/^\$\{\{([\s\S]*)\}\}$/, '$1')
@@ -60,6 +63,9 @@ function conjunctsOf(expression: string): string[] {
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
     depth += character === '(' ? 1 : character === ')' ? -1 : 0;
+    if (depth === 0 && text.startsWith('||', index)) {
+      return undefined;
+    }
     if (depth === 0 && text.startsWith('&&', index)) {
       operands.push(text.slice(start, index).trim());
       start = index + 2;
@@ -72,11 +78,10 @@ function conjunctsOf(expression: string): string[] {
 
 /** Whether a job's `if` holds the fork guard as the whole condition or as one operand of its top-level `&&`. */
 function forkGuarded(condition: unknown): boolean {
-  return (
-    typeof condition === 'string' &&
-    conjunctsOf(condition).some(
-      operand => operand === FORK_GUARD || operand === `(${FORK_GUARD})`,
-    )
+  const operands =
+    typeof condition === 'string' ? conjunctsOf(condition) : undefined;
+  return (operands ?? []).some(
+    operand => operand === FORK_GUARD || operand === `(${FORK_GUARD})`,
   );
 }
 

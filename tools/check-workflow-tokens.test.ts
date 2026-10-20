@@ -60,7 +60,7 @@ describe('check-workflow-tokens', () => {
     );
   });
 
-  it('the fork guard counts as the whole if or one operand of its top-level &&, never negated or OR-ed', () => {
+  it('the fork guard counts as the whole if or one operand of its top-level &&, never negated, OR-ed or beside a top-level ||', () => {
     deepStrictEqual(
       [
         `\${{ ${GUARD} }}`,
@@ -68,6 +68,8 @@ describe('check-workflow-tokens', () => {
         `!(${GUARD})`,
         `${GUARD} || github.event_name == 'push'`,
         `(github.event_name == 'push' || ${GUARD}) && always()`,
+        `${GUARD} && always() || github.event_name == 'pull_request'`,
+        `(${GUARD} || always()) && ${GUARD}`,
       ].map(
         condition =>
           workflowTokenProblems(
@@ -75,7 +77,7 @@ describe('check-workflow-tokens', () => {
             workflow('pull_request', WRITE, '', JSON.stringify(condition)),
           ).length,
       ),
-      [0, 0, 1, 1, 1],
+      [0, 0, 1, 1, 1, 1, 0],
     );
   });
 
