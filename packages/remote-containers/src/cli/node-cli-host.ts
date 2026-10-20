@@ -91,6 +91,7 @@ export function nodeCliHost(
           detached: true,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
+            BUILDKIT_PROGRESS: 'plain',
             ...editorEnvironment,
             ELECTRON_RUN_AS_NODE: '1',
             REMOTE_OSS_EDITOR_MODULES: paths.editorModules,

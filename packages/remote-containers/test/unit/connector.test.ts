@@ -19,6 +19,7 @@ import {
   REBUILD_INTENTS_KEY,
   storeRebuildIntent,
 } from '../../src/open/rebuild-intent.ts';
+import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
 function tick(): Promise<unknown> {
@@ -825,27 +826,117 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  it('F-0408 BR-6: the CLI’s error events are logged as errors and the rest as debug lines', async () => {
+  /** A `log` event of the CLI with the level, type and text given. */
+  function cliLog(
+    level: number,
+    type: 'raw' | 'start' | 'stop' | 'text',
+    text: string,
+  ): CliEvent {
+    return {
+      kind: 'log',
+      level,
+      text,
+      channel: undefined,
+      type,
+      timestamp: undefined,
+      startTimestamp: undefined,
+    };
+  }
+
+  /** What the connect writes to the log for `events`, as [level, message] of the lines they gave. */
+  async function loggedFor(
+    events: CliEvent[],
+    only: string[],
+  ): Promise<string[][]> {
+    const scene = sceneOf();
+    scene.cliEvents = events;
+    await connected(scene);
+    const lines = scene.sink.lines
+      .filter(line => only.includes(line.message))
+      .map(line => [line.level, line.message]);
+    // The connect prepares the container and reads its configuration, and each hands the events to the log.
+    return lines.slice(0, lines.length / 2);
+  }
+
+  it('contracts §2 step 3: a text of level 5 is logged as an error', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(5, 'text', 'it broke')], ['it broke']),
+      [['error', 'it broke']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 4 is logged as a warning', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(4, 'text', 'be careful')], ['be careful']),
+      [['warn', 'be careful']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 3 is logged as info', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(3, 'text', 'it ran')], ['it ran']),
+      [['info', 'it ran']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 2, and a start of level 3, are logged as debug', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [cliLog(2, 'text', 'detail'), cliLog(3, 'start', 'Running: x')],
+        ['detail', 'Running: x'],
+      ),
+      [
+        ['debug', 'detail'],
+        ['debug', 'Running: x'],
+      ],
+    );
+  });
+
+  it('F-0412 AC-11: Docker’s own output is logged as info, one line for each line of its text, without control sequences or empty lines', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            2,
+            'raw',
+            '#5 [2/3] RUN false\r\n\n  \r\n\u001b[31mfailed to solve\u001b[0m: exit code 1\n\n',
+          ),
+        ],
+        ['#5 [2/3] RUN false', 'failed to solve: exit code 1', '', '  '],
+      ),
+      [
+        ['info', '#5 [2/3] RUN false'],
+        ['info', 'failed to solve: exit code 1'],
+      ],
+    );
+  });
+
+  it('F-0405 AC-10: a failed lifecycle command’s line is logged as an error without its colour codes and line end', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            5,
+            'text',
+            '\u001b[1m\u001b[31mpostCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.\u001b[39m\u001b[22m\r',
+          ),
+        ],
+        [
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ),
+      [
+        [
+          'error',
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ],
+    );
+  });
+
+  it('F-0408 BR-6: a progress event is logged as a debug line', async () => {
     const scene = sceneOf();
     scene.cliEvents = [
-      {
-        kind: 'log',
-        level: 5,
-        text: 'it broke',
-        channel: undefined,
-        type: 'text',
-        timestamp: undefined,
-        startTimestamp: undefined,
-      },
-      {
-        kind: 'log',
-        level: 3,
-        text: 'it ran',
-        channel: undefined,
-        type: 'text',
-        timestamp: undefined,
-        startTimestamp: undefined,
-      },
       {
         kind: 'progress',
         name: 'Running',
@@ -856,18 +947,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     await connected(scene);
     deepStrictEqual(
       scene.sink.lines
-        .filter(line =>
-          ['it broke', 'it ran', 'Running: succeeded'].includes(line.message),
-        )
-        .map(line => [line.level, line.message]),
-      [
-        ['error', 'it broke'],
-        ['debug', 'it ran'],
-        ['debug', 'Running: succeeded'],
-        ['error', 'it broke'],
-        ['debug', 'it ran'],
-        ['debug', 'Running: succeeded'],
-      ],
+        .filter(line => line.message === 'Running: succeeded')
+        .map(line => line.level),
+      ['debug', 'debug'],
     );
   });
 
