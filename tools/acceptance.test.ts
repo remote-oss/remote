@@ -377,6 +377,7 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'login-shells',
   'config-files',
   'default-ports',
   'no-proposals',
@@ -769,6 +770,22 @@ describe('acceptance', () => {
       [...sharedLines('i686', 'harness-i686'), ...KEY_ALIAS_LINES].join('\n'),
     );
   });
+
+  for (const alias of [
+    'harness-bash',
+    'harness-zsh',
+    'harness-dash',
+    'harness-ksh',
+    'harness-csh',
+    'harness-tcsh',
+  ]) {
+    it(`F-2704: Host ${alias} logs in to ${alias} with the run key`, () => {
+      strictEqual(
+        accountBlock(alias),
+        [...sharedLines(alias, alias), ...KEY_ALIAS_LINES].join('\n'),
+      );
+    });
+  }
 
   it('#668: Host readonly logs in to harness-ro with the run key', () => {
     strictEqual(
