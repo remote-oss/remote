@@ -185,8 +185,10 @@ def _observe_errors(where, arg, seen):
                 errs.append(f"{where}: panel takes no arguments (panel: {{}})")
             elif k == "target_logins" and v != {}:   # kit #289, K3: a count of accepted logins, as a delta
                 errs.append(f"{where}: target_logins takes no arguments (target_logins: {{}})")
-            elif k == "client_listeners" and v != {}:   # kit #289, K2: the window's listeners and their holders
-                errs.append(f"{where}: client_listeners takes no arguments (client_listeners: {{}})")
+            elif k == "client_listeners" and not (v == {} or (isinstance(v, dict) and set(v) == {"holder"}
+                                                              and isinstance(v["holder"], str) and v["holder"])):
+                # kit #289, K2: the window's listeners and their holders; {holder} keeps one holder's
+                errs.append(f"{where}: client_listeners takes {{}} or {{holder: <editor, ssh or a process name>}}")
             elif k == "settings_editor" and v not in ({}, {"tabs": "all"}):   # kit #289, K6
                 errs.append(f"{where}: settings_editor takes {{}} or {{tabs: all}}")
             elif k == "target_files":   # athena on #218 (item 3): names, size changes, executable names; never contents
