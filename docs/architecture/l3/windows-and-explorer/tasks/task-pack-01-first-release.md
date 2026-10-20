@@ -12,6 +12,27 @@ The package is code-less (R-62): no `main`, no activation event, no contribution
 its static rows. Install and gallery behaviour (F-9101's install flows, F-9001 and F-9002's Extensions-view rows) is
 a later acceptance card, and so is publishing to Open VSX.
 
+## Amendment (athena's rulings on #1166, 2026-10-20; D-56, D-59)
+
+This block overrides the lines marked *superseded* below; they stay for the record.
+- **Repository and issues.** F-9001 AC-6 and F-9901 AC-15 were republished with D-56's URLs: `remote-oss/remote.git`
+  with a `directory`, and `remote-oss/remote/issues`. Ours matches the spec, so that's no deviation and has no
+  notes entry. The rows assert the spec as it is, with no `(ruling-d56)` label.
+- **Descriptions are English in every bundle** (D-56: English in every locale now, reviewed machine translation before
+  the first public release, as every member ships). The 13 language bundles and `qps-ploc` carry BR-4's English
+  sentence. The localized **display names** stay verbatim from F-9001 3.3 (D-41a). This is a deviation from F-9001
+  3.3, BR-4 and AC-4: an entry in `pack-release-1-notes.md`. Athena's spec question is on
+  remote-oss/remote-extensionpack#5.
+- **The README has no affiliation sentence** (D-56: no affiliation or trademark notice anywhere; D-59(1): the public
+  surface stands on its own). It contains neither the word "Microsoft" nor "reference", and no feature ids (no
+  `F-9xxx`, the maintainers table included). The factual install advice stays, worded without naming another
+  publisher: packs that list other extensions' ids don't install these, install one pack and not both, and the
+  family's extensions stand down beside the extensions they reimplement. This is a deviation from F-9002 BR-3's first
+  half and AC-7: an entry in `pack-release-1-notes.md`. Athena's spec question is on remote-oss/remote-extensionpack#6.
+  Any row that asserted BR-3's sentence asserts ours instead.
+- `pack-release-1-notes.md` therefore holds exactly two deviation entries: the English descriptions and the README's
+  missing affiliation sentence.
+
 ## 1. What's on main
 
 `packages/remote-extensionpack/` holds a placeholder `package.json` (name `vscode-remote-extensionpack`, version
@@ -37,7 +58,7 @@ Exactly these fields; drop the placeholder's others:
   and `bugs` `{"url": "https://github.com/remote-oss/remote/issues"}`, as every member has them. This is
   athena's ruling on #1158 (comment 6283610363, after D-56). F-9001 AC-6 and F-9901 AC-15 name the spec repo
   `remote-oss/remote-extensionpack` instead, so they're a deviation: a row asserts ours (§6), and an entry goes in
-  the release notes (§7a). Athena has put the spec question on remote-extensionpack #5 and #10.
+  the release notes (§7a). Athena has put the spec question on remote-extensionpack #5 and #10. *(superseded: see "Amendment")*
 - No `icon`. D-41 and D-56 already decided the family's icon (an original `>_` design, still to be made), and
   packages ship without one until it exists (athena on #1158). F-9901 AC-1 stays `todo`.
 - No `main`, `activationEvents`, `contributes`, `pricing` (F-9002 AC-17), `enabledApiProposals` or `scripts` that ship.
@@ -49,10 +70,10 @@ Exactly these fields; drop the placeholder's others:
 - The 14 bundles `package.nls.<l>.json` for cs, de, es, fr, it, ja, ko, pl, pt-br, qps-ploc, ru, tr, zh-cn, zh-tw:
   - `displayName` is **verbatim** the value of F-9001's 3.3 table for that language. Copy it from the spec, character
     for character.
-  - `description` is your own translation of the English sentence. It names "remote-oss", and keeps "Dev Containers"
+  - *(superseded: see "Amendment")* `description` is your own translation of the English sentence. It names "remote-oss", and keeps "Dev Containers"
     and "Remote - SSH" as the members' display names, untranslated. It must be non-empty, differ from the English,
-    and differ from the reference's description for that language (F-9001 3.3's second table).
-  - `qps-ploc`'s description is the English sentence pseudo-localized by the reference's substitution (each Latin
+    and differ from the reference's description for that language (F-9001 3.3's second table). *(superseded: see "Amendment")*
+  - *(superseded: see "Amendment")* `qps-ploc`'s description is the English sentence pseudo-localized by the reference's substitution (each Latin
     letter an accented or look-alike character, length and word order kept, as "Rëmøtë Ðëvëløpmëñt").
 - No `l10n/` folder. `pnpm check-string-tables` must pass. If it needs a rule for a package with no `l10n/`, the
   members' existing case shows the way.
@@ -62,12 +83,12 @@ Exactly these fields; drop the placeholder's others:
 - Write the README to F-9002's rules: §5 and BR-1 to BR-14, its AC-6 to AC-16 and AC-23, and F-9901's outline. In
   short:
   - **Opening:** the title names "Remote Development". The pack and its members are the `remote-oss` project's, not
-    Microsoft's.
+    Microsoft's. *(superseded: see "Amendment")*
   - **Members:** exactly the two members, each with a one-line purpose and a link to its own README. Remote Explorer
     and "Remote - SSH: Editing Configuration Files" come through the members' packs. WSL and Remote - Tunnels are each
     "not part of this release", with no promise or date.
   - **Install:** installing both packs is unsupported (install one, not both), and the family's extensions stand down
-    next to Microsoft's.
+    next to Microsoft's. *(superseded: see "Amendment")*
   - **Reference sections:** requirements with the lowest supported editor version, a getting-started list, and a
     release-notes link.
   - **Statements:** neither the pack nor its members collect telemetry, and the licence is MIT.
@@ -82,7 +103,7 @@ Exactly these fields; drop the placeholder's others:
   There's no `ThirdPartyNotices.txt` and no `LICENSE.txt`.
 - `.vscodeignore`: `**`, then `!package.json`, `!package.nls*.json`, `!README.md`, `!LICENSE`. The VSIX's file list
   is then exactly F-9901 AC-14's (no icon yet).
-- The maintainers table at the end of the README stays (the members have one too). Update it: features F-9001,
+- The maintainers table at the end of the README stays (the members have one too). Update it: features F-9001, *(superseded: see "Amendment")*
   F-9002, F-9101 and F-9901; components none; allowed imports none.
 
 ## 5. Packaging (`tools/package-extensions.ts`)
@@ -107,10 +128,10 @@ each citing its criterion:
   aren't the reference's eight.
 - `F-9001 AC-4, F-9901 AC-10`: exactly the 14 bundles and `package.nls.json`, no `l10n/`. Each bundle's
   `displayName` is the table's, each language `description` is non-empty and differs from the English and from
-  the reference's, and `qps-ploc`'s differs from the English. Put the two reference tables in the test file as
+  the reference's, and `qps-ploc`'s differs from the English. Put the two reference tables in the test file as *(superseded: see "Amendment")*
   constants, copied from F-9001 3.3.
 - `F-9001 AC-5`: `engines.vscode` equals the ADR-0007 constant, from the same source the layout check uses.
-- `F-9001 AC-6, F-9901 AC-15 (ruling-d56): repository and bugs are the monorepo's, as the members' are, and no URL is Microsoft's`.
+- `F-9001 AC-6, F-9901 AC-15 (ruling-d56): repository and bugs are the monorepo's, as the members' are, and no URL is Microsoft's`. *(superseded: see "Amendment")*
   Assert `repository` and `bugs` exactly as §2, and no Microsoft-owned URL anywhere in the manifest or bundles. Use
   one regular expression for `microsoft.com`, `aka.ms`, `visualstudio.com` and `Microsoft/vscode`. In the coverage
   file, both criteria are `unit` with this row.
@@ -145,7 +166,7 @@ New file `docs/architecture/l3/windows-and-explorer/pack-release-1-notes.md`, wi
 `docs/architecture/l3/containers-engine/release-1-notes.md`. One deviation entry, worded for users: the pack's
 Repository and Issues links lead to the project's repository (`remote-oss/remote`), where the family's extensions are
 developed together. Then its cite line: F-9001 AC-6 and F-9901 AC-15 name `remote-oss/remote-extensionpack`
-(athena's ruling on #1158, after D-56; spec question on remote-oss/remote-extensionpack #5 and #10).
+(athena's ruling on #1158, after D-56; spec question on remote-oss/remote-extensionpack #5 and #10). *(superseded: see "Amendment")*
 
 ## 7. Coverage
 
