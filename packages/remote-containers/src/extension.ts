@@ -564,7 +564,7 @@ export async function activate(
         pick: {
           createQuickPick: () =>
             vscode.window.createQuickPick<PickRow & vscode.QuickPickItem>(),
-          verifiedIcon: new vscode.ThemeIcon('verified-filled'),
+          verifiedIcon: new vscode.ThemeIcon('verified'),
           openExternal: address =>
             vscode.env.openExternal(vscode.Uri.parse(address)),
           templateMetadata: (templateId, cancellation) =>
@@ -614,20 +614,26 @@ export async function activate(
                 },
               },
               dialogs: {
-                show: (severity, message, detail, buttons) =>
-                  Promise.resolve(
+                show: async (severity, message, detail, buttons) => {
+                  const cancel = translate('Cancel');
+                  const items = buttons.map(title => ({
+                    title,
+                    isCloseAffordance: title === cancel,
+                  }));
+                  const chosen =
                     severity === 'error'
-                      ? vscode.window.showErrorMessage(
+                      ? await vscode.window.showErrorMessage(
                           message,
                           {modal: true, detail},
-                          ...buttons,
+                          ...items,
                         )
-                      : vscode.window.showWarningMessage(
+                      : await vscode.window.showWarningMessage(
                           message,
                           {modal: true, detail},
-                          ...buttons,
-                        ),
-                  ),
+                          ...items,
+                        );
+                  return chosen?.title;
+                },
                 revealLog: () => {
                   logChannel?.show(true);
                 },
@@ -826,9 +832,9 @@ export async function activate(
             ...continuation,
             window: {folders: windowFolders},
             showModal: (message, buttons) =>
-              vscode.window.showWarningMessage(
-                message,
-                {modal: true},
+              vscode.window.showInformationMessage(
+                '',
+                {modal: true, detail: message},
                 ...buttons,
               ),
             openFolder: () =>
