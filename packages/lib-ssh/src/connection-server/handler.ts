@@ -23,6 +23,7 @@ import {
 import {LineSplitter} from '../process/line-splitter.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {spawnSession, type SshSession} from '../process/session.ts';
+import {SshLineFeed} from './ssh-line-feed.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
@@ -254,6 +255,9 @@ export class ConnectionHandler implements MessageHandler {
   private watch(session: SshSession): void {
     this.session = session;
     const errorLines: string[] = [];
+    const feed = new SshLineFeed(batch => {
+      this.tell({type: 'sshLines', lines: batch});
+    }, this.options.scheduler);
     let timedOut = false;
     const wait = new ConnectWait(
       this.options.waitSettings,
@@ -287,6 +291,7 @@ export class ConnectionHandler implements MessageHandler {
         if (this.state === 'connecting') {
           wait.stop();
           this.askpass.closeAll();
+          feed.flush();
           this.state = 'connected';
           this.ownership.finish();
           this.tell({type: 'connected', socksPort: this.options.socksPort});
@@ -300,6 +305,7 @@ export class ConnectionHandler implements MessageHandler {
       output.push(piece);
     });
     const lines = new LineSplitter(line => {
+      feed.push(line);
       if (this.state === 'connecting') {
         errorLines.push(line);
       }
@@ -313,6 +319,7 @@ export class ConnectionHandler implements MessageHandler {
       wait.stop();
       this.askpass.closeAll();
       lines.flush();
+      feed.flush();
       if (this.killed) {
         return;
       }

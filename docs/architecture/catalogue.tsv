@@ -183,7 +183,7 @@ F-2503	61	remote-ssh	feature	spec:draft	E25	Internal commands for the Remotes vi
 F-2504	62	remote-ssh	feature	spec:draft	E25	Opening folders, workspaces and links on an SSH host	B	ssh.open-targets	lib-authority	32	10	True	6	0	0	0	ssh-remote	resolvers	code CLI	editor-cli	12
 F-2505	63	remote-ssh	feature	spec:draft	E25	Disconnect, reconnection and reconnection attempts	A	ssh.reconnect-controller	lib-ssh	33	8	True	0	2	0	1		resolvers	ssh (new process per attempt)	openssh	14
 F-2506	64	remote-ssh	feature	spec:draft	E25	Extensions on the SSH host and default extensions	A	ssh.default-extensions	lib-server	25	5	True	2	3	1	0		resolvers	VS Code Server install	editor-cli	11
-F-2507	65	remote-ssh	feature	spec:draft	E25	Port forwarding over the SSH connection	A	ssh.tunnel-factory	lib-forwarding	42	10	True	0	2	1	0		resolvers (tunnelFactory, port source);tunnels	ssh SOCKS forward	openssh	14
+F-2507	65	remote-ssh	feature	spec:reviewed	E25	Port forwarding over the SSH connection	A	ssh.tunnel-factory	lib-forwarding	43	10	True	0	2	1	0		resolvers (tunnelFactory, port source);tunnels	ssh SOCKS forward	openssh	14
 F-2508	66	remote-ssh	feature	spec:draft	E25	VS Code core features in an SSH window	A	ssh.core-passthrough	none	37	4	True	9	0	0	0		resolvers	host shell;code CLI;node (debug)	editor-cli	15
 F-2509	67	remote-ssh	feature	spec:draft	E25	Open Web UI	A	ssh.open-web-ui	none	21	4	False	1	1	0	3					11
 F-2601	68	remote-ssh	feature	spec:draft	E26	Connection failure notification and its buttons	B	ssh.failure-dialog	lib-authority	37	9	False	0	5	0	0	ssh-remote	resolvers	ssh		21

@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {createConnection} from 'node:net';
 import {onHost, openWindow} from '../windows/harness.ts';
+import {greetingOf} from './greeting.ts';
 
 /** The port the host listener answers on, and the greeting it gives. */
 const HOST_PORT = 8632;
@@ -8,23 +8,6 @@ const GREETING = 'dflt-8632';
 
 /** The local ports tried, the first being the one the setting asks for. */
 const LOCAL_PORTS = Array.from({length: 11}, (unused, index) => 18632 + index);
-
-/** The greeting the port gives, or nothing when nothing listens or it says nothing. */
-function greetingOf(port: number): Promise<string | undefined> {
-  return new Promise(resolve => {
-    const socket = createConnection({host: '127.0.0.1', port});
-    const received: Buffer[] = [];
-    socket.setTimeout(2000, () => {
-      socket.destroy();
-    });
-    socket.on('data', (chunk: Buffer) => received.push(chunk));
-    socket.on('error', () => undefined);
-    socket.on('close', () => {
-      const text = Buffer.concat(received).toString().trim();
-      resolve(text === '' ? undefined : text);
-    });
-  });
-}
 
 /** Polls the local ports every 500 ms for up to 15 s, and gives the first greeting. */
 async function greetingWithin15Seconds(): Promise<string | undefined> {

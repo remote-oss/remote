@@ -4,19 +4,13 @@
  * local time. The level is read for each line, so a change in the settings applies to the next operation.
  */
 
-import {createLogger, type Level, type Logger, type LogLine} from 'lib-log';
-
-/** The output channel the editor gives: lines appended, and a reveal that selects it and focuses the panel. */
-export interface RevealableChannel {
-  appendLine(text: string): void;
-  show(preserveFocus?: boolean): void;
-  dispose(): void;
-}
-
-/** The editor operation that opening the log needs. */
-export interface ChannelPort {
-  createOutputChannel(name: string): RevealableChannel;
-}
+import {
+  type ChannelPort,
+  createLogger,
+  type Level,
+  type Logger,
+  type LogLine,
+} from 'lib-log';
 
 /** What the first lines of the log say about the window. */
 export interface LogEnvironment {

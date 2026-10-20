@@ -1,8 +1,10 @@
 {
   "name": "vscode-remote-extensionpack",
-  "version": "0.0.0",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.1.0",
+  "publisher": "remote-oss",
   "private": true,
-  "description": "Remote development in one install: SSH, containers and WSL.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,11 +14,26 @@
   "bugs": {
     "url": "https://github.com/remote-oss/remote/issues"
   },
+  "engines": {
+    "vscode": "^1.139.0"
+  },
+  "categories": [
+    "Other",
+    "Extension Packs"
+  ],
   "keywords": [
-    "remote development",
     "remote",
-    "ssh",
-    "containers",
-    "wsl"
+    "remote development",
+    "extension pack",
+    "open source",
+    "dev containers",
+    "ssh"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "extensionPack": [
+    "remote-oss.remote-containers",
+    "remote-oss.remote-ssh"
   ]
 }

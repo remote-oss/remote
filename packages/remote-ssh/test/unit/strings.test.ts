@@ -93,8 +93,8 @@ const MITIGATION_TEXTS = [
 ];
 
 const LICENCE_TEXTS = [
-  '{0} needs you to accept the license terms of the {1} server before installing it.',
-  'Read the terms at {0}.',
+  "Accept the server's licence terms?",
+  'The server {0} installs or starts on this host is distributed under licence terms of its own, which {0} does not accept for you. Read them at {1} before you continue. "Accept and Continue" accepts them for this profile; the choice is remembered for this profile.',
   'Accept and Continue',
 ];
 

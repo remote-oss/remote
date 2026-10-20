@@ -73,7 +73,11 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
-import {reconnectionOutcomeOf, type ContainerState} from './reconnection.ts';
+import {
+  type ContainerState,
+  type ReconnectionOutcome,
+  reconnectionOutcomeOf,
+} from './reconnection.ts';
 import type {
   ServerRequest,
   ServerResult,
@@ -89,6 +93,9 @@ const IDENTIFIER_LENGTH = 12;
 
 /** How long a canonical request waits for the configuration read, in milliseconds (windows contracts §3.2). */
 const CANONICAL_READ_MILLISECONDS = 30_000;
+
+/** How long the decline's modal waits for its OK before the folder reopens locally, in milliseconds. */
+const DECLINED_MODAL_MILLISECONDS = 5000;
 
 /** The authority prefix of a dev container window. */
 const AUTHORITY_PREFIX = 'dev-container+';
@@ -347,6 +354,24 @@ async function probedEnvironment(
   return environment;
 }
 
+/** The log line for one answer to a reconnecting window: what was found of the container and the server, and the outcome. */
+function reconnectionLine(
+  connection: Pick<Held, 'containerId' | 'startedAt'>,
+  state: ContainerState,
+  alive: boolean | undefined,
+  outcome: ReconnectionOutcome,
+): string {
+  const status = state === 'missing' ? 'missing' : state.status;
+  const start =
+    state === 'missing'
+      ? 'no start'
+      : state.startedAt === connection.startedAt
+        ? 'same start'
+        : 'another start';
+  const server = alive === undefined ? 'not checked' : alive ? 'alive' : 'down';
+  return `reconnection: container ${shortId(connection.containerId)} is ${status}, ${start}, server ${server}: ${outcome}`;
+}
+
 /** The connector of Dev Containers. */
 export function containerConnectorOf(
   dependencies: ContainerConnectorDependencies,
@@ -411,6 +436,9 @@ export function containerConnectorOf(
       cancellation,
     );
     if (state === 'unreachable') {
+      logger.info(
+        `reconnection: container ${shortId(connection.containerId)} is unreachable, no start, server not checked: transportLost`,
+      );
       return transportLost();
     }
     const alive =
@@ -420,6 +448,7 @@ export function containerConnectorOf(
         ? await serverAlive(connection, cancellation)
         : undefined;
     const outcome = reconnectionOutcomeOf(connection, state, alive);
+    logger.info(reconnectionLine(connection, state, alive, outcome));
     if (outcome === 'held') {
       return connection.connected;
     }
@@ -679,9 +708,33 @@ export function containerConnectorOf(
     return local;
   }
 
+  /** Shows the decline's modal and waits for its end, or for `DECLINED_MODAL_MILLISECONDS`, whichever comes first. */
+  function declinedModalWait(): Promise<void> {
+    const {trustNeeds} = dependencies;
+    return new Promise(resolve => {
+      const stop = dependencies.preflight.setTimer(
+        DECLINED_MODAL_MILLISECONDS,
+        () => {
+          resolve();
+        },
+      );
+      function ended(): void {
+        stop();
+        resolve();
+      }
+      void dependencies
+        .showDeclined(
+          trustNeeds.translate(TRUST_TEMPLATES.S360),
+          trustNeeds.translate(TRUST_TEMPLATES.S377),
+        )
+        .then(ended, ended);
+    });
+  }
+
   /**
    * Whether the folder is trusted, asking the editor when it isn't yet. A folder that stays untrusted is opened as a
-   * local folder in this window, with the modal that says why when the user declined.
+   * local folder in this window, with the modal that says why when the user declined, for as long as its OK or five
+   * seconds take.
    */
   async function trustedFolder(
     folder: DevContainerFolder,
@@ -697,10 +750,7 @@ export function containerConnectorOf(
     }
     if (!isAborted(cancellation)) {
       if (outcome === 'declined') {
-        await dependencies.showDeclined(
-          trustNeeds.translate(TRUST_TEMPLATES.S360),
-          trustNeeds.translate(TRUST_TEMPLATES.S377),
-        );
+        await declinedModalWait();
       }
       await dependencies.reopenLocally(folder.hostPath);
     }

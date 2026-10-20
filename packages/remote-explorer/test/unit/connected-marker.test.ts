@@ -12,7 +12,7 @@ function rowFor(alias: string): HostRow {
 const ROWS = ['build-box', 'F5103-Upper', 'plain'].map(rowFor);
 
 describe('the connected marker of a host row', () => {
-  it('F-5103.BR-6: the row of the connected alias is marked', () => {
+  it('F-2503.AC-30: F-5103.BR-6: the row of the connected alias is marked', () => {
     deepStrictEqual(
       markedRowIds(ROWS, {connected: true, hostKey: 'build-box'}),
       ['ssh-host:build-box'],
@@ -20,14 +20,14 @@ describe('the connected marker of a host row', () => {
   });
 
   for (const alias of ['F5103-Upper', 'plain']) {
-    it(`F-5103.BR-6: only the row ${alias} is marked`, () => {
+    it(`F-2503.AC-12: F-5103.BR-6: only the row ${alias} is marked`, () => {
       deepStrictEqual(markedRowIds(ROWS, {connected: true, hostKey: alias}), [
         `ssh-host:${alias}`,
       ]);
     });
   }
 
-  it('F-5103.BR-6: the case of the alias is compared exactly', () => {
+  it('F-5103.AC-15, AC-31: F-5103.BR-6: the case of the alias is compared exactly', () => {
     deepStrictEqual(
       markedRowIds(ROWS, {connected: true, hostKey: 'f5103-upper'}),
       [],
@@ -51,7 +51,7 @@ describe('the connected marker of a host row', () => {
     );
   });
 
-  it('F-5103.BR-6: a local window marks nothing', () => {
+  it('F-2503.AC-13, F-5103.AC-36: F-5103.BR-6: a local window marks nothing', () => {
     deepStrictEqual(markedRowIds(ROWS, {connected: false}), []);
   });
 

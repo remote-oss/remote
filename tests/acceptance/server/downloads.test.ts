@@ -58,6 +58,7 @@ describe('the download host as the harness host reaches it (tooling-27)', functi
       archiveFile: path.join(folder, 'archive.tar.gz'),
       ...makeCertificate(folder),
       logFile,
+      tlsLogFile: path.join(folder, 'tls.log'),
     });
     host = await startHost({downloads: true});
   });

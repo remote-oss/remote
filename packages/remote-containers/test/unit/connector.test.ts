@@ -979,6 +979,7 @@ describe('the container connector: the folder trust (card containers-17)', () =>
         'retryable' in result && result.retryable,
         scene.prepared,
         scene.engineCalls,
+        scene.timers.length,
       ],
       [
         [
@@ -990,7 +991,50 @@ describe('the container connector: the folder trust (card containers-17)', () =>
         false,
         [],
         [],
+        0,
       ],
+    );
+  });
+
+  it('F-0301 AC-68: with the decline’s modal left open, the folder reopens locally when its 5 s are up, not before', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    scene.declinedHeld = true;
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    await new Promise(resolve => setImmediate(resolve));
+    const waiting = [
+      scene.trustCalls.slice(2).map(call => call.split(' ')[0]),
+      scene.timerDelays.at(-1),
+      scene.timers.length,
+    ];
+    scene.timers[0]?.();
+    const result = await connecting;
+    deepStrictEqual(
+      [
+        waiting,
+        failedKind(result),
+        'silent' in result && result.silent,
+        scene.trustCalls.at(-1),
+      ],
+      [
+        [['showDeclined'], 5000, 1],
+        'trustDeclined',
+        true,
+        'reopenLocally /work/proj',
+      ],
+    );
+  });
+
+  it('F-0301 AC-68: a modal that fails still reopens the folder locally, with no timer left', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    scene.declinedFails = true;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [failedKind(result), scene.trustCalls.at(-1), scene.timers.length],
+      ['trustDeclined', 'reopenLocally /work/proj', 0],
     );
   });
 
@@ -1317,6 +1361,9 @@ describe('the container connector: a reconnection (card containers-08)', () => {
       reran:
         scene.prepared.length !== prepared ||
         scene.serverRequests.length !== servers,
+      logged: messages(scene).filter(message =>
+        message.startsWith('reconnection:'),
+      ),
     };
   }
 
@@ -1394,6 +1441,57 @@ describe('the container connector: a reconnection (card containers-08)', () => {
   it('F-0502 7.E1: a container whose state cannot be read is transportLost', async () => {
     const outcome = await reconnection('unreachable');
     deepStrictEqual(failedKind(outcome.again), 'transportLost');
+  });
+
+  it('containers-61: each answer to a reconnecting window is logged with what was found of the container and the server', async () => {
+    const SAME = '2026-10-14T10:00:00Z';
+    const cases: Array<[Scene['inspect']['answer'], number[], string]> = [
+      [
+        {status: 'running', startedAt: SAME},
+        [0],
+        'is running, same start, server alive: held',
+      ],
+      [
+        {status: 'running', startedAt: SAME},
+        [1],
+        'is running, same start, server down: transportLost',
+      ],
+      [
+        {status: 'paused', startedAt: SAME},
+        [],
+        'is paused, same start, server not checked: transportLost',
+      ],
+      [
+        {status: 'exited', startedAt: SAME},
+        [],
+        'is exited, same start, server not checked: containerGone',
+      ],
+      [
+        {status: 'running', startedAt: '2026-10-14T11:00:00Z'},
+        [],
+        'is running, another start, server not checked: containerGone',
+      ],
+      [
+        'missing',
+        [],
+        'is missing, no start, server not checked: containerGone',
+      ],
+      [
+        'unreachable',
+        [],
+        'is unreachable, no start, server not checked: transportLost',
+      ],
+    ];
+    const logged = [];
+    for (const [answer, statuses] of cases) {
+      logged.push((await reconnection(answer, statuses)).logged);
+    }
+    deepStrictEqual(
+      logged,
+      cases.map(([, , text]) => [
+        `reconnection: container c1c1c1c1c1c1 ${text}`,
+      ]),
+    );
   });
 
   it('F-0502 7.E1: a server that cannot be asked about is not alive', async () => {

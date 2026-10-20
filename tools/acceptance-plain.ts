@@ -9,7 +9,11 @@ import {spawn, spawnSync} from 'node:child_process';
 import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
-import {withRunTokens, type Launch} from './acceptance-launches.ts';
+import {
+  needsDevContainerImage,
+  withRunTokens,
+  type Launch,
+} from './acceptance-launches.ts';
 import {resolveBinary} from './repository.ts';
 
 /** The extensions under test that use proposed API, enabled for them on the command line. */
@@ -18,9 +22,10 @@ const PROPOSED_API_EXTENSIONS: readonly string[] = [
   'remote-oss.acceptance-window-agent',
 ];
 
-/** The extensions folder of a launch: its own when it installs extensions of its own, the run's otherwise. */
+/** The extensions folder of a launch: its own when it installs extensions of its own or starts VS Code, the run's otherwise. */
 export function extensionsFolderOf(runFolder: string, launch?: Launch): string {
-  return launch?.kind === 'plain' && launch.withExtensions !== undefined
+  return launch?.kind === 'plain' &&
+    (launch.withExtensions !== undefined || launch.client !== undefined)
     ? path.join(runFolder, `extensions-${launch.label}`)
     : path.join(runFolder, 'extensions');
 }
@@ -130,15 +135,24 @@ export function debuggingPortFile(runFolder: string): string {
   return path.join(runFolder, 'user-data', 'DevToolsActivePort');
 }
 
-/** The script, record and log files of a launch: the run's own, or a failing connect's. */
+/**
+ * The script, record and log files of a launch: the run's own, or a failing connect's. `containersLogFile` is the log
+ * of Dev Containers, for the launches that install it.
+ */
 export function launchFiles(
   runFolder: string,
   label: string,
-): {script: string; record: string; logFile: string} {
+): {
+  script: string;
+  record: string;
+  logFile: string;
+  containersLogFile: string;
+} {
   return {
     script: path.join(runFolder, `${label}-script.json`),
     record: path.join(runFolder, `${label}-record.jsonl`),
     logFile: path.join(runFolder, `${label}-log.txt`),
+    containersLogFile: path.join(runFolder, `${label}-containers-log.txt`),
   };
 }
 
@@ -400,6 +414,9 @@ export async function runPlainLaunch(
     REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
     REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
+    ...(needsDevContainerImage(launch)
+      ? {REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG: files.containersLogFile}
+      : {}),
     REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
       session.runFolder,
       launch.label,
@@ -407,6 +424,7 @@ export async function runPlainLaunch(
       'pids',
     ),
     REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
+    HARNESS_EDITOR_EXECUTABLE: session.executable,
     ...withRunTokens(
       launch.environment,
       session.runFolder,

@@ -167,7 +167,7 @@ describe('connection helper', () => {
     authenticate(spawner.started[0]);
     await settled();
     deepStrictEqual(
-      [spawner.started[0]?.specification.programArguments, received.slice(-2)],
+      [spawner.started[0]?.specification.programArguments, received.slice(-3)],
       [
         [
           '-T',
@@ -183,6 +183,15 @@ describe('connection helper', () => {
           .concat(spawner.started[0]?.specification.programArguments ?? []),
         [
           {type: 'reply', requestId: 1, body: {type: 'accepted'}},
+          {
+            type: 'message',
+            body: {
+              type: 'sshLines',
+              lines: [
+                'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".',
+              ],
+            },
+          },
           {type: 'message', body: {type: 'connected', socksPort: 41000}},
         ],
       ],

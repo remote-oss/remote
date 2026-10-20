@@ -318,7 +318,7 @@ describe('the window side of the shared connection (S9)', () => {
     await drive();
     deepStrictEqual(
       heard.map(notice => notice.type),
-      ['transportLost', 'helperGone'],
+      ['sshLines', 'transportLost', 'helperGone'],
     );
   });
 

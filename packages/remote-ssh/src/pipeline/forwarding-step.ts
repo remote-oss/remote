@@ -81,17 +81,17 @@ async function takenLinks(
   return names;
 }
 
-/** The log line of the agent link plan. */
+/** The log line of the agent link plan; it never names the socket or the link. */
 function agentLine(plan: AgentLinkPlan): string {
   return plan.kind === 'link'
-    ? `agent forwarding: ${plan.linkPath} links to ${plan.target}`
+    ? 'agent forwarding: an agent socket was found, and the window links to it'
     : `agent forwarding: none (${plan.reason})`;
 }
 
-/** The log line of the display plan. */
+/** The log line of the display plan; it never names the display. */
 function displayLine(plan: DisplayPlan): string {
   return plan.kind === 'display'
-    ? `X11 forwarding: DISPLAY is ${plan.value}`
+    ? 'X11 forwarding: a forwarded display was found'
     : `X11 forwarding: none (${plan.reason})`;
 }
 

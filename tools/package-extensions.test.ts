@@ -94,6 +94,36 @@ describe('package-extensions', () => {
     );
   });
 
+  it('packages a code-less pack, which has an extensionPack and no main, with no built bundle', () => {
+    workspace.writeManifest('remote-pack', {
+      version: '0.1.0',
+      extensionPack: ['remote-oss.remote-a'],
+    });
+    deepStrictEqual(
+      packageExtensions(workspace.root, ['remote-pack'], recordingVsce),
+      [`remote-pack: ${path.join('dist', 'remote-pack-0.1.0.vsix')}`],
+    );
+  });
+
+  it('still rejects a manifest that has neither a main nor an extensionPack', () => {
+    workspace.writeManifest('remote-pack', {version: '0.1.0'});
+    throws(
+      () => packageExtensions(workspace.root, ['remote-pack'], recordingVsce),
+      {message: 'packages/remote-pack: no built main; run pnpm build'},
+    );
+  });
+
+  it('includes a code-less pack when no folder is named, beside the built extensions', () => {
+    workspace.writeManifest('remote-pack', {
+      version: '0.1.0',
+      extensionPack: ['remote-oss.remote-a'],
+    });
+    deepStrictEqual(packageExtensions(workspace.root, [], recordingVsce), [
+      `remote-a: ${path.join('dist', 'remote-a-1.2.3.vsix')}`,
+      `remote-pack: ${path.join('dist', 'remote-pack-0.1.0.vsix')}`,
+    ]);
+  });
+
   it('runs vsce from the repository when no runner is given', () => {
     throws(
       () => packageExtensions(workspace.root, ['remote-a']),

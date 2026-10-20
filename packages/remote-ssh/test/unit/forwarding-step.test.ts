@@ -333,7 +333,7 @@ describe('the forwarding plans of a connect', () => {
       [sink.lines.map(line => line.message), terminals],
       [
         [
-          `agent forwarding: /tmp/vscode-ssh-auth-sock-42 links to ${AGENT_SOCKET}`,
+          'agent forwarding: an agent socket was found, and the window links to it',
           'X11 forwarding: none (settingOff)',
         ],
         [],
@@ -352,8 +352,26 @@ describe('the forwarding plans of a connect', () => {
       sink.lines.map(line => line.message),
       [
         'agent forwarding: none (settingOff)',
-        'X11 forwarding: DISPLAY is localhost:10.0',
+        'X11 forwarding: a forwarded display was found',
       ],
+    );
+  });
+
+  it('F-2003 BR-14 (ruling-13-forwarding): no forwarded display or agent socket value reaches the log', async () => {
+    const {dependencies, sink} = forwardingOf({});
+    await plansOf(
+      dependencies,
+      channelWith([]),
+      hostWith(AGENT_SOCKET, 'localhost:10.0'),
+    );
+    const logged = sink.lines.map(line => line.message).join('\n');
+    deepStrictEqual(
+      [
+        logged.includes(AGENT_SOCKET),
+        logged.includes('localhost:10.0'),
+        logged.includes('/tmp/vscode-ssh-auth-sock'),
+      ],
+      [false, false, false],
     );
   });
 });

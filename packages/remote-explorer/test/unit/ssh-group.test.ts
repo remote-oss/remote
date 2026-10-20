@@ -1,15 +1,26 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   buildSshRows,
-  type FolderRow,
-  folderLabel,
+  type ClientPlatform,
+  folderPresentation,
+  folderRowId,
   hostRowId,
   isWorkspacePath,
   orderedPaths,
 } from '../../src/model/ssh-group.ts';
 
+/** The label of the recent folder `path`, which no client platform changes. */
+function labelOf(path: string): string {
+  return folderPresentation(path, 'devbox', 'other').label;
+}
+
+/** The description of `path` under `devbox` on a client of `platform`. */
+function descriptionOf(path: string, platform: ClientPlatform): string {
+  return folderPresentation(path, 'devbox', platform).description;
+}
+
 describe('the hostRow model of the SSH group', () => {
-  it('F-5102.BR-7: one hostRow per alias, in the given order, with no folders', () => {
+  it('F-5101.AC-27: F-5102.BR-7: one hostRow per alias, in the given order, with no folders', () => {
     const rows = buildSshRows(['zeta', 'Alpha', 'mid'], new Map(), undefined);
     deepStrictEqual(
       rows.map(hostRow => [hostRow.rowId, hostRow.alias, hostRow.folders]),
@@ -21,7 +32,7 @@ describe('the hostRow model of the SSH group', () => {
     );
   });
 
-  it('F-5102.BR-7: the row id is the alias after the prefix, and nothing else', () => {
+  it('F-5101.AC-10: F-5102.BR-7: the row id is the alias after the prefix, and nothing else', () => {
     deepStrictEqual(hostRowId('Alpha beta'), 'ssh-host:Alpha beta');
   });
 
@@ -35,7 +46,16 @@ describe('the hostRow model of the SSH group', () => {
       [Object.keys(hostRow ?? {}), Object.keys(hostRow?.folders[0] ?? {})],
       [
         ['rowId', 'alias', 'folders'],
-        ['kind', 'hostKey', 'path', 'label'],
+        [
+          'rowId',
+          'kind',
+          'hostKey',
+          'path',
+          'label',
+          'description',
+          'tooltip',
+          'accessibleName',
+        ],
       ],
     );
   });
@@ -115,7 +135,7 @@ describe('the hostRow model of the SSH group', () => {
     'C:\\Users\\lab\\trail\\',
   ]) {
     it(`F-5104.BR-14: the label of ${JSON.stringify(path)} is empty`, () => {
-      deepStrictEqual(folderLabel(path), '');
+      deepStrictEqual(labelOf(path), '');
     });
   }
 
@@ -129,7 +149,7 @@ describe('the hostRow model of the SSH group', () => {
     ['plain', 'plain'],
   ] as const) {
     it(`F-5104.BR-14: the label of ${JSON.stringify(path)} is ${JSON.stringify(label)}`, () => {
-      deepStrictEqual(folderLabel(path), label);
+      deepStrictEqual(labelOf(path), label);
     });
   }
 
@@ -138,10 +158,7 @@ describe('the hostRow model of the SSH group', () => {
     ['C:\\Users\\lab\\ws.code-workspace', 'ws (Workspace)'],
   ] as const) {
     it(`F-5104.6.3: ${JSON.stringify(path)} is a workspace labelled ${JSON.stringify(label)}`, () => {
-      deepStrictEqual(
-        [isWorkspacePath(path), folderLabel(path)],
-        [true, label],
-      );
+      deepStrictEqual([isWorkspacePath(path), labelOf(path)], [true, label]);
     });
   }
 
@@ -151,10 +168,7 @@ describe('the hostRow model of the SSH group', () => {
     ['/w/x.code-workspace/', ''],
   ] as const) {
     it(`F-5104.BR-15: ${JSON.stringify(path)} is not a workspace`, () => {
-      deepStrictEqual(
-        [isWorkspacePath(path), folderLabel(path)],
-        [false, label],
-      );
+      deepStrictEqual([isWorkspacePath(path), labelOf(path)], [false, label]);
     });
   }
 
@@ -164,28 +178,33 @@ describe('the hostRow model of the SSH group', () => {
       new Map([['a', ['/p', '/w.code-workspace']]]),
       undefined,
     );
-    const expected: FolderRow[] = [
-      {kind: 'folder', hostKey: 'a', path: '/p', label: 'p'},
-      {
-        kind: 'workspace',
-        hostKey: 'a',
-        path: '/w.code-workspace',
-        label: 'w (Workspace)',
-      },
-    ];
-    deepStrictEqual(hostRow?.folders, expected);
+    deepStrictEqual(
+      hostRow?.folders.map(folder => [
+        folder.kind,
+        folder.hostKey,
+        folder.path,
+        folder.label,
+      ]),
+      [
+        ['folder', 'a', '/p', 'p'],
+        ['workspace', 'a', '/w.code-workspace', 'w (Workspace)'],
+      ],
+    );
   });
 
-  it('F-5104.BR-3: a path recorded twice gives two identical rows', () => {
+  it('F-5104.BR-3: a path recorded twice gives two rows with the same path and different ids', () => {
     const [hostRow] = buildSshRows(
       ['a'],
       new Map([['a', ['/p', '/p']]]),
       undefined,
     );
-    deepStrictEqual(hostRow?.folders, [
-      {kind: 'folder', hostKey: 'a', path: '/p', label: 'p'},
-      {kind: 'folder', hostKey: 'a', path: '/p', label: 'p'},
-    ]);
+    deepStrictEqual(
+      hostRow?.folders.map(folder => [folder.path, folder.rowId]),
+      [
+        ['/p', 'ssh-folder:0:a'],
+        ['/p', 'ssh-folder:1:a'],
+      ],
+    );
   });
 
   it('F-5104.BR-2: a history key matches an alias exactly, and other keys are dropped', () => {
@@ -219,6 +238,246 @@ describe('the hostRow model of the SSH group', () => {
     deepStrictEqual(
       hostRow?.folders.map(folder => folder.path),
       ['/a', '/b'],
+    );
+  });
+
+  it('F-5104.AC-41: the accessible name of a folder row is its tooltip and ", has actions"', () => {
+    deepStrictEqual(folderPresentation('/w/bravo', 'devbox', 'other'), {
+      label: 'bravo',
+      description: '/w/bravo',
+      tooltip: "'/w/bravo' on devbox",
+      accessibleName: "'/w/bravo' on devbox, has actions",
+    });
+  });
+
+  // BR-14's first table: the label, and the description and tooltip path on a client that is not Windows.
+  for (const [path, label, description] of [
+    ['/', '', '/'],
+    ['/tmp/trailing/', '', '/tmp/trailing/'],
+    ['', '', '/'],
+    ['~/tilde', 'tilde', '/~/tilde'],
+    ['C:\\Users\\x\\proj', 'proj', 'c:\\Users\\x\\proj'],
+    ['c:/Users/x/fwd', 'fwd', 'c:/Users/x/fwd'],
+    ['/srv/ünïcødé/Ω', 'Ω', '/srv/ünïcødé/Ω'],
+    ['/home/x/with space', 'with space', '/home/x/with space'],
+    [
+      '/srv/proj.code-workspace',
+      'proj (Workspace)',
+      '/srv/proj.code-workspace',
+    ],
+    ['/w/UP.CODE-WORKSPACE', 'UP.CODE-WORKSPACE', '/w/UP.CODE-WORKSPACE'],
+    [
+      '/w/Mixed.Code-Workspace',
+      'Mixed.Code-Workspace',
+      '/w/Mixed.Code-Workspace',
+    ],
+    ['/w/.code-workspace', '.code-workspace', '/w/.code-workspace'],
+    ['.code-workspace', '.code-workspace', '/.code-workspace'],
+  ] as const) {
+    it(`F-5104.AC-27: ${JSON.stringify(path)} shows the label ${JSON.stringify(label)}, the path ${JSON.stringify(description)} and its tooltip`, () => {
+      deepStrictEqual(folderPresentation(path, 'devbox', 'other'), {
+        label,
+        description,
+        tooltip: `'${description}' on devbox`,
+        accessibleName: `'${description}' on devbox, has actions`,
+      });
+    });
+  }
+
+  // BR-14's second table: the Windows forms, with the path each client shows.
+  for (const [path, label, onOther, onWindows] of [
+    ['C:\\Users\\u\\proj', 'proj', 'c:\\Users\\u\\proj', 'c:\\Users\\u\\proj'],
+    [
+      'c:\\Users\\u\\lower',
+      'lower',
+      'c:\\Users\\u\\lower',
+      'c:\\Users\\u\\lower',
+    ],
+    ['C:/Users/u/fwd', 'fwd', 'c:/Users/u/fwd', 'c:\\Users\\u\\fwd'],
+    [
+      '/C:/Users/u/uri-upper',
+      'uri-upper',
+      'c:/Users/u/uri-upper',
+      'c:/Users/u/uri-upper',
+    ],
+    [
+      '/c:/Users/u/uri-lower',
+      'uri-lower',
+      'c:/Users/u/uri-lower',
+      'c:/Users/u/uri-lower',
+    ],
+    ['D:\\Data\\Beta', 'Beta', 'd:\\Data\\Beta', 'd:\\Data\\Beta'],
+    [
+      'C:\\Users\\u\\ws.code-workspace',
+      'ws (Workspace)',
+      'c:\\Users\\u\\ws.code-workspace',
+      'c:\\Users\\u\\ws.code-workspace',
+    ],
+    ['C:\\', '', 'c:\\', 'c:\\'],
+    [
+      'C:\\Users\\u\\trail\\',
+      '',
+      'c:\\Users\\u\\trail\\',
+      'c:\\Users\\u\\trail\\',
+    ],
+    ['\\\\srv\\share\\unc', 'unc', '/\\\\srv\\share\\unc', '//srv/share/unc'],
+  ] as const) {
+    it(`F-5104.AC-51: ${JSON.stringify(path)} shows ${JSON.stringify(label)}, and the path ${JSON.stringify(onOther)} on a Linux or macOS client and ${JSON.stringify(onWindows)} on a Windows client`, () => {
+      deepStrictEqual(
+        [
+          labelOf(path),
+          descriptionOf(path, 'other'),
+          descriptionOf(path, 'windows'),
+        ],
+        [label, onOther, onWindows],
+      );
+    });
+  }
+
+  it('F-5104.AC-51: a POSIX path reads the same on a Windows client as on any other', () => {
+    deepStrictEqual(
+      [
+        '/',
+        '/tmp/trailing/',
+        '/srv/ünïcødé/Ω',
+        '/home/x/with space',
+        '/w/bravo',
+      ].map(path => [
+        folderPresentation(path, 'devbox', 'windows'),
+        folderPresentation(path, 'devbox', 'other'),
+      ]),
+      [
+        '/',
+        '/tmp/trailing/',
+        '/srv/ünïcødé/Ω',
+        '/home/x/with space',
+        '/w/bravo',
+      ].map(path => [
+        folderPresentation(path, 'devbox', 'other'),
+        folderPresentation(path, 'devbox', 'other'),
+      ]),
+    );
+  });
+
+  it('F-5104.AC-52: alphabetical orders the Windows forms by the recorded strings, not by the shown ones', () => {
+    deepStrictEqual(
+      orderedPaths(
+        [
+          'c:\\Users\\u\\lower',
+          '\\\\srv\\share\\unc',
+          'D:\\Data\\Beta',
+          'C:\\Users\\u\\ws.code-workspace',
+          'C:\\Users\\u\\trail\\',
+          'C:\\Users\\u\\proj',
+          'C:\\',
+          'C:/Users/u/fwd',
+          '/c:/Users/u/uri-lower',
+          '/C:/Users/u/uri-upper',
+        ],
+        'alphabetical',
+      ).map(path => labelOf(path)),
+      [
+        'uri-upper',
+        'uri-lower',
+        'fwd',
+        '',
+        'proj',
+        '',
+        'ws (Workspace)',
+        'Beta',
+        'unc',
+        'lower',
+      ],
+    );
+  });
+
+  it('F-5104.AC-47: x.code-workspace is a workspace, and the upper-case and mixed-case names are folders', () => {
+    deepStrictEqual(
+      [
+        '/w/x.code-workspace',
+        '/w/UP.CODE-WORKSPACE',
+        '/w/Mixed.Code-Workspace',
+      ].map(path => [isWorkspacePath(path), labelOf(path)]),
+      [
+        [true, 'x (Workspace)'],
+        [false, 'UP.CODE-WORKSPACE'],
+        [false, 'Mixed.Code-Workspace'],
+      ],
+    );
+  });
+
+  it('F-5104.AC-53: a file named just .code-workspace is a folder row labelled .code-workspace, with its path unchanged', () => {
+    const [hostRow] = buildSshRows(
+      ['devbox'],
+      new Map([['devbox', ['/w/.code-workspace']]]),
+      undefined,
+    );
+    deepStrictEqual(
+      hostRow?.folders.map(folder => [
+        folder.kind,
+        folder.label,
+        folder.description,
+        folder.tooltip,
+      ]),
+      [
+        [
+          'folder',
+          '.code-workspace',
+          '/w/.code-workspace',
+          "'/w/.code-workspace' on devbox",
+        ],
+      ],
+    );
+  });
+
+  it('F-5104.AC-27: sixty entries under one host are all listed', () => {
+    const paths = Array.from(
+      {length: 60},
+      (ignored, index) => `/w/p${String(index)}`,
+    );
+    const [hostRow] = buildSshRows(
+      ['devbox'],
+      new Map([['devbox', paths]]),
+      undefined,
+    );
+    deepStrictEqual(
+      hostRow?.folders.map(folder => folder.path),
+      paths,
+    );
+  });
+
+  it('F-5104.BR-3: every row id is unique, across positions, aliases and repeated paths', () => {
+    const rows = buildSshRows(
+      ['a', 'b'],
+      new Map([
+        ['a', ['/p', '/p', '/q']],
+        ['b', ['/p', '/q']],
+      ]),
+      undefined,
+    );
+    const rowIds = rows.flatMap(hostRow => [
+      hostRow.rowId,
+      ...hostRow.folders.map(folder => folder.rowId),
+    ]);
+    deepStrictEqual(
+      [
+        new Set(rowIds).size === rowIds.length,
+        folderRowId('a', 0) === folderRowId('b', 0),
+      ],
+      [true, false],
+    );
+  });
+
+  it('F-5104.BR-14: the client platform reaches the rows of the group', () => {
+    const [hostRow] = buildSshRows(
+      ['devbox'],
+      new Map([['devbox', ['C:/Users/u/fwd']]]),
+      undefined,
+      'windows',
+    );
+    deepStrictEqual(
+      hostRow?.folders.map(folder => folder.description),
+      ['c:\\Users\\u\\fwd'],
     );
   });
 });
