@@ -20,7 +20,6 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
-  hasStatusItem,
   notificationCentre,
   portRowAction,
   portsRows,
@@ -251,14 +250,32 @@ describe('the declared forwardPorts (card containers-72)', function () {
     const quoted = await connectedWith('c72-ac32a', {
       forwardPorts: [String(port)],
     });
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    const shown = await hasStatusItem(quoted, 'status.forwardedPorts');
+    // The window enables core's Ports features once connected, so its status item exists with no port forwarded.
+    let label = '';
+    await waitFor(
+      'the status item to read that no port is forwarded',
+      async () => {
+        label = await statusItem(quoted, 'status.forwardedPorts')
+          .then(item => item.ariaLabel)
+          .catch(() => '');
+        return label === 'No Ports Forwarded';
+      },
+      10_000,
+    ).catch(() => undefined);
+    await showPorts(quoted);
+    const none = portsOf(await portsRows(quoted).catch(() => []));
+    const dialog = await dialogOf(quoted);
     await closeNow(quoted);
     const plain = await connectedWith('c72-ac32b', {forwardPorts: [port]});
     await showPorts(plain);
     deepStrictEqual(
-      [shown, portsOf(await rowsWhen(plain, rows => rows.length > 0))],
-      [false, [String(port)]],
+      [
+        label,
+        none,
+        dialog,
+        portsOf(await rowsWhen(plain, rows => rows.length > 0)),
+      ],
+      ['No Ports Forwarded', [], undefined, [String(port)]],
     );
   });
 
