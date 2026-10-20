@@ -530,6 +530,106 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     }
   });
 
+  /** Builds `dockerfile` as `imageTag` and pushes it to the run's registry. */
+  async function pushed(imageTag: string, dockerfile: string): Promise<void> {
+    await buildTag(imageTag, dockerfile);
+    await docker('push', imageTag);
+  }
+
+  /**
+   * Connects a dev container whose build names `imageTag` in `cacheFrom`, and gives what the log held while it built:
+   * the cache-import lines BuildKit wrote, the lines about the cache that say it failed, and the folder's containers.
+   */
+  async function cacheImportOf(
+    folderName: string,
+    imageTag: string,
+    dockerfile: string,
+  ): Promise<{imported: string[]; failed: string[]; containers: number}> {
+    const folder = devContainerFolder(folderName, {
+      name: folderName,
+      image: undefined,
+      build: {dockerfile: 'Dockerfile', cacheFrom: [imageTag]},
+    });
+    writeDockerfile(folder, dockerfile);
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const lines = containersLogSince(mark);
+      const containers = (await devContainersOf(folder)).length;
+      await closeWindow(name);
+      return {
+        imported: lines
+          .filter(line =>
+            /importing cache manifest from|inferred cache manifest type/.test(
+              line,
+            ),
+          )
+          .map(line =>
+            line.replace(/^#\d+ /, '').replace(/:\d+\//, ':<port>/'),
+          ),
+        failed: lines.filter(
+          line => /cache/i.test(line) && /fail|error/i.test(line),
+        ),
+        containers,
+      };
+    } finally {
+      await cleanUp(folder);
+    }
+  }
+
+  it('F-0412 AC-13 (cache-plain): an image built with plain docker build and pushed to the run’s registry, named in build.cacheFrom, has its cache imported by the dev container’s build, with no failure', async () => {
+    const imageTag = `${variable('HARNESS_REGISTRY')}/f0412-base:1`;
+    const dockerfile = `FROM ${base()}\nRUN echo c62-one > /one\nRUN echo c62-two > /two\n`;
+    try {
+      await pushed(imageTag, dockerfile);
+      deepStrictEqual(
+        await cacheImportOf('c62-cache-plain', imageTag, dockerfile),
+        {
+          imported: [
+            'importing cache manifest from 127.0.0.1:<port>/f0412-base:1',
+            'inferred cache manifest type: application/vnd.oci.image.index.v1+json done',
+          ],
+          failed: [],
+          containers: 1,
+        },
+      );
+    } finally {
+      await execFileAsync('docker', ['image', 'rm', '-f', imageTag]).catch(
+        () => undefined,
+      );
+    }
+  });
+
+  it('F-0412 AC-15 (cache-registry): a build.cacheFrom that names a registry-hosted image none of the build’s layers came from imports it without a failure, and the build completes', async () => {
+    const imageTag = `${variable('HARNESS_REGISTRY')}/f0412-other:1`;
+    try {
+      await pushed(
+        imageTag,
+        `FROM ${base()}\nRUN echo c62-unrelated > /other\n`,
+      );
+      deepStrictEqual(
+        await cacheImportOf(
+          'c62-cache-registry',
+          imageTag,
+          `FROM ${base()}\nRUN echo c62-built > /built\n`,
+        ),
+        {
+          imported: [
+            'importing cache manifest from 127.0.0.1:<port>/f0412-other:1',
+            'inferred cache manifest type: application/vnd.oci.image.index.v1+json done',
+          ],
+          failed: [],
+          containers: 1,
+        },
+      );
+    } finally {
+      await execFileAsync('docker', ['image', 'rm', '-f', imageTag]).catch(
+        () => undefined,
+      );
+    }
+  });
+
   it('F-0412 AC-31, AC-33 (i31): a missing build context and an image nobody can pull each end in the generic dialog and leave no container or image', async () => {
     const cases: Array<[string, Record<string, unknown>, string]> = [
       [
