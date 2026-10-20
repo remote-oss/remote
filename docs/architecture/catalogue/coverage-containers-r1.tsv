@@ -151,7 +151,7 @@ F-0301.AC-24	deferred	containers release 1: later (multi-root)
 F-0301.AC-25	acceptance	
 F-0301.AC-26	unit	
 F-0301.AC-27	deferred	containers release 1: later (virtual workspaces)
-F-0301.AC-28	todo	
+F-0301.AC-28	deferred	containers release 1: later (Open Container Configuration File, F-0812)
 F-0301.AC-29	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-30	unit	
 F-0301.AC-31	unit	
@@ -189,8 +189,8 @@ F-0301.AC-68	todo
 F-0301.AC-69	acceptance	
 F-0301.AC-70	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-71	deferred	containers release 1: later (multi-root)
-F-0301.AC-72	todo	
-F-0301.AC-73	todo	
+F-0301.AC-72	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-73	deferred	containers release 1: later (virtual workspaces)
 F-0301.AC-74	unit	
 F-0301.AC-75	acceptance	
 F-0301.AC-76	unit	
