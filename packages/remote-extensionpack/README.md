@@ -3,7 +3,8 @@
 This extension pack lets you open a folder inside a container, or on a remote machine over SSH, and keep working with
 the full feature set of your editor. It installs the extensions below in one step.
 
-Packs or extensions that name Microsoft's extension ids do not install or activate the family's extensions.
+A pack installs the extensions it lists by id, so a pack that lists another publisher's extension ids installs those, not
+this family's.
 
 ## The members
 
@@ -32,8 +33,8 @@ platforms, an SSH client or a container engine, is described in the member's own
 Install the pack from the Extensions view of your editor, or from the page of the gallery you use. Installing it
 installs the members of this release, Dev Containers and Remote - SSH, and Remote Explorer with them.
 
-- Install this pack or Microsoft's Remote Development pack, not both. Running the two together is unsupported, and the
-  family's extensions stand down next to Microsoft's.
+- Install one Remote Development pack, not two. Running two packs whose extensions share the same identifiers is
+  unsupported, and this family's extensions stand down next to extensions with those identifiers.
 - If the gallery does not have one of the members, the pack installs without it and says nothing. Install that member
   on its own once the gallery offers it.
 - Uninstalling the pack also uninstalls the members it installed.
@@ -72,7 +73,6 @@ The pack is licensed under the MIT License; see the `LICENSE` file in the packag
 | | |
 |---|---|
 | Maintainers | remote-oss |
-| Features | F-9001, F-9002, F-9101, F-9901 |
 | Components | none |
 | Allowed imports | none |
 | Coverage exclusions | none |

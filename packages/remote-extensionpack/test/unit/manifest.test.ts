@@ -367,7 +367,7 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
-  it('F-9002 AC-6, AC-7 (ruling-d56-affiliation): the title names Remote Development and remote-oss, not Visual Studio Code or Microsoft, the introduction names only a container and a remote machine over SSH, and the readme says that packs naming Microsoft’s ids do not install or activate the family’s extensions', () => {
+  it('F-9002 AC-6, AC-7 (ruling-d56-affiliation): the title names Remote Development and remote-oss, not Visual Studio Code or Microsoft, the introduction names only a container and a remote machine over SSH, and the readme says that a pack that lists another publisher’s extension ids installs those, not the family’s', () => {
     const [title = ''] = readme().split('\n');
     const introduction = readme().split('\n## ')[0] ?? '';
     deepStrictEqual(
@@ -376,7 +376,9 @@ describe('the pack’s package (card pack-01)', () => {
         /Visual Studio Code|Microsoft/.test(title),
         introduction.includes('container') && introduction.includes('SSH'),
         /WSL|tunnel/i.test(introduction),
-        flat(introduction).includes('do not install or activate'),
+        flat(introduction).includes(
+          "A pack installs the extensions it lists by id, so a pack that lists another publisher's extension ids installs those, not this family's.",
+        ),
       ],
       [true, false, true, false, true],
     );
@@ -445,16 +447,20 @@ describe('the pack’s package (card pack-01)', () => {
     deepStrictEqual(
       [
         flat(installation).includes('Dev Containers and Remote - SSH'),
-        flat(installation).includes('not both'),
+        flat(installation).includes(
+          'Install one Remote Development pack, not two.',
+        ),
         flat(installation).includes('unsupported'),
-        flat(installation).includes("stand down next to Microsoft's"),
+        flat(installation).includes(
+          "this family's extensions stand down next to extensions with those identifiers",
+        ),
         flat(installation).includes('installs without it and says nothing'),
         flat(installation).includes('uninstalls the members it installed'),
         sectionOf('Telemetry').includes(
           'Neither this pack nor its members collect or send telemetry.',
         ),
         flat(readme()).includes(
-          "Packs or extensions that name Microsoft's extension ids do not install or activate",
+          "so a pack that lists another publisher's extension ids installs those",
         ),
       ],
       [true, true, true, true, true, true, true, true],

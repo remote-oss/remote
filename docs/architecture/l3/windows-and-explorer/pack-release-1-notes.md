@@ -10,8 +10,6 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-9001 AC-4 and BR-4 ask for a translated description in each of the 13 other bundles (D-56; spec question on
     remote-oss/remote-extensionpack #5).
 
-- **The readme does not say that the pack and its members are not Microsoft's.** It says that packs or extensions
-  naming Microsoft's extension ids do not install or activate the family's extensions, and that installing the pack
-  together with Microsoft's pack is unsupported.
-  - F-9002 AC-7 and BR-3 ask for the statement (D-56: no notice of affiliation anywhere; D-59; spec question on
-    remote-oss/remote-extensionpack #6).
+- **The readme makes no statement about any other publisher's packs beyond the install advice.**
+  - F-9002 AC-7 and BR-3 ask for a statement that the pack and its members are not another publisher's (D-56: no notice
+    of affiliation anywhere; D-59; spec question on remote-oss/remote-extensionpack #6).
