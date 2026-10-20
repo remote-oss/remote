@@ -901,6 +901,29 @@ export async function remoteExplorerOptions(name: string): Promise<string[]> {
   );
 }
 
+/** The option the Switch Remote dropdown shows as selected, or nothing when the window has no such dropdown. */
+export async function selectedRemote(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `document.querySelector('select[aria-label="Switch Remote"]')?.value ?? null`,
+    )) ?? undefined
+  );
+}
+
+/** The titles of the sections of the Remote Explorer that are on screen, from the top. */
+export async function remoteExplorerSections(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.pane')]
+      .filter(pane => pane.offsetParent !== null && pane.getBoundingClientRect().height > 0)
+      .map(pane => pane.querySelector('.pane-header .title')?.textContent ?? '')
+      .filter(title => title !== '')`,
+  );
+}
+
 /** Chooses `option` in the "Switch Remote" dropdown of window `name`, as a user's choice. */
 export async function selectRemote(
   name: string,
