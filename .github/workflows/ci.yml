@@ -296,11 +296,11 @@ jobs:
     if: inputs.vscodium || github.event.schedule == '17 */2 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
     # Every launch of the suite (`all`) runs as three parts on three runners at once: the ssh launches, the containers
     # launches, and the explorer and host-case launches together. The genuine group has its own job. A dispatch that names
-    # its launches runs them as one part.
+    # its launches runs them as one part; one whose launches input is empty runs all.
     strategy:
       fail-fast: false
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh","@containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh","@containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
