@@ -123,7 +123,8 @@ function sceneOf(
         scene.metadataAsked.push(templateId);
         return Promise.resolve(metadata);
       },
-      templatePrefixes: [PREFIX],
+      curatedPrefix: PREFIX,
+      isVerified: template => template.owner === 'devcontainers',
       translate: template => template,
     },
   };
@@ -200,6 +201,24 @@ describe('the flat template pick (card containers-79)', () => {
         ['Python 3', 'devcontainers', 'verified-icon'],
         ['Twin', 'devcontainers', 'verified-icon'],
         ['Twin', 'devcontainers', 'verified-icon'],
+      ],
+    );
+  });
+
+  it('F-0802 AC-3: the verified icon follows the caller’s test, not the owner', () => {
+    const scene = sceneOf();
+    scene.ports.isVerified = template => template.name === 'Other';
+    const {picker} = started(scene, NO_FILES, CATALOGUE);
+    deepStrictEqual(
+      picker.items
+        .filter(each => each.action.kind === 'template')
+        .map(each => [each.label, each.iconPath]),
+      [
+        ['Alpine', undefined],
+        ['Other', 'verified-icon'],
+        ['Python 3', undefined],
+        ['Twin', undefined],
+        ['Twin', undefined],
       ],
     );
   });

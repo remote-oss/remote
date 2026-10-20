@@ -97,7 +97,7 @@ describe('our curated table (card containers-79)', () => {
       templateOf('python'),
     ];
     deepStrictEqual(
-      partsOf(curatedTemplates(catalogue, factsOf(['x.unknown']), [PREFIX])),
+      partsOf(curatedTemplates(catalogue, factsOf(['x.unknown']), PREFIX)),
       CORE,
     );
   });
@@ -120,7 +120,7 @@ describe('our curated table (card containers-79)', () => {
         curatedTemplates(
           catalogue,
           factsOf(['a.go', 'b.go', 'src/package.json', 'x.ts']),
-          [PREFIX],
+          PREFIX,
         ),
       ),
       [
@@ -150,7 +150,7 @@ describe('our curated table (card containers-79)', () => {
         curatedTemplates(
           catalogue,
           factsOf(['a.PY', 'b.csproj', 'c.rs', 'd.java']),
-          [PREFIX],
+          PREFIX,
         ),
       ),
       [
@@ -172,14 +172,14 @@ describe('our curated table (card containers-79)', () => {
         curatedTemplates(
           [templateOf('go'), templateOf('alpine')],
           factsOf(['a.go', '.git/x.rs']),
-          [PREFIX],
+          PREFIX,
         ),
       ),
       ['go', 'alpine'],
     );
   });
 
-  it('F-0802 AC-25: only templates under the given prefixes count, the published one or the harness’s', () => {
+  it('F-0802 AC-25: only templates under the prefix given count', () => {
     deepStrictEqual(
       partsOf(
         curatedTemplates(
@@ -189,10 +189,10 @@ describe('our curated table (card containers-79)', () => {
             templateOf('ubuntu', 'ghcr.io/someone/templates/'),
           ],
           factsOf(['x.go']),
-          [PREFIX, '127.0.0.1:5000/templates/'],
+          '127.0.0.1:5000/templates/',
         ),
       ),
-      ['alpine', 'debian'],
+      ['debian'],
     );
   });
 });

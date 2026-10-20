@@ -102,8 +102,10 @@ export interface TemplatePickPorts {
     templateId: string,
     cancellation: AbortSignal,
   ): Promise<TemplateMetadataResult>;
-  /** The starts of the ids of the templates our curated table may show. */
-  templatePrefixes: readonly string[];
+  /** The start of the ids of the templates our curated table may show: the catalogue's own collection's. */
+  curatedPrefix: string;
+  /** Whether a template carries the verified mark. */
+  isVerified(template: CatalogueTemplate): boolean;
   translate: Translate;
 }
 
@@ -177,9 +179,7 @@ function templateRow(
   return {
     label: template.name,
     description: template.owner,
-    ...(template.owner === 'devcontainers'
-      ? {iconPath: ports.verifiedIcon}
-      : {}),
+    ...(ports.isVerified(template) ? {iconPath: ports.verifiedIcon} : {}),
     action: {kind: 'template', template},
   };
 }
@@ -237,7 +237,7 @@ function templatePick(
         curatedTemplates(
           request.catalogue,
           request.folder,
-          ports.templatePrefixes,
+          ports.curatedPrefix,
         ),
       )
     : undefined;

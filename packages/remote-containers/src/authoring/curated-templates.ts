@@ -132,12 +132,12 @@ function lastPartOf(template: CatalogueTemplate): string {
 
 /**
  * The templates of the curated list, in the catalogue's order: the core set and the matches of every file present,
- * among the templates of the catalogue whose ids start with one of `prefixes`.
+ * among the templates of the catalogue whose ids start with `prefix`, the one of the catalogue's own collection.
  */
 export function curatedTemplates(
   catalogue: readonly CatalogueTemplate[],
   facts: FolderFacts,
-  prefixes: readonly string[],
+  prefix: string,
 ): CatalogueTemplate[] {
   const wanted = new Set<string>(CORE_TEMPLATES);
   for (const name of countedFiles(facts)) {
@@ -149,7 +149,6 @@ export function curatedTemplates(
   }
   return catalogue.filter(
     template =>
-      prefixes.some(prefix => template.id.startsWith(prefix)) &&
-      wanted.has(lastPartOf(template)),
+      template.id.startsWith(prefix) && wanted.has(lastPartOf(template)),
   );
 }
