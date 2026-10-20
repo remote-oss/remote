@@ -110,6 +110,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         'containers-ports',
+        'containers-shutdown',
         ...hostLaunchLabels(),
         'genuine',
         'ssh-no-proposals',
@@ -237,6 +238,12 @@ describe('the launches of the VSCodium run', () => {
           true,
           ['ms-vscode-remote.remote-containers'],
         ],
+        [
+          'containers-shutdown',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
+        ],
         ['genuine', undefined, true, undefined],
         ['ssh-no-proposals', undefined, true, undefined],
       ],
@@ -310,6 +317,13 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
+        [
+          'containers-shutdown',
+          'containers-shutdown',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
       ],
     );
   });
@@ -336,6 +350,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         'containers-ports',
+        'containers-shutdown',
       ],
     );
   });
@@ -495,6 +510,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         'containers-ports',
+        'containers-shutdown',
         ...hostLaunchLabels(),
         'genuine',
         'ssh-no-proposals',
