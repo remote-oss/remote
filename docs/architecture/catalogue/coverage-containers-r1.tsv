@@ -916,7 +916,7 @@ F-0801.AC-17	todo
 F-0801.AC-18	todo	
 F-0801.AC-19	deferred	containers release 1: later (tunnel windows, D-55)
 F-0801.AC-20	deferred	containers release 1: later (the recovery container)
-F-0801.AC-20a	todo	
+F-0801.AC-20a	deferred	containers release 1: later (the recovery container)
 F-0801.AC-21	deferred	containers release 1: later (Compose)
 F-0801.AC-22	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0801.AC-23	deferred	containers release 1: later (Windows, WSL and macOS)
