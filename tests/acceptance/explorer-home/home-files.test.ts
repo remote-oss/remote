@@ -6,7 +6,6 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {
-  existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -14,8 +13,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {type ConfigFileReader, listHosts} from 'lib-ssh';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {VIEW} from '../windows/explorer-rows.ts';
+import {listing, VIEW} from '../windows/explorer-rows.ts';
 import {
   appendScript,
   closeWindow,
@@ -24,17 +24,8 @@ import {
   restoreUserSettings,
   userSettings,
   variable,
-  waitFor,
 } from '../windows/harness.ts';
-import {
-  notifications,
-  rowAction,
-  titleAction,
-  viewRows,
-} from '../windows/renderer.ts';
-
-/** The system configuration file a Linux client reads after the user's. */
-const SYSTEM_FILE = '/etc/ssh/ssh_config';
+import {notifications, rowAction, titleAction} from '../windows/renderer.ts';
 
 /** The run's HOME, as the launch gives it to the editor. */
 function home(): string {
@@ -56,36 +47,38 @@ function sshFile(relative: string, lines: readonly string[]): string {
   return file;
 }
 
-/** The concrete aliases of the system file's `Host` lines, as the rows expect them after the user's. */
+/** The files Remote - SSH reads, from the disk: text or entries, none for anything else. */
+const FILE_READER: ConfigFileReader = {
+  readText: file => {
+    try {
+      return readFileSync(file, 'utf8');
+    } catch {
+      return undefined;
+    }
+  },
+  listFolder: folder => {
+    try {
+      return readdirSync(folder);
+    } catch {
+      return undefined;
+    }
+  },
+};
+
+/**
+ * The system file's hosts as Remote - SSH lists them, its Include lines followed, the hosts that come after the user's
+ * in every list: read with a home folder that holds no user file, so they don't depend on the machine's own file.
+ */
 function systemHosts(): string[] {
-  if (!existsSync(SYSTEM_FILE)) {
-    return [];
-  }
-  return readFileSync(SYSTEM_FILE, 'utf8')
-    .split('\n')
-    .filter(line => /^\s*Host\s/i.test(line))
-    .flatMap(line => line.trim().split(/\s+/).slice(1))
-    .filter(word => !/[*?!]/.test(word));
-}
-
-/** The labels of the group's host rows in `window`, in order. */
-async function hostLabels(window: string): Promise<string[]> {
-  return ((await viewRows(window, VIEW)) ?? [])
-    .filter(viewRow => viewRow.level === 2)
-    .map(viewRow => viewRow.label);
-}
-
-/** Waits until `window` lists exactly `hosts`. */
-async function listing(
-  window: string,
-  hosts: readonly string[],
-): Promise<void> {
-  await waitFor(
-    `window ${window} to list ${hosts.join(', ')}`,
-    async () =>
-      JSON.stringify(await hostLabels(window)) === JSON.stringify(hosts),
-    15_000,
+  const listed = listHosts(
+    '',
+    {
+      homeFolder: path.join(variable('HARNESS_RUN_FOLDER'), 'no-home'),
+      platform: 'linux',
+    },
+    FILE_READER,
   );
+  return 'hosts' in listed ? listed.hosts.map(entry => entry.name) : [];
 }
 
 /** A new folder window named `name` that shows the Remote Explorer. */

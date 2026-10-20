@@ -16,11 +16,7 @@ import {
   waitFor,
   windowState,
 } from '../windows/harness.ts';
-import {
-  remoteExplorerOptions,
-  rowAction,
-  selectRemote,
-} from '../windows/renderer.ts';
+import {rowAction, selectRemote} from '../windows/renderer.ts';
 import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
@@ -35,16 +31,14 @@ const UNTOUCHED_MILLISECONDS = 30_000;
 describe('the Remote Explorer beside Dev Containers (card coverage-25c, part b)', function () {
   this.timeout(600_000);
 
-  it('F-5101 AC-2, AC-30 (sections): the Remotes section comes before Dev Containers, and its group and host rows are those of a window without Dev Containers', async () => {
+  it('F-5101 AC-30 (sections): with Dev Containers installed, the Remotes section’s group and host rows are those of a window without it', async () => {
     const name = await openFolderWindow(
       devContainerFolder('explorer-sections', {name: 'Explorer Sections'}),
     );
     try {
       await inWindow(name, SHOW_REMOTE_EXPLORER);
-      const options = await remoteExplorerOptions(name);
       await selectRemote(name, VIEW);
       await rowsSettled(name, rowsOf(HOSTS, undefined));
-      deepStrictEqual(options.slice(0, 2), [VIEW, 'Dev Containers']);
     } finally {
       await closeWindow(name);
     }

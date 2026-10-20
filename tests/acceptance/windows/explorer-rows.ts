@@ -5,7 +5,13 @@
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {recordLines, waitFor, windowEvents} from './harness.ts';
-import {notifications, viewRows, type ViewRow} from './renderer.ts';
+import {
+  notifications,
+  renderedRows,
+  type RenderedRow,
+  viewRows,
+  type ViewRow,
+} from './renderer.ts';
 
 /** The view of the explorer's SSH group. */
 export const VIEW = 'Remotes (Tunnels/SSH)';
@@ -26,7 +32,22 @@ export function rowsOf(hosts: string[], marked: string | undefined): ViewRow[] {
   return rows;
 }
 
-/** Polls the view's rows of `name` until they equal `expected`, then asserts them once. */
+/**
+ * The rows down to the hosts, each host's own expansion left out: the folders under a host come from Remote - SSH's
+ * folder history, which every earlier window of the run fills, in this launch or in one before it.
+ */
+function hostLevel(rows: ViewRow[] | undefined): ViewRow[] {
+  return (rows ?? [])
+    .filter(viewRow => viewRow.level <= 2)
+    .map(viewRow =>
+      viewRow.level === 2 ? {...viewRow, expanded: undefined} : viewRow,
+    );
+}
+
+/**
+ * Polls the view's rows of `name` down to the hosts until they equal `expected`, then asserts them once; when they
+ * never do, the assertion names the rows the view shows.
+ */
 export async function rowsSettled(
   name: string,
   expected: ViewRow[],
@@ -35,15 +56,63 @@ export async function rowsSettled(
     `the ${VIEW} rows of window ${name}`,
     async () => {
       try {
-        deepStrictEqual(await viewRows(name, VIEW), expected);
+        deepStrictEqual(hostLevel(await viewRows(name, VIEW)), expected);
         return true;
       } catch {
         return false;
       }
     },
     15_000,
+  ).catch(() => undefined);
+  deepStrictEqual(hostLevel(await viewRows(name, VIEW)), expected);
+}
+
+/** The labels of the group's host rows in `window`, in order. */
+export async function hostLabels(window: string): Promise<string[]> {
+  return ((await viewRows(window, VIEW)) ?? [])
+    .filter(viewRow => viewRow.level === 2)
+    .map(viewRow => viewRow.label);
+}
+
+/** Waits until `window` lists exactly `hosts` under the group; when it never does, the error names what it lists. */
+export async function listing(
+  window: string,
+  hosts: readonly string[],
+): Promise<void> {
+  let seen: string[] = [];
+  await waitFor(
+    `window ${window} to list ${hosts.join(', ')}`,
+    async () => {
+      seen = await hostLabels(window);
+      return JSON.stringify(seen) === JSON.stringify(hosts);
+    },
+    15_000,
+  ).catch((error: unknown) => {
+    throw new Error(
+      `${String(error)}; it lists ${seen.join(', ') || 'no host'}`,
+      {cause: error},
+    );
+  });
+}
+
+/**
+ * Waits until the host rows `window` renders now meet `condition`, without scrolling the list: the timings of the view
+ * are the view's, not the reading's.
+ */
+export async function rendering(
+  window: string,
+  condition: (rows: RenderedRow[]) => boolean,
+): Promise<void> {
+  await waitFor(
+    `window ${window} to render its hosts`,
+    async () =>
+      condition(
+        (await renderedRows(window, VIEW)).filter(
+          rendered => rendered.level === 2,
+        ),
+      ),
+    15_000,
   );
-  deepStrictEqual(await viewRows(name, VIEW), expected);
 }
 
 /** Nothing failed in `name`: no toast that holds an error word, no notice line of the record, no failed command. */

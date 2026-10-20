@@ -14,3 +14,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-5901 AC-3 asks for a repository `remote-oss/remote-explorer` and a `bugs` address of that repository (D-56: one
     monorepo for the family, as athena ruled for the pack on #1158). The row is `F-5901 AC-3 (ruling-d56)` in
     `packages/remote-explorer/test/unit/manifest.test.ts`.
+- **A `Host` line with no pattern in the SSH configuration doesn't hide the hosts after it.** The Remotes view lists
+  every host of the file, as Remote - SSH's host picker does, and the empty line itself gives no row.
+  - F-5102 7.E4 and AC-26 describe the reference dropping every host after such a line. Ours shows the companion's
+    list (F-5102 BR-7), which follows F-2202 7.E4: "an empty `Host` line does not disturb later lines" (athena on
+    #253; spec question on remote-oss/remote-explorer#9). The row is `F-5102 AC-26 (ruling-f2202-empty-host)` in
+    `tests/acceptance/explorer-rows/host-list.test.ts`.
