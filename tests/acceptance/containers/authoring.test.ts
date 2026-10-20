@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -88,6 +89,40 @@ function existing(folder: string, ...relatives: string[]): string[] {
   return relatives.filter(relative => existsSync(path.join(folder, relative)));
 }
 
+/** The S182 question for an existing configuration, answered `answer`: whether the file stayed the user's. */
+async function answeredOverwrite(
+  answer: 'Overwrite' | 'Skip' | 'Cancel',
+  kept: 'replaced' | 'mine',
+): Promise<void> {
+  await withWindow(
+    `a9-${answer.toLowerCase()}`,
+    {[CONFIGURATION]: 'mine'},
+    async (window, folder) => {
+      await pickTemplate(window, 'Alpine');
+      const dialog = await waitForDialog(window);
+      const said = await dialogText(window);
+      await answerDialog(window, answer);
+      await waitFor(
+        'the wizard to end',
+        async () => (await quickPickOf(window)) === undefined,
+        30_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const text = readFileSync(path.join(folder, CONFIGURATION), 'utf8');
+      deepStrictEqual(
+        [
+          said?.includes(
+            "File './.devcontainer/devcontainer.json' already exists, overwrite?",
+          ),
+          [...dialog.buttons].sort(),
+          text === 'mine' ? 'mine' : 'replaced',
+        ],
+        [true, ['Cancel', 'Overwrite', 'Skip'], kept],
+      );
+    },
+  );
+}
+
 describe('the authoring wizard (card containers-80)', function () {
   this.timeout(600_000);
 
@@ -123,7 +158,7 @@ describe('the authoring wizard (card containers-80)', function () {
     );
   });
 
-  it('F-0801 AC-4, F-0802 AC-2 (a4): alpine on an empty folder shows the flat screen, writes the configuration, opens it in a preview and offers the reopen notification', async () => {
+  it('F-0801 AC-4, F-0802 AC-2, AC-20 (a4): alpine on an empty folder shows the flat screen, writes the configuration, opens it in a preview and offers the reopen notification', async () => {
     await withWindow('a4', {}, async (window, folder) => {
       startCommand(window);
       const shown = await waitForQuickPick(window);
@@ -143,15 +178,18 @@ describe('the authoring wizard (card containers-80)', function () {
           readFileSync(path.join(folder, CONFIGURATION), 'utf8').includes(
             '"image": "mcr.microsoft.com/devcontainers/base:alpine',
           ),
+          /Learn More|Show All Templates|Add Dev Container Configuration/.test(
+            readFileSync(path.join(folder, CONFIGURATION), 'utf8'),
+          ),
           (await editorTabs(window)).find(each => each.label === 'devcontainer')
             ?.preview,
         ],
-        [['Learn More', 'Alpine'], true, true],
+        [['Learn More', 'Alpine'], true, false, true],
       );
     });
   });
 
-  it('F-0802 AC-3, AC-4 (a-flat): the flat screen lists Learn More first and the templates by name, with the first template focused', async () => {
+  it('F-0802 AC-3, AC-4, AC-5 (a-flat): the flat screen lists Learn More first and the templates by name, with the first template focused', async () => {
     await withWindow('a-flat', {}, async window => {
       startCommand(window);
       await waitForQuickPick(window);
@@ -170,41 +208,17 @@ describe('the authoring wizard (card containers-80)', function () {
     });
   });
 
-  for (const [answer, kept] of [
-    ['Overwrite', 'replaced'],
-    ['Skip', 'mine'],
-    ['Cancel', 'mine'],
-  ] as const) {
-    it(`F-0801 AC-9 (a9-${answer.toLowerCase()}): an existing configuration file is asked about, and ${answer} leaves it ${kept}`, async () => {
-      await withWindow(
-        `a9-${answer.toLowerCase()}`,
-        {[CONFIGURATION]: 'mine'},
-        async (window, folder) => {
-          await pickTemplate(window, 'Alpine');
-          const dialog = await waitForDialog(window);
-          const said = await dialogText(window);
-          await answerDialog(window, answer);
-          await waitFor(
-            'the wizard to end',
-            async () => (await quickPickOf(window)) === undefined,
-            30_000,
-          );
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          const text = readFileSync(path.join(folder, CONFIGURATION), 'utf8');
-          deepStrictEqual(
-            [
-              said?.includes(
-                "File './.devcontainer/devcontainer.json' already exists, overwrite?",
-              ),
-              [...dialog.buttons].sort(),
-              text === 'mine' ? 'mine' : 'replaced',
-            ],
-            [true, ['Cancel', 'Overwrite', 'Skip'], kept],
-          );
-        },
-      );
-    });
-  }
+  it('F-0801 AC-9 (a9-overwrite): an existing configuration file is asked about, and Overwrite leaves it replaced', async () => {
+    await answeredOverwrite('Overwrite', 'replaced');
+  });
+
+  it('F-0801 AC-9 (a9-skip): an existing configuration file is asked about, and Skip leaves it mine', async () => {
+    await answeredOverwrite('Skip', 'mine');
+  });
+
+  it('F-0801 AC-9 (a9-cancel): an existing configuration file is asked about, and Cancel leaves it mine', async () => {
+    await answeredOverwrite('Cancel', 'mine');
+  });
 
   it('F-0801 AC-24, AC-38 (a24): a dotfile configuration and the other files of the folder are left alone', async () => {
     await withWindow(
@@ -262,6 +276,27 @@ describe('the authoring wizard (card containers-80)', function () {
     );
   });
 
+  it('F-0801 AC-30 (a30-readonly): a folder that cannot be written fails the write with a modal of ours and writes nothing', async () => {
+    await withWindow('a30-readonly', {}, async (window, folder) => {
+      chmodSync(folder, 0o555);
+      try {
+        await pickTemplate(window, 'Alpine');
+        await waitForDialog(window);
+        const said = await dialogText(window);
+        await pressEscape(window);
+        deepStrictEqual(
+          [
+            said?.includes("The configuration couldn't be written to "),
+            existing(folder, '.devcontainer'),
+          ],
+          [true, []],
+        );
+      } finally {
+        chmodSync(folder, 0o755);
+      }
+    });
+  });
+
   it('F-0802 AC-18 (a18): Learn More ends the wizard with nothing written', async () => {
     await withWindow('a18', {}, async (window, folder) => {
       await pickTemplate(window, 'Learn More');
@@ -294,7 +329,7 @@ describe('the authoring wizard (card containers-80)', function () {
     });
   });
 
-  it('F-0802 AC-9, AC-10 (a-custom): a custom template id of two slashes is written from the run’s own registry', async () => {
+  it('F-0802 AC-9, AC-10, AC-11 (a-custom): a custom template id of two slashes is written from the run’s own registry', async () => {
     await withWindow('a-custom', {}, async (window, folder) => {
       startCommand(window);
       await waitForQuickPick(window);
@@ -368,7 +403,7 @@ describe('the authoring wizard (card containers-80)', function () {
     );
   });
 
-  it('F-0802 AC-24, AC-26 (a-curated): a folder with a source file shows the curated screen, Show All Templates replaces it with the whole list, and a new run starts curated again', async () => {
+  it('F-0802 AC-24, AC-26, AC-31 (a-curated): a folder with a source file shows the curated screen, Show All Templates replaces it with the whole list, and a new run starts curated again', async () => {
     await withWindow('a-curated', {'main.py': 'print(1)\n'}, async window => {
       startCommand(window);
       await waitForQuickPick(window);

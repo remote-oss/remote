@@ -1638,13 +1638,13 @@ export async function chooseQuickPickRow(
   const address = await pageOf(name);
   for (let presses = 0; presses < 100; presses += 1) {
     const rows = await quickPickRows(name);
-    const target = rows.findIndex(row => row.label === label);
+    const target = rows.findIndex(entry => entry.label === label);
     if (target === -1) {
       throw new Error(
-        `window ${name}: no row ${JSON.stringify(label)} among ${JSON.stringify(rows.map(row => row.label))}`,
+        `window ${name}: no row ${JSON.stringify(label)} among ${JSON.stringify(rows.map(entry => entry.label))}`,
       );
     }
-    const focused = rows.findIndex(row => row.focused);
+    const focused = rows.findIndex(entry => entry.focused);
     if (focused === target) {
       await pressKey(address, name, 'Enter');
       return;
