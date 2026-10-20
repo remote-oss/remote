@@ -20,6 +20,7 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  answerNotification,
   chooseQuickPickItem,
   dialogOf,
   pressEscape,
@@ -27,6 +28,7 @@ import {
   statusItem,
   waitForDialog,
   windowTitle,
+  notificationCentre,
   notifications,
   waitForQuickPick,
 } from '../windows/renderer.ts';
@@ -111,6 +113,9 @@ const RECOVERY_BUTTONS = [
 
 /** The dialog of a failed connect takes the build or the second check, after the reload. */
 const DIALOG_MILLISECONDS = 180_000;
+
+/** The start of the message of F-0402's reopen notification. */
+const REOPEN_NOTICE = 'Folder contains a Dev Container configuration file.';
 
 /** Whether container `containerId` mounts something at `/vscode`, the cache volume (F-0419). */
 async function vscodeMounted(containerId: string): Promise<boolean> {
@@ -1007,6 +1012,140 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
             'Open Recent...',
             'Open Documentation',
           ],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-12 (r12): a stopped container whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
+    const folder = devContainerFolder('c54-stopped-edit', {
+      name: 'Stopped Edit',
+    });
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      writeFileSync(
+        path.join(folder, '.devcontainer', 'devcontainer.json'),
+        JSON.stringify({
+          image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+          runArgs: runLabelArguments(),
+          name: 'Stopped Edit',
+          containerEnv: {C54_EDITED: 'yes'},
+        }),
+      );
+      const name = await openFolderWindow(folder);
+      await waitFor(
+        `the reopen notification in window ${name}`,
+        async () => {
+          try {
+            return (await notificationCentre(name)).some(text =>
+              text.startsWith(REOPEN_NOTICE),
+            );
+          } catch {
+            return false;
+          }
+        },
+        30_000,
+      );
+      await answerNotification(name, REOPEN_NOTICE, 'Reopen in Container');
+      await connectedToContainer(name, DIALOG_MILLISECONDS);
+      const containers = await devContainersOf(folder);
+      const {stdout: environment} = await execFileAsync('docker', [
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        'echo "edited=${C54_EDITED:-}"',
+      ]);
+      const centre = await notificationCentre(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          containers: containers.map(id => containerId.startsWith(id)),
+          environment: environment.trim(),
+          changed: centre.filter(text => /changed|Rebuild/.test(text)),
+        },
+        {containers: [true], environment: 'edited=', changed: []},
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-19 (r19): Rebuild Container in More Actions... replaces the container a failed start left created, by a fresh one', async () => {
+    const folder = devContainerFolder('c54-created-rebuild', {
+      name: 'Created Rebuild',
+      containerUser: 'doesnotexist123',
+    });
+    try {
+      const {name} = await failedWindowOf(folder);
+      const [first = ''] = await devContainersOf(folder);
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      const before = activations(name);
+      await chooseQuickPickItem(name, 'Rebuild Container');
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > before,
+        60_000,
+      );
+      const again = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const second = await devContainersOf(folder);
+      const {stdout: firstLeft} = await execFileAsync('docker', [
+        'ps',
+        '--all',
+        '--quiet',
+        '--filter',
+        `id=${first}`,
+      ]);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          created: first !== '',
+          dialog: dialogText(again),
+          replaced: second.length === 1 && second[0] !== first,
+          firstGone: firstLeft.trim(),
+        },
+        {
+          created: true,
+          dialog: ['', S034, RECOVERY_BUTTONS],
+          replaced: true,
+          firstGone: '',
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-31 (r31): Rebuild Container on a connected window whose configuration names no container source shows F-0410’s dialog or the missing-image warning, creates no container, and keeps the old one', async () => {
+    const folder = devContainerFolder('c54-rebuild-no-source', {
+      name: 'Rebuild No Source',
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      writeFileSync(
+        path.join(folder, '.devcontainer', 'devcontainer.json'),
+        JSON.stringify({name: 'Rebuild No Source'}),
+      );
+      await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const containers = await devContainersOf(folder);
+      const {status} = await inspectOf(containerId);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          dialog: dialogText(dialog),
+          containers: containers.map(id => containerId.startsWith(id)),
+          status,
+        },
+        {
+          dialog: ['', S034, RECOVERY_BUTTONS],
+          containers: [true],
+          status: 'running',
         },
       );
     } finally {
