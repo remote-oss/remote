@@ -115,6 +115,9 @@ export function preconnectStep(
     } catch (error) {
       return failedWithText(messageOf(error));
     }
+    if (cancellation.aborted) {
+      return {kind: 'failed', failure: {kind: 'preconnectFailed'}};
+    }
     logger.info(`running the pre-connection script ${expanded}`);
     let handle: ProcessHandle;
     try {
@@ -137,6 +140,10 @@ export function preconnectStep(
     });
     handle.endInput();
     const stopped = new Promise<'stopped'>(resolve => {
+      if (cancellation.aborted) {
+        resolve('stopped');
+        return;
+      }
       cancellation.addEventListener('abort', () => {
         resolve('stopped');
       });

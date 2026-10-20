@@ -74,6 +74,7 @@ class Scene {
   stored = new Map<string, string>();
   spawned: ProcessSpecification[] = [];
   spawnError: Error | undefined;
+  abortOnSpawn = false;
   behaviour: Behaviour = process => {
     process.end(0);
   };
@@ -119,6 +120,9 @@ class Scene {
         exists: file => Promise.resolve(this.present.has(file)),
         spawner: specification => {
           this.spawned.push(specification);
+          if (this.abortOnSpawn) {
+            this.abort.abort();
+          }
           if (this.spawnError !== undefined) {
             return Promise.reject(this.spawnError);
           }
@@ -243,7 +247,7 @@ describe('the pre-connection script step (card connect-87)', () => {
     );
   });
 
-  it("F-2108 AC-11: Don't Ask Again stores the hash of the contents before the script runs", async () => {
+  it("F-2108 AC-23: Don't Ask Again stores the hash of the contents before the script runs", async () => {
     const scene = new Scene();
     scene.answers = ['allowAlways'];
     let storedWhenSpawned: string[] = [];
@@ -500,6 +504,25 @@ describe('the pre-connection script step (card connect-87)', () => {
           'info: the pre-connection step stopped waiting; the script is left to finish',
         ],
       ],
+    );
+  });
+
+  it('F-2108 AC-42: a connect that stopped waiting before the script was started starts nothing', async () => {
+    const scene = new Scene();
+    scene.abort.abort();
+    deepStrictEqual(
+      [await scene.execute(SCRIPT), scene.spawned.length, scene.logged()],
+      [{kind: 'failed', failure: {kind: 'preconnectFailed'}}, 0, []],
+    );
+  });
+
+  it('F-2108 AC-42: a connect that stops waiting while the script is being started fails at once and leaves it running', async () => {
+    const scene = new Scene();
+    scene.behaviour = () => undefined;
+    scene.abortOnSpawn = true;
+    deepStrictEqual(
+      [await scene.execute(SCRIPT), scene.processes[0]?.killed],
+      [{kind: 'failed', failure: {kind: 'preconnectFailed'}}, false],
     );
   });
 

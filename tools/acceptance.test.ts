@@ -378,6 +378,7 @@ const LAUNCH_ORDER = [
   'terminal-pick',
   'windows',
   'login-shells',
+  'preconnect',
   'config-files',
   'default-ports',
   'no-proposals',

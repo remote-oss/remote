@@ -622,6 +622,13 @@ export function launchesOf(root: string): Launch[] {
     },
     {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
     {
+      label: 'preconnect',
+      kind: 'plain',
+      suite: 'preconnect',
+      // A variable of the editor's environment, which the script of a row reports it received.
+      environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
+    },
+    {
       label: 'config-files',
       kind: 'plain',
       suite: 'config-files',

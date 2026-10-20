@@ -327,6 +327,13 @@
           "additionalProperties": {
             "type": "string"
           },
+          "examples": [
+            {
+              "myhost": "~/preconnect.sh",
+              "myhost2": "C:\\Users\\user\\preconnect.ps1"
+            },
+            "~/preconnect.sh"
+          ],
           "tags": [
             "experimental"
           ]
