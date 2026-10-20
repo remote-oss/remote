@@ -55,7 +55,7 @@ describe('the maintenance of the host server', function () {
       {
         allowedExtraStartOptions: [],
         extensionEntries: 'identifiersOnly',
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'none',
       },
       {
         lockLoop: lockLoop(),

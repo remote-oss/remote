@@ -456,6 +456,13 @@ async function runSteps(
       ofStart(started.failure, {useExecServer: options.useExecServer}),
     );
   }
+  if (
+    started.notices.some(notice => notice.kind === 'requirementsHelperMissing')
+  ) {
+    options.logger.warn(
+      "the server has no requirements helper; the host's requirements weren't checked",
+    );
+  }
   if (started.server.endpoint.kind === 'port') {
     options.logger.info(listeningLine(started.server.endpoint.port));
   }

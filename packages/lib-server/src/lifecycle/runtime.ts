@@ -323,7 +323,7 @@ function outcomeOf(
  * Starts the server of an install, or reuses the one that runs, and reads its port. A range with a problem fails before the
  * host is asked anything; a rejected bind host is replaced by the loopback address, with a notice. The extra start
  * options of the policy go only when the policy allows them, and the server's own requirements helper runs before a
- * launch only under the `bundledHelper` policy.
+ * launch only under the two helper policies.
  */
 export async function startOrReuse(
   channel: HostChannel,
@@ -369,7 +369,7 @@ export async function startOrReuse(
       forceDisableUserEnv: startPolicy.allowedExtraStartOptions.includes(
         'forceDisableUserEnv',
       ),
-      requirementsHelper: startPolicy.requirementsCheck === 'bundledHelper',
+      requirementsHelper: startPolicy.requirementsCheck !== 'none',
       readySeconds: options.readySeconds,
       socketMode: options.socketMode,
     },

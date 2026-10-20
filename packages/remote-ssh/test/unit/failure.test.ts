@@ -705,6 +705,16 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
+  it('F-2401 (ruling-253-helper): a prerequisites failure keeps the helper’s lines for the log and shows no reason', () => {
+    deepStrictEqual(
+      ofStart(
+        {kind: 'prerequisitesMissing', detail: 'Warning: Missing GLIBC'},
+        EXEC_SERVER,
+      ),
+      {kind: 'prerequisiteMissing', logDetail: 'Warning: Missing GLIBC'},
+    );
+  });
+
   it('#668 R2: a script failure with a write failure logs the path and the error, with the install reason', () => {
     const failure = {
       kind: 'scriptFailed' as const,

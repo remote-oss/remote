@@ -10,9 +10,10 @@ export type Verification = 'headerHash' | 'lengthOnly' | 'none';
 /**
  * Whether the host's requirements are checked, and by whom. `bundledHelper`: lib-server runs the server's
  * `bin/helpers/check-requirements.sh` before each launch; exit 99 aborts the start with the helper's output.
+ * `bundledHelperPlusAlpineProbe`: the same helper, then the Alpine libstdc++ probe.
  */
 export type RequirementsCheck =
-  'none' | 'serverBundled' | 'serverBundledPlusAlpineProbe' | 'bundledHelper';
+  'none' | 'bundledHelper' | 'bundledHelperPlusAlpineProbe';
 
 /** Whether a default extension entry reaches the server as written, or only when it is a `publisher.name` identifier. */
 export type ExtensionEntries = 'identifiersOnly' | 'asWritten';

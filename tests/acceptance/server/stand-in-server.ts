@@ -23,14 +23,18 @@ export type StandInBehaviour =
   | 'serving'
   | 'listening'
   | 'crashing'
-  | 'missingLibraries'
+  | 'requirementsUnmet'
+  | 'helperUnrunnable'
   | 'silent'
   | 'readyThenExit'
   | 'noFreePort'
   | 'cveTerminated';
 
-/** The exit status with which a server reports that the host lacks libraries it needs. */
-const MISSING_LIBRARIES_STATUS = 207;
+/** The two lines the requirements helper of the `requirementsUnmet` stand-in prints before it exits 99. */
+export const REQUIREMENTS_LINES = [
+  'Warning: Missing GLIBC >= 2.28! from /lib/libc.so',
+  'Error: Missing required dependencies.',
+];
 
 /** The launcher's lines up to and including the ready line; the serving and listening behaviours share them and differ only in the last part. */
 const SERVING_LINES = [
@@ -74,7 +78,8 @@ const LAUNCHERS: Readonly<Record<StandInBehaviour, string>> = {
   serving: SERVING_LAUNCHER,
   listening: LISTENING_LAUNCHER,
   crashing: '#!/bin/sh\necho "stand-in server crashed" >&2\nexit 1\n',
-  missingLibraries: `#!/bin/sh\nexit ${String(MISSING_LIBRARIES_STATUS)}\n`,
+  requirementsUnmet: SERVING_LAUNCHER,
+  helperUnrunnable: SERVING_LAUNCHER,
   silent: '#!/bin/sh\nwhile :; do\n  sleep 1\ndone\n',
   readyThenExit:
     '#!/bin/sh\necho "Extension host agent listening on 24680"\nexit 0\n',
@@ -84,9 +89,26 @@ const LAUNCHERS: Readonly<Record<StandInBehaviour, string>> = {
     '#!/bin/sh\necho "* !!!! Server terminated due to presence of CVE-2020-1416 !!!!"\nexit 0\n',
 };
 
+/** The requirements helper of the behaviours that have one: `serving` accepts the host, `requirementsUnmet` refuses it, `helperUnrunnable` cannot run. */
+const HELPERS: Readonly<Partial<Record<StandInBehaviour, string>>> = {
+  serving: '#!/bin/sh\nexit 0\n',
+  requirementsUnmet: `#!/bin/sh\n${REQUIREMENTS_LINES.map(line => `echo '${line}'`).join('\n')}\nexit 99\n`,
+  helperUnrunnable: '#!/bin/sh\nexit 127\n',
+};
+
 /** The files of the stand-in server archive. */
 function standInFiles(behaviour: StandInBehaviour): ArchiveFile[] {
+  const helper = HELPERS[behaviour];
   return [
+    ...(helper === undefined
+      ? []
+      : [
+          {
+            path: `${TOP_FOLDER}/bin/helpers/check-requirements.sh`,
+            content: helper,
+            mode: 0o755,
+          },
+        ]),
     {
       path: `${TOP_FOLDER}/${STAND_IN_LAUNCHER}`,
       content: LAUNCHERS[behaviour],

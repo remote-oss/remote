@@ -55,6 +55,18 @@ describe('policy rows (card server-01 table)', () => {
     );
   });
 
+  it('F-2401 (ruling-253-helper): the SSH policy checks the requirements with the bundled helper, a mode of it too, and the WSL policy adds the Alpine probe', () => {
+    deepStrictEqual(
+      [
+        SSH_POLICY.requirementsCheck,
+        sshPolicyFor('off').requirementsCheck,
+        wslPolicy({scriptLessStartup: false, environmentSetupPath: undefined})
+          .requirementsCheck,
+      ],
+      ['bundledHelper', 'bundledHelper', 'bundledHelperPlusAlpineProbe'],
+    );
+  });
+
   it('transport contracts 5.0: the SSH and WSL policies keep the umask they are given, and the SSH policy of a mode too', () => {
     deepStrictEqual(
       [
