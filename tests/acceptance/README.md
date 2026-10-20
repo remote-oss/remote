@@ -370,19 +370,35 @@ container label, so the run's clean-up and the stale sweep remove it with its an
 
 A launch with `templates: true` (today only `containers`) makes the run start its registry, as `registry: true` does,
 and publish templates into it before its launches (`tools/acceptance-templates.ts`):
-- **Two of the specification's templates**, the smallest the rows need: `alpine` and `docker-existing-dockerfile`
-  (`MIRRORED_TEMPLATES`). Each one's single layer is fetched anonymously from `ghcr.io` by its digest, checked and kept
-  in `.vscode-test/templates/`, as the server archive is. The layers are never committed and never in a VSIX.
-- **One of our own**, `mini` (`tests/acceptance/fixtures/templates/custom/`): an image template on the pinned
-  `alpine:3.22`, with one option (`greeting`) and one optional file. Rows that build a container use it, because the
-  `alpine` template's image (`mcr.microsoft.com/devcontainers/base:alpine…`) is about 1 GB.
+- **Three of the specification's templates**, the smallest the rows need: `alpine`, `docker-existing-dockerfile` and
+  `docker-in-docker` (`MIRRORED_TEMPLATES`; the last is the template F-0801 AC-40 applies). Each one's single layer is
+  fetched anonymously from `ghcr.io` by its digest, checked and kept in `.vscode-test/templates/`, as the server archive
+  is. The layers are never committed and never in a VSIX.
+- **Four of our own** (`tests/acceptance/fixtures/templates/custom/src/`), all on the pinned `alpine:3.22`, because the
+  `alpine` template's image (`mcr.microsoft.com/devcontainers/base:alpine…`) is about 1 GB:
+  - `mini`: one option (`greeting`) and one optional file. Rows that only build a container use it.
+  - `options-lab`: one option of each shape (a strict `enum`, `proposals`, a plain string, two booleans, one boolean with
+    no description), `optionalPaths` `zeta.txt`, `docs/*`, `alpha.txt` in that non-alphabetical order, files under
+    `docs/` and a `README.md` and `NOTES.md`. For the options stage (F-0803) and the optional-files stage (F-0805).
+  - `paths-free-lab`: one `enum` option and no `optionalPaths`. For a template with options and no optional files.
+  - `bare-lab`: no options and no `optionalPaths`. For a template with neither.
+- **Five Features of our own** in two collections, metadata only (`tests/acceptance/fixtures/templates/custom-features.json`;
+  nothing builds them). The collection `remote-oss-run/features` holds `lab-options`, with five options (two booleans,
+  one with no description, an `enum`, `proposals` and a string), and `lab-plain`, with none. The collection
+  `remote-oss-community/features`, a second owner, holds `add-community`, `Add Community Tool` and `Adobe Community
+  Kit`, whose labels sort differently without regard to case than by code unit (F-0804's sort). For the Features stage
+  (F-0804, F-0803).
 
-The CLI the package bundles publishes them, the first two as `devcontainers/templates` and ours as
+The CLI the package bundles publishes the templates, the mirrored ones as `devcontainers/templates` and ours as
 `remote-oss-run/custom`. The run's index, written to `<run>/downloads/templates/devcontainer-index.json`, is the
 pinned snapshot `tests/acceptance/fixtures/templates/devcontainer-index.json` with every `ghcr.io/devcontainers/templates/`
-id moved to the run's registry, plus a collection of ours.
-- **The snapshot** is a cut of the public index (`tools/trim-template-index.ts`): only the
-  `ghcr.io/devcontainers/templates` collection's metadata, no Features. Its folder holds that collection's MIT
+id moved to the run's registry, plus a collection of our templates and the collections of our Features (`<registry>/<namespace>/<id>`, each with its
+repository, which gives the owner a Feature list shows).
+- **The snapshot** is a cut of the public index (`tools/trim-template-index.ts`): the
+  `ghcr.io/devcontainers/templates` collection's metadata and the Features `common-utils`, `docker-in-docker`, `git`,
+  `node` and `python` of `ghcr.io/devcontainers/features`, each collection with its source information and nothing
+  else. It holds no other owner's metadata, whose licence we can't vouch for. The mirrored Features keep their
+  `ghcr.io/devcontainers/features/…` ids, and no row builds with them. Its folder holds the specification's MIT
   `LICENSE` and `SOURCE.md` (the URL, the date and the full file's digest). It's test data, under `tests/` only.
 - **The variables:**
   - `HARNESS_TEMPLATE_REGISTRY` is the registry as the templates' ids name it, `localhost:<port>`;

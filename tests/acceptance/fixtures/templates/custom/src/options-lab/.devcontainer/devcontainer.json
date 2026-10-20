@@ -1,0 +1,12 @@
+{
+  "name": "Lab ${templateOption:flavour}",
+  "image": "alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8",
+  "containerEnv": {
+    "FLAVOUR": "${templateOption:flavour}",
+    "CHANNEL": "${templateOption:channel}",
+    "MOTTO": "${templateOption:motto}",
+    "WITH_DOCS": "${templateOption:withDocs}",
+    "WITH_TESTS": "${templateOption:withTests}",
+    "QUIET": "${templateOption:quiet}"
+  }
+}
