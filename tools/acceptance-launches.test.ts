@@ -1027,4 +1027,13 @@ describe('the platform cases (card coverage-12)', () => {
       ],
     );
   });
+
+  it('containers-59: only the containers launch asks for the run’s registry', () => {
+    deepStrictEqual(
+      launchesOf(REPOSITORY_ROOT)
+        .filter(launch => launch.registry === true)
+        .map(launch => launch.label),
+      ['containers'],
+    );
+  });
 });

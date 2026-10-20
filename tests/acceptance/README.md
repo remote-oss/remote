@@ -306,6 +306,16 @@ when there is none; `containerAddress()` is the host container's own address; `r
 `net.connect` bounded at five seconds. The log has no line with the port: nothing writes F-2003's "Remote server
 listening on port" line yet.
 
+## The run's registry
+
+A launch with `registry: true` (today only `containers`) makes the run start a registry of its own before its
+launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
+`tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
+(`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
+The registry holds only what a row pushes to it, and nothing public is pushed. It carries the run's label and the dev
+container label, so the run's clean-up and the stale sweep remove it with its anonymous volume (`docker rm --force
+--volumes`), also after a killed run.
+
 ## Cutting the host's network
 
 `cutNetwork` and `restoreNetwork` of `tools/acceptance-network.ts` (each takes a command runner and the container id) make the host's network fail the way a lost network does. The host container runs with
