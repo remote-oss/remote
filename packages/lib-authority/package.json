@@ -2,6 +2,9 @@
   "name": "lib-authority",
   "version": "0.0.0",
   "private": true,
+  "dependencies": {
+    "lib-log": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./.tsc/src/index.d.ts",
