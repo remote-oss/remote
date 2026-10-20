@@ -1,15 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
 import {promisify} from 'node:util';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  editorProduct,
   reopenInContainer,
-  variable,
   waitFor,
 } from '../windows/harness.ts';
 import {notificationCentre} from '../windows/renderer.ts';
@@ -22,22 +20,6 @@ const INSTALL_MILLISECONDS = 90_000;
 /** The folder of the extension the configuration lists. */
 const DRACULA_PREFIX = 'dracula-theme.theme-dracula-';
 
-/** The server's data folder name, from the product the editor of the run ships, which the server it downloads shares. */
-function serverDataFolderName(): string {
-  const product = JSON.parse(
-    readFileSync(
-      path.join(
-        path.dirname(variable('HARNESS_VSCODIUM_EXECUTABLE')),
-        'resources',
-        'app',
-        'product.json',
-      ),
-      'utf8',
-    ),
-  ) as {serverDataFolderName: string};
-  return product.serverDataFolderName;
-}
-
 /** The folders of the extensions installed in container `containerId` for the remote user; none while there is no folder. */
 async function installedIn(containerId: string): Promise<string[]> {
   try {
@@ -46,7 +28,7 @@ async function installedIn(containerId: string): Promise<string[]> {
       containerId,
       'sh',
       '-c',
-      `ls "$(cd; pwd)/${serverDataFolderName()}/extensions"`,
+      `ls "$(cd; pwd)/${editorProduct().serverDataFolderName}/extensions"`,
     ]);
     return stdout.split('\n').filter(entry => entry !== '');
   } catch {
