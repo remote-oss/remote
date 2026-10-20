@@ -45,22 +45,41 @@ describe('login shells that do not finish or end early: the connect fails or wai
     await removeHomeFiles('harness-bash', '.bash_profile', '.profile');
   });
 
-  it('F-2704 AC-11 (startup-timeout): a .bash_profile that sleeps past the connect timeout, and one that reads a line, each end the connect with the timeout dialog', async () => {
+  it('F-2704 AC-11 (startup-timeout): a .bash_profile that sleeps past the connect timeout ends the connect with the timeout dialog', async () => {
     await setting('remote.SSH.connectTimeout', 10);
-    const seen: Array<[string, string[]]> = [];
-    for (const [file, name] of [
-      ['sleep 60\n', 'to-ac11a'],
-      ['read answer\n', 'to-ac11b'],
-    ] as const) {
-      await freshServer('harness-bash');
-      await writeHomeFile('harness-bash', '.bash_profile', file);
-      const failed = await failedOn('harness-bash', name, 60_000);
-      seen.push([failed.dialog.question, failed.dialog.buttons]);
-    }
-    deepStrictEqual(seen, [
+    await freshServer('harness-bash');
+    await writeHomeFile('harness-bash', '.bash_profile', 'sleep 60\n');
+    const failed = await failedOn('harness-bash', 'to-ac11', 60_000);
+    deepStrictEqual(
+      [failed.dialog.question, failed.dialog.buttons],
       [TIMED_OUT, BUTTONS],
-      [TIMED_OUT, BUTTONS],
-    ]);
+    );
+  });
+
+  it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13, and the log names the cause', async () => {
+    await setting('remote.SSH.connectTimeout', 10);
+    await freshServer('harness-bash');
+    await writeHomeFile('harness-bash', '.bash_profile', 'read answer\n');
+    const mark = connectionLog().length;
+    const failed = await failedOn('harness-bash', 'to-ac11-read', 60_000);
+    deepStrictEqual(
+      {
+        question: failed.dialog.question,
+        buttons: failed.dialog.buttons,
+        quick: failed.dialog.milliseconds < 5000,
+        logged: logSince(mark).some(line =>
+          line.includes(
+            'the SSH session ended before the host reported its platform',
+          ),
+        ),
+      },
+      {
+        question: 'Could not establish connection to "harness-bash".',
+        buttons: BUTTONS,
+        quick: true,
+        logged: true,
+      },
+    );
   });
 
   it('F-2704 AC-12 (timeout-actions): More Actions... on the timeout dialog shows the pick with its five items in order', async () => {
@@ -152,7 +171,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
       }));
       deepStrictEqual(seen, {notices: [], task: '1'});
     } finally {
-      await setting('remote.SSH.configFile', undefined);
+      await setting('remote.SSH.configFile', variable('HARNESS_SSH_CONFIG'));
     }
   });
 
