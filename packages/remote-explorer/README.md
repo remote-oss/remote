@@ -4,6 +4,13 @@ Every remote target in one view: SSH hosts, containers and WSL distros, one clic
 
 This extension is under development; its features arrive in coming releases.
 
+## Good to know
+
+- Remote Explorer collects no telemetry.
+- Running it beside another Remote Explorer extension isn't supported: when one is installed and enabled, this one
+  stands down and shows a warning.
+- Extension packs that list another Remote Explorer extension don't install this one. Install it directly.
+
 ## For maintainers
 
 | | |
