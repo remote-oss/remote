@@ -172,6 +172,17 @@ describe('the authorization of an address (card server-23)', () => {
     );
   });
 
+  it('server-23: a machine written in mixed case matches the host', () => {
+    const authorization = authorizationOf(
+      [{...ENTRY, machine: 'Files.Example.Invalid'}],
+      createLogger(new MemorySink(), {minimumLevel: () => 'debug'}),
+    );
+    deepStrictEqual(
+      authorization('https://files.example.invalid/a'),
+      basic('alice', 'secret'),
+    );
+  });
+
   it('server-23: a login and password with non-ASCII characters are encoded as UTF-8', () => {
     const authorization = authorizationOf(
       [{machine: 'files.example.invalid', login: 'zoë', password: 'pässwörd'}],
