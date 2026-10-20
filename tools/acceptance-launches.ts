@@ -159,6 +159,14 @@ const GENUINE_LAUNCH: PlainLaunch = {
     ...RENDERER_LAUNCH.settings,
     'window.dialogStyle': 'custom',
     'remote.SSH.localServerDownload': 'off',
+    // Genuine VS Code makes its own requests from the runner; none of them is wanted.
+    'telemetry.telemetryLevel': 'off',
+    'update.mode': 'none',
+    'extensions.autoCheckUpdates': false,
+    'extensions.autoUpdate': false,
+    'workbench.enableExperiments': false,
+    'workbench.settings.enableNaturalLanguageSearch': false,
+    'chat.disableAIFeatures': true,
   },
   // The empty script makes the extension show its real dialogs.
   environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},

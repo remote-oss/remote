@@ -118,8 +118,8 @@ describe('the editor adapters of the failure presenter (card containers-11)', ()
       ['openExternal', {parsed: 'https://example.org/x'}],
       [
         'executeCommand',
-        'workbench.action.openSettings',
-        'remote.serverDownloadBaseUrl',
+        'workbench.action.openSettingsJson',
+        {revealSetting: {key: 'remote.serverDownloadBaseUrl'}},
       ],
     ]);
   });

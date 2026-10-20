@@ -1003,7 +1003,8 @@ export function kill(name: string): Promise<void> {
 }
 
 /** The run's user settings file. */
-function userSettingsFile(): string {
+/** The run's user settings file, the one the editor reads. */
+export function userSettingsFile(): string {
   return path.join(
     variable('HARNESS_RUN_FOLDER'),
     'user-data/User/settings.json',

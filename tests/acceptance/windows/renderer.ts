@@ -1181,36 +1181,6 @@ export async function editorTabs(name: string): Promise<EditorTab[]> {
   );
 }
 
-/** The open Settings editor: the label of its selected target (User, Workspace or Remote) and the text of its search box. */
-export interface SettingsEditor {
-  target: string;
-  search: string;
-}
-
-/**
- * The Settings editor of window `name` when it is the one showing ([oss] `src/vs/workbench/contrib/preferences/browser/settingsEditor2.ts`),
- * or `undefined` when no Settings editor is open in the window.
- */
-export async function settingsEditorOf(
-  name: string,
-): Promise<SettingsEditor | undefined> {
-  return (
-    (await evaluate<SettingsEditor | null>(
-      name,
-      `(() => {
-  const editor = [...document.querySelectorAll('.settings-editor')].find(each => each.offsetParent !== null);
-  if (editor === undefined) {
-    return null;
-  }
-  return {
-    target: editor.querySelector('.settings-tabs-widget .action-label.checked')?.textContent?.replace(/\\s*\\[.*$/, '') ?? '',
-    search: (editor.querySelector('.suggest-input-container .view-lines')?.textContent ?? '').replaceAll('\\u00a0', ' '),
-  };
-})()`,
-    )) ?? undefined
-  );
-}
-
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
 export async function hasStatusItem(
   name: string,

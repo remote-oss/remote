@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  activeEditorOf,
   closeWindow,
   editorProduct,
   onHost,
@@ -9,6 +10,7 @@ import {
   reloadWindow,
   restoreUserSettings,
   userSettings,
+  userSettingsFile,
   variable,
   waitFor,
 } from '../windows/harness.ts';
@@ -20,7 +22,6 @@ import {
   notifications,
   pressEscape,
   quickPickOf,
-  settingsEditorOf,
   statusItem,
   waitForDialog,
   waitForQuickPick,
@@ -158,26 +159,29 @@ describe('where the server comes from, in genuine VS Code (card tooling-51, F-39
     await answerDialog(name, 'Cancel');
   });
 
-  it('F-3902 AC-9 (genuine-open-setting): Open Setting opens the Settings editor on the user tab, searching for the setting, and nothing else shows', async () => {
+  it('F-3902 AC-9 (ruling-ac9-json): Open Setting opens the user’s settings file in the window, writes nothing to it, and nothing else shows', async () => {
+    const before = readUserSettings();
     const name = nextName();
     await open(name);
     await waitForDialog(name, 120_000);
     await answerDialog(name, 'Open Setting');
     await waitFor(
-      `the Settings editor of window ${name}`,
-      async () => (await settingsEditorOf(name)) !== undefined,
+      `the user settings file to be the active editor of window ${name}`,
+      async () => (await activeEditorOf(name)) === userSettingsFile(),
       30_000,
     );
     const left = await leftOpen(name);
     deepStrictEqual(
       {
-        settings: await settingsEditorOf(name),
+        activeEditor: await activeEditorOf(name),
+        written: readUserSettings() !== before,
         dialog: left.dialog,
         toasts: left.toasts,
         disconnected: left.indicator.includes('Disconnected from SSH'),
       },
       {
-        settings: {target: 'User', search: TEMPLATE_SETTING},
+        activeEditor: userSettingsFile(),
+        written: false,
         dialog: undefined,
         toasts: [],
         disconnected: true,
@@ -185,7 +189,7 @@ describe('where the server comes from, in genuine VS Code (card tooling-51, F-39
     );
   });
 
-  it('F-3902 AC-9 (genuine-cancel): Cancel closes the dialog, opens no Settings editor and shows nothing else', async () => {
+  it('F-3902 AC-9 (genuine-cancel): Cancel closes the dialog, opens no settings file and shows nothing else', async () => {
     const name = nextName();
     await open(name);
     await waitForDialog(name, 120_000);
@@ -198,12 +202,12 @@ describe('where the server comes from, in genuine VS Code (card tooling-51, F-39
     const left = await leftOpen(name);
     deepStrictEqual(
       {
-        settings: await settingsEditorOf(name),
+        activeEditor: await activeEditorOf(name),
         dialog: left.dialog,
         toasts: left.toasts,
         disconnected: left.indicator.includes('Disconnected from SSH'),
       },
-      {settings: undefined, dialog: undefined, toasts: [], disconnected: true},
+      {activeEditor: null, dialog: undefined, toasts: [], disconnected: true},
     );
   });
 
@@ -290,6 +294,11 @@ describe('where the server comes from, in genuine VS Code (card tooling-51, F-39
   });
 
   it('F-3902 AC-15 (genuine-mit-release): a release address of the MIT build is no licensed source: the connect fails on the download, the stand-in sees a TLS attempt for github.com, and nothing reaches update.code.visualstudio.com', async () => {
+    await userSettings({
+      [TEMPLATE_SETTING]:
+        'https://github.com/VSCodium/vscodium/releases/download/' +
+        '${version}/vscodium-reh-${os}-${arch}-${version}.tar.gz',
+    });
     const gateway = (
       await onHostAs(
         'root',
@@ -306,11 +315,6 @@ describe('where the server comes from, in genuine VS Code (card tooling-51, F-39
       '-c',
       `echo '${gateway} github.com' >> /etc/hosts && iptables -t nat -A ${rule.replace('-t nat ', '')}`,
     );
-    await userSettings({
-      [TEMPLATE_SETTING]:
-        'https://github.com/VSCodium/vscodium/releases/download/' +
-        '${version}/vscodium-reh-${os}-${arch}-${version}.tar.gz',
-    });
     try {
       const marks = logMarks();
       const name = nextName();

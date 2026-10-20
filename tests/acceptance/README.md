@@ -420,8 +420,12 @@ answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settings
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
 executable the launch started, and `editorProduct()` reads the `product.json` beside it.
 
-Nothing reaches Microsoft or GitHub from the rows: the download host answers for `update.code.visualstudio.com`, and
-the TLS log shows which names the host asked for. The row for an MIT release address (F-3902 AC-15) needs `github.com`
+Nothing reaches Microsoft or GitHub from the rows, in two ways. The host's side is shown by the download host: it
+answers for `update.code.visualstudio.com`, its request log shows what the host asked for, and its TLS log shows which
+names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
+built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
+`update.mode`, `extensions.autoCheckUpdates`, `extensions.autoUpdate`, `workbench.enableExperiments`,
+`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both when it ends. The container's removal at the end of the run is the backstop.
