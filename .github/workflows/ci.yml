@@ -16,8 +16,8 @@ on:
     inputs:
       runner-arch:
         description: >-
-          The self-hosted runners' architecture for the acceptance jobs. X64 always on a pull request; ARM64 (the
-          Mac mini runners) only on a dispatch, until a dispatch shows the acceptance jobs pass there
+          The self-hosted runners' architecture for all five acceptance jobs of this dispatch. A pull request runs
+          slice 1 and server lifecycle on the pr-pool runners (either architecture) and the rest on X64
         type: choice
         options: [X64, ARM64]
         default: X64
@@ -154,9 +154,10 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the checks job
 
-  # The acceptance jobs run on the X64 self-hosted runners (ci-1 to ci-8): the arm64 Mac mini runners carry the
-  # runners' shared label too (2026-10-20), and these jobs haven't been shown to pass there yet. A dispatch with runner-arch
-  # ARM64 is how they are; until then a pull request never lands on arm64.
+  # Slice 1 and server lifecycle, the two acceptance jobs of a pull request, run on the pr-pool runners: ci-1 to ci-8
+  # (X64) and the two Mac minis (ARM64), where they pass (2026-10-20); the user's own Mac runners lack the label. The
+  # other acceptance jobs stay on X64: the VSCodium run outlasts its hour on a mini, and real-server and host-variants
+  # haven't been shown on arm64. A dispatch's runner-arch (X64 | ARM64) still picks one architecture for all five.
   # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
@@ -166,7 +167,7 @@ jobs:
       !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -205,7 +206,7 @@ jobs:
       !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
