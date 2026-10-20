@@ -11,6 +11,7 @@ import path from 'node:path';
 import {build} from 'esbuild';
 import {
   needsDevContainerImage,
+  withHarnessBases,
   withRunTokens,
   type Launch,
 } from './acceptance-launches.ts';
@@ -437,7 +438,7 @@ export async function runPlainLaunch(
     HARNESS_EDITOR_EXECUTABLE: session.executable,
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
     ...withRunTokens(
-      launch.environment,
+      withHarnessBases(launch.environment, session.environment),
       session.runFolder,
       session.environment.PATH ?? '',
     ),

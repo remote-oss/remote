@@ -649,6 +649,38 @@ describe('runPlainLaunch', () => {
     );
   });
 
+  it('containers-80: a launch’s environment resolves the run’s download bases, so it can name the host’s paths, and leaves other placeholders as written', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      {
+        ...PLAIN_RUN,
+        environment: {
+          HARNESS_RUN_FOLDER: '/run',
+          HARNESS_DOWNLOADS_LOCAL: 'http://localhost:9',
+        },
+      },
+      {
+        ...LAUNCH,
+        environment: {
+          INDEX: '${HARNESS_DOWNLOADS_LOCAL}/templates/unreachable',
+          OTHER: '${localEnv:HOME}',
+        },
+      },
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(program => [
+        program.environment.INDEX,
+        program.environment.OTHER,
+      ]),
+      [
+        ['http://localhost:9/templates/unreachable', '${localEnv:HOME}'],
+        ['http://localhost:9/templates/unreachable', '${localEnv:HOME}'],
+      ],
+    );
+  });
+
   const GENUINE = launchLabelled(launchesOf(REPOSITORY_ROOT), 'genuine');
 
   it('tooling-51: the genuine launch’s editor is the executable given, and its editor and tests get the empty script and the executable that was started', async () => {

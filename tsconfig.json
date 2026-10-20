@@ -194,6 +194,9 @@
       "path": "tests/acceptance/containers-trust"
     },
     {
+      "path": "tests/acceptance/containers-index"
+    },
+    {
       "path": "tests/acceptance/containers-volume"
     },
     {
