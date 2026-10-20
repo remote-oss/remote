@@ -383,6 +383,21 @@ all eight), each in its own mocha run on its own host: `server/login-shell-varia
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
 
+## Rows that fail in some runs
+
+Each launch of a run starts with a line `acceptance: launch <label>`, so a run's log splits by launch.
+`tools/flake-ledger.ts` reads the rows of the acceptance jobs from a run's job log, as `gh run view <id> --log` prints
+it:
+
+    node tools/flake-ledger.ts record <run id> <log file>   one run, into docs/qa/runs/<run id>.json
+    node tools/flake-ledger.ts render                       docs/qa/flakes.md, from the recorded runs
+
+A recorded run keeps its failed rows in full (title, launch, the first line of the failure) and a short key for each row
+that passed. The folder keeps the newest 30 runs. The ledger lists each row that failed in a recorded run over its
+latest 10 runs: those that failed and passed, and those that failed every time. A row that failed in two or more of
+them is marked "(issue)". The recorded runs and the ledger are kept on the branch `qa/flake-ledger`, updated after
+each scheduled run, not on main.
+
 ## Download host
 
 The VSCodium run starts a download host before the harness host, and stops it at the end of the run, also after a

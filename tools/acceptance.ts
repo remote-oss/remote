@@ -884,9 +884,16 @@ export async function runLaunches(
   beforeAttempt: (launch: Launch) => Promise<void> = () => Promise.resolve(),
   bases: Readonly<Record<string, string | undefined>> = {},
   holdPorts: PortHolder = holdClientPorts,
+  report: (line: string) => void = line => {
+    console.log(line);
+  },
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
+    if (launch !== undefined) {
+      // The line a log reader splits the run's output at: tools/flake-ledger.ts reads each launch's rows after it.
+      report(`acceptance: launch ${launch.label}`);
+    }
     if (launch?.hostSetup !== undefined) {
       // The helper of the previous launch ends HELPER_GRACE_MILLISECONDS after its window; a live one would be
       // reused by this resolve without any check, so the run waits the grace out.
@@ -918,7 +925,7 @@ export async function runLaunches(
         } finally {
           await held.release();
         }
-      }, console.log.bind(console)),
+      }, report),
     );
   }
   return exitCodes;
