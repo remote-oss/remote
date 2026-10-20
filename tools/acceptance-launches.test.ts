@@ -75,7 +75,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, preconnect, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -94,6 +94,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
+        'preconnect',
         'config-files',
         'default-ports',
         'no-proposals',

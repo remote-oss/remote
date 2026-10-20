@@ -143,6 +143,9 @@
       "path": "tests/acceptance/terminal-pick"
     },
     {
+      "path": "tests/acceptance/preconnect"
+    },
+    {
       "path": "tests/acceptance/explorer"
     },
     {

@@ -377,6 +377,7 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'preconnect',
   'config-files',
   'default-ports',
   'no-proposals',

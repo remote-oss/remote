@@ -48,6 +48,7 @@
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
         "terminal-pick/*.test.ts",
+        "preconnect/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "explorer-no-proposals/*.test.ts",

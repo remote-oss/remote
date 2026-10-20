@@ -121,8 +121,10 @@ export interface RecordLine {
   /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
   window: string;
-  /** The labels a failure dialog or a notice was shown with, in order. */
+  /** The labels a failure dialog, a notice or the pre-connection dialog was shown with, in order. */
   buttons?: string[];
+  /** The detail text a modal was shown with; only the lines of a `licenceModal` or a `preconnectDialog` surface have it. */
+  detail?: string;
   /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
   items?: string[];
   time: number;

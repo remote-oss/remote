@@ -137,6 +137,10 @@ export function preconnectStep(
     });
     handle.endInput();
     const stopped = new Promise<'stopped'>(resolve => {
+      if (cancellation.aborted) {
+        resolve('stopped');
+        return;
+      }
       cancellation.addEventListener('abort', () => {
         resolve('stopped');
       });
