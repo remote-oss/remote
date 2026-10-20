@@ -63,6 +63,22 @@
       "card": "#1240",
       "slice": "containers increment 2",
       "decision": "read by the template wizard, card containers-80 (#1242)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/authoring/curated-templates.ts",
+      "card": "#1241",
+      "slice": "containers increment 2",
+      "decision": "read by the template wizard, card containers-80 (#1242)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/authoring/template-pick.ts",
+      "card": "#1241",
+      "slice": "containers increment 2",
+      "decision": "read by the template wizard, card containers-80 (#1242)"
     }
   ]
 }
