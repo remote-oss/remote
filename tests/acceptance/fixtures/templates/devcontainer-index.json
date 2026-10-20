@@ -1,0 +1,2112 @@
+{
+  "collections": [
+    {
+      "sourceInformation": {
+        "name": "Reference Implementation Features",
+        "maintainer": "Dev Container Spec Maintainers",
+        "contact": "https://github.com/devcontainers/features/issues",
+        "repository": "https://github.com/devcontainers/features",
+        "ociReference": "ghcr.io/devcontainers/features"
+      },
+      "features": [
+        {
+          "id": "ghcr.io/devcontainers/features/common-utils",
+          "version": "2.7.1",
+          "name": "Common Utilities",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/common-utils",
+          "description": "Installs a set of common command line utilities, Oh My Zsh!, and sets up a non-root user.",
+          "options": {
+            "installZsh": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install ZSH?"
+            },
+            "configureZshAsDefaultShell": {
+              "type": "boolean",
+              "default": false,
+              "description": "Change default shell to ZSH?"
+            },
+            "installOhMyZsh": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install Oh My Zsh!?"
+            },
+            "installOhMyZshConfig": {
+              "type": "boolean",
+              "default": true,
+              "description": "Allow installing the default dev container .zshrc templates?"
+            },
+            "ohMyZshTheme": {
+              "type": "string",
+              "default": "devcontainers",
+              "description": "Oh My Zsh theme to use (e.g., 'robbyrussell', 'agnoster', 'fino'). Default is 'devcontainers'."
+            },
+            "upgradePackages": {
+              "type": "boolean",
+              "default": true,
+              "description": "Upgrade OS packages?"
+            },
+            "username": {
+              "type": "string",
+              "proposals": [
+                "devcontainer",
+                "vscode",
+                "codespace",
+                "none",
+                "automatic"
+              ],
+              "default": "automatic",
+              "description": "Enter name of a non-root user to configure or none to skip"
+            },
+            "userUid": {
+              "type": "string",
+              "proposals": [
+                "1001",
+                "automatic"
+              ],
+              "default": "automatic",
+              "description": "Enter UID for non-root user"
+            },
+            "userGid": {
+              "type": "string",
+              "proposals": [
+                "1001",
+                "automatic"
+              ],
+              "default": "automatic",
+              "description": "Enter GID for non-root user"
+            },
+            "addGroups": {
+              "type": "string",
+              "default": "",
+              "description": "Comma-separated list of additional groups to add the non-root user to. Groups are created if needed."
+            },
+            "sudoers": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add non-root user to passwordless sudoers?"
+            },
+            "nonFreePackages": {
+              "type": "boolean",
+              "default": false,
+              "description": "Add packages from non-free Debian repository? (Debian only)"
+            },
+            "installSsl": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install SSL?"
+            }
+          },
+          "owner": "devcontainers",
+          "majorVersion": "2"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/docker-in-docker",
+          "version": "4.1.3",
+          "name": "Docker (Docker-in-Docker)",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/docker-in-docker",
+          "description": "Create child containers *inside* a container, independent from the host's docker instance. Installs Docker extension in the container along with needed CLIs.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "none",
+                "20.10"
+              ],
+              "default": "latest",
+              "description": "Select or enter a Docker/Moby Engine version. (Availability can vary by OS version.)"
+            },
+            "moby": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install OSS Moby build instead of Docker CE"
+            },
+            "mobyBuildxVersion": {
+              "type": "string",
+              "default": "latest",
+              "description": "Install a specific version of moby-buildx when using Moby"
+            },
+            "dockerDashComposeVersion": {
+              "type": "string",
+              "enum": [
+                "none",
+                "latest",
+                "v1",
+                "v2"
+              ],
+              "default": "latest",
+              "description": "Default version of Docker Compose (v1, v2, latest or none)"
+            },
+            "azureDnsAutoDetection": {
+              "type": "boolean",
+              "default": true,
+              "description": "Allow automatically setting the dockerd DNS server when the installation script detects it is running in Azure"
+            },
+            "dockerDefaultAddressPool": {
+              "type": "string",
+              "default": "",
+              "proposals": [],
+              "description": "Define default address pools for Docker networks. e.g. base=192.168.0.0/16,size=24"
+            },
+            "dockerHostGatewayIP": {
+              "type": "string",
+              "default": "",
+              "proposals": [],
+              "description": "Set the IP used to resolve the special 'host-gateway' value in --add-host. e.g. 192.168.0.1"
+            },
+            "installDockerBuildx": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install Docker Buildx"
+            },
+            "installDockerComposeSwitch": {
+              "type": "boolean",
+              "default": false,
+              "description": "Install Compose Switch (provided docker compose is available) which is a replacement to the Compose V1 docker-compose (python) executable. It translates the command line into Compose V2 docker compose then runs the latter."
+            },
+            "disableIp6tables": {
+              "type": "boolean",
+              "default": false,
+              "description": "Disable ip6tables (this option is only applicable for Docker versions 27 and greater)"
+            },
+            "iptablesSwitchAtRuntime": {
+              "type": "boolean",
+              "default": true,
+              "description": "If true, the iptables alternative is selected at container start (inside docker-init.sh) instead of at image build time. Useful when the desired iptables backend depends on the host kernel at runtime rather than at build time."
+            }
+          },
+          "entrypoint": "/usr/local/share/docker-init.sh",
+          "privileged": true,
+          "containerEnv": {
+            "DOCKER_BUILDKIT": "1"
+          },
+          "customizations": {
+            "vscode": {
+              "extensions": [
+                "ms-azuretools.vscode-containers"
+              ],
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes the Docker CLI (`docker`) pre-installed and available on the `PATH` for running and managing containers using a dedicated Docker daemon running inside the dev container."
+                  }
+                ]
+              }
+            }
+          },
+          "mounts": [
+            {
+              "source": "dind-var-lib-docker-${devcontainerId}",
+              "target": "/var/lib/docker",
+              "type": "volume"
+            },
+            {
+              "source": "dind-var-lib-containerd-${devcontainerId}",
+              "target": "/var/lib/containerd",
+              "type": "volume"
+            }
+          ],
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "4"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/git",
+          "version": "1.3.8",
+          "name": "Git (from source)",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/git",
+          "description": "Install an up-to-date version of Git, built from source as needed. Useful for when you want the latest and greatest features. Auto-detects latest stable version and installs needed dependencies.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "system",
+                "os-provided"
+              ],
+              "default": "os-provided",
+              "description": "Select or enter a Git version."
+            },
+            "ppa": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install from PPA if available (only supported for Ubuntu distributions)"
+            }
+          },
+          "customizations": {
+            "vscode": {
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes an up-to-date version of Git, built from source as needed, pre-installed and available on the `PATH`."
+                  }
+                ]
+              }
+            }
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "1"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/node",
+          "version": "2.1.1",
+          "name": "Node.js (via nvm), yarn and pnpm.",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/node",
+          "description": "Installs Node.js, nvm, yarn, pnpm, and needed dependencies.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "lts",
+                "latest",
+                "none",
+                "22",
+                "20"
+              ],
+              "default": "lts",
+              "description": "Select or enter a Node.js version to install"
+            },
+            "nodeGypDependencies": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install dependencies to compile native node modules (node-gyp)?"
+            },
+            "nvmInstallPath": {
+              "type": "string",
+              "default": "/usr/local/share/nvm",
+              "description": "The path where NVM will be installed."
+            },
+            "npmVersion": {
+              "type": "string",
+              "proposals": [
+                "lts",
+                "latest",
+                "10.9.0",
+                "10.8.0",
+                "10.7.0",
+                "9.9.3",
+                "8.19.4",
+                "none"
+              ],
+              "default": "none",
+              "description": "Select or enter a specific NPM version to install globally. Use 'latest' for the latest version, 'none' to skip npm version update, or specify a version like '10.9.0'."
+            },
+            "pnpmVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "8.8.0",
+                "8.0.0",
+                "7.30.0",
+                "6.14.8",
+                "5.18.10",
+                "none"
+              ],
+              "default": "latest",
+              "description": "Select or enter the PNPM version to install"
+            },
+            "nvmVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "0.39"
+              ],
+              "default": "latest",
+              "description": "Version of NVM to install."
+            },
+            "installYarnUsingApt": {
+              "type": "boolean",
+              "default": false,
+              "description": "On Debian and Ubuntu systems, you have the option to install Yarn globally via APT. If you choose not to use this option, Yarn will be set up using Corepack instead. This choice is specific to Debian and Ubuntu; for other Linux distributions, Yarn is always installed using Corepack, with a fallback to installation via NPM if an error occurs."
+            }
+          },
+          "customizations": {
+            "vscode": {
+              "extensions": [
+                "dbaeumer.vscode-eslint"
+              ],
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes `node`, `npm` and `eslint` pre-installed and available on the `PATH` for Node.js and JavaScript development."
+                  }
+                ]
+              }
+            }
+          },
+          "containerEnv": {
+            "NVM_DIR": "/usr/local/share/nvm",
+            "NVM_SYMLINK_CURRENT": "true",
+            "PATH": "/usr/local/share/nvm/current/bin:${PATH}"
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "2"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/python",
+          "version": "1.8.0",
+          "name": "Python",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/python",
+          "description": "Installs the provided version of Python, as well as PIPX, and other common Python utilities.  JupyterLab is conditionally installed with the python feature. Note: May require source code compilation.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "os-provided",
+                "none",
+                "3.12",
+                "3.11",
+                "3.10",
+                "3.9",
+                "3.8",
+                "3.7",
+                "3.6"
+              ],
+              "default": "os-provided",
+              "description": "Select a Python version to install."
+            },
+            "installTools": {
+              "type": "boolean",
+              "default": true,
+              "description": "Flag indicating whether or not to install the tools specified via the 'toolsToInstall' option. Default is 'true'."
+            },
+            "toolsToInstall": {
+              "type": "string",
+              "default": "flake8,autopep8,black,yapf,mypy,pydocstyle,pycodestyle,bandit,pipenv,virtualenv,pytest,pylint",
+              "description": "Comma-separated list of tools to install when 'installTools' is true. Defaults to a set of common Python tools like pylint."
+            },
+            "optimize": {
+              "type": "boolean",
+              "default": false,
+              "description": "Optimize Python for performance when compiled (slow)"
+            },
+            "enableShared": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable building a shared Python library"
+            },
+            "installPath": {
+              "type": "string",
+              "default": "/usr/local/python",
+              "description": "The path where python will be installed."
+            },
+            "installJupyterlab": {
+              "type": "boolean",
+              "default": false,
+              "description": "Install JupyterLab, a web-based interactive development environment for notebooks"
+            },
+            "configureJupyterlabAllowOrigin": {
+              "type": "string",
+              "default": "",
+              "description": "Configure JupyterLab to accept HTTP requests from the specified origin"
+            },
+            "httpProxy": {
+              "type": "string",
+              "default": "",
+              "description": "Connect to GPG keyservers using a proxy for fetching source code signatures by configuring this option"
+            }
+          },
+          "containerEnv": {
+            "PYTHON_PATH": "/usr/local/python/current",
+            "PIPX_HOME": "/usr/local/py-utils",
+            "PIPX_BIN_DIR": "/usr/local/py-utils/bin",
+            "PATH": "/usr/local/python/current/bin:/usr/local/py-utils/bin:/usr/local/jupyter:${PATH}"
+          },
+          "customizations": {
+            "vscode": {
+              "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.autopep8"
+              ],
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes `python3` and `pip3` pre-installed and available on the `PATH`, along with the Python language extensions for Python development."
+                  }
+                ],
+                "python.defaultInterpreterPath": "/usr/local/python/current/bin/python",
+                "[python]": {
+                  "editor.defaultFormatter": "ms-python.autopep8"
+                }
+              }
+            }
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils",
+            "ghcr.io/devcontainers/features/oryx"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "1"
+        }
+      ]
+    },
+    {
+      "sourceInformation": {
+        "name": "Reference Implementation Templates",
+        "maintainer": "Dev Container Spec Maintainers",
+        "contact": "https://github.com/devcontainers/templates/issues",
+        "repository": "https://github.com/devcontainers/templates",
+        "ociReference": "ghcr.io/devcontainers/templates"
+      },
+      "templates": [
+        {
+          "id": "ghcr.io/devcontainers/templates/alpine",
+          "version": "3.5.0",
+          "name": "Alpine",
+          "description": "Simple Alpine container with Git installed.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/alpine",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Alpine version:",
+              "proposals": [
+                "3.23",
+                "3.22",
+                "3.21"
+              ],
+              "default": "3.23"
+            }
+          },
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/anaconda",
+          "version": "2.0.2",
+          "name": "Anaconda (Python 3)",
+          "description": "Develop Anaconda applications in Python3. Installs dependencies from your environment.yml file and the Python extension.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/anaconda",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Python",
+            "Anaconda"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerfile",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/noop.txt",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/anaconda-postgres",
+          "version": "2.0.2",
+          "name": "Anaconda (Python 3) & PostgreSQL",
+          "description": "Develop Anaconda & PostgreSQL applications in Python3. Installs dependencies from your environment.yml file and the Python extension.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/anaconda-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Python",
+            "Anaconda"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            "environment.yml",
+            ".devcontainer/.env",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/noop.txt",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 10,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/cpp",
+          "version": "4.1.1",
+          "name": "C++",
+          "description": "Develop C++ applications on Linux. Includes Debian C++ build tools.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/cpp",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Debian / Ubuntu version (use debian13, debian12, ubuntu24.04, and ubuntu22.04 on local arm64/Apple Silicon):",
+              "proposals": [
+                "debian13",
+                "debian12",
+                "ubuntu24.04",
+                "ubuntu22.04"
+              ],
+              "default": "debian13"
+            },
+            "reinstallCmakeVersionFromSource": {
+              "type": "string",
+              "description": "Install CMake version different from what base image has already installed.",
+              "proposals": [
+                "none",
+                "3.21.5",
+                "3.22.2"
+              ],
+              "default": "none"
+            }
+          },
+          "platforms": [
+            "C++"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerfile",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/reinstall-cmake.sh",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/cpp-mariadb",
+          "version": "4.1.0",
+          "name": "C++ & MariaDB",
+          "description": "Develop C++ applications on Linux. Includes Debian C++ build tools.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/cpp-mariadb",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Debian / Ubuntu version (use Debian 13, Debian 12, Ubuntu 24.04, and Ubuntu 22.04 on local arm64/Apple Silicon):",
+              "proposals": [
+                "debian13",
+                "debian12",
+                "ubuntu24.04",
+                "ubuntu22.04"
+              ],
+              "default": "debian13"
+            },
+            "reinstallCmakeVersionFromSource": {
+              "type": "string",
+              "description": "Install CMake version different from what base image has already installed.",
+              "proposals": [
+                "none",
+                "3.21.5",
+                "3.22.2"
+              ],
+              "default": "none"
+            }
+          },
+          "platforms": [
+            "C++"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "README.md",
+            "NOTES.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/.env",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/install-mariadb.sh",
+            ".devcontainer/reinstall-cmake.sh"
+          ],
+          "fileCount": 10,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/debian",
+          "version": "4.0.2",
+          "name": "Debian",
+          "description": "Simple Debian container with Git installed.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/debian",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Debian version (use trixie or bookworm on local arm64/Apple Silicon):",
+              "proposals": [
+                "trixie",
+                "bookworm"
+              ],
+              "default": "trixie"
+            }
+          },
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/docker-existing-docker-compose",
+          "version": "1.2.3",
+          "name": "Existing Docker Compose (Extend)",
+          "description": "Sample illustrating how to extend an existing Docker Compose file for use in a dev container.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/docker-existing-docker-compose",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "devcontainer-template.json",
+            "README.md",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/docker-existing-dockerfile",
+          "version": "1.3.2",
+          "name": "Existing Dockerfile",
+          "description": "Sample illustrating reuse of an existing Dockerfile.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerfile",
+          "files": [
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 4,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/docker-in-docker",
+          "version": "1.3.5",
+          "name": "Docker in Docker",
+          "description": "Create child containers _inside_ a container, independent from the host's docker instance. Installs Docker extension in the container along with needed CLIs.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/docker-in-docker",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "installZsh": {
+              "type": "boolean",
+              "description": "Install ZSH!?",
+              "default": "true"
+            },
+            "upgradePackages": {
+              "type": "boolean",
+              "description": "Upgrade OS packages?",
+              "default": "false"
+            },
+            "dockerVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "none",
+                "20.10"
+              ],
+              "default": "latest",
+              "description": "Select or enter a Docker/Moby CLI version. (Availability can vary by OS version.)"
+            },
+            "moby": {
+              "type": "boolean",
+              "default": "true",
+              "description": "Install OSS Moby build instead of Docker CE"
+            }
+          },
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/docker-in-docker"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/docker-outside-of-docker",
+          "version": "1.3.4",
+          "name": "Docker outside of Docker",
+          "description": "Access your host's Docker install from inside a dev container. Installs Docker extension in the container along with needed CLIs.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/docker-outside-of-docker",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "installZsh": {
+              "type": "boolean",
+              "description": "Install ZSH!?",
+              "default": "true"
+            },
+            "upgradePackages": {
+              "type": "boolean",
+              "description": "Upgrade OS packages?",
+              "default": "false"
+            },
+            "dockerVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "none",
+                "20.10"
+              ],
+              "default": "latest",
+              "description": "Select or enter a Docker/Moby CLI version. (Availability can vary by OS version.)"
+            },
+            "moby": {
+              "type": "boolean",
+              "default": "true",
+              "description": "Install OSS Moby build instead of Docker CE"
+            },
+            "enableNonRootDocker": {
+              "type": "boolean",
+              "description": "Enable non-root Docker access in container?",
+              "default": "true"
+            }
+          },
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 5,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/docker-outside-of-docker"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/docker-outside-of-docker-compose",
+          "version": "2.3.4",
+          "name": "Docker outside of Docker Compose",
+          "description": "Access your host's Docker install from inside a container when using Docker Compose. Installs Docker extension in the container along with needed CLIs.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/docker-outside-of-docker-compose",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "installZsh": {
+              "type": "boolean",
+              "description": "Install ZSH?",
+              "default": "true"
+            },
+            "upgradePackages": {
+              "type": "boolean",
+              "description": "Upgrade OS packages?",
+              "default": "false"
+            },
+            "dockerVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "none",
+                "20.10"
+              ],
+              "default": "latest",
+              "description": "Select or enter a Docker/Moby CLI version. (Availability can vary by OS version.)"
+            },
+            "moby": {
+              "type": "boolean",
+              "default": "true",
+              "description": "Install OSS Moby build instead of Docker CE"
+            },
+            "enableNonRootDocker": {
+              "type": "boolean",
+              "description": "Enable non-root Docker access in container?",
+              "default": "true"
+            }
+          },
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/docker-outside-of-docker"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/dotnet",
+          "version": "3.6.1",
+          "name": "C# (.NET)",
+          "description": "Develop C# and .NET based applications. Includes all needed SDKs, extensions, and dependencies.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/dotnet",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": ".NET version:",
+              "proposals": [
+                "11.0",
+                "11.0-resolute",
+                "10.0",
+                "9.0",
+                "8.0",
+                "9.0-bookworm",
+                "8.0-bookworm",
+                "10.0-noble",
+                "9.0-noble",
+                "8.0-noble",
+                "8.0-jammy"
+              ],
+              "default": "10.0-noble"
+            }
+          },
+          "platforms": [
+            ".NET",
+            ".NET Core",
+            "C#"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/dotnet-fsharp",
+          "version": "3.2.0",
+          "name": "F# (.NET)",
+          "description": "Develop F# and .NET based applications. Includes all needed SDKs, extensions, and dependencies.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/dotnet-fsharp",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            ".NET",
+            ".NET Core",
+            "F#"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/dotnet-mssql",
+          "version": "3.7.0",
+          "name": "C# (.NET) and MS SQL",
+          "description": "Develop C# and .NET Core based applications. Includes all needed SDKs, extensions, dependencies and an MS SQL container for parallel database development. Adds an additional MS SQL container to the C# (.NET Core) container definition and deploys any .dacpac files from the mssql .devcontainer folder.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/dotnet-mssql",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": ".NET version:",
+              "proposals": [
+                "10.0",
+                "9.0",
+                "8.0",
+                "9.0-bookworm",
+                "8.0-bookworm",
+                "10.0-noble",
+                "9.0-noble",
+                "8.0-noble",
+                "8.0-jammy"
+              ],
+              "default": "10.0-noble"
+            }
+          },
+          "platforms": [
+            ".NET",
+            ".NET Core",
+            "C#",
+            "Microsoft SQL"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "devcontainer-template.json",
+            "README.md",
+            "NOTES.md",
+            ".github/dependabot.yml",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/mssql/installSQLtools.sh",
+            ".devcontainer/mssql/postCreateCommand.sh",
+            ".devcontainer/mssql/setup.sql"
+          ],
+          "fileCount": 10,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/dotnet-postgres",
+          "version": "3.6.0",
+          "name": "C# (.NET) and PostgreSQL",
+          "description": "Develop C# and .NET Core based applications. Includes all needed SDKs, extensions, dependencies and a PostgreSQL container for parallel database development. Adds an additional PostgreSQL container to the C# (.NET Core) container definition.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/dotnet-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": ".NET version:",
+              "proposals": [
+                "10.0",
+                "9.0",
+                "8.0",
+                "9.0-bookworm",
+                "8.0-bookworm",
+                "10.0-noble",
+                "9.0-noble",
+                "8.0-noble",
+                "8.0-jammy"
+              ],
+              "default": "10.0-noble"
+            }
+          },
+          "platforms": [
+            ".NET",
+            ".NET Core",
+            "C#",
+            "PostgreSQL"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/Dockerfile"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/go",
+          "version": "6.0.1",
+          "name": "Go",
+          "description": "Develop Go based applications. Includes appropriate runtime args, Go, common tools, extensions, and dependencies.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/go",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Go version:",
+              "proposals": [
+                "1.27-trixie",
+                "1.26-trixie",
+                "1.25-trixie",
+                "1.27-bookworm",
+                "1.26-bookworm",
+                "1.25-bookworm"
+              ],
+              "default": "1.27-trixie"
+            }
+          },
+          "platforms": [
+            "Go"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            "README.md",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/go-postgres",
+          "version": "6.0.1",
+          "name": "Go & PostgreSQL",
+          "description": "Use and develop Go + Postgres applications. Includes appropriate runtime args, Go, common tools, extensions, and dependencies.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/go-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Go version:",
+              "proposals": [
+                "1.27-trixie",
+                "1.26-trixie",
+                "1.25-trixie",
+                "1.27-bookworm",
+                "1.26-bookworm",
+                "1.25-bookworm"
+              ],
+              "default": "1.27-trixie"
+            }
+          },
+          "platforms": [
+            "Go"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/.env",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml"
+          ],
+          "fileCount": 8,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/java",
+          "version": "5.0.0",
+          "name": "Java",
+          "description": "Develop Java applications. Includes the JDK and Java extensions.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/java",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Java version (use -trixie, or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "25-trixie",
+                "21-trixie",
+                "17-trixie",
+                "11-trixie",
+                "8-trixie",
+                "25-bookworm",
+                "21-bookworm",
+                "17-bookworm",
+                "11-bookworm",
+                "8-bookworm"
+              ],
+              "default": "25-trixie"
+            },
+            "installMaven": {
+              "type": "boolean",
+              "description": "Install Maven, a management tool for Java",
+              "default": "false"
+            },
+            "installGradle": {
+              "type": "boolean",
+              "description": "Install Gradle, a build automation tool for multi-language software development",
+              "default": "false"
+            }
+          },
+          "platforms": [
+            "Java"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 5,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/java"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/java-postgres",
+          "version": "5.0.0",
+          "name": "Java & PostgreSQL",
+          "description": "Develop applications with Java and PostgreSQL. Includes a Java application container and PostgreSQL server.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/java-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Java version (use -trixie, or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "25-trixie",
+                "21-trixie",
+                "17-trixie",
+                "11-trixie",
+                "8-trixie",
+                "25-bookworm",
+                "21-bookworm",
+                "17-bookworm",
+                "11-bookworm",
+                "8-bookworm"
+              ],
+              "default": "25-trixie"
+            },
+            "installMaven": {
+              "type": "boolean",
+              "description": "Install Maven, a management tool for Java",
+              "default": "false"
+            },
+            "installGradle": {
+              "type": "boolean",
+              "description": "Install Gradle, a build automation tool for multi-language software development",
+              "default": "false"
+            }
+          },
+          "platforms": [
+            "Java"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            ".github/dependabot.yml",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/javascript-node",
+          "version": "6.0.2",
+          "name": "Node.js & JavaScript",
+          "description": "Develop Node.js based applications. Includes Node.js, eslint, nvm, and yarn.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/javascript-node",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Node.js version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "24-trixie",
+                "22-trixie",
+                "24-bookworm",
+                "22-bookworm"
+              ],
+              "default": "24-trixie"
+            }
+          },
+          "platforms": [
+            "Node.js",
+            "JavaScript"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            ".github/dependabot.yml",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/javascript-node-mongo",
+          "version": "6.0.2",
+          "name": "Node.js & Mongo DB",
+          "description": "Develop applications in Node.js and Mongo DB. Includes Node.js, eslint, and yarn in a container linked to a Mongo DB.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/javascript-node-mongo",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Node.js version (use -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "24-bookworm",
+                "22-bookworm"
+              ],
+              "default": "24-bookworm"
+            }
+          },
+          "platforms": [
+            "Node.js",
+            "JavaScript",
+            "Mongo DB"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/javascript-node-postgres",
+          "version": "6.0.2",
+          "name": "Node.js & PostgreSQL",
+          "description": "Develop applications in Node.js and PostgreSQL. Includes Node.js, eslint, and yarn in a container linked to a Postgres DB container",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/javascript-node-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Node.js version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "24-trixie",
+                "22-trixie",
+                "24-bookworm",
+                "22-bookworm"
+              ],
+              "default": "24-trixie"
+            }
+          },
+          "platforms": [
+            "Node.js",
+            "JavaScript",
+            "PostgreSQL DB"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/Dockerfile",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/jekyll",
+          "version": "2.2.4",
+          "name": "Jekyll",
+          "description": "Develop static sites with Jekyll, includes everything you need to get up and running.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/jekyll",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Debian OS version (use bookworm on local arm64/Apple Silicon):",
+              "proposals": [
+                "bookworm"
+              ],
+              "default": "bookworm"
+            }
+          },
+          "platforms": [
+            "Ruby",
+            "Jekyll"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/kubernetes-helm",
+          "version": "1.4.4",
+          "name": "Kubernetes - Local Configuration",
+          "description": "Access a local (or remote) Kubernetes cluster from inside a dev container using your local config. Includes kubectl, Helm, and the Docker CLI.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/kubernetes-helm",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/bash.cmd",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/ensure-mount-sources",
+            ".devcontainer/ensure-mount-sources.cmd",
+            ".devcontainer/local-features/copy-kube-config/copy-kube-config.sh",
+            ".devcontainer/local-features/copy-kube-config/devcontainer-feature.json",
+            ".devcontainer/local-features/copy-kube-config/install.sh"
+          ],
+          "fileCount": 11,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/docker-outside-of-docker",
+            "ghcr.io/devcontainers/features/kubectl-helm-minikube"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/kubernetes-helm-minikube",
+          "version": "2.2.5",
+          "name": "Kubernetes - Minikube-in-Docker",
+          "description": "Access an embedded minikube instance from inside a dev container. Includes kubectl, Helm, minikube, and the Docker.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/kubernetes-helm-minikube",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "devcontainer-template.json",
+            "README.md",
+            "NOTES.md",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/docker-in-docker",
+            "ghcr.io/devcontainers/features/kubectl-helm-minikube"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/markdown",
+          "version": "1.1.3",
+          "name": "Markdown",
+          "description": "A simple container for editing markdown.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/markdown",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Markdown"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/miniconda",
+          "version": "2.0.2",
+          "name": "Miniconda (Python 3)",
+          "description": "Develop Miniconda applications in Python 3. Installs dependencies from your environment.yml file and the Python extension.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/miniconda",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Python",
+            "Anaconda",
+            "Miniconda"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerfile",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/noop.txt",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/miniconda-postgres",
+          "version": "2.0.2",
+          "name": "Miniconda & PostgreSQL (Python 3)",
+          "description": "Develop Miniconda & PostgreSQL applications in Python 3. Installs dependencies from your environment.yml file and the Python extension.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/miniconda-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Python",
+            "Anaconda",
+            "Miniconda"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            "environment.yml",
+            ".devcontainer/.env",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/noop.txt",
+            ".devcontainer/docker-compose.yml",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 10,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/php",
+          "version": "4.4.1",
+          "name": "PHP",
+          "description": "Develop PHP based applications. Includes needed tools, extensions, and dependencies.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/php",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "PHP version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "8.5-trixie",
+                "8.5-bookworm",
+                "8.4-trixie",
+                "8.4-bookworm",
+                "8.3-trixie",
+                "8.3-bookworm",
+                "8-bookworm"
+              ],
+              "default": "8.5-trixie"
+            }
+          },
+          "platforms": [
+            "PHP"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "README.md",
+            "devcontainer-template.json",
+            "NOTES.md",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/php-mariadb",
+          "version": "4.4.1",
+          "name": "PHP & MariaDB",
+          "description": "Develop PHP applications with MariaDB (MySQL Compatible).",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/php-mariadb",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "PHP version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "8.5-trixie",
+                "8.5-bookworm",
+                "8.4-trixie",
+                "8.4-bookworm",
+                "8.3-trixie",
+                "8.3-bookworm",
+                "8-trixie"
+              ],
+              "default": "8.5-trixie"
+            }
+          },
+          "platforms": [
+            "PHP",
+            "MariaDB (MySQL Compatible)"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "README.md",
+            "NOTES.md",
+            "devcontainer-template.json",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/postgres",
+          "version": "3.0.1",
+          "name": "Python 3 & PostgreSQL",
+          "description": "Develop applications with Python 3 and PostgreSQL. Includes a Python application container and PostgreSQL server.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Python version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "3.14-trixie",
+                "3.13-trixie",
+                "3.12-trixie",
+                "3.11-trixie",
+                "3.10-trixie",
+                "3.14-bookworm",
+                "3.13-bookworm",
+                "3.12-bookworm",
+                "3.11-bookworm",
+                "3.10-bookworm"
+              ],
+              "default": "3.14-trixie"
+            }
+          },
+          "platforms": [
+            "Python"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/docker-compose.yml",
+            ".devcontainer/devcontainer.json"
+          ],
+          "fileCount": 7,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/powershell",
+          "version": "1.2.3",
+          "name": "Powershell",
+          "description": "Develop PowerShell scripts without installing anything locally.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/powershell",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "PowerShell"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 4,
+          "featureIds": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/python",
+          "version": "6.0.0",
+          "name": "Python 3",
+          "description": "Develop Python 3 applications.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/python",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Python version (use -trixie, or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "3-trixie",
+                "3.14-trixie",
+                "3.13-trixie",
+                "3.12-trixie",
+                "3.11-trixie",
+                "3.10-trixie",
+                "3-bookworm",
+                "3.14-bookworm",
+                "3.13-bookworm",
+                "3.12-bookworm",
+                "3.11-bookworm",
+                "3.10-bookworm"
+              ],
+              "default": "3.14-trixie"
+            }
+          },
+          "platforms": [
+            "Python"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/ruby",
+          "version": "6.0.4",
+          "name": "Ruby",
+          "description": "Develop Ruby based applications. includes everything you need to get up and running.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/ruby",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Ruby version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "4.0-trixie",
+                "3.4-trixie",
+                "3.3-trixie",
+                "4.0-bookworm",
+                "3.4-bookworm",
+                "3.3-bookworm"
+              ],
+              "default": "4.0-trixie"
+            }
+          },
+          "platforms": [
+            "Ruby"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/ruby-rails-postgres",
+          "version": "6.0.4",
+          "name": "Ruby on Rails & Postgres",
+          "description": "Develop Ruby on Rails applications with Postgres. Includes a Rails application container and PostgreSQL server.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/ruby-rails-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Ruby version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "4.0-trixie",
+                "3.4-trixie",
+                "3.3-trixie",
+                "4.0-bookworm",
+                "3.4-bookworm",
+                "3.3-bookworm"
+              ],
+              "default": "4.0-trixie"
+            }
+          },
+          "platforms": [
+            "Ruby"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".github/dependabot.yml",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/create-db-user.sql",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml"
+          ],
+          "fileCount": 8,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/rust",
+          "version": "5.0.2",
+          "name": "Rust",
+          "description": "Develop Rust based applications. Includes appropriate runtime args and everything you need to get up and running.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/rust",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Debian OS version (use trixie or bookworm on local arm64/Apple Silicon):",
+              "proposals": [
+                "trixie",
+                "bookworm"
+              ],
+              "default": "trixie"
+            }
+          },
+          "platforms": [
+            "Rust"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "README.md",
+            "NOTES.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/rust-postgres",
+          "version": "5.0.2",
+          "name": "Rust & PostgreSQL",
+          "description": "Develop applications with Rust and PostgreSQL. Includes a Rust application container and PostgreSQL server.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/rust-postgres",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Debian OS version (use trixie or bookworm on local arm64/Apple Silicon):",
+              "proposals": [
+                "trixie",
+                "bookworm"
+              ],
+              "default": "trixie"
+            }
+          },
+          "platforms": [
+            "Rust",
+            "PostgreSQL DB"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "dockerCompose",
+          "files": [
+            "NOTES.md",
+            "devcontainer-template.json",
+            "README.md",
+            ".devcontainer/.env",
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/docker-compose.yml",
+            ".cargo/config.toml",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 9,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/typescript-node",
+          "version": "6.0.2",
+          "name": "Node.js & TypeScript",
+          "description": "Develop Node.js based applications in TypeScript. Includes Node.js, eslint, nvm, yarn, and the TypeScript compiler.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/typescript-node",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Node.js version (use -trixie or -bookworm variants on local arm64/Apple Silicon):",
+              "proposals": [
+                "24-trixie",
+                "22-trixie",
+                "24-bookworm",
+                "22-bookworm"
+              ],
+              "default": "24-trixie"
+            }
+          },
+          "platforms": [
+            "Node.js",
+            "TypeScript"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/ubuntu",
+          "version": "3.0.0",
+          "name": "Ubuntu",
+          "description": "A simple Ubuntu container with Git and other common utilities installed.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/ubuntu",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "options": {
+            "imageVariant": {
+              "type": "string",
+              "description": "Ubuntu version (use ubuntu-26.04 or ubuntu-24.04 or ubuntu-22.04 on local arm64/Apple Silicon):",
+              "proposals": [
+                "resolute",
+                "noble",
+                "jammy"
+              ],
+              "default": "resolute"
+            }
+          },
+          "platforms": [
+            "Any"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "devcontainer-template.json",
+            "README.md",
+            "NOTES.md",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        },
+        {
+          "id": "ghcr.io/devcontainers/templates/universal",
+          "version": "2.0.1",
+          "name": "Default Linux Universal",
+          "description": "Use or extend the new Ubuntu-based default, large, multi-language universal container for GitHub Codespaces.",
+          "documentationURL": "https://github.com/devcontainers/templates/tree/main/src/universal",
+          "publisher": "Dev Container Spec Maintainers",
+          "licenseURL": "https://github.com/devcontainers/templates/blob/main/LICENSE",
+          "platforms": [
+            "Python",
+            "Node.js",
+            "JavaScript",
+            "TypeScript",
+            "C++",
+            "Java",
+            "C#",
+            ".NET Core",
+            "PHP",
+            "Go",
+            "Ruby",
+            "Conda"
+          ],
+          "optionalPaths": [
+            ".github/dependabot.yml"
+          ],
+          "type": "image",
+          "files": [
+            "NOTES.md",
+            "README.md",
+            "devcontainer-template.json",
+            ".devcontainer/devcontainer.json",
+            ".github/dependabot.yml"
+          ],
+          "fileCount": 5,
+          "featureIds": [],
+          "owner": "devcontainers"
+        }
+      ]
+    }
+  ]
+}

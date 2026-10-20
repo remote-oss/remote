@@ -95,6 +95,8 @@ interface EngineCall {
 
 /** What a test steers and reads: the fakes, their answers and what they recorded. */
 export interface Scene {
+  /** The `DOCKER_HOST` of the editor's environment; unset when undefined. */
+  dockerHost: string | undefined;
   connector: ContainerConnector;
   engineCalls: EngineCall[];
   engineFiles: string[];
@@ -220,6 +222,7 @@ export function sceneOf(
   const sink = new MemorySink();
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
+    dockerHost: undefined,
     engineCalls: [],
     engineFiles: [],
     cliEnvironments: [],
@@ -377,6 +380,10 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    applyTemplate: () =>
+      Promise.reject(new Error('the connector never applies a template')),
+    templateMetadata: () =>
+      Promise.reject(new Error('the connector never reads template metadata')),
   };
   const lifecycle: ContainerLifecycle = {
     prepare: async (request, onStep, onCliEvent) => {

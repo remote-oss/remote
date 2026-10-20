@@ -160,7 +160,7 @@ F-5102.AC-44	deferred	explorer slice 1: increment 2
 F-5102.AC-45	todo	
 F-5102.AC-46	deferred	explorer slice 1: increment 2
 F-5102.AC-47	todo	
-F-5102.AC-48	todo	
+F-5102.AC-48	core	core: the display language comes from an installed language pack
 F-5102.AC-49	todo	
 F-5102.AC-50	deferred	explorer slice 1: increment 2
 F-5102.AC-51	deferred	explorer slice 1: increment 2
@@ -213,14 +213,14 @@ F-5901.AC-3	todo
 F-5901.AC-4	recorded	
 F-5901.AC-5	unit	
 F-5901.AC-6	todo	
-F-5901.AC-7	todo	
+F-5901.AC-7	unit	
 F-5901.AC-8	todo	
 F-5901.AC-9	todo	
 F-5901.AC-10	todo	
 F-5901.AC-11	unit	
 F-5901.AC-12	unit	
-F-5901.AC-13	todo	
-F-5901.AC-14	todo	
+F-5901.AC-13	unit	
+F-5901.AC-14	unit	
 F-5901.AC-15	deferred	D-55: no tunnel rows
 F-5901.AC-16	core	core: the publisher trust question of a gallery install
 F-5901.AC-17	core	core: the notification's gear menu and its source label
@@ -249,7 +249,7 @@ F-5902.AC-20	deferred	explorer slice 1: increment 2
 F-5902.AC-21	unit	
 F-5902.AC-22	deferred	explorer slice 1: increment 2
 F-5902.AC-23	unit	
-F-5902.AC-24	deferred	explorer slice 1: increment 2
+F-5902.AC-24	unit	
 F-5902.AC-25	unit	
 F-5902.AC-26	unit	
 F-5902.AC-27	unit	

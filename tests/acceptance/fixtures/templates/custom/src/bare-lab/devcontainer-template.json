@@ -1,0 +1,7 @@
+{
+  "id": "bare-lab",
+  "version": "1.0.0",
+  "name": "Bare Lab",
+  "description": "The acceptance run's own template with no options and no optional files.",
+  "platforms": ["Any"]
+}

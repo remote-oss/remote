@@ -100,7 +100,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -119,6 +119,8 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
+        'login-shells',
+        'preconnect',
         'config-files',
         'default-ports',
         'no-proposals',
@@ -783,7 +785,8 @@ describe('the install cases (card coverage-17)', () => {
     'for i in $(seq 1 20); do ' +
     "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
     'sleep 0.5; done; exit 1';
-  const REMOVE = 'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv';
+  const REMOVE =
+    'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv /home/harness/inst';
 
   /** An install case of `fields`, with the label and cite every case has. */
   function installCase(fields: Partial<HostCase>): HostCase {
@@ -1022,6 +1025,19 @@ describe('the launch with no runner', () => {
     );
   });
 
+  it('tooling-55: the login-shells launch is plain and has a suite folder of Node tests', () => {
+    deepStrictEqual(
+      launches.filter(launch => launch.label === 'login-shells'),
+      [
+        {
+          label: 'login-shells',
+          kind: 'plain',
+          suite: 'login-shells',
+        },
+      ],
+    );
+  });
+
   it('F-3903 §5 rule 4: the no-proposals launch is plain and starts the editor without the proposed API', () => {
     deepStrictEqual(
       launches.filter(launch => launch.label === 'no-proposals'),
@@ -1220,6 +1236,15 @@ describe('the platform cases (card coverage-12)', () => {
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
       ['containers', 'containers-ports'],
+    );
+  });
+
+  it('tooling-57: only the containers launch asks for the run’s templates', () => {
+    deepStrictEqual(
+      launchesOf(REPOSITORY_ROOT)
+        .filter(launch => launch.templates === true)
+        .map(launch => launch.label),
+      ['containers'],
     );
   });
 });

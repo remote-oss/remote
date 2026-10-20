@@ -2243,3 +2243,50 @@ describe('the container connector: the declared ports (card containers-72)', () 
     );
   });
 });
+
+describe('the container connector: the appPort rows (card containers-74)', () => {
+  function configurationWith(
+    configuration: Record<string, unknown>,
+  ): Scene['configuration'] {
+    return {
+      kind: 'configuration',
+      configuration: {name: 'Proj', ...configuration},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+  }
+
+  const STATIC_ROW = {
+    remoteAddress: {host: '0.0.0.0', port: 8080},
+    localAddress: '127.0.0.1:8080',
+  };
+
+  it('F-1101 BR-15: the connection hands core the rows of the configuration’s appPort', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({appPort: [8080]});
+    deepStrictEqual((await connected(scene)).environmentTunnels, [STATIC_ROW]);
+  });
+
+  it('F-1101 BR-14: a Compose configuration hands core none', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({
+      appPort: [8080],
+      dockerComposeFile: 'compose.yml',
+    });
+    deepStrictEqual((await connected(scene)).environmentTunnels, []);
+  });
+
+  it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
+    const scene = sceneOf();
+    scene.dockerHost = 'tcp://10.0.0.5:2375';
+    scene.configuration = configurationWith({appPort: [8080]});
+    deepStrictEqual((await connected(scene)).environmentTunnels, []);
+  });
+
+  it('F-1101 BR-14: a configuration that cannot be read hands core none', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    deepStrictEqual((await connected(scene)).environmentTunnels, []);
+  });
+});

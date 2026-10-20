@@ -222,6 +222,18 @@
       "installedIn": "/tmp/srv/.vscodium-server-insiders"
     },
     {
+      "label": "install-tilde-path",
+      "cite": "F-2407 AC-7 (ruling-1277-tilde)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.serverInstallPath": {
+          "harness": "~/inst"
+        }
+      },
+      "outcome": "connected",
+      "installedIn": "/home/harness/inst/.vscodium-server-insiders"
+    },
+    {
       "label": "local-always",
       "cite": "F-2405 AC-3, AC-9 (local-always)",
       "settings": {

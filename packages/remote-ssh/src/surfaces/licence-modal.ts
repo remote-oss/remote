@@ -5,6 +5,7 @@
  */
 
 import type {LicenceModal, ModalAnswer} from 'lib-server';
+import {answeredOrAborted} from './abortable.ts';
 import {filled, type Translate} from './strings.ts';
 
 /** What the editor shows. */
@@ -57,21 +58,7 @@ export function licenceModalOf(
         // A modal that cannot be shown is no acceptance.
         (): ModalAnswer => 'cancel',
       );
-      const waiting: {stop?: () => void} = {};
-      const aborted = new Promise<ModalAnswer>(resolve => {
-        function onAbort(): void {
-          resolve('cancel');
-        }
-        cancellation.addEventListener('abort', onAbort, {once: true});
-        waiting.stop = () => {
-          cancellation.removeEventListener('abort', onAbort);
-        };
-      });
-      try {
-        return await Promise.race([answered, aborted]);
-      } finally {
-        waiting.stop?.();
-      }
+      return answeredOrAborted(answered, cancellation, 'cancel');
     },
   };
 }

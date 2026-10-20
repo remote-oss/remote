@@ -42,6 +42,7 @@ import type {
 export type PhaseEvent =
   | {kind: 'initializing'; quiet?: true}
   | {kind: 'promptShown'}
+  | {kind: 'runningPreconnectScript'}
   | {kind: 'waitingForOtherWindow'}
   | {kind: 'downloading'}
   | {kind: 'downloadingLocally'}

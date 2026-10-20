@@ -29,6 +29,12 @@ interface LaunchCommon {
   clientListeners?: readonly number[];
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
+  /**
+   * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
+   * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
+   * HARNESS_TEMPLATE_REGISTRY.
+   */
+  templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
 }
@@ -385,7 +391,11 @@ export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
     suite: 'suite-install',
     prefix: 'install',
     caseVariable: 'HARNESS_INSTALL_CASE',
-    removed: ['/home/harness/.vscodium-server-insiders', '/tmp/srv'],
+    removed: [
+      '/home/harness/.vscodium-server-insiders',
+      '/tmp/srv',
+      '/home/harness/inst',
+    ],
   },
   {
     suite: 'suite-platform',
@@ -610,6 +620,14 @@ export function launchesOf(root: string): Launch[] {
       suite: 'windows',
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
+    {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
+    {
+      label: 'preconnect',
+      kind: 'plain',
+      suite: 'preconnect',
+      // A variable of the editor's environment, which the script of a row reports it received.
+      environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
+    },
     {
       label: 'config-files',
       kind: 'plain',
@@ -694,6 +712,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'web-ui-trust',
       // The same browser, in a launch with workspace trust on and core's startup prompt off, so that a window opens in
       // Restricted Mode and silent.
+      // A terminal-mode connect in this launch waits on core's trust question before its login terminal starts, so its
+      // rows connect only through the local server.
       settings: {
         ...TRUST_LAUNCH.settings,
         'security.workspace.trust.startupPrompt': 'never',
@@ -705,6 +725,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers',
       suite: 'containers',
       registry: true,
+      templates: true,
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

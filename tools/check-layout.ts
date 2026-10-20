@@ -66,6 +66,7 @@ function checkPackageFolder(
   root: string,
   folder: string,
   references: Set<string>,
+  rootLicense: string | undefined,
   problems: string[],
 ): void {
   const where = `packages/${folder}`;
@@ -97,6 +98,25 @@ function checkPackageFolder(
       problems.push(
         `${where}/package.json has engines.vscode '${fields.engines?.vscode ?? ''}', expected '${EDITOR_ENGINE}' (ADR-0007)`,
       );
+    }
+    if (fields.publisher !== undefined && rootLicense !== undefined) {
+      const licence = path.join(directory, 'LICENSE');
+      if (!existsSync(licence)) {
+        problems.push(
+          `${where}/LICENSE is missing (every extension ships the MIT licence)`,
+        );
+      } else if (readFileSync(licence, 'utf8') !== rootLicense) {
+        problems.push(`${where}/LICENSE differs from the repository's LICENSE`);
+      }
+      const ignore = path.join(directory, '.vscodeignore');
+      if (
+        existsSync(ignore) &&
+        !readFileSync(ignore, 'utf8').split('\n').includes('!LICENSE')
+      ) {
+        problems.push(
+          `${where}/.vscodeignore leaves LICENSE out of the package`,
+        );
+      }
     }
   } else {
     problems.push(
@@ -222,8 +242,11 @@ export function checkLayout(root: string): string[] {
     }
   }
   const references = rootReferences(root, problems);
+  const rootLicense = existsSync(path.join(root, 'LICENSE'))
+    ? readFileSync(path.join(root, 'LICENSE'), 'utf8')
+    : undefined;
   for (const folder of packageFolders(root)) {
-    checkPackageFolder(root, folder, references, problems);
+    checkPackageFolder(root, folder, references, rootLicense, problems);
     if (existsSync(path.join(root, 'packages', folder, 'package.json'))) {
       problems.push(...stringTableProblems(root, folder));
     }

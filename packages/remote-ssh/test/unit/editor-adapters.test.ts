@@ -7,6 +7,7 @@ import {
   downloadProgressOf,
   failureDialogOf,
   licenceDialogOf,
+  preconnectDialogPortOf,
   mitigationPickPortOf,
   noticeOf,
   platformPickPortOf,
@@ -737,6 +738,44 @@ describe('textInputOf and noticeOf (card tooling-24)', () => {
         ['OK', undefined, undefined],
         [{text: 'Host added', options: {}, items: ['OK', 'Dismiss']}],
       ],
+    );
+  });
+});
+
+describe('preconnectDialogPortOf (card connect-87)', () => {
+  it('F-2108 AC-4: shows a modal warning message with the detail and the three items, and resolves the title of the chosen one', async () => {
+    const fake = fakeEditor(() => 'Skip');
+    const chosen = await preconnectDialogPortOf(fake.editor).showModal(
+      'm',
+      'd',
+      ['Allow', "Allow and Don't Ask Again", 'Skip'],
+    );
+    const shown = fake.warnings[0];
+    deepStrictEqual(
+      [
+        chosen,
+        shown?.text,
+        shown?.options,
+        shown?.items.map(item =>
+          typeof item === 'string' ? item : item.title,
+        ),
+        fake.infos.length,
+      ],
+      [
+        'Skip',
+        'm',
+        {modal: true, detail: 'd'},
+        ['Allow', "Allow and Don't Ask Again", 'Skip'],
+        0,
+      ],
+    );
+  });
+
+  it("F-2108 AC-10: resolves nothing for the editor's Cancel", async () => {
+    const fake = fakeEditor(() => undefined);
+    deepStrictEqual(
+      await preconnectDialogPortOf(fake.editor).showModal('m', 'd', ['Allow']),
+      undefined,
     );
   });
 });

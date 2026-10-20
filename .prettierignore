@@ -11,3 +11,5 @@ dist-*/
 vscode-dts/
 # The tooling-46 golden is byte-exact data the rows assert (#824).
 tools/fixtures/
+# The run's template index, written by tools/trim-template-index.ts from the public one.
+tests/acceptance/fixtures/templates/devcontainer-index.json

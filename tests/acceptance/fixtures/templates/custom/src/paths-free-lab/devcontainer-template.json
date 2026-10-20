@@ -1,0 +1,15 @@
+{
+  "id": "paths-free-lab",
+  "version": "1.0.0",
+  "name": "Paths-free Lab",
+  "description": "The acceptance run's own template with one option and no optional files.",
+  "options": {
+    "size": {
+      "type": "string",
+      "description": "Size:",
+      "enum": ["small", "large"],
+      "default": "small"
+    }
+  },
+  "platforms": ["Any"]
+}

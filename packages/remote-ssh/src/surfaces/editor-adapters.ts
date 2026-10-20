@@ -12,6 +12,7 @@ import type {DownloadProgressPort} from '../cli/server-download-progress.ts';
 import type {PlatformPickPort} from '../connect/platform-picker.ts';
 import type {FailureDialogPort} from './failure-presenter.ts';
 import type {LicenceDialogPort} from './licence-modal.ts';
+import type {PreconnectDialogPort} from './preconnect-dialog.ts';
 import type {MitigationPickPort} from './mitigation-picker.ts';
 import type {NoticePort} from './notice.ts';
 import type {TextInputPort} from './text-input.ts';
@@ -192,6 +193,20 @@ export function licenceDialogOf(editor: Editor): LicenceDialogPort {
     showModal: async (message, detail, buttons) =>
       (
         await editor.window.showInformationMessage(
+          message,
+          {modal: true, detail},
+          ...buttons.map(title => ({title})),
+        )
+      )?.title,
+  };
+}
+
+/** The pre-connection dialog: a modal warning message with the detail and the extension's items; the editor adds its Cancel. */
+export function preconnectDialogPortOf(editor: Editor): PreconnectDialogPort {
+  return {
+    showModal: async (message, detail, buttons) =>
+      (
+        await editor.window.showWarningMessage(
           message,
           {modal: true, detail},
           ...buttons.map(title => ({title})),

@@ -18,9 +18,11 @@ import {
   RESULT_BEGIN,
   RESULT_END,
 } from 'lib-server';
+import type {Clock} from 'lib-server';
 import {FakeClock} from 'lib-server/testing/fake-clock';
 import {
   containersOverridePolicy,
+  lockWaitLine,
   runServerSteps,
   type ServerRequest,
   type ServerResult,
@@ -207,6 +209,8 @@ function dependenciesOf(
     modal?: LicenceModal;
     /** The percents the download reports while the body arrives. */
     percents?: number[];
+    /** The clock of the lock waits; a fake one that no row advances by default. */
+    clock?: Clock;
   } = {},
 ): ServerStepDependencies {
   const downloads = [...(options.downloads ?? [])];
@@ -254,7 +258,7 @@ function dependenciesOf(
     download,
     credentials: {readNetrc: () => Promise.resolve(undefined)},
     files,
-    clock: new FakeClock(),
+    clock: options.clock ?? new FakeClock(),
     newTemporaryToken: () => 'token',
     logger: createLogger(seen.sink, {minimumLevel: () => 'info'}),
   };
@@ -1313,6 +1317,90 @@ describe("the server steps with the volume's root step (card containers-25)", ()
         'unpack',
         'noResultBlock',
         'cancelled',
+      ],
+    );
+  });
+});
+
+/** A clock whose waits end at once, so a held lock costs a row nothing. */
+const INSTANT_CLOCK: Clock = {now: () => 0, wait: () => Promise.resolve()};
+
+/** The lock a busy install names. */
+const INSTALL_LOCK = '/home/node/.vscode-server/bin/remote-lock.node.abc123';
+
+describe('the waits for the install lock (card containers-65)', () => {
+  /** The lines of a run whose install meets `install` and then the answers of `extra`, that name the lock or a reuse. */
+  async function lockLines(
+    install: readonly string[],
+    extra: ScriptAnswer[],
+  ): Promise<string[]> {
+    const {seen} = await runSteps(channelOf({install, extra}), {
+      clock: INSTANT_CLOCK,
+    });
+    return seen.sink.lines
+      .map(line => line.message)
+      .filter(
+        message =>
+          message.includes('install lock') ||
+          message.includes('was installed by another window'),
+      );
+  }
+
+  it('F-0419 BR-17: an install that waits says so at each attempt, and says when it took the lock', async () => {
+    deepStrictEqual(
+      await lockLines(blockOf('LockBusy', `server.lockPath=${INSTALL_LOCK}`), [
+        answer(
+          isInstall,
+          blockOf('LockBusy', `server.lockPath=${INSTALL_LOCK}`),
+        ),
+        answer(isInstall, blockOf('Ok', 'timing.install=5')),
+      ]),
+      [
+        `the server install waits for the install lock ${INSTALL_LOCK} (attempt 1 of 30)`,
+        `the server install waits for the install lock ${INSTALL_LOCK} (attempt 2 of 30)`,
+        `the server install took the install lock ${INSTALL_LOCK} after 3 attempts`,
+      ],
+    );
+  });
+
+  it('F-0419 BR-17: an install that finds the server installed under the lock says another window installed it', async () => {
+    deepStrictEqual(await lockLines(blockOf('Ok'), []), [
+      `the server ${PROFILE.commit} was installed by another window; this one reuses it`,
+    ]);
+  });
+
+  it('F-0419 BR-17: an install that takes the lock at once and unpacks says nothing of the lock', async () => {
+    deepStrictEqual(await lockLines(blockOf('Ok', 'timing.install=5'), []), []);
+  });
+
+  it('F-0419 BR-17: a start that waits for the lock says so, naming the start', async () => {
+    const {seen} = await runSteps(
+      channelOf({
+        start: blockOf('LockBusy', `server.lockPath=${INSTALL_LOCK}`),
+        extra: [answer(isStart, STARTED)],
+      }),
+      {clock: INSTANT_CLOCK},
+    );
+    deepStrictEqual(
+      seen.sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('the server start')),
+      [
+        `the server start waits for the install lock ${INSTALL_LOCK} (attempt 1 of 30)`,
+        `the server start took the install lock ${INSTALL_LOCK} after 2 attempts`,
+      ],
+    );
+  });
+
+  it('F-0419 BR-17: the start names its own step, and a lock without a path', () => {
+    deepStrictEqual(
+      [
+        lockWaitLine('start', {kind: 'busy', attempt: 4, attempts: 30}),
+        lockWaitLine('start', {kind: 'taken', attempts: 5}),
+      ],
+      [
+        'the server start waits for the install lock (attempt 4 of 30)',
+        'the server start took the install lock after 5 attempts',
       ],
     );
   });

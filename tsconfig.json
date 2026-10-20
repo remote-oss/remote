@@ -131,6 +131,9 @@
       "path": "tests/acceptance/windows"
     },
     {
+      "path": "tests/acceptance/login-shells"
+    },
+    {
       "path": "tests/acceptance/config-files"
     },
     {
@@ -141,6 +144,9 @@
     },
     {
       "path": "tests/acceptance/terminal-pick"
+    },
+    {
+      "path": "tests/acceptance/preconnect"
     },
     {
       "path": "tests/acceptance/explorer"

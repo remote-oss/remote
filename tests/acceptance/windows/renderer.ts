@@ -681,7 +681,10 @@ export async function portRowActions(
       const inline = [...entry.row.querySelectorAll('.actions-container .action-label')].map(label => (label.getAttribute('aria-label') ?? label.getAttribute('title') ?? label.textContent ?? '').replace(/ \\([^)]*\\)$/, ''));
       const box = entry.row.getBoundingClientRect();
       entry.row.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
-      await new Promise(resolve => setTimeout(resolve, 800));
+      for (let tries = 0; tries < 30 && document.querySelector('.context-view .monaco-menu .action-label') === null; tries += 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
       const menu = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
       for (const type of ['keydown', 'keyup']) {
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));

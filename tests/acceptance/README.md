@@ -118,7 +118,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view.
+- `web-ui` and `web-ui-trust`: plain launches with a debugging port and a recording `xdg-open` first on the editor's PATH; the suite writes it into `<run>/browser-bin` and reads the addresses it was asked to open from `<run>/browser-urls` (`windows/web-ui-support.ts`), for the rows of Open Web UI. `web-ui-trust` has workspace trust on and core's startup trust prompt off, so a window opens in Restricted Mode and silent. A terminal-mode connect in it (`remote.SSH.useLocalServer` off) waits on core's trust question before its login terminal starts, and fails when nothing answers within the connect timeout, so its rows connect only through the local server.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -365,6 +366,61 @@ The registry holds only what a row pushes to it, and nothing public is pushed. I
 container label, so the run's clean-up and the stale sweep remove it with its anonymous volume (`docker rm --force
 --volumes`), also after a killed run.
 
+## The run's templates
+
+A launch with `templates: true` (today only `containers`) makes the run start its registry, as `registry: true` does,
+and publish templates into it before its launches (`tools/acceptance-templates.ts`):
+- **Three of the specification's templates**, the smallest the rows need: `alpine`, `docker-existing-dockerfile` and
+  `docker-in-docker` (`MIRRORED_TEMPLATES`; the last is the template F-0801 AC-40 applies). Each one's single layer is
+  fetched anonymously from `ghcr.io` by its digest, checked and kept in `.vscode-test/templates/`, as the server archive
+  is. The layers are never committed and never in a VSIX.
+- **Four of our own** (`tests/acceptance/fixtures/templates/custom/src/`), all on the pinned `alpine:3.22`, because the
+  `alpine` template's image (`mcr.microsoft.com/devcontainers/base:alpine…`) is about 1 GB:
+  - `mini`: one option (`greeting`) and one optional file. Rows that only build a container use it.
+  - `options-lab`: one option of each shape (a strict `enum`, `proposals`, a plain string, two booleans, one boolean with
+    no description), `optionalPaths` `zeta.txt`, `docs/*`, `alpha.txt` in that non-alphabetical order, files under
+    `docs/` and a `README.md` and `NOTES.md`. For the options stage (F-0803) and the optional-files stage (F-0805).
+  - `paths-free-lab`: one `enum` option and no `optionalPaths`. For a template with options and no optional files.
+  - `bare-lab`: no options and no `optionalPaths`. For a template with neither.
+- **Five Features of our own** in two collections, metadata only (`tests/acceptance/fixtures/templates/custom-features.json`;
+  nothing builds them). The collection `remote-oss-run/features` holds `lab-options`, with five options (two booleans,
+  one with no description, an `enum`, `proposals` and a string), and `lab-plain`, with none. The collection
+  `remote-oss-community/features`, a second owner, holds `add-community`, `Add Community Tool` and `Adobe Community
+  Kit`, whose labels sort differently without regard to case than by code unit (F-0804's sort). For the Features stage
+  (F-0804, F-0803).
+
+The CLI the package bundles publishes the templates, the mirrored ones as `devcontainers/templates` and ours as
+`remote-oss-run/custom`. The run's index, written to `<run>/downloads/templates/devcontainer-index.json`, is the
+pinned snapshot `tests/acceptance/fixtures/templates/devcontainer-index.json` with every `ghcr.io/devcontainers/templates/`
+id moved to the run's registry, plus a collection of our templates and the collections of our Features (`<registry>/<namespace>/<id>`, each with its
+repository, which gives the owner a Feature list shows).
+- **The snapshot** is a cut of the public index (`tools/trim-template-index.ts`): the
+  `ghcr.io/devcontainers/templates` collection's metadata and the Features `common-utils`, `docker-in-docker`, `git`,
+  `node` and `python` of `ghcr.io/devcontainers/features`, each collection with its source information and nothing
+  else. It holds no other owner's metadata, whose licence we can't vouch for. The mirrored Features keep their
+  `ghcr.io/devcontainers/features/…` ids, and no row builds with them. Its folder holds the specification's MIT
+  `LICENSE` and `SOURCE.md` (the URL, the date and the full file's digest). It's test data, under `tests/` only.
+- **The variables:**
+  - `HARNESS_TEMPLATE_REGISTRY` is the registry as the templates' ids name it, `localhost:<port>`;
+  - `REMOTE_OSS_TEMPLATE_INDEX` is the index's URL on the download host. It is harness-only: the product reads it only
+    when `REMOTE_OSS_ACCEPTANCE` is `1`.
+- **A row's clean-up removes the registry** with every other container of the run (`clearEarlierRows`), so the Dev
+  Containers views of later rows list no container but their own. A row that needs the templates calls
+  `runTemplatesReady()` (`windows/run-templates.ts`) first. It starts the registry again on the same port, which the
+  index's ids name, and publishes the templates into it again from the run's cache, with no network.
+
+Measured on CLI 0.89.0, on 2026-10-20:
+- **Plain HTTP is used only for `localhost:<port>`.** `templates publish` to `127.0.0.1:<port>` fails with a TLS error
+  (`wrong version number`), while the same registry as `localhost:<port>` works ("Sending as plain HTTP request"). So
+  the templates name the registry that way and it needs no TLS.
+- **`templates apply` and `templates metadata` have no `--log-format`.** `apply` prints one JSON line on stdout,
+  `{"files":["./.devcontainer/devcontainer.json", …]}`, and its log as text on stderr. A missing template exits 1 with
+  stdout empty. `metadata <id>` prints the template's metadata as JSON on stdout.
+- `apply` leaves out `devcontainer-template.json`, `README.md` and `NOTES.md` by itself, and writes the optional files
+  unless `--omit-paths` names them.
+- **The published index** (`https://containers.dev/static/devcontainer-index.json`) is `{"collections":
+  [{sourceInformation, features, templates}]}`, and each template's `id` is its full OCI reference.
+
 ## Cutting the host's network
 
 `cutNetwork` and `restoreNetwork` of `tools/acceptance-network.ts` (each takes a command runner and the container id) make the host's network fail the way a lost network does. The host container runs with
@@ -468,6 +524,7 @@ behaviour is chosen by the first segment of the path:
 | `hang` | the request is accepted and never answered, until `GET /control/drop-hung` or the run's end |
 | `cut` | 200 with the archive's length, then the connection drops after 1 MiB |
 | `slow` | the archive, 64 KiB every 100 ms |
+| `templates` | `/templates/devcontainer-index.json`: the run's template index once the run has written it (404 before); `/templates/broken-index.json`: an index cut off so it doesn't parse; `/templates/unreachable`: the connection dropped before any answer |
 
 The archive is the VSCodium server for Alpine of the release the client is pinned to, cached under
 `.vscode-test/downloads/` and checked against its sha256 (`SERVER_ARCHIVE`). The HTTPS certificate is the run's own,
@@ -516,7 +573,7 @@ so. `genuine` before it clears the flag, because its probe passes:
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has three users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has thirteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -529,6 +586,12 @@ Besides `harness`, the host image has three users, and the run's `ssh_config` ha
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |
 | `harness-fish` | `harness-fish` | the run's key; its login shell is `/usr/bin/fish` |
+| `harness-bash` | `harness-bash` | the run's key; its login shell is `/bin/bash` |
+| `harness-zsh` | `harness-zsh` | the run's key; its login shell is `/bin/zsh` |
+| `harness-dash` | `harness-dash` | the run's key; its login shell is `/usr/local/bin/sh`, a link to dash |
+| `harness-ksh` | `harness-ksh` | the run's key; its login shell is `/bin/ksh` |
+| `harness-csh` | `harness-csh` | the run's key; its login shell is `/bin/csh` |
+| `harness-tcsh` | `harness-tcsh` | the run's key; its login shell is `/bin/tcsh` |
 | `master` | `harness-pw` | `password`, behind `ControlMaster auto` (socket `cm-%C` in the run's folder, `ControlPersist 600`) |
 | `master-ask` | `harness-pw` | `password`, behind `ControlMaster ask` (socket `cm-ask-%C`) |
 | `master-yes` | `harness-pw` | `password`, behind `ControlMaster yes` (socket `cm-yes-%C`) |

@@ -78,6 +78,11 @@ export type ScriptEntry = (
       answer: MitigationAction | 'dismiss';
     }
   | {surface: 'licenceModal'; match: string; answer: 'decline' | 'dismiss'}
+  | {
+      surface: 'preconnectDialog';
+      match: string;
+      answer: {button: string} | 'dismiss';
+    }
 ) & {window?: string; after?: string};
 
 /** One line of the record: the question as asked, and what the adapter answered. */
@@ -99,13 +104,13 @@ export interface RecordLine {
   window: string;
   /** The time of the line's append. */
   time: number;
-  /** The labels the failure dialog or the notice was shown with, in order; only the lines of those surfaces have it. */
+  /** The labels the failure dialog, the notice or the pre-connection dialog was shown with, in order; only the lines of those surfaces have it. */
   buttons?: string[];
   /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `platformPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
   /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
   active?: string | undefined;
-  /** The detail text the licence modal was shown with; only the lines of a `licenceModal` surface have it. */
+  /** The detail text a modal was shown with; only the lines of a `licenceModal` or a `preconnectDialog` surface have it. */
   detail?: string;
 }
 
@@ -125,7 +130,21 @@ const SCRIPT_SURFACES = {
   notice: true,
   mitigationPick: true,
   licenceModal: true,
+  preconnectDialog: true,
 } satisfies Record<ScriptEntry['surface'], boolean>;
+
+/** What an entry that dismisses or names a button gives: nothing for the first, the button when it is offered. */
+function buttonAnswer(
+  answer: {button: string} | 'dismiss',
+  buttons: readonly string[],
+): {value: string | undefined; recorded: string} | undefined {
+  if (answer === 'dismiss') {
+    return {value: undefined, recorded: 'dismiss'};
+  }
+  return buttons.includes(answer.button)
+    ? {value: answer.button, recorded: answer.button}
+    : undefined;
+}
 
 /** Whether the surface has a script entry, and its lines count for the cursor. */
 function countedForCursor(surface: RecordLine['surface']): boolean {
@@ -548,15 +567,7 @@ export function scriptedAdapters(
         answerFrom(
           'failureDialog',
           text,
-          entry => {
-            if (entry.answer === 'dismiss') {
-              return {value: undefined, recorded: 'dismiss'};
-            }
-            const {button} = entry.answer;
-            return buttons.includes(button)
-              ? {value: button, recorded: button}
-              : undefined;
-          },
+          entry => buttonAnswer(entry.answer, buttons),
           undefined,
           {buttons: [...buttons]},
         ),
@@ -572,6 +583,16 @@ export function scriptedAdapters(
           }),
           undefined,
           {detail},
+        ),
+    },
+    preconnectDialog: {
+      showModal: (message, detail, buttons) =>
+        answerFrom(
+          'preconnectDialog',
+          message,
+          entry => buttonAnswer(entry.answer, buttons),
+          undefined,
+          {detail, buttons: [...buttons]},
         ),
     },
     platformPick: {

@@ -23,9 +23,6 @@ import {
   windowState,
 } from './harness.ts';
 import {
-  fishServerRuns,
-  fishServerInstalled,
-  FISH_DATA_FOLDER,
   closeAllButLocal,
   DATA_FOLDER,
   existsOnHost,
@@ -302,36 +299,6 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     deepStrictEqual(
       [surfacesSince(mark, 'local'), await existsOnHost(folder)],
       [['hostPick'], false],
-    );
-  });
-
-  it('F-2412 AC-24 (ruling-fish): on a host whose login shell is fish, Uninstall removes the server folder with no UI, well inside the connect timeout', async () => {
-    await fishServerInstalled('fish-uninstall');
-    const started = Date.now();
-    const mark = await uninstallWith('local', [pickHost('harness-fish')]);
-    const took = Date.now() - started;
-    const folderLeft = await onHostAs(
-      'harness-fish',
-      'test',
-      '-e',
-      FISH_DATA_FOLDER,
-    ).then(
-      () => true,
-      () => false,
-    );
-    deepStrictEqual(
-      {
-        surfaces: surfacesSince(mark, 'local'),
-        folderLeft,
-        running: await fishServerRuns(),
-        withinTimeout: took < 15_000,
-      },
-      {
-        surfaces: ['hostPick'],
-        folderLeft: false,
-        running: false,
-        withinTimeout: true,
-      },
     );
   });
 

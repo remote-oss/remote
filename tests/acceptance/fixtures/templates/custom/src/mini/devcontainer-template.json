@@ -1,0 +1,16 @@
+{
+  "id": "mini",
+  "version": "1.0.0",
+  "name": "Mini",
+  "description": "The acceptance run's own template: the pinned Alpine image, one option and one optional file.",
+  "options": {
+    "greeting": {
+      "type": "string",
+      "description": "Greeting:",
+      "proposals": ["hello", "hi"],
+      "default": "hello"
+    }
+  },
+  "optionalPaths": [".github/mini.yml"],
+  "platforms": ["Any"]
+}

@@ -24,6 +24,7 @@ import {
   SYSTEM_CLOCK,
 } from './acceptance-registry.ts';
 import {staleRefusal} from './acceptance-stale.ts';
+import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -178,6 +179,10 @@ export interface HarnessVariables {
   HARNESS_DEVCONTAINER_IMAGE?: string;
   /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
   HARNESS_REGISTRY?: string;
+  /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
+  HARNESS_TEMPLATE_REGISTRY?: string;
+  /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
+  REMOTE_OSS_TEMPLATE_INDEX?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -246,6 +251,12 @@ export interface HarnessDependencies {
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
   startRegistry: (runId: string) => Promise<RunRegistry>;
+  /** Publishes the run's templates into the registry at `address` and writes the run's index; gives the templates' registry. */
+  prepareTemplates: (
+    root: string,
+    runFolder: string,
+    address: string,
+  ) => Promise<string>;
 }
 
 /** How long the run waits for sshd to accept the first connection, in attempts half a second apart. */
@@ -380,6 +391,48 @@ export function harnessSshConfig(
     ...accountAlias(
       'harness-fish',
       'harness-fish',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-bash',
+      'harness-bash',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-zsh',
+      'harness-zsh',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-dash',
+      'harness-dash',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-ksh',
+      'harness-ksh',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-csh',
+      'harness-csh',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-tcsh',
+      'harness-tcsh',
       port,
       runFolder,
       keyLines(runFolder),
@@ -769,12 +822,19 @@ async function prepare(
       writeStandIns(runFolder, launch, standInEngines(root, launch));
     }
   }
-  const registry = chosen.some(launch => launch.registry === true)
+  const registry = chosen.some(
+    launch => launch.registry === true || launch.templates === true,
+  )
     ? await dependencies.startRegistry(runId)
     : undefined;
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
+  const templateRegistry =
+    registry !== undefined && chosen.some(launch => launch.templates === true)
+      ? await dependencies.prepareTemplates(root, runFolder, registry.address)
+      : undefined;
+  const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
   const devContainerImage = launches.some(needsDevContainerImage)
     ? devContainerImageFor(command, root, runId)
     : undefined;
@@ -789,6 +849,12 @@ async function prepare(
       ? {}
       : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
     ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
+    ...(templateRegistry === undefined || templateIndex === undefined
+      ? {}
+      : {
+          HARNESS_TEMPLATE_REGISTRY: templateRegistry,
+          REMOTE_OSS_TEMPLATE_INDEX: `${templateIndex}/templates/devcontainer-index.json`,
+        }),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
@@ -1496,6 +1562,7 @@ export function runAndCollect(
     let resultsAt: number | undefined;
     let tail = '';
     let ended: string | undefined;
+    let resultsStand = false;
     for (const stream of [child.stdout, child.stderr]) {
       stream.on('data', (chunk: Buffer) => {
         chunks.push(chunk);
@@ -1522,7 +1589,9 @@ export function runAndCollect(
               return;
             }
             clearInterval(watch);
-            ended = `acceptance: ${reason}; the launch's processes were ended\n`;
+            // Past its results, the rows have run: a slow quit ends the processes, and the rows' result stands.
+            resultsStand = resultsAt !== undefined;
+            ended = `acceptance: ${reason}; the launch's processes were ended${resultsStand ? ", and its rows' result stands" : ''}\n`;
             echo(ended);
             child.kill('SIGKILL');
             limits.endLeftovers();
@@ -1533,7 +1602,10 @@ export function runAndCollect(
       resolve(
         ended === undefined
           ? {exitCode: code ?? 1, output}
-          : {exitCode: 1, output: output + ended},
+          : {
+              exitCode: resultsStand && !FAILING_LINE.test(output) ? 0 : 1,
+              output: output + ended,
+            },
       );
     });
     child.on('error', reject);
@@ -1554,6 +1626,9 @@ export interface LaunchLimits {
 
 /** Mocha's results line, which a launch prints once all its rows have run. */
 const RESULTS_LINE = /^\s*\d+ passing \(/m;
+
+/** Mocha's line for the rows that failed, which follows its results line when any did. */
+const FAILING_LINE = /^\s*\d+ failing$/m;
 
 /** How much of the output's end is kept to find the results line across two chunks. */
 const RESULTS_TAIL_LENGTH = 400;
@@ -1839,6 +1914,8 @@ if (isMainModule(import.meta.url)) {
         startAgent: startRunAgent,
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
+        prepareTemplates: (root, runFolder, address) =>
+          prepareRunTemplates(runCommand, root, runFolder, address, ghcrLayer),
         startDownloads: startRunDownloads.bind(
           undefined,
           runCommand,

@@ -6,7 +6,9 @@ import {deepStrictEqual, ok, rejects} from 'node:assert';
 import {createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 import {
+  ensureRunRegistry,
   REGISTRY_IMAGE,
+  REGISTRY_LABEL,
   type RegistryClock,
   SYSTEM_CLOCK,
   startRunRegistry,
@@ -16,8 +18,17 @@ import type {CommandResult, CommandRunner} from './command-runner.ts';
 
 const RUN_ID = '77-2';
 
-/** A runner that records each call and answers `docker run` with a container id and `docker port` with a port line. */
-function recording(portLine = '127.0.0.1:49200\n'): {
+/**
+ * A runner that records each call and answers `docker run` with a container id, `docker port` with a port line, and
+ * `docker ps` with `running` for the running registries and `existing` for all of them.
+ */
+function recording(
+  portLine = '127.0.0.1:49200\n',
+  registries: {running: string; existing: string} = {
+    running: 'registry-container\n',
+    existing: 'registry-container\n',
+  },
+): {
   command: CommandRunner;
   calls: string[][];
 } {
@@ -27,6 +38,9 @@ function recording(portLine = '127.0.0.1:49200\n'): {
     programArguments: readonly string[],
   ): CommandResult {
     calls.push([program, ...programArguments]);
+    const listing = programArguments.includes('--all')
+      ? registries.existing
+      : registries.running;
     return {
       status: 0,
       stdout:
@@ -34,7 +48,9 @@ function recording(portLine = '127.0.0.1:49200\n'): {
           ? 'registry-container\n'
           : programArguments[0] === 'port'
             ? portLine
-            : '',
+            : programArguments[0] === 'ps'
+              ? listing
+              : '',
       stderr: '',
     };
   }
@@ -63,7 +79,7 @@ function clockOf(statuses: ReadonlyArray<number | undefined>): {
 }
 
 describe('the run’s registry (card containers-59)', () => {
-  it('starts the pinned image on a loopback port, labelled with the run and as a dev container’s', async () => {
+  it('starts the pinned image on a loopback port, labelled with the run, as a dev container’s and as the registry', async () => {
     const {command, calls} = recording();
     await startRunRegistry(command, clockOf([200]).clock, RUN_ID);
     deepStrictEqual(calls[0], [
@@ -74,6 +90,8 @@ describe('the run’s registry (card containers-59)', () => {
       `${RUN_LABEL}=${RUN_ID}`,
       '--label',
       `${DEVCONTAINER_LABEL}=1`,
+      '--label',
+      `${REGISTRY_LABEL}=1`,
       '--publish',
       '127.0.0.1::5000',
       REGISTRY_IMAGE,
@@ -102,7 +120,7 @@ describe('the run’s registry (card containers-59)', () => {
     );
   });
 
-  it('removes the container with its anonymous volume when it is stopped', async () => {
+  it('removes every registry container of the run with its anonymous volume when it is stopped', async () => {
     const {command, calls} = recording();
     const registry = await startRunRegistry(
       command,
@@ -136,6 +154,56 @@ describe('the run’s registry (card containers-59)', () => {
         ['docker', 'rm', '--force', '--volumes'],
       ],
     );
+  });
+
+  it('tooling-57: a registry that runs is left as it is', async () => {
+    const {command, calls} = recording();
+    const outcome = await ensureRunRegistry(
+      command,
+      clockOf([]).clock,
+      RUN_ID,
+      '127.0.0.1:49200',
+    );
+    deepStrictEqual(
+      [outcome, calls.some(call => call[1] === 'run')],
+      ['running', false],
+    );
+  });
+
+  it('tooling-57: a registry a clean-up removed is started again on the same port and waited for', async () => {
+    const {command, calls} = recording('127.0.0.1:49200\n', {
+      running: '',
+      existing: '',
+    });
+    const {clock, asked} = clockOf([undefined, 200]);
+    const outcome = await ensureRunRegistry(
+      command,
+      clock,
+      RUN_ID,
+      '127.0.0.1:49200',
+    );
+    deepStrictEqual(
+      [outcome, calls.find(call => call[1] === 'run')?.slice(-2), asked.length],
+      ['restarted', ['127.0.0.1:49200:5000', REGISTRY_IMAGE], 2],
+    );
+  });
+
+  it('tooling-57: a stopped registry container is removed before the new one starts', async () => {
+    const {command, calls} = recording('127.0.0.1:49200\n', {
+      running: '',
+      existing: 'stopped-registry\n',
+    });
+    await ensureRunRegistry(
+      command,
+      clockOf([200]).clock,
+      RUN_ID,
+      '127.0.0.1:49200',
+    );
+    const removed = calls.findIndex(
+      call => call[1] === 'rm' && call.includes('stopped-registry'),
+    );
+    const started = calls.findIndex(call => call[1] === 'run');
+    deepStrictEqual([removed >= 0, removed < started], [true, true]);
   });
 
   it('fails when the container publishes no port', async () => {

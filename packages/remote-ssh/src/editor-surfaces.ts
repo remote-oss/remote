@@ -32,10 +32,15 @@ import {
   licenceModalOf,
 } from './surfaces/licence-modal.ts';
 import {
+  type PreconnectDialogPort,
+  preconnectDialogOf,
+} from './surfaces/preconnect-dialog.ts';
+import {
   type MitigationPickPort,
   moreActionsOf,
 } from './surfaces/mitigation-picker.ts';
 import type {Logger} from 'lib-log';
+import {approvalsOf} from './preconnect/approvals.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {PromptEditor} from './surfaces/prompt-surface.ts';
@@ -51,6 +56,7 @@ export interface EditorAdapters {
   linkTerminals: LinkTerminals;
   failureDialog: FailureDialogPort;
   licenceDialog: LicenceDialogPort;
+  preconnectDialog: PreconnectDialogPort;
   platformPick: PlatformPickPort;
   mitigationPick: MitigationPickPort;
   downloadProgress: DownloadProgressPort;
@@ -168,6 +174,8 @@ export function editorSurfacesOf(
       context.names,
     ),
     acceptances,
+    preconnectDialog: preconnectDialogOf(adapters.preconnectDialog, translate),
+    preconnectApprovals: approvalsOf(context.acceptanceState),
     presenter: failurePresenterOf(
       adapters.failureDialog,
       {

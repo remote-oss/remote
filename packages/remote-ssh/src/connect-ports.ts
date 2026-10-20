@@ -101,6 +101,9 @@ import {
 } from './maintenance/maintenance-run.ts';
 import type {ConnectInput, StepFailure} from './pipeline/steps.ts';
 import {stepsOf, type WiringPorts} from './pipeline/wiring.ts';
+import type {PreconnectApprovals} from './preconnect/approvals.ts';
+import type {PreconnectPorts} from './preconnect/ports.ts';
+import type {PreconnectDialog} from './surfaces/preconnect-dialog.ts';
 import {phaseTitleOf, startTitleOf} from './surfaces/progress-titles.ts';
 import {type FailureStringId, textOfId} from './surfaces/failure-strings.ts';
 import {
@@ -131,6 +134,9 @@ export interface ConnectSurfaces {
   noticeState: AcceptanceState;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
+  /** The question before a pre-connection script runs, and the record of the scripts the user trusts. */
+  preconnectDialog: PreconnectDialog;
+  preconnectApprovals: PreconnectApprovals;
   presenter: FailurePresenter;
   /** The editor's notifications with a percentage, which the server download shows after the window resolved. */
   downloadProgress: DownloadProgressPort;
@@ -153,6 +159,10 @@ export interface ConnectMachine {
   profile: ProductProfile;
   platform: ClientPlatform;
   homeFolder: string;
+  /** The editor process's working directory, which a relative script path resolves against. */
+  workingDirectory: string;
+  /** The reads of a pre-connection script's file. */
+  preconnectFiles: Pick<PreconnectPorts, 'readFile' | 'exists'>;
   /** The editor's environment, given to each process as it is. */
   processEnvironment: Readonly<Record<string, string | undefined>>;
   /** The program search path and Program Files folder the client search reads. */
@@ -269,6 +279,16 @@ export function wiringPortsOf(
   };
   return {
     configuredHosts: () => surfaces.configuredHosts(),
+    preconnect: {
+      ...machine.preconnectFiles,
+      spawner: machine.spawner,
+      environment: processEnvironment,
+      workingDirectory: machine.workingDirectory,
+      home: machine.homeFolder,
+      approvals: surfaces.preconnectApprovals,
+      dialog: surfaces.preconnectDialog,
+      logger,
+    },
     settings: {
       preconnect: () => valueOf(settings, 'preconnect'),
       server: () => serverSettingsOf(settings),
