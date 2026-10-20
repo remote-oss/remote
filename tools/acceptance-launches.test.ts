@@ -57,6 +57,7 @@ function labelsFromExplorer(): string[] {
     'containers-volume',
     'containers-explorer',
     'containers-ports',
+    'containers-features',
     'containers-shutdown',
     'containers-killed-23',
     'containers-killed-35',
@@ -261,6 +262,12 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
         ],
         [
+          'containers-features',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
+        ],
+        [
           'containers-shutdown',
           ['remote-oss.remote-containers'],
           true,
@@ -358,6 +365,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-features',
+          'containers-features',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
+        [
           'containers-shutdown',
           'containers-shutdown',
           shared,
@@ -411,6 +425,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         'containers-ports',
+        'containers-features',
         'containers-shutdown',
         'containers-killed-23',
         'containers-killed-35',
@@ -1291,21 +1306,21 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59, tooling-56: only the containers launch and containers-ports ask for the run’s registry', () => {
+  it('containers-59, tooling-56: only the containers launch, containers-ports and containers-features ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
-      ['containers', 'containers-ports'],
+      ['containers', 'containers-ports', 'containers-features'],
     );
   });
 
-  it('tooling-57: only the containers launch asks for the run’s templates', () => {
+  it('tooling-57: only the containers launch and containers-features ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
-      ['containers'],
+      ['containers', 'containers-features'],
     );
   });
 });
