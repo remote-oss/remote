@@ -773,7 +773,7 @@ function deepEqualStrings(actual: string[], expected: string[]): boolean {
   );
 }
 
-describe('the manifest rows of slice 1', () => {
+describe('the manifest rows of slices 1 and 2', () => {
   /** The manifest and its default strings. */
   const manifest = JSON.parse(
     readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
@@ -783,7 +783,10 @@ describe('the manifest rows of slice 1', () => {
     capabilities: Record<string, unknown>;
     activationEvents: string[];
     contributes: {
-      configuration: {properties: Record<string, Record<string, unknown>>};
+      configuration: {
+        title: string;
+        properties: Record<string, Record<string, unknown>>;
+      };
       commands: Array<{
         command: string;
         title: string;
@@ -1163,6 +1166,186 @@ describe('the manifest rows of slice 1', () => {
     deepStrictEqual(
       [commands.openConfigFile.id, commands.addNewSshHost.id],
       [SSH_HAND_OVERS.openConfigFile, SSH_HAND_OVERS.addNewSshHost],
+    );
+  });
+  it('F-2104 AC-1: remote.SSH.enableDynamicForwarding is a boolean, true by default, application scope, with the description of 3.2', () => {
+    const setting = properties['remote.SSH.enableDynamicForwarding'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.description),
+      ],
+      [
+        'boolean',
+        true,
+        'application',
+        'Whether to use SSH dynamic forwarding to allow setting up new port tunnels over an existing SSH connection. When this is used, a password only needs to be entered once for each remote window.',
+      ],
+    );
+  });
+
+  it('F-2104 AC-2: remote.SSH.preferredLocalPortRange is an empty string, application scope, with the markdown description of 3.2, and a pattern core checks with its own message', () => {
+    const setting = properties['remote.SSH.preferredLocalPortRange'];
+    const pattern = new RegExp(String(setting?.pattern));
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.markdownDescription),
+        setting?.pattern,
+        'patternErrorMessage' in (setting ?? {}),
+        pattern.test('abc'),
+        pattern.test('41090-41080'),
+      ],
+      [
+        'string',
+        '',
+        'application',
+        "A range of **local** ports preferred to utilize for the SSH tunnel connection. If no free port is found in range, an error will be thrown. Valid ranges of the form `number-number` such as `4000-5000`; it's expected the first number will be lower than the next.",
+        '^\\d+-\\d+$|^$',
+        false,
+        false,
+        true,
+      ],
+    );
+  });
+
+  it('F-2106 AC-11: remote.SSH.permitPtyAllocation is a boolean, false by default, application scope (so no Remote or Workspace value), with the description of 3.2', () => {
+    const setting = properties['remote.SSH.permitPtyAllocation'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.markdownDescription),
+      ],
+      [
+        'boolean',
+        false,
+        'application',
+        "Permits the system to allocate a pseudo-terminal for the SSH connection (by omitting the '-T' SSH connection flag). This setting is disabled by default and may be enabled to support specific use-cases.",
+      ],
+    );
+  });
+
+  it('F-2308 AC-1: remote.SSH.showLoginTerminal is a boolean, false by default, application scope, with the description of 3.2', () => {
+    const setting = properties['remote.SSH.showLoginTerminal'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.description),
+      ],
+      [
+        'boolean',
+        false,
+        'application',
+        'Always reveal the SSH login terminal.',
+      ],
+    );
+  });
+
+  it('F-2312 AC-1, AC-33: remote.SSH.enableX11Forwarding is a boolean, true by default, application scope (so no Remote value), with the description of 3.2', () => {
+    const setting = properties['remote.SSH.enableX11Forwarding'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.markdownDescription),
+      ],
+      [
+        'boolean',
+        true,
+        'application',
+        "Enable fixing the remote environment so that the SSH config option `ForwardX11` will take effect as expected from VS Code's remote extension host.",
+      ],
+    );
+  });
+
+  it('F-2405 AC-19: remote.SSH.localServerDownload has the description, values and value texts of 3.2, auto by default, and the old key points to it', () => {
+    const setting = properties['remote.SSH.localServerDownload'];
+    const values = (setting?.enum ?? []) as string[];
+    const texts = (setting?.enumDescriptions ?? []) as unknown[];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.description),
+        // The value texts are literal in the manifest, not keys of the string table.
+        values.map((value, index) => [value, texts[index]]),
+        [...values].sort(),
+        properties['remote.SSH.allowLocalServerDownload']
+          ?.markdownDeprecationMessage,
+      ],
+      [
+        'string',
+        'auto',
+        'application',
+        'Whether the extension can download the VS Code Server on the client and transfer it to the host with scp, instead of downloading it on the host.',
+        [
+          [
+            'auto',
+            'The server will first be downloaded on the host, and if that fails, will fall back to downloading locally',
+          ],
+          [
+            'always',
+            'The server will only be downloaded locally and transferred to the host',
+          ],
+          ['off', 'The server will only be downloaded on the host'],
+        ],
+        ['always', 'auto', 'off'],
+        'Deprecated, please use `#remote.SSH.localServerDownload#`',
+      ],
+    );
+  });
+
+  it('F-2410 AC-1: remote.SSH.remoteServerListenOnSocket is a boolean, false by default, with no scope (so not for all profiles), with the markdown description of 3.2', () => {
+    const setting = properties['remote.SSH.remoteServerListenOnSocket'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        'scope' in (setting ?? {}),
+        resolved(setting?.markdownDescription),
+      ],
+      [
+        'boolean',
+        false,
+        false,
+        'When true, the remote VS Code server will listen on a socket path instead of opening a port. Only valid for Linux and macOS remotes. After toggling this setting, run the command "Kill VS Code Server on Host..." for it to take effect. Requires OpenSSH 6.7+. Disables the "local server" connection multiplexing mode. Requires `AllowStreamLocalForwarding` to be enabled for the SSH server.',
+      ],
+    );
+  });
+
+  it('F-2507 AC-1: remote.SSH.defaultForwardedPorts is an array of objects with a required remotePort, empty by default, with no scope, under Remote - SSH, with the description of 3.2', () => {
+    const setting = properties['remote.SSH.defaultForwardedPorts'];
+    const items = setting?.items as
+      {type?: string; required?: string[]} | undefined;
+    deepStrictEqual(
+      [
+        manifest.contributes.configuration.title,
+        setting?.type,
+        setting?.default,
+        'scope' in (setting ?? {}),
+        items?.type,
+        items?.required,
+        resolved(setting?.description),
+      ],
+      [
+        'Remote - SSH',
+        'array',
+        [],
+        false,
+        'object',
+        ['remotePort'],
+        'A list of ports to forward when the connection is established.',
+      ],
     );
   });
 });

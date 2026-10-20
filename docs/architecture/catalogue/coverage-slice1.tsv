@@ -99,8 +99,8 @@ F-2102.AC-37	todo
 F-2102.AC-38	todo	
 F-2102.AC-39	todo	
 F-2102.AC-40	todo	
-F-2104.AC-1	todo	
-F-2104.AC-2	todo	
+F-2104.AC-1	unit	
+F-2104.AC-2	unit	
 F-2104.AC-3	todo	
 F-2104.AC-4	todo	
 F-2104.AC-5	todo	
@@ -157,7 +157,7 @@ F-2106.AC-7	todo
 F-2106.AC-8	todo	
 F-2106.AC-9	todo	
 F-2106.AC-10	todo	
-F-2106.AC-11	todo	
+F-2106.AC-11	unit	
 F-2106.AC-12	todo	
 F-2106.AC-13	todo	
 F-2106.AC-14	todo	
@@ -602,7 +602,7 @@ F-2307.AC-29	todo
 F-2307.AC-30	todo	
 F-2307.AC-31	todo	
 F-2307.AC-32	todo	
-F-2308.AC-1	todo	
+F-2308.AC-1	unit	
 F-2308.AC-2	todo	
 F-2308.AC-3	todo	
 F-2308.AC-4	todo	
@@ -633,7 +633,7 @@ F-2308.AC-28	todo
 F-2311.AC-8	todo	
 F-2311.AC-9	todo	
 F-2311.AC-25	todo	
-F-2312.AC-1	todo	
+F-2312.AC-1	unit	
 F-2312.AC-2	acceptance	
 F-2312.AC-3	todo	
 F-2312.AC-4	todo	
@@ -665,7 +665,7 @@ F-2312.AC-29	todo
 F-2312.AC-30	todo	
 F-2312.AC-31	unit	
 F-2312.AC-32	todo	
-F-2312.AC-33	todo	
+F-2312.AC-33	unit	
 F-2401.AC-1	todo	
 F-2401.AC-2	acceptance	
 F-2401.AC-3	todo	
@@ -731,7 +731,7 @@ F-2405.AC-15	acceptance
 F-2405.AC-16	todo	
 F-2405.AC-17	acceptance	
 F-2405.AC-18	todo	
-F-2405.AC-19	todo	
+F-2405.AC-19	unit	
 F-2405.AC-20	todo	
 F-2405.AC-21	todo	
 F-2405.AC-22	todo	
@@ -772,7 +772,7 @@ F-2409.AC-27	acceptance
 F-2409.AC-28	todo	
 F-2409.AC-29	todo	
 F-2409.AC-30	todo	
-F-2410.AC-1	todo	
+F-2410.AC-1	unit	
 F-2410.AC-2	acceptance	
 F-2410.AC-3	acceptance	
 F-2410.AC-4	todo	
@@ -945,7 +945,7 @@ F-2502.AC-32	core	core: the Open Recent entries of two spellings
 F-2502.AC-33	core	core: the Welcome page's Recent list
 F-2502.AC-34	core	core: the Open Recent entry after a failed resolve
 F-2502.AC-35	unit	
-F-2507.AC-1	todo	
+F-2507.AC-1	unit	
 F-2507.AC-2	acceptance	
 F-2507.AC-3	unit	
 F-2507.AC-4	todo	
