@@ -248,7 +248,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('F-2501 AC-1: activationEvents: the seven, in order, with no wildcards or startup', () => {
+  it('F-2501 AC-1, F-5902 AC-24: activationEvents: the seven, in order, with no wildcards or startup', () => {
     deepStrictEqual(manifest().activationEvents, [
       'onCommand:remote-internal.getSshFoldersHistory',
       'onCommand:remote-internal.deleteSshFolderFromHistory',
@@ -286,7 +286,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     ]);
   });
 
-  it('F-2503.AC-2: commands: 17, every category, every title a key, no enablement, no internal ids', () => {
+  it('F-2503.AC-2, F-5902 AC-24: commands: 17, every category, every title a key, no enablement, no internal ids', () => {
     const contributed = manifest().contributes?.commands ?? [];
     deepStrictEqual(
       {
