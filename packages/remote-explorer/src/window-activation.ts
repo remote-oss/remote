@@ -14,9 +14,11 @@ import {identifierHost} from 'lib-identifiers';
 import {standDownHost} from 'lib-standdown';
 import type * as vscode from 'vscode';
 import {activateExplorer, silentHandlers} from './activation.ts';
+import {serveInbox} from './companion/inbox.ts';
 import {commands, standDown, views} from './identifiers.generated.ts';
 import {companionCallsOf} from './view/companion-calls.ts';
 import {connectHandlers} from './view/connect.ts';
+import {handOverHandlers} from './view/hand-overs.ts';
 import type {ClientPlatform} from './model/ssh-group.ts';
 import {createTargets, type ViewSession} from './view/targets.ts';
 import {
@@ -64,6 +66,7 @@ export async function activateInWindow(
       ...silentHandlers(commands),
       refresh: {execute: () => session?.targets.rebuild()},
       ...connectHandlers(() => session),
+      ...handOverHandlers(() => session, editor.commands),
     },
     setup,
   });
@@ -75,13 +78,13 @@ export async function activateInWindow(
       result.dispose();
     },
   });
-  const calls = companionCallsOf(
-    createProtocol({
-      // eslint-disable-next-line id-length -- the protocol's option is named bus
-      bus: commandBus(editor),
-      timers: systemTimers,
-    }),
-  );
+  const protocol = createProtocol({
+    // eslint-disable-next-line id-length -- the protocol's option is named bus
+    bus: commandBus(editor),
+    timers: systemTimers,
+  });
+  context.subscriptions.push(serveInbox(protocol, () => session?.targets));
+  const calls = companionCallsOf(protocol);
   const detector = createDetector(extensionLookup(editor));
   const targets = createTargets({
     calls,

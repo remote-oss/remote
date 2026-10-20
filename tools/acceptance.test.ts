@@ -67,6 +67,7 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
+import type {RunRegistry} from './acceptance-registry.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -181,6 +182,17 @@ class FakeHarness implements HarnessDependencies {
         return Promise.resolve();
       },
     };
+  };
+
+  readonly startRegistry = (runId: string): Promise<RunRegistry> => {
+    this.calls.push(`registry started ${runId}`);
+    return Promise.resolve({
+      address: '127.0.0.1:5000',
+      stop: () => {
+        this.calls.push('registry stopped');
+        return Promise.resolve();
+      },
+    });
   };
 
   readonly startDownloads = (): Promise<RunDownloads> => {
@@ -1005,6 +1017,34 @@ describe('acceptance', () => {
       deepStrictEqual(harness.launched, ['local', 'remote']);
     });
 
+    it('containers-59: a run whose chosen launches ask for no registry starts none', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('registry')),
+          harness.variables?.HARNESS_REGISTRY,
+        ],
+        [[], undefined],
+      );
+    });
+
+    it('containers-59: a run with the containers launch starts the registry once, passes its address, and stops it at the end', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['containers']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('registry')),
+          harness.variables?.HARNESS_REGISTRY,
+        ],
+        [
+          [
+            `registry started ${acceptanceRunId(process.env, process.pid)}`,
+            'registry stopped',
+          ],
+          '127.0.0.1:5000',
+        ],
+      );
+    });
+
     it('tooling-51: a run given the genuine label makes it, with VS Code downloaded once and its folder installed with VS Code’s CLI', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['genuine']);
       deepStrictEqual(
@@ -1280,6 +1320,37 @@ describe('acceptance', () => {
       );
       return seen;
     }
+
+    it('qa-01: each launch is announced with its label before it runs, so a log splits at it', async () => {
+      const reported: string[] = [];
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL, REMOTE, undefined],
+        command,
+        '',
+        sleep,
+        launch => {
+          reported.push(`ran ${launch?.label ?? 'the one configuration'}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+        () => Promise.resolve(),
+        {},
+        () => Promise.resolve({release: () => Promise.resolve()}),
+        line => {
+          reported.push(line);
+        },
+      );
+      deepStrictEqual(reported, [
+        'acceptance: launch terminal',
+        'ran terminal',
+        'acceptance: launch remote',
+        'ran remote',
+        'ran the one configuration',
+      ]);
+    });
 
     it('D-85: a launch with settings finds them over the base settings', async () => {
       deepStrictEqual((await settingsSeen(TERMINAL, REMOTE)).get('terminal'), {

@@ -6,6 +6,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
+import {SSH_HAND_OVERS} from 'lib-companion';
 import {
   authorities,
   commands,
@@ -1121,6 +1122,13 @@ describe('the manifest rows of slice 1', () => {
         'application',
         "Respect configuration from remote environment's 'curlrc' and 'wgetrc' files (placed in their respective default locations).  Enabling this setting may be useful in certain cases (i.e: proxy configuration) but can interfere with this extension's operation. Setting may be ignored on platforms that do not support the necessary flags (i.e: busybox).",
       ],
+    );
+  });
+
+  it('F-5102.BR-12: the identifier table contributes the two commands the explorer hands over to', () => {
+    deepStrictEqual(
+      [commands.openConfigFile.id, commands.addNewSshHost.id],
+      [SSH_HAND_OVERS.openConfigFile, SSH_HAND_OVERS.addNewSshHost],
     );
   });
 });

@@ -647,8 +647,8 @@ describe('cleanRun (card tooling-10)', () => {
           'label=remote-oss.acceptance.run=77-2',
         ],
       },
-      {program: 'docker', argv: ['rm', '--force', 'c1']},
-      {program: 'docker', argv: ['rm', '--force', 'c2']},
+      {program: 'docker', argv: ['rm', '--force', '--volumes', 'c1']},
+      {program: 'docker', argv: ['rm', '--force', '--volumes', 'c2']},
       {
         program: 'docker',
         argv: [
@@ -746,7 +746,7 @@ describe('cleanRun (card tooling-10)', () => {
         )
         .map(call => call.argv.join(' ')),
       [
-        'rm --force c1',
+        'rm --force --volumes c1',
         'network rm n1',
         'network rm n2',
         `image rm --force remote-oss-acceptance-host:${RUN_ID}`,
@@ -932,7 +932,7 @@ describe('the dev container image and its sweep (card containers-09)', () => {
         .filter(call => call.argv.includes('rm'))
         .map(call => call.argv),
       [
-        ['rm', '--force', 'old'],
+        ['rm', '--force', '--volumes', 'old'],
         ['image', 'rm', '--force', 'sha256:a'],
       ],
     );

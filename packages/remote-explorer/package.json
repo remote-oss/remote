@@ -74,6 +74,16 @@
         "command": "remote-explorer.deleteFolderHistoryItem",
         "title": "%commands.deleteFolderHistoryItem.title%",
         "icon": "$(remove)"
+      },
+      {
+        "command": "remote-explorer.configureSsh",
+        "title": "%commands.configureSsh.title%",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "remote-explorer.add",
+        "title": "%commands.add.title%",
+        "icon": "$(plus)"
       }
     ],
     "views": {
@@ -113,6 +123,14 @@
         },
         {
           "command": "remote-explorer.deleteFolderHistoryItem",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.configureSsh",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.add",
           "when": "false"
         }
       ],
@@ -168,6 +186,26 @@
           "command": "remote-explorer.deleteFolderHistoryItem",
           "group": "navigation@3",
           "when": "viewItem == remote-explorer.remoteFolder && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.configureSsh",
+          "group": "inline@1",
+          "when": "viewItem == remote-explorer.sshGroup && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.configureSsh",
+          "group": "navigation@1",
+          "when": "viewItem == remote-explorer.sshGroup && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.add",
+          "group": "inline@2",
+          "when": "viewItem == remote-explorer.sshGroup && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.add",
+          "group": "navigation@2",
+          "when": "viewItem == remote-explorer.sshGroup && !remote-explorer.standingDown"
         }
       ]
     },

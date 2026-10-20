@@ -27,6 +27,8 @@ interface LaunchCommon {
   hostSetup?: readonly HostSetupEntry[];
   /** Ports of the client's loopback the run listens on while each attempt of the launch runs, to make a configured range busy. */
   clientListeners?: readonly number[];
+  /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
+  registry?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
 }
@@ -681,6 +683,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers',
       suite: 'containers',
+      registry: true,
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

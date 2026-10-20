@@ -83,6 +83,8 @@ export interface Targets extends Registration {
   /** The roots for `undefined`; a group's hosts once the latest build has settled; a host's folders; `[]` for a folder. */
   children(node: TargetNode | undefined): Promise<readonly TargetNode[]>;
   itemOf(node: TargetNode): TargetItem;
+  /** The "SSH" group node when the value is it and the companion is present; otherwise undefined. */
+  groupOf(value: unknown): GroupNode | undefined;
   /** The value itself when it is a host node of the current list; otherwise undefined. */
   hostOf(value: unknown): HostNode | undefined;
   /** The value itself when it is a folder node of the current list; otherwise undefined. */
@@ -307,6 +309,7 @@ export function createTargets(options: TargetsOptions): Targets {
         collapsibleState: hostStateOf(node),
       };
     },
+    groupOf: value => (value === group && present() ? group : undefined),
     hostOf: value => hostNodes.find(node => node === value),
     folderOf: value =>
       hostNodes.flatMap(node => node.folders).find(node => node === value),
