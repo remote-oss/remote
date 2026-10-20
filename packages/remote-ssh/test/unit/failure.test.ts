@@ -811,6 +811,29 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
+  it("connect-64: a failed shared login keeps ssh's exit status for the log, and a signal as null", () => {
+    deepStrictEqual(
+      [
+        ofConnection({
+          kind: 'loginFailed',
+          failure: 'unknown',
+          hints: [],
+          exitStatus: 255,
+        }),
+        ofConnection({
+          kind: 'loginFailed',
+          failure: 'unknown',
+          hints: [],
+          exitStatus: null,
+        }),
+      ],
+      [
+        {kind: 'unknown', hints: [], sshExitStatus: 255},
+        {kind: 'unknown', hints: [], sshExitStatus: null},
+      ],
+    );
+  });
+
   it('a login failure with no reason has none', () => {
     deepStrictEqual(
       ofConnection({kind: 'loginFailed', failure: 'unreachable', hints: []}),
