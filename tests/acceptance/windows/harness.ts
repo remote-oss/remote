@@ -46,6 +46,7 @@ export interface AgentEvent {
     | 'commands'
     | 'extension'
     | 'terminalBuffer'
+    | 'recentlyOpened'
     | 'tunnels';
   time: number;
   id?: string;
@@ -82,8 +83,17 @@ export interface AgentEvent {
   activeTab?: {uri: string; preview: boolean} | null;
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
   text?: string;
+  /** The folders and workspaces of the editor's Open Recent list, as a `recentlyOpened` event read them. */
+  recent?: RecentEntry[];
   /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
   tunnels?: ForwardedTunnel[];
+}
+
+/** One folder or workspace of the Open Recent list: its address, and the label and remote authority stored with it. */
+export interface RecentEntry {
+  uri: string;
+  label: string | null;
+  remoteAuthority: string | null;
 }
 
 /** One forwarded port of a window: its port on the host, and where it is reachable on this machine. */
@@ -1071,6 +1081,14 @@ export async function terminalBuffer(name: string): Promise<string> {
   return (
     (await reported(name, 'terminalBuffer', 'acceptance.agent.terminalBuffer'))
       ?.text ?? ''
+  );
+}
+
+/** The folders and workspaces of the editor's Open Recent list, as window `name` reads them from the main process. */
+export async function recentlyOpenedIn(name: string): Promise<RecentEntry[]> {
+  return (
+    (await reported(name, 'recentlyOpened', 'acceptance.agent.recentlyOpened'))
+      ?.recent ?? []
   );
 }
 
