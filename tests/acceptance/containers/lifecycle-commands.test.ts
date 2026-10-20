@@ -224,15 +224,17 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
       })();
       const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
       const labelsAtDialog = await labelsOf(containerId, folder);
-      await new Promise(resolve => setTimeout(resolve, IDLE_MILLISECONDS));
-      const stillShown = await dialogOf(name);
-      const indicator = (await statusItem(name, 'status.host')).text;
+      // The shutdown helper stops the container of a failed connect about ten seconds after it, so the state is read
+      // while the dialog shows, before the wait that checks the dialog stays.
       const status = await docker(
         'inspect',
         '-f',
         '{{.State.Status}}',
         containerId,
       );
+      await new Promise(resolve => setTimeout(resolve, IDLE_MILLISECONDS));
+      const stillShown = await dialogOf(name);
+      const indicator = (await statusItem(name, 'status.host')).text;
       await closeWindow(name);
       deepStrictEqual(
         {

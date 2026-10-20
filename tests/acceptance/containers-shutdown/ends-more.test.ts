@@ -346,11 +346,14 @@ describe('more of what ends a window decides when its container stops (card cont
 
   it('F-0417 AC-61 (m61): a window closed and the same folder reopened from a second window within five seconds sees no kill, stop, die or start for 40 s', async () => {
     const first = await connectedWindow('c69-m61');
-    const second = await openFolderWindow(first.folder);
     try {
       const since = Date.now();
-      await closeWindow(first.window);
-      await reopenInContainer(second);
+      // Both windows have one name, and the first command to reach it is taken by whichever of them polls first: the
+      // close is sent while the first is the only one, and the second opens as it ends.
+      const closing = closeWindow(first.window);
+      const opening = openFolderWindow(first.folder);
+      await Promise.all([closing, opening]);
+      await reopenInContainer(first.window);
       await new Promise(resolve => setTimeout(resolve, 40_000));
       deepStrictEqual(
         [
@@ -360,7 +363,7 @@ describe('more of what ends a window decides when its container stops (card cont
         [[], true],
       );
     } finally {
-      await closeWindow(second).catch(() => undefined);
+      await closeWindow(first.window).catch(() => undefined);
       await removeContainersOf(first.folder);
     }
   });
