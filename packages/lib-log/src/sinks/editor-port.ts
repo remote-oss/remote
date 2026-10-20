@@ -14,3 +14,15 @@ export interface EditorLogPort {
     dispose(): void;
   };
 }
+
+/** The output channel the editor gives: lines appended, and a reveal that selects it and focuses the panel. */
+export interface RevealableChannel {
+  appendLine(text: string): void;
+  show(preserveFocus?: boolean): void;
+  dispose(): void;
+}
+
+/** The editor operation that opening a revealable log channel needs. */
+export interface ChannelPort {
+  createOutputChannel(name: string): RevealableChannel;
+}

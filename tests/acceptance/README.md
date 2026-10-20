@@ -133,7 +133,10 @@ happen: a `progress` line with the title of each progress message (no `details`)
 message, with `details` true or false as the message carried the details link. `recordLines(surface?)` of
 `suite/harness.ts` reads them. `REMOTE_OSS_ACCEPTANCE_LOG` names a file the log channel's lines are appended to, after the
 logger's secret masking: `<run folder>/<label>-log.txt` for each VSCodium launch and `<run folder>/log.txt` for the
-VS Code run. `connectionLog()` reads it, without the time stamps. Nothing of this exists when the switch is unset.
+VS Code run. `connectionLog()` reads it, without the time stamps. `REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG` names the same
+for Dev Containers' log, `<run folder>/<label>-containers-log.txt`, for each launch that installs it; `containersLog()`
+reads it and `containersLogSince(mark)` reads the lines after a count taken earlier. Nothing of this exists when the
+switch is unset.
 
 ### Several windows
 

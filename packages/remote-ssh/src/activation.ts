@@ -20,7 +20,7 @@ import {
   type SetupPorts,
   type SetupRun,
 } from 'lib-authority';
-import type {Logger} from 'lib-log';
+import type {ChannelPort, Logger} from 'lib-log';
 import {standDownIfPresent, type StandDownHost} from 'lib-standdown';
 import {
   helpHandlers,
@@ -29,7 +29,6 @@ import {
   type HelpLinks,
 } from './help-commands.ts';
 import {
-  type ChannelPort,
   levelOfSetting,
   type LogEnvironment,
   openLogChannel,

@@ -205,6 +205,7 @@ describe('the files of a launch', () => {
       script: '/run/windows-script.json',
       record: '/run/windows-record.jsonl',
       logFile: '/run/windows-log.txt',
+      containersLogFile: '/run/windows-containers-log.txt',
     });
   });
 });
@@ -471,6 +472,65 @@ describe('runPlainLaunch', () => {
         ],
       );
     }
+  });
+
+  it('card containers-37: a launch that installs Dev Containers gets a log file of its own for it, the same for its editor and its tests', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      PLAIN_RUN,
+      {...LAUNCH, withExtensions: ['remote-oss.remote-containers']},
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(
+        program => program.environment.REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG,
+      ),
+      ['/run/windows-containers-log.txt', '/run/windows-containers-log.txt'],
+    );
+  });
+
+  it('card containers-37: a launch that does not install Dev Containers gets no file for its log', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      PLAIN_RUN,
+      {...LAUNCH, withExtensions: ['remote-oss.remote-explorer']},
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(
+        program => program.environment.REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG,
+      ),
+      [undefined, undefined],
+    );
+  });
+
+  it('card containers-37: of the launches of the run, those that install Dev Containers get the variable, and no other does', async () => {
+    const seen: Array<[string, boolean]> = [];
+    for (const launch of launchesOf(REPOSITORY_ROOT).filter(
+      each => each.kind === 'plain',
+    )) {
+      const {steps, programs} = recordingSteps('pass');
+      await runPlainLaunch('/repo', PLAIN_RUN, launch, steps);
+      seen.push([
+        launch.label,
+        programs[0]?.environment.REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG ===
+          path.join('/run', `${launch.label}-containers-log.txt`),
+      ]);
+    }
+    deepStrictEqual(
+      seen.filter(([, gotFile]) => gotFile).map(([label]) => label),
+      launchesOf(REPOSITORY_ROOT)
+        .filter(
+          each =>
+            each.kind === 'plain' &&
+            (each.withExtensions ?? []).includes(
+              'remote-oss.remote-containers',
+            ),
+        )
+        .map(each => each.label),
+    );
   });
 
   it('D-85: a launch’s own environment wins over the run’s', async () => {
