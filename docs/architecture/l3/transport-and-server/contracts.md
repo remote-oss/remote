@@ -332,7 +332,7 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   request after its hello. This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
   `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
-  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints}`,
+  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64),
   `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
   `transportLost`, `waitingForOtherWindow`. The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
   event (S5's kind, reason and hints) and the oldest waiting window takes over the login. S6 classifies prompts inside
@@ -538,6 +538,11 @@ Rules inside the scripts:
 - Lowercase `http_proxy` and `https_proxy` are exported in F-2404 BR-5's text, and the host's login environment
   wins (F-2404 BR-10).
 - Locks use `flock` or atomic `ln` (F-2408, F-2702).
+- **A secret never enters a script as text** (F-2003 BR-14; athena on #253, 2026-10-20, with proteus). A credential, a
+  token, or a value that comes from a user setting reaches the run only through the run's `environment`, where it's
+  marked secret, so the log names it whatever its length. A value written into the script itself (an `assignment()`)
+  is seen by neither the mark nor the name guard. An address that may carry a token (the template override, V4) is
+  logged with its scheme, host and path only (#1087).
 - The scripts trap HUP, INT and TERM and release the host lock before exiting, so a killed `ssh` never leaves later
   connects at `LockBusy` (found in review, 2026-10-08).
 - macOS sockets go in `TMPDIR` (F-2702).
@@ -1059,7 +1064,7 @@ R4:
 
 ## 8. remote-server tunnel client: blocked
 
-Frozen pending D-55 (the user). F-8902 is accepted: sign-in through `vscode.authentication` only. F-8201 Q1 is
+Not built: the user decided on 2026-10-07 to ship without Remote - Tunnels (D-55, the dev tunnels terms of service), and to revisit only if the terms change. What follows is kept for that day. F-8902 is accepted: sign-in through `vscode.authentication` only. F-8201 Q1 is
 ruled "three quirks fixed", which T4 and B's `currentConnection` follow. A spike of option (c) runs as an
 investigation by `remote-coding-worker-1`.
 

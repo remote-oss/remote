@@ -40,6 +40,11 @@ export interface ScriptRequest {
   interpreter: Interpreter;
   /** Variables added to the remote environment for this script only. */
   environment: Readonly<Record<string, string>>;
+  /**
+   * The names in `environment` whose values are secret: a channel or a decorator that logs the run's output names
+   * those values, whatever their length.
+   */
+  secretVariables?: readonly string[];
   /** A local file that does not exist fails the run with `spawnFailed`, naming the file, before anything runs. */
   input: ScriptInput;
   cancellation: AbortSignal;

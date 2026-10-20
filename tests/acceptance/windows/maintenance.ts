@@ -4,7 +4,13 @@
  * changes them.
  */
 
-import {mkdirSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
@@ -298,12 +304,13 @@ const ANSWERED_SURFACES = new Set([
  */
 function alignScript(window: string): void {
   const scriptFile = variable('REMOTE_OSS_ACCEPTANCE_SCRIPT');
-  const entries =
-    (
-      JSON.parse(readFileSync(scriptFile, 'utf8')) as {
-        entries?: Array<{window?: string}>;
-      }
-    ).entries ?? [];
+  const entries = existsSync(scriptFile)
+    ? ((
+        JSON.parse(readFileSync(scriptFile, 'utf8')) as {
+          entries?: Array<{window?: string}>;
+        }
+      ).entries ?? [])
+    : [];
   const answered = recordLines().filter(
     line =>
       line.window === window &&

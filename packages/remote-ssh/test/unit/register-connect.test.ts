@@ -175,6 +175,7 @@ async function registered(
         showError: () => Promise.resolve(undefined),
       },
       addHost: {
+        hostsChanged: () => undefined,
         editor: {
           pickFile: () => Promise.resolve(undefined),
           open: file => Promise.resolve({file}),
@@ -544,6 +545,36 @@ describe("the connect's registration", () => {
       hostKey: 'dev',
       lastResolve: 'succeeded',
     });
+  });
+
+  it('ssh-provider-02: the first-resolve listener is called once when the first resolve settles, not before', async () => {
+    const {registration, recording} = await registered(
+      true,
+      'none',
+      undefined,
+      CONNECTED,
+    );
+    const calls: string[] = [];
+    registration.onFirstResolveSettled(() => {
+      calls.push('settled');
+    });
+    const before = [...calls];
+    await recording
+      .registered()
+      ?.resolve('ssh-remote+dev', {resolveAttempt: 1});
+    await recording
+      .registered()
+      ?.resolve('ssh-remote+dev', {resolveAttempt: 2});
+    deepStrictEqual([before, calls], [[], ['settled']]);
+  });
+
+  it('ssh-provider-02: without a resolver the first-resolve listener never fires', async () => {
+    const {registration} = await registered(false);
+    const calls: string[] = [];
+    registration.onFirstResolveSettled(() => {
+      calls.push('settled');
+    });
+    deepStrictEqual(calls, []);
   });
 
   it('contracts §3.2: without the resolvers grant there is no active connection', async () => {

@@ -76,7 +76,7 @@ describe('a launch in socket mode', () => {
     );
   });
 
-  it('F-2410 AC-9, BR-7: a running port-kind server is left as it is', async () => {
+  it('F-2410 AC-9: a running port-kind server is left as it is (BR-7)', async () => {
     if (portServersBefore.length === 0) {
       throw new Error('no port-kind server was running when the launch began');
     }

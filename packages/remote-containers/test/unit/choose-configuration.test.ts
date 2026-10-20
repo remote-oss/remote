@@ -33,6 +33,8 @@ interface Scene {
   engineCheck: Promise<FirstCheckResult>;
   /** What the worktree setting is, as the command passes it. */
   mountGitWorktreeCommonDir: boolean;
+  /** The absolute paths that exist besides the configuration files; none by default, so a named Dockerfile is missing. */
+  existing: string[];
   calls: string[];
   rows: unknown[];
   targets: unknown[];
@@ -58,6 +60,7 @@ function sceneOf(contents: Scene['contents']): Scene {
     reading: undefined,
     engineCheck: Promise.resolve('proceed'),
     mountGitWorktreeCommonDir: false,
+    existing: [],
     calls: [],
     rows: [],
     targets: [],
@@ -115,6 +118,10 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
               ? 'unreadable'
               : Buffer.from(content),
           );
+        },
+        exists: path => {
+          scene.calls.push(`exists ${path.slice(FOLDER.length + 1)}`);
+          return Promise.resolve(scene.existing.includes(path));
         },
       },
       surfaces: {
@@ -739,5 +746,103 @@ describe('choosing the configuration while the engine is checked (card container
     deepStrictEqual(after, [
       'info: the configuration was read while the engine check failed: plain',
     ]);
+  });
+
+  const MISSING = '{"name":"x","build":{"dockerfile":"Missing"}}';
+  const MISSING_DETAIL = '"/w/p/.devcontainer/Missing" does not exist.';
+  const BUTTON = 'Open devcontainer.json';
+
+  it('F-0412 AC-18, AC-32: a missing build.dockerfile (7.E3) shows S004 with the absolute path and the button, and goes no further', async () => {
+    const scene = sceneOf({[ONLY]: MISSING});
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => call.startsWith('showError')),
+        scene.calls.includes('readConfiguration'),
+      ],
+      [
+        {kind: 'rejected'},
+        [`showError ${JSON.stringify(['', MISSING_DETAIL, [BUTTON]])}`],
+        false,
+      ],
+    );
+  });
+
+  it('F-0412 7.E3: the button opens the configuration, and Cancel opens nothing', async () => {
+    const opened = sceneOf({[ONLY]: MISSING});
+    opened.errorAnswer = BUTTON;
+    await choose(opened);
+    const cancelled = sceneOf({[ONLY]: MISSING});
+    const choice = await choose(cancelled);
+    deepStrictEqual(
+      [
+        opened.calls.filter(call => call.startsWith('openPreview')),
+        cancelled.calls.filter(call => call.startsWith('openPreview')),
+        choice,
+      ],
+      [[`openPreview ${ONLY}`], [], {kind: 'rejected'}],
+    );
+  });
+
+  it('F-0412 7.E3: the legacy dockerFile is checked too', async () => {
+    const scene = sceneOf({[ONLY]: '{"name":"x","dockerFile":"Missing"}'});
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.some(call => call.includes(JSON.stringify(MISSING_DETAIL))),
+      ],
+      [{kind: 'rejected'}, true],
+    );
+  });
+
+  it('F-0412 7.E3: the path resolves from the configuration’s folder, and the button names a dotfile configuration', async () => {
+    const nested = sceneOf({
+      '.devcontainer/sub/devcontainer.json':
+        '{"name":"x","build":{"dockerfile":"../Dockerfile"}}',
+    });
+    nested.existing = ['/w/p/.devcontainer/Dockerfile'];
+    const choice = await choose(nested);
+    const dotfile = sceneOf({
+      '.devcontainer.json': '{"name":"x","dockerFile":"Missing"}',
+    });
+    await choose(dotfile);
+    deepStrictEqual(
+      [
+        nested.calls.filter(call => call.startsWith('exists')),
+        choice.kind,
+        dotfile.calls.some(call => call.includes('"Open .devcontainer.json"')),
+      ],
+      [['exists .devcontainer/Dockerfile'], 'chosen', true],
+    );
+  });
+
+  it('F-0412 5.1: an existing Dockerfile goes on to the read', async () => {
+    const scene = sceneOf({[ONLY]: MISSING});
+    scene.existing = ['/w/p/.devcontainer/Missing'];
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [choice.kind, scene.calls.includes('readConfiguration')],
+      ['chosen', true],
+    );
+  });
+
+  it('F-0412 BR-16: an image configuration is not checked, and a dockerfile with a variable is not either', async () => {
+    const image = sceneOf({[ONLY]: IMAGE});
+    await choose(image);
+    const variable = sceneOf({
+      [ONLY]:
+        '{"name":"x","build":{"dockerfile":"${localWorkspaceFolder}/Dockerfile"}}',
+    });
+    const choice = await choose(variable);
+    deepStrictEqual(
+      [
+        image.calls.some(call => call.startsWith('exists')),
+        variable.calls.some(call => call.startsWith('exists')),
+        choice.kind,
+      ],
+      [false, false, 'chosen'],
+    );
   });
 });

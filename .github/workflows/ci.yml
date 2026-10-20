@@ -14,6 +14,13 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
+      runner-arch:
+        description: >-
+          The self-hosted runners' architecture for the acceptance jobs. X64 always on a pull request; ARM64 (the
+          Mac mini runners) only on a dispatch, until a dispatch shows the acceptance jobs pass there
+        type: choice
+        options: [X64, ARM64]
+        default: X64
       real-server:
         description: Also install and start the real VSCodium server (about 125 MB, up to 20 minutes)
         type: boolean
@@ -32,10 +39,12 @@ on:
           node tools/acceptance-select.ts --base <sha> --head <sha> prints the launches it can reach)
         type: string
         default: all
-  # a push to main runs the VSCodium job alone: the backstop that shows whether main's launches are green, which PR CI
-  # never runs; the other jobs ran on the pull request's merge ref
+  # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
+  # PR CI never runs. It ran on every merge until 2026-10-20, which kept one of the eight runners busy with it almost all
+  # the time; the other jobs ran on the pull request's merge ref
+  schedule:
+    - cron: '17 */2 * * *'
   push:
-    branches: [main]
     tags: ['*-v*']
 
 permissions:
@@ -47,7 +56,7 @@ permissions:
 # run side by side. The tag of a release is its own group and is never cancelled.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
   # Whether a pull request changes only docs/ (no .tsv): only the checks job reads docs/ (layout, public surface,
@@ -56,7 +65,8 @@ jobs:
   # brings to the base it would merge into. Dispatches and tags skip this job and run everything.
   changes:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    # a git diff only, so a GitHub runner (allowed by the user, 2026-10-20) and no wait for a self-hosted one
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
@@ -76,8 +86,9 @@ jobs:
           fi
 
   checks:
-    if: (github.event_name != 'pull_request' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')) || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
+    runs-on: ubuntu-latest
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
@@ -102,6 +113,9 @@ jobs:
       - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
+      # seconds each after the install above; as jobs of their own they waited minutes for a runner (2026-10-20)
+      - run: pnpm dupes
+      - run: pnpm dead
       - run: pnpm check-licences
       - run: pnpm format:check
       # the unit tests' temporary folders go to the job's own temporary directory, which the runner empties after every
@@ -117,14 +131,15 @@ jobs:
     name: ${{ matrix.check }}
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     strategy:
       fail-fast: false
       matrix:
-        check: [dupes, dead, coverage]
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+        check: [coverage]
+    # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -139,16 +154,19 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the checks job
 
+  # The acceptance jobs run on the X64 self-hosted runners (ci-1 to ci-8): the arm64 Mac mini runners carry the
+  # runners' shared label too (2026-10-20), and these jobs haven't been shown to pass there yet. A dispatch with runner-arch
+  # ARM64 is how they are; until then a pull request never lands on arm64.
   # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
     name: acceptance (slice 1)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -184,10 +202,10 @@ jobs:
     name: acceptance (server lifecycle)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -208,7 +226,7 @@ jobs:
   acceptance-host-variants:
     name: acceptance (host variants)
     if: inputs.variants || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -232,7 +250,7 @@ jobs:
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -252,14 +270,14 @@ jobs:
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
   acceptance-vscodium:
     name: acceptance (vscodium)
-    if: inputs.vscodium || (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'))
-    # GitHub keeps one pending job per group, and a newer one replaces it. Pushes to main have their own group, where
+    if: inputs.vscodium || github.event_name == 'schedule' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group, where
     # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
-    # theirs, fed one at a time, so a main push never displaces them.
+    # theirs, fed one at a time, so the backstop never displaces them.
     concurrency:
-      group: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
+      group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     # the whole VSCodium suite outgrew 30 minutes in October 2026: main's backstop was cut at 30 every time, so it never
     # reported (050079f: started 23:38:16, cancelled 00:08:41)
     timeout-minutes: 60
@@ -291,7 +309,8 @@ jobs:
   # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
   # that failed or was cancelled fails it; a skipped job passes (a docs-only change, a draft, a dispatch's opt-in jobs).
   # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
-  # on skipped jobs; it runs on a GitHub runner then, so even this step of a fork's run never reaches a self-hosted runner.
+  # on skipped jobs. It runs on a GitHub runner (allowed by the user, 2026-10-20): it only reads the needed jobs'
+  # results, so it takes no self-hosted runner, and no step of a fork's run reaches one.
   ci-gate:
     name: ci-gate
     needs:
@@ -304,9 +323,7 @@ jobs:
       - acceptance-real-server
       - acceptance-vscodium
     if: always()
-    runs-on: >-
-      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-      && 'ubuntu-latest' || vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: The needed jobs' results
