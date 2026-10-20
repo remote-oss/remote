@@ -78,6 +78,8 @@ export interface AgentEvent {
   terminals?: string[];
   /** The file of the window's active text editor, or null, as a `state` event saw it. */
   activeEditor?: string | null;
+  /** The active tab when it holds a text file: its URI and whether it is a preview; null for any other tab, as a `state` event saw it. */
+  activeTab?: {uri: string; preview: boolean} | null;
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
   text?: string;
   /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
@@ -796,6 +798,7 @@ export async function windowState(name: string): Promise<{
   folders: string[];
   workspaceFile: string | null;
   remoteSshActive: boolean;
+  activeTab: {uri: string; preview: boolean} | null;
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -806,6 +809,7 @@ export async function windowState(name: string): Promise<{
       folders: last?.folders ?? [],
       workspaceFile: last?.workspaceFile ?? null,
       remoteSshActive: last?.remoteSshActive ?? false,
+      activeTab: last?.activeTab ?? null,
     };
     if (
       state.remoteName !== 'ssh-remote' ||
