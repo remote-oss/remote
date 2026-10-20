@@ -32,7 +32,7 @@ import {workspaceSuffixOf} from './window-identity.ts';
 /**
  * What the extension decides about its editor adapter: the details link and nothing about ports. The resolver then
  * gives core no tunnel factory, no tunnel features and no candidate port source, so core's own detection and forwards
- * serve the window (F-1102 §16).
+ * serve the window.
  */
 export const RESOLVER_EDITOR_OPTIONS: ResolverEditorOptions = {
   detailsCommand: runtimeCommands.revealLogTerminal,

@@ -38,7 +38,6 @@ import {currentContext, firstCheck} from './engine/preflight.ts';
 import {
   commands,
   enabledApiProposals,
-  runtimeCommands,
   settings,
   standDown,
   views,
