@@ -247,7 +247,7 @@ describe('the first check', () => {
     );
   });
 
-  it('F-0201 AC-21, AC-31, BR-9: an old engine offers Ignore, which proceeds; the other buttons stop; every call asks again', async () => {
+  it('F-0201 AC-21, AC-31: an old engine offers Ignore, which proceeds; the other buttons stop; every call asks again', async () => {
     const oldEngine: Record<string, Answer> = {
       '--version': finished(0),
       [STRUCTURED.join(' ')]: finished(0, OLD_REPLY),
@@ -336,7 +336,7 @@ describe('the first check', () => {
     );
   });
 
-  it('F-0201 AC-22, BR-2: the setting is read at every call', async () => {
+  it('F-0201 AC-22: the setting is read at every call', async () => {
     const scene = sceneOf(
       {'--version': {kind: 'failed', detail: 'spawn x ENOENT'}},
       {values: ['missing-a', 'missing-b']},
