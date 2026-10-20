@@ -10,6 +10,7 @@ import {
 } from '../../src/connect-ports.ts';
 import type {SshTarget} from 'lib-ssh';
 import type {MaintenanceRun} from '../../src/maintenance/maintenance-run.ts';
+import {windowlessLine} from '../../src/connect/windowless.ts';
 import {registerConnect} from '../../src/register-connect.ts';
 import {nodeMachineOf} from '../../src/node-machine.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
@@ -256,8 +257,30 @@ describe("the connect's registration", () => {
     );
   });
 
-  it('F-3903 §5 rule 4: without the resolvers grant Connect to Host still opens the window', async () => {
-    const {seen} = await registered(false);
+  it('F-3903 §5 rule 4: without the resolvers grant the connect commands open no window, pick nothing and log one line each', async () => {
+    const {seen, sink} = await registered(false);
+    const connects = [
+      'opensshremotes.openEmptyWindow',
+      'opensshremotes.openEmptyWindowInCurrentWindow',
+      'opensshremotes.openEmptyWindowOnCurrentHost',
+    ];
+    for (const commandId of connects) {
+      await seen.commands.get(commandId)?.({host: 'dev'});
+    }
+    deepStrictEqual(
+      [
+        seen.remote,
+        seen.inputs,
+        sink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('opens no window')),
+      ],
+      [[], 0, connects.map(commandId => windowlessLine(commandId))],
+    );
+  });
+
+  it('F-3903 §5 rule 4: with the resolvers grant Connect to Host opens the window', async () => {
+    const {seen} = await registered(true);
     await seen.commands.get('opensshremotes.openEmptyWindow')?.({host: 'dev'});
     deepStrictEqual(seen.remote, [['ssh-remote+dev', 'new']]);
   });

@@ -5,6 +5,14 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
+- **In VS Code without the proposed APIs Remote - SSH needs, "Connect to Host..." opens no window.** The window you ran
+  it from shows the notification that says how to enable them. A window opened directly on an SSH host shows the same
+  notification in its notification centre, and VS Code's own offer to install an extension appears beside it.
+  - F-2001 AC-30 describes the notification in the window that opens on the host, from both paths, and not VS Code's
+    offer. The window opened from "Connect to Host..." can't connect without the proposals, and it took the focus
+    from the notification. VS Code shows its own offer whenever no extension resolves the host, which no extension can
+    change (athena on #737; spec question on remote-oss/remote-ssh#11).
+
 - **"Open Setting" in the dialog that says the editor names no server source opens your user settings file at the
   setting**, not the Settings editor. Nothing is written to the file.
   - F-3902 AC-9 describes the Settings editor on the User tab, searching for the setting. The Settings editor can't

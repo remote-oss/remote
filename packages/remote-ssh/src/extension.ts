@@ -345,6 +345,7 @@ export async function activate(
     activeConnection: () => connect.activeConnection(),
     opener: openerHostOf(vscode),
     logger: result.logger,
+    resolversGranted: result.proposals.granted.includes('resolvers'),
   });
   context.subscriptions.push({
     dispose: () => {
