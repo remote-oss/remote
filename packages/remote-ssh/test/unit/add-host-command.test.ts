@@ -36,6 +36,8 @@ interface World {
   notices: Array<{severity: string; message: string; buttons: string[]}>;
   opened: string[];
   windows: Array<[string, string]>;
+  /** The steps and the notices shown when each hosts-changed signal was sent. */
+  signals: Array<{steps: Step[]; notices: number}>;
 }
 
 function takeFile(label: string): World['take'] {
@@ -56,6 +58,7 @@ function worldWith(changes: Partial<World> = {}): World {
     choices: [],
     notices: [],
     opened: [],
+    signals: [],
     windows: [],
     ...changes,
   };
@@ -102,6 +105,12 @@ function filesOf(world: World): HostFiles {
 
 function portsOf(world: World): AddHostPorts {
   return {
+    hostsChanged: () => {
+      world.signals.push({
+        steps: [...world.steps],
+        notices: world.notices.length,
+      });
+    },
     editor: {
       pickFile: choice => {
         world.steps.push('pick');
@@ -379,6 +388,36 @@ describe('the command that adds a host (card connect-22)', () => {
     world.disk.set(PLACES.userFile, 'Host old\n  HostName a\n');
     await execute(world);
     deepStrictEqual(world.steps, ['input', 'pick', 'read', 'write']);
+  });
+
+  it('F-2204 §16: a run that wrote the block sends one signal, right after the write and before the notice', async () => {
+    const world = worldWith();
+    await execute(world);
+    deepStrictEqual(world.signals, [
+      {
+        steps: [
+          'input',
+          'pick',
+          `folder ${HOME}/.ssh 700`,
+          `file ${PLACES.userFile} 600`,
+          'write',
+        ],
+        notices: 0,
+      },
+    ]);
+  });
+
+  it('F-2204 §16: a cancelled run, a parse problem and a failed write send no signal', async () => {
+    const signals: number[] = [];
+    for (const world of [
+      worldWith({typed: undefined}),
+      worldWith({typed: 'host50;id'}),
+      worldWith({writeFailure: new Error('EACCES')}),
+    ]) {
+      await execute(world).catch(() => undefined);
+      signals.push(world.signals.length);
+    }
+    deepStrictEqual(signals, [0, 0, 0]);
   });
 
   it('F-2204 AC-26: a file that cannot be written rejects with the system error', async () => {

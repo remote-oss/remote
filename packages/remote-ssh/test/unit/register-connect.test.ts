@@ -175,6 +175,7 @@ async function registered(
         showError: () => Promise.resolve(undefined),
       },
       addHost: {
+        hostsChanged: () => undefined,
         editor: {
           pickFile: () => Promise.resolve(undefined),
           open: file => Promise.resolve({file}),
