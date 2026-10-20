@@ -159,6 +159,7 @@ export async function runWizard(
   }
   const {state} = walked;
   const folder = targetFolderOf(state, ports);
+  const entry = state.reuseEntry;
   const written = await ports.write(
     {
       targetFolder: folder,
@@ -166,12 +167,12 @@ export async function runWizard(
       templateArgs: state.templateArgs,
       features: state.features,
       omitPaths: state.omitPaths,
+      ...(entry === undefined
+        ? {}
+        : {adjust: scratch => referToEntry(scratch, entry, ports)}),
     },
     cancellation,
   );
-  if (written.kind === 'written' && state.reuseEntry !== undefined) {
-    await referToEntry(folder, state.reuseEntry, ports);
-  }
   return outcomeOf(written, folder);
 }
 

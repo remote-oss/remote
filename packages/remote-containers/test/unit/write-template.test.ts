@@ -127,8 +127,12 @@ class Scene {
   }
 
   /** Runs the write over this scene. */
-  execute(): ReturnType<typeof writeTemplate> {
-    return writeTemplate(REQUEST, this.ports(), NEVER);
+  execute(adjust?: WriteRequest['adjust']): ReturnType<typeof writeTemplate> {
+    return writeTemplate(
+      adjust === undefined ? REQUEST : {...REQUEST, adjust},
+      this.ports(),
+      NEVER,
+    );
   }
 
   /** The CLI leaves these files in the scratch folder and reports them. */
@@ -448,6 +452,47 @@ describe('the write of a template (card containers-78)', () => {
           0,
         ],
       ),
+    );
+  });
+
+  it('F-0802 AC-22: the adjustment runs in the scratch folder after the apply and before any question, and its change is what is copied', async () => {
+    const scene = new Scene();
+    scene.target.set(`${TARGET}/a.txt`, 'old a');
+    scene.leaves('a.txt');
+    scene.answers = ['Overwrite'];
+    const seen: string[] = [];
+    const outcome = await scene.execute(scratch => {
+      seen.push(scratch, String(scene.shown.length));
+      scene.scratchFiles.set('a.txt', 'adjusted');
+      return Promise.resolve();
+    });
+    deepStrictEqual(
+      [outcome.kind, seen, scene.target.get(`${TARGET}/a.txt`)],
+      ['written', [SCRATCH, '0'], 'adjusted'],
+    );
+  });
+
+  it('F-0802 AC-22, F-0801 AC-9: a file that is skipped is left as the user has it, whatever the adjustment did to the copy', async () => {
+    const scene = new Scene();
+    scene.target.set(`${TARGET}/a.txt`, 'old a');
+    scene.leaves('a.txt');
+    scene.answers = ['Skip'];
+    await scene.execute(() => {
+      scene.scratchFiles.set('a.txt', 'adjusted');
+      return Promise.resolve();
+    });
+    deepStrictEqual(scene.target.get(`${TARGET}/a.txt`), 'old a');
+  });
+
+  it('F-0802 AC-22, F-0801 7.E8: an adjustment that fails writes nothing, asks nothing and shows our message with its words', async () => {
+    const scene = new Scene();
+    scene.leaves('a.txt');
+    const outcome = await scene.execute(() =>
+      Promise.reject(new Error('no such file')),
+    );
+    deepStrictEqual(
+      [outcome, scene.written, scene.shown.map(each => each.severity)],
+      [{kind: 'failed', detail: 'no such file'}, [], ['error']],
     );
   });
 });

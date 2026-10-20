@@ -30,6 +30,8 @@ export interface WriteRequest {
   templateArgs: TemplateRequest['templateArgs'];
   features: TemplateRequest['features'];
   omitPaths: readonly string[];
+  /** Changes the applied files in the scratch folder, before the questions; a failure writes nothing. */
+  adjust?: (scratchFolder: string) => Promise<void>;
 }
 
 /** How the write ended. */
@@ -289,6 +291,11 @@ export async function writeTemplate(
         return await notWritten(
           `the template reported a path outside its folder: ${unsafe}`,
         );
+      }
+      try {
+        await request.adjust?.(scratch);
+      } catch (caught) {
+        return await notWritten((caught as Error).message);
       }
       const planned = await plan(applied.files);
       if (planned === 'cancelled') {

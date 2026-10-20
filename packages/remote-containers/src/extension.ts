@@ -681,7 +681,13 @@ export async function activate(
           vscode.window.showTextDocument(vscode.Uri.file(file), {
             preview: true,
           }),
-        offerReopen: () => offerReopenFor(served.logger),
+        offerReopen: () => {
+          offerReopenFor(served.logger).catch((caught: unknown) => {
+            served.logger.error(
+              `the reopen notification failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+            );
+          });
+        },
         logger: served.logger,
       };
       const reopenPorts: ReopenPorts = {

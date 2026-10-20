@@ -278,9 +278,10 @@ function sceneOf(
         }),
       translate: template => template,
     },
-    write: request => {
+    write: async request => {
       scene.written.push(request);
-      return Promise.resolve(scene.outcome);
+      await request.adjust?.('/scratch');
+      return scene.outcome;
     },
     files: {
       list: () => Promise.resolve(scene.root),
@@ -418,7 +419,7 @@ describe('the wizard (card containers-80)', () => {
     const scene = sceneOf();
     scene.root = [{name: 'api.Dockerfile', kind: 'file'}];
     scene.files.set(
-      '/work/ws/.devcontainer/devcontainer.json',
+      '/scratch/.devcontainer/devcontainer.json',
       '{\n  // keep\n  "build": {"dockerfile": "../Dockerfile"}\n}',
     );
     const {picker, result} = await started(scene);
@@ -426,7 +427,7 @@ describe('the wizard (card containers-80)', () => {
     await result;
     deepStrictEqual(scene.writes, [
       [
-        '/work/ws/.devcontainer/devcontainer.json',
+        '/scratch/.devcontainer/devcontainer.json',
         '{\n  // keep\n  "build": {"dockerfile": "../api.Dockerfile"}\n}',
       ],
     ]);
@@ -436,7 +437,7 @@ describe('the wizard (card containers-80)', () => {
     const scene = sceneOf();
     scene.root = [{name: 'Dockerfile', kind: 'file'}];
     scene.files.set(
-      '/work/ws/.devcontainer/devcontainer.json',
+      '/scratch/.devcontainer/devcontainer.json',
       '{"build": {"dockerfile": "../Dockerfile"}}',
     );
     const {picker, result} = await started(scene);
@@ -448,7 +449,7 @@ describe('the wizard (card containers-80)', () => {
   it('F-0802 AC-22: a written configuration with no build gets one that names the entry, and a text that is no object is rewritten as one', async () => {
     const scene = sceneOf();
     scene.root = [{name: 'Dockerfile', kind: 'file'}];
-    scene.files.set('/work/ws/.devcontainer/devcontainer.json', '[1]');
+    scene.files.set('/scratch/.devcontainer/devcontainer.json', '[1]');
     const {picker, result} = await started(scene);
     picker.accept("From 'Dockerfile'");
     await result;

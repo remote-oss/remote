@@ -54,7 +54,6 @@ function sceneOf(
       },
       offerReopen: () => {
         calls.push('offerReopen');
-        return Promise.resolve();
       },
       translate: template => template,
       logger: createLogger(sink, {minimumLevel: () => 'info'}),

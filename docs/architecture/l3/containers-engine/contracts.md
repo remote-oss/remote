@@ -170,7 +170,8 @@ export function runWizard(request: {title: string; folder: string; target?: Wiza
   `keep`), `cancelled` or `done`; Back returns to the last stage that showed something, with the state it was entered with.
 - After the last stage the template is written with the state's `templateArgs`, `features` and `omitPaths`, into the workspace folder
   or the store's slot (`configs/<slot>`).
-- A Dockerfile-family entry the user picked is written into `build.dockerfile` (`../<entry>`) after the copy, by a JSONC edit, when the
-  template's own default names another file.
+- A Dockerfile-family entry the user picked is written into `build.dockerfile` (`../<entry>`) in the write's scratch folder, by a
+  JSONC edit, when the template's own default names another file: `WriteRequest.adjust(scratchFolder)` runs after the apply and
+  before the questions, so a Skip leaves the user's own file alone and a failure writes nothing.
 - The curated table's prefix is the folder of the ids of the templates in the collection whose repository is the
   specification's (`https://github.com/devcontainers/templates`); with no such collection the flat list shows.

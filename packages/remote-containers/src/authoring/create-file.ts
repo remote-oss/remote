@@ -27,8 +27,8 @@ export interface ContinuationPorts {
   wizard(folder: string): Promise<WizardOutcome>;
   /** Opens the file in a preview editor tab. */
   openPreview(file: string): PromiseLike<unknown>;
-  /** Offers to reopen the window's folder in its container, when its configuration is there. */
-  offerReopen(): Promise<void>;
+  /** Offers to reopen the window's folder in its container, when its configuration is there; not waited for. */
+  offerReopen(): void;
   logger: Logger;
 }
 
@@ -62,7 +62,7 @@ export async function addConfiguration(
     if (written !== undefined) {
       await ports.openPreview(path.join(outcome.target, written));
     }
-    await ports.offerReopen();
+    ports.offerReopen();
   }
   return outcome;
 }
