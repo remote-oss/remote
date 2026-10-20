@@ -87,7 +87,7 @@ its content:
    - `cache: kept`;
    - `verification: none` (until the room names one);
    - `environmentSetup: none`;
-   - `requirementsCheck: serverBundled`;
+   - `requirementsCheck: bundledHelper` (containers-21, #903);
    - `allowedExtraStartOptions: [useHostProxy, forceDisableUserEnv]`: every server start runs in host-proxy mode
      (F-0503 BR-18, #122 Q6), so the container's extensions take the local proxy and, with `http.systemCertificates`, its
      certificates. Every start also passes `--force-disable-user-env` (amended 2026-10-19, proteus and athena on #737):

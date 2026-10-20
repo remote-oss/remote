@@ -196,7 +196,7 @@ Parameters handed to `lib-server`: the remote-wsl row of A's policy record (`../
 | override policy | none, or `remote.WSL.serverDownloadUrlTemplate`, user layer, template form (R-27, **provisional** on the register, dossier question 2) | F-6301 BR-12, ADR-0006 decision 2 |
 | `installMode` | `stepwise` when `scriptLessStartup` is true, else `singleScript` (read here, passed in) | F-6304 BR-1 |
 | environment setup | `<home>/<serverDataFolderName>/server-env-setup`, sourced before install and before start, never on reuse | F-6303 BR-1 to BR-5 |
-| `requirementsCheck` | `serverBundled` plus the Alpine `libstdc++` probe (result logged, never blocking) | F-6302 BR-6, 7.E1, 7.E4 |
+| `requirementsCheck` | `bundledHelperPlusAlpineProbe`: the server's requirements helper (exit 99 refuses the start with its output), then the Alpine `libstdc++` probe (result logged, never blocking); amended 2026-10-20, #253 | F-6302 BR-6, 7.E1, 7.E4 |
 | start options and `allowedExtraStartOptions` (`fileWatcherPolling`) | bind `127.0.0.1`, random port, connection token, `--telemetry-level off`; extra: `--file-watcher-polling <ms>` only for WSL 1 with polling true, interval normalised (non-number → 5000; ceil; at least 500) | F-6201 BR-7; R-83; F-6601 BR-1 to BR-4 |
 | `cleanup` | `singleScript`: `onlyCurrentKeepLeftovers`; `stepwise`: `onlyCurrentRemoveLeftovers` | F-6304 BR-7, BR-8, AC-9 |
 | licence | `sourceBased` (R-80) through V6 | R-68 |
