@@ -5,7 +5,7 @@
 
 import path from 'node:path';
 
-/** The features of slice 1, as the build order lists them, the six added to 0.2 later, and slice 2's eight with F-2405 (card coverage-44); two decision records have no criteria. */
+/** The features whose criteria the coverage file lists, as the build order names them; two decision records have no criteria. */
 export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-2001',
   'F-2101',
