@@ -30,30 +30,13 @@ import {
   windowEvents,
   windowState,
 } from './harness.ts';
+import {dismissals} from './maintenance.ts';
 
 /** The windows the rows open, in the order their folders are named. */
 const WINDOWS = ['a1', 'a2', 'a3', 'a4'];
 
 /** The start title of a resolve for the host `harness`: every attempt leaves one progress line with this question. */
 const START_TITLE = 'Setting up SSH Host';
-
-/** The entries that dismiss a failing window's dialog and the pick of actions after it, written for its folder name. */
-function dismissals(window: string) {
-  return [
-    {
-      surface: 'failureDialog',
-      match: 'Could not establish connection',
-      answer: 'dismiss',
-      window,
-    },
-    {
-      surface: 'mitigationPick',
-      match: 'Pick an action',
-      answer: 'dismiss',
-      window,
-    },
-  ] as const;
-}
 
 /** The first failure dialog `window` showed from `mark` (a time in milliseconds) on, once it is shown. */
 async function dialogOf(window: string, mark: number) {

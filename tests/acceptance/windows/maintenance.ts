@@ -228,6 +228,36 @@ export async function closeAllButLocal(): Promise<void> {
   leftBefore = await hostServerProcesses();
 }
 
+/** Ends the host's servers and removes their installs, so that the next connect installs the server afresh. */
+export async function freshHost(): Promise<void> {
+  await closeAllButLocal();
+  // The bracket keeps pkill's pattern from matching this shell's own command line.
+  const servers = `${DATA_FOLDER.replace('/.', '/[.]')}/bin/`;
+  await onHost(
+    'sh',
+    '-c',
+    `pkill -f '${servers}' || true; rm -rf '${DATA_FOLDER}/bin' '${DATA_FOLDER}/cli'`,
+  );
+}
+
+/** The entries that dismiss a failing window's dialog and the pick of actions after it, written for its folder name. */
+export function dismissals(window: string) {
+  return [
+    {
+      surface: 'failureDialog',
+      match: 'Could not establish connection',
+      answer: 'dismiss',
+      window,
+    },
+    {
+      surface: 'mitigationPick',
+      match: 'Pick an action',
+      answer: 'dismiss',
+      window,
+    },
+  ] as const;
+}
+
 /** The per-window mode: no local server, and the host's platform named so that no pick is asked. */
 export async function perWindowMode(enabled: boolean): Promise<void> {
   await setting(

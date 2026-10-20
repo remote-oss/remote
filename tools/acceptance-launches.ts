@@ -558,7 +558,12 @@ export function launchesOf(root: string): Launch[] {
       suite: 'terminal-pick',
       settings: {'remote.SSH.useLocalServer': false},
     },
-    {label: 'windows', kind: 'plain', suite: 'windows'},
+    {
+      label: 'windows',
+      kind: 'plain',
+      suite: 'windows',
+      environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
+    },
     {
       label: 'config-files',
       kind: 'plain',
