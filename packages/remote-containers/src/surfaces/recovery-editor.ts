@@ -28,10 +28,13 @@ export interface RecoveryEditor<Address> {
   Uri: {file(path: string): Address; parse(address: string): Address};
 }
 
-/** The ports of the presenter over the editor; `keepEdit` and `logger` are the window's own. */
+/** The ports of the presenter over the editor; the ones that touch the window's own state are handed in. */
 export function recoveryPortsOf<Address>(
   editor: RecoveryEditor<Address>,
-  own: Pick<RecoveryPorts, 'keepEdit' | 'logger'>,
+  own: Pick<
+    RecoveryPorts,
+    'keepEdit' | 'storePausedRetry' | 'rebuildContainer' | 'logger'
+  >,
 ): Omit<RecoveryPorts, 'disconnected'> {
   return {
     ...own,

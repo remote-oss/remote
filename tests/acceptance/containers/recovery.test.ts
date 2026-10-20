@@ -10,6 +10,7 @@ import {
   devContainersOf,
   reloadWindow,
   reopenInContainer,
+  connectedToContainer,
   reopenStarted,
   runLabelArguments,
   variable,
@@ -204,29 +205,32 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
     );
   });
 
-  it('F-0410 AC-12 (r3): a port that is already published shows the port detail, and leaves the created container', async () => {
-    const image = variable('HARNESS_DEVCONTAINER_IMAGE');
+  /** Runs a container of the run that publishes a host port, and gives its id and that port. */
+  async function portHolder(): Promise<{helperId: string; port: number}> {
     const {stdout: helper} = await execFileAsync('docker', [
       'run',
       '--detach',
       ...runLabelArguments(),
       '--publish',
       '8000',
-      image,
+      variable('HARNESS_DEVCONTAINER_IMAGE'),
       'sleep',
       '600',
     ]);
     const helperId = helper.trim();
+    const {stdout: port} = await execFileAsync('docker', [
+      'inspect',
+      '--format',
+      '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}',
+      helperId,
+    ]);
+    return {helperId, port: Number.parseInt(port.trim(), 10)};
+  }
+
+  it('F-0410 AC-12 (r3): a port that is already published shows the port detail, and leaves the created container', async () => {
+    const {helperId, port} = await portHolder();
     try {
-      const {stdout: port} = await execFileAsync('docker', [
-        'inspect',
-        '--format',
-        '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}',
-        helperId,
-      ]);
-      const folder = folderOf('recover-port', {
-        appPort: [Number.parseInt(port.trim(), 10)],
-      });
+      const folder = folderOf('recover-port', {appPort: [port]});
       const {dialog} = await failed(folder);
       const containers = await devContainersOf(folder);
       const {stdout: states} = await execFileAsync('docker', [
@@ -252,7 +256,43 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
     }
   });
 
-  it('F-0410 AC-5, F-0202 AC-9 (r4): More Actions... opens the quick pick with its four items', async () => {
+  it('F-0410 AC-12b (p12b): after a port conflict leaves a created container, Retry starts that same container', async () => {
+    const {helperId, port} = await portHolder();
+    try {
+      const folder = folderOf('recover-port-retry', {appPort: [port]});
+      const {name} = await failed(folder);
+      const created = await devContainersOf(folder);
+      await execFileAsync('docker', ['rm', '--force', helperId]);
+      const before = activations(name);
+      await answerDialog(name, 'Retry');
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > before,
+        60_000,
+      );
+      await connectedToContainer(name, DIALOG_MILLISECONDS);
+      const {stdout: states} = await execFileAsync('docker', [
+        'inspect',
+        '--format',
+        '{{.State.Status}}',
+        ...created,
+      ]);
+      deepStrictEqual(
+        {
+          containers: await devContainersOf(folder),
+          states: states.trim(),
+          created: created.length,
+        },
+        {containers: created, states: 'running', created: 1},
+      );
+    } finally {
+      await execFileAsync('docker', ['rm', '--force', helperId]).catch(
+        () => undefined,
+      );
+    }
+  });
+
+  it('F-0410 AC-5, AC-6, F-0202 AC-9 (r4): More Actions... opens the quick pick with its four items', async () => {
     const {name} = await failed(
       folderOf('recover-pick', {
         runArgs: [...runLabelArguments(), '--no-such-flag'],

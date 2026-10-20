@@ -5,6 +5,8 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {DevContainerFolder} from '../../src/authority/payload.ts';
 import {
   containerSetupFailed,
+  containerUnusable,
+  type FailedContainer,
   noServerSource,
   requirementsNotMet,
 } from '../../src/connect/failures.ts';
@@ -37,6 +39,10 @@ interface Script {
   keepFails?: boolean;
   /** A rejection of the keep that is not an Error. */
   keepRefusal?: string;
+  /** The container the failed connect found. */
+  failed?: FailedContainer;
+  /** A rejection of the paused retry's store, an Error or a text. */
+  storeRefusal?: Error | string;
 }
 
 /** A presenter over recording ports; `later` queues its tasks until `flush` runs them. */
@@ -87,6 +93,18 @@ function presenting(script: Script = {}) {
         calls.push('openRecent');
         return Promise.resolve();
       },
+      storePausedRetry: containerId => {
+        calls.push(`storePausedRetry ${containerId}`);
+        if (script.storeRefusal === undefined) {
+          return Promise.resolve();
+        }
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
+        return Promise.reject(script.storeRefusal);
+      },
+      rebuildContainer: () => {
+        calls.push('rebuildContainer');
+        return Promise.resolve();
+      },
       openExternal: address => {
         calls.push(`openExternal ${address}`);
         return Promise.resolve();
@@ -105,6 +123,7 @@ function presenting(script: Script = {}) {
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     },
     () => ('target' in script ? script.target : TARGET),
+    () => script.failed,
     template => template,
   );
   /** Runs what `later` queued, and waits for the quick pick that follows. */
@@ -137,6 +156,74 @@ describe('the failure presenter C8 (card containers-11)', () => {
         ],
       ],
     );
+  });
+
+  it('F-0409 AC-22, ruling 12: Retry on a paused container leaves the retry for its full id before it reloads', async () => {
+    const {outcome, calls} = await present(containerUnusable('paused'), {
+      errors: ['Retry'],
+      failed: {containerId: 'a'.repeat(64), paused: true},
+    });
+    deepStrictEqual(
+      [outcome, calls.slice(1)],
+      ['reload', [`storePausedRetry ${'a'.repeat(64)}`]],
+    );
+  });
+
+  it('F-0409 AC-7, ruling 12: Retry leaves no retry when the container was not paused, or the connect found none', async () => {
+    const running = await present(containerSetupFailed(), {
+      errors: ['Retry'],
+      failed: {containerId: 'b'.repeat(64), paused: false},
+    });
+    const none = await present(containerSetupFailed(), {errors: ['Retry']});
+    deepStrictEqual(
+      [running.outcome, running.calls.length, none.outcome, none.calls.length],
+      ['reload', 1, 'reload', 1],
+    );
+  });
+
+  it('F-0409 ruling 12: a retry that cannot be stored is logged, by its text when it is not an error, and the reload still happens', async () => {
+    const failed = {containerId: 'c'.repeat(64), paused: true};
+    const broken = await present(containerUnusable('paused'), {
+      errors: ['Retry'],
+      failed,
+      storeRefusal: new Error('disk full'),
+    });
+    const refused = await present(containerUnusable('paused'), {
+      errors: ['Retry'],
+      failed,
+      storeRefusal: 'quota',
+    });
+    deepStrictEqual(
+      [broken, refused].map(each => [
+        each.outcome,
+        each.sink.lines.map(line => `${line.level}: ${line.message}`),
+      ]),
+      [
+        [
+          'reload',
+          [
+            'warn: the retry of the paused container could not be kept: disk full',
+          ],
+        ],
+        [
+          'reload',
+          ['warn: the retry of the paused container could not be kept: quota'],
+        ],
+      ],
+    );
+  });
+
+  it('F-0409 AC-34, ruling 14: More Actions... offers Rebuild Container second when the connect found a container, and choosing it rebuilds', async () => {
+    const seen = await present(containerSetupFailed(), {
+      errors: ['More Actions...'],
+      picks: ['Rebuild Container'],
+      failed: {containerId: 'd'.repeat(64), paused: false},
+    });
+    await seen.flush();
+    deepStrictEqual(seen.calls.slice(2), [
+      `pick Pick an action to help resolve the problem.|Reload Window,Rebuild Container,${EDIT},Open Recent...,Open Documentation`,
+      'rebuildContainer',
+    ]);
   });
 
   it('F-0410 AC-4: Edit Locally opens the folder locally and resolves handled', async () => {
@@ -425,6 +512,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
           }),
       }),
       () => TARGET,
+      () => undefined,
       template => template,
     );
     let settled = false;
