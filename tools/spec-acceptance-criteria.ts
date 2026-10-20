@@ -5,11 +5,13 @@
 
 import path from 'node:path';
 
-/** The features of slice 1, as the build order lists them, and the six added to 0.2 later; two decision records have no criteria. */
+/** The features of slice 1, as the build order lists them, the six added to 0.2 later, and slice 2's eight with F-2405 (card coverage-44); two decision records have no criteria. */
 export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-2001',
   'F-2101',
   'F-2102',
+  'F-2104',
+  'F-2106',
   'F-2201',
   'F-2202',
   'F-2204',
@@ -21,14 +23,21 @@ export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-2305',
   'F-2306',
   'F-2307',
+  'F-2308',
+  'F-2312',
   'F-2401',
   'F-2403',
+  'F-2405',
   'F-2409',
+  'F-2410',
   'F-2411',
   'F-2412',
   'F-2501',
   'F-2502',
+  'F-2507',
+  'F-2508',
   'F-2601',
+  'F-2604',
   'F-2605',
   'F-3901',
   'F-3902',

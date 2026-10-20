@@ -84,7 +84,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     );
   });
 
-  it('F-2104: the SOCKS forward rides the same session and accepts a connection', async () => {
+  it('the SOCKS forward rides the same session and accepts a connection (F-2104)', async () => {
     const accepted = await new Promise<boolean>(resolve => {
       const socket = createConnection(session.socksPort, '127.0.0.1');
       socket.once('connect', () => {
