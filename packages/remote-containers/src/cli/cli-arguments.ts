@@ -3,6 +3,14 @@
  * shell: a path with spaces or quotes reaches the CLI unchanged. The order of a list is fixed.
  */
 
+/** The settings that decide which Features a build adds and whether it writes a lockfile. */
+export interface FeatureSettings {
+  /** The Features to always install, as the setting holds them; `features` of the configuration wins on the same id. */
+  defaultFeatures: Readonly<Record<string, unknown>>;
+  /** Whether `devcontainer-lock.json` is written. */
+  lockfile: boolean;
+}
+
 /** What the CLI is told about the dev container it works on. */
 export interface CliTarget {
   /** The host folder. */
@@ -17,6 +25,7 @@ export interface CliTarget {
   mountWorkspaceGitRoot: boolean;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
+  features: FeatureSettings;
   /** `--mount` values for `up`. */
   mounts: readonly string[];
   logLevel: 'info' | 'debug' | 'trace';
@@ -67,11 +76,23 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
   ];
 }
 
+/** `--additional-features` with the default Features as JSON, when the setting names any. */
+function additionalFeatures(target: CliTarget): string[] {
+  return Object.keys(target.features.defaultFeatures).length === 0
+    ? []
+    : [
+        '--additional-features',
+        JSON.stringify(target.features.defaultFeatures),
+      ];
+}
+
 /** Creates the container or finds it, runs the commands up to the one `waitFor` names, and gives its id. */
 export function upArguments(target: CliTarget, options: UpOptions): string[] {
   return [
     ...commonArguments('up', target),
     ...target.mounts.flatMap(mount => ['--mount', mount]),
+    ...additionalFeatures(target),
+    ...(target.features.lockfile ? [] : ['--no-lockfile']),
     '--skip-non-blocking-commands',
     '--workspace-mount-consistency',
     options.workspaceMountConsistency,
@@ -102,6 +123,7 @@ export function readConfigurationArguments(
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
+    ...additionalFeatures(target),
     ...(containerId === undefined
       ? []
       : ['--container-id', containerId, '--include-merged-configuration']),

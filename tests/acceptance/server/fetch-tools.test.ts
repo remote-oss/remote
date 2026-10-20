@@ -311,6 +311,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
             archiveFile: path.join(folder, 'archive.tar.gz'),
             ...makeCertificate(folder),
             templatesFolder: path.join(folder, 'templates'),
+            controlFolder: path.join(folder, 'control'),
             logFile: path.join(folder, 'requests.log'),
             tlsLogFile: path.join(folder, 'tls.log'),
           });

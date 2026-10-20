@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import type {Logger} from 'lib-log';
+import type {FeatureSettings} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {
   CliEvent,
@@ -95,6 +96,8 @@ export interface ConfigurationRequest {
   dockerPath: string;
   /** Whether the Git worktree's common dir is mounted, which moves the folder the window opens at (BR-12). */
   mountGitWorktreeCommonDir: boolean;
+  /** The Feature settings, which the CLI's read of the configuration takes. */
+  features: FeatureSettings;
   cancellation: AbortSignal;
   /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
@@ -171,6 +174,7 @@ export async function chooseConfiguration(
         idLabels: [],
         mountWorkspaceGitRoot: true,
         mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
+        features: request.features,
         mounts: [],
         logLevel: 'info',
       },

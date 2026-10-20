@@ -13,6 +13,7 @@ import {
 } from '../config/choose-configuration.ts';
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
+import {featureSettingsOf} from '../connect/feature-settings.ts';
 import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
@@ -105,7 +106,11 @@ export async function beforeReload(
 
 /** What an open command gives the checks before its reload, besides the first check it chooses. */
 export interface CommandChecksPorts {
-  settings: {mountGitWorktreeCommonDir(): unknown};
+  settings: {
+    mountGitWorktreeCommonDir(): unknown;
+    defaultFeatures(): unknown;
+    lockfile(): unknown;
+  };
   dialogs: EngineDialogPort;
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   bridge: Pick<CliBridge, 'readConfiguration'>;
@@ -133,6 +138,10 @@ export function commandBeforeReload(
       dockerPath,
       mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
         ports.settings.mountGitWorktreeCommonDir(),
+      ),
+      features: featureSettingsOf(
+        ports.settings.defaultFeatures(),
+        ports.settings.lockfile(),
       ),
       cancellation: new AbortController().signal,
     },

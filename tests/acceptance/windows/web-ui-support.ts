@@ -57,7 +57,7 @@ export function serverPortOf(lines: readonly string[]): number | undefined {
 /** The key the command's palette entry depends on, which no manifest contributes. */
 const WEB_ACCESS = 'remote.SSH.enableWebAccess';
 
-/** Sets the key in the run's user settings, or removes it when `value` is `undefined`, and waits a second for the editor to read it. */
+/** Sets the key in the launch's user settings, or removes it when `value` is `undefined`, and waits a second for the editor to read it. */
 export async function setWebAccess(value: unknown): Promise<void> {
   const file = userSettingsFile();
   const current = existsSync(file)

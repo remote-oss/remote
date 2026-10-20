@@ -112,7 +112,7 @@ describe(`the ports case "${portsCase?.label ?? 'unknown'}" of the VSCodium run`
 
   it('F-2409 AC-17: settings.json is unchanged', () => {
     const userSettings = readFileSync(
-      path.join(runFolder, 'user-data', 'User', 'settings.json'),
+      path.join(process.env.HARNESS_USER_DATA ?? '', 'User', 'settings.json'),
     );
     const launchSettings = readFileSync(
       path.join(runFolder, `ports-${portsCase?.label ?? ''}-settings.json`),

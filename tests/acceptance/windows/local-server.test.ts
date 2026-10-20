@@ -268,7 +268,7 @@ describe('the local connection server on a key host (card coverage-14)', functio
     await connectedWithin('k1', 60_000);
     await connectedWithin('k2', 60_000);
     const settings = readFileSync(
-      `${variable('HARNESS_RUN_FOLDER')}/user-data/User/settings.json`,
+      `${variable('HARNESS_USER_DATA')}/User/settings.json`,
       'utf8',
     );
     const config = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
@@ -283,7 +283,7 @@ describe('the local connection server on a key host (card coverage-14)', functio
         await connected('k2'),
         messagesSince(mark),
         readFileSync(
-          `${variable('HARNESS_RUN_FOLDER')}/user-data/User/settings.json`,
+          `${variable('HARNESS_USER_DATA')}/User/settings.json`,
           'utf8',
         ) === settings,
         readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8') === config,

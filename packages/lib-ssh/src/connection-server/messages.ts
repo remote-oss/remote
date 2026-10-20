@@ -91,6 +91,8 @@ export type ConnectionEvent =
       hints: FailureHint[];
       /** `ssh`'s exit status, or `null` when it ended on a signal; absent from a helper of an earlier build. */
       exitStatus?: number | null;
+      /** What the helper logged about the failure, for the window's own log; absent when it logged nothing. */
+      detail?: string;
     }
   | {type: 'spawnFailed'; cause: SpawnFailure; detail: string}
   | {type: 'scriptLine'; runId: number; line: string}
@@ -356,7 +358,8 @@ function readLoginFailed(fields: Fields): ConnectionEvent | undefined {
       fields.exitStatus === undefined ||
       fields.exitStatus === null ||
       typeof fields.exitStatus === 'number'
-    )
+    ) ||
+    !(fields.detail === undefined || typeof fields.detail === 'string')
   ) {
     return undefined;
   }
@@ -366,6 +369,7 @@ function readLoginFailed(fields: Fields): ConnectionEvent | undefined {
     kind: fields.kind as FailureKind,
     hints: fields.hints as FailureHint[],
     ...(fields.exitStatus === undefined ? {} : {exitStatus: fields.exitStatus}),
+    ...(fields.detail === undefined ? {} : {detail: fields.detail}),
   } as const;
   return fields.reason === undefined
     ? failed

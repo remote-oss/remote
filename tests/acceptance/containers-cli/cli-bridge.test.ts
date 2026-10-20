@@ -133,6 +133,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
       ],
       mountWorkspaceGitRoot: true,
       mountGitWorktreeCommonDir: false,
+      features: {defaultFeatures: {}, lockfile: true},
       mounts: [],
       logLevel: 'info',
     };

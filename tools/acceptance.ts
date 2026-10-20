@@ -5,8 +5,9 @@
  *
  * It builds the host image of tests/acceptance/host, makes a key pair for this run, starts the host with the public
  * key, writes an ssh_config whose `Host harness` reaches it, bundles the tests of tests/acceptance/suite, and starts
- * `@vscode/test-cli` with tests/acceptance/vscode-test.mjs. The editor gets a fresh user-data and extensions folder,
- * the packaged VSIX files of the extensions under test, and the harness variables. The container and the run's
+ * `@vscode/test-cli` with tests/acceptance/vscode-test.mjs. The editor gets a fresh user-data and extensions folder
+ * (each plain launch a user-data folder of its own), the packaged VSIX files of the extensions under test, and the
+ * harness variables. The container and the run's
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
@@ -102,6 +103,7 @@ import {
   runPlainLaunch,
   startDetached,
   type Started,
+  userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
 import {
@@ -183,6 +185,8 @@ export interface HarnessVariables {
   HARNESS_TEMPLATE_REGISTRY?: string;
   /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
   REMOTE_OSS_TEMPLATE_INDEX?: string;
+  /** The URL of the run's control manifest on the download host, when a chosen launch asks for templates; harness-only. */
+  REMOTE_OSS_CONTROL_MANIFEST?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -611,18 +615,19 @@ export function packagedExtensions(
 }
 
 /**
- * The editor's user settings of the run: the extensions under test read the harness's ssh_config, and `extra` is a
- * launch's own settings. With `label`, the same bytes go to `<run folder>/<label>-settings.json`, so a row compares
- * the file the editor read with the one its launch got. A `tail` is text put after the last member with no comma
- * before it: a syntax error, after members the editor still reads.
+ * The editor's user settings of a launch, in its user-data folder: the extensions under test read the harness's
+ * ssh_config, and `extra` is the launch's own settings. With a launch, the same bytes go to
+ * `<run folder>/<label>-settings.json`, so a row compares the file the editor read with the one its launch got. The
+ * launch's `settingsTail` is text put after the last member with no comma before it: a syntax error, after members the
+ * editor still reads.
  */
 export function writeUserSettings(
   runFolder: string,
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
-  label?: string,
-  tail?: string,
+  launch?: Launch,
 ): void {
+  const tail = launch?.settingsTail;
   const written = JSON.stringify(
     {'remote.SSH.configFile': configFile, ...extra},
     null,
@@ -632,11 +637,11 @@ export function writeUserSettings(
     tail === undefined
       ? `${written}\n`
       : `${written.slice(0, -2)}\n  ${tail}\n}\n`;
-  const folder = path.join(runFolder, 'user-data', 'User');
+  const folder = path.join(userDataFolderOf(runFolder, launch), 'User');
   mkdirSync(folder, {recursive: true});
   writeFileSync(path.join(folder, 'settings.json'), bytes);
-  if (label !== undefined) {
-    writeFileSync(path.join(runFolder, `${label}-settings.json`), bytes);
+  if (launch !== undefined) {
+    writeFileSync(path.join(runFolder, `${launch.label}-settings.json`), bytes);
   }
 }
 
@@ -810,7 +815,7 @@ async function prepare(
     for (const {folder, files, client} of installs) {
       checked(command, editorCommands[client], [
         `--extensions-dir=${folder}`,
-        `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+        `--user-data-dir=${userDataFolderOf(runFolder)}`,
         `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
         ...files.flatMap(file => ['--install-extension', file]),
       ]);
@@ -854,6 +859,7 @@ async function prepare(
       : {
           HARNESS_TEMPLATE_REGISTRY: templateRegistry,
           REMOTE_OSS_TEMPLATE_INDEX: `${templateIndex}/templates/devcontainer-index.json`,
+          REMOTE_OSS_CONTROL_MANIFEST: `${templateIndex}/control/devcontainer-control-manifest.json`,
         }),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
@@ -1023,8 +1029,7 @@ export async function runLaunches(
             runFolder,
             process.env.PATH ?? '',
           ),
-          launch.label,
-          launch.settingsTail,
+          launch,
         );
         await beforeAttempt(launch);
       }
@@ -1034,7 +1039,7 @@ export async function runLaunches(
       } finally {
         await held.release();
         // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
-        stopHelpersUnder(path.join(runFolder, 'user-data'), command);
+        stopHelpersUnder(userDataFolderOf(runFolder, launch), command);
       }
     }, report);
   }
@@ -1226,7 +1231,7 @@ export function acceptanceConfiguration(
     // test-cli expands a glob relative to its configuration file, tests/acceptance/vscode-test.mjs.
     files: 'dist/**/*.test.cjs',
     launchArgs: editorArguments(runFolder),
-    env: {...environment},
+    env: {...environment, HARNESS_USER_DATA: userDataFolderOf(runFolder)},
     mocha: {ui: 'bdd', timeout: 60_000},
   };
 }
@@ -1251,6 +1256,7 @@ export function vscodiumConfiguration(
       'agent',
       'pids',
     ),
+    HARNESS_USER_DATA: userDataFolderOf(runFolder),
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
@@ -1620,7 +1626,7 @@ export interface LaunchLimits {
   quietMilliseconds: number;
   /** How often the limits are checked. */
   checkMilliseconds: number;
-  /** Ends what the launch's process leaves behind once it is killed: an editor still on the run's profile. */
+  /** Ends what the launch's process leaves behind once it is killed: an editor still on one of the run's profiles. */
   endLeftovers: () => void;
 }
 
@@ -1658,8 +1664,8 @@ export function boundReached(
 /**
  * A launch's limits on a run: three minutes for the editor to end after its results (a window connected to a container
  * takes about a minute to quit), twenty minutes of silence (a row's own limit is at most ten), checked every five
- * seconds. What is left is any editor on the run's profile folder, which every launch of the run shares, so a stuck one
- * would hold up every launch after it.
+ * seconds. What is left is any editor on one of the run's profile folders, the runner launches' shared one or a plain
+ * launch's own (`user-data-<label>`, labels being lower-case letters, digits and hyphens).
  */
 export function launchLimits(
   runFolder: string,
@@ -1674,7 +1680,7 @@ export function launchLimits(
         '-KILL',
         '-f',
         '--',
-        `${path.join(runFolder, 'user-data')}( |$)`,
+        `${path.join(runFolder, 'user-data')}(-[a-z0-9-]+)?( |$)`,
       ]);
     },
   };

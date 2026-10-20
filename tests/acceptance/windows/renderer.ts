@@ -9,7 +9,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable, windowState} from './harness.ts';
+import {isOpen, variable, windowState} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -26,6 +26,8 @@ export interface ViewRow {
 
 /** A target of the debugging port's list. */
 interface DebugTarget {
+  /** The target's id, which a window's page keeps for as long as the window lives, a reload in place included. */
+  id: string;
   type: string;
   title: string;
   webSocketDebuggerUrl?: string;
@@ -70,13 +72,9 @@ async function settled<Value>(
   }
 }
 
-/** The port the editor chose, from the file it writes in the run's user-data folder. */
+/** The port the editor chose, from the file it writes in the launch's user-data folder. */
 async function debuggingPort(): Promise<number> {
-  const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data',
-    'DevToolsActivePort',
-  );
+  const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
     () => {
@@ -118,16 +116,8 @@ function workspaceTitleName(workspaceFile: string): string {
   return `${folderName(workspaceFile).replace(/\.code-workspace$/, '')} (Workspace)`;
 }
 
-/**
- * The title of the page of a window with this state among `titles`: the workspace's name for a workspace window, else
- * the folder name in brackets, `[]` for a local window with no folder, and `[]` plus the remote name for a remote one.
- * It fails when two titles match, naming both: two folder-less windows of one kind can't be told apart, and the gate
- * rows never have two.
- */
-export function pageTitleFor(
-  state: PageState,
-  titles: readonly string[],
-): string | undefined {
+/** The test of a title for a window of this state: the workspace's name, the folder name in brackets, or `[]`. */
+function titleMatcher(state: PageState): (title: string) => boolean {
   const folder = state.folders[0];
   const workspaceFile = state.workspaceFile ?? null;
   const bracketed =
@@ -136,13 +126,24 @@ export function pageTitleFor(
       : folder === undefined
         ? undefined
         : folderName(folder);
-  const matching = titles.filter(title =>
+  return title =>
     bracketed === undefined
       ? state.remoteName === null
         ? title === '[]'
         : title.startsWith('[]') && title !== '[]'
-      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`),
-  );
+      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`);
+}
+
+/**
+ * The title of the page of a window with this state among `titles`: the workspace's name for a workspace window, else
+ * the folder name in brackets, `[]` for a local window with no folder, and `[]` plus the remote name for a remote one.
+ * It fails when two titles match, naming both. Pages with the same title are told apart by `pageAmong`.
+ */
+export function pageTitleFor(
+  state: PageState,
+  titles: readonly string[],
+): string | undefined {
+  const matching = titles.filter(titleMatcher(state));
   if (matching.length > 1) {
     throw new Error(
       `two pages match the window's state: ${JSON.stringify(matching)}`,
@@ -150,6 +151,34 @@ export function pageTitleFor(
   }
   return matching[0];
 }
+
+/**
+ * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
+ * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
+ * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
+ * ambiguous.
+ */
+export function pageAmong(
+  candidates: readonly DebugTarget[],
+  name: string,
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+): DebugTarget | undefined {
+  const own = candidates.find(page => page.id === remembered.get(name));
+  if (own !== undefined || candidates.length === 1) {
+    return own ?? candidates[0];
+  }
+  const taken = new Set(
+    [...remembered]
+      .filter(([other]) => other !== name && open(other))
+      .map(([, pageId]) => pageId),
+  );
+  const left = candidates.filter(page => !taken.has(page.id));
+  return left.length === 1 ? left[0] : undefined;
+}
+
+/** The id of the page each window's name was last found by, while the window lives. */
+const REMEMBERED_PAGES = new Map<string, string>();
 
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
@@ -222,31 +251,46 @@ export async function pageOf(
       titles = found.map(page => page.title);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
-        return found.find(page => page.title === named)?.webSocketDebuggerUrl;
+        const page = found.find(each => each.title === named);
+        if (page !== undefined) {
+          REMEMBERED_PAGES.set(name, page.id);
+        }
+        return page?.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
         name,
         milliseconds - (Date.now() - started),
       );
-      const title =
-        state === undefined
-          ? undefined
-          : pageTitleFor(
-              {
-                folders: state.folders,
-                remoteName: state.remoteName,
-                workspaceFile: state.workspaceFile,
-              },
-              titles,
-            );
-      const chosen =
-        title === undefined
-          ? undefined
-          : found.find(page => page.title === title);
+      if (state === undefined) {
+        return undefined;
+      }
+      const matches = titleMatcher({
+        folders: state.folders,
+        remoteName: state.remoteName,
+        workspaceFile: state.workspaceFile,
+      });
+      const candidates = found.filter(page => matches(page.title));
+      const chosen = pageAmong(candidates, name, REMEMBERED_PAGES, isOpen);
+      if (chosen === undefined && candidates.length > 1) {
+        throw new Error(
+          `two pages match the window's state: ${JSON.stringify(candidates.map(page => page.title))}`,
+        );
+      }
+      if (chosen !== undefined) {
+        REMEMBERED_PAGES.set(name, chosen.id);
+      }
       return chosen?.webSocketDebuggerUrl;
     },
     milliseconds,
   );
+}
+
+/**
+ * Remembers the page window `name` has now, so that a later window with the same title, a further folder-less local
+ * one, is told apart from it. A suite that opens such a window calls it for `local` before the first one opens.
+ */
+export async function rememberPage(name: string): Promise<void> {
+  await pageOf(name);
 }
 
 /** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
@@ -336,6 +380,37 @@ export async function terminalPageFacts(
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
 function paneExpression(viewName: string): string {
   return `[...document.querySelectorAll('.pane')].find(pane => pane.querySelector('.pane-header .title')?.textContent === ${JSON.stringify(viewName)})`;
+}
+
+/** A row of a view as the list renders it now, with the size of the set it belongs to. */
+export interface RenderedRow {
+  label: string;
+  level: number;
+  setSize: number;
+}
+
+/**
+ * The rows view `viewName` of window `name` renders now, without scrolling: a virtualized list's viewport only, each
+ * with its `aria-setsize`, which counts the rows of its set also when they are off screen; none when the view isn't
+ * there.
+ */
+export async function renderedRows(
+  name: string,
+  viewName: string,
+): Promise<RenderedRow[]> {
+  return evaluate<RenderedRow[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])]
+        .filter(row => row.getAttribute('aria-level') !== null)
+        .map(row => ({
+          label: row.querySelector('.label-name')?.textContent ?? '',
+          level: Number(row.getAttribute('aria-level')),
+          setSize: Number(row.getAttribute('aria-setsize')),
+        }));
+    })()`,
+  );
 }
 
 /**
@@ -853,6 +928,34 @@ export async function rowDetails(
 }
 
 /**
+ * Whether the label of the row `label` of view `viewName` in window `name` is cut: its text is wider than the space the
+ * row gives it, so core shows it with an ellipsis. Throws when the view has no such row.
+ */
+export async function labelCut(
+  name: string,
+  viewName: string,
+  label: string,
+): Promise<boolean> {
+  const overflowing = await evaluate<boolean | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const row = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].find(
+        each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)},
+      );
+      const container = row?.querySelector('.monaco-icon-label-container');
+      return container === undefined || container === null
+        ? null
+        : container.scrollWidth > container.clientWidth;
+    })()`,
+  );
+  if (overflowing === null) {
+    throw new Error(`window ${name} shows no row ${label} in ${viewName}`);
+  }
+  return overflowing;
+}
+
+/**
  * The welcome text view `viewName` shows in window `name`, with its links as their words and a line break between its
  * blocks, as the user reads it; `undefined` when it shows none or an empty one.
  */
@@ -903,6 +1006,29 @@ export async function remoteExplorerOptions(name: string): Promise<string[]> {
   return evaluate<string[]>(
     name,
     `[...document.querySelectorAll('select[aria-label="Switch Remote"] option')].map(each => each.textContent ?? '')`,
+  );
+}
+
+/** The option the Switch Remote dropdown shows as selected, or nothing when the window has no such dropdown. */
+export async function selectedRemote(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `document.querySelector('select[aria-label="Switch Remote"]')?.value ?? null`,
+    )) ?? undefined
+  );
+}
+
+/** The titles of the sections of the Remote Explorer that are on screen, from the top. */
+export async function remoteExplorerSections(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.pane')]
+      .filter(pane => pane.offsetParent !== null && pane.getBoundingClientRect().height > 0)
+      .map(pane => pane.querySelector('.pane-header .title')?.textContent ?? '')
+      .filter(title => title !== '')`,
   );
 }
 

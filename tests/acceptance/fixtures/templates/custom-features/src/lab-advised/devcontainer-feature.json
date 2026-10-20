@@ -1,0 +1,6 @@
+{
+  "id": "lab-advised",
+  "version": "1.0.0",
+  "name": "Lab Advised",
+  "description": "The acceptance run's own Feature that the run's control manifest advises against."
+}

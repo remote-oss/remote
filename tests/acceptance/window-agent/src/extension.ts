@@ -316,10 +316,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'acceptance.agent.extensionPresent',
       (extensionId: string) => {
+        const extension = vscode.extensions.getExtension(extensionId);
         report(agentFolder, name, {
           event: 'extension',
           extensionId,
-          present: vscode.extensions.getExtension(extensionId) !== undefined,
+          present: extension !== undefined,
+          extensionActive: extension?.isActive === true,
         });
       },
     ),

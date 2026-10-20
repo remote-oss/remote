@@ -35,14 +35,6 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/shutdown/effective-action.ts",
-      "card": "#1225",
-      "slice": "containers increment 2",
-      "decision": "read by the window's connect, card containers-69 (#1226)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/authoring/catalogue-download.ts",
       "card": "#1239",
       "slice": "containers increment 2",
@@ -53,6 +45,30 @@
       "kind": "module",
       "key": "src/authoring/catalogue.ts",
       "card": "#1239",
+      "slice": "containers increment 2",
+      "decision": "read by the template wizard, card containers-80 (#1242)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/authoring/write.ts",
+      "card": "#1240",
+      "slice": "containers increment 2",
+      "decision": "read by the template wizard, card containers-80 (#1242)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/authoring/curated-templates.ts",
+      "card": "#1241",
+      "slice": "containers increment 2",
+      "decision": "read by the template wizard, card containers-80 (#1242)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/authoring/template-pick.ts",
+      "card": "#1241",
       "slice": "containers increment 2",
       "decision": "read by the template wizard, card containers-80 (#1242)"
     }

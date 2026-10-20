@@ -2,6 +2,7 @@
   "name": "acceptance",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "lib-authority": "workspace:*",
     "lib-forwarding": "workspace:*",
