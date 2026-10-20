@@ -704,8 +704,10 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       const pick = lines.find(line => line.surface === 'hostPick')?.time ?? 0;
       const notice =
         lines.find(line => line.surface === 'notice')?.time ?? Infinity;
+      // The kill's own login is accepted before the kill runs, so before its
+      // notice; a later login is the window reconnecting by itself.
       return (await acceptedKeyLoginTimes(since)).filter(
-        time => time >= pick - 1000 && time <= notice + 1000,
+        time => time >= pick - 1000 && time <= notice,
       ).length;
     }
     const baseline = await sessions();
