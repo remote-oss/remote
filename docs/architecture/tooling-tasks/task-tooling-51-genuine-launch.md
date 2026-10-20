@@ -115,6 +115,11 @@ rewrite it in place rather than using `sed -i`: `grep -v ' github.com$' /etc/hos
 The container's removal at the end of the run is the backstop, and `genuine` being last means no launch runs
 after it. The case's URL has **no port**, so it matches the MIT prefix character for character.
 
+*Amended (connect-84, #1182; proteus):* `genuine` is no longer the table's last launch: `ssh-no-proposals` follows it.
+AC-15's `finally` still removes the routing, and the container's removal at the end of the run still backs it up. If
+the `finally` failed, `ssh-no-proposals` would run with `github.com` routed to the download host, which its rows don't
+use.
+
 ## 3. Product fixes (remote-ssh)
 
 1. **Licence modal per §5a.** In `licence-modal.ts`, `LICENCE_TEMPLATES` becomes the §5a keys:

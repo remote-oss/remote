@@ -414,7 +414,7 @@ the server suite the same names, and `server/downloads.test.ts` holds the rows t
 The `genuine` launch starts VS Code at the floor of ADR-0007 (`EDITOR_VERSION`, downloaded under `.vscode-test/` on
 first use) instead of the run's VSCodium, with the extensions installed in a folder of its own, `<run>/extensions-genuine`,
 by VS Code's CLI. Two launch fields do it: `client: 'vscode'` names the editor, and `namedOnly: true` keeps the launch
-out of a run that names no launches, so only `--launches genuine` makes it (it is the table's last launch). The launch
+out of a run that names no launches, so only `--launches genuine` makes it (it comes after every VSCodium launch, and only `ssh-no-proposals` comes after it). The launch
 sets `REMOTE_OSS_ACCEPTANCE_SCRIPT` to the empty string, so the extension shows its real dialogs, which the rows read and
 answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settingsEditorOf`); `localServerDownload` is off,
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
@@ -428,7 +428,7 @@ built-in chat) is not seen there, so the launch turns each off in its settings: 
 `workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
-removes both when it ends. The container's removal at the end of the run is the backstop.
+removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
 
     node tools/acceptance.ts --editor vscodium --launches genuine
 
