@@ -23,6 +23,7 @@ import {
   isOpen,
   noHelperWithin,
   onHost,
+  onHostAs,
   openWindow,
   recordLines,
   type RecordLine,
@@ -306,4 +307,30 @@ function alignScript(window: string): void {
     JSON.stringify({entries: [...placeholders, ...kept]}),
   );
   renameSync(tempFile, scriptFile);
+}
+
+/** The data folder of the server of `harness-fish`, the account whose login shell is fish. */
+export const FISH_DATA_FOLDER = '/home/harness-fish/.vscodium-server-insiders';
+
+/** Opens window `name` on `harness-fish` until it connects, so the account has a running server, then closes it. */
+export async function fishServerInstalled(name: string): Promise<void> {
+  await openWindow('harness-fish', name);
+  try {
+    await connectedWithin(name, INSTALL_MILLISECONDS);
+  } finally {
+    await closeWindow(name);
+  }
+}
+
+/** Whether a server of `harness-fish` runs on the host; the bracket keeps pgrep from matching its own command line. */
+export function fishServerRuns(): Promise<boolean> {
+  return onHostAs(
+    'harness-fish',
+    'pgrep',
+    '-f',
+    `${FISH_DATA_FOLDER.replace('/.', '/[.]')}/bin/`,
+  ).then(
+    () => true,
+    () => false,
+  );
 }
