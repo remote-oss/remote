@@ -385,6 +385,7 @@ behaviour is chosen by the first segment of the path:
 |---|---|
 | `ok` | 200 with the server archive, `Content-Length` set |
 | `missing` | 404, empty |
+| `missing-cors` | 404, empty, with an `Access-Control-Allow-Origin: *` header |
 | `busy` | 503, empty |
 | `junk` | 200 with 64 KiB of random bytes |
 | `hang` | the request is accepted and never answered, until `GET /control/drop-hung` or the run's end |

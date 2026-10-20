@@ -168,7 +168,7 @@ F-2401	46	remote-ssh	feature	spec:draft	E24	Host prerequisites: glibc, libstdc++
 F-2402	47	remote-ssh	feature	spec:draft	E24	Required commands on the host (curl/wget, tar and others)	A	ssh.host-tool-probe	lib-server	28	8	True	0	0	0	0	ssh-remote	resolvers	curl;wget;tar;gzip;sh;bash;ln;flock;getconf;ldd;uname	openssh	18
 F-2403	48	remote-ssh	feature	spec:draft	E24	Server download and install on the host	A	ssh.server-installer	lib-server	27	9	True	0	1	0	0	ssh-remote	resolvers	curl;wget;tar;code	openssh;editor-cli	24
 F-2404	49	remote-ssh	feature	spec:draft	E24	HTTP(S) proxy for the server install and launch	A	ssh.proxy-env	lib-server	40	8	True	0	3	0	0	ssh-remote	resolvers	curl;wget	openssh	15
-F-2405	50	remote-ssh	feature	spec:draft	E24	Client-side download and transfer with scp	A	ssh.local-download-transfer	lib-server	28	12	True	0	5	0	0	ssh-remote		scp;ssh	openssh	21
+F-2405	50	remote-ssh	feature	spec:draft	E24	Client-side download and transfer with scp	A	ssh.local-download-transfer	lib-server	29	12	True	0	5	0	0	ssh-remote		scp;ssh	openssh	21
 F-2406	51	remote-ssh	feature	spec:draft	E24	Manual local bootstrap of the server	A	ssh.manual-bootstrap	lib-server	30	7	True	0	3	0	0	ssh-remote	resolvers	scp	openssh	22
 F-2407	52	remote-ssh	feature	spec:draft	E24	Server install location: remote.SSH.serverInstallPath	A	ssh.install-path-resolver	lib-server	22	5	True	0	1	0	0	ssh-remote	resolvers	ssh		21
 F-2408	53	remote-ssh	feature	spec:draft	E24	Install lock files and concurrent connects	A	ssh.install-lock	lib-server	40	9	True	0	4	0	0	ssh-remote	resolvers	flock;ln;ssh	openssh	23
