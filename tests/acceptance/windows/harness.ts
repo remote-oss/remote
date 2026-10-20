@@ -18,7 +18,13 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
+import {
+  cutNetwork,
+  cutRoute as cutRouteOf,
+  restoreNetwork,
+  restoreRoute as restoreRouteOf,
+  type RouteCut,
+} from '../../../tools/acceptance-network.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
@@ -80,6 +86,8 @@ export interface AgentEvent {
   activeEditor?: string | null;
   /** The active tab when it holds a text file: its URI and whether it is a preview; null for any other tab, as a `state` event saw it. */
   activeTab?: {uri: string; preview: boolean} | null;
+  /** The uris of the window's documents with unsaved changes, untitled ones included, as a `state` event saw them. */
+  dirtyDocuments?: string[];
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
   text?: string;
   /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
@@ -271,6 +279,11 @@ async function acceptedLogins(line: string): Promise<number> {
     .length;
 }
 
+/** The number of key logins the host's sshd counted for the user harness. */
+export function logins(): Promise<number> {
+  return acceptedLogins('Accepted publickey for harness');
+}
+
 /** The number of logins the host's sshd counted for the password account. */
 export function acceptedPasswords(): Promise<number> {
   return acceptedLogins('Accepted password for harness-pw');
@@ -343,6 +356,43 @@ export function cutHostNetwork(): void {
 /** Brings the host container's network back. */
 export function restoreHostNetwork(): void {
   restoreNetwork(runCommand, variable('HARNESS_CONTAINER'));
+}
+
+/** Cuts the route to the host's own address (the `routed` alias); the published port keeps working. */
+export function cutRoute(kind: RouteCut): void {
+  cutRouteOf(
+    runCommand,
+    variable('HARNESS_CONTAINER'),
+    variable('HARNESS_ROUTED_ADDRESS'),
+    kind,
+  );
+}
+
+/** Brings the route back; harmless when nothing was cut. */
+export function restoreRoute(): void {
+  restoreRouteOf(
+    runCommand,
+    variable('HARNESS_CONTAINER'),
+    variable('HARNESS_ROUTED_ADDRESS'),
+  );
+}
+
+/** The uris of window `name`'s documents with unsaved changes, as it reports them now. */
+export async function dirtyDocumentsOf(name: string): Promise<string[]> {
+  await inWindow(name, 'acceptance.agent.state');
+  return (
+    windowEvents(name)
+      .filter(each => each.event === 'state')
+      .at(-1)?.dirtyDocuments ?? []
+  );
+}
+
+/** The names of window `name`'s terminals, as it reports them now. */
+export async function terminalsOf(name: string): Promise<string[] | undefined> {
+  await inWindow(name, 'acceptance.agent.state');
+  return windowEvents(name)
+    .filter(each => each.event === 'state')
+    .at(-1)?.terminals;
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */

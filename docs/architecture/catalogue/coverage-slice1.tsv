@@ -391,29 +391,29 @@ F-2302.AC-34	unit
 F-2303.AC-1	unit	
 F-2303.AC-2	unit	
 F-2303.AC-3	unit	
-F-2303.AC-4	todo	
-F-2303.AC-5	todo	
-F-2303.AC-6	todo	
-F-2303.AC-7	todo	
-F-2303.AC-8	todo	
-F-2303.AC-9	todo	
+F-2303.AC-4	acceptance	
+F-2303.AC-5	acceptance	
+F-2303.AC-6	acceptance	
+F-2303.AC-7	acceptance	
+F-2303.AC-8	acceptance	
+F-2303.AC-9	acceptance	
 F-2303.AC-10	unit	
 F-2303.AC-11	unit	
 F-2303.AC-12	unit	
-F-2303.AC-13	todo	
-F-2303.AC-14	todo	
-F-2303.AC-15	todo	
-F-2303.AC-16	todo	
-F-2303.AC-17	todo	
-F-2303.AC-18	todo	
+F-2303.AC-13	acceptance	
+F-2303.AC-14	acceptance	
+F-2303.AC-15	acceptance	
+F-2303.AC-16	acceptance	
+F-2303.AC-17	acceptance	
+F-2303.AC-18	acceptance	
 F-2303.AC-19	unit	
-F-2303.AC-20	todo	
-F-2303.AC-21	todo	
-F-2303.AC-22	todo	
-F-2303.AC-23	todo	
+F-2303.AC-20	acceptance	
+F-2303.AC-21	acceptance	
+F-2303.AC-22	acceptance	
+F-2303.AC-23	acceptance	
 F-2303.AC-24	todo	
 F-2303.AC-25	todo	
-F-2303.AC-26	todo	
+F-2303.AC-26	acceptance	
 F-2304.AC-1	acceptance	
 F-2304.AC-2	unit	
 F-2304.AC-3	todo	
@@ -1061,10 +1061,10 @@ F-2605.AC-16	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-17	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-18	unit	
 F-2605.AC-19	deferred	F-3907: remote.SSH.experimental.chat (F-2606) is not built
-F-2605.AC-20	todo	
-F-2605.AC-21	todo	
+F-2605.AC-20	acceptance	
+F-2605.AC-21	acceptance	
 F-2605.AC-22	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-23	todo	
+F-2605.AC-23	acceptance	
 F-2605.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
