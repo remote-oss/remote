@@ -906,7 +906,6 @@ export async function runLaunches(
   report: (line: string) => void = line => {
     console.log(line);
   },
-  stopHelpers: (userDataFolder: string) => void = stopHelpersUnder,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -945,7 +944,7 @@ export async function runLaunches(
         } finally {
           await held.release();
           // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
-          stopHelpers(path.join(runFolder, 'user-data'));
+          stopHelpersUnder(path.join(runFolder, 'user-data'), command);
         }
       }, report),
     );

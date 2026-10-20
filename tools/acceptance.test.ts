@@ -68,6 +68,7 @@ import {
   type RunnerLaunch,
 } from './acceptance-launches.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
+import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -1352,9 +1353,30 @@ describe('acceptance', () => {
       ]);
     });
 
-    it("each launch stops the helpers recorded under the run's user-data folder once it has run", async () => {
-      const happened: string[] = [];
-      const {command} = recordingCommand();
+    it("each launch runs the helper stop program on the run's user-data folder once it has run, when it holds records", async () => {
+      const userData = path.join(workspace.root, 'user-data');
+      const namespaceFolder = path.join(
+        userData,
+        'User',
+        'globalStorage',
+        'ext.a',
+        'registry',
+        'watch',
+      );
+      mkdirSync(namespaceFolder, {recursive: true});
+      writeFileSync(
+        path.join(
+          namespaceFolder,
+          `${createHash('sha256').update('one').digest('hex').slice(0, 32)}.json`,
+        ),
+        JSON.stringify({
+          namespace: 'watch',
+          recordKey: 'one',
+          nonce: 'n1',
+          endpoint: '/run/one.sock',
+        }),
+      );
+      const {calls, command} = recordingCommand();
       const {sleep} = recordingSleeper();
       await runLaunches(
         workspace.root,
@@ -1363,25 +1385,16 @@ describe('acceptance', () => {
         command,
         '',
         sleep,
-        () => Promise.resolve({exitCode: 0, output: ''}),
         launch => {
-          happened.push(`began ${launch.label}`);
-          return Promise.resolve();
-        },
-        {},
-        () => Promise.resolve({release: () => Promise.resolve()}),
-        () => undefined,
-        userDataFolder => {
-          happened.push(`stopped the helpers under ${userDataFolder}`);
+          calls.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
         },
       );
-      const userData = path.join(workspace.root, 'user-data');
-      deepStrictEqual(happened, [
-        'began terminal',
-        `stopped the helpers under ${userData}`,
-        'began remote',
-        `stopped the helpers under ${userData}`,
-      ]);
+      const stopLine = [process.execPath, STOP_PROGRAM, userData].join(' ');
+      deepStrictEqual(
+        calls.filter(call => call.startsWith('ran ') || call === stopLine),
+        ['ran terminal', stopLine, 'ran remote', stopLine],
+      );
     });
 
     it('D-85: a launch with settings finds them over the base settings', async () => {

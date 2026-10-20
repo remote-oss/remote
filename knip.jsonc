@@ -64,8 +64,6 @@
         "containers-explorer/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
-        // tools/acceptance-helper-stop.ts runs it as a program.
-        "server/stop-helpers.ts",
         "containers-cli/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],
