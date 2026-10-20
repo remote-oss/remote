@@ -374,6 +374,8 @@ const LAUNCH_ORDER = [
   'explorer-standdown',
   'trust',
   'trust-terminal',
+  'web-ui',
+  'web-ui-trust',
   'containers',
   'containers-standdown',
   'containers-no-proposals',
