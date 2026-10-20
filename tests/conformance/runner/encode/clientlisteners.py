@@ -1,13 +1,21 @@
 """The window's own listeners (kit #289, K2): the listening addresses and ports held by the slot's editor and every
-process below it, read from the socket table, each with its holder's name: `editor` for a process of the editor's own
+process below it, and by the ssh processes connected to the case's own SSH target wherever they run (after a reload a
+helper that outlived the window holds them), each with its holder's name: `editor` for a process of the editor's own
 executable (the extension host among them), `ssh` for an ssh client, else the process's name. Addresses, ports and
-names only, sorted. A command line is read only to find the editor by its profile folder and never kept; nothing an
-extension wrote is read.
+names only, sorted.
+
+No command line is read: the editor is the process that holds its own IPC socket (`<profile>/<version>-main.sock`, or
+`$XDG_RUNTIME_DIR/vscode-<sha256 of the profile path, 8 hex>-<version>-main.sock`), found in the unix socket table, and
+the case's ssh is an `ssh` that holds an established TCP connection to the target's address. Of a process's open
+files only its socket links (`socket:[inode]`) are read; nothing an extension wrote is read. The lab's own debugging
+port on the editor (lab-code's 9222 + slot, which the driver reads the screen through) is not the window's.
 """
+import hashlib
 import os
+import re
 import socket
 
-LISTEN = "0A"   # the TCP state LISTEN in /proc/net/tcp
+LISTEN, ESTABLISHED = "0A", "01"   # TCP states in /proc/net/tcp
 
 
 def _address(hexaddr, v6):
@@ -17,9 +25,10 @@ def _address(hexaddr, v6):
     return socket.inet_ntop(socket.AF_INET6 if v6 else socket.AF_INET, words)
 
 
-def listening_sockets(process):
-    """{socket inode: (address, port)} of every listening TCP socket in the network namespace of `process`, a
-    /proc/<pid> folder: the holder's own, so a window in another namespace than the recorder's is still read right."""
+def tcp_sockets(process, state):
+    """{socket inode: (local address, local port, remote address)} of the TCP sockets in `state` in the network
+    namespace of `process`, a /proc/<pid> folder: the holder's own, so a window in another namespace than the recorder's
+    is still read right. A v4 peer of a v6 socket is given as v4."""
     out = {}
     for name, v6 in (("tcp", False), ("tcp6", True)):
         try:
@@ -29,10 +38,28 @@ def listening_sockets(process):
             continue
         for line in lines:
             fields = line.split()
-            if len(fields) < 10 or fields[3] != LISTEN:
+            if len(fields) < 10 or fields[3] != state:
                 continue
-            address, port = fields[1].split(":")
-            out[int(fields[9])] = (_address(address, v6), int(port, 16))
+            (local, port), (remote, _) = fields[1].split(":"), fields[2].split(":")
+            peer = _address(remote, v6)
+            out[int(fields[9])] = (_address(local, v6), int(port, 16), peer.removeprefix("::ffff:"))
+    return out
+
+
+def socket_inodes(pid, proc="/proc"):
+    """The socket inodes among the open files of `pid`; any other open file is passed over and never kept."""
+    try:
+        fds = os.listdir(f"{proc}/{pid}/fd")
+    except OSError:
+        return set()
+    out = set()
+    for fd in fds:
+        try:
+            link = os.readlink(f"{proc}/{pid}/fd/{fd}")
+        except OSError:
+            continue
+        if link.startswith("socket:[") and link.endswith("]"):
+            out.add(int(link[8:-1]))
     return out
 
 
@@ -53,17 +80,43 @@ def processes(proc="/proc"):
     return out
 
 
-def editor_processes(user_data_dir, pids, proc="/proc"):
-    """The processes among `pids` started with `--user-data-dir <user_data_dir>`: the slot's editor."""
+def editor_sockets(user_data_dir, proc="/proc"):
+    """The inodes of the editor's own IPC sockets for the profile `user_data_dir`, from the unix socket table: the main
+    socket in the profile folder, or the one in $XDG_RUNTIME_DIR named by the profile path's digest."""
+    scope = hashlib.sha256(user_data_dir.encode()).hexdigest()[:8]
+    runtime = re.compile(r"[A-Za-z]+-" + scope + r"-[^/]+-main\.sock")
     out = set()
-    for pid in pids:
-        try:
-            with open(f"{proc}/{pid}/cmdline", "rb") as fh:
-                argv = fh.read().decode(errors="replace").split("\0")
-        except OSError:
+    try:
+        with open(f"{proc}/net/unix", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()[1:]
+    except OSError:
+        return out
+    for line in lines:
+        fields = line.split(None, 7)
+        if len(fields) < 8:
             continue
-        if f"--user-data-dir={user_data_dir}" in argv or any(
-                a == "--user-data-dir" and b == user_data_dir for a, b in zip(argv, argv[1:])):
+        folder, name = os.path.split(fields[7])
+        if (folder == user_data_dir and name.endswith("-main.sock")) or runtime.fullmatch(name):
+            out.add(int(fields[6]))
+    return out
+
+
+def editor_processes(user_data_dir, table, proc="/proc"):
+    """The processes among `table` that hold the editor's own IPC socket for `user_data_dir`: the slot's editor."""
+    held = editor_sockets(user_data_dir, proc)
+    return {pid for pid in table if held and socket_inodes(pid, proc) & held}
+
+
+def target_ssh_processes(target_address, table, proc="/proc"):
+    """The ssh processes among `table` that hold an established TCP connection to `target_address`, the case's own SSH
+    target, whose address is the run's own (its network is cut from the slot's block): another window's never is."""
+    out = set()
+    for pid, (_, name) in table.items():
+        if name != "ssh":
+            continue
+        held = socket_inodes(pid, proc)
+        connected = tcp_sockets(f"{proc}/{pid}", ESTABLISHED) if held else {}
+        if any(connected[inode][2] == target_address for inode in held & set(connected)):
             out.add(pid)
     return out
 
@@ -82,28 +135,26 @@ def descendants(roots, table):
     return found
 
 
-def window_listeners(user_data_dir, proc="/proc"):
+def window_listeners(user_data_dir, proc="/proc", target_address=None, holder=None, lab_ports=()):
     """{listening: [{address: "<address>:<port>", holder}, ...]} of the editor on `user_data_dir` and every process
-    below it, or an error when no editor runs on it. Sorted by holder, then address, then port, so two holders' ports
-    the kernel picked keep their order once normalization has replaced them; a case's client ports (the slot's range,
-    below the kernel's ephemeral range) come before a port the kernel picked. The port is text, so ${PORT_<NAME>} and a
-    bound value normalize in it."""
+    below it, and with `target_address` of the ssh processes connected to it wherever they run; or an error when no
+    editor holds that profile's IPC socket. Sorted by holder, then address, then port, so two holders' ports the kernel
+    picked keep their order once normalization has replaced them; a case's client ports (the slot's range, below the
+    kernel's ephemeral range) come before a port the kernel picked. The port is text, so ${PORT_<NAME>} and a bound
+    value normalize in it. With `holder`, only that holder's listeners are kept; `lab_ports` are never listed."""
     table = processes(proc)
     roots = editor_processes(user_data_dir, table, proc)
     if not roots:
-        return {"error": "client_listeners: no editor runs on this slot's profile"}
+        return {"error": "client_listeners: no editor holds this slot's profile's IPC socket"}
     editor_names = {table[pid][1] for pid in roots}
+    window = descendants(roots, table) | (target_ssh_processes(target_address, table, proc) if target_address else set())
     found = set()
-    for pid in descendants(roots, table):
+    for pid in window:
         name = table.get(pid, (None, ""))[1]
-        holder = "editor" if name in editor_names else name
-        try:
-            links = [os.readlink(f"{proc}/{pid}/fd/{fd}") for fd in os.listdir(f"{proc}/{pid}/fd")]
-        except OSError:
-            continue
-        sockets = listening_sockets(f"{proc}/{pid}")
-        for link in links:
-            if link.startswith("socket:[") and int(link[8:-1]) in sockets:
-                found.add((holder,) + sockets[int(link[8:-1])])
+        held_by = "editor" if name in editor_names else name
+        held = socket_inodes(pid, proc)
+        listening = tcp_sockets(f"{proc}/{pid}", LISTEN) if held else {}
+        found |= {(held_by,) + listening[inode][:2] for inode in held & set(listening)
+                  if listening[inode][1] not in lab_ports}
     return {"listening": [{"address": f"[{address}]:{port}" if ":" in address else f"{address}:{port}",
-                           "holder": holder} for holder, address, port in sorted(found)]}
+                           "holder": name} for name, address, port in sorted(found) if holder in (None, name)]}

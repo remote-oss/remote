@@ -404,7 +404,7 @@ class Session:
                 elif kind == "target_logins":
                     out["target_logins"] = self._observe_target_logins()
                 elif kind == "client_listeners":   # kit #289, K2: the window's listeners, addresses, ports and holder names
-                    out["client_listeners"] = self.client_listeners() if self.client_listeners else \
+                    out["client_listeners"] = self.client_listeners(arg.get("holder")) if self.client_listeners else \
                         {"error": "client_listeners needs the run's window"}
                 elif kind == "settings_editor":   # kit #289, K6: the Settings editor's rows the case's search shows
                     out["settings_editor"] = self._observe_settings_editor(arg)
