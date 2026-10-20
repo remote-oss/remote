@@ -848,6 +848,34 @@ export async function rowDetails(
 }
 
 /**
+ * Whether the label of the row `label` of view `viewName` in window `name` is cut: its text is wider than the space the
+ * row gives it, so core shows it with an ellipsis. Throws when the view has no such row.
+ */
+export async function labelCut(
+  name: string,
+  viewName: string,
+  label: string,
+): Promise<boolean> {
+  const overflowing = await evaluate<boolean | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const row = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].find(
+        each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)},
+      );
+      const container = row?.querySelector('.monaco-icon-label-container');
+      return container === undefined || container === null
+        ? null
+        : container.scrollWidth > container.clientWidth;
+    })()`,
+  );
+  if (overflowing === null) {
+    throw new Error(`window ${name} shows no row ${label} in ${viewName}`);
+  }
+  return overflowing;
+}
+
+/**
  * The welcome text view `viewName` shows in window `name`, with its links as their words and a line break between its
  * blocks, as the user reads it; `undefined` when it shows none or an empty one.
  */
