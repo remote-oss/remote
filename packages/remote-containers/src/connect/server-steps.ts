@@ -34,6 +34,7 @@ import {
   ensureAccepted,
   hostLockLoopOf,
   type LicenceModal,
+  type LockWait,
   type Plan,
   plan,
   probe,
@@ -148,6 +149,20 @@ export function transferredDetail(failure: TransferFailure): string {
     default:
       return failure.kind;
   }
+}
+
+/**
+ * The log line of a wait for the host's lock by the server `step` (`install` or `start`): an attempt that found it held
+ * by another window, or the lock taken after such waits.
+ */
+export function lockWaitLine(
+  step: 'install' | 'start',
+  wait: LockWait,
+): string {
+  const lock = wait.lockPath === undefined ? 'lock' : `lock ${wait.lockPath}`;
+  return wait.kind === 'busy'
+    ? `the server ${step} waits for the install ${lock} (attempt ${String(wait.attempt)} of ${String(wait.attempts)})`
+    : `the server ${step} took the install ${lock} after ${String(wait.attempts)} attempts`;
 }
 
 /** The download override's policy of Dev Containers in `policies`; a table without one is a defect. */
@@ -441,6 +456,9 @@ export async function runServerSteps(
             dependencies.clock,
             LOCK_ATTEMPTS,
             LOCK_INTERVAL_MILLISECONDS,
+            wait => {
+              logger.info(lockWaitLine('install', wait));
+            },
           ),
           logger,
           onPhase: phase => {
@@ -468,6 +486,11 @@ export async function runServerSteps(
         transferred.failure.kind === 'cancelled' ? cancelled() : serverFailed(),
       );
     }
+    if (transferred.installedByAnother === true) {
+      logger.info(
+        `the server ${profile.commit} was installed by another window; this one reuses it`,
+      );
+    }
   }
   request.onPhase('startingServer');
   logger.info('Starting VS Code Server');
@@ -490,6 +513,9 @@ export async function runServerSteps(
         dependencies.clock,
         LOCK_ATTEMPTS,
         LOCK_INTERVAL_MILLISECONDS,
+        wait => {
+          logger.info(lockWaitLine('start', wait));
+        },
       ),
       logger,
     },

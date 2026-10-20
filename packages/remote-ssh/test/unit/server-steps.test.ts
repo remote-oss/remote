@@ -737,6 +737,7 @@ describe('the server steps: transfer and start', () => {
           lines(
             'Ok',
             'server.installDir=/home/alex/.fixture-server/bin/abc123',
+            'timing.install=5',
           ),
         ),
       ),

@@ -87,7 +87,11 @@ function block(status: string, ...facts: string[]): string[] {
   return [RESULT_BEGIN, `status=${status}`, ...facts, RESULT_END];
 }
 
-const INSTALLED = block('Ok', `server.installDir=${INSTALL_FOLDER}`);
+const INSTALLED = block(
+  'Ok',
+  `server.installDir=${INSTALL_FOLDER}`,
+  'timing.install=5',
+);
 
 function plan(overrides: Partial<DownloadPlan> = {}): DownloadPlan {
   return {
@@ -325,11 +329,51 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
   });
 
   it('F-2403: the install folder comes from the plan when the script reports none', async () => {
-    const {outcome} = await runTransfer({installs: [block('Ok')]});
+    const {outcome} = await runTransfer({
+      installs: [block('Ok', 'timing.install=5')],
+    });
     deepStrictEqual(outcome, {
       kind: 'transferred',
       installFolder: INSTALL_FOLDER,
     });
+  });
+
+  it('F-0419 BR-17: a step that found the server installed under the lock, timing no unpack, is reported as installed by another', async () => {
+    const {outcome} = await runTransfer({
+      installs: [block('Ok', `server.installDir=${INSTALL_FOLDER}`)],
+    });
+    deepStrictEqual(outcome, {
+      kind: 'transferred',
+      installFolder: INSTALL_FOLDER,
+      installedByAnother: true,
+    });
+  });
+
+  it('F-0419 BR-17: a tree install says itself whether it installed the tree', async () => {
+    const outcomes = await Promise.all(
+      ['yes', 'no'].map(
+        async installed =>
+          (
+            await runTransfer({
+              installs: [
+                block(
+                  'Ok',
+                  `server.installDir=${INSTALL_FOLDER}`,
+                  `server.treeInstalled=${installed}`,
+                ),
+              ],
+            })
+          ).outcome,
+      ),
+    );
+    deepStrictEqual(outcomes, [
+      {kind: 'transferred', installFolder: INSTALL_FOLDER},
+      {
+        kind: 'transferred',
+        installFolder: INSTALL_FOLDER,
+        installedByAnother: true,
+      },
+    ]);
   });
 
   it('F-2405.AC-2: a host that downloads needs no client download', async () => {
