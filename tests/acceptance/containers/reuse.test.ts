@@ -37,6 +37,7 @@ import {
   notifications,
   waitForQuickPick,
 } from '../windows/renderer.ts';
+import {paletteItems} from '../windows/palette.ts';
 import {
   activations,
   openFolderWindow,
@@ -98,6 +99,13 @@ async function containerLeftBy(folder: string): Promise<string> {
   const containerId = await containerOf(folder);
   await closeWindow(name);
   return containerId;
+}
+
+/** The Dev Containers items that the palette of window `name` lists for Rebuild. */
+async function rebuildItems(name: string): Promise<string[]> {
+  return (await paletteItems(name, 'Rebuild')).filter(item =>
+    item.startsWith('Dev Containers: Rebuild'),
+  );
 }
 
 /** The payload and the in-container path that a dev container window's folder URI carries in its authority and path. */
@@ -1581,6 +1589,32 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         title: true,
         dialog: undefined,
       });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-1 (m4): the palette’s Rebuild items are the and-reopen pair in a local window and the in-container pair in a connected one, each without the other', async () => {
+    const folder = devContainerFolder('c54-palette', {name: 'Palette'});
+    try {
+      const name = await openFolderWindow(folder);
+      const local = await rebuildItems(name);
+      await reopenInContainer(name);
+      const inside = await rebuildItems(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        {local, inside},
+        {
+          local: [
+            'Dev Containers: Rebuild and Reopen in Container',
+            'Dev Containers: Rebuild Without Cache and Reopen in Container',
+          ],
+          inside: [
+            'Dev Containers: Rebuild Container',
+            'Dev Containers: Rebuild Container Without Cache',
+          ],
+        },
+      );
     } finally {
       await removeContainers(folder);
     }
