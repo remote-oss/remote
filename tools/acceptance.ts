@@ -1443,6 +1443,7 @@ export function runAndCollect(
   programArguments: readonly string[],
   options: {cwd?: string; env?: NodeJS.ProcessEnv} = {},
   echo: (chunk: string) => void = chunk => process.stdout.write(chunk),
+  limits?: LaunchLimits,
 ): Promise<AttemptResult> {
   return new Promise<AttemptResult>((resolve, reject) => {
     const child = spawn(program, [...programArguments], {
@@ -1451,20 +1452,116 @@ export function runAndCollect(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const chunks: Buffer[] = [];
+    let lastOutput = Date.now();
+    let resultsAt: number | undefined;
+    let tail = '';
+    let ended: string | undefined;
     for (const stream of [child.stdout, child.stderr]) {
       stream.on('data', (chunk: Buffer) => {
         chunks.push(chunk);
-        echo(chunk.toString('utf8'));
+        const text = chunk.toString('utf8');
+        echo(text);
+        lastOutput = Date.now();
+        tail = (tail + text).slice(-RESULTS_TAIL_LENGTH);
+        if (resultsAt === undefined && RESULTS_LINE.test(tail)) {
+          resultsAt = lastOutput;
+        }
       });
     }
+    const watch =
+      limits === undefined
+        ? undefined
+        : setInterval(() => {
+            const reason = boundReached(
+              limits,
+              Date.now(),
+              lastOutput,
+              resultsAt,
+            );
+            if (reason === undefined) {
+              return;
+            }
+            clearInterval(watch);
+            ended = `acceptance: ${reason}; the launch's processes were ended\n`;
+            echo(ended);
+            child.kill('SIGKILL');
+            limits.endLeftovers();
+          }, limits.checkMilliseconds);
     child.on('close', (code: number | null) => {
-      resolve({
-        exitCode: code ?? 1,
-        output: Buffer.concat(chunks).toString('utf8'),
-      });
+      clearInterval(watch);
+      const output = Buffer.concat(chunks).toString('utf8');
+      resolve(
+        ended === undefined
+          ? {exitCode: code ?? 1, output}
+          : {exitCode: 1, output: output + ended},
+      );
     });
     child.on('error', reject);
   });
+}
+
+/** How long a launch may go on: past its results, and with nothing printed; and what ends what it left running. */
+export interface LaunchLimits {
+  /** How long the editor may take to end after mocha's results line ("N passing (…)"). */
+  afterResultsMilliseconds: number;
+  /** How long the launch may print nothing at all. */
+  quietMilliseconds: number;
+  /** How often the limits are checked. */
+  checkMilliseconds: number;
+  /** Ends what the launch's process leaves behind once it is killed: an editor still on the run's profile. */
+  endLeftovers: () => void;
+}
+
+/** Mocha's results line, which a launch prints once all its rows have run. */
+const RESULTS_LINE = /^\s*\d+ passing \(/m;
+
+/** How much of the output's end is kept to find the results line across two chunks. */
+const RESULTS_TAIL_LENGTH = 400;
+
+/**
+ * Why a launch is over its limits at `now`, or undefined: its editor has not ended `afterResultsMilliseconds` after
+ * its results line, or it has printed nothing for `quietMilliseconds`.
+ */
+export function boundReached(
+  limits: Pick<LaunchLimits, 'afterResultsMilliseconds' | 'quietMilliseconds'>,
+  now: number,
+  lastOutput: number,
+  resultsAt: number | undefined,
+): string | undefined {
+  if (
+    resultsAt !== undefined &&
+    now - resultsAt >= limits.afterResultsMilliseconds
+  ) {
+    return `the editor had not ended ${String(limits.afterResultsMilliseconds / 1000)} s after its results`;
+  }
+  if (now - lastOutput >= limits.quietMilliseconds) {
+    return `nothing was printed for ${String(limits.quietMilliseconds / 1000)} s`;
+  }
+  return undefined;
+}
+
+/**
+ * A launch's limits on a run: one minute for the editor to end after its results, twenty minutes of silence (a row's
+ * own limit is at most ten), checked every five seconds. What is left is any editor on the run's profile folder, which
+ * every launch of the run shares, so a stuck one would hold up every launch after it.
+ */
+export function launchLimits(
+  runFolder: string,
+  command: CommandRunner,
+): LaunchLimits {
+  return {
+    afterResultsMilliseconds: 60_000,
+    quietMilliseconds: 20 * 60_000,
+    checkMilliseconds: 5000,
+    endLeftovers: () => {
+      command('pkill', [
+        '-KILL',
+        '-f',
+        '--',
+        `${path.join(runFolder, 'user-data')}( |$)`,
+      ]);
+    },
+  };
 }
 
 /**
@@ -1486,6 +1583,8 @@ export function runTestCli(
       ...(label === undefined ? [] : ['--label', label]),
     ],
     {cwd: root, env: {...process.env, ...variables}},
+    undefined,
+    launchLimits(variables.HARNESS_RUN_FOLDER, runCommand),
   );
 }
 
@@ -1716,10 +1815,13 @@ if (isMainModule(import.meta.url)) {
             {
               start: startDetached,
               runTests: program =>
-                runAndCollect(program.file, program.programArguments, {
-                  cwd: root,
-                  env: program.environment,
-                }),
+                runAndCollect(
+                  program.file,
+                  program.programArguments,
+                  {cwd: root, env: program.environment},
+                  undefined,
+                  launchLimits(variables.HARNESS_RUN_FOLDER, runCommand),
+                ),
             },
           ),
       },
