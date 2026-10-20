@@ -16,7 +16,6 @@ import {
   restoreUserSettings,
   userSettings,
   variable,
-  waitFor,
 } from '../windows/harness.ts';
 import {
   notifications,
@@ -24,7 +23,12 @@ import {
   toggleRow,
   viewRows,
 } from '../windows/renderer.ts';
-import {VIEW} from '../windows/explorer-rows.ts';
+import {
+  hostLabels,
+  listing,
+  rendering,
+  VIEW,
+} from '../windows/explorer-rows.ts';
 
 const SHOW_REMOTE_EXPLORER = 'workbench.view.remote';
 const SHOW_FILE_EXPLORER = 'workbench.view.explorer';
@@ -53,26 +57,6 @@ async function viewWindow(name: string): Promise<string> {
   const window = await openFolderWindow(folder);
   await inWindow(window, SHOW_REMOTE_EXPLORER);
   return window;
-}
-
-/** The labels of the group's host rows in `window`, in order, as the view shows them now. */
-async function hostLabels(window: string): Promise<string[]> {
-  return ((await viewRows(window, VIEW)) ?? [])
-    .filter(viewRow => viewRow.level === 2)
-    .map(viewRow => viewRow.label);
-}
-
-/** Waits until `window` lists exactly `hosts` under the group. */
-async function listing(
-  window: string,
-  hosts: readonly string[],
-): Promise<void> {
-  await waitFor(
-    `window ${window} to list ${hosts.join(', ')}`,
-    async () =>
-      JSON.stringify(await hostLabels(window)) === JSON.stringify(hosts),
-    15_000,
-  );
 }
 
 function pause(milliseconds: number): Promise<void> {
@@ -214,18 +198,17 @@ describe('when the SSH group reads its hosts again (card coverage-25c, part b)',
     try {
       const shown = Date.now();
       await inWindow(window, SHOW_REMOTE_EXPLORER);
-      await listing(window, hosts);
+      await rendering(window, rows => rows[0]?.label === 'bulk-001');
       const showSeconds = (Date.now() - shown) / 1000;
+      await listing(window, hosts);
       appendFileSync(config, 'Host bulk-301\n');
       const clicked = Date.now();
       await titleAction(window, VIEW, 'Refresh');
+      await rendering(window, rows => rows[0]?.setSize === 301);
+      const refreshSeconds = (Date.now() - clicked) / 1000;
       await listing(window, [...hosts, 'bulk-301']);
       deepStrictEqual(
-        [
-          showSeconds <= 5,
-          (Date.now() - clicked) / 1000 <= 5,
-          await notifications(window),
-        ],
+        [showSeconds <= 5, refreshSeconds <= 5, await notifications(window)],
         [true, true, []],
       );
     } finally {

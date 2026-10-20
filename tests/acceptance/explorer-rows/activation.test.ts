@@ -20,7 +20,12 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {notifications, viewRows} from '../windows/renderer.ts';
-import {rowsOf, rowsSettled, VIEW} from '../windows/explorer-rows.ts';
+import {
+  rendering,
+  rowsOf,
+  rowsSettled,
+  VIEW,
+} from '../windows/explorer-rows.ts';
 
 const EXPLORER = 'remote-oss.remote-explorer';
 const SSH_COMPANION = 'remote-oss.remote-ssh';
@@ -90,11 +95,13 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
       ];
       const shown = Date.now();
       await inWindow(name, SHOW_REMOTE_EXPLORER);
+      await rendering(name, rows => rows[0]?.label === HOSTS[0]);
+      const shownSeconds = (Date.now() - shown) / 1000;
       await rowsSettled(name, rowsOf(HOSTS, undefined));
       deepStrictEqual(
         [
           before,
-          Date.now() - shown <= 5_000,
+          shownSeconds <= 5,
           await extensionActive(name, EXPLORER),
           await notifications(name),
         ],

@@ -680,6 +680,11 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...EXPLORER_LAUNCH,
+      label: 'explorer-rows',
+      suite: 'explorer-rows',
+    },
+    {
+      ...EXPLORER_LAUNCH,
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,

@@ -75,7 +75,32 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the six explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  /** The labels from the first explorer launch to the last launch, in table order. */
+  const FROM_EXPLORER = [
+    'explorer',
+    'explorer-alone',
+    'explorer-trust',
+    'explorer-home',
+    'explorer-rows',
+    'explorer-no-proposals',
+    'explorer-standdown',
+    'trust',
+    'trust-terminal',
+    'web-ui',
+    'web-ui-trust',
+    'containers',
+    'containers-standdown',
+    'containers-no-proposals',
+    'containers-trust',
+    'containers-volume',
+    'containers-explorer',
+    'containers-ports',
+    ...hostLaunchLabels(),
+    'genuine',
+    'ssh-no-proposals',
+  ];
+
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -99,26 +124,7 @@ describe('the launches of the VSCodium run', () => {
         'config-files',
         'default-ports',
         'no-proposals',
-        'explorer',
-        'explorer-alone',
-        'explorer-trust',
-        'explorer-home',
-        'explorer-no-proposals',
-        'explorer-standdown',
-        'trust',
-        'trust-terminal',
-        'web-ui',
-        'web-ui-trust',
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-volume',
-        'containers-explorer',
-        'containers-ports',
-        ...hostLaunchLabels(),
-        'genuine',
-        'ssh-no-proposals',
+        ...FROM_EXPLORER,
       ],
     );
   });
@@ -199,6 +205,7 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['explorer-trust', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-home', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-rows', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-no-proposals',
           ['remote-oss.remote-explorer'],
@@ -505,26 +512,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'default-ports',
-        'explorer',
-        'explorer-alone',
-        'explorer-trust',
-        'explorer-home',
-        'explorer-no-proposals',
-        'explorer-standdown',
-        'trust',
-        'trust-terminal',
-        'web-ui',
-        'web-ui-trust',
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-volume',
-        'containers-explorer',
-        'containers-ports',
-        ...hostLaunchLabels(),
-        'genuine',
-        'ssh-no-proposals',
+        ...FROM_EXPLORER,
       ],
     );
   });
@@ -534,7 +522,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 6}, () => ({
+      Array.from({length: 7}, () => ({
         'window.title': '[${rootName}]${remoteName}',
       })),
     );

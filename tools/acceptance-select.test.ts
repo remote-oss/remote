@@ -59,16 +59,17 @@ describe('acceptance-select', () => {
     ]);
   });
 
-  it("coverage-25c: the explorer-trust and explorer-home suites' tests select their own launches in the real table", () => {
+  it("coverage-25c: the explorer-trust, explorer-home and explorer-rows suites' tests select their own launches in the real table", () => {
     deepStrictEqual(
       selectLaunches(
         [
           'tests/acceptance/explorer-home/home-files.test.ts',
+          'tests/acceptance/explorer-rows/refresh.test.ts',
           'tests/acceptance/explorer-trust/restricted.test.ts',
         ],
         launchesOf(REPOSITORY_ROOT),
       ).labels,
-      ['explorer-trust', 'explorer-home'],
+      ['explorer-trust', 'explorer-home', 'explorer-rows'],
     );
   });
 

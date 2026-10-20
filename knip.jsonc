@@ -54,6 +54,7 @@
         "explorer-alone/*.test.ts",
         "explorer-trust/*.test.ts",
         "explorer-home/*.test.ts",
+        "explorer-rows/*.test.ts",
         "explorer-no-proposals/*.test.ts",
         "explorer-standdown/*.test.ts",
         "trust/*.test.ts",
