@@ -21,6 +21,10 @@ import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
 import {discoverConfigurations} from './config/discovery.ts';
+import {
+  type DiagnosticsHost,
+  featureDiagnosticsProviderOf,
+} from './config/feature-diagnostics-provider.ts';
 import {type CliBridge, cliBridgeOf} from './cli/cli-bridge.ts';
 import {cliPathsOf} from './cli/cli-paths.ts';
 import {nodeCliHost} from './cli/node-cli-host.ts';
@@ -255,6 +259,101 @@ function statusProgressPortOf(): StatusProgressPort {
       return () => {
         ender.finish?.();
       };
+    },
+  };
+}
+
+/** The places of a window's folders where dev container configurations are: the dotfile and the `.devcontainer` folder. */
+const CONFIGURATION_PATTERN =
+  '{.devcontainer.json,.devcontainer/**/devcontainer.json}';
+
+/** The editor behind the diagnostics of the Feature ids. */
+function featureDiagnosticsHost(): DiagnosticsHost {
+  const collection = vscode.languages.createDiagnosticCollection(
+    'dev-containers-features',
+  );
+  return {
+    folders: () =>
+      (vscode.workspace.workspaceFolders ?? []).map(each => each.uri.fsPath),
+    onFoldersChanged: listener =>
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        listener();
+      }),
+    findConfigurations: async folder =>
+      (
+        await vscode.workspace.findFiles(
+          new vscode.RelativePattern(folder, CONFIGURATION_PATTERN),
+          null,
+        )
+      ).map(each => each.fsPath),
+    readFromDisk: async file => {
+      try {
+        return new TextDecoder().decode(
+          await vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+        );
+      } catch {
+        return undefined;
+      }
+    },
+    openText: file =>
+      vscode.workspace.textDocuments
+        .find(each => each.uri.fsPath === file)
+        ?.getText(),
+    watch: (folder, listener) => {
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(folder, CONFIGURATION_PATTERN),
+      );
+      const subscriptions = [
+        watcher.onDidCreate(each => {
+          listener(each.fsPath);
+        }),
+        watcher.onDidChange(each => {
+          listener(each.fsPath);
+        }),
+        watcher.onDidDelete(each => {
+          listener(each.fsPath);
+        }),
+      ];
+      return {
+        dispose: () => {
+          for (const subscription of subscriptions) {
+            subscription.dispose();
+          }
+          watcher.dispose();
+        },
+      };
+    },
+    onTextChanged: listener =>
+      vscode.workspace.onDidChangeTextDocument(event => {
+        listener(event.document.uri.fsPath);
+      }),
+    setDiagnostics: (file, diagnostics) => {
+      collection.set(
+        vscode.Uri.file(file),
+        diagnostics.map(each => {
+          const shown = new vscode.Diagnostic(
+            new vscode.Range(
+              each.range.start.line,
+              each.range.start.character,
+              each.range.end.line,
+              each.range.end.character,
+            ),
+            each.message,
+            vscode.DiagnosticSeverity.Error,
+          );
+          shown.code = {
+            value: each.code.value,
+            target: vscode.Uri.parse(each.code.target),
+          };
+          return shown;
+        }),
+      );
+    },
+    deleteDiagnostics: file => {
+      collection.delete(vscode.Uri.file(file));
+    },
+    dispose: () => {
+      collection.dispose();
     },
   };
 }
@@ -825,6 +924,11 @@ export async function activate(
       translate,
       logger,
     });
+    if (vscode.env.remoteName === undefined) {
+      context.subscriptions.push(
+        featureDiagnosticsProviderOf(featureDiagnosticsHost(), translate),
+      );
+    }
     context.subscriptions.push(
       {
         dispose: () => {

@@ -96,5 +96,11 @@
   "\"{0}\" does not exist.": "\"{0}\" does not exist.",
   "Open {0}": "Open {0}",
   "Port number must not start with a dash: {0}": "Port number must not start with a dash: {0}",
-  "The list of dev container templates couldn't be downloaded: {0}": "The list of dev container templates couldn't be downloaded: {0}"
+  "The list of dev container templates couldn't be downloaded: {0}": "The list of dev container templates couldn't be downloaded: {0}",
+  "Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.": "Absolute file paths are not allowed. Local file path must be indicated relative to the devcontainer.json.",
+  "Direct tarball references must be served over HTTPS.": "Direct tarball references must be served over HTTPS.",
+  "Failed to parse feature identifier.": "Failed to parse feature identifier.",
+  "GitHub release feature id contains invalid characters": "GitHub release feature id contains invalid characters",
+  "OCI Feature id contains invalid characters": "OCI Feature id contains invalid characters",
+  "Legacy feature not supported. Please check https://containers.dev/features for replacements.": "Legacy feature not supported. Please check https://containers.dev/features for replacements."
 }
