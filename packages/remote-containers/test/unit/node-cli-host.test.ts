@@ -451,31 +451,27 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
     );
   });
 
-  it('F-0412 AC-11: the spawn asks BuildKit for plain progress, so the log holds one line per step', async () => {
+  /** The BUILDKIT_PROGRESS of the environment a run spawns the CLI with, given the editor's own environment. */
+  async function spawnedProgress(
+    editorEnvironment: Record<string, string>,
+  ): Promise<string | undefined> {
     const fake = fakeSystem();
-    const running = bareRun(fake);
+    const running = nodeCliHost(PATHS, editorEnvironment, fake.ports).run(
+      [],
+      () => undefined,
+      new AbortController().signal,
+    );
     fake.exit(0);
     await running;
-    deepStrictEqual(
-      (fake.spawns[0]?.options as {env: Record<string, string>}).env
-        .BUILDKIT_PROGRESS,
-      'plain',
-    );
+    return (fake.spawns[0]?.options as {env: Record<string, string>}).env
+      .BUILDKIT_PROGRESS;
+  }
+
+  it('F-0412 AC-11: the spawn asks BuildKit for plain progress, so the log holds one line per step', async () => {
+    deepStrictEqual(await spawnedProgress({}), 'plain');
   });
 
   it('F-0412 AC-11: a BUILDKIT_PROGRESS of the editor’s own environment wins over the plain one', async () => {
-    const fake = fakeSystem();
-    const running = nodeCliHost(
-      PATHS,
-      {BUILDKIT_PROGRESS: 'tty'},
-      fake.ports,
-    ).run([], () => undefined, new AbortController().signal);
-    fake.exit(0);
-    await running;
-    deepStrictEqual(
-      (fake.spawns[0]?.options as {env: Record<string, string>}).env
-        .BUILDKIT_PROGRESS,
-      'tty',
-    );
+    deepStrictEqual(await spawnedProgress({BUILDKIT_PROGRESS: 'tty'}), 'tty');
   });
 });
