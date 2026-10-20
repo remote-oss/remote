@@ -35,14 +35,6 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/shutdown/effective-action.ts",
-      "card": "#1225",
-      "slice": "containers increment 2",
-      "decision": "read by the window's connect, card containers-69 (#1226)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/authoring/catalogue-download.ts",
       "card": "#1239",
       "slice": "containers increment 2",

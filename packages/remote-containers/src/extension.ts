@@ -7,6 +7,7 @@ import {appendFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
@@ -14,7 +15,7 @@ import {
   resolverEditorOf,
 } from 'lib-authority';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
-import {nodeTimer} from 'lib-helper';
+import {acquire, nodeClientEnvironment, nodeTimer} from 'lib-helper';
 import {identifierHost} from 'lib-identifiers';
 import type {Logger, RevealableChannel} from 'lib-log';
 import {profileOf} from 'lib-product';
@@ -62,6 +63,11 @@ import {
   resetReopenNotification,
 } from './open/reopen-notification.ts';
 import {openFolderInContainer} from './open/open-folder.ts';
+import {
+  SHUTDOWN_CLIENT_WAITS,
+  shutdownHelperRequest,
+} from './shutdown/helper-request.ts';
+import {createWindowLease} from './shutdown/window-lease.ts';
 import {forwarderOf, type TunnelHost} from './ports/forwarder.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import type {ReopenPorts} from './open/reopen-ports.ts';
@@ -371,6 +377,8 @@ export async function activate(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
   let logChannel: RevealableChannel | undefined;
+  /** Tells the shutdown helper that this window leaves its container; the connector gives it once it exists. */
+  const windowShutdown = {leave: (): Promise<void> => Promise.resolve()};
   const channelPort = containersChannelPortFor(
     process.env,
     vscode.window,
@@ -491,6 +499,7 @@ export async function activate(
             },
             intents: context.globalState,
             now: Date.now,
+            shutdown: {leave: () => windowShutdown.leave()},
             logger: served.logger,
           },
           {buildNoCache},
@@ -592,6 +601,7 @@ export async function activate(
             vscode.commands.executeCommand(command, ...parameters),
           addressOf: parts => vscode.Uri.from(parts),
         },
+        shutdown: {leave: () => windowShutdown.leave()},
         logger: served.logger,
       };
       const reopenHandler = reopenHandlersOf(reopenPorts);
@@ -689,7 +699,26 @@ export async function activate(
         applicationName: profile.applicationName,
       },
     );
+    const shutdownHelper = nodeClientEnvironment(
+      process.execPath,
+      SHUTDOWN_CLIENT_WAITS,
+    );
     const connector = containerConnectorOf({
+      shutdown: createWindowLease({
+        acquire: () =>
+          acquire(
+            shutdownHelper,
+            shutdownHelperRequest(
+              {
+                extensionFolder: context.extensionUri.fsPath,
+                storageFolder: context.globalStorageUri.fsPath,
+              },
+              new AbortController().signal,
+            ),
+          ),
+        logger,
+      }),
+      newConnectionId: randomUUID,
       engineFor: file => served.preflight.engineFor(file),
       cliFor: environment => bridgeFor(environment, logger),
       lifecycleFor: (engine, bridge, presenter) =>
@@ -803,6 +832,8 @@ export async function activate(
         logChannel?.show(true);
       },
     });
+    windowShutdown.leave = () => connector.leaveShutdown();
+    connector.announceShutdown(vscode.env.remoteAuthority);
     if (served.missing.length === 0) {
       offerReopen({
         window: {

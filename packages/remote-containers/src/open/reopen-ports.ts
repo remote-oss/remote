@@ -57,5 +57,7 @@ export interface ReopenPorts {
   progress: PreReloadProgressPorts;
   bridge: Pick<CliBridge, 'readConfiguration'>;
   opener: OpenerHost;
+  /** Tells the shutdown helper that this window leaves the container it holds, before the window reloads elsewhere. */
+  shutdown: {leave(): Promise<void>};
   logger: Logger;
 }
