@@ -16,6 +16,7 @@ import {
   answerDialog,
   answerInputBox,
   dialogOf,
+  notificationCentre,
   portRowAction,
   portsRows,
   type PortsRow,
@@ -507,6 +508,59 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     } finally {
       for (const stop of stops) {
         await stop().catch(() => undefined);
+      }
+    }
+  });
+
+  it('F-1102 AC-31 (listening-before-connect): a listener that postStartCommand started is not forwarded, while a later listener started in a terminal is', async () => {
+    const [before, later] = [await freePort(), await freePort()];
+    const {window, containerId} = await plainWindow('c75-ac31a', {
+      postStartCommand: `nohup nc -lk -p ${String(before)} -e cat >/dev/null 2>&1 &`,
+    });
+    await showPorts(window);
+    await new Promise(resolve => setTimeout(resolve, 25_000));
+    const early = portsOf(await portsRows(window).catch(() => []));
+    const stop = await listenInTerminal(window, containerId, later);
+    try {
+      const seen = await appearing(window, later, Date.now());
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      deepStrictEqual(
+        [early, seen.shown !== undefined, portsOf(await portsRows(window))],
+        [[], true, [String(later)]],
+      );
+    } finally {
+      await stop();
+    }
+  });
+
+  it('F-1102 AC-31 (on-auto-forward): portsAttributes onAutoForward silent forwards a later listener without a notice, and ignore keeps another one out', async () => {
+    const [silent, ignored] = [await freePort(), await freePort()];
+    const {window, containerId} = await plainWindow('c75-ac31b', {
+      portsAttributes: {
+        [String(silent)]: {onAutoForward: 'silent'},
+        [String(ignored)]: {onAutoForward: 'ignore'},
+      },
+    });
+    const stops = [
+      await listenInTerminal(window, containerId, silent),
+      await listenInTerminal(window, containerId, ignored),
+    ];
+    try {
+      const seen = await appearing(window, silent, Date.now());
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      deepStrictEqual(
+        [
+          seen.shown?.origin,
+          portsOf(await portsRows(window)),
+          (await notificationCentre(window)).filter(text =>
+            text.includes(String(silent)),
+          ),
+        ],
+        ['Auto Forwarded', [String(silent)], []],
+      );
+    } finally {
+      for (const stop of stops) {
+        await stop();
       }
     }
   });

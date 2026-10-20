@@ -1373,7 +1373,7 @@ F-1102.AC-2	acceptance
 F-1102.AC-3	core	core: the auto-forward notification, its buttons and its one entry (F-1102 BR-9, BR-10; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')
 F-1102.AC-4	core	core: the Ports view, Forward a Port and Stop Forwarding Port (F-1102 §16; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')
 F-1102.AC-5	acceptance	
-F-1102.AC-6	acceptance	
+F-1102.AC-6	todo	
 F-1102.AC-7	acceptance	
 F-1102.AC-8	core	core: Change Local Address Port's in-place edit and its warning (F-1102 BR-8; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')
 F-1102.AC-9	core	core: Change Local Address Port's in-place edit and its warning (F-1102 BR-8; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')
@@ -1398,7 +1398,7 @@ F-1102.AC-27	acceptance
 F-1102.AC-28	core	core: the Ports view, Forward a Port and Stop Forwarding Port (F-1102 §16; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')
 F-1102.AC-29	acceptance	
 F-1102.AC-30	core	core: Change Local Address Port's in-place edit and its warning (F-1102 BR-8; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')
-F-1102.AC-31	todo	
+F-1102.AC-31	acceptance	
 F-1402.AC-1	todo	
 F-1402.AC-2	unit	
 F-1402.AC-3	todo	
