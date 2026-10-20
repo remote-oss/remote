@@ -196,10 +196,22 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly prepareTemplates = (
+    root: string,
+    runFolder: string,
+    address: string,
+  ): Promise<string> => {
+    this.calls.push(`templates prepared ${address}`);
+    return Promise.resolve('localhost:5000');
+  };
+
   readonly startDownloads = (): Promise<RunDownloads> => {
     this.calls.push('downloads started');
     return Promise.resolve({
-      variables: {HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080'},
+      variables: {
+        HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080',
+        HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
+      },
       stop: () => {
         this.calls.push('downloads stopped');
         return Promise.resolve();
@@ -1055,6 +1067,33 @@ describe('acceptance', () => {
           ],
           '127.0.0.1:5000',
         ],
+      );
+    });
+
+    it('tooling-57: a run with the containers launch publishes its templates into the registry and passes the index and the templates registry', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['containers']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('templates')),
+          harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+          harness.variables?.HARNESS_TEMPLATE_REGISTRY,
+        ],
+        [
+          ['templates prepared 127.0.0.1:5000'],
+          'http://127.0.0.1:8080/templates/devcontainer-index.json',
+          'localhost:5000',
+        ],
+      );
+    });
+
+    it('tooling-57: a run whose chosen launches ask for no templates prepares none and passes no index', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('templates')),
+          harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+        ],
+        [[], undefined],
       );
     });
 

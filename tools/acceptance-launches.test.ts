@@ -1218,4 +1218,13 @@ describe('the platform cases (card coverage-12)', () => {
       ['containers', 'containers-ports'],
     );
   });
+
+  it('tooling-57: only the containers launch asks for the run’s templates', () => {
+    deepStrictEqual(
+      launchesOf(REPOSITORY_ROOT)
+        .filter(launch => launch.templates === true)
+        .map(launch => launch.label),
+      ['containers'],
+    );
+  });
 });
