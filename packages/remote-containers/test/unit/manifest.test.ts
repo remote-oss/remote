@@ -105,6 +105,12 @@ const DETAILS_TITLE_WHEN =
 const DETAILS_REBUILD_WHEN =
   '!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown';
 
+const CREATE_FILE_WHEN =
+  '!remoteName && !virtualWorkspace && !remote-containers:standingDown';
+
+const CREATE_FILE_INDICATOR_WHEN =
+  'workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+
 const ENGLISH = {
   description:
     'Develop inside a container that carries its own toolchain, so each project brings its environment with it.',
@@ -113,6 +119,8 @@ const ENGLISH = {
   'configuration.title': 'Dev Containers',
   'commands.Reopenincontainer.title': 'Reopen in Container',
   'commands.Openfolder.title': 'Open Folder in Container...',
+  'commands.Createdevcontainerfile.title':
+    'Add Dev Container Configuration Files...',
   'commands.Rebuildcontainer.title': 'Rebuild Container',
   'commands.Rebuildcontainerwithoutcache.title':
     'Rebuild Container Without Cache',
@@ -271,6 +279,11 @@ describe('the manifest', () => {
             title: '%commands.Openfolder.title%',
             category: 'Dev Containers',
           },
+          {
+            command: 'remote-containers.createDevContainerFile',
+            title: '%commands.Createdevcontainerfile.title%',
+            category: 'Dev Containers',
+          },
           ...REBUILD_COMMANDS,
           {
             command: 'remote-containers.showReopenInContainerNotificationReset',
@@ -305,6 +318,10 @@ describe('the manifest', () => {
             {
               command: 'remote-containers.openFolder',
               when: OPEN_FOLDER_WHEN,
+            },
+            {
+              command: 'remote-containers.createDevContainerFile',
+              when: CREATE_FILE_WHEN,
             },
             {
               command: 'remote-containers.rebuildContainer',
@@ -370,6 +387,11 @@ describe('the manifest', () => {
               command: 'remote-containers.openFolder',
               group: 'remote_30_dev-container_2_actions@8',
               when: OPEN_FOLDER_INDICATOR_WHEN,
+            },
+            {
+              command: 'remote-containers.createDevContainerFile',
+              group: 'remote_30_dev-container_2_actions@4',
+              when: CREATE_FILE_INDICATOR_WHEN,
             },
             {
               command: 'remote-containers.rebuildContainer',
@@ -776,6 +798,35 @@ describe('the manifest', () => {
           'view/item/context': [],
         },
         'Open Folder in Container...',
+      ],
+    );
+  });
+
+  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and the indicator item only in a window with a folder', () => {
+    deepStrictEqual(
+      [
+        menusOf(['remote-containers.createDevContainerFile']),
+        readJson('package.nls.json')['commands.Createdevcontainerfile.title'],
+      ],
+      [
+        {
+          commandPalette: [
+            {
+              command: 'remote-containers.createDevContainerFile',
+              when: CREATE_FILE_WHEN,
+            },
+          ],
+          'statusBar/remoteIndicator': [
+            {
+              command: 'remote-containers.createDevContainerFile',
+              group: 'remote_30_dev-container_2_actions@4',
+              when: CREATE_FILE_INDICATOR_WHEN,
+            },
+          ],
+          'view/title': [],
+          'view/item/context': [],
+        },
+        'Add Dev Container Configuration Files...',
       ],
     );
   });

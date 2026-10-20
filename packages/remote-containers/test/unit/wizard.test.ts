@@ -1,7 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type {CatalogueTemplate} from '../../src/authoring/catalogue.ts';
 import type {RootEntry} from '../../src/authoring/curated-templates.ts';
-import {runWizard, walkStages} from '../../src/authoring/wizard.ts';
+import {
+  runWizard,
+  walkStages,
+  wizardRunnerOf,
+} from '../../src/authoring/wizard.ts';
 import type {
   StagePorts,
   StageResult,
@@ -536,6 +540,18 @@ describe('the wizard (card containers-80)', () => {
         },
         ['/store/configs/one'],
       ],
+    );
+  });
+
+  it('F-0801 AC-1: the runner the commands use titles the pick S024 and writes into the folder it is given', async () => {
+    const scene = sceneOf();
+    const result = wizardRunnerOf(scene.ports)('/work/ws');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const [picker] = scene.pickers;
+    picker?.accept('Alpine');
+    deepStrictEqual(
+      [picker?.title, (await result).kind, scene.written.length],
+      ['Add Dev Container Configuration Files', 'written', 1],
     );
   });
 });

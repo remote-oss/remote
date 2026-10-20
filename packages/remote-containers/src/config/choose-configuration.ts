@@ -39,8 +39,7 @@ const CONFIG_TEMPLATES = {
   S049: 'Cancelled container configuration selection.',
   S004: '"{0}" does not exist.',
   openConfiguration: 'Open {0}',
-  noConfiguration:
-    'No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.',
+  useTemplate: 'Use Template',
 } as const;
 
 /** One row of the picker. */
@@ -74,8 +73,6 @@ export interface ConfigSurfaces {
   ): Promise<string | undefined>;
   /** Opens the file in a preview editor tab. */
   openPreview(file: string): Promise<void>;
-  /** A non-modal information message with no buttons; not awaited. */
-  showInformation(message: string): void;
 }
 
 /** Everything choosing needs. */
@@ -84,6 +81,8 @@ export interface ConfigurationPorts {
   surfaces: ConfigSurfaces;
   cli: Pick<CliBridge, 'readConfiguration'>;
   compare: (left: string, right: string) => number;
+  /** Adds a configuration to the folder with the wizard, and shows what the command that adds one shows after it. */
+  useTemplate(folder: string): PromiseLike<unknown>;
   translate: Translate;
   logger: Logger;
 }
@@ -248,9 +247,6 @@ export async function chooseConfiguration(
     if (!(await engineAllows())) {
       return stopped;
     }
-    surfaces.showInformation(
-      textOf(translate, CONFIG_TEMPLATES.noConfiguration),
-    );
     return {kind: 'noConfiguration'};
   }
   const candidate =
@@ -300,12 +296,17 @@ export async function chooseConfiguration(
     return {kind: 'rejected'};
   }
   if (reading === undefined) {
-    await surfaces.showWarning(
+    const useTemplate = textOf(translate, CONFIG_TEMPLATES.useTemplate);
+    const answer = await surfaces.showWarning(
       '',
       textOf(translate, CONFIG_TEMPLATES.S113, [candidate.relative]),
-      [],
+      [useTemplate],
     );
-    await surfaces.openPreview(candidate.file);
+    if (answer === useTemplate) {
+      await ports.useTemplate(folder);
+    } else {
+      await surfaces.openPreview(candidate.file);
+    }
     return {kind: 'rejected'};
   }
   const read = await reading;

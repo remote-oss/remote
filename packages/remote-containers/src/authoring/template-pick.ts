@@ -61,7 +61,7 @@ type RowAction =
   | {kind: 'learnMore'};
 
 /** One row of the pick, with what it does. */
-interface PickRow {
+export interface PickRow {
   label: string;
   description?: string;
   detail?: string;

@@ -174,3 +174,20 @@ export async function runWizard(
   }
   return outcomeOf(written, folder);
 }
+
+/** The English templates of the wizard's own text, by their string ids. */
+const WIZARD_TEMPLATES = {
+  S024: 'Add Dev Container Configuration Files',
+} as const;
+
+/** The wizard as the commands start it: for a folder, titled S024, and never cancelled from outside. */
+export function wizardRunnerOf(
+  ports: WizardPorts,
+): (folder: string) => Promise<WizardOutcome> {
+  return folder =>
+    runWizard(
+      {title: ports.translate(WIZARD_TEMPLATES.S024), folder},
+      ports,
+      new AbortController().signal,
+    );
+}

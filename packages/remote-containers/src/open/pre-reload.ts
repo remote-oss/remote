@@ -66,7 +66,6 @@ function closingSurfaces(
     dialogs: closingDialogs(surfaces.dialogs, progress),
     showWarning: closing(progress, surfaces.showWarning.bind(surfaces)),
     openPreview: closing(progress, surfaces.openPreview.bind(surfaces)),
-    showInformation: closing(progress, surfaces.showInformation.bind(surfaces)),
   };
 }
 
