@@ -17,7 +17,8 @@ import {
 import {
   dialogOf,
   notifications,
-  statusItem,
+  INDICATOR_MILLISECONDS,
+  statusItemText,
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -345,7 +346,12 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
         await reopenInContainer(name);
         seen.push([
           await windowTitle(name),
-          (await statusItem(name, 'status.host')).text,
+          await statusItemText(
+            name,
+            'status.host',
+            'Dev Container: Title Name',
+            INDICATOR_MILLISECONDS,
+          ),
         ]);
         await closeWindow(name);
       } finally {

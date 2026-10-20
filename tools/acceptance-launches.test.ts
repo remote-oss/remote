@@ -103,6 +103,8 @@ describe('the launches of the VSCodium run', () => {
         'explorer-standdown',
         'trust',
         'trust-terminal',
+        'web-ui',
+        'web-ui-trust',
         'containers',
         'containers-standdown',
         'containers-no-proposals',
@@ -201,6 +203,8 @@ describe('the launches of the VSCodium run', () => {
         ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
+        ['web-ui', undefined, true, undefined],
+        ['web-ui-trust', undefined, true, undefined],
         [
           'containers',
           ['remote-oss.remote-containers'],
@@ -355,7 +359,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-33, containers-12: the two trust launches and containers-trust are the only ones with workspace trust on; trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and containers-trust turns the prompt off', () => {
+  it('tooling-33, containers-12: the two trust launches, web-ui-trust and containers-trust are the only ones with workspace trust on; trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and web-ui-trust and containers-trust turn the prompt off', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' && launch.workspaceTrust !== undefined
@@ -378,6 +382,14 @@ describe('the launches of the VSCodium run', () => {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
             'remote.SSH.remotePlatform': {harness: 'linux'},
+          },
+        ],
+        [
+          'web-ui-trust',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'security.workspace.trust.startupPrompt': 'never',
           },
         ],
         [
@@ -503,6 +515,8 @@ describe('the launches of the VSCodium run', () => {
         'explorer-standdown',
         'trust',
         'trust-terminal',
+        'web-ui',
+        'web-ui-trust',
         'containers',
         'containers-standdown',
         'containers-no-proposals',
@@ -1179,6 +1193,35 @@ describe('the platform cases (card coverage-12)', () => {
         ])
         .filter(([, environment]) => environment !== undefined),
       [['containers-ports', {PATH: '<run>/xdg-bin:<path>'}]],
+    );
+  });
+
+  it('coverage-48: web-ui is a renderer launch of the suite of its name, with a recording browser of the run’s folder first on the editor’s PATH and no extension of its own', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label === 'web-ui')
+        .map(launch =>
+          launch.kind === 'plain'
+            ? [
+                launch.suite,
+                launch.debuggingPort,
+                launch.environment,
+                launch.withExtensions,
+                launch.workspaceTrust,
+                launch.settings,
+              ]
+            : undefined,
+        ),
+      [
+        [
+          'web-ui',
+          true,
+          {PATH: '<run>/browser-bin:<path>'},
+          undefined,
+          undefined,
+          {'window.title': '[${rootName}]'},
+        ],
+      ],
     );
   });
 

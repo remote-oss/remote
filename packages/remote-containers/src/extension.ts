@@ -30,14 +30,16 @@ import {overrideStoreOf} from './cli/override-files.ts';
 import {containerConnectorOf} from './connect/connector.ts';
 import {openHostRelay} from './connect/host-relay.ts';
 import {recentLabelPortsOf} from './connect/recent-editor.ts';
-import {registerContainerResolver} from './connect/register-connector.ts';
+import {
+  registerContainerResolver,
+  RESOLVER_EDITOR_OPTIONS,
+} from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
 import {
   commands,
   enabledApiProposals,
-  runtimeCommands,
   settings,
   standDown,
   views,
@@ -759,9 +761,7 @@ export async function activate(
     }
     const registered = await registerContainerResolver(
       {
-        resolverEditor: resolverEditorOf(vscode, {
-          detailsCommand: runtimeCommands.revealLogTerminal,
-        }),
+        resolverEditor: resolverEditorOf(vscode, RESOLVER_EDITOR_OPTIONS),
         labels: vscode.workspace,
         commands: host,
         recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),

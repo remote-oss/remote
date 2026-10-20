@@ -64,6 +64,8 @@
         "containers-explorer/*.test.ts",
         "containers-ports/*.test.ts",
         "containers-shutdown/*.test.ts",
+        "web-ui/*.test.ts",
+        "web-ui-trust/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
         "containers-cli/*.test.ts",

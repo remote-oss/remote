@@ -866,6 +866,22 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-1101 BR-24: the server start carries the port attributes of the merged configuration as machine settings', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {name: 'Proj'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: {portsAttributes: {'3000': {label: 'App'}}},
+    };
+    await connected(scene);
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.machineSettings),
+      [{'remote.portsAttributes': {'3000': {label: 'App'}}}],
+    );
+  });
+
   it("F-0505 5.0 step 5: a new container's start carries the effective list, and the log names it", async () => {
     const scene = sceneOf();
     scene.defaultExtensions = ['c.d'];

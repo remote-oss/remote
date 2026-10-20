@@ -374,6 +374,8 @@ const LAUNCH_ORDER = [
   'explorer-standdown',
   'trust',
   'trust-terminal',
+  'web-ui',
+  'web-ui-trust',
   'containers',
   'containers-standdown',
   'containers-no-proposals',
@@ -1371,6 +1373,79 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    const CONTAINERS: Launch = {
+      label: 'containers',
+      kind: 'plain',
+      suite: 'containers',
+      withExtensions: ['remote-oss.remote-containers'],
+    };
+
+    /** Runs `launches` with `runLaunch` under a lock that notes its takes and releases in `events`. */
+    function runLocked(
+      launches: Launch[],
+      runLaunch: (launch?: Launch) => Promise<AttemptResult>,
+      events: string[],
+    ): Promise<number[]> {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        '',
+        sleep,
+        runLaunch,
+        undefined,
+        undefined,
+        undefined,
+        () => undefined,
+        {
+          take: () => {
+            events.push('take');
+            return Promise.resolve();
+          },
+          release: () => {
+            events.push('release');
+          },
+        },
+      );
+    }
+
+    it("tooling-58: a launch of dev containers holds the daemon's lock through its attempts; another launch takes none", async () => {
+      const events: string[] = [];
+      await runLocked(
+        [TERMINAL, CONTAINERS],
+        launch => {
+          events.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+        events,
+      );
+      deepStrictEqual(events, [
+        'ran terminal',
+        'take',
+        'ran containers',
+        'release',
+      ]);
+    });
+
+    it("tooling-58: the daemon's lock is released when a launch of dev containers throws", async () => {
+      const events: string[] = [];
+      const failure = await runLocked(
+        [CONTAINERS],
+        () => Promise.reject(new Error('the editor did not start')),
+        events,
+      ).then(
+        () => 'resolved',
+        (error: unknown) => (error as Error).message,
+      );
+      deepStrictEqual(
+        [failure, events],
+        ['the editor did not start', ['take', 'release']],
+      );
     });
 
     it("each launch runs the helper stop program on the run's user-data folder once it has run, when it holds records", async () => {
