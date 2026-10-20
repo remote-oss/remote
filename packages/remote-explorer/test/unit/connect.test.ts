@@ -52,7 +52,7 @@ const COMMANDS = [
 
 describe('the connect commands of a host row (card explorer-05)', () => {
   for (const [name, target] of COMMANDS) {
-    it(`F-5103.BR-${String(COMMANDS.findIndex(entry => entry[1] === target) + 1)}: ${name} opens the host's alias as written in the ${target} window`, async () => {
+    it(`F-5103.AC-23: F-5103.BR-${String(COMMANDS.findIndex(entry => entry[1] === target) + 1)}: ${name} opens the host's alias as written in the ${target} window`, async () => {
       const {session, opened} = sessionOf(ANSWERED);
       const outcome = await connectHandlers(() => session)[name].execute(HOST);
       deepStrictEqual(
@@ -83,7 +83,7 @@ describe('the connect commands of a host row (card explorer-05)', () => {
       ['an empty object', {}],
       ['a value the targets do not know', {kind: 'sshHost'}],
     ] as const) {
-      it(`F-5002.19.7: ${name} with ${label} resolves undefined and opens nothing`, async () => {
+      it(`F-5103.AC-19, AC-20: F-5002.19.7: ${name} with ${label} resolves undefined and opens nothing`, async () => {
         const {session, opened} = sessionOf(ANSWERED);
         const outcome = await connectHandlers(() => session)[name].execute(
           argument,
@@ -92,7 +92,7 @@ describe('the connect commands of a host row (card explorer-05)', () => {
       });
     }
 
-    it(`F-5002.19.1: ${name} without a session resolves undefined`, async () => {
+    it(`F-5002.AC-18, F-5103.AC-19: F-5002.19.1: ${name} without a session resolves undefined`, async () => {
       deepStrictEqual(
         await connectHandlers(() => undefined)[name].execute(HOST),
         undefined,
