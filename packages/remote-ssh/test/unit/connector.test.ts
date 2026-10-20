@@ -340,34 +340,14 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(heard, []);
   });
 
-  /** The phases heard for a connect whose connection step reports `events`. */
-  async function phasesHeardAfter(
-    ...events: PhaseEvent[]
-  ): Promise<ConnectPhase[]> {
-    const {recording, options} = setup();
-    const connector = connectorOf({
-      stepsFor: onPhase =>
-        steps(recording, {
-          openConnection: (...given) => {
-            events.forEach(onPhase);
-            return steps(recording).openConnection(...given);
-          },
-        }),
-      terminalMode: () => false,
-      options: connectorOptions(options),
-      revealLog: () => undefined,
-      applyTerminalEnvironment: () => undefined,
-    });
-    const heard: ConnectPhase[] = [];
-    connector.onPhase(given => {
-      heard.push(given);
-    });
-    await connector.connect(HOST_INPUT);
-    return heard;
-  }
-
-  /** The progress lines a connect whose connection step reports `events` writes to the log. */
-  async function progressLogged(...events: PhaseEvent[]): Promise<string[]> {
+  /**
+   * A connector whose connection step reports `events`, with the sink its log writes to; the phases it tells and the
+   * lines it logs are what the rows below read.
+   */
+  function connectorReporting(...events: PhaseEvent[]): {
+    connector: SshConnector;
+    logSink: ReturnType<typeof setup>['logSink'];
+  } {
     const {recording, options, logSink} = setup();
     const connector = connectorOf({
       stepsFor: onPhase =>
@@ -382,6 +362,25 @@ describe('the connector over the connect pipeline', () => {
       revealLog: () => undefined,
       applyTerminalEnvironment: () => undefined,
     });
+    return {connector, logSink};
+  }
+
+  /** The phases heard for a connect whose connection step reports `events`. */
+  async function phasesHeardAfter(
+    ...events: PhaseEvent[]
+  ): Promise<ConnectPhase[]> {
+    const {connector} = connectorReporting(...events);
+    const heard: ConnectPhase[] = [];
+    connector.onPhase(given => {
+      heard.push(given);
+    });
+    await connector.connect(HOST_INPUT);
+    return heard;
+  }
+
+  /** The progress lines a connect whose connection step reports `events` writes to the log. */
+  async function progressLogged(...events: PhaseEvent[]): Promise<string[]> {
+    const {connector, logSink} = connectorReporting(...events);
     await connector.connect(HOST_INPUT);
     return logSink.lines
       .map(line => line.message)
