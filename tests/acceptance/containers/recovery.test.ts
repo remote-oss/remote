@@ -8,6 +8,7 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  OLD_GLIBC_IMAGE,
   reloadWindow,
   reopenInContainer,
   connectedToContainer,
@@ -49,10 +50,6 @@ const S339 =
   "The 'docker' command was not found. Make sure Docker is installed.";
 const S346 =
   'The container does not meet all the requirements of the VS Code Server.';
-
-/** `ubuntu:18.04`, whose glibc 2.27 is below the server's 2.28, pinned by digest as the Alpine base is. */
-const OLD_GLIBC_IMAGE =
-  'ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98';
 
 /** The dialog of a failed connect takes the image pull, the CLI's run and the server's install. */
 const DIALOG_MILLISECONDS = 180_000;

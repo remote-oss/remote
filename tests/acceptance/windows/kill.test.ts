@@ -26,6 +26,8 @@ import {
   withoutActivity,
 } from './harness.ts';
 import {
+  fishServerRuns,
+  fishServerInstalled,
   closeAllButLocal,
   DATA_FOLDER,
   FIXED_ROWS,
@@ -405,6 +407,21 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     deepStrictEqual(
       [noticesSince(mark, 'local'), exists],
       [[[killed('noforward'), ['Open Logs']]], false],
+    );
+  });
+
+  it('F-2411 AC-24 (ruling-fish): on a host whose login shell is fish, Kill on Host says it killed the server, and the server is stopped', async () => {
+    await fishServerInstalled('fish-kill');
+    const runningBefore = await fishServerRuns();
+    const mark = await killWith('local', [pickHost('harness-fish')]);
+    await waitFor(
+      'the server of harness-fish to stop',
+      async () => !(await fishServerRuns()),
+      10_000,
+    );
+    deepStrictEqual(
+      {runningBefore, notices: noticesSince(mark, 'local')},
+      {runningBefore: true, notices: [[killed('harness-fish'), ['Open Logs']]]},
     );
   });
 

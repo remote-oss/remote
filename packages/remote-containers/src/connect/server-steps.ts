@@ -95,6 +95,8 @@ export interface ServerRequest {
   /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
   defaultExtensions: readonly string[];
   onPhase(phase: 'installing' | 'startingServer'): void;
+  /** The share of the server archive downloaded so far, from 0 to 100. */
+  onDownloadPercent(percent: number): void;
   cancellation: AbortSignal;
 }
 
@@ -423,7 +425,11 @@ export async function runServerSteps(
             LOCK_INTERVAL_MILLISECONDS,
           ),
           logger,
-          onPhase: () => undefined,
+          onPhase: phase => {
+            if (phase.kind === 'progress' && phase.step === 'download') {
+              request.onDownloadPercent(phase.percent);
+            }
+          },
         },
       );
     }

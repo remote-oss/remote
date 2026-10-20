@@ -13,7 +13,6 @@ const OTHER_PHASES: readonly PhaseName[] = [
   'copyingWithScp',
   'settingUpTunnel',
   'waitingForForwarding',
-  'serverDownloadPercent',
 ];
 
 describe('the titles of the connect progress (card containers-08)', () => {
@@ -31,6 +30,13 @@ describe('the titles of the connect progress (card containers-08)', () => {
         phaseTitleOf({name: 'startingServer'}, template => template),
       ],
       ['Installing server', 'Starting server'],
+    );
+  });
+
+  it('containers-55: the download of the server keeps the installing text, so the suffix stays until the next stage replaces it', () => {
+    deepStrictEqual(
+      phaseTitleOf({name: 'serverDownloadPercent'}, template => template),
+      'Installing server',
     );
   });
 

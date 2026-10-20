@@ -22,7 +22,12 @@ import {
 } from './failure.ts';
 import {connectOverCli} from '../cli/cli-connect.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
-import {hostPlatformLine} from '../diagnostics/log-content.ts';
+import {
+  hostPlatformLine,
+  listeningLine,
+  resolvedLine,
+  resolverLine,
+} from '../diagnostics/log-content.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -199,8 +204,17 @@ export async function connect(
     return failedWith(step, context);
   }
 
+  options.logger.info(
+    resolverLine(input.rawHostString, input.attempt, input.isReconnection),
+  );
   try {
-    return await runSteps(input, steps, options, held, failure);
+    const result = await runSteps(input, steps, options, held, failure);
+    if ('connected' in result) {
+      options.logger.info(
+        resolvedLine(input.rawHostString, result.connected.address.port),
+      );
+    }
+    return result;
   } catch (caught) {
     return failure({kind: 'unknown', logDetail: messageOf(caught)});
   }
@@ -441,6 +455,9 @@ async function runSteps(
     return failure(
       ofStart(started.failure, {useExecServer: options.useExecServer}),
     );
+  }
+  if (started.server.endpoint.kind === 'port') {
+    options.logger.info(listeningLine(started.server.endpoint.port));
   }
   if (started.server.reused) {
     await quietly('the default extensions', () =>

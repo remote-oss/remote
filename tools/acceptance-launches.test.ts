@@ -871,7 +871,14 @@ describe('the launch with no runner', () => {
   it('D-85: the windows launch is plain and has a suite folder of Node tests', () => {
     deepStrictEqual(
       launches.filter(launch => launch.label === 'windows'),
-      [{label: 'windows', kind: 'plain', suite: 'windows'}],
+      [
+        {
+          label: 'windows',
+          kind: 'plain',
+          suite: 'windows',
+          environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
+        },
+      ],
     );
   });
 

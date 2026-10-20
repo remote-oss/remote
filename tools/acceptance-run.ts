@@ -81,7 +81,9 @@ export function buildDevContainerImage(
   checked(command, 'docker', [
     'build',
     '--load',
-    '--quiet',
+    // the build's own output goes to stderr, so a failed step's error reaches the thrown message (2026-10-20: an
+    // `apk add` that failed on one runner showed only "did not complete" under --quiet)
+    '--progress=plain',
     '--label',
     `${RUN_LABEL}=${runId}`,
     '--label',
@@ -317,7 +319,7 @@ export function startHostContainer(
   checked(command, 'docker', [
     'build',
     '--load',
-    '--quiet',
+    '--progress=plain', // as the dev container image's build: a failed step's error reaches the thrown message
     '--tag',
     hostImageOf(runId),
     path.join(root, 'tests', 'acceptance', 'host'),

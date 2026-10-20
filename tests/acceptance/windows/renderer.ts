@@ -446,7 +446,10 @@ export async function rowDetails(
   );
 }
 
-/** The welcome text view `viewName` shows in window `name`, with its links as their words; `undefined` when it shows none. */
+/**
+ * The welcome text view `viewName` shows in window `name`, with its links as their words and a line break between its
+ * blocks, as the user reads it; `undefined` when it shows none or an empty one.
+ */
 export async function welcomeText(
   name: string,
   viewName: string,
@@ -456,7 +459,7 @@ export async function welcomeText(
       name,
       `(() => {
       const pane = ${paneExpression(viewName)};
-      return pane?.querySelector('.welcome-view-content')?.textContent ?? null;
+      return pane?.querySelector('.welcome-view-content')?.innerText || null;
     })()`,
     )) ?? undefined
   );
@@ -549,6 +552,38 @@ export async function notifications(name: string): Promise<string[]> {
     name,
     `[...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(each => each.textContent ?? '')`,
   );
+}
+
+/** The connecting toast of a window: its message and its bar, which core draws as `infinite` or `discrete`. */
+export interface ConnectingToast {
+  message: string;
+  progress: 'infinite' | 'discrete' | 'none';
+}
+
+/**
+ * The toast of window `name` whose message starts with `messageStart`, with the state of its progress bar, or nothing
+ * when there is none. Core draws an indeterminate bar with the class `infinite` on the toast's `.monaco-progress-container`
+ * and a determinate one without it ([oss] `src/vs/base/browser/ui/progressbar/progressbar.ts`).
+ */
+export async function notificationProgress(
+  name: string,
+  messageStart: string,
+): Promise<ConnectingToast | undefined> {
+  return evaluate<ConnectingToast | null>(
+    name,
+    `(() => {
+  const item = [...document.querySelectorAll('.notifications-toasts .notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  if (item === undefined) {
+    return null;
+  }
+  const bar = item.parentElement?.querySelector('.monaco-progress-container') ?? null;
+  const shown = bar !== null && bar.classList.contains('active') && !bar.classList.contains('done');
+  return {
+    message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+    progress: !shown ? 'none' : bar.classList.contains('infinite') ? 'infinite' : 'discrete',
+  };
+})()`,
+  ).then(found => found ?? undefined);
 }
 
 /** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */
@@ -860,7 +895,9 @@ const QUICK_PICK_EXPRESSION = `(() => {
 })()`;
 
 /** The quick pick open in window `name`, or `undefined` when none is. */
-async function quickPickOf(name: string): Promise<ShownQuickPick | undefined> {
+export async function quickPickOf(
+  name: string,
+): Promise<ShownQuickPick | undefined> {
   return (
     (await evaluate<ShownQuickPick | null>(name, QUICK_PICK_EXPRESSION)) ??
     undefined

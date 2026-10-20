@@ -8,23 +8,11 @@ import {
   userSettings,
 } from './harness.ts';
 import {
-  closeAllButLocal,
   DATA_FOLDER,
+  freshHost,
   INSTALL_MILLISECONDS,
   openConnected,
 } from './maintenance.ts';
-
-/** Ends the host's servers and removes their installs, so that the next connect installs the server afresh. */
-async function freshHost(): Promise<void> {
-  await closeAllButLocal();
-  // The bracket keeps pkill's pattern from matching this shell's own command line.
-  const servers = `${DATA_FOLDER.replace('/.', '/[.]')}/bin/`;
-  await onHost(
-    'sh',
-    '-c',
-    `pkill -f '${servers}' || true; rm -rf '${DATA_FOLDER}/bin' '${DATA_FOLDER}/cli'`,
-  );
-}
 
 /**
  * What the log of one connect shows of the remote side: whether it has remote output, an install step, and the

@@ -35,6 +35,8 @@ interface Received {
   length: number;
   body: Buffer;
   broken: boolean;
+  /** The response's `Access-Control-Allow-Origin` header, or undefined when it has none. */
+  allowOrigin: string | undefined;
 }
 
 /** The body of a plain HTTP GET of `pathName` at `address` and `port`. */
@@ -91,6 +93,7 @@ function get(
             length: Number(response.headers['content-length'] ?? -1),
             body: Buffer.concat(chunks),
             broken,
+            allowOrigin: response.headers['access-control-allow-origin'],
           });
         });
       },
@@ -145,6 +148,21 @@ describe('the download host', function () {
       [
         [404, 0],
         [503, 0],
+      ],
+    );
+  });
+
+  it('coverage-44: missing-cors gives an empty 404 with an Access-Control-Allow-Origin header, and missing gives none', async () => {
+    const answers = await Promise.all(
+      ['/missing-cors/x', '/missing/x'].map(pathName =>
+        get('http', host.httpPort, pathName),
+      ),
+    );
+    deepStrictEqual(
+      answers.map(each => [each.status, each.body.length, each.allowOrigin]),
+      [
+        [404, 0, '*'],
+        [404, 0, undefined],
       ],
     );
   });
