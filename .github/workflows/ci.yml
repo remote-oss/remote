@@ -39,11 +39,17 @@ on:
           node tools/acceptance-select.ts --base <sha> --head <sha> prints the launches it can reach)
         type: string
         default: all
+      genuine:
+        description: Also run the genuine launch, VS Code 1.139.1 with our VSIX, on X64 (tooling-51, D-97)
+        type: boolean
+        default: false
   # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
   # PR CI never runs. It ran on every merge until 2026-10-20, which kept one of the eight runners busy with it almost all
   # the time; the other jobs ran on the pull request's merge ref
+  # and once a day the genuine VS Code job runs alone on main (tooling-51, D-97). Each job reads which of the two fired
   schedule:
     - cron: '17 */2 * * *'
+    - cron: '43 4 * * *'
   push:
     tags: ['*-v*']
 
@@ -55,7 +61,7 @@ permissions:
 # real-server, vscodium and variants inputs) is part of the key, so a plain and an opt-in dispatch on one branch
 # run side by side. The tag of a release is its own group and is never cancelled.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}-${{ inputs.genuine && 'genuine' || 'no-genuine' }}
   cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
@@ -286,7 +292,7 @@ jobs:
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
   acceptance-vscodium:
     name: acceptance (vscodium)
-    if: inputs.vscodium || github.event_name == 'schedule' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    if: inputs.vscodium || github.event.schedule == '17 */2 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group, where
     # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
     # theirs, fed one at a time, so the backstop never displaces them.
@@ -322,6 +328,41 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
+  # The genuine launch (card tooling-51, the user's D-97): VS Code at ADR-0007's floor runs our VSIX against the run's
+  # stand-in download host, with the real dialogs. Nothing clicks Accept on a Microsoft licence and no Microsoft server is
+  # downloaded. It runs on a dispatch (the `genuine` input), once a day on main, and on the tag of a release, never on
+  # a pull request, and always on X64, the architecture the launch is measured on. Its concurrency follows the VSCodium
+  # job's: the daily run keeps one group, each tag its own, and dispatches queue.
+  acceptance-genuine:
+    name: acceptance (genuine)
+    if: inputs.genuine || github.event.schedule == '43 4 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    concurrency:
+      group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}
+      cancel-in-progress: false
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm acceptance:clean
+      - run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - run: |
+          if command -v xvfb-run >/dev/null; then
+            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches genuine
+          else
+            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches genuine
+          fi
+      - if: always()
+        run: pnpm acceptance:clean
+
   # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
   # that failed or was cancelled fails it; a skipped job passes (a docs-only change, a draft, a dispatch's opt-in jobs).
   # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
@@ -339,6 +380,7 @@ jobs:
       - acceptance-host-variants
       - acceptance-real-server
       - acceptance-vscodium
+      - acceptance-genuine
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -347,7 +389,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes checks quality slice-1 server host-variants real-server vscodium: $RESULTS"
+          echo "changes checks unit quality slice-1 server host-variants real-server vscodium genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
