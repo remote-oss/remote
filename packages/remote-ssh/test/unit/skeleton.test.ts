@@ -925,6 +925,40 @@ describe('the manifest rows of slice 1', () => {
     );
   });
 
+  it('F-2509 AC-1: Open Web UI is in the palette only in a connected SSH window with the key on and the family is not standing down, in no other menu and with no keybinding', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.openWebUI',
+    );
+    deepStrictEqual(
+      [
+        command?.category,
+        resolved(command?.title),
+        manifest.contributes.menus.commandPalette?.filter(
+          entry => entry.command === 'opensshremotes.openWebUI',
+        ),
+        placesOf('opensshremotes.openWebUI'),
+      ],
+      [
+        'Remote-SSH',
+        'Open Web UI',
+        [
+          {
+            command: 'opensshremotes.openWebUI',
+            when: 'remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess && !opensshremotes.standingDown',
+          },
+        ],
+        ['commandPalette'],
+      ],
+    );
+  });
+
+  it('F-2509 AC-14: the key is contributed by no configuration', () => {
+    deepStrictEqual(
+      Object.keys(properties).includes('remote.SSH.enableWebAccess'),
+      false,
+    );
+  });
+
   it('F-2204 AC-1: Add New SSH Host... is in no menu, so no when-clause hides it from the palette, and has no keybinding', () => {
     const command = manifest.contributes.commands.find(
       entry => entry.command === 'opensshremotes.addNewSshHost',

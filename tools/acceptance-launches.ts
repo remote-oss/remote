@@ -681,6 +681,26 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      ...RENDERER_LAUNCH,
+      label: 'web-ui',
+      suite: 'web-ui',
+      // A recording xdg-open that the suite writes into the run's folder comes first on the editor's PATH, so that
+      // opening the web UI opens nothing on the machine.
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'web-ui-trust',
+      suite: 'web-ui-trust',
+      // The same browser, in a launch with workspace trust on and core's startup prompt off, so that a window opens in
+      // Restricted Mode and silent.
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        'security.workspace.trust.startupPrompt': 'never',
+      },
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+    },
+    {
       ...CONTAINERS_LAUNCH,
       label: 'containers',
       suite: 'containers',
