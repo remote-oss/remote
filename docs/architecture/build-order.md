@@ -41,17 +41,21 @@ F-2509 is built (option (a), B's window surfaces) but belongs to slice 3, not "n
 ## Slice 3: the pre-connection script, Open Web UI and fish hosts (athena, 2026-10-20, #1205)
 
 Three features, and nothing else joins. The commands D-86 put in 0.2 (F-2204, F-2411, F-2412, `clearAllSessionHints`
-of F-2605, F-2302, F-2303) are already in slices 1 and 2. F-2605 beyond `clearAllSessionHints` stays out (D-86).
+of F-2605, F-2302, F-2303) are already in, by D-86 and `SLICE_ONE_FEATURES` (`coverage-slice1.tsv`). F-2605 beyond `clearAllSessionHints` stays out (D-86).
 F-2606 and F-3907 stay as above.
 
 All three specs are `spec:draft`. A card that seeds coverage or builds against a criterion waits for the spec's review,
 so that the criterion ids it cites are final. The harness card (fish) doesn't wait.
 
-**F-2108, the pre-connection script (P2): to build.** `steps.preconnect` in `pipeline/connect.ts` is the seam, already
-bounded by `PRECONNECT_MILLISECONDS`. It is empty today.
-- *Component:* `ssh.preconnect-runner` in `remote-ssh` (catalogue), behind a `PreconnectPorts` port in
-  `connect-ports.ts`: the setting's value, a file reader (content and executable bit), a process spawner and the
-  approval memory. It needs no new library: the spawn goes through `lib-host`'s local process port, and the lines through
+**F-2108, the pre-connection script (P2): to build, replacing a stub.** `steps.preconnect` (`pipeline/connect.ts`,
+bounded by `PRECONNECT_MILLISECONDS`) is wired to `pipeline/preconnect-step.ts` (`wiring.ts`). Today that step reads
+the setting through `preconnectScriptFor` (`host-settings.ts`: one path or an alias map). It goes on when no script
+applies, and fails with `preconnectFailed` and a log warning when one does, so no connect runs without the script the
+user asked for. The card replaces that stub's failing branch with the runner. It keeps `preconnectScriptFor` and the
+stub's tests for the no-script path, and adds no second step.
+- *Component:* `ssh.preconnect-runner` in `remote-ssh` (catalogue). `ports.settings.preconnect` (`connect-ports.ts`)
+  already supplies the setting's value, so a `PreconnectPorts` port adds only a file reader (content and executable
+  bit), a process spawner and the approval memory. It needs no new library: the spawn goes through `lib-host`'s local process port, and the lines through
   `lib-log` with its masking.
 - *Which script:* `remote.SSH.preconnect` as F-2108 resolves it: one path, or a map from host alias to path. That
   includes workspace-file and remote-folder settings and Restricted Mode (BR-15). The confirmation dialog is what
