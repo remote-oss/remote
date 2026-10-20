@@ -1,6 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
-import {connectionLog} from '../windows/harness.ts';
-import {setting} from '../windows/maintenance.ts';
+import type {AppendedEntry} from '../../../tools/script-file.ts';
+import {
+  appendScript,
+  connectedWithin,
+  connectionLog,
+  openWindow,
+} from '../windows/harness.ts';
+import {INSTALL_MILLISECONDS, setting} from '../windows/maintenance.ts';
 import {
   freshServer,
   newTerminalIs,
@@ -156,5 +162,76 @@ describe('login shells: the shell the host reports, the other shells and the oth
       ['csh false', "the host's login shell is /bin/tcsh (tcsh)"],
       ['tcsh false', "the host's login shell is /bin/tcsh (tcsh)"],
     ]);
+  });
+
+  it('F-2704 AC-15 (fish-per-window): a fish host connects with no local server once the platform is picked, opens a fish terminal, and the config.fish export reaches a task while the .profile export does not', async () => {
+    await setting('remote.SSH.useLocalServer', false);
+    try {
+      await freshServer('harness-fish');
+      await writeHomeFile(
+        'harness-fish',
+        '.config/fish/config.fish',
+        'set -gx F2704_FISH 1\n',
+      );
+      await writeHomeFile(
+        'harness-fish',
+        '.profile',
+        'export F2704_PROFILE=1\n',
+      );
+      appendScript([
+        {
+          surface: 'platformPick',
+          match: 'platform',
+          answer: 'linux',
+          window: 'ms-ac15',
+        },
+      ] satisfies AppendedEntry[]);
+      const seen = await withWindow('harness-fish', 'ms-ac15', async () => ({
+        task: marked(
+          await taskEnvironment('ms-ac15', 'harness-fish', 'ms-ac15'),
+          'F2704_',
+        ),
+        terminal: await newTerminalIs('ms-ac15', 'fish'),
+      }));
+      deepStrictEqual(seen, {task: ['F2704_FISH'], terminal: true});
+    } finally {
+      await setting('remote.SSH.useLocalServer', undefined);
+      await setting('remote.SSH.remotePlatform', undefined);
+      await removeHomeFiles(
+        'harness-fish',
+        '.config/fish/config.fish',
+        '.profile',
+      );
+    }
+  });
+
+  it('F-2704 AC-16 (reused-server): a second window to a running server sees the environment of its start, and a server that was stopped and started again sees the changed startup file', async () => {
+    await freshServer('harness-bash');
+    await writeHomeFile('harness-bash', '.profile', 'export F2704_VALUE=old\n');
+    try {
+      await openWindow('harness-bash', 'ms-ac16a');
+      await connectedWithin('ms-ac16a', INSTALL_MILLISECONDS);
+      await writeHomeFile(
+        'harness-bash',
+        '.profile',
+        'export F2704_VALUE=new\n',
+      );
+      await openWindow('harness-bash', 'ms-ac16b');
+      await connectedWithin('ms-ac16b', INSTALL_MILLISECONDS);
+      const second = (
+        await taskEnvironment('ms-ac16b', 'harness-bash', 'ms-ac16b')
+      ).F2704_VALUE;
+      await freshServer('harness-bash');
+      const third = await withWindow(
+        'harness-bash',
+        'ms-ac16c',
+        async () =>
+          (await taskEnvironment('ms-ac16c', 'harness-bash', 'ms-ac16c'))
+            .F2704_VALUE,
+      );
+      deepStrictEqual([second, third], ['old', 'new']);
+    } finally {
+      await removeHomeFiles('harness-bash', '.profile');
+    }
   });
 });
