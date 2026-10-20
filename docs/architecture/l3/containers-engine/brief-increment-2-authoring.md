@@ -69,7 +69,8 @@ for this answer is now in scope, and none of (B)'s deviations apply.
      1460 Features, each template carrying its `options` and `optionalPaths`.
    - *When:* once at the start of each wizard run, never reused (F-0802 BR-1), and one fetch feeds both the template
      list and the Feature list.
-   - *How:* the extension host's `https` module, which core makes follow `http.proxy`.
+   - *How:* an injected HTTP port that `extension.ts` wires to the extension host's `fetch`, which core makes follow
+     `http.proxySupport` (transport contracts §5's network rule, as lib-server's downloads do).
    - *Failure:* the preferred outcome, our own message naming the network cause, before any screen (F-0801 7.E10,
      F-0802 7.E3). Its text is ours (ADR-0008), so it's a spec question for an `[adaptation]` string, with a
      provisional key until then.
