@@ -58,7 +58,8 @@ jobs:
   # brings to the base it would merge into. Dispatches and tags skip this job and run everything.
   changes:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    # a git diff only, so a GitHub runner (allowed by the user, 2026-10-20) and no wait for a self-hosted one
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
@@ -296,7 +297,8 @@ jobs:
   # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
   # that failed or was cancelled fails it; a skipped job passes (a docs-only change, a draft, a dispatch's opt-in jobs).
   # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
-  # on skipped jobs; it runs on a GitHub runner then, so even this step of a fork's run never reaches a self-hosted runner.
+  # on skipped jobs. It runs on a GitHub runner (allowed by the user, 2026-10-20): it only reads the needed jobs'
+  # results, so it takes no self-hosted runner, and no step of a fork's run reaches one.
   ci-gate:
     name: ci-gate
     needs:
@@ -309,9 +311,7 @@ jobs:
       - acceptance-real-server
       - acceptance-vscodium
     if: always()
-    runs-on: >-
-      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
-      && 'ubuntu-latest' || vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: The needed jobs' results
