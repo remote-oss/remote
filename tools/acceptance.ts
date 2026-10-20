@@ -1544,16 +1544,17 @@ export function boundReached(
 }
 
 /**
- * A launch's limits on a run: one minute for the editor to end after its results, twenty minutes of silence (a row's
- * own limit is at most ten), checked every five seconds. What is left is any editor on the run's profile folder, which
- * every launch of the run shares, so a stuck one would hold up every launch after it.
+ * A launch's limits on a run: three minutes for the editor to end after its results (a window connected to a container
+ * takes about a minute to quit), twenty minutes of silence (a row's own limit is at most ten), checked every five
+ * seconds. What is left is any editor on the run's profile folder, which every launch of the run shares, so a stuck one
+ * would hold up every launch after it.
  */
 export function launchLimits(
   runFolder: string,
   command: CommandRunner,
 ): LaunchLimits {
   return {
-    afterResultsMilliseconds: 60_000,
+    afterResultsMilliseconds: 3 * 60_000,
     quietMilliseconds: 20 * 60_000,
     checkMilliseconds: 5000,
     endLeftovers: () => {
