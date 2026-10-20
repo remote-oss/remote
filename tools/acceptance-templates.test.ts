@@ -16,8 +16,8 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
-  CUSTOM_FEATURES_NAMESPACE,
   CUSTOM_NAMESPACE,
+  type CustomFeatureCollection,
   ghcrLayer,
   type MirroredTemplate,
   MIRROR_NAMESPACE,
@@ -33,7 +33,6 @@ import type {CommandResult, CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {
   FEATURES_REFERENCE,
-  KEPT_COMMUNITY_FEATURES,
   KEPT_FEATURES,
   SNAPSHOT_FOLDER,
   TEMPLATES_REFERENCE,
@@ -41,6 +40,28 @@ import {
 
 /** The run's own templates, in name order. */
 const CUSTOM_TEMPLATES = ['bare-lab', 'mini', 'options-lab', 'paths-free-lab'];
+
+/** A collection of the run's own Features at `namespace`, with `features`. */
+function collectionOf(
+  namespace: string,
+  features: CustomFeatureCollection['features'],
+): CustomFeatureCollection {
+  return {
+    namespace,
+    name: namespace,
+    repository: `https://github.com/owner/${namespace}`,
+    features,
+  };
+}
+
+/** The ids of the run's own Features in the registry, as `custom-features.json` lists them. */
+const CUSTOM_FEATURE_IDS = [
+  'remote-oss-run/features/lab-options',
+  'remote-oss-run/features/lab-plain',
+  'remote-oss-community/features/add-community',
+  'remote-oss-community/features/add-community-tool',
+  'remote-oss-community/features/adobe-community-kit',
+];
 
 const LAYER = new TextEncoder().encode('a layer');
 
@@ -230,8 +251,11 @@ describe('the run templates', () => {
             {id: 'options-lab', name: 'Options Lab'},
           ],
           [
-            {id: 'lab-options', name: 'Lab Options'},
-            {id: 'lab-plain', name: 'Lab Plain'},
+            collectionOf('run/features', [
+              {id: 'lab-options', name: 'Lab Options'},
+              {id: 'lab-plain', name: 'Lab Plain'},
+            ]),
+            collectionOf('other/features', [{id: 'third', name: 'Third'}]),
           ],
           'localhost:49200',
         ),
@@ -270,31 +294,47 @@ describe('the run templates', () => {
             ],
           ],
           [
-            `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}`,
+            'localhost:49200/run/features',
             [
-              [
-                `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}/lab-options`,
-                'Lab Options',
-              ],
-              [
-                `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}/lab-plain`,
-                'Lab Plain',
-              ],
+              ['localhost:49200/run/features/lab-options', 'Lab Options'],
+              ['localhost:49200/run/features/lab-plain', 'Lab Plain'],
             ],
+          ],
+          [
+            'localhost:49200/other/features',
+            [['localhost:49200/other/features/third', 'Third']],
           ],
         ],
       );
     });
 
-    it("tooling-61: the run's Features collection names its repository, for the owner a Feature list shows", () => {
+    it('tooling-61: each Features collection names its own source and repository, for the owner a Feature list shows', () => {
       const index = JSON.parse(
-        runIndexText('{"collections":[]}', [], [], 'localhost:49200'),
+        runIndexText(
+          '{"collections":[]}',
+          [],
+          [
+            collectionOf('run/features', []),
+            collectionOf('other/features', []),
+          ],
+          'localhost:49200',
+        ),
       ) as {collections: Array<{sourceInformation: unknown}>};
-      deepStrictEqual(index.collections.at(-1)?.sourceInformation, {
-        name: "The acceptance run's own Features",
-        repository: 'https://github.com/remote-oss-run/features',
-        ociReference: `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}`,
-      });
+      deepStrictEqual(
+        index.collections.slice(-2).map(each => each.sourceInformation),
+        [
+          {
+            name: 'run/features',
+            repository: 'https://github.com/owner/run/features',
+            ociReference: 'localhost:49200/run/features',
+          },
+          {
+            name: 'other/features',
+            repository: 'https://github.com/owner/other/features',
+            ociReference: 'localhost:49200/other/features',
+          },
+        ],
+      );
     });
   });
 
@@ -352,8 +392,8 @@ describe('the run templates', () => {
           templates?: Array<{id: string}>;
         }>;
       };
-      const features = index.collections.at(-1);
-      const templates = index.collections.at(-2);
+      const featureCollections = index.collections.slice(-2);
+      const templates = index.collections.at(-3);
       deepStrictEqual(
         [
           registry,
@@ -362,7 +402,9 @@ describe('the run templates', () => {
             path.join(runFolder, 'templates', 'custom', 'src'),
           ).sort(),
           templates?.templates?.map(template => template.id),
-          features?.features?.map(feature => feature.id),
+          featureCollections.flatMap(collection =>
+            (collection.features ?? []).map(feature => feature.id),
+          ),
         ],
         [
           'localhost:49200',
@@ -397,9 +439,7 @@ describe('the run templates', () => {
           CUSTOM_TEMPLATES.map(
             name => `localhost:49200/${CUSTOM_NAMESPACE}/${name}`,
           ),
-          ['lab-options', 'lab-plain'].map(
-            name => `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}/${name}`,
-          ),
+          CUSTOM_FEATURE_IDS.map(featureId => `localhost:49200/${featureId}`),
         ],
       );
     });
@@ -435,25 +475,16 @@ describe('the run templates', () => {
                 each => each.id === `${TEMPLATES_REFERENCE}/${template.name}`,
               )?.version,
           ),
-          snapshot.collections
-            .flatMap(collection =>
-              (collection.features ?? []).map(feature =>
-                collection.sourceInformation.ociReference === FEATURES_REFERENCE
-                  ? feature.id
-                  : feature.name,
-              ),
-            )
-            .sort(),
+          snapshot.collections.flatMap(collection =>
+            (collection.features ?? []).map(feature => feature.id),
+          ),
           snapshot.collections.map(collection =>
             Object.keys(collection).sort().join(),
           ),
         ],
         [
           MIRRORED_TEMPLATES.map(template => template.version),
-          [
-            ...KEPT_FEATURES.map(name => `${FEATURES_REFERENCE}/${name}`),
-            ...KEPT_COMMUNITY_FEATURES,
-          ].sort(),
+          KEPT_FEATURES.map(name => `${FEATURES_REFERENCE}/${name}`),
           snapshot.collections.map(collection =>
             collection === specification
               ? 'sourceInformation,templates'
@@ -544,26 +575,45 @@ describe('the run templates', () => {
       );
     });
 
-    it("tooling-61: the run's own Features are two, one with every shape of option and one with none", () => {
-      const features = JSON.parse(
+    it("tooling-61: the run's own Features are two collections: the lab's, with every shape of option and none, and a second owner's three, whose labels sort differently without regard to case than by code unit", () => {
+      const collections = JSON.parse(
         readFileSync(
           path.join(REPOSITORY_ROOT, SNAPSHOT_FOLDER, 'custom-features.json'),
           'utf8',
         ),
-      ) as Array<{id: string; name: string; options?: Record<string, unknown>}>;
+      ) as CustomFeatureCollection[];
+      const labels = (collections[1]?.features ?? []).map(
+        feature => feature.name as string,
+      );
       deepStrictEqual(
-        features.map(feature => [
-          feature.id,
-          feature.name,
-          Object.keys(feature.options ?? {}),
-        ]),
         [
+          collections.map(collection => collection.namespace),
+          (collections[0]?.features ?? []).map(feature => [
+            feature.id,
+            feature.name,
+            Object.keys((feature.options as object | undefined) ?? {}),
+          ]),
+          collections
+            .map(collection => collection.features.map(feature => feature.id))
+            .flat().length,
+          [...labels].sort(),
+          [...labels].sort((left, right) =>
+            left.toLowerCase().localeCompare(right.toLowerCase()),
+          ),
+        ],
+        [
+          ['remote-oss-run/features', 'remote-oss-community/features'],
           [
-            'lab-options',
-            'Lab Options',
-            ['enabled', 'verbose', 'level', 'tone', 'installPath'],
+            [
+              'lab-options',
+              'Lab Options',
+              ['enabled', 'verbose', 'level', 'tone', 'installPath'],
+            ],
+            ['lab-plain', 'Lab Plain', []],
           ],
-          ['lab-plain', 'Lab Plain', []],
+          5,
+          ['Add Community Tool', 'Adobe Community Kit', 'add-community'],
+          ['Add Community Tool', 'add-community', 'Adobe Community Kit'],
         ],
       );
     });

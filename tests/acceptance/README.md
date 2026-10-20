@@ -382,20 +382,22 @@ and publish templates into it before its launches (`tools/acceptance-templates.t
     `docs/` and a `README.md` and `NOTES.md`. For the options stage (F-0803) and the optional-files stage (F-0805).
   - `paths-free-lab`: one `enum` option and no `optionalPaths`. For a template with options and no optional files.
   - `bare-lab`: no options and no `optionalPaths`. For a template with neither.
-- **Two Features of our own**, metadata only (`tests/acceptance/fixtures/templates/custom-features.json`; nothing
-  builds them): `lab-options`, with five options (two booleans, one with no description, an `enum`, `proposals` and a
-  string), and `lab-plain`, with none. For the Features stage (F-0804, F-0803).
+- **Five Features of our own** in two collections, metadata only (`tests/acceptance/fixtures/templates/custom-features.json`;
+  nothing builds them). The collection `remote-oss-run/features` holds `lab-options`, with five options (two booleans,
+  one with no description, an `enum`, `proposals` and a string), and `lab-plain`, with none. The collection
+  `remote-oss-community/features`, a second owner, holds `add-community`, `Add Community Tool` and `Adobe Community
+  Kit`, whose labels sort differently without regard to case than by code unit (F-0804's sort). For the Features stage
+  (F-0804, F-0803).
 
 The CLI the package bundles publishes the templates, the mirrored ones as `devcontainers/templates` and ours as
 `remote-oss-run/custom`. The run's index, written to `<run>/downloads/templates/devcontainer-index.json`, is the
 pinned snapshot `tests/acceptance/fixtures/templates/devcontainer-index.json` with every `ghcr.io/devcontainers/templates/`
-id moved to the run's registry, plus a collection of our templates and one of our Features
-(`<registry>/remote-oss-run/features/<id>`, repository `https://github.com/remote-oss-run/features`).
+id moved to the run's registry, plus a collection of our templates and the collections of our Features (`<registry>/<namespace>/<id>`, each with its
+repository, which gives the owner a Feature list shows).
 - **The snapshot** is a cut of the public index (`tools/trim-template-index.ts`): the
-  `ghcr.io/devcontainers/templates` collection's metadata, the Features `common-utils`, `docker-in-docker`, `git`,
-  `node` and `python` of `ghcr.io/devcontainers/features`, and three community Features whose labels sort differently
-  without regard to case than by code unit (`Add Host`, `add-script`, `Adobe Experience Manager LTS`, F-0804 AC-25's
-  example). A collection keeps its source information and the kept entries only. The mirrored Features keep their
+  `ghcr.io/devcontainers/templates` collection's metadata and the Features `common-utils`, `docker-in-docker`, `git`,
+  `node` and `python` of `ghcr.io/devcontainers/features`, each collection with its source information and nothing
+  else. It holds no other owner's metadata, whose licence we can't vouch for. The mirrored Features keep their
   `ghcr.io/devcontainers/features/…` ids, and no row builds with them. Its folder holds the specification's MIT
   `LICENSE` and `SOURCE.md` (the URL, the date and the full file's digest). It's test data, under `tests/` only.
 - **The variables:**

@@ -5,7 +5,6 @@
 import {deepStrictEqual, throws} from 'node:assert';
 import {
   FEATURES_REFERENCE,
-  KEPT_COMMUNITY_FEATURES,
   KEPT_FEATURES,
   PUBLIC_INDEX_URL,
   sourceNote,
@@ -18,7 +17,7 @@ function coreFeature(name: string): {id: string; name: string} {
   return {id: `${FEATURES_REFERENCE}/${name}`, name};
 }
 
-/** A small index in the public one's shape: the specification's Features and templates, and the community's. */
+/** A small index in the public one's shape: the specification's Features and templates, and another owner's. */
 function fullIndex(options: {without?: string} = {}): string {
   return JSON.stringify({
     collections: [
@@ -43,25 +42,14 @@ function fullIndex(options: {without?: string} = {}): string {
       },
       {
         sourceInformation: {ociReference: 'ghcr.io/someone/features'},
-        features: [...KEPT_COMMUNITY_FEATURES.slice(0, 2), 'Another Feature']
-          .filter(name => name !== options.without)
-          .map(name => ({id: `ghcr.io/someone/features/${name}`, name})),
-      },
-      {
-        sourceInformation: {ociReference: 'ghcr.io/someone-else/features'},
-        features: [
-          {
-            id: 'ghcr.io/someone-else/features/third',
-            name: KEPT_COMMUNITY_FEATURES[2],
-          },
-        ],
+        features: [{id: 'ghcr.io/someone/features/other', name: 'Other'}],
       },
     ],
   });
 }
 
 describe('trimmedIndex', () => {
-  it("tooling-61: the specification's template collection, its Features of the list and the community's of the list are kept, each with its source and nothing else of its collection", () => {
+  it("tooling-61: the specification's template collection and its Features of the list are kept, each with its source and nothing else of its collection, and no other owner's", () => {
     deepStrictEqual(JSON.parse(trimmedIndex(fullIndex())), {
       collections: [
         {
@@ -75,22 +63,6 @@ describe('trimmedIndex', () => {
           },
           templates: [{id: `${TEMPLATES_REFERENCE}/alpine`, name: 'Alpine'}],
         },
-        {
-          sourceInformation: {ociReference: 'ghcr.io/someone/features'},
-          features: KEPT_COMMUNITY_FEATURES.slice(0, 2).map(name => ({
-            id: `ghcr.io/someone/features/${name}`,
-            name,
-          })),
-        },
-        {
-          sourceInformation: {ociReference: 'ghcr.io/someone-else/features'},
-          features: [
-            {
-              id: 'ghcr.io/someone-else/features/third',
-              name: KEPT_COMMUNITY_FEATURES[2],
-            },
-          ],
-        },
       ],
     });
   });
@@ -102,10 +74,20 @@ describe('trimmedIndex', () => {
     );
   });
 
-  it('tooling-61: a kept community Feature that the index lacks fails, naming it', () => {
+  it("tooling-61: an index without the specification's Features collection fails, naming it", () => {
     throws(
-      () => trimmedIndex(fullIndex({without: 'add-script'})),
-      /the index has no Feature named "add-script"/,
+      () =>
+        trimmedIndex(
+          JSON.stringify({
+            collections: [
+              {
+                sourceInformation: {ociReference: TEMPLATES_REFERENCE},
+                templates: [],
+              },
+            ],
+          }),
+        ),
+      /the index has no ghcr\.io\/devcontainers\/features collection/,
     );
   });
 

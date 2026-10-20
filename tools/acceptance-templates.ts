@@ -54,9 +54,6 @@ export const MIRROR_NAMESPACE = 'devcontainers/templates';
 /** The namespace of the run's own templates. */
 export const CUSTOM_NAMESPACE = 'remote-oss-run/custom';
 
-/** The namespace of the run's own Features. */
-export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
-
 /** Fetches the layer of a mirrored template; the run's goes to `ghcr.io`, a test's is a fake. */
 export type LayerFetch = (template: MirroredTemplate) => Promise<Uint8Array>;
 
@@ -134,15 +131,25 @@ interface IndexEntry {
 /** The metadata of one of the run's own templates or Features: its `id` is its folder's name. */
 export type CustomMetadata = Readonly<Record<string, unknown>> & {id: string};
 
+/** A collection of the run's own Features, as `custom-features.json` lists it. */
+export interface CustomFeatureCollection {
+  /** Where the collection is published in the run's registry. */
+  namespace: string;
+  name: string;
+  /** The repository whose owner a Feature list shows. */
+  repository: string;
+  features: readonly CustomMetadata[];
+}
+
 /**
  * The run's index: the pinned snapshot with its templates' ids moved from `ghcr.io` to `registry` and its Features'
  * ids left as they are, a collection of the run's own templates, whose metadata is `customTemplates` and whose ids name
- * them in `registry`, and a collection of the run's own Features, `customFeatures`, named the same way.
+ * them in `registry`, and the collections of the run's own Features, `customFeatures`, named the same way.
  */
 export function runIndexText(
   snapshotText: string,
   customTemplates: readonly CustomMetadata[],
-  customFeatures: readonly CustomMetadata[],
+  customFeatures: readonly CustomFeatureCollection[],
   registry: string,
 ): string {
   const snapshot = JSON.parse(snapshotText) as {
@@ -174,17 +181,17 @@ export function runIndexText(
     },
     templates: customTemplates.map(entry => named(CUSTOM_NAMESPACE, entry)),
   };
-  const customFeaturesCollection = {
+  const customFeatureCollections = customFeatures.map(collection => ({
     sourceInformation: {
-      name: "The acceptance run's own Features",
-      repository: 'https://github.com/remote-oss-run/features',
-      ociReference: `${registry}/${CUSTOM_FEATURES_NAMESPACE}`,
+      name: collection.name,
+      repository: collection.repository,
+      ociReference: `${registry}/${collection.namespace}`,
     },
-    features: customFeatures.map(entry =>
-      named(CUSTOM_FEATURES_NAMESPACE, entry),
+    features: collection.features.map(entry =>
+      named(collection.namespace, entry),
     ),
-  };
-  return `${JSON.stringify({collections: [...collections, customTemplatesCollection, customFeaturesCollection]}, undefined, 2)}\n`;
+  }));
+  return `${JSON.stringify({collections: [...collections, customTemplatesCollection, ...customFeatureCollections]}, undefined, 2)}\n`;
 }
 
 /** The CLI's arguments that publish every template under `sourceFolder` into `namespace` of `registry`. */
@@ -284,7 +291,7 @@ export async function prepareRunTemplates(
         ),
       JSON.parse(
         readFileSync(path.join(fixtures, 'custom-features.json'), 'utf8'),
-      ) as CustomMetadata[],
+      ) as CustomFeatureCollection[],
       registry,
     ),
   );
