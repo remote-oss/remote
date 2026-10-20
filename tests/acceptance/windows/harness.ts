@@ -53,6 +53,8 @@ export interface AgentEvent {
     | 'extension'
     | 'terminalBuffer'
     | 'recentlyOpened'
+    | 'taskEnded'
+    | 'terminalNames'
     | 'tunnels';
   time: number;
   id?: string;
@@ -93,6 +95,10 @@ export interface AgentEvent {
   text?: string;
   /** The folders and workspaces of the editor's Open Recent list, as a `recentlyOpened` event read them. */
   recent?: RecentEntry[];
+  /** The exit code a `taskEnded` event reports, or null when the process gave none. */
+  exitCode?: number | null;
+  /** The names of the window's terminals, in order, as a `terminalNames` event listed them. */
+  names?: string[];
   /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
   tunnels?: ForwardedTunnel[];
 }
@@ -490,6 +496,50 @@ export async function inWindow(
       `window ${name} failed ${command}: ${failed.message ?? 'no message'}`,
     );
   }
+}
+
+/** The exit code of the process task window `name` ran, or null when the process gave none. */
+export async function runProcessTask(
+  name: string,
+  command: string,
+  programArguments: string[],
+): Promise<number | null> {
+  return (
+    (
+      await reported(
+        name,
+        'taskEnded',
+        'acceptance.agent.runProcessTask',
+        command,
+        programArguments,
+      )
+    )?.exitCode ?? null
+  );
+}
+
+/** The names of window `name`'s terminals, in order, as a `terminalNames` event listed them. */
+export async function terminalNames(name: string): Promise<string[]> {
+  return (
+    (await reported(name, 'terminalNames', 'acceptance.agent.terminalNames'))
+      ?.names ?? []
+  );
+}
+
+/**
+ * Polls window `name`'s terminals for a name containing `wanted`, for up to 10 s: a new terminal's name can settle after
+ * it opens, and gives whether one holds it.
+ */
+export async function terminalNamed(
+  name: string,
+  wanted: string,
+): Promise<boolean> {
+  const deadline = Date.now() + 10_000;
+  let named = (await terminalNames(name)).some(each => each.includes(wanted));
+  while (!named && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    named = (await terminalNames(name)).some(each => each.includes(wanted));
+  }
+  return named;
 }
 
 /** Opens window `folder` (a folder of the user harness's home, made first) on `alias`, from the local window. */

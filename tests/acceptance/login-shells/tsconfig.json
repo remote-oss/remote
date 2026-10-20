@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"],
+    "tsBuildInfoFile": "${configDir}/.tsc/login-shells.tsbuildinfo"
+  },
+  "include": ["${configDir}"],
+  "references": [
+    {
+      "path": "../windows"
+    },
+    {
+      "path": "../../../tools"
+    }
+  ],
+  "exclude": ["${configDir}/.tsc"]
+}

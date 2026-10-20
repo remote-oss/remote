@@ -610,6 +610,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'windows',
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
+    {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
     {
       label: 'config-files',
       kind: 'plain',
