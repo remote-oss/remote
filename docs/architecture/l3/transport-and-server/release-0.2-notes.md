@@ -5,8 +5,5 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
-- **On a host whose login shell is fish, "Kill VS Code Server on Host" and "Uninstall VS Code Server from Host"
-  work** as on any other host: the server is stopped, or removed.
-  - F-2411 AC-24 and F-2412 AC-24 describe the reference ending silently there, with nothing done. Our scripts run
-    under an explicit POSIX `sh`, whatever the login shell (F-2703, decided 2026-10-06), so the step runs (proteus and
-    athena on #1080; spec question on remote-oss/remote-ssh#56 and #57).
+None yet. (The fish entry of #1101 left on 2026-10-20: F-2411 and F-2412 AC-24 now state the outcome under an explicit
+`sh`, remote-oss/remote-ssh#56 and #57, so it's no longer a deviation.)
