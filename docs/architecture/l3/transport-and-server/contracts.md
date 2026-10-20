@@ -334,7 +334,9 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
   `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64),
   `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
-  `transportLost`, `waitingForOtherWindow`. The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
+  `transportLost`, `waitingForOtherWindow`, and `sshLines {lines}` (ssh's error-stream lines, in order: batches of at most
+  200 lines, sent at most every 100 ms, from ssh's start until the helper ends, and flushed before `connected` and
+  `loginFailed` so they come first; absent from an earlier helper, which a window accepts; connect-66). The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
   event (S5's kind, reason and hints) and the oldest waiting window takes over the login. S6 classifies prompts inside
   the helper; no answer is stored or logged.
 - The SOCKS port: prefer `-D 0` with the allocated port read from `ssh -v` ("Allocated port N for ...") when the
@@ -369,7 +371,7 @@ wait for the run of F-2102 Q1 (D-60).
 | `answer` / `refuse` | lease, prompt id, the text (answer only) | whether the question was still open; a refusal closes it unanswered (the program exits 1, `ssh` cancels the prompt) and the helper refuses the run's later questions itself (card ssh-10, 2026-10-09) | none |
 | `release` | lease | none | none |
 | `kill` | host string | done, silently, also when nothing runs (F-2102 BR-7) | none |
-| `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost` | none |
+| `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost`, `sshLines` | none |
 
 Rules:
 - One helper per **connection identity** (amended 2026-10-14, connect-77): the decoded target's (host, user, port),

@@ -17,6 +17,7 @@ import {payloadOf} from '../connect/connect-commands.ts';
 import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import {sshTargetOf} from './host-settings.ts';
+import {logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionTerms,
@@ -101,7 +102,15 @@ export function openConnectionStep(
       return {kind: 'failed', failure: ofAcquire(acquired.failure)};
     }
     const {connection} = acquired;
+    let token: string | undefined;
+    // The window logs ssh's lines as the helper sends them, from the acquire until the connection is given back.
+    const stopSshLog = connection.onNotice(notice => {
+      if (notice.type === 'sshLines') {
+        logSshLines(dependencies.logger, notice.lines, token);
+      }
+    });
     function end(): void {
+      stopSshLog();
       connection.release();
     }
     const login = dependencies.attachLogin(connection, input);
@@ -127,6 +136,7 @@ export function openConnectionStep(
       return {kind: 'failed', failure: ofConnection(outcome.failure)};
     }
     dependencies.adoptRunFacts(outcome.runFacts);
+    token = outcome.sharedRecord?.connectionToken;
     let channel: HostChannel;
     try {
       channel = dependencies.channelFor(connection, terms, input);
@@ -144,7 +154,10 @@ export function openConnectionStep(
         waits: dependencies.waits(),
         socksPort: outcome.socksPort,
         storedRecord: outcome.sharedRecord ?? undefined,
-        storeSharedRecord: record => connection.storeSharedRecord(record),
+        storeSharedRecord: record => {
+          token = record.connectionToken;
+          return connection.storeSharedRecord(record);
+        },
         onNotice: listener => connection.onNotice(listener),
         answer: (promptId, text) => connection.answer(promptId, text),
         refuse: promptId => connection.refuse(promptId),

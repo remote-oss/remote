@@ -43,6 +43,8 @@ describe('connection handler (contracts §4 S9)', () => {
   let spawner: ScriptedSpawner;
   let handler: ConnectionHandler;
   let events: PlainData[];
+  let sshEvents: PlainData[];
+  let order: string[];
   let stops: number;
   let logged: string[];
   let markers: number;
@@ -75,7 +77,14 @@ describe('connection handler (contracts §4 S9)', () => {
       ...changes,
     });
     const control: HelperControl = {
-      broadcast: body => events.push(body),
+      broadcast: body => {
+        order.push(String((body as {type?: string}).type));
+        if ((body as {type?: string}).type === 'sshLines') {
+          sshEvents.push(body);
+        } else {
+          events.push(body);
+        }
+      },
       stop: () => {
         stops += 1;
       },
@@ -103,6 +112,8 @@ describe('connection handler (contracts §4 S9)', () => {
     clock = new FakeClock();
     spawner = new ScriptedSpawner(() => undefined);
     events = [];
+    sshEvents = [];
+    order = [];
     stops = 0;
     logged = [];
     markers = 0;
@@ -170,6 +181,70 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(
         [before, events],
         [[], [{type: 'connected', socksPort: 41000}]],
+      );
+    });
+
+    it('F-2003 BR-6 item 6: the helper sends ssh’s lines live, in order, before the connection is reported', async () => {
+      await send(1, {type: 'connect'});
+      const client = spawner.started[0];
+      client?.error('debug1: first\n');
+      client?.error('Warning: second\n');
+      client?.error(
+        'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+      );
+      client?.output('LAYER1-READY\n');
+      deepStrictEqual(
+        [sshEvents, order.filter(type => type !== 'ownerChanged')],
+        [
+          [
+            {
+              type: 'sshLines',
+              lines: [
+                'debug1: first',
+                'Warning: second',
+                'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".',
+              ],
+            },
+          ],
+          ['sshLines', 'connected'],
+        ],
+      );
+    });
+
+    it('F-2003 BR-8: a later ssh line reaches the windows once the connection is set up, in a batch of its own', async () => {
+      await send(1, {type: 'connect'});
+      authenticate(spawner.started[0]);
+      const before = sshEvents.length;
+      spawner.started[0]?.error(
+        'channel 3: open failed: administratively prohibited: open failed\n',
+      );
+      clock.advance(100);
+      deepStrictEqual(
+        [before, sshEvents.slice(before)],
+        [
+          before,
+          [
+            {
+              type: 'sshLines',
+              lines: [
+                'channel 3: open failed: administratively prohibited: open failed',
+              ],
+            },
+          ],
+        ],
+      );
+    });
+
+    it('F-2003 BR-6 item 6: the lines that wait when ssh ends leave before the login failure', async () => {
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(
+        'ssh: connect to host 127.0.0.1 port 1: Connection refused\n',
+      );
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        order.filter(type => type !== 'ownerChanged'),
+        ['sshLines', 'loginFailed'],
       );
     });
 

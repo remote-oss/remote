@@ -101,6 +101,8 @@ export type ConnectionNotice =
   /** This window's first request started the login: it was accepted without a wait. */
   | {type: 'loginStarted'}
   | {type: 'transportLost'}
+  /** Lines of ssh's error stream, in order, for the window's log. */
+  | {type: 'sshLines'; lines: string[]}
   | {type: 'helperGone'};
 
 /** Why the connection is not there. */
@@ -571,6 +573,7 @@ export class SharedConnection {
       case 'ownerChanged':
       case 'waitingForOtherWindow':
       case 'transportLost':
+      case 'sshLines':
         this.notify(event);
         break;
       default:

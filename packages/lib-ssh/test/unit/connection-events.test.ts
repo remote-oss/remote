@@ -89,6 +89,25 @@ describe('connection replies and events (contracts §4 S9)', () => {
     );
   });
 
+  it('F-2003 BR-6 item 6: an sshLines event holds the lines as text, and nothing else', () => {
+    deepStrictEqual(
+      [
+        {type: 'sshLines', lines: ['a', 'b']},
+        {type: 'sshLines', lines: []},
+        {type: 'sshLines', lines: ['a', 1]},
+        {type: 'sshLines', lines: 'a'},
+        {type: 'sshLines'},
+      ].map(body => readConnectionEvent(body)),
+      [
+        {type: 'sshLines', lines: ['a', 'b']},
+        {type: 'sshLines', lines: []},
+        undefined,
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
   it('reads nothing from a body that is no event', () => {
     deepStrictEqual(
       [
