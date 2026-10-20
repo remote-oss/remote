@@ -746,7 +746,7 @@ F-0503.AC-41	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0503.AC-42	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0503.AC-43	todo	
 F-0503.AC-44	acceptance	
-F-0503.AC-45	core	core: remoteEnv is not applied in release 1 (#1049)
+F-0503.AC-45	acceptance	
 F-0503.AC-46	deferred	containers release 1: later (attach)
 F-0503.AC-47	deferred	containers release 1: later (attach)
 F-0503.AC-48	deferred	containers release 1: later (attach)

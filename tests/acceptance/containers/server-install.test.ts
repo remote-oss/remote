@@ -734,4 +734,25 @@ describe('F-0503 server install (card containers-41)', function () {
       {dialog: FAILED_SETUP, optional: '', home: ''},
     );
   });
+
+  it('F-0503 AC-45 (s19): a remoteEnv HOME does not move the server folder, which stays in the remote user’s passwd home, and the HOME path is not made', async () => {
+    const product = editorProduct();
+    const connected = await connect(
+      folderOf('c41-remote-env', {
+        remoteUser: 'node',
+        remoteEnv: {HOME: '/opt/r14renv'},
+      }),
+    );
+    const tree = await treeOfImage();
+    deepStrictEqual(
+      {
+        link: await inContainer(
+          connected.containerId,
+          `readlink /home/node/${product.serverDataFolderName}/bin/${product.commit}`,
+        ),
+        optional: await inContainer(connected.containerId, 'ls -A /opt'),
+      },
+      {link: tree, optional: ''},
+    );
+  });
 });
