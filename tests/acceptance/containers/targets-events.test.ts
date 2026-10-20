@@ -12,7 +12,11 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
-import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
+import {
+  openFolderWindow,
+  clearEarlierRows,
+  setUserSetting,
+} from '../windows/folder-windows.ts';
 import {
   notificationCentre,
   toggleRow,
@@ -24,6 +28,10 @@ const execFileAsync = promisify(execFile);
 
 /** How soon after a change of Docker the view follows it, in milliseconds (F-0901 AC-56). */
 const FOLLOW_MILLISECONDS = 5_000;
+
+/** The start of the notification F-0402 shows in a local window whose folder holds a configuration; it is not the view's. */
+const REOPEN_NOTIFICATION =
+  'Folder contains a Dev Container configuration file.';
 
 /** Runs a plain container of the run named `containerName`. */
 async function runContainer(containerName: string): Promise<void> {
@@ -55,8 +63,12 @@ async function lists(name: string, containerName: string): Promise<boolean> {
   }
 }
 
-/** Opens a local window on a new folder named `folderName` with its Dev Containers view showing rows. */
+/**
+ * Starts a plain container, so that the view has a row to show (on an engine with no container it shows its welcome
+ * text), then opens a local window on a new folder named `folderName` with its Dev Containers view showing rows.
+ */
 async function windowWithRows(folderName: string): Promise<string> {
+  await runContainer(`${folderName}-seed`);
   const name = await openFolderWindow(devContainerFolder(folderName));
   await inWindow(name, 'workbench.view.remote');
   await rowsWhen(name, rows => rows.length > 0);
@@ -65,6 +77,8 @@ async function windowWithRows(folderName: string): Promise<string> {
 
 describe('the Dev Containers view follows Docker (card containers-31)', function () {
   this.timeout(600_000);
+
+  beforeEach(clearEarlierRows);
 
   it('F-0901 AC-56 (gate-row-14): a container started from the command line gets its row, and one removed loses it, each within 5 s and with no Refresh', async () => {
     const name = await windowWithRows('events-one');
@@ -108,7 +122,9 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
           shown?.startsWith(
             'Get started with containers by installing Docker or by visiting the help view.',
           ),
-          await notificationCentre(name),
+          (await notificationCentre(name)).filter(
+            text => !text.startsWith(REOPEN_NOTIFICATION),
+          ),
         ],
         [true, []],
       );
