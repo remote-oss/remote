@@ -1,4 +1,4 @@
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {deepStrictEqual} from 'node:assert';
@@ -8,6 +8,7 @@ import {
   devContainerFolder,
   inWindow,
   terminalBuffer,
+  terminalFacts,
   variable,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
@@ -15,6 +16,7 @@ import {
   answerFolderDialog,
   focusTerminal,
   pressControlC,
+  terminalPageFacts,
   terminalText,
   typeInTerminal,
 } from '../windows/renderer.ts';
@@ -37,6 +39,61 @@ async function until(
   }
 }
 
+/** How many of the newest extension host logs the failure message quotes, and how many lines of each. */
+const LOGS_QUOTED = 3;
+const LOG_LINES_QUOTED = 6;
+
+/** The last lines of the newest extension host logs of the run's editor, to tell a window that never finished starting. */
+function extensionHostLogTails(): Record<string, string[]> | string {
+  const logs = path.join(variable('HARNESS_USER_DATA'), 'logs');
+  try {
+    return Object.fromEntries(
+      readdirSync(logs, {recursive: true, encoding: 'utf8'})
+        .filter(file => file.endsWith(`exthost${path.sep}exthost.log`))
+        .map(file => path.join(logs, file))
+        .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs)
+        .slice(0, LOGS_QUOTED)
+        .map(file => [
+          path.relative(logs, file),
+          readFileSync(file, 'utf8')
+            .trimEnd()
+            .split('\n')
+            .slice(-LOG_LINES_QUOTED),
+        ]),
+    );
+  } catch (caught) {
+    return `unavailable: ${(caught as Error).message}`;
+  }
+}
+
+/** How long the window's agent has to answer for the terminals, in milliseconds. */
+const AGENT_ANSWER_MILLISECONDS = 20_000;
+
+/** What window `name`'s agent says of its terminals, or that it gave no answer in time. */
+async function agentTerminalReport(name: string): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const silent = new Promise<string>(resolve => {
+    timer = setTimeout(() => {
+      resolve(
+        `the agent gave no answer about the terminals in ${String(AGENT_ANSWER_MILLISECONDS)} ms`,
+      );
+    }, AGENT_ANSWER_MILLISECONDS);
+  });
+  const asked = terminalFacts(name).then(
+    facts =>
+      `the terminals are ${JSON.stringify(facts.terminals)}, the active one ${JSON.stringify(facts.active)}` +
+      `${facts.stuck === undefined ? '' : `, and the step ${facts.stuck} did not finish in 10 s`}; ` +
+      `the active terminal's buffer ends ${JSON.stringify((facts.text ?? '').slice(-600))}`,
+    // A wait that outlives this answer ends in its own failure, which nothing reads.
+    () => 'the agent failed to answer about the terminals',
+  );
+  try {
+    return await Promise.race([asked, silent]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Resolves once window `name`'s active terminal holds `needle`, for up to `milliseconds`. */
 async function untilText(
   name: string,
@@ -45,12 +102,15 @@ async function untilText(
 ): Promise<void> {
   const deadline = Date.now() + milliseconds;
   for (;;) {
-    if ((await terminalText(name)).includes(needle)) {
+    const text = await terminalText(name);
+    if (text.includes(needle)) {
       return;
     }
     if (Date.now() > deadline) {
       throw new Error(
-        `timed out waiting for the terminal of ${name} to hold ${needle}`,
+        `timed out waiting for the terminal of ${name} to hold ${needle}; the last read was ${JSON.stringify(text)}; ` +
+          `the page holds ${JSON.stringify(await terminalPageFacts(name))}; ${await agentTerminalReport(name)}; ` +
+          `the extension host logs end ${JSON.stringify(extensionHostLogTails())}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));

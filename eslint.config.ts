@@ -110,12 +110,17 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/server/tsconfig.json',
   './tests/acceptance/containers-cli/tsconfig.json',
   './tests/acceptance/windows/tsconfig.json',
+  './tests/acceptance/login-shells/tsconfig.json',
   './tests/acceptance/config-files/tsconfig.json',
   './tests/acceptance/no-proposals/tsconfig.json',
   './tests/acceptance/default-ports/tsconfig.json',
   './tests/acceptance/terminal-pick/tsconfig.json',
+  './tests/acceptance/preconnect/tsconfig.json',
   './tests/acceptance/explorer/tsconfig.json',
   './tests/acceptance/explorer-alone/tsconfig.json',
+  './tests/acceptance/explorer-trust/tsconfig.json',
+  './tests/acceptance/explorer-home/tsconfig.json',
+  './tests/acceptance/explorer-rows/tsconfig.json',
   './tests/acceptance/explorer-no-proposals/tsconfig.json',
   './tests/acceptance/explorer-standdown/tsconfig.json',
   './tests/acceptance/trust/tsconfig.json',
@@ -128,6 +133,10 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/containers-trust/tsconfig.json',
   './tests/acceptance/containers-volume/tsconfig.json',
   './tests/acceptance/containers-explorer/tsconfig.json',
+  './tests/acceptance/containers-ports/tsconfig.json',
+  './tests/acceptance/containers-shutdown/tsconfig.json',
+  './tests/acceptance/web-ui/tsconfig.json',
+  './tests/acceptance/web-ui-trust/tsconfig.json',
 ];
 
 const DEFAULT_EXPORT_BAN = {

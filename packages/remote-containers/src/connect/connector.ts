@@ -21,9 +21,20 @@ import {
 } from '../authority/payload.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import type {ConfigurationResult, CliEvent} from '../cli/cli-lines.ts';
+import {
+  type ConfigurationResult,
+  type CliEvent,
+  withoutControlSequences,
+} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
-import {executableOf} from '../engine/executable.ts';
+import {type Executable, executableOf} from '../engine/executable.ts';
+import {effectiveAction} from '../shutdown/effective-action.ts';
+import type {EngineCoordinates} from '../shutdown/protocol.ts';
+import {
+  metadataArguments,
+  recordedMetadataOf,
+} from '../shutdown/recorded-metadata.ts';
+import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf} from '../exec/exec-channel.ts';
@@ -38,6 +49,7 @@ import {
   effectiveExtensions,
   settingEntries,
 } from '../extensions/extension-list.ts';
+import {portAttributeSettings} from '../ports/port-attributes.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
@@ -75,6 +87,7 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
+import {featureSettingsOf} from './feature-settings.ts';
 import {
   type ContainerState,
   type ReconnectionOutcome,
@@ -86,8 +99,16 @@ import type {
   StartedContainerServer,
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
+import type {DeclaredPorts} from '../ports/declared-forwards.ts';
+import {
+  appPortOf,
+  engineIsLocal,
+  staticForwards,
+} from '../ports/static-forwards.ts';
 
-/** The CLI's level for an error event. */
+/** The CLI's levels for an info, a warning and an error event. */
+const CLI_INFO_LEVEL = 3;
+const CLI_WARNING_LEVEL = 4;
 const CLI_ERROR_LEVEL = 5;
 
 /** How many characters of a container's identifier the log shows. */
@@ -119,10 +140,19 @@ export interface ContainerConnector extends Connector {
   failedContainer(): FailedContainer | undefined;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
+  /** The ports the connection the window holds declared; nothing before the first connect. */
+  heldPorts(): DeclaredPorts | undefined;
   /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
   heldConnection(): HeldConnection | undefined;
   /** Calls the listener when the connection the window holds is made or given back; gives the way to stop listening. */
   onHeldChanged(listener: () => void): () => void;
+  /**
+   * Tells the shutdown helper about the connection this window is about to make, from the authority it was opened on and
+   * before the connect starts: nothing for another kind of authority or a folder that is not trusted yet.
+   */
+  announceShutdown(authority: string | undefined): void;
+  /** Tells the shutdown helper that the window leaves the container it holds, before the window reloads elsewhere. */
+  leaveShutdown(): Promise<void>;
   /** The local path a URI of this window's container folder stands for; nothing otherwise. */
   canonicalPathOf(authority: string, path: string): Promise<string | undefined>;
 }
@@ -151,6 +181,10 @@ export interface ContainerConnectorDependencies {
     legacyWorkspaceMountConsistency: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
+    /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
+    defaultFeatures: unknown;
+    /** The user's value of `dev.containers.lockfile`, `undefined` when unset. */
+    lockfile: unknown;
     /** The user's value of `dev.containers.defaultExtensions`, `undefined` when unset. */
     defaultExtensions: unknown;
     /** The user's value of the deprecated `remote.containers.defaultExtensions`, `undefined` when unset. */
@@ -182,6 +216,10 @@ export interface ContainerConnectorDependencies {
   showDeclined(message: string, detail: string): Promise<void>;
   /** Opens `hostPath` as a local folder in this window. */
   reopenLocally(hostPath: string): Promise<void>;
+  /** What tells the shutdown helper about this window's connection. */
+  shutdown: ShutdownMessenger;
+  /** A fresh id for each connection of the window to a container. */
+  newConnectionId(): string;
   clock: () => number;
   logger: Logger;
   revealLog(): void;
@@ -229,6 +267,7 @@ function mappedPath(
 /** The settings, the program, the engine and the CLI of one folder. */
 interface Tools {
   settings: ReturnType<ContainerConnectorDependencies['settings']>;
+  /** The file that the engine and the CLI run: the setting's value, a relative one resolved against the folder. */
   dockerPath: string;
   configFile: string;
   engine: EngineHost;
@@ -251,6 +290,8 @@ interface Held {
   relay: OpenRelay;
   identity: WindowIdentity;
   connected: Connected;
+  /** The ports the merged configuration declared when the connection was made; a reconnect keeps them. */
+  ports: DeclaredPorts;
 }
 
 /** The state of a container, or why it is not known. */
@@ -387,6 +428,8 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
+  /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
+  let shutdownConnection: string | undefined;
   let checking = false;
   /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
   const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
@@ -475,14 +518,30 @@ export function containerConnectorOf(
     return outcome.kind === 'exited' && outcome.status === 0;
   }
 
-  /** Writes a CLI event to the log: errors as errors, the rest as debug lines. */
+  /**
+   * Writes a CLI event to the log: Docker's and BuildKit's own output (`raw`) as info lines, one per line of its text
+   * and without control sequences or empty lines; a text by its level (info, warning, error, else debug), also without control sequences; progress as debug.
+   */
   function logCliEvent(event: CliEvent): void {
     if (event.kind === 'progress') {
       logger.debug(`${event.name}: ${event.status}`);
+      return;
+    }
+    const text = withoutControlSequences(event.text).trimEnd();
+    if (event.type === 'raw') {
+      for (const line of text.split(/\r?\n|\r/u)) {
+        if (line.trim() !== '') {
+          logger.info(line);
+        }
+      }
     } else if (event.level >= CLI_ERROR_LEVEL) {
-      logger.error(event.text);
+      logger.error(text);
+    } else if (event.level >= CLI_WARNING_LEVEL) {
+      logger.warn(text);
+    } else if (event.level >= CLI_INFO_LEVEL && event.type === 'text') {
+      logger.info(text);
     } else {
-      logger.debug(event.text);
+      logger.debug(text);
     }
   }
 
@@ -524,6 +583,10 @@ export function containerConnectorOf(
       mountWorkspaceGitRoot: true,
       mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
         tools.settings.mountGitWorktreeCommonDir,
+      ),
+      features: featureSettingsOf(
+        tools.settings.defaultFeatures,
+        tools.settings.lockfile,
       ),
       mounts: [],
       logLevel: 'info',
@@ -599,19 +662,97 @@ export function containerConnectorOf(
     }
   }
 
+  /** Tells the shutdown helper that this window's connection ends, if it has one registered, and forgets it. */
+  async function leaveShutdown(): Promise<void> {
+    const connectionId = shutdownConnection;
+    shutdownConnection = undefined;
+    if (connectionId !== undefined) {
+      await dependencies.shutdown.send({type: 'leave', connectionId});
+    }
+  }
+
+  /** The engine of `tools`, as the shutdown helper must reach it: the program and the variables that pick the engine. */
+  function engineCoordinatesOf(
+    folder: DevContainerFolder,
+    tools: Pick<Tools, 'dockerPath'>,
+  ): EngineCoordinates {
+    const dockerHost = dependencies.editorEnvironment.DOCKER_HOST;
+    return {
+      dockerPath: tools.dockerPath,
+      environment: {
+        ...(folder.context === undefined
+          ? {}
+          : {DOCKER_CONTEXT: folder.context}),
+        ...(dockerHost === undefined || dockerHost === ''
+          ? {}
+          : {DOCKER_HOST: dockerHost}),
+      },
+    };
+  }
+
+  /**
+   * Tells the shutdown helper about this window's connection, once: a reconnection or a retry is the same connection.
+   * It runs after the trust gate, so the helper never runs a folder's program for a folder that was not trusted. It
+   * does not wait for the helper.
+   */
+  function registerWithShutdown(
+    folder: DevContainerFolder,
+    tools: Pick<Tools, 'configFile' | 'dockerPath'>,
+  ): string {
+    if (shutdownConnection !== undefined) {
+      return shutdownConnection;
+    }
+    const connectionId = dependencies.newConnectionId();
+    shutdownConnection = connectionId;
+    void dependencies.shutdown.send({
+      type: 'register',
+      connectionId,
+      identity: {hostPath: folder.hostPath, configFile: tools.configFile},
+      engine: engineCoordinatesOf(folder, tools),
+    });
+    return connectionId;
+  }
+
+  /**
+   * Tells the shutdown helper which container the connection holds and what its end owes it: the value recorded on the
+   * container, or the file's when it has no metadata label. It does not wait for the helper.
+   */
+  async function tellShutdownContainer(
+    connectionId: string,
+    containerId: string,
+    fileValue: unknown,
+    engine: EngineHost,
+    cancellation: AbortSignal,
+  ): Promise<void> {
+    const outcome = await engine.run(
+      metadataArguments(containerId),
+      {kind: 'none'},
+      {cancellation},
+    );
+    const recorded =
+      outcome.kind === 'ran' && outcome.status === 0
+        ? recordedMetadataOf(outcome.stdout)
+        : undefined;
+    void dependencies.shutdown.send({
+      type: 'container',
+      connectionId,
+      containerId,
+      action: effectiveAction(recorded, fileValue),
+    });
+  }
+
   /** The settings, the program, the engine and the CLI a connect or a read of `folder` uses, made the same way for both. */
   function toolsOf(folder: DevContainerFolder): Tools {
     const settings = dependencies.settings();
-    const dockerPath =
-      typeof settings.dockerPath === 'string' && settings.dockerPath !== ''
-        ? settings.dockerPath
-        : 'docker';
-    const file = executableOf(settings.dockerPath, undefined);
-    const written = file.kind === 'spawn' ? file.file : dockerPath;
-    const unwrapped = dependencies.engineFor(written);
+    // With the folder as base, the setting always names a program: a relative value is the folder's file.
+    const executable = executableOf(
+      settings.dockerPath,
+      folder.hostPath,
+    ) as Extract<Executable, {kind: 'spawn'}>;
+    const unwrapped = dependencies.engineFor(executable.file);
     return {
       settings,
-      dockerPath,
+      dockerPath: executable.file,
       configFile: folder.configFile.fsPath ?? folder.configFile.path,
       engine:
         folder.context === undefined
@@ -741,12 +882,16 @@ export function containerConnectorOf(
   async function trustedFolder(
     folder: DevContainerFolder,
     cancellation: AbortSignal,
+    trustedAtStart: boolean,
   ): Promise<boolean> {
     const {trustNeeds, trust} = dependencies;
-    const outcome = await ensureTrusted(trust, {
-      ...trustNeeds,
-      commandTitle: 'the connect',
-    });
+    const outcome = await ensureTrusted(
+      {request: trust.request.bind(trust), isTrusted: () => trustedAtStart},
+      {
+        ...trustNeeds,
+        commandTitle: 'the connect',
+      },
+    );
     if (outcome === 'trusted') {
       return true;
     }
@@ -769,10 +914,16 @@ export function containerConnectorOf(
     failedContainer = undefined;
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
+    // A folder that is trusted already counts as connecting from the start; one that is not waits for its answer.
+    const trustedAtStart = dependencies.trust.isTrusted();
+    if (trustedAtStart) {
+      registerWithShutdown(folder, tools);
+    }
     const read = await readWithinCap(payload, folder, tools);
-    if (!(await trustedFolder(folder, cancellation))) {
+    if (!(await trustedFolder(folder, cancellation, trustedAtStart))) {
       return trustDeclined();
     }
+    const connectionId = registerWithShutdown(folder, tools);
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {
@@ -780,7 +931,7 @@ export function containerConnectorOf(
         engineFor: () => engine,
         dockerPath: () => settings.dockerPath,
       },
-      undefined,
+      folder.hostPath,
       cancellation,
     );
     if (checked.kind === 'failed') {
@@ -814,6 +965,10 @@ export function containerConnectorOf(
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
         ),
+        features: featureSettingsOf(
+          settings.defaultFeatures,
+          settings.lockfile,
+        ),
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}
@@ -835,19 +990,25 @@ export function containerConnectorOf(
     logger.info(
       `container ${shortId(prepared.containerId)} was ${prepared.created ? 'newly started' : 'already running'}`,
     );
+    await tellShutdownContainer(
+      connectionId,
+      prepared.containerId,
+      read?.configuration.shutdownAction,
+      engine,
+      cancellation,
+    );
     const configuration = await bridge.readConfiguration(
       cliTargetOf(folder, tools),
       prepared.containerId,
       logCliEvent,
       cancellation,
     );
+    const merged =
+      configuration.kind === 'configuration'
+        ? configuration.mergedConfiguration
+        : undefined;
     const defaultExtensions = prepared.created
-      ? newContainerExtensions(
-          configuration.kind === 'configuration'
-            ? configuration.mergedConfiguration
-            : undefined,
-          settings,
-        )
+      ? newContainerExtensions(merged, settings)
       : [];
     let name: string | undefined;
     if (configuration.kind === 'configuration') {
@@ -870,6 +1031,7 @@ export function containerConnectorOf(
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         defaultExtensions,
+        machineSettings: portAttributeSettings(merged),
         onPhase: phase => {
           phases.tell({name: phase});
         },
@@ -886,12 +1048,8 @@ export function containerConnectorOf(
     if (isAborted(cancellation)) {
       return cancelled();
     }
-    const mergedConfiguration =
-      configuration.kind === 'configuration'
-        ? configuration.mergedConfiguration
-        : undefined;
-    const mode = probeModeOf(mergedConfiguration);
-    const remoteEnvironment = remoteEnvironmentOf(mergedConfiguration);
+    const mode = probeModeOf(merged);
+    const remoteEnvironment = remoteEnvironmentOf(merged);
     for (const name of remoteEnvironment.dropped) {
       logger.warn(`remoteEnv ${name} is neither a string nor null`);
     }
@@ -943,7 +1101,15 @@ export function containerConnectorOf(
         probed,
         remoteEnvironment.entries,
       ),
-      environmentTunnels: [],
+      environmentTunnels: staticForwards(
+        configuration.kind === 'configuration'
+          ? appPortOf(configuration.configuration)
+          : undefined,
+        engineIsLocal({
+          context: folder.context,
+          dockerHost: dependencies.editorEnvironment.DOCKER_HOST,
+        }),
+      ),
       trusted: false,
     };
     held = {
@@ -961,6 +1127,11 @@ export function containerConnectorOf(
       relay,
       identity: {name, context: folder.context},
       connected,
+      ports: {
+        forwardPorts: merged?.forwardPorts,
+        portsAttributes: merged?.portsAttributes,
+        otherPortsAttributes: merged?.otherPortsAttributes,
+      },
     };
     const connection = held;
     owner.connection = connection;
@@ -999,6 +1170,10 @@ export function containerConnectorOf(
           controller,
           input,
         );
+        if (!('connectionToken' in result)) {
+          // A window that shows a failure does not hold its container: its connection ends here, and a retry is a new one.
+          await leaveShutdown();
+        }
         return result;
       } finally {
         logger.info(
@@ -1020,6 +1195,7 @@ export function containerConnectorOf(
     },
     failedContainer: () => failedContainer,
     heldIdentity: () => held?.identity,
+    heldPorts: () => held?.ports,
     heldConnection: () =>
       held === undefined
         ? undefined
@@ -1029,6 +1205,21 @@ export function containerConnectorOf(
             remoteWorkspaceFolder: held.remoteWorkspaceFolder,
             engine: held.engine,
           },
+    announceShutdown: authority => {
+      const decoded =
+        authority?.startsWith(AUTHORITY_PREFIX) === true
+          ? devContainerTargetOf(authority.slice(AUTHORITY_PREFIX.length))
+          : undefined;
+      if (
+        decoded !== undefined &&
+        !('malformed' in decoded) &&
+        decoded.kind !== 'legacy' &&
+        dependencies.trust.isTrusted()
+      ) {
+        registerWithShutdown(decoded, toolsOf(decoded));
+      }
+    },
+    leaveShutdown,
     canonicalPathOf,
     onHeldChanged: listener => heldChanges.subscribe(listener),
     onPhase: listener => phases.subscribe(listener),

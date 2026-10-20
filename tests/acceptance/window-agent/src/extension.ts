@@ -160,6 +160,41 @@ function activeTabOf(
   return {uri: current.input.uri.toString(), preview: current.isPreview};
 }
 
+/** The editor commands that copy the active terminal's whole buffer to the clipboard, in order. */
+const COPY_STEPS = [
+  'workbench.action.terminal.focus',
+  'workbench.action.terminal.selectAll',
+  'workbench.action.terminal.copySelection',
+  'workbench.action.terminal.clearSelection',
+];
+
+/** How long a copy step may take before the read gives up and names it. */
+const COPY_STEP_MILLISECONDS = 10_000;
+
+/** Whether `pending` settled within `milliseconds`; one that did not is left to settle on its own. */
+async function settledWithin(
+  pending: PromiseLike<unknown>,
+  milliseconds: number,
+): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<false>(resolve => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve(pending).then(
+        () => true,
+        () => true,
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Starts the agent: reports the window's activation, registers its own commands and polls for the test's commands. */
 export function activate(context: vscode.ExtensionContext): void {
   const agentFolder = agentFolderOf();
@@ -218,8 +253,19 @@ export function activate(context: vscode.ExtensionContext): void {
         activeTab: activeTabOf(
           vscode.window.tabGroups.activeTabGroup.activeTab,
         ),
+        dirtyDocuments: vscode.workspace.textDocuments
+          .filter(document => document.isDirty)
+          .map(document => document.uri.toString()),
       });
     }),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openUntitled',
+      async (content: string) => {
+        await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument({content}),
+        );
+      },
+    ),
     vscode.commands.registerCommand(
       'acceptance.agent.setting',
       (settingId: string) => {
@@ -245,12 +291,37 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.recentlyOpened',
+      async () => {
+        const recent = await vscode.commands.executeCommand<{
+          workspaces: Array<{
+            folderUri?: vscode.Uri;
+            workspace?: {configPath: vscode.Uri};
+            label?: string;
+            remoteAuthority?: string;
+          }>;
+        }>('_workbench.getRecentlyOpened');
+        report(agentFolder, name, {
+          event: 'recentlyOpened',
+          recent: recent.workspaces.map(entry => ({
+            uri:
+              (entry.folderUri ?? entry.workspace?.configPath)?.toString() ??
+              '',
+            label: entry.label ?? null,
+            remoteAuthority: entry.remoteAuthority ?? null,
+          })),
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.extensionPresent',
       (extensionId: string) => {
+        const extension = vscode.extensions.getExtension(extensionId);
         report(agentFolder, name, {
           event: 'extension',
           extensionId,
-          present: vscode.extensions.getExtension(extensionId) !== undefined,
+          present: extension !== undefined,
+          extensionActive: extension?.isActive === true,
         });
       },
     ),
@@ -325,22 +396,78 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'acceptance.agent.terminalBuffer',
       async () => {
-        await vscode.commands.executeCommand('workbench.action.terminal.focus');
-        await vscode.commands.executeCommand(
-          'workbench.action.terminal.selectAll',
-        );
-        await vscode.commands.executeCommand(
-          'workbench.action.terminal.copySelection',
-        );
-        await vscode.commands.executeCommand(
-          'workbench.action.terminal.clearSelection',
+        const terminals = vscode.window.terminals.map(each => each.name);
+        const active = vscode.window.activeTerminal?.name ?? null;
+        if (active === null) {
+          // Focusing would create a terminal and wait for it, so a window with none answers at once.
+          report(agentFolder, name, {
+            event: 'terminalBuffer',
+            text: '',
+            terminals,
+            active,
+          });
+          return;
+        }
+        for (const step of COPY_STEPS) {
+          const finished = await settledWithin(
+            vscode.commands.executeCommand(step),
+            COPY_STEP_MILLISECONDS,
+          );
+          if (!finished) {
+            report(agentFolder, name, {
+              event: 'terminalBuffer',
+              text: null,
+              terminals,
+              active,
+              stuck: step,
+            });
+            return;
+          }
+        }
+        let copied: string | undefined;
+        const read = await settledWithin(
+          Promise.resolve(vscode.env.clipboard.readText()).then(text => {
+            copied = text;
+          }),
+          COPY_STEP_MILLISECONDS,
         );
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: await vscode.env.clipboard.readText(),
+          text: read ? (copied ?? '') : null,
+          terminals,
+          active,
+          ...(read ? {} : {stuck: 'clipboard.readText'}),
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.runProcessTask',
+      async (command: string, programArguments: string[]) => {
+        const task = new vscode.Task(
+          {type: 'acceptance'},
+          vscode.TaskScope.Workspace,
+          'acceptance',
+          'acceptance',
+          new vscode.ProcessExecution(command, programArguments),
+        );
+        const execution = await vscode.tasks.executeTask(task);
+        const exitCode = await new Promise<number | null>(resolve => {
+          const end = vscode.tasks.onDidEndTaskProcess(event => {
+            if (event.execution === execution) {
+              end.dispose();
+              resolve(event.exitCode ?? null);
+            }
+          });
+        });
+        report(agentFolder, name, {event: 'taskEnded', exitCode});
+      },
+    ),
+    vscode.commands.registerCommand('acceptance.agent.terminalNames', () => {
+      report(agentFolder, name, {
+        event: 'terminalNames',
+        names: vscode.window.terminals.map(each => each.name),
+      });
+    }),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {

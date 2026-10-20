@@ -75,6 +75,40 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
+  /** The login shell lines a connect writes, with the probe's host given by `loginShell` or the fixture's. */
+  async function shellLines(loginShell?: string): Promise<string[]> {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(
+        recording,
+        loginShell === undefined
+          ? {}
+          : {
+              probe: () =>
+                Promise.resolve({
+                  kind: 'probed',
+                  host: {...HOST, loginShell},
+                }),
+            },
+      ),
+      options,
+    );
+    return logSink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith("the host's login shell"));
+  }
+
+  it('F-2704 BR-2: the probed login shell is logged once, after the platform', async () => {
+    deepStrictEqual(await shellLines(), [
+      "the host's login shell is /bin/sh (sh)",
+    ]);
+  });
+
+  it('F-2704 BR-2: a host that reports no login shell gets no shell line', async () => {
+    deepStrictEqual(await shellLines(''), []);
+  });
+
   it('F-2206 §9: no platform line is written when the connect ends before the probe', async () => {
     const {recording, options, logSink} = setup();
     await connect(
@@ -552,7 +586,7 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
-  it('a probe that never answers fails at its limit as a timeout', async () => {
+  it('F-2704 AC-11: a probe that never answers fails at its limit as a timeout, with the reason the dialog shows', async () => {
     const {recording, options} = setup();
     const result = await connect(
       INPUT,
@@ -562,7 +596,13 @@ describe('the connect pipeline, when a step fails', () => {
       }),
       options,
     );
-    deepStrictEqual('kind' in result ? result.kind : result, 'timeout');
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        'reason' in result ? result.reason : result,
+      ],
+      ['timeout', {id: 'sshTimedOut'}],
+    );
   });
 
   it('a plan that has no source fails as no server source, before the licence is asked', async () => {

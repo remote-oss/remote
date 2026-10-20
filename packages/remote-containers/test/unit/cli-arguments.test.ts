@@ -17,6 +17,7 @@ const TARGET: CliTarget = {
   ],
   mountWorkspaceGitRoot: true,
   mountGitWorktreeCommonDir: false,
+  features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
   logLevel: 'info',
 };
@@ -180,6 +181,7 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         ...TARGET,
         mountWorkspaceGitRoot: false,
         mountGitWorktreeCommonDir: true,
+        features: {defaultFeatures: {}, lockfile: true},
       }).slice(-6, -2),
       [
         '--mount-workspace-git-root=false',
@@ -269,6 +271,53 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     deepStrictEqual(
       upArguments({...TARGET, workspaceFolder: '/work/a b/"q"'}, PLAIN)[2],
       '/work/a b/"q"',
+    );
+  });
+
+  it('F-0414 6.2, BR-9: default Features go to up and to the read of the configuration as JSON, and an empty setting passes nothing', () => {
+    const features = {
+      defaultFeatures: {'ghcr.io/devcontainers/features/node:1': {}},
+      lockfile: true,
+    };
+    const json = JSON.stringify(features.defaultFeatures);
+    deepStrictEqual(
+      [
+        upArguments({...TARGET, features}, PLAIN),
+        readConfigurationArguments({...TARGET, features}),
+        runUserCommandsArguments({...TARGET, features}, 'c1'),
+      ],
+      [
+        [
+          'up',
+          ...COMMON,
+          '--additional-features',
+          json,
+          '--skip-non-blocking-commands',
+          '--workspace-mount-consistency',
+          'cached',
+        ],
+        ['read-configuration', ...COMMON, '--additional-features', json],
+        ['run-user-commands', ...COMMON, '--container-id', 'c1'],
+      ],
+    );
+  });
+
+  it('F-0414 6.3, BR-6: a lockfile setting of true passes no flag, since the CLI writes the lockfile by default, and false passes --no-lockfile to up alone', () => {
+    const without = {
+      ...TARGET,
+      features: {defaultFeatures: {}, lockfile: false},
+    };
+    deepStrictEqual(
+      [
+        upArguments(TARGET, PLAIN).includes('--no-lockfile'),
+        upArguments(without, PLAIN).includes('--no-lockfile'),
+        readConfigurationArguments(without).includes('--no-lockfile'),
+        upArguments(without, PLAIN).some(
+          argument =>
+            argument.includes('lockfile') && argument !== '--no-lockfile',
+        ),
+      ],
+      [false, true, false, false],
     );
   });
 });

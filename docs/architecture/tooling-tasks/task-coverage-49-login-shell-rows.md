@@ -100,3 +100,47 @@ If a row fails, look at the cause before changing anything:
 - All gates pass, and `node tools/check-coverage.ts` is clean.
 - PR title: `remote-ssh: the window rows of login shells and profile scripts (card coverage-49, #1221)`.
   Request athena only.
+
+## 5. Amendment (2026-10-20, from triton's review of #1278)
+
+
+1. **`terminalNamed` fails and names what it saw** (`tests/acceptance/windows/harness.ts`):
+   - New signature: `terminalNamed(name: string, wanted: string): Promise<void>`. It polls `terminalNames(name)` every 500 ms for up to 10 s, as it does now.
+   - It resolves once a name includes `wanted`.
+   - At the deadline it throws `new Error(`no terminal of window ${name} is named after ${wanted} within 10 s; its terminals are: ${last.join(', ') || 'none'}`)`, where `last` is the last list it read.
+   - Update its doc comment to match.
+2. **Every account row polls** (`tests/acceptance/login-shells/accounts.test.ts`):
+   - All seven rows (bash, zsh, dash with `sh`, ksh, csh and tcsh with `tcsh`, fish) call `await terminalNamed(<window>, <name>)` after `workbench.action.terminal.new`.
+   - They drop `shellTerminal` from the `deepStrictEqual` object, which becomes `{exitCode, homeLine}` against `{exitCode: 0, homeLine: true}`.
+   - The bash, zsh, dash and ksh rows no longer read `terminalNames` directly.
+   - Write this card's terminal rows the same way. Use `terminalNames` only where a row asserts the whole list (AC-19's local window).
+3. **`runProcessTask` listens before it starts the task** (`tests/acceptance/window-agent/src/extension.ts`, `acceptance.agent.runProcessTask`):
+   - Subscribe to `vscode.tasks.onDidEndTaskProcess` before `executeTask`, and keep every event in a list.
+   - After `executeTask` resolves, take the first event whose `execution` is the returned one. If it hasn't arrived yet, wait for it.
+   - Dispose of the listener in a `finally`. Report `exitCode` as now (`event.exitCode ?? null`).
+   - Shape:
+     ```ts
+     const endings: vscode.TaskProcessEndEvent[] = [];
+     let check = (): void => undefined;
+     const listener = vscode.tasks.onDidEndTaskProcess(event => {
+       endings.push(event);
+       check();
+     });
+     try {
+       const execution = await vscode.tasks.executeTask(task);
+       const ending = await new Promise<vscode.TaskProcessEndEvent>(resolve => {
+         check = () => {
+           const found = endings.find(each => each.execution === execution);
+           if (found !== undefined) {
+             resolve(found);
+           }
+         };
+         check();
+       });
+       report(agentFolder, name, {event: 'taskEnded', exitCode: ending.exitCode ?? null});
+     } finally {
+       listener.dispose();
+     }
+     ```
+
+**Done when** gains: `node tools/acceptance.ts --editor vscodium --launches login-shells` passes with the seven account rows and the two `(ruling-fish)` rows, before your F-2704 rows are added and after. Paste both summary lines.

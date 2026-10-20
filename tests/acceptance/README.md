@@ -40,6 +40,7 @@ The extension host sees these variables:
 | `HARNESS_SSH_CONFIG` | The `ssh_config` with `Host harness`, also set as `remote.SSH.configFile` in the user settings. |
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
+| `HARNESS_USER_DATA` | The launch's user-data folder, the one its editor starts on: `<run>/user-data-<label>` for a plain launch, `<run>/user-data` for the others. A test reads the editor's settings, state and logs there. |
 | `HARNESS_VSIX_FILES` | The VSIX files installed, separated by the platform's path delimiter. |
 | `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. An entry with an `after` is a held one: it answers only after the signal file of that name in `REMOTE_OSS_ACCEPTANCE_SIGNALS` exists. |
 | `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`, a held entry's waiting line is `held` and its withdrawal `withdrawn`) and whether an entry matched. |
@@ -104,9 +105,9 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   (its grace is 3 s) and clears `calls.log`, because a live helper is reused without any check. The launches run in
   every VSCodium run.
 
-- `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
+- `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, a user-data folder of its own (`<run>/user-data-<label>`, so nothing an earlier launch stored reaches it) and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
 
-- `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the run's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
+- `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the launch's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
 
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
@@ -114,11 +115,12 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
 
-- `explorer`, `explorer-alone`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
+- `explorer`, `explorer-alone`, `explorer-trust`, `explorer-home`, `explorer-rows`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-trust` with workspace trust on, so a new folder window is in Restricted Mode, `explorer-home` with the run's own HOME (`<run>/home`), where its rows write the user's SSH configuration, `explorer-rows` with the view's own rows (activation, the hosts of a file, Refresh and SSH windows) apart from `explorer`'s gate rows, whose Connect in Current Window reloads the launch's window, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust` and `containers-explorer`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, and `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side.
+- `web-ui` and `web-ui-trust`: plain launches with a debugging port and a recording `xdg-open` first on the editor's PATH; the suite writes it into `<run>/browser-bin` and reads the addresses it was asked to open from `<run>/browser-urls` (`windows/web-ui-support.ts`), for the rows of Open Web UI. `web-ui-trust` has workspace trust on and core's startup trust prompt off, so a window opens in Restricted Mode and silent. A terminal-mode connect in it (`remote.SSH.useLocalServer` off) waits on core's trust question before its login terminal starts, and fails when nothing answers within the connect timeout, so its rows connect only through the local server.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -158,7 +160,7 @@ files and two launches never mix their windows. The agent appends `activated`, `
 every 200 ms for `{id, command, args}` lines it has not accepted yet, so a command written while the window starts or
 reloads is not lost. The deactivation is reported once, by the first of the extension's deactivate or the process's
 own end that reaches it, so a window the harness ends still reports it. Its own commands are
-`acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`; an
+`acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)`, `acceptance.agent.openUntitled(content)` (opens an untitled editor holding `content`, which makes it dirty) and `acceptance.agent.state()`, whose report lists the uris of the documents with unsaved changes in `dirtyDocuments`; an
 `openWindow` whose uri names an authority but no folder opens an empty window on it, the way the connect commands do,
 and one with a folder opens a folder window.
 
@@ -198,7 +200,7 @@ that `acceptance:clean` ends an editor a killed job left behind.
 
 The explorer launches install Remote Explorer and its proposed API into `<run>/extensions-<label>`, so no other launch
 has it, and start the editor with a debugging port that only the run reads (`--remote-debugging-port=0`; the editor
-writes the port it chose into the user-data folder). Each window's title is its folder name in brackets, `[]` for a
+writes the port it chose into the launch's user-data folder). Each window's title is its folder name in brackets, `[]` for a
 window with none. `windows/renderer.ts` finds a window's page by that title and, over the Chrome DevTools Protocol,
 reads a view's rows (`viewRows`) and clicks a row's inline action (`rowAction`) or a view's title action
 (`titleAction`), as a user does. A test shows the view first with its focus command. The selectors read the workbench
@@ -251,6 +253,26 @@ failure that comes in about the first second after the window connects, whatever
 card containers-61: the dialog came in 0 to 3 of 5 stops made at once, and in 12 of 12 made from two seconds on, while
 the extension's answer was the same in all of them).
 
+Two facts about the dev container CLI (version 0.89.0, Docker 29.9.1) that the ports rows rely on, measured in card
+tooling-56:
+- `devcontainer up` with `"appPort": [18741, "18742:8742"]` publishes `18741/tcp` on `127.0.0.1:18741` and `8742/tcp`
+  on `:18742`, on all interfaces. The CLI already applies the rule for `appPort`, so no `--override-config` pre-pass is
+  needed.
+- After `forwardPorts` is edited from `[3000]` to `[4000]` on a running container, `read-configuration --container-id
+  <id> --include-merged-configuration` gives `mergedConfiguration.forwardPorts` `[3000]`, the container's
+  `devcontainer.metadata` label, while the configuration says `[4000]`. The merged configuration is the list as it was
+  when the container was built.
+
+**The Ports view.** `windows/renderer.ts` reads core's Ports view, a table: `portsRows` gives each row's Port column,
+forwarded address, running process, origin, icon (the row icon's codicon class) and hover, and `portRowActions` the
+titles of a row's inline actions and of its context menu's items. A table that overflows is read from its top, a
+viewport at a time, by wheel steps dispatched on a row (the table scrolls by its own scrollable element, not by the
+DOM's `scrollTop`). Show the view first with `~remote.forwardedPorts.focus`, which core registers only once the view
+exists, so wait for it in `commandsOf`. The forwarded-ports status item reads with `statusItem(name,
+'status.forwardedPorts')`. `listenIn(containerId, port)` starts a listener in a container, with busybox's `nc`, and
+gives the function that ends it. "Forward a Port" is `remote.tunnel.forwardCommandPalette`, answered in its input box
+with `answerInputBox`.
+
 **Choosing launches.** `--launches` takes `all` (every launch that isn't named only), `none`, or a comma list of
 entries, applied in turn:
 - a label;
@@ -266,10 +288,12 @@ from the table (`launchGroupOf`):
 - `hosts`: the ports, install and platform cases;
 - `ssh`: every other.
 
-An entry that names no label or group fails, listing both. The backstop splits across three runners this way:
+An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
+the longest launch, `containers`, alone:
 
     node tools/acceptance.ts --editor vscodium --launches @ssh
-    node tools/acceptance.ts --editor vscodium --launches @containers
+    node tools/acceptance.ts --editor vscodium --launches containers
+    node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
 
 `@ssh,!terminal` is the ssh group without one launch.
@@ -337,13 +361,79 @@ listening on port" line yet.
 
 ## The run's registry
 
-A launch with `registry: true` (today only `containers`) makes the run start a registry of its own before its
+A launch with `registry: true` (today `containers` and `containers-ports`) makes the run start a registry of its own before its
 launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
 `tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
 (`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
 The registry holds only what a row pushes to it, and nothing public is pushed. It carries the run's label and the dev
 container label, so the run's clean-up and the stale sweep remove it with its anonymous volume (`docker rm --force
 --volumes`), also after a killed run.
+
+## The run's templates
+
+A launch with `templates: true` (today only `containers`) makes the run start its registry, as `registry: true` does,
+and publish templates into it before its launches (`tools/acceptance-templates.ts`):
+- **Three of the specification's templates**, the smallest the rows need: `alpine`, `docker-existing-dockerfile` and
+  `docker-in-docker` (`MIRRORED_TEMPLATES`; the last is the template F-0801 AC-40 applies). Each one's single layer is
+  fetched anonymously from `ghcr.io` by its digest, checked and kept in `.vscode-test/templates/`, as the server archive
+  is. The layers are never committed and never in a VSIX.
+- **Four of our own** (`tests/acceptance/fixtures/templates/custom/src/`), all on the pinned `alpine:3.22`, because the
+  `alpine` template's image (`mcr.microsoft.com/devcontainers/base:alpine…`) is about 1 GB:
+  - `mini`: one option (`greeting`) and one optional file. Rows that only build a container use it.
+  - `options-lab`: one option of each shape (a strict `enum`, `proposals`, a plain string, two booleans, one boolean with
+    no description), `optionalPaths` `zeta.txt`, `docs/*`, `alpha.txt` in that non-alphabetical order, files under
+    `docs/` and a `README.md` and `NOTES.md`. For the options stage (F-0803) and the optional-files stage (F-0805).
+  - `paths-free-lab`: one `enum` option and no `optionalPaths`. For a template with options and no optional files.
+  - `bare-lab`: no options and no `optionalPaths`. For a template with neither.
+- **Eight Features of our own** in two collections. The collection `remote-oss-run/features` is published, from the
+  Feature folders of `tests/acceptance/fixtures/templates/custom-features/src/` (a `devcontainer-feature.json` and an
+  `install.sh` that writes its environment to `/usr/local/share/remote-oss-run/<id>.env`), so a row can build with
+  them: `lab-options`, with five options (two booleans, one with no description, an `enum`, `proposals` and a string),
+  and `lab-plain`, with none; `lab-depends-e`, with none, and `lab-depends-a`, which depends on it (its
+  `dependsOn` names `${registry}/remote-oss-run/features/lab-depends-e:1`, and the publish writes the run's registry
+  into a copy of the folder first); and `lab-advised`, which the run's control manifest advises against. The collection
+  `remote-oss-community/features`, a second owner, is only listed
+  (`custom-community-features.json`; nothing builds it): `add-community`, `Add Community Tool` and `Adobe Community
+  Kit`, whose labels sort differently without regard to case than by code unit (F-0804's sort). For the Features stage
+  (F-0804, F-0803, F-0414).
+
+The CLI the package bundles publishes the templates, the mirrored ones as `devcontainers/templates` and ours as
+`remote-oss-run/custom`, and our Features as `remote-oss-run/features`. The run's index, written to `<run>/downloads/templates/devcontainer-index.json`, is the
+pinned snapshot `tests/acceptance/fixtures/templates/devcontainer-index.json` with every `ghcr.io/devcontainers/templates/`
+id moved to the run's registry, plus a collection of our templates and the collections of our Features (`<registry>/<namespace>/<id>`, each with its
+repository, which gives the owner a Feature list shows).
+- **The snapshot** is a cut of the public index (`tools/trim-template-index.ts`): the
+  `ghcr.io/devcontainers/templates` collection's metadata and the Features `common-utils`, `docker-in-docker`, `git`,
+  `node` and `python` of `ghcr.io/devcontainers/features`, each collection with its source information and nothing
+  else. It holds no other owner's metadata, whose licence we can't vouch for. The mirrored Features keep their
+  `ghcr.io/devcontainers/features/…` ids, and no row builds with them. Its folder holds the specification's MIT
+  `LICENSE` and `SOURCE.md` (the URL, the date and the full file's digest). It's test data, under `tests/` only.
+- **The variables:**
+  - `HARNESS_TEMPLATE_REGISTRY` is the registry as the templates' ids name it, `localhost:<port>`;
+  - `REMOTE_OSS_TEMPLATE_INDEX` is the index's URL on the download host. It is harness-only: the product reads it only
+    when `REMOTE_OSS_ACCEPTANCE` is `1`;
+  - `REMOTE_OSS_CONTROL_MANIFEST` is the run's control manifest on the download host, beside it, for the product's own
+    copy (card containers-94). The dev container CLI reads `control-manifest.json` from its cache folder
+    (`<temporary folder>/devcontainercli-<user name>`) while the file is under five minutes old, so a row that needs the
+    run's manifest in the CLI calls `seedControlManifest()` (`windows/control-manifest.ts`) and `removeControlManifest()`
+    after. The manifest is `tools/acceptance-control-manifest.ts`: a disallowed Feature with a documentation address
+    and one without, and an advisory for `lab-advised` 1.0.0 fixed in 1.0.1.
+- **A row's clean-up removes the registry** with every other container of the run (`clearEarlierRows`), so the Dev
+  Containers views of later rows list no container but their own. A row that needs the templates calls
+  `runTemplatesReady()` (`windows/run-templates.ts`) first. It starts the registry again on the same port, which the
+  index's ids name, and publishes the templates into it again from the run's cache, with no network.
+
+Measured on CLI 0.89.0, on 2026-10-20:
+- **Plain HTTP is used only for `localhost:<port>`.** `templates publish` to `127.0.0.1:<port>` fails with a TLS error
+  (`wrong version number`), while the same registry as `localhost:<port>` works ("Sending as plain HTTP request"). So
+  the templates name the registry that way and it needs no TLS.
+- **`templates apply` and `templates metadata` have no `--log-format`.** `apply` prints one JSON line on stdout,
+  `{"files":["./.devcontainer/devcontainer.json", …]}`, and its log as text on stderr. A missing template exits 1 with
+  stdout empty. `metadata <id>` prints the template's metadata as JSON on stdout.
+- `apply` leaves out `devcontainer-template.json`, `README.md` and `NOTES.md` by itself, and writes the optional files
+  unless `--omit-paths` names them.
+- **The published index** (`https://containers.dev/static/devcontainer-index.json`) is `{"collections":
+  [{sourceInformation, features, templates}]}`, and each template's `id` is its full OCI reference.
 
 ## Cutting the host's network
 
@@ -448,6 +538,8 @@ behaviour is chosen by the first segment of the path:
 | `hang` | the request is accepted and never answered, until `GET /control/drop-hung` or the run's end |
 | `cut` | 200 with the archive's length, then the connection drops after 1 MiB |
 | `slow` | the archive, 64 KiB every 100 ms |
+| `templates` | `/templates/devcontainer-index.json`: the run's template index once the run has written it (404 before); `/templates/broken-index.json`: an index cut off so it doesn't parse; `/templates/unreachable`: the connection dropped before any answer |
+| `control` | `/control/devcontainer-control-manifest.json`: the run's control manifest once the run has written it (404 before); `/control/unreachable`: the connection dropped before any answer |
 
 The archive is the VSCodium server for Alpine of the release the client is pinned to, cached under
 `.vscode-test/downloads/` and checked against its sha256 (`SERVER_ARCHIVE`). The HTTPS certificate is the run's own,
@@ -488,15 +580,14 @@ removes both in its `finally`. The container's removal at the end of the run is 
 
 `ssh-no-proposals` is the same client and settings with the proposed API not enabled (`proposedApi: false`), for F-2001
 §3.4's setup notice in the editor the family's users start from. It also comes last and only when named, after
-`genuine`. The family's gate tells a profile once, and a "Not Now" keeps it silent until a probe passes. So in a run
-that also makes the VSCodium `no-proposals` launch, whose rows dismiss the notice, this launch's rows find none and say
-so. `genuine` before it clears the flag, because its probe passes:
+`genuine`. The family's gate tells a profile once, and a "Not Now" keeps it silent until a probe passes; the launch has
+a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's rows never reaches it:
 
     node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has three users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has thirteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -509,6 +600,12 @@ Besides `harness`, the host image has three users, and the run's `ssh_config` ha
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |
 | `harness-fish` | `harness-fish` | the run's key; its login shell is `/usr/bin/fish` |
+| `harness-bash` | `harness-bash` | the run's key; its login shell is `/bin/bash` |
+| `harness-zsh` | `harness-zsh` | the run's key; its login shell is `/bin/zsh` |
+| `harness-dash` | `harness-dash` | the run's key; its login shell is `/usr/local/bin/sh`, a link to dash |
+| `harness-ksh` | `harness-ksh` | the run's key; its login shell is `/bin/ksh` |
+| `harness-csh` | `harness-csh` | the run's key; its login shell is `/bin/csh` |
+| `harness-tcsh` | `harness-tcsh` | the run's key; its login shell is `/bin/tcsh` |
 | `master` | `harness-pw` | `password`, behind `ControlMaster auto` (socket `cm-%C` in the run's folder, `ControlPersist 600`) |
 | `master-ask` | `harness-pw` | `password`, behind `ControlMaster ask` (socket `cm-ask-%C`) |
 | `master-yes` | `harness-pw` | `password`, behind `ControlMaster yes` (socket `cm-yes-%C`) |

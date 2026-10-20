@@ -1,8 +1,11 @@
 **
 !package.json
 !package.nls*.json
+!LICENSE
 !l10n/**
 !dist/extension.js
 !dist/cli-preload.js
+!dist/helper-launcher.js
+!dist/shutdown-helper.js
 !dist/devcontainers-cli/**
 !resources/**

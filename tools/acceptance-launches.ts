@@ -29,6 +29,12 @@ interface LaunchCommon {
   clientListeners?: readonly number[];
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
+  /**
+   * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
+   * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
+   * HARNESS_TEMPLATE_REGISTRY.
+   */
+  templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
 }
@@ -385,7 +391,11 @@ export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
     suite: 'suite-install',
     prefix: 'install',
     caseVariable: 'HARNESS_INSTALL_CASE',
-    removed: ['/home/harness/.vscodium-server-insiders', '/tmp/srv'],
+    removed: [
+      '/home/harness/.vscodium-server-insiders',
+      '/tmp/srv',
+      '/home/harness/inst',
+    ],
   },
   {
     suite: 'suite-platform',
@@ -510,11 +520,12 @@ function forwardingLaunch(
  * SSH disabled, the third without the proposed API, and the fourth with a stand-in carrying the other Remote
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
- * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume` and
- * `containers-explorer` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
+ * `containers-explorer`, `containers-ports` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
- * Explorer installed beside it;
+ * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
+ * installed and disabled as in `containers`;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -609,6 +620,14 @@ export function launchesOf(root: string): Launch[] {
       suite: 'windows',
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
+    {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
+    {
+      label: 'preconnect',
+      kind: 'plain',
+      suite: 'preconnect',
+      // A variable of the editor's environment, which the script of a row reports it received.
+      environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
+    },
     {
       label: 'config-files',
       kind: 'plain',
@@ -649,6 +668,23 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...EXPLORER_LAUNCH,
+      label: 'explorer-trust',
+      suite: 'explorer-trust',
+      workspaceTrust: true,
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-home',
+      suite: 'explorer-home',
+      environment: {HOME: '<run>/home'},
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-rows',
+      suite: 'explorer-rows',
+    },
+    {
+      ...EXPLORER_LAUNCH,
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
@@ -680,10 +716,33 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      ...RENDERER_LAUNCH,
+      label: 'web-ui',
+      suite: 'web-ui',
+      // A recording xdg-open that the suite writes into the run's folder comes first on the editor's PATH, so that
+      // opening the web UI opens nothing on the machine.
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'web-ui-trust',
+      suite: 'web-ui-trust',
+      // The same browser, in a launch with workspace trust on and core's startup prompt off, so that a window opens in
+      // Restricted Mode and silent.
+      // A terminal-mode connect in this launch waits on core's trust question before its login terminal starts, so its
+      // rows connect only through the local server.
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        'security.workspace.trust.startupPrompt': 'never',
+      },
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+    },
+    {
       ...CONTAINERS_LAUNCH,
       label: 'containers',
       suite: 'containers',
       registry: true,
+      templates: true,
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
@@ -724,6 +783,26 @@ export function launchesOf(root: string): Launch[] {
         'remote-oss.remote-containers',
         'remote-oss.remote-explorer',
       ],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ports',
+      suite: 'containers-ports',
+      registry: true,
+      // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that opening a
+      // port in the browser opens nothing on the machine.
+      environment: {PATH: '<run>/xdg-bin:<path>'},
+      // The other Dev Containers, installed and disabled, as in `containers`: the Ports view's rows are core's.
+      standIns: ['ms-vscode-remote.remote-containers'],
+      disabledExtensions: ['ms-vscode-remote.remote-containers'],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-shutdown',
+      suite: 'containers-shutdown',
+      // The other Dev Containers, installed and disabled, as in `containers`.
+      standIns: ['ms-vscode-remote.remote-containers'],
+      disabledExtensions: ['ms-vscode-remote.remote-containers'],
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({

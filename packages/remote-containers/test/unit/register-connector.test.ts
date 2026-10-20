@@ -19,6 +19,7 @@ import {
 } from '../../src/connect/failures.ts';
 import {inertRecoveryPorts} from './inert-recovery-ports.ts';
 import type {ContainerConnector} from '../../src/connect/connector.ts';
+import type {DeclaredPorts} from '../../src/ports/declared-forwards.ts';
 import {registerContainerResolver} from '../../src/connect/register-connector.ts';
 
 const AUTHORITY = encodeAuthority({
@@ -51,6 +52,8 @@ async function registered(
       authority: string,
       path: string,
     ) => Promise<string | undefined>;
+    /** The ports the connector says the connection declares. */
+    ports?: DeclaredPorts;
   } = {},
 ) {
   const warned: string[] = [];
@@ -61,10 +64,13 @@ async function registered(
     close: () => undefined,
   };
   const events: string[] = [];
+  const forwarded: Array<DeclaredPorts | undefined> = [];
   const shown: string[][] = [];
   const requests: ProgressRequest[] = [];
+  let portsViewCalls = 0;
   const formatters: ResourceLabelFormatter[] = [];
   const disposed: string[] = [];
+  const recentAdded: string[] = [];
   const commands = new Map<string, () => unknown>();
   const recording = recordingResolverEditor(events);
   const listeners: Array<(phase: ConnectPhase) => void> = [];
@@ -83,8 +89,11 @@ async function registered(
     onHeldChanged: () => () => undefined,
     revealDetails: () => undefined,
     heldConnection: () => undefined,
+    announceShutdown: () => undefined,
+    leaveShutdown: () => Promise.resolve(),
     failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,
+    heldPorts: () => options.ports,
     canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
       listeners.push(listener);
@@ -127,6 +136,19 @@ async function registered(
         },
       },
       commands: host,
+      recentLabel: {
+        homeFolder: () => '/home/al',
+        windowEntry: () => ({
+          type: 'folder',
+          uri: 'vscode-remote://dev-container%2B7b7d/workspaces/w',
+          remoteAuthority: 'dev-container+7b7d',
+        }),
+        recentEntries: () => Promise.resolve([]),
+        addEntry: entry => {
+          recentAdded.push(entry.label);
+          return Promise.resolve();
+        },
+      },
       presenter: inertRecoveryPorts({
         storePausedRetry: containerId => {
           stored.push(containerId);
@@ -147,6 +169,18 @@ async function registered(
         },
       }),
       translate: template => template,
+      forwarder: {
+        forward: declared => {
+          forwarded.push(declared);
+          return Promise.resolve();
+        },
+      },
+      portsView: {
+        enablePortsView: () => {
+          portsViewCalls += 1;
+          return Promise.resolve();
+        },
+      },
     },
     connector,
     {
@@ -165,7 +199,9 @@ async function registered(
   return {
     result,
     events,
+    forwarded,
     shown,
+    portsViewCalls: () => portsViewCalls,
     requests,
     formatters,
     disposed,
@@ -174,6 +210,7 @@ async function registered(
     revealed: () => revealed,
     warned,
     stored,
+    recentAdded,
     identify: (next: typeof identity) => {
       identity = next;
     },
@@ -218,6 +255,41 @@ function suffixesOf(seen: Awaited<ReturnType<typeof registered>>): string[] {
 }
 
 describe('the registration of the container connector (card containers-08)', () => {
+  it('F-1101 AC-1, AC-22: every resolve that settles connected hands the connection’s ports to the forwarder', async () => {
+    const ports = {
+      forwardPorts: [3000],
+      portsAttributes: undefined,
+      otherPortsAttributes: undefined,
+    };
+    const seen = await registered({ports});
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 2});
+    deepStrictEqual(seen.forwarded, [ports, ports]);
+  });
+
+  it('F-1101 AC-1: a resolve that fails forwards nothing', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(seen.forwarded, []);
+  });
+
+  it('F-1102 duty 2: the resolver gives core no tunnel factory, no tunnel features and no candidatePortSource, and the window sets forwardedPortsViewEnabled once connected', async () => {
+    const connectedRow = await registered();
+    await settledResolve(connectedRow, 1);
+    const failedRow = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(failedRow, 1);
+    deepStrictEqual(
+      [connectedRow.portsViewCalls(), failedRow.portsViewCalls()],
+      [1, 0],
+    );
+  });
+
   it('contracts §3.2: the resolver of dev-container is registered when the editor grants the proposal', async () => {
     const seen = await registered();
     deepStrictEqual(
@@ -481,5 +553,29 @@ describe('the registration of the container connector (card containers-08)', () 
     seen.result.dispose();
     await running;
     deepStrictEqual(seen.formatters, []);
+  });
+
+  it('F-0501 AC-1: the first connected resolve of a folder window stores its Open Recent entry with the tilded host path and the static suffix, once', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    await settledResolve(seen, 2, FOLDER_AUTHORITY);
+    deepStrictEqual(seen.recentAdded, ['/w [Dev Container]']);
+  });
+
+  it('F-0501 AC-1: an authority that names no folder stores no Open Recent entry', async () => {
+    const seen = await registered();
+    await settledResolve(seen, 1);
+    deepStrictEqual(seen.recentAdded, []);
+  });
+
+  it('F-0501 AC-1: a connect that fails stores no Open Recent entry', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    deepStrictEqual(seen.recentAdded, []);
   });
 });

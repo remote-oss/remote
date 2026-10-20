@@ -1,4 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   type ActiveRemote,
   type CallOutcome,
@@ -241,7 +243,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5902.5.order: a full build asks the pull and the hosts in one turn, before either answers, and changes once both did', async () => {
+  it('F-5902.AC-30: F-5902.5.order: a full build asks the pull first and the hosts in one turn, before either answers, and changes once both did', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     const asked = [...scenario.calls.order];
@@ -919,6 +921,23 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
         scenario.targets.folderOf('x'),
       ],
       [true, undefined, undefined, undefined, undefined],
+    );
+  });
+
+  it('F-5102 AC-48: the group label and its tooltip are the literal SSH, from no string table', async () => {
+    const scenario = setup();
+    const [group] = await scenario.targets.children(undefined);
+    const item =
+      group === undefined ? undefined : scenario.targets.itemOf(group);
+    const bundle = JSON.parse(
+      readFileSync(
+        path.join(import.meta.dirname, '..', '..', 'l10n', 'bundle.l10n.json'),
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    deepStrictEqual(
+      [item?.label, item?.tooltip, 'SSH' in bundle],
+      ['SSH', 'SSH', false],
     );
   });
 });

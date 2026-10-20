@@ -7,7 +7,7 @@
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {StdinPresentation} from '../cli/cli-host.ts';
-import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {CliTarget, FeatureSettings} from '../cli/cli-arguments.ts';
 import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
@@ -22,7 +22,9 @@ import {
   type Decision,
 } from './labels.ts';
 
-const VOLUME_MOUNT = 'type=volume,source=vscode,target=/vscode';
+/** The name of the shared cache volume. */
+const VOLUME_NAME = 'vscode';
+const VOLUME_MOUNT = `type=volume,source=${VOLUME_NAME},target=/vscode`;
 const IDENTIFIER_LENGTH = 12;
 
 /** The stages of a connection that the container takes part in. */
@@ -43,6 +45,8 @@ export interface ContainerRequest {
   workspaceMountConsistency: string;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
+  /** The Feature settings: the default Features and the lockfile. */
+  features: FeatureSettings;
   /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
   pausedRetry: (containerId: string) => Promise<boolean>;
 }
@@ -457,6 +461,7 @@ export function containerLifecycleOf(dependencies: {
       idLabels: targetIdLabels,
       mountWorkspaceGitRoot: true,
       mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
+      features: request.features,
       mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
       logLevel: request.logLevel,
     };
@@ -464,6 +469,19 @@ export function containerLifecycleOf(dependencies: {
       logger.info(
         `rebuilding: the dev container CLI removes ${discovery.containers.map(container => container.id.slice(0, IDENTIFIER_LENGTH)).join(', ') || 'no container'} first`,
       );
+    }
+    if (request.cacheVolume) {
+      // The cache volume exists once a connect has passed trust and the pre-flight, whatever the build does next.
+      const created = await askEngine(
+        engine,
+        ['volume', 'create', VOLUME_NAME],
+        cancellation,
+      );
+      if (created.kind === 'failed') {
+        logger.warn(
+          `the vscode volume could not be created before the build: ${created.detail}`,
+        );
+      }
     }
     const upResult = await bridge.up(
       {...target, terminalSize: presenter.terminalSize()},

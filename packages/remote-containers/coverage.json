@@ -5,7 +5,9 @@
     "src/cli/cli-host.ts": "types only; no executable code",
     "src/programs/cli-preload.ts": "runs as a preload in the CLI's own process; the preload rows cover it",
     "src/engine/node-engine-host.ts": "spawns real processes; the server acceptance rows cover it",
-    "src/open/reopen-ports.ts": "types only; no executable code"
+    "src/open/reopen-ports.ts": "types only; no executable code",
+    "src/programs/shutdown-helper.ts": "runs as a program of its own over real sockets and processes; the acceptance row `#1226: the shutdown helper program starts with the first dev container window, outside the editor's process tree, and ends after the last window closed and its check ran` in tests/acceptance/containers-shutdown/helper-program.test.ts covers it",
+    "src/programs/helper-launcher.ts": "runs as a program of its own and starts a detached process; the acceptance row `#1226: the shutdown helper program starts with the first dev container window, outside the editor's process tree, and ends after the last window closed and its check ran` in tests/acceptance/containers-shutdown/helper-program.test.ts covers it"
   },
   "ratchet": {
     "lines": 100,

@@ -19,6 +19,7 @@ import {
   REBUILD_INTENTS_KEY,
   storeRebuildIntent,
 } from '../../src/open/rebuild-intent.ts';
+import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
 function tick(): Promise<unknown> {
@@ -195,7 +196,7 @@ describe('the container connector: the connect (card containers-08)', () => {
   it('contracts §2 step 3: unusable, discovery failed, a build failure and a cancel are rows 4, 5, 5 and 11', async () => {
     const kinds: string[] = [];
     for (const outcome of [
-      {kind: 'unusable', containerId: 'c1', status: 'exited'},
+      {kind: 'unusable', containerId: 'c1c1c1c1c1c1c1c1', status: 'exited'},
       {kind: 'discoveryFailed', detail: 'x'},
       {kind: 'buildFailed', message: 'x'},
       {kind: 'cancelled'},
@@ -537,16 +538,234 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(files, [['docker'], ['docker']]);
   });
 
-  it('contracts §2 step 3: a relative path cannot be resolved inside the resolve, so the second check fails and nothing runs', async () => {
-    const scene = sceneOf({dockerPath: 'bin/docker'});
-    const result = await scene.connector.connect(inputOf(PAYLOAD));
+  it('F-0201 AC-37, BR-1: a relative docker path is the folder’s file: the engine, the CLI’s read and the container request all get it, with ./ or without', async () => {
+    const seen = [];
+    for (const dockerPath of ['tools/dk', './tools/dk']) {
+      const scene = sceneOf({dockerPath});
+      await connected(scene);
+      seen.push([
+        scene.engineFiles,
+        [
+          ...new Set(
+            scene.configurationReads.map(read => read.target.dockerPath),
+          ),
+        ],
+        scene.prepared.map(request => request.dockerPath),
+      ]);
+    }
+    const resolved = '/work/proj/tools/dk';
+    deepStrictEqual(seen, [
+      [[resolved], [resolved], [resolved]],
+      [[resolved], [resolved], [resolved]],
+    ]);
+  });
+
+  it('F-0417 BR-5, BR-13: a connect registers its connection with the shutdown helper after the trust gate, with the folder, the configuration file and the engine as it was', async () => {
+    const scene = sceneOf({dockerPath: '/opt/docker'});
+    scene.dockerHost = 'unix:///run/docker.sock';
+    await connected(scene);
+    deepStrictEqual(scene.shutdownSent[0], {
+      type: 'register',
+      connectionId: 'connection-1',
+      identity: {
+        hostPath: '/work/proj',
+        configFile: '/work/proj/.devcontainer/devcontainer.json',
+      },
+      engine: {
+        dockerPath: '/opt/docker',
+        environment: {DOCKER_HOST: 'unix:///run/docker.sock'},
+      },
+    });
+  });
+
+  it('F-0417 BR-13: a Docker context in the authority reaches the helper as DOCKER_CONTEXT, and an empty DOCKER_HOST is no variable', async () => {
+    const scene = sceneOf();
+    scene.dockerHost = '';
+    await scene.connector.connect(
+      inputOf(devContainerPayloadOf({...FOLDER, context: 'colima'})),
+    );
+    const [register] = scene.shutdownSent;
+    deepStrictEqual(
+      register?.type === 'register' ? register.engine.environment : register,
+      {DOCKER_CONTEXT: 'colima'},
+    );
+  });
+
+  it('F-0417 BR-8, BR-2: the container is told once it is ready, with the action its recorded label gives, and with the file’s value when the container has no label', async () => {
+    const labelled = sceneOf();
+    labelled.metadata = '[{"id":"base"},{"shutdownAction":"none"}]';
+    await connected(labelled);
+    const unlabelled = sceneOf();
+    unlabelled.configuration = {
+      kind: 'configuration',
+      configuration: {name: 'Proj', shutdownAction: 'none'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await connected(unlabelled);
+    deepStrictEqual(
+      [labelled, unlabelled].map(scene => scene.shutdownSent[1]),
+      [
+        {
+          type: 'container',
+          connectionId: 'connection-1',
+          containerId: 'c1c1c1c1c1c1c1c1',
+          action: 'none',
+        },
+        {
+          type: 'container',
+          connectionId: 'connection-1',
+          containerId: 'c1c1c1c1c1c1c1c1',
+          action: 'none',
+        },
+      ],
+    );
+  });
+
+  it('F-0417 BR-2: a label without shutdownAction gives the default whatever the file says, and a label that cannot be read leaves the file’s value', async () => {
+    const answers: Array<[string, unknown]> = [
+      ['[{"id":"base"}]', 'none'],
+      ['fails', 'none'],
+      ['', undefined],
+    ];
+    const actions = [];
+    for (const [metadata, written] of answers) {
+      const scene = sceneOf();
+      scene.metadata = metadata;
+      scene.configuration = {
+        kind: 'configuration',
+        configuration: {name: 'Proj', shutdownAction: written},
+        workspaceFolder: '/workspaces/proj',
+        workspaceMount: undefined,
+        mergedConfiguration: undefined,
+      };
+      await connected(scene);
+      const told = scene.shutdownSent[1];
+      actions.push(told?.type === 'container' ? told.action : told);
+    }
+    deepStrictEqual(actions, ['stop', 'none', 'stop']);
+  });
+
+  it('F-0417 AC-60, BR-8, BR-5: a connect that fails after its container is ready has told the helper which container the window holds, and then that the connection ends, since a failed window holds nothing', async () => {
+    const scene = sceneOf();
+    const failure: Failed = {
+      kind: 'serverFailed',
+      reason: {id: 'S034'},
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    };
+    scene.server = {kind: 'failed', failure};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.shutdownSent.map(request => request.type),
+      ['register', 'container', 'leave'],
+    );
+  });
+
+  it('F-0417 BR-8: a retry or a reconnection is the same connection and registers nothing again, and after a failed connect the next one is a new connection', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf(PAYLOAD));
+    await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    const failing = sceneOf();
+    failing.outcome = {kind: 'discoveryFailed', detail: 'no engine'};
+    await failing.connector.connect(inputOf(PAYLOAD));
+    failing.outcome = READY;
+    await failing.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    deepStrictEqual(
+      [scene, failing].map(each =>
+        each.shutdownSent.map(
+          request => `${request.type} ${request.connectionId}`,
+        ),
+      ),
+      [
+        [
+          'register connection-1',
+          'container connection-1',
+          'container connection-1',
+        ],
+        [
+          'register connection-1',
+          'leave connection-1',
+          'register connection-2',
+          'container connection-2',
+        ],
+      ],
+    );
+  });
+
+  it('F-0417 AC-51, BR-5: the authority the window was opened on is announced before the connect starts, once, and the connect then registers nothing more', async () => {
+    const scene = sceneOf();
+    scene.connector.announceShutdown(`dev-container+${PAYLOAD}`);
+    const before = scene.shutdownSent.length;
+    await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
       [
-        'reason' in result && result.reason,
-        scene.engineCalls.length,
-        scene.prepared,
+        before,
+        scene.shutdownSent.map(request => request.type),
+        scene.readsAtShutdown[0],
       ],
-      [{id: 'S339'}, 0, []],
+      [1, ['register', 'container'], 0],
+    );
+  });
+
+  it('F-0417 BR-5: an authority of another kind, a malformed or a legacy one, none at all, or a folder that is not trusted yet announces nothing', () => {
+    const trusted = sceneOf();
+    for (const authority of [
+      undefined,
+      'ssh-remote+host',
+      'dev-container+not hex',
+      `dev-container+${Buffer.from('/work/proj').toString('hex')}`,
+    ]) {
+      trusted.connector.announceShutdown(authority);
+    }
+    const untrusted = sceneOf();
+    untrusted.trusted = false;
+    untrusted.connector.announceShutdown(`dev-container+${PAYLOAD}`);
+    deepStrictEqual([trusted.shutdownSent, untrusted.shutdownSent], [[], []]);
+  });
+
+  it('F-0417 BR-5: a folder the user did not trust registers nothing, since the helper would run its Docker program', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(scene.shutdownSent, []);
+  });
+
+  it('F-0417 BR-5: a folder not trusted at the start and trusted at the gate registers after the answer, and tells the container', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = true;
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.shutdownSent.map(request => request.type),
+      ['register', 'container'],
+    );
+  });
+
+  it('F-0417 BR-9: a malformed or legacy authority and an outer hop tell the helper nothing', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf('not hex'));
+    await scene.connector.connect(
+      inputOf(Buffer.from('/work/proj').toString('hex')),
+    );
+    deepStrictEqual(scene.shutdownSent, []);
+  });
+
+  it('F-0417 BR-9: leaving tells the helper once for the connection the window holds, and nothing when it holds none', async () => {
+    const none = sceneOf();
+    await none.connector.leaveShutdown();
+    const scene = sceneOf();
+    await connected(scene);
+    await scene.connector.leaveShutdown();
+    await scene.connector.leaveShutdown();
+    deepStrictEqual(
+      [none.shutdownSent, scene.shutdownSent.slice(2)],
+      [[], [{type: 'leave', connectionId: 'connection-1'}]],
     );
   });
 
@@ -601,6 +820,27 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it('F-0414 3.2, 6.2, 6.3: the Feature settings reach the container request and both reads of the configuration', async () => {
+    const features = {'ghcr.io/devcontainers/features/node:1': {}};
+    const scene = sceneOf();
+    scene.defaultFeatures = features;
+    scene.lockfile = false;
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.features,
+        scene.configurationReads.map(read => read.target.features),
+      ],
+      [
+        {defaultFeatures: features, lockfile: false},
+        [
+          {defaultFeatures: features, lockfile: false},
+          {defaultFeatures: features, lockfile: false},
+        ],
+      ],
+    );
+  });
+
   it('F-0411 BR-7, BR-11: the settings are read at each connect, so a change between two connects takes effect', async () => {
     const scene = sceneOf();
     scene.workspaceMountConsistency = 'cached';
@@ -651,6 +891,22 @@ describe('the container connector: the connect (card containers-08)', () => {
           ],
         ],
       ],
+    );
+  });
+
+  it('F-1101 BR-24: the server start carries the port attributes of the merged configuration as machine settings', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {name: 'Proj'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: {portsAttributes: {'3000': {label: 'App'}}},
+    };
+    await connected(scene);
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.machineSettings),
+      [{'remote.portsAttributes': {'3000': {label: 'App'}}}],
     );
   });
 
@@ -825,27 +1081,117 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  it('F-0408 BR-6: the CLI’s error events are logged as errors and the rest as debug lines', async () => {
+  /** A `log` event of the CLI with the level, type and text given. */
+  function cliLog(
+    level: number,
+    type: 'raw' | 'start' | 'stop' | 'text',
+    text: string,
+  ): CliEvent {
+    return {
+      kind: 'log',
+      level,
+      text,
+      channel: undefined,
+      type,
+      timestamp: undefined,
+      startTimestamp: undefined,
+    };
+  }
+
+  /** What the connect writes to the log for `events`, as [level, message] of the lines they gave. */
+  async function loggedFor(
+    events: CliEvent[],
+    only: string[],
+  ): Promise<string[][]> {
+    const scene = sceneOf();
+    scene.cliEvents = events;
+    await connected(scene);
+    const lines = scene.sink.lines
+      .filter(line => only.includes(line.message))
+      .map(line => [line.level, line.message]);
+    // The connect prepares the container and reads its configuration, and each hands the events to the log.
+    return lines.slice(0, lines.length / 2);
+  }
+
+  it('contracts §2 step 3: a text of level 5 is logged as an error', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(5, 'text', 'it broke')], ['it broke']),
+      [['error', 'it broke']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 4 is logged as a warning', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(4, 'text', 'be careful')], ['be careful']),
+      [['warn', 'be careful']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 3 is logged as info', async () => {
+    deepStrictEqual(
+      await loggedFor([cliLog(3, 'text', 'it ran')], ['it ran']),
+      [['info', 'it ran']],
+    );
+  });
+
+  it('contracts §2 step 3: a text of level 2, and a start of level 3, are logged as debug', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [cliLog(2, 'text', 'detail'), cliLog(3, 'start', 'Running: x')],
+        ['detail', 'Running: x'],
+      ),
+      [
+        ['debug', 'detail'],
+        ['debug', 'Running: x'],
+      ],
+    );
+  });
+
+  it('F-0412 AC-11: Docker’s own output is logged as info, one line for each line of its text, without control sequences or empty lines', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            2,
+            'raw',
+            '#5 [2/3] RUN false\r\n\n  \r\n\u001b[31mfailed to solve\u001b[0m: exit code 1\n\n',
+          ),
+        ],
+        ['#5 [2/3] RUN false', 'failed to solve: exit code 1', '', '  '],
+      ),
+      [
+        ['info', '#5 [2/3] RUN false'],
+        ['info', 'failed to solve: exit code 1'],
+      ],
+    );
+  });
+
+  it('F-0405 AC-10: a failed lifecycle command’s line is logged as an error without its colour codes and line end', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            5,
+            'text',
+            '\u001b[1m\u001b[31mpostCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.\u001b[39m\u001b[22m\r',
+          ),
+        ],
+        [
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ),
+      [
+        [
+          'error',
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ],
+    );
+  });
+
+  it('F-0408 BR-6: a progress event is logged as a debug line', async () => {
     const scene = sceneOf();
     scene.cliEvents = [
-      {
-        kind: 'log',
-        level: 5,
-        text: 'it broke',
-        channel: undefined,
-        type: 'text',
-        timestamp: undefined,
-        startTimestamp: undefined,
-      },
-      {
-        kind: 'log',
-        level: 3,
-        text: 'it ran',
-        channel: undefined,
-        type: 'text',
-        timestamp: undefined,
-        startTimestamp: undefined,
-      },
       {
         kind: 'progress',
         name: 'Running',
@@ -856,18 +1202,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     await connected(scene);
     deepStrictEqual(
       scene.sink.lines
-        .filter(line =>
-          ['it broke', 'it ran', 'Running: succeeded'].includes(line.message),
-        )
-        .map(line => [line.level, line.message]),
-      [
-        ['error', 'it broke'],
-        ['debug', 'it ran'],
-        ['debug', 'Running: succeeded'],
-        ['error', 'it broke'],
-        ['debug', 'it ran'],
-        ['debug', 'Running: succeeded'],
-      ],
+        .filter(line => line.message === 'Running: succeeded')
+        .map(line => line.level),
+      ['debug', 'debug'],
     );
   });
 
@@ -1880,5 +2217,108 @@ describe('the container connector: the remote environment (card containers-45)',
       scene.probeScripts.map(script => script.includes(' -i -c ')),
       [true],
     );
+  });
+});
+
+describe('the container connector: the declared ports (card containers-72)', () => {
+  function configurationWith(
+    mergedConfiguration: Record<string, unknown> | undefined,
+  ): Scene['configuration'] {
+    return {
+      kind: 'configuration',
+      configuration: {name: 'Proj'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration,
+    };
+  }
+
+  it('F-1101 BR-1: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({
+      forwardPorts: [3000, 'side:4000'],
+      portsAttributes: {'3000': {label: 'web'}},
+      otherPortsAttributes: {onAutoForward: 'silent'},
+    });
+    await connected(scene);
+    deepStrictEqual(scene.connector.heldPorts(), {
+      forwardPorts: [3000, 'side:4000'],
+      portsAttributes: {'3000': {label: 'web'}},
+      otherPortsAttributes: {onAutoForward: 'silent'},
+    });
+  });
+
+  it('F-1101 AC-11, AC-30: a reconnect keeps the ports read when the connection was made', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({forwardPorts: [3000]});
+    await connected(scene);
+    scene.configuration = configurationWith({forwardPorts: [4000]});
+    await scene.connector.connect({...inputOf(PAYLOAD), isReconnection: true});
+    deepStrictEqual(scene.connector.heldPorts()?.forwardPorts, [3000]);
+  });
+
+  it('F-1101 AC-1: a configuration that cannot be read declares no ports, and a connector that never connected holds none', async () => {
+    const scene = sceneOf();
+    const before = scene.connector.heldPorts();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    await connected(scene);
+    deepStrictEqual(
+      [before, scene.connector.heldPorts()],
+      [
+        undefined,
+        {
+          forwardPorts: undefined,
+          portsAttributes: undefined,
+          otherPortsAttributes: undefined,
+        },
+      ],
+    );
+  });
+});
+
+describe('the container connector: the appPort rows (card containers-74)', () => {
+  function configurationWith(
+    configuration: Record<string, unknown>,
+  ): Scene['configuration'] {
+    return {
+      kind: 'configuration',
+      configuration: {name: 'Proj', ...configuration},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+  }
+
+  const STATIC_ROW = {
+    remoteAddress: {host: '0.0.0.0', port: 8080},
+    localAddress: '127.0.0.1:8080',
+  };
+
+  it('F-1101 BR-15: the connection hands core the rows of the configuration’s appPort', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({appPort: [8080]});
+    deepStrictEqual((await connected(scene)).environmentTunnels, [STATIC_ROW]);
+  });
+
+  it('F-1101 BR-14: a Compose configuration hands core none', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({
+      appPort: [8080],
+      dockerComposeFile: 'compose.yml',
+    });
+    deepStrictEqual((await connected(scene)).environmentTunnels, []);
+  });
+
+  it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
+    const scene = sceneOf();
+    scene.dockerHost = 'tcp://10.0.0.5:2375';
+    scene.configuration = configurationWith({appPort: [8080]});
+    deepStrictEqual((await connected(scene)).environmentTunnels, []);
+  });
+
+  it('F-1101 BR-14: a configuration that cannot be read hands core none', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    deepStrictEqual((await connected(scene)).environmentTunnels, []);
   });
 });

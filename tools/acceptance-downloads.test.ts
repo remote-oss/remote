@@ -15,6 +15,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   bridgeGateway,
+  BROKEN_INDEX_TEXT,
   DOWNLOAD_HOST_NAMES,
   type DownloadHost,
   downloadHostArguments,
@@ -37,6 +38,16 @@ interface Received {
   broken: boolean;
   /** The response's `Access-Control-Allow-Origin` header, or undefined when it has none. */
   allowOrigin: string | undefined;
+}
+
+/** Whether `text` parses as JSON. */
+function parses(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The body of a plain HTTP GET of `pathName` at `address` and `port`. */
@@ -126,6 +137,8 @@ describe('the download host', function () {
       ...certificate,
       logFile,
       tlsLogFile,
+      templatesFolder: path.join(folder, 'templates'),
+      controlFolder: path.join(folder, 'control'),
     });
   });
 
@@ -249,6 +262,77 @@ describe('the download host', function () {
     strictEqual((await get('http', host.httpPort, '/other/x')).status, 404);
   });
 
+  it("tooling-57: the template index gives 404 until the run writes it, then the run's file", async () => {
+    const before = (
+      await get('http', host.httpPort, '/templates/devcontainer-index.json')
+    ).status;
+    mkdirSync(path.join(folder, 'templates'), {recursive: true});
+    writeFileSync(
+      path.join(folder, 'templates', 'devcontainer-index.json'),
+      '{"collections": []}',
+    );
+    const after = await get(
+      'http',
+      host.httpPort,
+      '/templates/devcontainer-index.json',
+    );
+    deepStrictEqual(
+      [before, after.status, after.body.toString()],
+      [404, 200, '{"collections": []}'],
+    );
+  });
+
+  it("tooling-57: broken-index.json gives an index that doesn't parse, and another templates path gives 404", async () => {
+    const broken = await get(
+      'http',
+      host.httpPort,
+      '/templates/broken-index.json',
+    );
+    const other = await get('http', host.httpPort, '/templates/other.json');
+    deepStrictEqual(
+      [
+        broken.status,
+        broken.body.toString(),
+        parses(broken.body.toString()),
+        other.status,
+      ],
+      [200, BROKEN_INDEX_TEXT, false, 404],
+    );
+  });
+
+  it('tooling-57: unreachable drops the connection before any answer', async () => {
+    await rejects(get('http', host.httpPort, '/templates/unreachable'));
+  });
+
+  it("tooling-62: the control manifest gives 404 until the run writes it, then the run's file, and another control path gives 404", async () => {
+    const before = (
+      await get(
+        'http',
+        host.httpPort,
+        '/control/devcontainer-control-manifest.json',
+      )
+    ).status;
+    mkdirSync(path.join(folder, 'control'), {recursive: true});
+    writeFileSync(
+      path.join(folder, 'control', 'devcontainer-control-manifest.json'),
+      '{"disallowedFeatures": []}',
+    );
+    const after = await get(
+      'http',
+      host.httpPort,
+      '/control/devcontainer-control-manifest.json',
+    );
+    const other = await get('http', host.httpPort, '/control/other.json');
+    deepStrictEqual(
+      [before, after.status, after.body.toString(), other.status],
+      [404, 200, '{"disallowedFeatures": []}', 404],
+    );
+  });
+
+  it('tooling-62: the control unreachable path drops the connection before any answer', async () => {
+    await rejects(get('http', host.httpPort, '/control/unreachable'));
+  });
+
   it('tooling-27: hang holds the request until the hung connections are dropped', async () => {
     const hung = get('http', host.httpPort, '/hang/x');
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -318,6 +402,8 @@ describe('startDownloadHost', () => {
           ...certificate,
           logFile: path.join(folder, 'log'),
           tlsLogFile: path.join(folder, 'tls-log'),
+          templatesFolder: path.join(folder, 'templates'),
+          controlFolder: path.join(folder, 'control'),
         }),
       );
     } finally {

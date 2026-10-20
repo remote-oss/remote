@@ -52,7 +52,11 @@ const PLATFORM_LINE_START =
   )[0] ?? '';
 
 /** The settings file of this window's launch. */
-const settingsFile = path.join(runFolder, 'user-data', 'User', 'settings.json');
+const settingsFile = path.join(
+  process.env.HARNESS_USER_DATA ?? '',
+  'User',
+  'settings.json',
+);
 
 /** The launch's copy of the settings it was given. */
 const givenFile = path.join(runFolder, `${label}-settings.json`);

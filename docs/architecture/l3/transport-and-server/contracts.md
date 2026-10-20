@@ -332,7 +332,7 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   request after its hello. This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
   `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
-  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64),
+  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?, detail?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64; `detail`: the helper's own log line for a login shell that timed out or ended early, which the window logs with the failure (F-2704 AC-25); absent from an earlier helper and from any other failure; it is one of two fixed sentences with a number in them, so nothing of the host's output or of the user's secrets is in it),
   `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
   `transportLost`, `waitingForOtherWindow`, and `sshLines {lines}` (ssh's error-stream lines, in order: batches of at most
   200 lines, sent at most every 100 ms, from ssh's start until the helper ends, and flushed before `connected` and
@@ -1118,13 +1118,14 @@ Fixed regardless of the choice:
 ## 9. lib-helper (draft for area C's review; lead's ruling 2026-10-06)
 
 - `RequestContext.notify(body)` (added 2026-10-08, #183): a message to the lease that sent the request only, before its reply; `broadcast` stays for all leases.
+- The instance-scoped registry folder, `registryUnresolved` and the start that leaves the starter's tree (added 2026-10-20, #1223, from the C9 ruling on #737): in X1, X3 and **The start** below.
 
 Names (ADR-0003, ruled 2026-10-08): the record's `recordKey` (not `key`), `startedByProcessId` (not `pid`; it is the
 acquirer's process id, since the claim precedes the spawn; stopping always goes through the endpoint, never a kill
 by process id), `Lease.leaseId`, `close(leaseId)`, `Clock.now()` (the user allows `now` as a named exception to the four-character rule, 2026-10-08). The wire protocol is newline-delimited
 JSON (`hello`/`welcome` with the nonce, `request`/`reply` by `requestId`, pushed `leaseListChanged` and `message`,
 `stop`); helper parameters travel in one environment variable, never argv; the spawn is `process.execPath` with
-`ELECTRON_RUN_AS_NODE=1`, detached, stdio ignored, windowsHide, unref; the endpoint path is
+`ELECTRON_RUN_AS_NODE=1`, detached, stdio ignored, windowsHide, unref (or through a launcher, see **The start**); the endpoint path is
 `$XDG_RUNTIME_DIR` or the temp folder plus `rh-<16 hex>.sock` under umask 0o077; helper scripts are bundled from
 `src/helpers/*.ts` into `dist/helpers/<name>.js` as separate entries without `vscode`.
 
@@ -1134,7 +1135,7 @@ that starts it, is shared by leases from several windows, and ends by a policy.
 Consumers:
 - S9, the SSH local connection server: per host string, per profile (F-2102);
 - area C's container watchdog: stops containers once every window is gone, after a delayed check of about 10 s,
-  with a registry shared across profiles (F-0417 AC-43);
+  with the instance's registry, shared by its profiles, and a start that leaves the starter's tree (F-0417 AC-43);
 - the Tunnels relay (T2), if the frozen design keeps one: per profile, idle end after 30 to 60 s (F-8103 BR-6).
 
 The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
@@ -1143,11 +1144,11 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | registry folder (per profile from global storage, or per user; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed`, `endpointUnreachable` (after replacing a stale record once), `cancelled` |
+| `acquire` | registry folder (per profile from global storage, per user, or per instance as `{instanceOf: <the caller's globalStorageUri.fsPath>}`; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters, and optionally `leaveStarterTree` with the bundled launcher script, see **The start**), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed` (a launcher that exits other than 0 included), `endpointUnreachable` (after replacing a stale record once), `cancelled`, `registryUnresolved` (an instance folder that X3 can't find, returned before any record is read or claimed) |
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
-| `stop` | registry folder, namespace, recordKey | done, also when nothing runs. When it returns, the stopped helper's record is gone, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532 and #597: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). A helper that answers removes its own record before it closes its endpoint (X2), and `stop` waits for that close, bounded by the hello limit. `stop` removes the record itself only when the helper doesn't answer or doesn't end in time, and only while the file holds the stopped helper's nonce: a record a new helper wrote (another nonce) stays | none |
+| `stop` | registry folder (the same three forms), namespace, recordKey | done, also when nothing runs, and at once for an instance folder that can't be found. When it returns, the stopped helper's record is gone, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532 and #597: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). A helper that answers removes its own record before it closes its endpoint (X2), and `stop` waits for that close, bounded by the hello limit. `stop` removes the record itself only when the helper doesn't answer or doesn't end in time, and only while the file holds the stopped helper's nonce: a record a new helper wrote (another nonce) stays | none |
 
 ### X2 helper-runtime (bundled into each helper script)
 
@@ -1170,8 +1171,15 @@ helper's record (the claim is atomic and the starter's hello window counts as al
 |---|---|---|---|
 | `claim` | folder, namespace, recordKey, record | `claimed`, `existing` with the record, or `corrupt` | none |
 | `isStale` | record, result of one hello exchange | true when the helper does not answer within a short limit | none |
+| `instanceRegistryFolder` | an extension's global storage folder | `resolved` with `<user-data>/User/globalStorage/<extension folder>/instance-registry`, or `unresolved` | none |
 
 Rules:
+- **Three registry scopes.** Per profile (the caller's global storage), per user, or per editor instance. The
+  instance folder is shared by every profile of one instance and by no other instance. It is found from the
+  caller's global storage folder, the default profile's `<user-data>/User/globalStorage/<extension folder>` or a
+  named profile's `<user-data>/User/profiles/<id>/globalStorage/<extension folder>`, by reading the segments from the
+  end, so a user-data folder whose own path holds a `User` segment works. Any other form is `unresolved`, and there
+  is no fallback to a per-user folder, which would share one registry between instances.
 - **Atomic claim.** A record is claimed by an atomic exclusive create. The loser of a race joins the winner. A stale
   record is replaced once, never in a loop.
 - **Endpoint.** A Unix socket with mode 0600 in the user's runtime folder (temp folder on macOS), or a named pipe
@@ -1183,6 +1191,30 @@ Rules:
 - **Lease order.** Leases are numbered in arrival order. The oldest live lease is first. Consumers build ownership on
   this, for example S9's login owner and its hand-over (F-2102 BR-5).
 - **Tests.** The lease state machine and the end policies are pure, with a fake clock and a fake endpoint.
+
+### The start
+
+- **Direct (the default).** The starter spawns the runtime on the helper script, as above. The helper is a child of
+  the starter's process until the starter ends.
+- **Leaving the starter's tree** (`leaveStarterTree: true` with `launcherScript`, which the type requires with it).
+  This is for a helper that must outlive everything that ends the starter's process tree, such as area C's shutdown
+  helper.
+  - The runtime runs the bundled launcher (`runTreeLeavingLauncher`, in a two-line program of the consumer's), with
+    the helper script as its only argument and the same environment. `ELECTRON_RUN_AS_NODE` and the parameters
+    variable pass through unchanged, and nothing else goes in argv.
+  - The launcher spawns `process.execPath` on the script, detached, stdio ignored, windowsHide, with `unref`. It
+    exits 0 on the child's `spawn` event, or 1 on its `error`. The helper's parent is then gone, so it is in no
+    window's process tree.
+  - The starter waits for the launcher's exit. On 0 it continues as a direct start does: the hello window, and the
+    record's `startedByProcessId` stays the acquirer's own process id. Any other exit, or an error, is
+    `spawnFailed`.
+- **Ending.** Nothing ends a helper that left the tree except its own end. The end policy is armed at start, so a
+  helper that never gets a lease ends by itself. The acceptance harness also stops every helper recorded under a
+  run's user-data folder, at the end of every launch and in its clean-up. If one still answers a hello afterwards,
+  the harness kills the processes whose environment holds that record's nonce. That kill is the test run's
+  clean-up, not a product path.
+- **Platforms.** POSIX now. On Windows, the helper also needs a job breakaway, so that closing the editor's job
+  doesn't end it. That comes with the Windows platform increment and is provisional.
 
 Never:
 - store prompt answers or credentials in a record;

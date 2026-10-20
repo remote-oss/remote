@@ -1,5 +1,5 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
-import {pageTitleByName, pageTitleFor} from './renderer.ts';
+import {pageAmong, pageTitleByName, pageTitleFor} from './renderer.ts';
 
 describe('pageTitleByName', () => {
   it('containers-19: a folder window finds its page by its name, with or without the remote part of the title', () => {
@@ -155,5 +155,88 @@ describe('pageTitleFor', () => {
       ),
       '[k1]',
     );
+  });
+});
+
+describe('pageAmong', () => {
+  function pageOf(pageId: string, title = '[]') {
+    return {id: pageId, type: 'page', title};
+  }
+  function alwaysOpen(): boolean {
+    return true;
+  }
+
+  it('tooling-64: a window finds its remembered page among pages that have its title', () => {
+    deepStrictEqual(
+      pageAmong(
+        [pageOf('p1'), pageOf('p2')],
+        'local',
+        new Map([['local', 'p2']]),
+        alwaysOpen,
+      ),
+      pageOf('p2'),
+    );
+  });
+
+  it('tooling-64: of two pages with one title, a window with no page of its own gets the one another open window did not remember', () => {
+    deepStrictEqual(
+      pageAmong(
+        [pageOf('p1'), pageOf('p2')],
+        'empty-1',
+        new Map([['local', 'p1']]),
+        alwaysOpen,
+      ),
+      pageOf('p2'),
+    );
+  });
+
+  it('tooling-64: of three, the pages of two other open windows are left out', () => {
+    deepStrictEqual(
+      pageAmong(
+        [pageOf('p1'), pageOf('p2'), pageOf('p3')],
+        'empty-2',
+        new Map([
+          ['local', 'p1'],
+          ['empty-1', 'p2'],
+        ]),
+        alwaysOpen,
+      ),
+      pageOf('p3'),
+    );
+  });
+
+  it('tooling-64: the page of a window that is closed no longer rules a page out, so two stay ambiguous', () => {
+    deepStrictEqual(
+      pageAmong(
+        [pageOf('p1'), pageOf('p2')],
+        'empty-1',
+        new Map([['local', 'p1']]),
+        () => false,
+      ),
+      undefined,
+    );
+  });
+
+  it('tooling-64: two pages that nothing was remembered for stay ambiguous', () => {
+    deepStrictEqual(
+      pageAmong([pageOf('p1'), pageOf('p2')], 'local', new Map(), alwaysOpen),
+      undefined,
+    );
+  });
+
+  it('tooling-64: the one page that fits is the window’s, even when another window remembered it', () => {
+    deepStrictEqual(
+      pageAmong(
+        [pageOf('p1')],
+        'empty-1',
+        new Map([['local', 'p1']]),
+        alwaysOpen,
+      ),
+      pageOf('p1'),
+    );
+  });
+
+  it('tooling-64: no page that fits gives none', () => {
+    deepStrictEqual(pageAmong([], 'local', new Map(), alwaysOpen), undefined);
   });
 });

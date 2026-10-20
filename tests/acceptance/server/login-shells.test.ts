@@ -192,7 +192,7 @@ function boundedHost(
   };
 }
 
-describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', function () {
+describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', function () {
   this.timeout(240000);
 
   for (const shell of LOGIN_SHELLS.filter(each =>
@@ -267,7 +267,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         }
       }
 
-      it('#443, F-2704 AC-10: two multi-line scripts run one after the other on the session, each exiting 0 with its lines', async () => {
+      it('#443: two multi-line scripts run one after the other on the session, each exiting 0 with its lines', async () => {
         const results = await inSession([], async session => [
           await runOn(session, "echo 'one'\necho 1"),
           await runOn(session, "echo 'two'\necho 2"),
@@ -320,7 +320,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
       });
 
       for (const layer of LAYER_ROWS[shell.name] ?? []) {
-        it(`F-2704 BR-4: ${layer.title}`, async () => {
+        it(`#443, F-2704 BR-4: ${layer.title}`, async () => {
           const lines = await inSession(
             layer.files,
             async session => (await runOn(session, layer.script)).lines,
@@ -387,7 +387,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         };
       }
 
-      it('F-2704 AC-11, #443: a .bash_profile that sleeps 30 s fails the connect as a timeout, at the bound', async () => {
+      it('F-2704 AC-11: #443: a .bash_profile that sleeps 30 s fails the connect as a timeout, at the bound', async () => {
         write(bash, '.bash_profile', 'sleep 30\n');
         const attempt = await failedAttempt(bash);
         deepStrictEqual(
@@ -409,7 +409,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         );
       });
 
-      it("F-2704 AC-11, #443, connect-49: the client's wait ends a login shell that never finishes its startup", async () => {
+      it("F-2704 AC-11: #443, connect-49: the client's wait ends a login shell that never finishes its startup", async () => {
         write(bash, '.bash_profile', 'sleep 30\n');
         const attempt = await failedAttempt(bash);
         deepStrictEqual(
@@ -454,7 +454,14 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
           ],
           [
             'failed',
-            {kind: 'loginFailed', failure: 'unknown', hints: [], exitStatus: 1},
+            {
+              kind: 'loginFailed',
+              failure: 'unknown',
+              hints: [],
+              exitStatus: 1,
+              detail:
+                "the SSH session ended before the host reported its platform: the login shell's startup exited with status 1",
+            },
             true,
           ],
         );
@@ -512,7 +519,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         deepStrictEqual(sleeping, false);
       });
 
-      it('F-2704 AC-13, #443: a dash .profile that reads standard input and exits 3 fails the connect with that status', async () => {
+      it('F-2704 AC-13: #443: a dash .profile that reads standard input and exits 3 fails the connect with that status', async () => {
         write(dash, '.profile', 'export LAYER1=never\nread x\nexit 3\n');
         const attempt = await failedAttempt(dash);
         deepStrictEqual(

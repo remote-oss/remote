@@ -68,6 +68,7 @@ import {
   type RunnerLaunch,
 } from './acceptance-launches.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
+import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -92,8 +93,8 @@ class FakeHarness implements HarnessDependencies {
   /** The files of the run's folder as the first launch found them, by name. */
   readonly firstLaunchFiles = new Map<string, string>();
   readonly answers = new Map<string, CommandResult>();
-  /** What a launch with stand-ins found in its extensions folder when it started: the stand-in's manifest, the list's last entry. */
-  standInFound: [unknown, unknown] | undefined = undefined;
+  /** What each launch with stand-ins found in its extensions folder when it started, by label: the stand-in's manifest, the list's last entry. */
+  readonly standInFound = new Map<string, [unknown, unknown]>();
   /** What a client-search launch found in the run's folder when it started. */
   readonly clientLaunches: Array<{
     label: string;
@@ -195,10 +196,22 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly prepareTemplates = (
+    root: string,
+    runFolder: string,
+    address: string,
+  ): Promise<string> => {
+    this.calls.push(`templates prepared ${address}`);
+    return Promise.resolve('localhost:5000');
+  };
+
   readonly startDownloads = (): Promise<RunDownloads> => {
     this.calls.push('downloads started');
     return Promise.resolve({
-      variables: {HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080'},
+      variables: {
+        HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080',
+        HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
+      },
       stop: () => {
         this.calls.push('downloads stopped');
         return Promise.resolve();
@@ -223,7 +236,7 @@ class FakeHarness implements HarnessDependencies {
         variables.HARNESS_RUN_FOLDER,
         `extensions-${launch.label}`,
       );
-      this.standInFound = [
+      this.standInFound.set(launch.label, [
         JSON.parse(
           readFileSync(
             path.join(
@@ -239,7 +252,7 @@ class FakeHarness implements HarnessDependencies {
             readFileSync(path.join(folder, 'extensions.json'), 'utf8'),
           ) as unknown[]
         ).at(-1),
-      ];
+      ]);
     }
     return Promise.resolve(
       this.labelResults.get(launch.label) ?? this.testResult,
@@ -364,21 +377,30 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'login-shells',
+  'preconnect',
   'config-files',
   'default-ports',
   'no-proposals',
   'explorer',
   'explorer-alone',
+  'explorer-trust',
+  'explorer-home',
+  'explorer-rows',
   'explorer-no-proposals',
   'explorer-standdown',
   'trust',
   'trust-terminal',
+  'web-ui',
+  'web-ui-trust',
   'containers',
   'containers-standdown',
   'containers-no-proposals',
   'containers-trust',
   'containers-volume',
   'containers-explorer',
+  'containers-ports',
+  'containers-shutdown',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -754,6 +776,22 @@ describe('acceptance', () => {
     );
   });
 
+  for (const alias of [
+    'harness-bash',
+    'harness-zsh',
+    'harness-dash',
+    'harness-ksh',
+    'harness-csh',
+    'harness-tcsh',
+  ]) {
+    it(`F-2704: Host ${alias} logs in to ${alias} with the run key`, () => {
+      strictEqual(
+        accountBlock(alias),
+        [...sharedLines(alias, alias), ...KEY_ALIAS_LINES].join('\n'),
+      );
+    });
+  }
+
   it('#668: Host readonly logs in to harness-ro with the run key', () => {
     strictEqual(
       accountBlock('readonly'),
@@ -847,8 +885,12 @@ describe('acceptance', () => {
       workspace.root,
       '/run/ssh_config',
       {'remote.SSH.useLocalServer': false},
-      undefined,
-      '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+      {
+        label: 'platform-tail',
+        runner: 'runner-remote',
+        suite: 'suite-platform',
+        settingsTail: '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+      },
     );
     strictEqual(
       readFileSync(
@@ -856,6 +898,50 @@ describe('acceptance', () => {
         'utf8',
       ),
       '{\n  "remote.SSH.configFile": "/run/ssh_config",\n  "remote.SSH.useLocalServer": false\n  "acceptance.broken": 1 "acceptance.brokenToo": 2\n}\n',
+    );
+  });
+
+  it("tooling-66: a plain launch's settings go into its own profile, and a runner launch's into the run's, each with the launch's copy", () => {
+    writeUserSettings(
+      workspace.root,
+      '/run/ssh_config',
+      {'remote.explorerType': 'ssh'},
+      {label: 'explorer', kind: 'plain', suite: 'explorer'},
+    );
+    writeUserSettings(
+      workspace.root,
+      '/run/ssh_config',
+      {},
+      {
+        label: 'remote',
+        runner: 'runner-remote',
+        suite: 'suite-remote',
+      },
+    );
+    function settingsOf(...names: string[]): unknown {
+      return JSON.parse(
+        readFileSync(path.join(workspace.root, ...names), 'utf8'),
+      );
+    }
+    deepStrictEqual(
+      [
+        settingsOf('user-data-explorer', 'User', 'settings.json'),
+        settingsOf('explorer-settings.json'),
+        settingsOf('user-data', 'User', 'settings.json'),
+        settingsOf('remote-settings.json'),
+      ],
+      [
+        {
+          'remote.SSH.configFile': '/run/ssh_config',
+          'remote.explorerType': 'ssh',
+        },
+        {
+          'remote.SSH.configFile': '/run/ssh_config',
+          'remote.explorerType': 'ssh',
+        },
+        {'remote.SSH.configFile': '/run/ssh_config'},
+        {'remote.SSH.configFile': '/run/ssh_config'},
+      ],
     );
   });
 
@@ -940,6 +1026,9 @@ describe('acceptance', () => {
           ...[
             'explorer',
             'explorer-alone',
+            'explorer-trust',
+            'explorer-home',
+            'explorer-rows',
             'explorer-no-proposals',
             'explorer-standdown',
           ].map(label => ({
@@ -973,6 +1062,24 @@ describe('acceptance', () => {
               '/run/window-agent.vsix',
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
               path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-ports'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-shutdown'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
             ],
             client: 'vscodium',
           },
@@ -1042,6 +1149,35 @@ describe('acceptance', () => {
           ],
           '127.0.0.1:5000',
         ],
+      );
+    });
+
+    it('tooling-57: a run with the containers launch publishes its templates into the registry and passes the index and the templates registry', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['containers']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('templates')),
+          harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+          harness.variables?.REMOTE_OSS_CONTROL_MANIFEST,
+          harness.variables?.HARNESS_TEMPLATE_REGISTRY,
+        ],
+        [
+          ['templates prepared 127.0.0.1:5000'],
+          'http://127.0.0.1:8080/templates/devcontainer-index.json',
+          'http://127.0.0.1:8080/control/devcontainer-control-manifest.json',
+          'localhost:5000',
+        ],
+      );
+    });
+
+    it('tooling-57: a run whose chosen launches ask for no templates prepares none and passes no index', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('templates')),
+          harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+        ],
+        [[], undefined],
       );
     });
 
@@ -1350,6 +1486,138 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    const CONTAINERS: Launch = {
+      label: 'containers',
+      kind: 'plain',
+      suite: 'containers',
+      withExtensions: ['remote-oss.remote-containers'],
+    };
+
+    /** Runs `launches` with `runLaunch` under a lock that notes its takes and releases in `events`. */
+    function runLocked(
+      launches: Launch[],
+      runLaunch: (launch?: Launch) => Promise<AttemptResult>,
+      events: string[],
+    ): Promise<number[]> {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        '',
+        sleep,
+        runLaunch,
+        undefined,
+        undefined,
+        undefined,
+        () => undefined,
+        {
+          take: () => {
+            events.push('take');
+            return Promise.resolve();
+          },
+          release: () => {
+            events.push('release');
+          },
+        },
+      );
+    }
+
+    it("tooling-58: a launch of dev containers holds the daemon's lock through its attempts; another launch takes none", async () => {
+      const events: string[] = [];
+      await runLocked(
+        [TERMINAL, CONTAINERS],
+        launch => {
+          events.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+        events,
+      );
+      deepStrictEqual(events, [
+        'ran terminal',
+        'take',
+        'ran containers',
+        'release',
+      ]);
+    });
+
+    it("tooling-58: the daemon's lock is released when a launch of dev containers throws", async () => {
+      const events: string[] = [];
+      const failure = await runLocked(
+        [CONTAINERS],
+        () => Promise.reject(new Error('the editor did not start')),
+        events,
+      ).then(
+        () => 'resolved',
+        (error: unknown) => (error as Error).message,
+      );
+      deepStrictEqual(
+        [failure, events],
+        ['the editor did not start', ['take', 'release']],
+      );
+    });
+
+    it("each launch runs the helper stop program on its user-data folder once it has run, when it holds records: the run's for a runner launch, its own for a plain one", async () => {
+      const userDataFolders = ['user-data', 'user-data-containers'].map(name =>
+        path.join(workspace.root, name),
+      );
+      for (const userData of userDataFolders) {
+        const namespaceFolder = path.join(
+          userData,
+          'User',
+          'globalStorage',
+          'ext.a',
+          'registry',
+          'watch',
+        );
+        mkdirSync(namespaceFolder, {recursive: true});
+        writeFileSync(
+          path.join(
+            namespaceFolder,
+            `${createHash('sha256').update('one').digest('hex').slice(0, 32)}.json`,
+          ),
+          JSON.stringify({
+            namespace: 'watch',
+            recordKey: 'one',
+            nonce: 'n1',
+            endpoint: '/run/one.sock',
+          }),
+        );
+      }
+      const {calls, command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL, CONTAINERS, REMOTE],
+        command,
+        '',
+        sleep,
+        launch => {
+          calls.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+      );
+      const [sharedStop, ownStop] = userDataFolders.map(userData =>
+        [process.execPath, STOP_PROGRAM, userData].join(' '),
+      );
+      deepStrictEqual(
+        calls.filter(
+          call => call.startsWith('ran ') || call.includes(STOP_PROGRAM),
+        ),
+        [
+          'ran terminal',
+          sharedStop,
+          'ran containers',
+          ownStop,
+          'ran remote',
+          sharedStop,
+        ],
+      );
     });
 
     it('D-85: a launch with settings finds them over the base settings', async () => {
@@ -1814,6 +2082,14 @@ describe('acceptance', () => {
         CONTAINER,
       );
     });
+
+    it("tooling-66: tells the extension host the run's user-data folder, the one its editor starts on", () => {
+      strictEqual(
+        acceptanceConfiguration('/repo', {HARNESS_RUN_FOLDER: '/run'}).env
+          .HARNESS_USER_DATA,
+        '/run/user-data',
+      );
+    });
   });
 
   describe('the VSCodium run', () => {
@@ -1941,7 +2217,7 @@ describe('acceptance', () => {
         'extensions-containers-standdown',
         'ms-vscode-remote.remote-containers-0.0.0',
       );
-      deepStrictEqual(harness.standInFound, [
+      deepStrictEqual(harness.standInFound.get('containers-standdown'), [
         {
           publisher: 'ms-vscode-remote',
           name: 'remote-containers',
@@ -2420,7 +2696,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('D-85: a launch with no environment adds its log file and its windows folder to the harness variables', () => {
+    it("D-85, tooling-66: a launch with no environment adds its log file, its windows folder and the run's user-data folder to the harness variables", () => {
       deepStrictEqual(
         vscodiumConfiguration(
           workspace.root,
@@ -2437,6 +2713,7 @@ describe('acceptance', () => {
             'agent',
             'pids',
           ),
+          HARNESS_USER_DATA: path.join('/run', 'user-data'),
         },
       );
     });

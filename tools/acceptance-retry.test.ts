@@ -1,14 +1,18 @@
 /**
  * @fileoverview acceptance-retry: the automatic retry of the acceptance run when the editor window was reported
- * unresponsive (card tooling-01).
+ * unresponsive (card tooling-01), and the limits that end a launch whose editor stays after its results or that
+ * prints nothing.
  */
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {
+  boundReached,
+  launchLimits,
   runAndCollect,
   runWithRetry,
   shouldRetry,
   type AttemptResult,
+  type LaunchLimits,
 } from './acceptance.ts';
 
 /** Runs `run` from a scripted list of attempt results, repeating the last one, and counts the calls. */
@@ -118,6 +122,150 @@ describe('runWithRetry', () => {
     const lines: string[] = [];
     const status = await runWithRetry(attempt, line => lines.push(line));
     deepStrictEqual([status, called(), lines], [1, 1, []]);
+  });
+});
+
+describe('a launch past its limits', () => {
+  /** Small limits for a test, whose leftovers are a line in `ended`. */
+  function limits(ended: string[]): LaunchLimits {
+    return {
+      afterResultsMilliseconds: 300,
+      quietMilliseconds: 600,
+      checkMilliseconds: 50,
+      endLeftovers: () => {
+        ended.push('leftovers');
+      },
+    };
+  }
+
+  it("a child that prints passing results and stays: killed after the grace, its leftovers ended, and the rows' pass stands", async () => {
+    const ended: string[] = [];
+    const result = await runAndCollect(
+      process.execPath,
+      [
+        '-e',
+        'process.stdout.write("  3 passing (2s)\\n"); setTimeout(() => process.stdout.write("late\\n"), 100); setInterval(() => {}, 1000)',
+      ],
+      {},
+      () => undefined,
+      limits(ended),
+    );
+    deepStrictEqual(
+      [result, ended],
+      [
+        {
+          exitCode: 0,
+          output:
+            "  3 passing (2s)\nlate\nacceptance: the editor had not ended 0.3 s after its results; the launch's processes were ended, and its rows' result stands\n",
+        },
+        ['leftovers'],
+      ],
+    );
+  });
+
+  it("a child that prints failing results and stays: killed after the grace, and the rows' failure stands", async () => {
+    const result = await runAndCollect(
+      process.execPath,
+      [
+        '-e',
+        'process.stdout.write("  2 passing (2s)\\n  1 failing\\n"); setInterval(() => {}, 1000)',
+      ],
+      {},
+      () => undefined,
+      limits([]),
+    );
+    deepStrictEqual(result.exitCode, 1);
+  });
+
+  it('a child that prints nothing: killed after the quiet limit', async () => {
+    const ended: string[] = [];
+    const result = await runAndCollect(
+      process.execPath,
+      ['-e', 'setInterval(() => {}, 1000)'],
+      {},
+      () => undefined,
+      limits(ended),
+    );
+    deepStrictEqual(
+      [result, ended],
+      [
+        {
+          exitCode: 1,
+          output:
+            "acceptance: nothing was printed for 0.6 s; the launch's processes were ended\n",
+        },
+        ['leftovers'],
+      ],
+    );
+  });
+
+  it('a child that prints its results and ends in time: its own code, nothing ended', async () => {
+    const ended: string[] = [];
+    const result = await runAndCollect(
+      process.execPath,
+      [
+        '-e',
+        'process.stdout.write("  1 passing (1s)\\n"); process.exitCode = 3',
+      ],
+      {},
+      () => undefined,
+      limits(ended),
+    );
+    deepStrictEqual(
+      [result, ended],
+      [{exitCode: 3, output: '  1 passing (1s)\n'}, []],
+    );
+  });
+
+  it('boundReached: within both limits, past the grace after the results, past the quiet limit', () => {
+    const bounds = {
+      afterResultsMilliseconds: 60_000,
+      quietMilliseconds: 1_200_000,
+    };
+    deepStrictEqual(
+      [
+        boundReached(bounds, 1_000_000, 999_000, 950_000),
+        boundReached(bounds, 1_010_000, 1_005_000, 950_000),
+        boundReached(bounds, 1_300_000, 100_000, undefined),
+      ],
+      [
+        undefined,
+        'the editor had not ended 60 s after its results',
+        'nothing was printed for 1200 s',
+      ],
+    );
+  });
+
+  it("launchLimits, tooling-66: the leftovers are the editors on the run's profile folders, its own and each plain launch's, killed by their command line", () => {
+    const calls: string[][] = [];
+    const limitsOfRun = launchLimits(
+      '/tmp/acceptance-7-abc',
+      (program, programArguments) => {
+        calls.push([program, ...programArguments]);
+        return {status: 1, stdout: '', stderr: ''};
+      },
+    );
+    limitsOfRun.endLeftovers();
+    deepStrictEqual(
+      [
+        limitsOfRun.afterResultsMilliseconds,
+        limitsOfRun.quietMilliseconds,
+        calls,
+      ],
+      [
+        180_000,
+        1_200_000,
+        [
+          [
+            'pkill',
+            '-KILL',
+            '-f',
+            '--',
+            '/tmp/acceptance-7-abc/user-data(-[a-z0-9-]+)?( |$)',
+          ],
+        ],
+      ],
+    );
   });
 });
 

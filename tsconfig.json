@@ -131,6 +131,9 @@
       "path": "tests/acceptance/windows"
     },
     {
+      "path": "tests/acceptance/login-shells"
+    },
+    {
       "path": "tests/acceptance/config-files"
     },
     {
@@ -143,10 +146,22 @@
       "path": "tests/acceptance/terminal-pick"
     },
     {
+      "path": "tests/acceptance/preconnect"
+    },
+    {
       "path": "tests/acceptance/explorer"
     },
     {
       "path": "tests/acceptance/explorer-alone"
+    },
+    {
+      "path": "tests/acceptance/explorer-trust"
+    },
+    {
+      "path": "tests/acceptance/explorer-home"
+    },
+    {
+      "path": "tests/acceptance/explorer-rows"
     },
     {
       "path": "tests/acceptance/explorer-no-proposals"
@@ -183,6 +198,18 @@
     },
     {
       "path": "tests/acceptance/containers-explorer"
+    },
+    {
+      "path": "tests/acceptance/containers-ports"
+    },
+    {
+      "path": "tests/acceptance/containers-shutdown"
+    },
+    {
+      "path": "tests/acceptance/web-ui"
+    },
+    {
+      "path": "tests/acceptance/web-ui-trust"
     }
   ]
 }

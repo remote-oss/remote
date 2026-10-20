@@ -20,6 +20,7 @@ const TARGET: CliTarget = {
   idLabels: ['a=b'],
   mountWorkspaceGitRoot: true,
   mountGitWorktreeCommonDir: false,
+  features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
   logLevel: 'info',
 };
@@ -312,6 +313,17 @@ describe('the CLI bridge (card containers-04)', () => {
       await eventsOfStderr([rawLine('echo s3cr3t-'), rawLine('token\n')]),
       ['postCreate: echo ${localEnv:GITHUB_TOKEN}\n'],
     );
+  });
+
+  it('R-26, F-0412 AC-11: the build’s own raw output, which has no channel, reaches the log with a secret in it as its reference', async () => {
+    const build = JSON.stringify({
+      type: 'raw',
+      level: 2,
+      text: '#4 [2/3] RUN echo s3cr3t-token\n',
+    });
+    deepStrictEqual(await eventsOfStderr([build]), [
+      '-: #4 [2/3] RUN echo ${localEnv:GITHUB_TOKEN}\n',
+    ]);
   });
 
   it('R-26: a held tail is flushed, scrubbed, when the progress of its channel succeeds', async () => {
@@ -738,5 +750,175 @@ describe('the daemon refusal in the bridge (card containers-11)', () => {
       result.kind === 'setupFailed' ? 'refusal' in result : result,
       false,
     );
+  });
+});
+
+describe('the CLI bridge: templates (card containers-76)', () => {
+  const REQUEST = {
+    workspaceFolder: '/scratch/t1',
+    templateId: 'ghcr.io/devcontainers/templates/alpine',
+    templateArgs: {imageVariant: '3.22', flag: true},
+    features: [{id: 'ghcr.io/devcontainers/features/git:1', options: {}}],
+    omitPaths: ['.github/dependabot.yml'],
+  };
+  const APPLIED = '{"files":["./.devcontainer/devcontainer.json","./a.txt"]}';
+
+  it('F-0802 BR-1: apply runs templates apply with the folder, the id and the options, Features and omitted paths as JSON', async () => {
+    const {bridge, calls} = setup(ending(APPLIED));
+    await bridge.applyTemplate(REQUEST, () => undefined, NEVER);
+    deepStrictEqual(calls, [
+      [
+        'templates',
+        'apply',
+        '-w',
+        '/scratch/t1',
+        '-t',
+        'ghcr.io/devcontainers/templates/alpine',
+        '-a',
+        '{"imageVariant":"3.22","flag":"true"}',
+        '-f',
+        '[{"id":"ghcr.io/devcontainers/features/git:1","options":{}}]',
+        '--omit-paths',
+        '[".github/dependabot.yml"]',
+        '--log-level',
+        'info',
+      ],
+    ]);
+  });
+
+  it('F-0802 BR-1: a false option goes to the CLI as the text false, which it does not read as empty', async () => {
+    const {bridge, calls} = setup(ending(APPLIED));
+    await bridge.applyTemplate(
+      {...REQUEST, templateArgs: {enabled: false}},
+      () => undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      calls[0]?.[calls[0].indexOf('-a') + 1],
+      '{"enabled":"false"}',
+    );
+  });
+
+  it('F-0802 BR-7: metadata runs templates metadata with the id', async () => {
+    const {bridge, calls} = setup(ending('{"id":"alpine"}'));
+    await bridge.templateMetadata('ghcr.io/x/templates/t', NEVER);
+    deepStrictEqual(calls, [
+      ['templates', 'metadata', 'ghcr.io/x/templates/t', '--log-level', 'info'],
+    ]);
+  });
+
+  it('F-0802 BR-1: an apply that exits 0 with its JSON line gives the files', async () => {
+    const {bridge} = setup(ending(APPLIED));
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, NEVER),
+      {
+        kind: 'applied',
+        files: ['./.devcontainer/devcontainer.json', './a.txt'],
+      },
+    );
+  });
+
+  it('F-0802 7.E1: an apply that exits 1 with an empty stdout is a failure with its status', async () => {
+    const {bridge} = setup(ending(undefined, 1));
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, NEVER),
+      {kind: 'noResult', status: 1},
+    );
+  });
+
+  it('F-0802 7.E1: a non-zero exit is a failure even when stdout holds a line', async () => {
+    const {bridge} = setup(ending(APPLIED, 2));
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, NEVER),
+      {kind: 'noResult', status: 2},
+    );
+  });
+
+  it('F-0802 7.E1: an apply whose stdout is no JSON is a malformed result', async () => {
+    const {bridge} = setup(ending('done!'));
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, NEVER),
+      {kind: 'malformedResult', field: 'result'},
+    );
+  });
+
+  it('F-0802 7.E1: an apply whose files are not a list of text is a malformed result', async () => {
+    const {bridge} = setup(ending('{"files":["a",2]}'));
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, NEVER),
+      {kind: 'malformedResult', field: 'files'},
+    );
+  });
+
+  it('F-0802 BR-7: metadata exits 0 with an object and gives it', async () => {
+    const {bridge} = setup(ending('{"id":"alpine","options":{}}'));
+    deepStrictEqual(await bridge.templateMetadata('x', NEVER), {
+      kind: 'metadata',
+      metadata: {id: 'alpine', options: {}},
+    });
+  });
+
+  it('F-0802 BR-7: metadata that is no object is a malformed result, and a failing exit a failure', async () => {
+    const list = setup(ending('[1]'));
+    const failing = setup(ending(undefined, 1));
+    deepStrictEqual(
+      [
+        await list.bridge.templateMetadata('x', NEVER),
+        await failing.bridge.templateMetadata('x', NEVER),
+      ],
+      [
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'noResult', status: 1},
+      ],
+    );
+  });
+
+  it('F-0802 7.E1: the stderr lines of an apply reach onLine as they are, without their colour codes, and mean nothing', async () => {
+    const lines: string[] = [];
+    const {bridge} = setup(onStderr('\u001b[31mError: bad\u001b[39m', APPLIED));
+    const result = await bridge.applyTemplate(
+      REQUEST,
+      line => lines.push(line),
+      NEVER,
+    );
+    deepStrictEqual([lines, result.kind], [['Error: bad'], 'applied']);
+  });
+
+  it('F-0802 7.E1: a spawn that fails is a failure', async () => {
+    const {bridge} = setup(() =>
+      Promise.resolve({kind: 'spawnFailed', message: 'no node'}),
+    );
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, NEVER),
+      {kind: 'spawnFailed', message: 'no node'},
+    );
+  });
+
+  it('F-0802 7.E1: an abort ends the run, which then gives cancelled', async () => {
+    const controller = new AbortController();
+    const {bridge} = setup((cliArguments, onLine, cancellation) => {
+      controller.abort();
+      return Promise.resolve({
+        kind: 'ran',
+        result: undefined,
+        status: cancellation.aborted ? null : 0,
+      });
+    });
+    deepStrictEqual(
+      await bridge.applyTemplate(REQUEST, () => undefined, controller.signal),
+      {kind: 'cancelled'},
+    );
+  });
+
+  it('F-0802 7.E1: a request already aborted reaches the host aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let seen: boolean | undefined;
+    const {bridge} = setup((cliArguments, onLine, cancellation) => {
+      seen = cancellation.aborted;
+      return Promise.resolve({kind: 'ran', result: undefined, status: null});
+    });
+    await bridge.templateMetadata('x', controller.signal);
+    deepStrictEqual(seen, true);
   });
 });

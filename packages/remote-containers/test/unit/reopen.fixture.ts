@@ -3,6 +3,7 @@
  * what they recorded.
  */
 
+import type {WizardOutcome} from '../../src/authoring/wizard-stages.ts';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
@@ -56,11 +57,16 @@ export interface Setup {
   /** What the worktree setting's user value is. */
   mountGitWorktreeCommonDir: unknown;
   waitOnCheck: Promise<void>;
+  /** How the wizard ends, and the configuration files it leaves in the folder when it runs. */
+  wizard: WizardOutcome;
+  wizardLeaves: string[];
   targets: unknown[];
   /** The order of the progress and the open, as far as the rows on them look. */
   order: string[];
   /** What the progress asked the clock for. */
   timers: Array<{milliseconds: number; callback: () => void}>;
+  /** How many times the window told the shutdown helper that it leaves its container. */
+  left: number;
 }
 
 /** A setup of a trusted local window on the folder, with its configuration and a passing engine. */
@@ -89,9 +95,12 @@ export function setup(): Setup {
     dockerPath: 'docker',
     mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
+    wizard: {kind: 'cancelled'},
+    wizardLeaves: [],
     targets: [],
     order: [],
     timers: [],
+    left: 0,
   };
 }
 
@@ -99,6 +108,13 @@ export function setup(): Setup {
 export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
   const sink = new MemorySink();
   const ports: ReopenPorts = {
+    authoring: {
+      execute: folder => {
+        state.calls.push(`wizard ${folder}`);
+        state.existing.push(...state.wizardLeaves);
+        return Promise.resolve(state.wizard);
+      },
+    },
     gate: {
       missing: state.missing,
       setupAgain: () => {
@@ -178,16 +194,16 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         },
         showWarning: () => Promise.resolve(undefined),
         openPreview: () => Promise.resolve(),
-        showInformation: message => {
-          state.shown.push(`info ${message}`);
-        },
       },
+      useTemplate: () => Promise.resolve(),
       compare: (left, right) => left.localeCompare(right, 'en'),
       translate: template => template,
     },
     settings: {
       dockerPath: () => state.dockerPath,
       mountGitWorktreeCommonDir: () => state.mountGitWorktreeCommonDir,
+      defaultFeatures: () => undefined,
+      lockfile: () => undefined,
     },
     engine: {
       firstCheck: async base => {
@@ -223,6 +239,13 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         state.targets.push(target);
         state.calls.push(`readConfiguration ${target.workspaceFolder}`);
         return Promise.resolve(state.read);
+      },
+    },
+    shutdown: {
+      leave: () => {
+        state.left += 1;
+        state.order.push('leave');
+        return Promise.resolve();
       },
     },
     opener: {

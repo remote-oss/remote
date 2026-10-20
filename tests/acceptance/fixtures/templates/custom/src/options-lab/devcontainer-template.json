@@ -1,0 +1,41 @@
+{
+  "id": "options-lab",
+  "version": "1.0.0",
+  "name": "Options Lab",
+  "description": "The acceptance run's own template with every shape of option and several optional files.",
+  "options": {
+    "flavour": {
+      "type": "string",
+      "description": "Flavour:",
+      "enum": ["a", "b", "c"],
+      "default": "b"
+    },
+    "channel": {
+      "type": "string",
+      "description": "Channel:",
+      "proposals": ["stable", "edge"],
+      "default": "stable"
+    },
+    "motto": {
+      "type": "string",
+      "description": "Motto:",
+      "default": "plain"
+    },
+    "withDocs": {
+      "type": "boolean",
+      "description": "With docs",
+      "default": true
+    },
+    "withTests": {
+      "type": "boolean",
+      "description": "With tests",
+      "default": false
+    },
+    "quiet": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "optionalPaths": ["zeta.txt", "docs/*", "alpha.txt"],
+  "platforms": ["Any"]
+}

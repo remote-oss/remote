@@ -1,0 +1,9 @@
+{
+  "id": "lab-depends-a",
+  "version": "1.0.0",
+  "name": "Lab Depends A",
+  "description": "The acceptance run's own Feature that depends on lab-depends-e.",
+  "dependsOn": {
+    "${registry}/remote-oss-run/features/lab-depends-e:1": {}
+  }
+}

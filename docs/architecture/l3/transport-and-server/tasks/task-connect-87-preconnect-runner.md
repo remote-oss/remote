@@ -279,11 +279,14 @@ AC-34 and AC-42 leave processes running. Kill them by pid at the end of the row,
 
 ### Coverage (`docs/architecture/catalogue/coverage-slice1.tsv`)
 
-- Tag `acceptance`: 2–15, 18, 19, 21–27, 29, 30, 32, 34–40 and 42. A row of a mixed criterion (24, 25, 27, 35)
-  covers everything outside the troubleshooting row, which is F-2605's (its own lines are deferred under D-86).
+- Tag `acceptance`: 2–15, 18, 19, 21–23, 26, 29, 30, 32, 34, 36–40 and 42.
 - Tag `unit`: 1 (if coverage-47 found no manifest row, add `F-2108.AC-1` beside the other manifest rows of
   `docs.test.ts`/the manifest test), 16, 17, 31, 33 and 41.
-- Tag `deferred`: 20 with `D-86: only clearAllSessionHints of F-2605 is in 0.2`, and 28 with `D-60: Windows client`.
+- Tag `deferred` (athena's ruling on #1266, 2026-10-20):
+  - **20, 24, 25, 27 and 35**, with `D-86: only clearAllSessionHints of F-2605 is in 0.2`. Each asserts the
+    `PreconnectScriptFailure` row, which is F-2605's and out under D-86, so each is deferred whole (the AC-72 rule).
+    The rows that prove their failure dialog stay, and may still cite them;
+  - **28**, with `D-60: Windows client`.
 
 ## 5. Done when
 

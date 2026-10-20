@@ -4,7 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
@@ -27,6 +27,11 @@ const LOCALES = [
   'zh-cn',
   'zh-tw',
 ];
+
+/** Whether none of the keys names telemetry, case-insensitively. */
+function noTelemetryKey(keys: string[]): boolean {
+  return keys.every(key => !/telemetry/i.test(key));
+}
 
 /** A JSON file of the package. */
 function jsonOf(file: string): Record<string, unknown> {
@@ -89,7 +94,37 @@ function alternativesOf(when: unknown): string[] {
     .map(each => each.trim());
 }
 
+/** An address of Microsoft's: its sites, its short links, or the reference extensions' repositories. */
+const MICROSOFT_ADDRESS =
+  /microsoft\.com|aka\.ms|visualstudio\.com|Microsoft\/vscode/i;
+
+/** The manifest, the string bundles and the README, each as its text. */
+function addressedTexts(): string[] {
+  return readdirSync(PACKAGE)
+    .filter(file => /^(package(\.nls.*)?\.json|README\.md)$/.test(file))
+    .map(file => readFileSync(path.join(PACKAGE, file), 'utf8'));
+}
+
 describe('the manifest of the Remote Explorer package', () => {
+  it('F-5901 AC-3 (ruling-d56): the repository and bugs are the monorepo’s, as the pack’s and the other members’ are, and no address in the manifest, the bundles or the README is Microsoft’s', () => {
+    deepStrictEqual(
+      [
+        MANIFEST.repository,
+        MANIFEST.bugs,
+        addressedTexts().filter(text => MICROSOFT_ADDRESS.test(text)),
+      ],
+      [
+        {
+          type: 'git',
+          url: 'https://github.com/remote-oss/remote.git',
+          directory: 'packages/remote-explorer',
+        },
+        {url: 'https://github.com/remote-oss/remote/issues'},
+        [],
+      ],
+    );
+  });
+
   it('F-5001.AC-18, F-5901.AC-1: F-5901.5.identity: the top-level fields are the card, and no other', () => {
     deepStrictEqual(
       {
@@ -498,5 +533,54 @@ describe('the manifest of the Remote Explorer package', () => {
       ungated: [],
       locales: LOCALES,
     });
+  });
+
+  it('F-5901 AC-7: the package declares no telemetry: no telemetry.json, and no telemetry key in the manifest', () => {
+    deepStrictEqual(
+      [
+        existsSync(path.join(PACKAGE, 'telemetry.json')),
+        noTelemetryKey(Object.keys(MANIFEST)),
+        noTelemetryKey(Object.keys(CONTRIBUTES)),
+      ],
+      [false, true, true],
+    );
+  });
+
+  it("F-5901 AC-13: the package ships the repository's MIT licence", () => {
+    const root = path.join(PACKAGE, '..', '..');
+    const licence = readFileSync(path.join(PACKAGE, 'LICENSE'), 'utf8');
+    const rootLicence = readFileSync(path.join(root, 'LICENSE'), 'utf8');
+    const ignore = readFileSync(
+      path.join(PACKAGE, '.vscodeignore'),
+      'utf8',
+    ).split('\n');
+    deepStrictEqual(
+      [
+        licence === rootLicence,
+        licence.startsWith('MIT License'),
+        licence.includes('Microsoft'),
+        ignore.includes('!LICENSE'),
+      ],
+      [true, true, false, true],
+    );
+  });
+
+  it("F-5901 AC-14 (ruling-737-readme): the README says it collects no telemetry, that it stands down beside another Remote Explorer, and to install it directly, naming no other publisher's id", () => {
+    const readme = readFileSync(path.join(PACKAGE, 'README.md'), 'utf8')
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+    const bullets = [
+      '- Remote Explorer collects no telemetry.',
+      "- Running it beside another Remote Explorer extension isn't supported: when one is installed and enabled, this one stands down and shows a warning.",
+      "- Extension packs that list another Remote Explorer extension don't install this one. Install it directly.",
+    ];
+    deepStrictEqual(
+      [
+        ...bullets.map(bullet => readme.includes(bullet.toLowerCase())),
+        readme.includes('ms-vscode'),
+        readme.includes('microsoft'),
+      ],
+      [true, true, true, false, false],
+    );
   });
 });

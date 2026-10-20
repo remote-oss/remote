@@ -36,6 +36,34 @@ function hostLaunchLabels(): string[] {
   );
 }
 
+/** The labels of the launches from the explorer ones on, in their order. */
+function labelsFromExplorer(): string[] {
+  return [
+    'explorer',
+    'explorer-alone',
+    'explorer-trust',
+    'explorer-home',
+    'explorer-rows',
+    'explorer-no-proposals',
+    'explorer-standdown',
+    'trust',
+    'trust-terminal',
+    'web-ui',
+    'web-ui-trust',
+    'containers',
+    'containers-standdown',
+    'containers-no-proposals',
+    'containers-trust',
+    'containers-volume',
+    'containers-explorer',
+    'containers-ports',
+    'containers-shutdown',
+    ...hostLaunchLabels(),
+    'genuine',
+    'ssh-no-proposals',
+  ];
+}
+
 describe('the launches of the VSCodium run', () => {
   it('tooling-53: every launch has one group from the table, and every group has a launch', () => {
     const launches = launchesOf(REPOSITORY_ROOT);
@@ -75,7 +103,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -94,24 +122,12 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
+        'login-shells',
+        'preconnect',
         'config-files',
         'default-ports',
         'no-proposals',
-        'explorer',
-        'explorer-alone',
-        'explorer-no-proposals',
-        'explorer-standdown',
-        'trust',
-        'trust-terminal',
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-volume',
-        'containers-explorer',
-        ...hostLaunchLabels(),
-        'genuine',
-        'ssh-no-proposals',
+        ...labelsFromExplorer(),
       ],
     );
   });
@@ -190,6 +206,9 @@ describe('the launches of the VSCodium run', () => {
           true,
           ['remote-oss.remote-ssh'],
         ],
+        ['explorer-trust', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-home', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-rows', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-no-proposals',
           ['remote-oss.remote-explorer'],
@@ -199,6 +218,8 @@ describe('the launches of the VSCodium run', () => {
         ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
+        ['web-ui', undefined, true, undefined],
+        ['web-ui-trust', undefined, true, undefined],
         [
           'containers',
           ['remote-oss.remote-containers'],
@@ -229,6 +250,18 @@ describe('the launches of the VSCodium run', () => {
           ['remote-oss.remote-containers', 'remote-oss.remote-explorer'],
           true,
           undefined,
+        ],
+        [
+          'containers-ports',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
+        ],
+        [
+          'containers-shutdown',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
         ],
         ['genuine', undefined, true, undefined],
         ['ssh-no-proposals', undefined, true, undefined],
@@ -296,6 +329,20 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-ports',
+          'containers-ports',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
+        [
+          'containers-shutdown',
+          'containers-shutdown',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
       ],
     );
   });
@@ -321,11 +368,13 @@ describe('the launches of the VSCodium run', () => {
         'containers-trust',
         'containers-volume',
         'containers-explorer',
+        'containers-ports',
+        'containers-shutdown',
       ],
     );
   });
 
-  it('tooling-33, containers-12: the two trust launches and containers-trust are the only ones with workspace trust on; trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and containers-trust turns the prompt off', () => {
+  it('tooling-33, containers-12, coverage-25c: explorer-trust, the two trust launches, web-ui-trust and containers-trust are the only ones with workspace trust on; explorer-trust keeps the explorer’s title, trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and web-ui-trust and containers-trust turn the prompt off', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' && launch.workspaceTrust !== undefined
@@ -333,6 +382,11 @@ describe('the launches of the VSCodium run', () => {
           : [],
       ),
       [
+        [
+          'explorer-trust',
+          true,
+          {'window.title': '[${rootName}]${remoteName}'},
+        ],
         [
           'trust',
           true,
@@ -348,6 +402,14 @@ describe('the launches of the VSCodium run', () => {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
             'remote.SSH.remotePlatform': {harness: 'linux'},
+          },
+        ],
+        [
+          'web-ui-trust',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'security.workspace.trust.startupPrompt': 'never',
           },
         ],
         [
@@ -467,21 +529,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'default-ports',
-        'explorer',
-        'explorer-alone',
-        'explorer-no-proposals',
-        'explorer-standdown',
-        'trust',
-        'trust-terminal',
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-volume',
-        'containers-explorer',
-        ...hostLaunchLabels(),
-        'genuine',
-        'ssh-no-proposals',
+        ...labelsFromExplorer(),
       ],
     );
   });
@@ -491,7 +539,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 4}, () => ({
+      Array.from({length: 7}, () => ({
         'window.title': '[${rootName}]${remoteName}',
       })),
     );
@@ -748,7 +796,8 @@ describe('the install cases (card coverage-17)', () => {
     'for i in $(seq 1 20); do ' +
     "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
     'sleep 0.5; done; exit 1';
-  const REMOVE = 'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv';
+  const REMOVE =
+    'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv /home/harness/inst';
 
   /** An install case of `fields`, with the label and cite every case has. */
   function installCase(fields: Partial<HostCase>): HostCase {
@@ -987,6 +1036,19 @@ describe('the launch with no runner', () => {
     );
   });
 
+  it('tooling-55: the login-shells launch is plain and has a suite folder of Node tests', () => {
+    deepStrictEqual(
+      launches.filter(launch => launch.label === 'login-shells'),
+      [
+        {
+          label: 'login-shells',
+          kind: 'plain',
+          suite: 'login-shells',
+        },
+      ],
+    );
+  });
+
   it('F-3903 §5 rule 4: the no-proposals launch is plain and starts the editor without the proposed API', () => {
     deepStrictEqual(
       launches.filter(launch => launch.label === 'no-proposals'),
@@ -1137,10 +1199,61 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59: only the containers launch asks for the run’s registry', () => {
+  it('containers-72: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, and no other containers launch does', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label.startsWith('containers'))
+        .map(launch => [
+          launch.label,
+          launch.kind === 'plain' ? launch.environment : undefined,
+        ])
+        .filter(([, environment]) => environment !== undefined),
+      [['containers-ports', {PATH: '<run>/xdg-bin:<path>'}]],
+    );
+  });
+
+  it('coverage-48: web-ui is a renderer launch of the suite of its name, with a recording browser of the run’s folder first on the editor’s PATH and no extension of its own', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label === 'web-ui')
+        .map(launch =>
+          launch.kind === 'plain'
+            ? [
+                launch.suite,
+                launch.debuggingPort,
+                launch.environment,
+                launch.withExtensions,
+                launch.workspaceTrust,
+                launch.settings,
+              ]
+            : undefined,
+        ),
+      [
+        [
+          'web-ui',
+          true,
+          {PATH: '<run>/browser-bin:<path>'},
+          undefined,
+          undefined,
+          {'window.title': '[${rootName}]'},
+        ],
+      ],
+    );
+  });
+
+  it('containers-59, tooling-56: only the containers launch and containers-ports ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
+        .map(launch => launch.label),
+      ['containers', 'containers-ports'],
+    );
+  });
+
+  it('tooling-57: only the containers launch asks for the run’s templates', () => {
+    deepStrictEqual(
+      launchesOf(REPOSITORY_ROOT)
+        .filter(launch => launch.templates === true)
         .map(launch => launch.label),
       ['containers'],
     );

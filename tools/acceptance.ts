@@ -5,11 +5,19 @@
  *
  * It builds the host image of tests/acceptance/host, makes a key pair for this run, starts the host with the public
  * key, writes an ssh_config whose `Host harness` reaches it, bundles the tests of tests/acceptance/suite, and starts
- * `@vscode/test-cli` with tests/acceptance/vscode-test.mjs. The editor gets a fresh user-data and extensions folder,
- * the packaged VSIX files of the extensions under test, and the harness variables. The container and the run's
+ * `@vscode/test-cli` with tests/acceptance/vscode-test.mjs. The editor gets a fresh user-data and extensions folder
+ * (each plain launch a user-data folder of its own), the packaged VSIX files of the extensions under test, and the
+ * harness variables. The container and the run's
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
+import {stopHelpersUnder} from './acceptance-helper-stop.ts';
+import {
+  daemonLock,
+  type LaunchLock,
+  NO_LOCK,
+  nodeProcessAlive,
+} from './acceptance-lock.ts';
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {
   type RunRegistry,
@@ -17,6 +25,7 @@ import {
   SYSTEM_CLOCK,
 } from './acceptance-registry.ts';
 import {staleRefusal} from './acceptance-stale.ts';
+import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -28,7 +37,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {tmpdir} from 'node:os';
+import {hostname, tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -94,6 +103,7 @@ import {
   runPlainLaunch,
   startDetached,
   type Started,
+  userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
 import {
@@ -171,6 +181,12 @@ export interface HarnessVariables {
   HARNESS_DEVCONTAINER_IMAGE?: string;
   /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
   HARNESS_REGISTRY?: string;
+  /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
+  HARNESS_TEMPLATE_REGISTRY?: string;
+  /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
+  REMOTE_OSS_TEMPLATE_INDEX?: string;
+  /** The URL of the run's control manifest on the download host, when a chosen launch asks for templates; harness-only. */
+  REMOTE_OSS_CONTROL_MANIFEST?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -239,6 +255,12 @@ export interface HarnessDependencies {
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
   startRegistry: (runId: string) => Promise<RunRegistry>;
+  /** Publishes the run's templates into the registry at `address` and writes the run's index; gives the templates' registry. */
+  prepareTemplates: (
+    root: string,
+    runFolder: string,
+    address: string,
+  ) => Promise<string>;
 }
 
 /** How long the run waits for sshd to accept the first connection, in attempts half a second apart. */
@@ -373,6 +395,48 @@ export function harnessSshConfig(
     ...accountAlias(
       'harness-fish',
       'harness-fish',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-bash',
+      'harness-bash',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-zsh',
+      'harness-zsh',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-dash',
+      'harness-dash',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-ksh',
+      'harness-ksh',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-csh',
+      'harness-csh',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-tcsh',
+      'harness-tcsh',
       port,
       runFolder,
       keyLines(runFolder),
@@ -551,18 +615,19 @@ export function packagedExtensions(
 }
 
 /**
- * The editor's user settings of the run: the extensions under test read the harness's ssh_config, and `extra` is a
- * launch's own settings. With `label`, the same bytes go to `<run folder>/<label>-settings.json`, so a row compares
- * the file the editor read with the one its launch got. A `tail` is text put after the last member with no comma
- * before it: a syntax error, after members the editor still reads.
+ * The editor's user settings of a launch, in its user-data folder: the extensions under test read the harness's
+ * ssh_config, and `extra` is the launch's own settings. With a launch, the same bytes go to
+ * `<run folder>/<label>-settings.json`, so a row compares the file the editor read with the one its launch got. The
+ * launch's `settingsTail` is text put after the last member with no comma before it: a syntax error, after members the
+ * editor still reads.
  */
 export function writeUserSettings(
   runFolder: string,
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
-  label?: string,
-  tail?: string,
+  launch?: Launch,
 ): void {
+  const tail = launch?.settingsTail;
   const written = JSON.stringify(
     {'remote.SSH.configFile': configFile, ...extra},
     null,
@@ -572,11 +637,11 @@ export function writeUserSettings(
     tail === undefined
       ? `${written}\n`
       : `${written.slice(0, -2)}\n  ${tail}\n}\n`;
-  const folder = path.join(runFolder, 'user-data', 'User');
+  const folder = path.join(userDataFolderOf(runFolder, launch), 'User');
   mkdirSync(folder, {recursive: true});
   writeFileSync(path.join(folder, 'settings.json'), bytes);
-  if (label !== undefined) {
-    writeFileSync(path.join(runFolder, `${label}-settings.json`), bytes);
+  if (launch !== undefined) {
+    writeFileSync(path.join(runFolder, `${launch.label}-settings.json`), bytes);
   }
 }
 
@@ -750,7 +815,7 @@ async function prepare(
     for (const {folder, files, client} of installs) {
       checked(command, editorCommands[client], [
         `--extensions-dir=${folder}`,
-        `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+        `--user-data-dir=${userDataFolderOf(runFolder)}`,
         `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
         ...files.flatMap(file => ['--install-extension', file]),
       ]);
@@ -762,12 +827,19 @@ async function prepare(
       writeStandIns(runFolder, launch, standInEngines(root, launch));
     }
   }
-  const registry = chosen.some(launch => launch.registry === true)
+  const registry = chosen.some(
+    launch => launch.registry === true || launch.templates === true,
+  )
     ? await dependencies.startRegistry(runId)
     : undefined;
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
+  const templateRegistry =
+    registry !== undefined && chosen.some(launch => launch.templates === true)
+      ? await dependencies.prepareTemplates(root, runFolder, registry.address)
+      : undefined;
+  const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
   const devContainerImage = launches.some(needsDevContainerImage)
     ? devContainerImageFor(command, root, runId)
     : undefined;
@@ -782,6 +854,13 @@ async function prepare(
       ? {}
       : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
     ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
+    ...(templateRegistry === undefined || templateIndex === undefined
+      ? {}
+      : {
+          HARNESS_TEMPLATE_REGISTRY: templateRegistry,
+          REMOTE_OSS_TEMPLATE_INDEX: `${templateIndex}/templates/devcontainer-index.json`,
+          REMOTE_OSS_CONTROL_MANIFEST: `${templateIndex}/control/devcontainer-control-manifest.json`,
+        }),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
@@ -905,6 +984,7 @@ export async function runLaunches(
   report: (line: string) => void = line => {
     console.log(line);
   },
+  lock: LaunchLock = NO_LOCK,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -917,36 +997,52 @@ export async function runLaunches(
       // reused by this resolve without any check, so the run waits the grace out.
       await sleep(FRESH_RESOLVE_WAIT_MILLISECONDS);
     }
-    exitCodes.push(
-      await runWithRetry(async () => {
-        // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
-        if (launch !== undefined) {
-          if (launch.hostSetup !== undefined) {
-            runHostSetup(command, container, launch.hostSetup);
-          }
-          writeUserSettings(
-            runFolder,
-            configFile,
-            withRunTokens(
-              withHarnessBases(launch.settings, bases),
-              runFolder,
-              process.env.PATH ?? '',
-            ),
-            launch.label,
-            launch.settingsTail,
-          );
-          await beforeAttempt(launch);
-        }
-        const held = await holdPorts(launch?.clientListeners ?? []);
-        try {
-          return await runLaunch(launch);
-        } finally {
-          await held.release();
-        }
-      }, report),
-    );
+    // A launch of dev containers holds the daemon's lock through all its attempts: see acceptance-lock.ts.
+    const locked =
+      launch !== undefined && launchGroupOf(launch) === 'containers';
+    if (locked) {
+      await lock.take();
+    }
+    try {
+      exitCodes.push(await runAttempts(launch));
+    } finally {
+      if (locked) {
+        lock.release();
+      }
+    }
   }
   return exitCodes;
+
+  /** The launch's attempts (one, or two after a hung window). */
+  function runAttempts(launch: Launch | undefined): Promise<number> {
+    return runWithRetry(async () => {
+      // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
+      if (launch !== undefined) {
+        if (launch.hostSetup !== undefined) {
+          runHostSetup(command, container, launch.hostSetup);
+        }
+        writeUserSettings(
+          runFolder,
+          configFile,
+          withRunTokens(
+            withHarnessBases(launch.settings, bases),
+            runFolder,
+            process.env.PATH ?? '',
+          ),
+          launch,
+        );
+        await beforeAttempt(launch);
+      }
+      const held = await holdPorts(launch?.clientListeners ?? []);
+      try {
+        return await runLaunch(launch);
+      } finally {
+        await held.release();
+        // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
+        stopHelpersUnder(userDataFolderOf(runFolder, launch), command);
+      }
+    }, report);
+  }
 }
 
 /**
@@ -1081,6 +1177,21 @@ export async function runAcceptance(
           markDownloadRequests(runFolder, launch.label, variables);
         },
         {...variables},
+        undefined,
+        undefined,
+        daemonLock(
+          dependencies.command,
+          variables.HARNESS_RUN_ID,
+          {
+            now: Date.now,
+            sleep: dependencies.sleep,
+            hostName: hostname(),
+            processAlive: nodeProcessAlive,
+          },
+          line => {
+            console.log(line);
+          },
+        ),
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
@@ -1120,7 +1231,7 @@ export function acceptanceConfiguration(
     // test-cli expands a glob relative to its configuration file, tests/acceptance/vscode-test.mjs.
     files: 'dist/**/*.test.cjs',
     launchArgs: editorArguments(runFolder),
-    env: {...environment},
+    env: {...environment, HARNESS_USER_DATA: userDataFolderOf(runFolder)},
     mocha: {ui: 'bdd', timeout: 60_000},
   };
 }
@@ -1145,6 +1256,7 @@ export function vscodiumConfiguration(
       'agent',
       'pids',
     ),
+    HARNESS_USER_DATA: userDataFolderOf(runFolder),
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
@@ -1443,6 +1555,7 @@ export function runAndCollect(
   programArguments: readonly string[],
   options: {cwd?: string; env?: NodeJS.ProcessEnv} = {},
   echo: (chunk: string) => void = chunk => process.stdout.write(chunk),
+  limits?: LaunchLimits,
 ): Promise<AttemptResult> {
   return new Promise<AttemptResult>((resolve, reject) => {
     const child = spawn(program, [...programArguments], {
@@ -1451,20 +1564,126 @@ export function runAndCollect(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const chunks: Buffer[] = [];
+    let lastOutput = Date.now();
+    let resultsAt: number | undefined;
+    let tail = '';
+    let ended: string | undefined;
+    let resultsStand = false;
     for (const stream of [child.stdout, child.stderr]) {
       stream.on('data', (chunk: Buffer) => {
         chunks.push(chunk);
-        echo(chunk.toString('utf8'));
+        const text = chunk.toString('utf8');
+        echo(text);
+        lastOutput = Date.now();
+        tail = (tail + text).slice(-RESULTS_TAIL_LENGTH);
+        if (resultsAt === undefined && RESULTS_LINE.test(tail)) {
+          resultsAt = lastOutput;
+        }
       });
     }
+    const watch =
+      limits === undefined
+        ? undefined
+        : setInterval(() => {
+            const reason = boundReached(
+              limits,
+              Date.now(),
+              lastOutput,
+              resultsAt,
+            );
+            if (reason === undefined) {
+              return;
+            }
+            clearInterval(watch);
+            // Past its results, the rows have run: a slow quit ends the processes, and the rows' result stands.
+            resultsStand = resultsAt !== undefined;
+            ended = `acceptance: ${reason}; the launch's processes were ended${resultsStand ? ", and its rows' result stands" : ''}\n`;
+            echo(ended);
+            child.kill('SIGKILL');
+            limits.endLeftovers();
+          }, limits.checkMilliseconds);
     child.on('close', (code: number | null) => {
-      resolve({
-        exitCode: code ?? 1,
-        output: Buffer.concat(chunks).toString('utf8'),
-      });
+      clearInterval(watch);
+      const output = Buffer.concat(chunks).toString('utf8');
+      resolve(
+        ended === undefined
+          ? {exitCode: code ?? 1, output}
+          : {
+              exitCode: resultsStand && !FAILING_LINE.test(output) ? 0 : 1,
+              output: output + ended,
+            },
+      );
     });
     child.on('error', reject);
   });
+}
+
+/** How long a launch may go on: past its results, and with nothing printed; and what ends what it left running. */
+export interface LaunchLimits {
+  /** How long the editor may take to end after mocha's results line ("N passing (…)"). */
+  afterResultsMilliseconds: number;
+  /** How long the launch may print nothing at all. */
+  quietMilliseconds: number;
+  /** How often the limits are checked. */
+  checkMilliseconds: number;
+  /** Ends what the launch's process leaves behind once it is killed: an editor still on one of the run's profiles. */
+  endLeftovers: () => void;
+}
+
+/** Mocha's results line, which a launch prints once all its rows have run. */
+const RESULTS_LINE = /^\s*\d+ passing \(/m;
+
+/** Mocha's line for the rows that failed, which follows its results line when any did. */
+const FAILING_LINE = /^\s*\d+ failing$/m;
+
+/** How much of the output's end is kept to find the results line across two chunks. */
+const RESULTS_TAIL_LENGTH = 400;
+
+/**
+ * Why a launch is over its limits at `now`, or undefined: its editor has not ended `afterResultsMilliseconds` after
+ * its results line, or it has printed nothing for `quietMilliseconds`.
+ */
+export function boundReached(
+  limits: Pick<LaunchLimits, 'afterResultsMilliseconds' | 'quietMilliseconds'>,
+  now: number,
+  lastOutput: number,
+  resultsAt: number | undefined,
+): string | undefined {
+  if (
+    resultsAt !== undefined &&
+    now - resultsAt >= limits.afterResultsMilliseconds
+  ) {
+    return `the editor had not ended ${String(limits.afterResultsMilliseconds / 1000)} s after its results`;
+  }
+  if (now - lastOutput >= limits.quietMilliseconds) {
+    return `nothing was printed for ${String(limits.quietMilliseconds / 1000)} s`;
+  }
+  return undefined;
+}
+
+/**
+ * A launch's limits on a run: three minutes for the editor to end after its results (a window connected to a container
+ * takes about a minute to quit), twenty minutes of silence (a row's own limit is at most ten), checked every five
+ * seconds. What is left is any editor on one of the run's profile folders, the runner launches' shared one or a plain
+ * launch's own (`user-data-<label>`, labels being lower-case letters, digits and hyphens).
+ */
+export function launchLimits(
+  runFolder: string,
+  command: CommandRunner,
+): LaunchLimits {
+  return {
+    afterResultsMilliseconds: 3 * 60_000,
+    quietMilliseconds: 20 * 60_000,
+    checkMilliseconds: 5000,
+    endLeftovers: () => {
+      command('pkill', [
+        '-KILL',
+        '-f',
+        '--',
+        `${path.join(runFolder, 'user-data')}(-[a-z0-9-]+)?( |$)`,
+      ]);
+    },
+  };
 }
 
 /**
@@ -1486,6 +1705,8 @@ export function runTestCli(
       ...(label === undefined ? [] : ['--label', label]),
     ],
     {cwd: root, env: {...process.env, ...variables}},
+    undefined,
+    launchLimits(variables.HARNESS_RUN_FOLDER, runCommand),
   );
 }
 
@@ -1699,6 +1920,8 @@ if (isMainModule(import.meta.url)) {
         startAgent: startRunAgent,
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
+        prepareTemplates: (root, runFolder, address) =>
+          prepareRunTemplates(runCommand, root, runFolder, address, ghcrLayer),
         startDownloads: startRunDownloads.bind(
           undefined,
           runCommand,
@@ -1716,10 +1939,13 @@ if (isMainModule(import.meta.url)) {
             {
               start: startDetached,
               runTests: program =>
-                runAndCollect(program.file, program.programArguments, {
-                  cwd: root,
-                  env: program.environment,
-                }),
+                runAndCollect(
+                  program.file,
+                  program.programArguments,
+                  {cwd: root, env: program.environment},
+                  undefined,
+                  launchLimits(variables.HARNESS_RUN_FOLDER, runCommand),
+                ),
             },
           ),
       },

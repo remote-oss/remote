@@ -1,6 +1,6 @@
 node_modules/
 dist/
-.vscode-test/
+.vscode-test
 *.tsbuildinfo
 *.vsix
 .tsc/

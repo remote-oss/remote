@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {chmodSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -13,6 +14,7 @@ import {
   reloadingCommand,
   reloadWindow,
   reopenInContainer,
+  recentlyOpenedIn,
   reopenStarted,
   startInWindow,
   runLabelArguments,
@@ -117,6 +119,27 @@ function identityOf(folderUri: string): {payload: unknown; path: string} {
     ) as unknown,
     path: decodeURIComponent(match?.[2] ?? ''),
   };
+}
+
+/**
+ * The Open Recent entries of the dev container window of `folder`, whose in-container folder is `/workspaces/<folder
+ * name>`, as window `name` reads the editor's list.
+ */
+async function recentEntriesOf(name: string, folder: string) {
+  return (await recentlyOpenedIn(name)).filter(
+    entry =>
+      entry.remoteAuthority?.startsWith('dev-container+') === true &&
+      entry.uri.endsWith(`/workspaces/${path.basename(folder)}`),
+  );
+}
+
+/** The label the entry of `folder` stores: its host path, with the home folder as ~, and the static suffix. */
+function storedLabelOf(folder: string): string {
+  const home = os.homedir();
+  const shown = folder.startsWith(`${home}/`)
+    ? `~${folder.slice(home.length)}`
+    : folder;
+  return `${shown} [Dev Container]`;
 }
 
 /** F-0410's dialog details for a generic failure and for a missing docker, as `failure-strings.ts` has them. */
@@ -1255,7 +1278,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-10 (r10): a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, and skips postStartCommand', async () => {
+  it('F-0405 AC-10 (r10): a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, skips postStartCommand, and the log names the command, its exit code and the skip', async () => {
     const folder = devContainerFolder('c54-rebuild-poststart', {
       name: 'Rebuild Poststart',
       postCreateCommand: 'exit 7',
@@ -1278,8 +1301,8 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         '-c',
         'test -e /tmp/c54-poststart && echo yes || echo no',
       ]);
-      const lines = containersLogSince(mark).filter(line =>
-        line.includes('lifecycle'),
+      const lines = containersLogSince(mark).filter(
+        line => line.includes('postCreateCommand') && line.includes('failed'),
       );
       const centre = await notificationCentre(name);
       const dialog = await dialogOf(name);
@@ -1294,6 +1317,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         {
           started: 'no',
           lines: [
+            'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
             'the lifecycle commands failed: lifecycleFailed (postCreateCommand)',
           ],
           centre: [],
@@ -1481,6 +1505,56 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         title: true,
         indicator: 'Dev Container: Identity Name',
       });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0501 AC-1 (stored-label): the Open Recent entry of the connected window stores the host path and the static suffix as its label, and the window’s authority as its remote authority', async () => {
+    const folder = devContainerFolder('c71-stored', {name: 'Stored Name'});
+    try {
+      const name = await reopened(folder);
+      const entries = await recentEntriesOf(name, folder);
+      const authority = entries[0]?.remoteAuthority ?? '';
+      await closeWindow(name);
+      deepStrictEqual(
+        entries.map(entry => [
+          entry.label,
+          entry.remoteAuthority,
+          entry.uri.startsWith(
+            `vscode-remote://${authority.replace('+', '%2B')}/`,
+          ),
+        ]),
+        [[storedLabelOf(folder), authority, true]],
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0501 AC-8 (rename): renaming the configuration and reconnecting changes the live label and leaves the stored one', async () => {
+    const folder = devContainerFolder('c71-rename', {name: 'Old Name'});
+    try {
+      const first = await reopened(folder);
+      const before = await recentEntriesOf(first, folder);
+      await closeWindow(first);
+      devContainerFolder('c71-rename', {name: 'New Name'});
+      const second = await reopened(folder);
+      const after = await recentEntriesOf(second, folder);
+      const indicator = (await statusItem(second, 'status.host')).text;
+      await closeWindow(second);
+      deepStrictEqual(
+        [
+          indicator,
+          before.map(entry => entry.label),
+          after.map(entry => entry.label),
+        ],
+        [
+          'Dev Container: New Name',
+          [storedLabelOf(folder)],
+          [storedLabelOf(folder)],
+        ],
+      );
     } finally {
       await removeContainers(folder);
     }

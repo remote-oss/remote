@@ -9,7 +9,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable, windowState} from './harness.ts';
+import {isOpen, variable, windowState} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -26,6 +26,8 @@ export interface ViewRow {
 
 /** A target of the debugging port's list. */
 interface DebugTarget {
+  /** The target's id, which a window's page keeps for as long as the window lives, a reload in place included. */
+  id: string;
   type: string;
   title: string;
   webSocketDebuggerUrl?: string;
@@ -70,13 +72,9 @@ async function settled<Value>(
   }
 }
 
-/** The port the editor chose, from the file it writes in the run's user-data folder. */
+/** The port the editor chose, from the file it writes in the launch's user-data folder. */
 async function debuggingPort(): Promise<number> {
-  const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data',
-    'DevToolsActivePort',
-  );
+  const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
     () => {
@@ -118,16 +116,8 @@ function workspaceTitleName(workspaceFile: string): string {
   return `${folderName(workspaceFile).replace(/\.code-workspace$/, '')} (Workspace)`;
 }
 
-/**
- * The title of the page of a window with this state among `titles`: the workspace's name for a workspace window, else
- * the folder name in brackets, `[]` for a local window with no folder, and `[]` plus the remote name for a remote one.
- * It fails when two titles match, naming both: two folder-less windows of one kind can't be told apart, and the gate
- * rows never have two.
- */
-export function pageTitleFor(
-  state: PageState,
-  titles: readonly string[],
-): string | undefined {
+/** The test of a title for a window of this state: the workspace's name, the folder name in brackets, or `[]`. */
+function titleMatcher(state: PageState): (title: string) => boolean {
   const folder = state.folders[0];
   const workspaceFile = state.workspaceFile ?? null;
   const bracketed =
@@ -136,13 +126,24 @@ export function pageTitleFor(
       : folder === undefined
         ? undefined
         : folderName(folder);
-  const matching = titles.filter(title =>
+  return title =>
     bracketed === undefined
       ? state.remoteName === null
         ? title === '[]'
         : title.startsWith('[]') && title !== '[]'
-      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`),
-  );
+      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`);
+}
+
+/**
+ * The title of the page of a window with this state among `titles`: the workspace's name for a workspace window, else
+ * the folder name in brackets, `[]` for a local window with no folder, and `[]` plus the remote name for a remote one.
+ * It fails when two titles match, naming both. Pages with the same title are told apart by `pageAmong`.
+ */
+export function pageTitleFor(
+  state: PageState,
+  titles: readonly string[],
+): string | undefined {
+  const matching = titles.filter(titleMatcher(state));
   if (matching.length > 1) {
     throw new Error(
       `two pages match the window's state: ${JSON.stringify(matching)}`,
@@ -150,6 +151,34 @@ export function pageTitleFor(
   }
   return matching[0];
 }
+
+/**
+ * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
+ * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
+ * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
+ * ambiguous.
+ */
+export function pageAmong(
+  candidates: readonly DebugTarget[],
+  name: string,
+  remembered: ReadonlyMap<string, string>,
+  open: (window: string) => boolean,
+): DebugTarget | undefined {
+  const own = candidates.find(page => page.id === remembered.get(name));
+  if (own !== undefined || candidates.length === 1) {
+    return own ?? candidates[0];
+  }
+  const taken = new Set(
+    [...remembered]
+      .filter(([other]) => other !== name && open(other))
+      .map(([, pageId]) => pageId),
+  );
+  const left = candidates.filter(page => !taken.has(page.id));
+  return left.length === 1 ? left[0] : undefined;
+}
+
+/** The id of the page each window's name was last found by, while the window lives. */
+const REMEMBERED_PAGES = new Map<string, string>();
 
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
@@ -217,31 +246,46 @@ export async function pageOf(
       titles = found.map(page => page.title);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
-        return found.find(page => page.title === named)?.webSocketDebuggerUrl;
+        const page = found.find(each => each.title === named);
+        if (page !== undefined) {
+          REMEMBERED_PAGES.set(name, page.id);
+        }
+        return page?.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
         name,
         milliseconds - (Date.now() - started),
       );
-      const title =
-        state === undefined
-          ? undefined
-          : pageTitleFor(
-              {
-                folders: state.folders,
-                remoteName: state.remoteName,
-                workspaceFile: state.workspaceFile,
-              },
-              titles,
-            );
-      const chosen =
-        title === undefined
-          ? undefined
-          : found.find(page => page.title === title);
+      if (state === undefined) {
+        return undefined;
+      }
+      const matches = titleMatcher({
+        folders: state.folders,
+        remoteName: state.remoteName,
+        workspaceFile: state.workspaceFile,
+      });
+      const candidates = found.filter(page => matches(page.title));
+      const chosen = pageAmong(candidates, name, REMEMBERED_PAGES, isOpen);
+      if (chosen === undefined && candidates.length > 1) {
+        throw new Error(
+          `two pages match the window's state: ${JSON.stringify(candidates.map(page => page.title))}`,
+        );
+      }
+      if (chosen !== undefined) {
+        REMEMBERED_PAGES.set(name, chosen.id);
+      }
       return chosen?.webSocketDebuggerUrl;
     },
     milliseconds,
   );
+}
+
+/**
+ * Remembers the page window `name` has now, so that a later window with the same title, a further folder-less local
+ * one, is told apart from it. A suite that opens such a window calls it for `local` before the first one opens.
+ */
+export async function rememberPage(name: string): Promise<void> {
+  await pageOf(name);
 }
 
 /** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
@@ -293,9 +337,75 @@ async function evaluate<Value>(
   return evaluateAt(await pageOf(name), `window ${name}`, expression);
 }
 
+/** How many terminals' text areas window `name`'s page holds and the titles of its terminal tabs. */
+export interface TerminalPageFacts {
+  rows: number;
+  tabs: string[];
+}
+
+/** How long the page may take to answer a read of its terminals, in milliseconds. */
+const PAGE_FACTS_MILLISECONDS = 10_000;
+
+/** What window `name`'s page holds of terminals, or `unavailable` when it does not answer within 10 s. */
+export async function terminalPageFacts(
+  name: string,
+): Promise<TerminalPageFacts | 'unavailable'> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<'unavailable'>(resolve => {
+    timer = setTimeout(() => {
+      resolve('unavailable');
+    }, PAGE_FACTS_MILLISECONDS);
+  });
+  try {
+    return await Promise.race([
+      evaluate<TerminalPageFacts>(
+        name,
+        `({
+          rows: document.querySelectorAll('.xterm-rows').length,
+          tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
+        })`,
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
 function paneExpression(viewName: string): string {
   return `[...document.querySelectorAll('.pane')].find(pane => pane.querySelector('.pane-header .title')?.textContent === ${JSON.stringify(viewName)})`;
+}
+
+/** A row of a view as the list renders it now, with the size of the set it belongs to. */
+export interface RenderedRow {
+  label: string;
+  level: number;
+  setSize: number;
+}
+
+/**
+ * The rows view `viewName` of window `name` renders now, without scrolling: a virtualized list's viewport only, each
+ * with its `aria-setsize`, which counts the rows of its set also when they are off screen; none when the view isn't
+ * there.
+ */
+export async function renderedRows(
+  name: string,
+  viewName: string,
+): Promise<RenderedRow[]> {
+  return evaluate<RenderedRow[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])]
+        .filter(row => row.getAttribute('aria-level') !== null)
+        .map(row => ({
+          label: row.querySelector('.label-name')?.textContent ?? '',
+          level: Number(row.getAttribute('aria-level')),
+          setSize: Number(row.getAttribute('aria-setsize')),
+        }));
+    })()`,
+  );
 }
 
 /**
@@ -352,9 +462,12 @@ export async function viewRows(
         }
       };
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
+      // first stays, so the first alone does not tell that the list moved.
       const first = () => {
-        const row = pane.querySelector('[role="treeitem"]');
-        return row ? row.querySelector('.label-name')?.textContent ?? '' : '';
+        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
+        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+        return label(rows[0]) + '\u0000' + label(rows.at(-1));
       };
       // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
       const move = async delta => {
@@ -375,8 +488,10 @@ export async function viewRows(
       let down = 0;
       if (await move(-400)) {
         down = -400;
+        collect();
       } else if (await move(400)) {
         down = 400;
+        collect();
       }
       let steps = 0;
       while (down !== 0 && steps < 200) {
@@ -550,6 +665,224 @@ export async function rowContextMenu(
   return menu;
 }
 
+/** One row of core's Ports view. */
+export interface PortsRow {
+  /** The Port column as shown: `<label> (<port or key>)`, or the port or key alone. */
+  port: string;
+  forwardedAddress: string;
+  runningProcess: string;
+  origin: string;
+  /** The row icon's codicon class, e.g. `codicon-ports-forwarded-with-process-icon`. */
+  icon: string;
+  /** The row's hover, non-breaking spaces read as spaces, as `statusItem` reads a hover. */
+  tooltip: string;
+}
+
+/** The page-side lookup of the rows of core's Ports view, without its "Add Port" row, as each row's cells. */
+const PORTS_ROWS_EXPRESSION = `(() => {
+  const pane = ${paneExpression('Ports')};
+  return [...(pane?.querySelectorAll('.monaco-table-tr') ?? [])]
+    .map(row => ({
+      row,
+      cells: [...row.querySelectorAll('.monaco-table-td')].map(cell => (cell.textContent ?? '').replaceAll('\\u00a0', ' ').trim()),
+    }))
+    .filter(entry => entry.cells[1] !== 'Add Port');
+})()`;
+
+/**
+ * The rows of core's Ports view in window `name`, in the order shown. A table that overflows its container keeps only
+ * the rows of its viewport in the DOM, so it is read from its top, a viewport at a time, and scrolled back after.
+ */
+export async function portsRows(name: string): Promise<PortsRow[]> {
+  const rows = await evaluate<PortsRow[] | string>(
+    name,
+    `(async () => {
+      const pane = ${paneExpression('Ports')};
+      if (pane === undefined || pane.querySelector('.monaco-table') === null) {
+        return 'no Ports table';
+      }
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const seen = new Map();
+      const order = [];
+      const readRow = async ({row, cells}) => {
+        const icon = [...(row.querySelector('.codicon')?.classList ?? [])].find(each => each.startsWith('codicon-') && each !== 'codicon-modifier-spin') ?? '';
+        const target = row.querySelectorAll('.monaco-table-td')[1].querySelector('.monaco-icon-label');
+        for (const type of ['mouseenter', 'mouseover', 'mousemove']) {
+          target.dispatchEvent(new MouseEvent(type, {bubbles: true, clientX: target.getBoundingClientRect().left + 5, clientY: target.getBoundingClientRect().top + 5}));
+        }
+        let hover = '';
+        for (let tries = 0; tries < 30 && hover === ''; tries += 1) {
+          await wait(100);
+          hover = (document.querySelector('.workbench-hover, .monaco-hover')?.textContent ?? '').replaceAll('\\u00a0', ' ').trim();
+        }
+        for (const type of ['mouseleave', 'mouseout']) {
+          target.dispatchEvent(new MouseEvent(type, {bubbles: true}));
+        }
+        for (let tries = 0; tries < 20 && document.querySelector('.workbench-hover') !== null; tries += 1) {
+          await wait(100);
+        }
+        return {port: cells[1] ?? '', forwardedAddress: cells[2] ?? '', runningProcess: cells[3] ?? '', origin: cells[4] ?? '', icon, tooltip: hover};
+      };
+      const collect = async () => {
+        for (const entry of ${PORTS_ROWS_EXPRESSION}) {
+          const key = entry.cells[1] + '|' + entry.cells[4];
+          if (!seen.has(key)) {
+            seen.set(key, await readRow(entry));
+            order.push(key);
+          }
+        }
+      };
+      const list = pane.querySelector('.monaco-table .monaco-list');
+      const first = () => (${PORTS_ROWS_EXPRESSION}[0]?.cells[1] ?? '');
+      // A wheel moves the list with a smooth scroll, so the next one waits for the move to settle; a step stays under
+      // the rows of a viewport so that no row passes unseen. The wheel's sign that scrolls down varies with the build.
+      const move = async delta => {
+        const before = first();
+        pane.querySelector('.monaco-table-tr').dispatchEvent(new WheelEvent('wheel', {bubbles: true, cancelable: true, deltaY: delta, deltaMode: 0}));
+        await wait(600);
+        return first() !== before;
+      };
+      // The rows come after the table: a read of no row at all is no position to scroll back to.
+      for (let tries = 0; tries < 30 && first() === ''; tries += 1) {
+        await wait(100);
+      }
+      const step = Math.max(44, Math.floor(list.clientHeight / 2));
+      const topFirst = first();
+      await collect();
+      let down = 0;
+      if (await move(-step)) {
+        down = -step;
+      } else if (await move(step)) {
+        down = step;
+      }
+      let steps = 0;
+      while (down !== 0 && steps < 100) {
+        await collect();
+        if (!(await move(down))) {
+          break;
+        }
+        steps += 1;
+      }
+      await collect();
+      while (down !== 0 && steps < 200 && first() !== topFirst) {
+        await move(-down);
+        steps += 1;
+      }
+      return order.map(key => seen.get(key));
+    })()`,
+  );
+  if (typeof rows === 'string') {
+    throw new Error(`window ${name}: ${rows}`);
+  }
+  return rows;
+}
+
+/** The titles of row `port`'s inline actions on hover, and of its context menu's items, in order. */
+export async function portRowActions(
+  name: string,
+  port: string,
+): Promise<{inline: string[]; menu: string[]}> {
+  const found = await evaluate<{inline: string[]; menu: string[]} | null>(
+    name,
+    `(async () => {
+      const entries = ${PORTS_ROWS_EXPRESSION};
+      const entry = entries.find(each => each.cells[1] === ${JSON.stringify(port)});
+      if (entry === undefined) {
+        return null;
+      }
+      entry.row.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const inline = [...entry.row.querySelectorAll('.actions-container .action-label')].map(label => (label.getAttribute('aria-label') ?? label.getAttribute('title') ?? label.textContent ?? '').replace(/ \\([^)]*\\)$/, ''));
+      const box = entry.row.getBoundingClientRect();
+      entry.row.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      for (let tries = 0; tries < 30 && document.querySelector('.context-view .monaco-menu .action-label') === null; tries += 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const menu = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+      for (const type of ['keydown', 'keyup']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      entry.row.dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+      return {inline, menu};
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name}: no Ports row for ${JSON.stringify(port)}`);
+  }
+  return found;
+}
+
+/** Clicks the inline action `title` of row `port` of core's Ports view, as a user's click on its icon. */
+export async function portRowAction(
+  name: string,
+  port: string,
+  title: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const entry = ${PORTS_ROWS_EXPRESSION}.find(each => each.cells[1] === ${JSON.stringify(port)});
+      if (entry === undefined) {
+        return 'no Ports row for ' + ${JSON.stringify(port)};
+      }
+      const action = [...entry.row.querySelectorAll('.actions-container .action-label')].find(
+        label => (label.getAttribute('aria-label') ?? '').replace(/ \\([^)]*\\)$/, '') === ${JSON.stringify(title)},
+      );
+      if (action === undefined) {
+        return 'no action ' + ${JSON.stringify(title)};
+      }
+      action.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
+/** Opens the Command Palette of window `name` with F1, types `text`, and gives the labels of its rows once they stop changing. */
+async function openedPalette(name: string, text: string): Promise<string[]> {
+  await pressStroke(await pageOf(name), name, {
+    key: 'F1',
+    code: 'F1',
+    windowsVirtualKeyCode: 112,
+    nativeVirtualKeyCode: 112,
+  });
+  // The palette starts with `>`, which is what makes it list commands.
+  await keyInFolderDialog(name, undefined, `>${text}`);
+  let labels: string[] = [];
+  let steady = 0;
+  for (let attempt = 0; attempt < 40 && steady < 3; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const now = (await quickPickRows(name)).map(each => each.label);
+    steady = JSON.stringify(now) === JSON.stringify(labels) ? steady + 1 : 0;
+    labels = now;
+  }
+  return labels;
+}
+
+/** The labels of the rows the Command Palette of window `name` lists for `text`; the palette is closed again with Escape. */
+export async function paletteRows(
+  name: string,
+  text: string,
+): Promise<string[]> {
+  const labels = await openedPalette(name, text);
+  await pressEscape(name);
+  return labels;
+}
+
+/** Runs the first command the Command Palette of window `name` lists for `text`, as Enter on it does. */
+export async function paletteRun(name: string, text: string): Promise<void> {
+  await openedPalette(name, text);
+  await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** Types `text` into the input box a command of window `name` shows, and accepts it. */
+export function answerInputBox(name: string, text: string): Promise<void> {
+  return keyInFolderDialog(name, 'Enter', text);
+}
+
 /** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */
 export interface RowDetails {
   label: string;
@@ -587,6 +920,34 @@ export async function rowDetails(
     })()`,
     )) ?? undefined
   );
+}
+
+/**
+ * Whether the label of the row `label` of view `viewName` in window `name` is cut: its text is wider than the space the
+ * row gives it, so core shows it with an ellipsis. Throws when the view has no such row.
+ */
+export async function labelCut(
+  name: string,
+  viewName: string,
+  label: string,
+): Promise<boolean> {
+  const overflowing = await evaluate<boolean | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const row = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].find(
+        each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)},
+      );
+      const container = row?.querySelector('.monaco-icon-label-container');
+      return container === undefined || container === null
+        ? null
+        : container.scrollWidth > container.clientWidth;
+    })()`,
+  );
+  if (overflowing === null) {
+    throw new Error(`window ${name} shows no row ${label} in ${viewName}`);
+  }
+  return overflowing;
 }
 
 /**
@@ -640,6 +1001,29 @@ export async function remoteExplorerOptions(name: string): Promise<string[]> {
   return evaluate<string[]>(
     name,
     `[...document.querySelectorAll('select[aria-label="Switch Remote"] option')].map(each => each.textContent ?? '')`,
+  );
+}
+
+/** The option the Switch Remote dropdown shows as selected, or nothing when the window has no such dropdown. */
+export async function selectedRemote(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `document.querySelector('select[aria-label="Switch Remote"]')?.value ?? null`,
+    )) ?? undefined
+  );
+}
+
+/** The titles of the sections of the Remote Explorer that are on screen, from the top. */
+export async function remoteExplorerSections(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.pane')]
+      .filter(pane => pane.offsetParent !== null && pane.getBoundingClientRect().height > 0)
+      .map(pane => pane.querySelector('.pane-header .title')?.textContent ?? '')
+      .filter(title => title !== '')`,
   );
 }
 
@@ -915,6 +1299,29 @@ export interface StatusItem {
   text: string;
   ariaLabel: string;
   hover: string;
+}
+
+/** How long a row waits for the remote indicator to read the container once the window is connected. */
+export const INDICATOR_MILLISECONDS = 30_000;
+
+/**
+ * The text of the status bar item `itemId` of window `name` once it reads `expected`, or its last text after
+ * `milliseconds`: core updates the remote indicator a moment after the window connects, and on a loaded machine that
+ * moment is longer than a row's read.
+ */
+export async function statusItemText(
+  name: string,
+  itemId: string,
+  expected: string,
+  milliseconds: number,
+): Promise<string> {
+  const deadline = Date.now() + milliseconds;
+  let text = (await statusItem(name, itemId)).text;
+  while (text !== expected && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    text = (await statusItem(name, itemId)).text;
+  }
+  return text;
 }
 
 /**
@@ -1290,11 +1697,11 @@ export async function folderDialogOpen(name: string): Promise<boolean> {
 
 /**
  * Has window `name`'s in-window folder dialog take `key` (`Enter` or `Escape`), with `typed` in its input first when
- * given. It waits for the dialog to open, and fails when none does.
+ * given; with no key it only types. It waits for the dialog to open, and fails when none does.
  */
 async function keyInFolderDialog(
   name: string,
-  key: 'Enter' | 'Escape',
+  key: 'Enter' | 'Escape' | undefined,
   typed?: string,
 ): Promise<void> {
   await settled(
@@ -1314,7 +1721,9 @@ async function keyInFolderDialog(
       return null;
     })()`,
   );
-  await pressKey(await pageOf(name), name, key);
+  if (key !== undefined) {
+    await pressKey(await pageOf(name), name, key);
+  }
 }
 
 /**

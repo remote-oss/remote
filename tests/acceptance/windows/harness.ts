@@ -18,7 +18,13 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
+import {
+  cutNetwork,
+  cutRoute as cutRouteOf,
+  restoreNetwork,
+  restoreRoute as restoreRouteOf,
+  type RouteCut,
+} from '../../../tools/acceptance-network.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
@@ -46,6 +52,9 @@ export interface AgentEvent {
     | 'commands'
     | 'extension'
     | 'terminalBuffer'
+    | 'recentlyOpened'
+    | 'taskEnded'
+    | 'terminalNames'
     | 'tunnels';
   time: number;
   id?: string;
@@ -69,9 +78,10 @@ export interface AgentEvent {
   /** The prefix a `commands` event was asked for, and the registered command ids that start with it, sorted. */
   prefix?: string;
   commandIds?: string[];
-  /** The extension an `extension` event was asked about, and whether the window's editor has it. */
+  /** The extension an `extension` event was asked about, whether the window's editor has it, and whether it is active there. */
   extensionId?: string;
   present?: boolean;
+  extensionActive?: boolean;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
   /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
@@ -80,10 +90,29 @@ export interface AgentEvent {
   activeEditor?: string | null;
   /** The active tab when it holds a text file: its URI and whether it is a preview; null for any other tab, as a `state` event saw it. */
   activeTab?: {uri: string; preview: boolean} | null;
+  /** The uris of the window's documents with unsaved changes, untitled ones included, as a `state` event saw them. */
+  dirtyDocuments?: string[];
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
-  text?: string;
+  text?: string | null;
+  /** The name of the window's active terminal, or null for none, as a `terminalBuffer` event saw it. */
+  active?: string | null;
+  /** The editor command or read of a `terminalBuffer` event that did not finish in 10 s, when one did not; its `text` is then null. */
+  stuck?: string;
+  /** The folders and workspaces of the editor's Open Recent list, as a `recentlyOpened` event read them. */
+  recent?: RecentEntry[];
+  /** The exit code a `taskEnded` event reports, or null when the process gave none. */
+  exitCode?: number | null;
+  /** The names of the window's terminals, in order, as a `terminalNames` event listed them. */
+  names?: string[];
   /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
   tunnels?: ForwardedTunnel[];
+}
+
+/** One folder or workspace of the Open Recent list: its address, and the label and remote authority stored with it. */
+export interface RecentEntry {
+  uri: string;
+  label: string | null;
+  remoteAuthority: string | null;
 }
 
 /** One forwarded port of a window: its port on the host, and where it is reachable on this machine. */
@@ -103,8 +132,10 @@ export interface RecordLine {
   /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
   window: string;
-  /** The labels a failure dialog or a notice was shown with, in order. */
+  /** The labels a failure dialog, a notice or the pre-connection dialog was shown with, in order. */
   buttons?: string[];
+  /** The detail text a modal was shown with; only the lines of a `licenceModal` or a `preconnectDialog` surface have it. */
+  detail?: string;
   /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
   items?: string[];
   time: number;
@@ -271,6 +302,11 @@ async function acceptedLogins(line: string): Promise<number> {
     .length;
 }
 
+/** The number of key logins the host's sshd counted for the user harness. */
+export function logins(): Promise<number> {
+  return acceptedLogins('Accepted publickey for harness');
+}
+
 /** The number of logins the host's sshd counted for the password account. */
 export function acceptedPasswords(): Promise<number> {
   return acceptedLogins('Accepted password for harness-pw');
@@ -343,6 +379,43 @@ export function cutHostNetwork(): void {
 /** Brings the host container's network back. */
 export function restoreHostNetwork(): void {
   restoreNetwork(runCommand, variable('HARNESS_CONTAINER'));
+}
+
+/** Cuts the route to the host's own address (the `routed` alias); the published port keeps working. */
+export function cutRoute(kind: RouteCut): void {
+  cutRouteOf(
+    runCommand,
+    variable('HARNESS_CONTAINER'),
+    variable('HARNESS_ROUTED_ADDRESS'),
+    kind,
+  );
+}
+
+/** Brings the route back; harmless when nothing was cut. */
+export function restoreRoute(): void {
+  restoreRouteOf(
+    runCommand,
+    variable('HARNESS_CONTAINER'),
+    variable('HARNESS_ROUTED_ADDRESS'),
+  );
+}
+
+/** The uris of window `name`'s documents with unsaved changes, as it reports them now. */
+export async function dirtyDocumentsOf(name: string): Promise<string[]> {
+  await inWindow(name, 'acceptance.agent.state');
+  return (
+    windowEvents(name)
+      .filter(each => each.event === 'state')
+      .at(-1)?.dirtyDocuments ?? []
+  );
+}
+
+/** The names of window `name`'s terminals, as it reports them now. */
+export async function terminalsOf(name: string): Promise<string[] | undefined> {
+  await inWindow(name, 'acceptance.agent.state');
+  return windowEvents(name)
+    .filter(each => each.event === 'state')
+    .at(-1)?.terminals;
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */
@@ -430,6 +503,50 @@ export async function inWindow(
       `window ${name} failed ${command}: ${failed.message ?? 'no message'}`,
     );
   }
+}
+
+/** The exit code of the process task window `name` ran, or null when the process gave none. */
+export async function runProcessTask(
+  name: string,
+  command: string,
+  programArguments: string[],
+): Promise<number | null> {
+  return (
+    (
+      await reported(
+        name,
+        'taskEnded',
+        'acceptance.agent.runProcessTask',
+        command,
+        programArguments,
+      )
+    )?.exitCode ?? null
+  );
+}
+
+/** The names of window `name`'s terminals, in order, as a `terminalNames` event listed them. */
+export async function terminalNames(name: string): Promise<string[]> {
+  return (
+    (await reported(name, 'terminalNames', 'acceptance.agent.terminalNames'))
+      ?.names ?? []
+  );
+}
+
+/**
+ * Polls window `name`'s terminals for a name containing `wanted`, for up to 10 s: a new terminal's name can settle after
+ * it opens, and gives whether one holds it.
+ */
+export async function terminalNamed(
+  name: string,
+  wanted: string,
+): Promise<boolean> {
+  const deadline = Date.now() + 10_000;
+  let named = (await terminalNames(name)).some(each => each.includes(wanted));
+  while (!named && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    named = (await terminalNames(name)).some(each => each.includes(wanted));
+  }
+  return named;
 }
 
 /** Opens window `folder` (a folder of the user harness's home, made first) on `alias`, from the local window. */
@@ -652,6 +769,45 @@ export function devContainerFolder(
   return folder;
 }
 
+/**
+ * Starts a listener on `port` in container `containerId`, which echoes what it is sent, waits until the container
+ * lists the port, and gives the function that ends it.
+ */
+export async function listenIn(
+  containerId: string,
+  port: number,
+): Promise<() => Promise<void>> {
+  await execFileAsync('docker', [
+    'exec',
+    '-d',
+    containerId,
+    'nc',
+    '-lk',
+    '-p',
+    String(port),
+    '-e',
+    'cat',
+  ]);
+  await waitFor(
+    `the container to listen on ${String(port)}`,
+    async () =>
+      (
+        await execFileAsync('docker', ['exec', containerId, 'netstat', '-ltn'])
+      ).stdout.includes(`:${String(port)} `),
+    10_000,
+  );
+  return async () => {
+    // The bracket keeps pkill's pattern from matching its own shell's command line.
+    await execFileAsync('docker', [
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `pkill -f '[n]c -lk -p ${String(port)} ' || true`,
+    ]);
+  };
+}
+
 /** The ids of the run's containers made for `folder`, by the label the dev container CLI gives them. */
 export async function devContainersOf(folder: string): Promise<string[]> {
   const {stdout} = await execFileAsync('docker', [
@@ -774,15 +930,27 @@ export async function extensionPresent(
   name: string,
   extensionId: string,
 ): Promise<boolean> {
-  return (
-    (
-      await reported(
-        name,
-        'extension',
-        'acceptance.agent.extensionPresent',
-        extensionId,
-      )
-    )?.present === true
+  return (await extensionReport(name, extensionId))?.present === true;
+}
+
+/** Whether the extension `extensionId` has activated in window `name`'s local extension host. */
+export async function extensionActive(
+  name: string,
+  extensionId: string,
+): Promise<boolean> {
+  return (await extensionReport(name, extensionId))?.extensionActive === true;
+}
+
+/** What window `name` reports of the extension `extensionId`: whether its editor has it, and whether it is active. */
+function extensionReport(
+  name: string,
+  extensionId: string,
+): Promise<AgentEvent | undefined> {
+  return reported(
+    name,
+    'extension',
+    'acceptance.agent.extensionPresent',
+    extensionId,
   );
 }
 
@@ -1027,22 +1195,18 @@ export function kill(name: string): Promise<void> {
   return inWindow(name, 'opensshremotes.cleanLocalServer');
 }
 
-/** The run's user settings file. */
-/** The run's user settings file, the one the editor reads. */
+/** The launch's user settings file, the one the editor reads. */
 export function userSettingsFile(): string {
-  return path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data/User/settings.json',
-  );
+  return path.join(variable('HARNESS_USER_DATA'), 'User/settings.json');
 }
 
-/** The bytes of the run's user settings file, or nothing when it has none. */
+/** The bytes of the launch's user settings file, or nothing when it has none. */
 export function readUserSettings(): string | undefined {
   const file = userSettingsFile();
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
-/** Puts the run's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
+/** Puts the launch's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
 export function restoreUserSettings(bytes: string | undefined): void {
   if (bytes === undefined) {
     rmSync(userSettingsFile(), {force: true});
@@ -1051,7 +1215,7 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** Rewrites the run's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+/** Rewrites the launch's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
 ): Promise<void> {
@@ -1063,14 +1227,47 @@ export async function userSettings(
   await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
+/** What window `name` found of its terminals when asked for the active one's buffer. */
+export interface TerminalFacts {
+  /** The buffer of the active terminal; empty for none, and null when a step did not finish. */
+  text: string | null;
+  /** The names of the window's terminals. */
+  terminals: string[];
+  /** The name of the active terminal, or null for none. */
+  active: string | null;
+  /** The step that did not finish in 10 s, when one did not. */
+  stuck: string | undefined;
+}
+
 /**
- * The whole buffer of window `name`'s active terminal, scrollback included: the agent focuses the terminal, selects
- * all of it and copies it, and reports the clipboard's text.
+ * The names of window `name`'s terminals and the active one's, and the active one's whole buffer, scrollback included:
+ * the agent focuses the terminal, selects all of it and copies it, and reports the clipboard's text. A window with no
+ * active terminal answers at once with no text, and a step that does not finish in 10 s is named.
  */
+export async function terminalFacts(name: string): Promise<TerminalFacts> {
+  const event = await reported(
+    name,
+    'terminalBuffer',
+    'acceptance.agent.terminalBuffer',
+  );
+  return {
+    text: event?.text ?? null,
+    terminals: event?.terminals ?? [],
+    active: event?.active ?? null,
+    stuck: event?.stuck,
+  };
+}
+
+/** The whole buffer of window `name`'s active terminal, scrollback included; empty when it has none. */
 export async function terminalBuffer(name: string): Promise<string> {
+  return (await terminalFacts(name)).text ?? '';
+}
+
+/** The folders and workspaces of the editor's Open Recent list, as window `name` reads them from the main process. */
+export async function recentlyOpenedIn(name: string): Promise<RecentEntry[]> {
   return (
-    (await reported(name, 'terminalBuffer', 'acceptance.agent.terminalBuffer'))
-      ?.text ?? ''
+    (await reported(name, 'recentlyOpened', 'acceptance.agent.recentlyOpened'))
+      ?.recent ?? []
   );
 }
 

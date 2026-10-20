@@ -51,7 +51,7 @@ const PROBE_FACTS = [
   'host.release=debian',
   'host.home=/home/alex',
   'host.tmp=/tmp',
-  'host.shell=sh',
+  'host.shell=/bin/sh',
   'host.tool.tar=yes',
   'host.tool.wget=yes',
   'host.tool.curl=no',
@@ -737,6 +737,7 @@ describe('the server steps: transfer and start', () => {
           lines(
             'Ok',
             'server.installDir=/home/alex/.fixture-server/bin/abc123',
+            'timing.install=5',
           ),
         ),
       ),

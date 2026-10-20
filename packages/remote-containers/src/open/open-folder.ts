@@ -7,7 +7,7 @@
 import {devContainerTargetOf} from '../authority/payload.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {openPathAllowed} from './open-gate.ts';
-import {commandBeforeReload} from './pre-reload.ts';
+import {chooseOrAuthor} from './author-first.ts';
 import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
@@ -28,6 +28,8 @@ export interface OpenFolderPorts extends Pick<
   | 'progress'
   | 'bridge'
   | 'opener'
+  | 'authoring'
+  | 'shutdown'
   | 'logger'
 > {
   window: {
@@ -36,6 +38,8 @@ export interface OpenFolderPorts extends Pick<
     remoteAuthority(): string | undefined;
     folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
     homeFolder(): string;
+    /** Whether the window's workspace is trusted now. */
+    isTrusted(): boolean;
     serializedFile: ReopenPorts['window']['serializedFile'];
   };
   /** Core's folder dialog: folders only, one, opened at `start`. */
@@ -73,13 +77,15 @@ export function openFolderInContainer(
       return;
     }
     const own = ownFolder();
-    if ((await ports.engine.firstCheck(own, ports.dialogs)) === 'stopped') {
+    // A relative value is the window's own folder's file, which runs only once that folder is trusted.
+    const base = window.isTrusted() ? own : undefined;
+    if ((await ports.engine.firstCheck(base, ports.dialogs)) === 'stopped') {
       return;
     }
     // The passed check means the setting names a program, with the window's folder as base or none.
     const executable = executableOf(
       ports.settings.dockerPath(),
-      own,
+      base,
     ) as Extract<Executable, {kind: 'spawn'}>;
     const picked = await ports.pickFolder(own ?? window.homeFolder());
     if (picked === undefined) {
@@ -95,17 +101,12 @@ export function openFolderInContainer(
       return;
     }
     const folder = picked.fsPath;
-    const {choice, progress} = await commandBeforeReload(
+    const {choice, progress} = await chooseOrAuthor(
       ports,
       () => Promise.resolve('proceed'),
-      folder,
-      executable.file,
+      {title: TITLE, folder, dockerPath: executable.file},
     );
     try {
-      if (choice.kind === 'noConfiguration') {
-        logger.info(`${TITLE} found no configuration in ${folder}`);
-        return;
-      }
       if (choice.kind !== 'chosen') {
         return;
       }

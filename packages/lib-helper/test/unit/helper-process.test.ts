@@ -1,7 +1,16 @@
 import {deepStrictEqual, rejects, strictEqual, throws} from 'node:assert';
-import {mkdirSync, mkdtempSync, rmSync} from 'node:fs';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {createInterface} from 'node:readline';
 import {setTimeout as delay} from 'node:timers/promises';
 import {
   acquire,
@@ -10,6 +19,7 @@ import {
   nodeClientEnvironment,
   parseRecord,
   recordPath,
+  stop,
 } from '../../src/index.ts';
 import {nodeEndpointPort} from '../../src/endpoint/node-endpoint.ts';
 import {nodeFilePort} from '../../src/registry/node-file-port.ts';
@@ -31,6 +41,44 @@ const SCRIPT = path.join(
   'fixtures',
   'echo-helper.ts',
 );
+
+const STARTER = path.join(
+  import.meta.dirname,
+  '..',
+  'fixtures',
+  'tree-leaving-starter.ts',
+);
+
+/** The parent of each live process, read from /proc; a process that ends during the read is left out. */
+function parentsOfProcesses(): Map<number, number> {
+  const parents = new Map<number, number>();
+  for (const entry of readdirSync('/proc').filter(name => /^\d+$/.test(name))) {
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, 'utf8');
+      parents.set(
+        Number(entry),
+        Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]),
+      );
+    } catch {
+      // The process ended between the listing and the read.
+    }
+  }
+  return parents;
+}
+
+/** The processes whose parent chain leads to `root`. */
+function descendantsOf(root: number): number[] {
+  const parents = parentsOfProcesses();
+  const found: number[] = [];
+  let generation = [root];
+  while (generation.length > 0) {
+    generation = [...parents]
+      .filter(([, parent]) => generation.includes(parent))
+      .map(([child]) => child);
+    found.push(...generation);
+  }
+  return found;
+}
 
 function leaseOf(outcome: AcquireOutcome): HelperLease {
   if (outcome.kind !== 'acquired') {
@@ -92,6 +140,64 @@ describe('a helper process', function () {
       [true, false, 1, {kind: 'reply', body: {echo: 'ping'}}, 'refused'],
     );
   });
+});
+
+describe("a helper started outside its starter's tree", function () {
+  this.timeout(30000);
+  let folder: string;
+
+  beforeEach(() => {
+    folder = mkdtempSync(path.join(tmpdir(), 'helper-tree-'));
+  });
+
+  afterEach(() => {
+    rmSync(folder, {recursive: true, force: true});
+  });
+
+  (process.platform === 'linux' ? it : it.skip)(
+    '(linux) still answers after its starter and every process below the starter are killed',
+    async () => {
+      const registry = path.join(folder, 'registry');
+      const starter = spawn(process.execPath, [STARTER, registry, folder], {
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
+      const [said] = (await once(
+        createInterface({input: starter.stdout}),
+        'line',
+      )) as [string];
+      const starterId = starter.pid ?? 0;
+      // The tree is read before anything is killed: a killed parent's children move to another parent.
+      const tree = [starterId, ...descendantsOf(starterId)];
+      const exited = once(starter, 'exit');
+      for (const processId of tree) {
+        process.kill(processId, 'SIGKILL');
+      }
+      await exited;
+      const environment = {
+        ...nodeClientEnvironment(process.execPath, WAITS),
+        endpointFolder: folder,
+      };
+      const lease = leaseOf(
+        await acquire(environment, {
+          folder: registry,
+          namespace: 'test.echo',
+          helperKey: 'tree',
+          script: SCRIPT,
+          policy: {kind: 'graceAfterLastLease', milliseconds: 300},
+          prepare: () =>
+            Promise.resolve({kind: 'ready', options: {}, payload: {}}),
+          cancellation: new AbortController().signal,
+        }),
+      );
+      const reply = await lease.request('ping', 5000);
+      lease.release();
+      await stop(environment, registry, 'test.echo', 'tree');
+      deepStrictEqual(
+        [said, lease.startedByMe, reply],
+        ['acquired', false, {kind: 'reply', body: {echo: 'ping'}}],
+      );
+    },
+  );
 });
 
 describe('helper parameters', () => {

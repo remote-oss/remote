@@ -27,7 +27,8 @@ export interface AppendedEntry {
     | 'hostPick'
     | 'filePick'
     | 'mitigationPick'
-    | 'licenceModal';
+    | 'licenceModal'
+    | 'preconnectDialog';
   match: string;
   answer:
     | 'yes'

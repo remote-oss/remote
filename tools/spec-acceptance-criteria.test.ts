@@ -76,7 +76,7 @@ describe('acceptanceCriteriaOf, a removed criterion', () => {
 });
 
 describe('the features of slice 1', () => {
-  it('#142, D-86, coverage-44: there are thirty-five, F-3901, F-3903, the six of D-86 and the nine of coverage-44 among them', () => {
+  it('#142, D-86, coverage-44, coverage-47: there are thirty-eight, F-3901, F-3903, the six of D-86, the nine of coverage-44 and the three of coverage-47 among them', () => {
     deepStrictEqual(
       [
         SLICE_ONE_FEATURES.length,
@@ -98,9 +98,12 @@ describe('the features of slice 1', () => {
           'F-2507',
           'F-2508',
           'F-2604',
+          'F-2108',
+          'F-2509',
+          'F-2704',
         ].every(feature => SLICE_ONE_FEATURES.includes(feature)),
       ],
-      [35, true],
+      [38, true],
     );
   });
 });
@@ -163,7 +166,7 @@ describe('the coverage files', () => {
     );
   });
 
-  it('containers release 1: twenty-nine features, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
+  it('containers release 1: thirty-nine features, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
     deepStrictEqual(
       [
         CONTAINERS_RELEASE_ONE_FEATURES.length,
@@ -177,7 +180,7 @@ describe('the coverage files', () => {
           'F-0906',
         ].every(feature => CONTAINERS_RELEASE_ONE_FEATURES.includes(feature)),
       ],
-      [29, true],
+      [39, true],
     );
   });
 });

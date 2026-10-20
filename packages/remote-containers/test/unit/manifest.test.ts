@@ -105,6 +105,12 @@ const DETAILS_TITLE_WHEN =
 const DETAILS_REBUILD_WHEN =
   '!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown';
 
+const CREATE_FILE_WHEN =
+  '!remoteName && !virtualWorkspace && !remote-containers:standingDown';
+
+const CREATE_FILE_INDICATOR_WHEN =
+  'workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+
 const ENGLISH = {
   description:
     'Develop inside a container that carries its own toolchain, so each project brings its environment with it.',
@@ -113,6 +119,8 @@ const ENGLISH = {
   'configuration.title': 'Dev Containers',
   'commands.Reopenincontainer.title': 'Reopen in Container',
   'commands.Openfolder.title': 'Open Folder in Container...',
+  'commands.Createdevcontainerfile.title':
+    'Add Dev Container Configuration Files...',
   'commands.Rebuildcontainer.title': 'Rebuild Container',
   'commands.Rebuildcontainerwithoutcache.title':
     'Rebuild Container Without Cache',
@@ -162,6 +170,25 @@ const ENGLISH = {
     'Use `#dev.containers.workspaceMountConsistency#` instead.',
   'setting.MountGitWorktreeCommonDir.description':
     'Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`).',
+  'setting.DefaultFeatures.description':
+    'Configures the list of features to always install while creating a container.',
+  'setting.Lockfile.description':
+    'Controls whether a devcontainer-lock.json should be written.',
+};
+
+const FEATURE_SETTINGS = {
+  'dev.containers.defaultFeatures': {
+    type: 'object',
+    default: {},
+    scope: 'application',
+    description: '%setting.DefaultFeatures.description%',
+  },
+  'dev.containers.lockfile': {
+    type: 'boolean',
+    default: true,
+    scope: 'application',
+    description: '%setting.Lockfile.description%',
+  },
 };
 
 const MOUNT_SETTINGS = {
@@ -252,6 +279,11 @@ describe('the manifest', () => {
             title: '%commands.Openfolder.title%',
             category: 'Dev Containers',
           },
+          {
+            command: 'remote-containers.createDevContainerFile',
+            title: '%commands.Createdevcontainerfile.title%',
+            category: 'Dev Containers',
+          },
           ...REBUILD_COMMANDS,
           {
             command: 'remote-containers.showReopenInContainerNotificationReset',
@@ -286,6 +318,10 @@ describe('the manifest', () => {
             {
               command: 'remote-containers.openFolder',
               when: OPEN_FOLDER_WHEN,
+            },
+            {
+              command: 'remote-containers.createDevContainerFile',
+              when: CREATE_FILE_WHEN,
             },
             {
               command: 'remote-containers.rebuildContainer',
@@ -351,6 +387,11 @@ describe('the manifest', () => {
               command: 'remote-containers.openFolder',
               group: 'remote_30_dev-container_2_actions@8',
               when: OPEN_FOLDER_INDICATOR_WHEN,
+            },
+            {
+              command: 'remote-containers.createDevContainerFile',
+              group: 'remote_30_dev-container_2_actions@4',
+              when: CREATE_FILE_INDICATOR_WHEN,
             },
             {
               command: 'remote-containers.rebuildContainer',
@@ -456,6 +497,7 @@ describe('the manifest', () => {
                 '%setting.Remotecontainersdefaultextensions.markdownDeprecation%',
             },
             ...MOUNT_SETTINGS,
+            ...FEATURE_SETTINGS,
           },
         },
       },
@@ -533,6 +575,26 @@ describe('the manifest', () => {
     deepStrictEqual(
       Object.keys(MOUNT_SETTINGS).map(key => properties[key]),
       Object.values(MOUNT_SETTINGS),
+    );
+  });
+
+  it('F-0414 3.2: the two Feature settings are contributed with their shapes, and their English texts are the reference’s', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, unknown>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      [
+        Object.keys(FEATURE_SETTINGS).map(key => properties[key]),
+        ENGLISH['setting.DefaultFeatures.description'],
+        ENGLISH['setting.Lockfile.description'],
+      ],
+      [
+        Object.values(FEATURE_SETTINGS),
+        'Configures the list of features to always install while creating a container.',
+        'Controls whether a devcontainer-lock.json should be written.',
+      ],
     );
   });
 
@@ -736,6 +798,35 @@ describe('the manifest', () => {
           'view/item/context': [],
         },
         'Open Folder in Container...',
+      ],
+    );
+  });
+
+  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and the indicator item only in a window with a folder', () => {
+    deepStrictEqual(
+      [
+        menusOf(['remote-containers.createDevContainerFile']),
+        readJson('package.nls.json')['commands.Createdevcontainerfile.title'],
+      ],
+      [
+        {
+          commandPalette: [
+            {
+              command: 'remote-containers.createDevContainerFile',
+              when: CREATE_FILE_WHEN,
+            },
+          ],
+          'statusBar/remoteIndicator': [
+            {
+              command: 'remote-containers.createDevContainerFile',
+              group: 'remote_30_dev-container_2_actions@4',
+              when: CREATE_FILE_INDICATOR_WHEN,
+            },
+          ],
+          'view/title': [],
+          'view/item/context': [],
+        },
+        'Add Dev Container Configuration Files...',
       ],
     );
   });

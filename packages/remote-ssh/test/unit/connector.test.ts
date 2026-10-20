@@ -10,6 +10,7 @@ import {
   LINKED,
   type Recording,
   setup,
+  STARTED,
   steps,
   tunnelFails,
 } from './pipeline.fixture.ts';
@@ -438,6 +439,15 @@ describe('the connector over the connect pipeline', () => {
     );
   });
 
+  it('F-2108 AC-3: the running script stage opens the progress, with no details link and not quiet', async () => {
+    deepStrictEqual(
+      (await phasesHeardAfter({kind: 'runningPreconnectScript'})).filter(
+        phase => phase.name === 'runningPreconnectScript',
+      ),
+      [{name: 'runningPreconnectScript'}],
+    );
+  });
+
   it("F-2304 6.1: the pipeline's first initializing and the tunnel stage are quiet", async () => {
     deepStrictEqual(
       (await tunnelPhasesHeard(() => false)).filter(
@@ -497,6 +507,21 @@ describe('the connector over the connect pipeline', () => {
     const {connector} = connectorFor();
     await connector.connect(HOST_INPUT);
     deepStrictEqual(connector.serverPort(), 4321);
+  });
+
+  it('F-2509 AC-19: a server that listens on a socket has no port to give', async () => {
+    const {connector} = connectorFor({
+      start: () =>
+        Promise.resolve({
+          ...STARTED,
+          server: {
+            ...STARTED.server,
+            endpoint: {kind: 'socket', path: '/tmp/server.sock'},
+          },
+        }),
+    });
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(connector.serverPort(), 'none');
   });
 
   it('F-2509 AC-13: before any connect there is no server port, and no throw', () => {

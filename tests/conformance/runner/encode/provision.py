@@ -171,6 +171,9 @@ def split_target_settings(settings, per_case_target):
     late = {k: v for k, v in settings.items() if per_case_target and TARGET_PH.search(json.dumps({k: v}))}
     return {k: v for k, v in settings.items() if k not in late}, late
 
+LAB_DEBUGGING_PORT = 9222   # lab-code starts each slot's editor with --remote-debugging-port=9222+slot
+
+
 class Run:
     def __init__(self, case, profile, slot, host, run_id, log=print, counterparts=False):
         self.case, self.profile, self.slot, self.host, self.run_id = case, profile, int(slot), host, run_id
@@ -497,12 +500,15 @@ class Run:
             raise ProvisionError("keybindings.json: the profile's file is not a plain JSON list: "
                                  + (p.stderr or p.stdout).strip()[-200:])
 
-    def client_listeners(self):
-        """The listening addresses and ports of this window's editor and every process below it, with each holder's
-        name (kit #289, K2), read from this machine's process and socket tables."""
+    def client_listeners(self, holder=None):
+        """The listening addresses and ports of this window's editor and every process below it, and of the ssh
+        processes connected to the case's own SSH target wherever they run, with each holder's name (kit #289, K2),
+        read from this machine's process and socket tables; with `holder`, that holder's only."""
         if self.remote:
             return {"error": "client_listeners: the window runs on another host, and its sockets are read on this one"}
-        return clientlisteners.window_listeners(f"{self.slot_dir}/user-data")
+        address = self.ph.get("SSH_TARGET_ADDR") if self.ssh_run else None
+        return clientlisteners.window_listeners(f"{self.slot_dir}/user-data", target_address=address, holder=holder,
+                                                lab_ports={LAB_DEBUGGING_PORT + int(self.slot)})
 
     def read_user_settings(self, keys):
         """athena on kit #227 (item 3): the named keys of the slot profile's settings.json, as {key: value}, with a key

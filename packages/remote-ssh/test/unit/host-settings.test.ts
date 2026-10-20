@@ -7,7 +7,7 @@ import {
   graceSecondsOf,
   hostAlias,
   installFolderFor,
-  preconnectScriptFor,
+  preconnectChoiceOf,
   sshTargetOf,
 } from '../../src/pipeline/host-settings.ts';
 
@@ -100,6 +100,15 @@ describe('the install folder setting', () => {
     );
   });
 
+  for (const entry of ['~', '~/', '~/My_Servers-1.0']) {
+    it(`F-2407 AC-7 (ruling-1277-tilde): ${JSON.stringify(entry)} is used as written, for the host to expand against its home folder`, () => {
+      deepStrictEqual(installFolderFor({devbox: entry}, 'devbox'), {
+        kind: 'folder',
+        folder: entry,
+      });
+    });
+  }
+
   it('means the default when there is no entry, the entry is empty, or it is not text', () => {
     deepStrictEqual(
       [
@@ -117,7 +126,21 @@ describe('the install folder setting', () => {
     );
   });
 
-  for (const entry of ['relative', '/a(b)', '/a\\b', '/a\tb', '/ä']) {
+  for (const entry of [
+    'relative',
+    '/a(b)',
+    '/a\\b',
+    '/a\tb',
+    '/ä',
+    '~x',
+    '~user/x',
+    '/a/~',
+    '/a/~/b',
+    '~~',
+    '~/a~',
+    '~/a(b)',
+    '$HOME/x',
+  ]) {
     it(`F-2407: ${JSON.stringify(entry)} is refused and keeps its value as it is stored`, () => {
       deepStrictEqual(installFolderFor({devbox: entry}, 'devbox'), {
         kind: 'invalid',
@@ -232,60 +255,77 @@ describe('the target as ssh is given it', () => {
   });
 });
 
-describe('the pre-connection script that applies to a host', () => {
+describe('what remote.SSH.preconnect asks of a host', () => {
+  const NONE = {kind: 'none'};
+
   it('F-2108 BR-1: a text applies to every host', () => {
+    deepStrictEqual(preconnectChoiceOf('/home/a/renew.sh', 'devbox'), {
+      kind: 'script',
+      path: '/home/a/renew.sh',
+    });
+  });
+
+  it('F-2108 AC-15: an object applies by the alias exactly as written', () => {
     deepStrictEqual(
-      preconnectScriptFor('/home/a/renew.sh', 'devbox'),
-      '/home/a/renew.sh',
+      preconnectChoiceOf({devbox: '/home/a/renew.sh'}, 'devbox'),
+      {kind: 'script', path: '/home/a/renew.sh'},
     );
   });
 
-  it('F-2108 6.5: an object applies by the alias exactly as written', () => {
-    deepStrictEqual(
-      preconnectScriptFor({devbox: '/home/a/renew.sh'}, 'devbox'),
-      '/home/a/renew.sh',
-    );
-  });
-
-  it('F-2108 6.5 step 3: another alias, or the same in another case, is no script', () => {
+  it('F-2108 AC-16: another alias, the same in another case, and a pattern are no script', () => {
     deepStrictEqual(
       [
-        preconnectScriptFor({other: '/x'}, 'devbox'),
-        preconnectScriptFor({DevBox: '/x'}, 'devbox'),
-        preconnectScriptFor({'*': '/x'}, 'devbox'),
+        preconnectChoiceOf({other: '/x'}, 'devbox'),
+        preconnectChoiceOf({DevBox: '/x'}, 'devbox'),
+        preconnectChoiceOf({'*': '/x'}, 'devbox'),
       ],
-      [undefined, undefined, undefined],
+      [NONE, NONE, NONE],
     );
   });
 
   it('F-2108 6.5 step 4: a matching entry of "" or null is no script', () => {
     deepStrictEqual(
       [
-        preconnectScriptFor({devbox: ''}, 'devbox'),
-        preconnectScriptFor({devbox: null}, 'devbox'),
+        preconnectChoiceOf({devbox: ''}, 'devbox'),
+        preconnectChoiceOf({devbox: null}, 'devbox'),
       ],
-      [undefined, undefined],
+      [NONE, NONE],
     );
   });
 
   it('F-2108 6.6: an absent or empty setting is no script', () => {
     deepStrictEqual(
       [
-        preconnectScriptFor(undefined, 'devbox'),
-        preconnectScriptFor('', 'devbox'),
+        preconnectChoiceOf(undefined, 'devbox'),
+        preconnectChoiceOf('', 'devbox'),
       ],
-      [undefined, undefined],
+      [NONE, NONE],
     );
   });
 
-  it('F-2108 6.6 step 2: a value of another type is no script', () => {
+  it('F-2108 AC-41: a value of another type at the top is no script', () => {
     deepStrictEqual(
       [
-        preconnectScriptFor(true, 'devbox'),
-        preconnectScriptFor(3, 'devbox'),
-        preconnectScriptFor(['/x'], 'devbox'),
+        preconnectChoiceOf(true, 'devbox'),
+        preconnectChoiceOf(3, 'devbox'),
+        preconnectChoiceOf(['/x'], 'devbox'),
+        preconnectChoiceOf(null, 'devbox'),
       ],
-      [undefined, undefined, undefined],
+      [NONE, NONE, NONE, NONE],
+    );
+  });
+
+  it('F-2108 AC-27: an entry that is a number, a boolean, a list or an object is not the path of a script', () => {
+    deepStrictEqual(
+      [7, true, ['/x'], {key: 1}].map(entry =>
+        preconnectChoiceOf({devbox: entry}, 'devbox'),
+      ),
+      [
+        {kind: 'notAPath', valueKind: 'number'},
+        {kind: 'notAPath', valueKind: 'boolean'},
+        {kind: 'notAPath', valueKind: 'list'},
+        {kind: 'notAPath', valueKind: 'object'},
+      ],
     );
   });
 });

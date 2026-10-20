@@ -46,7 +46,6 @@ export interface ConfigEditorHost {
     options: {modal: boolean; detail: string},
     ...items: string[]
   ): PromiseLike<string | undefined>;
-  showInformationMessage(message: string): PromiseLike<unknown>;
   /** Opens a file in an editor tab. */
   showTextDocument(
     file: string,
@@ -121,9 +120,6 @@ export function configSurfacesOf(
           `could not open ${file}: ${caught instanceof Error ? caught.message : String(caught)}`,
         );
       }
-    },
-    showInformation: message => {
-      void host.showInformationMessage(message);
     },
   };
 }

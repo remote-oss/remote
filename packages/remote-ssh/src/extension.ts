@@ -18,6 +18,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
+  PORTS_VIEW_KEY,
   type ResolverEditor,
   resolverEditorOf,
 } from 'lib-authority';
@@ -84,6 +85,7 @@ import {
   failureDialogOf,
   filePickPortOf,
   licenceDialogOf,
+  preconnectDialogPortOf,
   mitigationPickPortOf,
   noticeOf,
   platformPickPortOf,
@@ -97,7 +99,6 @@ import {
   progressFor,
   windowNameFor,
 } from './surfaces/scripted-adapters.ts';
-import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 import {
   linkTerminalsOf,
@@ -395,6 +396,7 @@ async function surfaceAdapters(): Promise<EditorAdapters> {
       linkTerminals: linkTerminalsOf(vscode),
       failureDialog: failureDialogOf(vscode),
       licenceDialog: licenceDialogOf(vscode),
+      preconnectDialog: preconnectDialogPortOf(vscode),
       platformPick: platformPickPortOf(vscode, translate),
       mitigationPick: mitigationPickPortOf(vscode),
       downloadProgress: downloadProgressOf(vscode),

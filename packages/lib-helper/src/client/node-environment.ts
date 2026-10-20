@@ -9,23 +9,62 @@ import {nodeEndpointPort} from '../endpoint/node-endpoint.ts';
 import {runtimeFolder} from '../endpoint/path.ts';
 import {nodeFilePort} from '../registry/node-file-port.ts';
 import type {ClientEnvironment} from './acquire.ts';
-import type {SpawnSpecification} from './spawn.ts';
+import type {Spawner} from './spawn.ts';
 
-/** Starts the process detached and lets it outlive this one; rejects when it cannot start. */
-function nodeSpawner(specification: SpawnSpecification): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(specification.command, specification.commandArguments, {
-      detached: specification.detached,
-      stdio: specification.stdio,
-      windowsHide: specification.windowsHide,
-      env: specification.environment,
+/** What a spawner needs of a process it started: Node.js's child process, or a fake in tests. */
+export interface StartedProcess {
+  once(event: 'error', listener: (error: Error) => void): unknown;
+  once(event: 'spawn', listener: () => void): unknown;
+  once(event: 'exit', listener: (code: number | null) => void): unknown;
+  unref(): void;
+}
+
+/** Starts a process, as Node.js's `spawn` does. */
+export type ProcessSpawn = (
+  command: string,
+  commandArguments: readonly string[],
+  options: {
+    detached: boolean;
+    stdio: 'ignore';
+    windowsHide: boolean;
+    env: Readonly<Record<string, string | undefined>>;
+  },
+) => StartedProcess;
+
+/**
+ * A spawner over `spawnProcess`. It starts the process detached and lets it outlive this one, resolving once it has
+ * started; with `waitForExit`, it resolves only once the process exits with 0. It rejects when the process cannot
+ * start, or when a process it waits for exits otherwise.
+ */
+export function spawnerOf(spawnProcess: ProcessSpawn): Spawner {
+  return specification =>
+    new Promise((resolve, reject) => {
+      const child = spawnProcess(
+        specification.command,
+        specification.commandArguments,
+        {
+          detached: specification.detached,
+          stdio: specification.stdio,
+          windowsHide: specification.windowsHide,
+          env: specification.environment,
+        },
+      );
+      child.once('error', reject);
+      if (specification.waitForExit === true) {
+        child.once('exit', code => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`the launcher exited with ${String(code)}`));
+          }
+        });
+        return;
+      }
+      child.once('spawn', () => {
+        child.unref();
+        resolve();
+      });
     });
-    child.once('error', reject);
-    child.once('spawn', () => {
-      child.unref();
-      resolve();
-    });
-  });
 }
 
 /** A timer on Node.js's clock: calls `callback` after `milliseconds`; the returned function cancels it. */
@@ -53,7 +92,7 @@ export function nodeClientEnvironment(
   return {
     files: nodeFilePort,
     endpoints: nodeEndpointPort(),
-    spawn: nodeSpawner,
+    spawn: spawnerOf(spawn),
     timer: nodeTimer,
     clock: Date.now,
     newNonce: () => randomBytes(16).toString('hex'),

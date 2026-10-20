@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": ["${configDir}/src", "${configDir}/vscode-dts"],
-  "references": []
+  "references": [
+    {
+      "path": "../lib-log"
+    }
+  ]
 }

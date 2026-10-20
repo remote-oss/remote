@@ -51,6 +51,7 @@ function commandOf(state: Setup, authority?: string) {
       ...ports.window,
       remoteAuthority: () => authority,
       homeFolder: () => '/home/u',
+      isTrusted: () => state.trust === 'trusted',
     },
     pickFolder: async start => {
       dialog.starts.push(start);
@@ -73,6 +74,21 @@ describe('Open Folder in Container', () => {
       [state.calls, dialog.starts],
       [['firstCheck undefined'], []],
     );
+  });
+
+  it('F-0201 AC-55, BR-1: a relative dockerPath is the window folder’s file, so the engine check gets the folder as its base only once the window is trusted', async () => {
+    const calls = [];
+    for (const trust of ['trusted', 'declined'] as const) {
+      const state = setup();
+      state.check = 'stopped';
+      state.trust = trust;
+      await commandOf(state).handler();
+      calls.push(state.calls);
+    }
+    deepStrictEqual(calls, [
+      [`firstCheck ${FOLDER}`],
+      ['firstCheck undefined'],
+    ]);
   });
 
   it('F-0403 5.0 step 2: the dialog opens at the local window’s folder, at the container’s host folder, or at home', async () => {
@@ -224,18 +240,43 @@ describe('Open Folder in Container', () => {
     );
   });
 
-  it('F-0403 5.1: no configuration shows the notice and reloads nothing', async () => {
+  it('F-0403 5.1: no configuration runs the wizard for the folder, and a wizard that ends without a write reloads nothing', async () => {
     const state = setup();
     state.existing = [];
     const {handler, sink} = commandOf(state);
     await handler();
     deepStrictEqual(
-      [state.commands, state.shown.length, linesOf(sink).slice(-1)],
+      [
+        state.commands,
+        state.calls.filter(call => call.startsWith('wizard')),
+        linesOf(sink).slice(-1),
+      ],
       [
         [],
-        1,
+        ['wizard /w/p'],
         ['info: Open Folder in Container found no configuration in /w/p'],
       ],
+    );
+  });
+
+  it('F-0403 AC-23: a written configuration is read and the window reloads on it, with no notice shown, and no trust asked first (ruling 2)', async () => {
+    const state = setup();
+    state.existing = [];
+    state.wizard = {
+      kind: 'written',
+      files: ['.devcontainer/devcontainer.json'],
+      target: '/w/p',
+    };
+    state.wizardLeaves = [CONFIG];
+    const {handler} = commandOf(state);
+    await handler();
+    deepStrictEqual(
+      [
+        state.commands.map(each => each.command),
+        state.shown,
+        state.calls.includes('ensureTrusted'),
+      ],
+      [['vscode.openFolder'], [], false],
     );
   });
 

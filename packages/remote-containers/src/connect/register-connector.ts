@@ -2,15 +2,18 @@
  * @fileoverview The registration of the container connector: the resolver of the `dev-container` authority behind the
  * activation's own readiness, the window's label (the named one once a resolve settles with the connection up, the
  * unnamed one once the window is disconnected, never while a failure dialog is open) and the command the progress's
- * "(show log)" link runs.
+ * "(show log)" link runs. The first connection of a window also stores its Open Recent entry with its label.
  */
 
 import {
   type LabelFormatterHost,
+  enablePortsViewWhenConnected,
+  type PortsViewHost,
   type Registration,
   registerAuthorityLabel,
   registerResolver,
   type ResolverEditor,
+  type ResolverEditorOptions,
 } from 'lib-authority';
 import type {CommandHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
@@ -19,6 +22,7 @@ import {
   decodedFolderOf,
 } from '../authority/payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
+import type {Forwarder} from '../ports/forwarder.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {
   type RecoveryPorts,
@@ -26,15 +30,31 @@ import {
 } from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
+import {type RecentLabelPorts, storeRecentLabel} from './recent-label.ts';
 import {workspaceSuffixOf} from './window-identity.ts';
+
+/**
+ * What the extension decides about its editor adapter: the details link and nothing about ports. The resolver then
+ * gives core no tunnel factory, no tunnel features and no candidate port source, so core's own detection and forwards
+ * serve the window.
+ */
+export const RESOLVER_EDITOR_OPTIONS: ResolverEditorOptions = {
+  detailsCommand: runtimeCommands.revealLogTerminal,
+};
 
 /** What the registration needs of the editor. */
 export interface ConnectorRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
+  /** Core's Ports view, which the connected window enables. */
+  portsView: PortsViewHost;
   commands: CommandHost;
   presenter: Omit<RecoveryPorts, 'disconnected'>;
+  /** The Open Recent entry of the window, which gets its label once the window first connects. */
+  recentLabel: RecentLabelPorts;
   translate: Translate;
+  /** Opens the forwards the connection declares, once core has the connection. */
+  forwarder: Forwarder;
 }
 
 /** What the activation hands over: whether the proposed resolvers API is there, and the log to reveal. */
@@ -60,6 +80,7 @@ export async function registerContainerResolver(
   }
   let label: {dispose(): void} | undefined;
   let disposed = false;
+  let recentLabelStored = false;
   let dialogs = 0;
   /** The label with no name, for a window that is disconnected and has none yet; never while a dialog is open. */
   function registerUnnamedLabel(): void {
@@ -120,18 +141,30 @@ export async function registerContainerResolver(
   if (registration.kind === 'registered') {
     const {resolver} = registration;
     handle = resolver;
+    enablePortsViewWhenConnected(resolver, host.portsView, served.logger);
     resolver.onResolveSettled(() => {
       const connection = resolver.currentConnection();
       if (connection === undefined || disposed) {
         return;
       }
       if (connection.state === 'connected') {
+        void host.forwarder.forward(connector.heldPorts());
         label?.dispose();
         label = registerAuthorityLabel(
           host.labels,
           connection.decodedTarget,
           workspaceSuffixOf(connector.heldIdentity(), translate),
         );
+        const folder = decodedFolderOf(connection.decodedTarget);
+        if (folder !== undefined && !recentLabelStored) {
+          recentLabelStored = true;
+          void storeRecentLabel(
+            host.recentLabel,
+            translate,
+            served.logger,
+            folder,
+          );
+        }
       } else {
         queueMicrotask(() => {
           if (dialogs === 0) {

@@ -29,6 +29,8 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {cacheVolumeOf} from '../../src/lifecycle/cache-volume.ts';
+import type {ShutdownRequest} from '../../src/shutdown/protocol.ts';
+import {metadataArguments} from '../../src/shutdown/recorded-metadata.ts';
 import type {
   ContainerLifecycle,
   ContainerOutcome,
@@ -93,6 +95,8 @@ interface EngineCall {
 
 /** What a test steers and reads: the fakes, their answers and what they recorded. */
 export interface Scene {
+  /** The `DOCKER_HOST` of the editor's environment; unset when undefined. */
+  dockerHost: string | undefined;
   connector: ContainerConnector;
   engineCalls: EngineCall[];
   engineFiles: string[];
@@ -117,6 +121,11 @@ export interface Scene {
   }>;
   stopped: number;
   revealed: number;
+  /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
+  shutdownSent: ShutdownRequest[];
+  readsAtShutdown: number[];
+  /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
+  metadata: string;
   sink: MemorySink;
   /** The outcome of `prepare`; a function to hold it. */
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
@@ -144,6 +153,8 @@ export interface Scene {
   legacyWorkspaceMountConsistency: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
+  defaultFeatures: unknown;
+  lockfile: unknown;
   defaultExtensions: unknown;
   deprecatedDefaultExtensions: unknown;
   /** The exit statuses of the next `kill -0` runs. */
@@ -211,6 +222,7 @@ export function sceneOf(
   const sink = new MemorySink();
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
+    dockerHost: undefined,
     engineCalls: [],
     engineFiles: [],
     cliEnvironments: [],
@@ -225,6 +237,9 @@ export function sceneOf(
     relays: [],
     stopped: 0,
     revealed: 0,
+    shutdownSent: [],
+    readsAtShutdown: [],
+    metadata: '',
     sink,
     outcome: READY,
     steps: [],
@@ -245,6 +260,8 @@ export function sceneOf(
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
     mountGitWorktreeCommonDir: undefined,
+    defaultFeatures: undefined,
+    lockfile: undefined,
     defaultExtensions: undefined,
     deprecatedDefaultExtensions: undefined,
     killStatuses: [],
@@ -287,6 +304,16 @@ export function sceneOf(
         stdout: '',
         stderr: scene.version.stderr,
       };
+    }
+    if (argv[0] === 'inspect' && argv[4] === metadataArguments('')[4]) {
+      return scene.metadata === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: `${scene.metadata}\n`, stderr: ''};
     }
     const {answer} = scene.inspect;
     if (answer === 'unreachable') {
@@ -354,6 +381,10 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    applyTemplate: () =>
+      Promise.reject(new Error('the connector never applies a template')),
+    templateMetadata: () =>
+      Promise.reject(new Error('the connector never reads template metadata')),
   };
   const lifecycle: ContainerLifecycle = {
     prepare: async (request, onStep, onCliEvent) => {
@@ -372,7 +403,19 @@ export function sceneOf(
       scene.stopped += 1;
     },
   };
+  let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
+    shutdown: {
+      send: request => {
+        scene.shutdownSent.push(request);
+        scene.readsAtShutdown.push(scene.configurationReads.length);
+        return Promise.resolve();
+      },
+    },
+    newConnectionId: () => {
+      connections += 1;
+      return `connection-${String(connections)}`;
+    },
     engineFor: file => {
       scene.engineFiles.push(file);
       return engine;
@@ -393,6 +436,8 @@ export function sceneOf(
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
       serverDownloadFolder: undefined,
+      defaultFeatures: scene.defaultFeatures,
+      lockfile: scene.lockfile,
       cacheVolume: () =>
         cacheVolumeOf(
           scene.cacheVolumeInspect?.globalValue,
@@ -418,7 +463,15 @@ export function sceneOf(
       translate: template => template,
       dialogs: silentDialogs(),
     },
-    editorEnvironment: {HOME: '/home/u', GITHUB_TOKEN: 's3cr3t-token'},
+    get editorEnvironment() {
+      return {
+        HOME: '/home/u',
+        GITHUB_TOKEN: 's3cr3t-token',
+        ...(scene.dockerHost === undefined
+          ? {}
+          : {DOCKER_HOST: scene.dockerHost}),
+      };
+    },
     intents: {
       get: () => {
         if (scene.intentError !== undefined) {
@@ -433,14 +486,14 @@ export function sceneOf(
     },
     trust: {
       isTrusted: () => {
-        scene.atTrust = {
-          reads: scene.configurationReads.length,
-          engineCalls: scene.engineCalls.length,
-        };
         scene.trustCalls.push('isTrusted');
         return scene.trusted;
       },
       request: message => {
+        scene.atTrust = {
+          reads: scene.configurationReads.length,
+          engineCalls: scene.engineCalls.length,
+        };
         scene.trustCalls.push(`request ${message}`);
         const {trustAnswer} = scene;
         if (typeof trustAnswer === 'function') {

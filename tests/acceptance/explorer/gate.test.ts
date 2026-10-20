@@ -4,7 +4,7 @@
  * and a host added to the run's ssh_config, seen on Refresh.
  */
 
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {
   closeWindow,
@@ -12,83 +12,29 @@ import {
   inWindow,
   isOpen,
   onHost,
-  recordLines,
   variable,
   waitFor,
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
+import {rowAction, titleAction} from '../windows/renderer.ts';
 import {
-  notifications,
-  rowAction,
-  titleAction,
-  viewRows,
-  type ViewRow,
-} from '../windows/renderer.ts';
+  nothingFails,
+  rowsOf,
+  rowsSettled,
+  VIEW,
+} from '../windows/explorer-rows.ts';
 
 /** The launch's first window and the windows the connects open, and the view and its actions. */
 const LOCAL = 'local';
 const NEW_WINDOW = 'empty-1';
 const RELOADED_WINDOW = 'empty-2';
-const VIEW = 'Remotes (Tunnels/SSH)';
 const IN_NEW = 'Connect in New Window...';
 const CURRENT = 'Connect in Current Window...';
 const REFRESH = 'Refresh';
 
 /** The hosts of the run's ssh_config, read when this file's tests start. */
 const HOSTS = hostAliases();
-
-/** The rows of the view: the SSH group, then `hosts` in order, with `marked` its connected description. */
-function rowsOf(hosts: string[], marked: string | undefined): ViewRow[] {
-  const rows: ViewRow[] = [
-    {label: 'SSH', description: '', level: 1, expanded: true},
-  ];
-  for (const host of hosts) {
-    rows.push({
-      label: host,
-      description: host === marked ? 'connected' : '',
-      level: 2,
-      expanded: undefined,
-    });
-  }
-  return rows;
-}
-
-/** Polls the view's rows of `name` until they equal `expected`, then asserts them once. */
-async function rowsSettled(name: string, expected: ViewRow[]): Promise<void> {
-  await waitFor(
-    `the ${VIEW} rows of window ${name}`,
-    async () => {
-      try {
-        deepStrictEqual(await viewRows(name, VIEW), expected);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    15_000,
-  );
-  deepStrictEqual(await viewRows(name, VIEW), expected);
-}
-
-/** Nothing failed in `name`: no toast that holds an error word, no notice line of the record, no failed command. */
-async function nothingFails(name: string): Promise<void> {
-  const toasts = await notifications(name);
-  for (const toast of toasts) {
-    for (const word of ['Error', 'error', 'not found', 'failed']) {
-      strictEqual(
-        toast.includes(word),
-        false,
-        `window ${name} holds a failing toast: ${toast}`,
-      );
-    }
-  }
-  deepStrictEqual(recordLines('notice', name), []);
-  deepStrictEqual(
-    windowEvents(name).filter(each => each.event === 'failed'),
-    [],
-  );
-}
 
 describe('the gate rows of explorer slice 1 in the explorer launch (card coverage-25b, rows 1–5)', function () {
   this.timeout(180_000);

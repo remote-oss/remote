@@ -1,0 +1,25 @@
+{
+  "namespace": "remote-oss-community/features",
+  "name": "The acceptance run's own community Features",
+  "repository": "https://github.com/remote-oss-community/features",
+  "features": [
+    {
+      "id": "add-community",
+      "version": "1.0.0",
+      "name": "add-community",
+      "description": "The acceptance run's own Feature, named to sort differently without regard to case than by code unit."
+    },
+    {
+      "id": "add-community-tool",
+      "version": "1.0.0",
+      "name": "Add Community Tool",
+      "description": "The acceptance run's own Feature, named to sort differently without regard to case than by code unit."
+    },
+    {
+      "id": "adobe-community-kit",
+      "version": "1.0.0",
+      "name": "Adobe Community Kit",
+      "description": "The acceptance run's own Feature, named to sort differently without regard to case than by code unit."
+    }
+  ]
+}

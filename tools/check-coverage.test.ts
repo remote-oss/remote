@@ -29,9 +29,17 @@ const BOTH = [SLICE_ONE_SCOPE, CONTAINERS_RELEASE_ONE_SCOPE];
 /** Where the containers file lies. */
 const CONTAINERS_FILE = CONTAINERS_RELEASE_ONE_SCOPE.file;
 
+/** The problems or the notes of a report, or the way it failed. */
+function reportMember(
+  report: CoverageReport,
+  member: 'problems' | 'notes',
+): string[] {
+  return report.kind === 'checked' ? report[member] : [report.kind];
+}
+
 /** The problems of a report, or the way it failed. */
 function problemsOf(report: CoverageReport): string[] {
-  return report.kind === 'checked' ? report.problems : [report.kind];
+  return reportMember(report, 'problems');
 }
 
 describe('check-coverage', () => {
@@ -470,6 +478,82 @@ describe('check-coverage', () => {
       unitTest('F-2409: x');
       tagged('F-2601.AC-1\ttodo\t');
       deepStrictEqual(problems(), []);
+    });
+  });
+
+  describe('a todo line a row already cites (card tooling-65)', () => {
+    /** The notes of the slice-1 check, or the way it failed. */
+    function notesOf(): string[] {
+      return reportMember(checkCoverage(workspace.root, SLICE_ONLY), 'notes');
+    }
+
+    it('tooling-65: a todo line an acceptance row cites gets the note', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      acceptanceTest('F-2601 AC-1: x');
+      deepStrictEqual(notesOf(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 is todo and an acceptance row cites it`,
+      ]);
+    });
+
+    it('tooling-65: a todo line a unit row alone cites gets the unit note', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      unitTest('F-2601 AC-1: x');
+      deepStrictEqual(notesOf(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 is todo and a unit row cites it`,
+      ]);
+    });
+
+    it('tooling-65: a todo line no row cites gets no note', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      deepStrictEqual(notesOf(), []);
+    });
+
+    it('tooling-65: a deferred, an acceptance and a unit line get no problem and no note', () => {
+      tagged(
+        'F-2601.AC-1\tdeferred\tD-51',
+        'F-2601.AC-2\tacceptance\t',
+        'F-2601.AC-3\tunit\t',
+      );
+      acceptanceTest('F-2601 AC-2: x');
+      unitTest('F-2601 AC-3: x');
+      deepStrictEqual([problems(), notesOf()], [[], []]);
+    });
+
+    it('tooling-65: a note alone keeps the exit 0', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      acceptanceTest('F-2601 AC-1: x');
+      strictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).exitCode,
+        0,
+      );
+    });
+
+    it('tooling-65: outputOf puts the note after the problems and before the counts, prefixed note: ', () => {
+      tagged('F-2601.AC-1\ttodo\t', 'F-2601.AC-2\tacceptance\t');
+      acceptanceTest('F-2601 AC-1: x');
+      deepStrictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).lines,
+        [
+          `${COVERAGE_FILE}:00003: F-2601.AC-2 is tagged acceptance and no acceptance row cites it`,
+          `note: ${COVERAGE_FILE}:00002: F-2601.AC-1 is todo and an acceptance row cites it`,
+          `${COVERAGE_FILE}:`,
+          'acceptance: 1',
+          'unit: 0',
+          'recorded: 0',
+          'core: 0',
+          'deferred: 0',
+          'todo: 1',
+        ],
+      );
+    });
+
+    it('tooling-65: a note does not change the exit 1 of a problem', () => {
+      tagged('F-2601.AC-1\ttodo\t', 'F-2601.AC-2\tacceptance\t');
+      acceptanceTest('F-2601 AC-1: x');
+      strictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).exitCode,
+        1,
+      );
     });
   });
 
