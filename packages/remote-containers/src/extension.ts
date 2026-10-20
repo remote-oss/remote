@@ -1045,7 +1045,12 @@ export async function activate(
       },
     });
     windowShutdown.leave = () => connector.leaveShutdown();
-    connector.announceShutdown(vscode.env.remoteAuthority);
+    // `env.remoteAuthority` belongs to the resolvers proposal: reading it without the grant throws.
+    connector.announceShutdown(
+      served.missing.includes('resolvers')
+        ? undefined
+        : vscode.env.remoteAuthority,
+    );
     if (served.missing.length === 0) {
       offerReopenFor(logger).catch((caught: unknown) => {
         logger.error(

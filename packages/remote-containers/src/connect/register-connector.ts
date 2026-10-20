@@ -94,6 +94,13 @@ export async function registerContainerResolver(
       workspaceSuffixOf(undefined, translate),
     );
   }
+  // First, before anything that can fail: the command only shows the log, so it works without the proposals.
+  const logCommand = host.commands.registerCommand(
+    runtimeCommands.revealLogTerminal,
+    () => {
+      served.revealLog();
+    },
+  );
   const dialogPresenter = recoveryPresenterOf(
     {...host.presenter, disconnected: registerUnnamedLabel},
     () => currentTarget(),
@@ -130,12 +137,6 @@ export async function registerContainerResolver(
     {
       guard: () => Promise.resolve('serving'),
       resolversGranted: () => Promise.resolve(served.resolversGranted),
-    },
-  );
-  const logCommand = host.commands.registerCommand(
-    runtimeCommands.revealLogTerminal,
-    () => {
-      served.revealLog();
     },
   );
   if (registration.kind === 'registered') {
