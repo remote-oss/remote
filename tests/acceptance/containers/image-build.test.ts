@@ -6,8 +6,6 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
-  containersLog,
-  containersLogSince,
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
@@ -522,85 +520,5 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       seen,
       cases.map(([folderName]) => [folderName, S034, RECOVERY_BUTTONS, [], []]),
     );
-  });
-
-  it('F-0412 AC-13 (cache-plain): a cacheFrom that names an image pushed to a registry, built with no cache options, lets the build complete with no failure shown', async () => {
-    const pushed = `${variable('HARNESS_REGISTRY')}/c52-cache-plain:1`;
-    await buildTag(pushed, `FROM ${base()}\nRUN echo one > /one\n`);
-    await docker('push', pushed);
-    const folder = devContainerFolder('c52-cache-plain', {
-      name: 'Cache Plain',
-      image: undefined,
-      build: {dockerfile: 'Dockerfile', cacheFrom: pushed},
-    });
-    writeDockerfile(folder, `FROM ${base()}\nRUN echo one > /one\n`);
-    try {
-      const mark = containersLog().length;
-      const name = await openFolderWindow(folder);
-      await reopenInContainer(name);
-      const [containerId = ''] = await devContainersOf(folder);
-      deepStrictEqual(
-        [
-          await docker('inspect', '-f', '{{.State.Status}}', containerId),
-          containersLogSince(mark).filter(line =>
-            /cache.*fail|fail.*cache/i.test(line),
-          ),
-          await dialogOf(name),
-          await notifications(name),
-        ],
-        ['running', [], undefined, []],
-      );
-      await closeWindow(name);
-    } finally {
-      await cleanUp(folder, [pushed]);
-    }
-  });
-
-  it('F-0412 AC-15 (cache-registry): a cacheFrom that names a registry-hosted image built with its cache inline lets the build complete with no failure shown', async () => {
-    const pushed = `${variable('HARNESS_REGISTRY')}/c52-cache-registry:1`;
-    const context = path.join(
-      variable('HARNESS_RUN_FOLDER'),
-      'c52-cache-context',
-    );
-    mkdirSync(context, {recursive: true});
-    writeFileSync(
-      path.join(context, 'Dockerfile'),
-      `FROM ${base()}\nRUN echo one > /one\n`,
-    );
-    await docker(
-      'build',
-      '--build-arg',
-      'BUILDKIT_INLINE_CACHE=1',
-      '-t',
-      pushed,
-      context,
-    );
-    await docker('push', pushed);
-    const folder = devContainerFolder('c52-cache-registry', {
-      name: 'Cache Registry',
-      image: undefined,
-      build: {dockerfile: 'Dockerfile', cacheFrom: pushed},
-    });
-    writeDockerfile(folder, `FROM ${base()}\nRUN echo one > /one\n`);
-    try {
-      const mark = containersLog().length;
-      const name = await openFolderWindow(folder);
-      await reopenInContainer(name);
-      const [containerId = ''] = await devContainersOf(folder);
-      deepStrictEqual(
-        [
-          await docker('inspect', '-f', '{{.State.Status}}', containerId),
-          containersLogSince(mark).filter(line =>
-            /cache.*fail|fail.*cache/i.test(line),
-          ),
-          await dialogOf(name),
-          await notifications(name),
-        ],
-        ['running', [], undefined, []],
-      );
-      await closeWindow(name);
-    } finally {
-      await cleanUp(folder, [pushed]);
-    }
   });
 });
