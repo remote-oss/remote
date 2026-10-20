@@ -2,7 +2,12 @@ import {execFile} from 'node:child_process';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {devContainersOf, waitFor} from '../windows/harness.ts';
-import {pageText, statusItem} from '../windows/renderer.ts';
+import {
+  INDICATOR_MILLISECONDS,
+  pageText,
+  statusItem,
+  statusItemText,
+} from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -117,12 +122,24 @@ export async function untilLabels(
   );
 }
 
-/** The connect's state in window `name`: the remote indicator and whether the Configuring text shows. */
+/**
+ * The connect's state in window `name`: the remote indicator and whether the Configuring text shows. With `expected`
+ * the indicator is the text it reads once it says that, or after `INDICATOR_MILLISECONDS`.
+ */
 export async function stateOf(
   name: string,
+  expected?: string,
 ): Promise<{indicator: string; configuring: boolean}> {
   return {
-    indicator: (await statusItem(name, 'status.host')).text,
+    indicator:
+      expected === undefined
+        ? (await statusItem(name, 'status.host')).text
+        : await statusItemText(
+            name,
+            'status.host',
+            expected,
+            INDICATOR_MILLISECONDS,
+          ),
     configuring: (await pageText(name)).includes(CONFIGURING),
   };
 }
@@ -143,12 +160,13 @@ export async function waitForContainer(folder: string): Promise<string> {
  */
 export async function connectedState(
   name: string,
+  expected?: string,
 ): Promise<{indicator: string; configuring: boolean}> {
-  let state = await stateOf(name);
+  let state = await stateOf(name, expected);
   const deadline = Date.now() + 10_000;
   while (!state.configuring && Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 300));
-    state = await stateOf(name);
+    state = await stateOf(name, expected);
   }
   return state;
 }

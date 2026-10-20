@@ -1133,6 +1133,29 @@ export interface StatusItem {
   hover: string;
 }
 
+/** How long a row waits for the remote indicator to read the container once the window is connected. */
+export const INDICATOR_MILLISECONDS = 30_000;
+
+/**
+ * The text of the status bar item `itemId` of window `name` once it reads `expected`, or its last text after
+ * `milliseconds`: core updates the remote indicator a moment after the window connects, and on a loaded machine that
+ * moment is longer than a row's read.
+ */
+export async function statusItemText(
+  name: string,
+  itemId: string,
+  expected: string,
+  milliseconds: number,
+): Promise<string> {
+  const deadline = Date.now() + milliseconds;
+  let text = (await statusItem(name, itemId)).text;
+  while (text !== expected && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    text = (await statusItem(name, itemId)).text;
+  }
+  return text;
+}
+
 /**
  * The status bar item of window `name` whose DOM id is `itemId` (core's remote indicator is `status.host`). The hover
  * is read by moving the pointer onto the item and back off, with its non-breaking spaces read as spaces. It fails
