@@ -126,11 +126,11 @@ describe('the effective shutdownAction decides what the close does (card contain
         await removeContainersOf(connected.folder);
       }
     }
-    const one = await connectedWindow('c69-v70-one', {shutdownAction: 1});
+    const numeric = await connectedWindow('c69-v70-one', {shutdownAction: 1});
     try {
-      results.push(['one', stayedRunning(await closedAndWatched(one, 40))]);
+      results.push(['one', stayedRunning(await closedAndWatched(numeric, 40))]);
     } finally {
-      await removeContainersOf(one.folder);
+      await removeContainersOf(numeric.folder);
     }
     deepStrictEqual(results, [
       ['null', true],
@@ -156,15 +156,13 @@ describe('the effective shutdownAction decides what the close does (card contain
     const kept = await connectedWindow('c69-v7-none', {
       shutdownAction: 'none',
     });
-    let keptOutcome = false;
-    let stoppedOutcome = false;
     const stopped = await connectedWindow('c69-v7-key');
     try {
       await closeWindow(kept.window);
       configure(kept.folder, {});
       const again = await reopened(kept.folder);
       const same = (await devContainersOf(kept.folder))[0] === kept.containerId;
-      keptOutcome =
+      const keptOutcome =
         same &&
         stayedRunning(await closedAndWatched({...kept, window: again}, 40));
       await closeWindow(stopped.window);
@@ -173,14 +171,14 @@ describe('the effective shutdownAction decides what the close does (card contain
       const sameStopped =
         (await devContainersOf(stopped.folder))[0] === stopped.containerId;
       // The first window's own check may come first, with the second one closed already: it stops the container then.
-      stoppedOutcome =
+      const stoppedOutcome =
         sameStopped &&
         stoppedWithin(
           await closedAndWatched({...stopped, window: later}, 20),
           0,
           {
             from: 0,
-            to: 15,
+            until: 15,
           },
         );
       deepStrictEqual([keptOutcome, stoppedOutcome], [true, true]);
@@ -200,8 +198,8 @@ describe('the effective shutdownAction decides what the close does (card contain
       path.join(folderOfImage, 'Dockerfile'),
       `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nLABEL devcontainer.metadata='[{"shutdownAction":"none"}]'\n`,
     );
-    const tag = `c69-none-${variable('HARNESS_RUN_ID')}`.toLowerCase();
-    await execFileAsync('docker', ['build', '-t', tag, folderOfImage]);
+    const imageTag = `c69-none-${variable('HARNESS_RUN_ID')}`.toLowerCase();
+    await execFileAsync('docker', ['build', '-t', imageTag, folderOfImage]);
     const results = [];
     try {
       for (const [label, extra] of [
@@ -209,7 +207,7 @@ describe('the effective shutdownAction decides what the close does (card contain
         ['file', {shutdownAction: 'stopContainer'}],
       ] as const) {
         const connected = await connectedWindow(`c69-v5-${label}`, {
-          image: tag,
+          image: imageTag,
           ...extra,
         });
         try {
@@ -228,7 +226,7 @@ describe('the effective shutdownAction decides what the close does (card contain
       }
       deepStrictEqual(results, [true, true]);
     } finally {
-      await execFileAsync('docker', ['image', 'rm', '--force', tag]);
+      await execFileAsync('docker', ['image', 'rm', '--force', imageTag]);
     }
   });
 });

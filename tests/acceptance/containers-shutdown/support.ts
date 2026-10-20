@@ -6,7 +6,6 @@ import {
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
-  waitFor,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 
@@ -106,34 +105,22 @@ export async function removeContainersOf(
   extra: readonly string[] = [],
 ): Promise<void> {
   const found = await devContainersOf(folder);
-  const ids = [
+  const doomed = [
     ...found,
     ...extra.filter(
-      id => !found.some(one => id.startsWith(one) || one.startsWith(id)),
+      named =>
+        !found.some(
+          shown => named.startsWith(shown) || shown.startsWith(named),
+        ),
     ),
   ];
-  if (ids.length > 0) {
-    await execFileAsync('docker', ['rm', '--force', ...ids]);
+  if (doomed.length > 0) {
+    await execFileAsync('docker', ['rm', '--force', ...doomed]);
   }
 }
 
-/** Waits until container `containerId` is not running; fails naming it after `milliseconds`. */
-export async function untilStopped(
-  containerId: string,
-  milliseconds: number,
-): Promise<void> {
-  await waitFor(
-    `container ${containerId} to stop`,
-    async () => {
-      const state = await stateOf(containerId);
-      return state === 'gone' || state.status !== 'running';
-    },
-    milliseconds,
-  );
-}
-
 /** The seconds after a close in which a container that the close stops is read to have stopped, with a margin of 3 s. */
-export const STOP_WINDOW = {from: 10, to: 15} as const;
+const STOP_WINDOW = {from: 10, until: 15} as const;
 
 /** Whether every state read was running. */
 export function stayedRunning(outcome: Outcome): boolean {
@@ -146,13 +133,13 @@ export function stayedRunning(outcome: Outcome): boolean {
 export function stoppedWithin(
   outcome: Outcome,
   exitCode: number,
-  window: {from: number; to: number} = STOP_WINDOW,
+  window: {from: number; until: number} = STOP_WINDOW,
 ): boolean {
   const last = outcome.states.at(-1);
   return (
     outcome.stoppedAfter !== undefined &&
     outcome.stoppedAfter >= window.from &&
-    outcome.stoppedAfter <= window.to &&
+    outcome.stoppedAfter <= window.until &&
     last !== undefined &&
     last !== 'gone' &&
     last.status === 'exited' &&
@@ -199,20 +186,20 @@ export async function helperProcesses(): Promise<string[]> {
   }
 }
 
-/** The parent process id of `pid`, read from `/proc`; 0 for none. */
-export function parentOf(pid: string): string {
+/** The parent process id of `processId`, read from `/proc`; 0 for none. */
+function parentOf(processId: string): string {
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const stat = readFileSync(`/proc/${processId}/stat`, 'utf8');
     return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1] ?? '0';
   } catch {
     return '0';
   }
 }
 
-/** The process ids from `pid` up through its parents to the first process, `pid` first. */
-export function chainOf(pid: string): string[] {
+/** The process ids from `processId` up through its parents to the first process, `processId` first. */
+export function chainOf(processId: string): string[] {
   const chain: string[] = [];
-  let current = pid;
+  let current = processId;
   while (current !== '0' && current !== '1' && !chain.includes(current)) {
     chain.push(current);
     current = parentOf(current);
@@ -231,8 +218,8 @@ export async function editorMainProcess(userData: string): Promise<string[]> {
     return stdout
       .split('\n')
       .filter(line => line !== '')
-      .filter(pid => {
-        const command = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+      .filter(processId => {
+        const command = readFileSync(`/proc/${processId}/cmdline`, 'utf8');
         return !command.includes('--type=');
       });
   } catch {

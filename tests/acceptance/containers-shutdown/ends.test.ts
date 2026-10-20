@@ -53,8 +53,8 @@ describe('what ends a window decides when its container stops (card containers-6
   it('F-0417 AC-12 (e12): a command that exits 3 four seconds after the signal shows Exited (3) about 15 s after the close, and one that ignores it Exited (137) about 21 s after', async () => {
     const results = [];
     for (const [label, trap, exitCode, window] of [
-      ['exits', "trap 'sleep 4; exit 3' TERM", 3, {from: 13, to: 18}],
-      ['ignores', "trap '' TERM", 137, {from: 19, to: 24}],
+      ['exits', "trap 'sleep 4; exit 3' TERM", 3, {from: 13, until: 18}],
+      ['ignores', "trap '' TERM", 137, {from: 19, until: 24}],
     ] as const) {
       const folder = dockerfileFolder(
         `c69-e12-${label}`,
@@ -154,7 +154,7 @@ describe('what ends a window decides when its container stops (card containers-6
     try {
       const outcome = await closedAndWatched({window, folder, containerId}, 22);
       deepStrictEqual(
-        stoppedWithin(outcome, 0, {from: 9, to: 17}),
+        stoppedWithin(outcome, 0, {from: 9, until: 17}),
         true,
         JSON.stringify(outcome),
       );

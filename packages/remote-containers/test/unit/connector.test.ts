@@ -677,12 +677,8 @@ describe('the container connector: the connect (card containers-08)', () => {
     await failing.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
     deepStrictEqual(
       [scene, failing].map(each =>
-        each.shutdownSent.map(request =>
-          request.type === 'register' ||
-          request.type === 'leave' ||
-          request.type === 'container'
-            ? `${request.type} ${request.connectionId}`
-            : '',
+        each.shutdownSent.map(
+          request => `${request.type} ${request.connectionId}`,
         ),
       ),
       [
@@ -716,7 +712,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  it('F-0417 BR-5: an authority of another kind, a malformed or a legacy one, none at all, or a folder that is not trusted yet announces nothing', async () => {
+  it('F-0417 BR-5: an authority of another kind, a malformed or a legacy one, none at all, or a folder that is not trusted yet announces nothing', () => {
     const trusted = sceneOf();
     for (const authority of [
       undefined,

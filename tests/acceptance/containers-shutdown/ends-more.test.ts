@@ -73,11 +73,11 @@ describe('more of what ends a window decides when its container stops (card cont
       const outcome = await closedAndWatched(connected, 22);
       deepStrictEqual(
         [
-          shown.details?.includes('Cannot reconnect') === true,
-          stoppedWithin(outcome, 0, {from: 9, to: 17}),
+          shown.details.includes('Cannot reconnect'),
+          stoppedWithin(outcome, 0, {from: 9, until: 17}),
         ],
         [true, true],
-        `${String(shown.details)} ${JSON.stringify(outcome)}`,
+        `${shown.details} ${JSON.stringify(outcome)}`,
       );
     } finally {
       await closeWindow(connected.window).catch(() => undefined);
@@ -105,7 +105,7 @@ describe('more of what ends a window decides when its container stops (card cont
       void startInWindow(connected.window, 'workbench.action.remote.close');
       const outcome = await watched(connected.containerId, 24, from);
       deepStrictEqual(
-        stoppedWithin(outcome, 0, {from: 9, to: 19}),
+        stoppedWithin(outcome, 0, {from: 9, until: 19}),
         true,
         JSON.stringify(outcome),
       );

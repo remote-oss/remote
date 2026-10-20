@@ -27,8 +27,8 @@ describe('the shutdown helper program (card containers-69)', function () {
     try {
       const during = await helperProcesses();
       const editors = await editorMainProcess(userData);
-      const reached = during.flatMap(pid =>
-        chainOf(pid).filter(each => editors.includes(each)),
+      const reached = during.flatMap(processId =>
+        chainOf(processId).filter(each => editors.includes(each)),
       );
       const registry = path.join(
         userData,
