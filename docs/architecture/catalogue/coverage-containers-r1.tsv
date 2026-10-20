@@ -331,11 +331,11 @@ F-0409.AC-4	acceptance
 F-0409.AC-5	deferred	containers release 1: increment 2 (shutdown)
 F-0409.AC-6	acceptance	
 F-0409.AC-7	acceptance	
-F-0409.AC-8	core	core: the editor's reconnect dialog after the container stopped
+F-0409.AC-8	todo	
 F-0409.AC-9	acceptance	
-F-0409.AC-10	core	core: the editor's reconnection indicator and countdown dialog for a paused container
+F-0409.AC-10	todo	
 F-0409.AC-11	todo	
-F-0409.AC-12	acceptance	
+F-0409.AC-12	todo	
 F-0409.AC-13	todo	
 F-0409.AC-14	todo	
 F-0409.AC-15	unit	
@@ -346,7 +346,7 @@ F-0409.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-20	deferred	containers release 1: later (Reopen Folder Locally)
 F-0409.AC-21	deferred	containers release 1: later (remote engines)
 F-0409.AC-22	acceptance	
-F-0409.AC-23	core	core: the editor's reconnection dialog and its Dismiss notification
+F-0409.AC-23	todo	
 F-0409.AC-24	todo	
 F-0409.AC-25	unit	
 F-0409.AC-26	acceptance	
