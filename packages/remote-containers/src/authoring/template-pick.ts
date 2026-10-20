@@ -102,8 +102,11 @@ export interface TemplatePickPorts {
     templateId: string,
     cancellation: AbortSignal,
   ): Promise<TemplateMetadataResult>;
-  /** The start of the ids of the templates our curated table may show: the catalogue's own collection's. */
-  curatedPrefix: string;
+  /**
+   * The start of the ids of the templates our curated table may show: the catalogue's own collection's. Nothing when
+   * the catalogue has none, which leaves the flat list whatever the folder holds.
+   */
+  curatedPrefix: string | undefined;
   /** Whether a template carries the verified mark. */
   isVerified(template: CatalogueTemplate): boolean;
   translate: Translate;
@@ -232,15 +235,11 @@ function templatePick(
   ports: TemplatePickPorts,
   cancellation: AbortSignal,
 ): Promise<TemplateChoice> {
-  const curatedList = isCurated(request.folder)
-    ? byName(
-        curatedTemplates(
-          request.catalogue,
-          request.folder,
-          ports.curatedPrefix,
-        ),
-      )
-    : undefined;
+  const prefix = ports.curatedPrefix;
+  const curatedList =
+    prefix !== undefined && isCurated(request.folder)
+      ? byName(curatedTemplates(request.catalogue, request.folder, prefix))
+      : undefined;
   const flat = byName(request.catalogue);
   let showingAll = false;
   return shown(ports, cancellation, (picker, finish) => {

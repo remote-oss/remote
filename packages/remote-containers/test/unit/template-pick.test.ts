@@ -442,6 +442,22 @@ describe('the curated template pick (card containers-79)', () => {
     );
   });
 
+  it('F-0802 AC-24: with no collection prefix the list is flat whatever the folder holds, with no Show All Templates', () => {
+    const scene = sceneOf();
+    scene.ports.curatedPrefix = undefined;
+    const {picker} = started(scene, SIGNIFICANT, CURATED);
+    picker.type('a/b/c');
+    const custom = labels(picker);
+    picker.type('');
+    deepStrictEqual(
+      [labels(picker), custom],
+      [
+        ['Learn More', 'Alpine', 'Go', 'Rust', 'Ubuntu'],
+        ["Use 'a/b/c' as template...", 'Learn More'],
+      ],
+    );
+  });
+
   it('F-0802 AC-26: a folder of neutral files only shows the flat list', () => {
     const {picker} = started(
       sceneOf(),
