@@ -221,12 +221,17 @@ async function stateForPage(
 ): Promise<Awaited<ReturnType<typeof windowState>> | undefined> {
   const state = windowState(name);
   state.catch(() => undefined);
-  return Promise.race([
-    state,
-    new Promise<undefined>(resolve => {
-      setTimeout(resolve, remaining, undefined);
-    }),
-  ]);
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      state,
+      new Promise<undefined>(resolve => {
+        timer = setTimeout(resolve, remaining, undefined);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

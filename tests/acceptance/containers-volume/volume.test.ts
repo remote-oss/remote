@@ -11,6 +11,7 @@ import {
   devContainersOf,
   reopenInContainer,
   reopenStarted,
+  startInWindow,
   variable,
   windowState,
 } from '../windows/harness.ts';
@@ -232,7 +233,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
       remoteUser: 'node',
     });
     const name = await openFolderWindow(folder);
-    void reopenInContainer(name).catch(() => undefined);
+    await startInWindow(name, 'remote-containers.reopenInContainer');
     const dialog = await waitForDialog(name, 300_000);
     const folders = await serverFolders();
     console.log(
@@ -274,7 +275,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     containers: string[];
   }> {
     const name = await windowOf(folder);
-    void reopenInContainer(name).catch(() => undefined);
+    await startInWindow(name, 'remote-containers.reopenInContainer');
     const dialog = await waitForDialog(name, 300_000);
     return {
       name,
