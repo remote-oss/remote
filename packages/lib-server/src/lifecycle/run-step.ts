@@ -30,9 +30,14 @@ export interface StepOptions {
   input?: ScriptInput;
   /** Variables added to the script's environment; they never appear in a command line (contracts §S10). */
   environment?: Readonly<Record<string, string>>;
+  /** The names in `environment` whose values are secret; a name that looks secret must be among them. */
+  secretVariables?: readonly string[];
   /** Receives every output line as it arrives, before the outcome is known. */
   onLine?: (line: string) => void;
 }
+
+/** A variable name that looks secret: it must be marked as such where it is put into the environment. */
+const SECRET_NAME = /TOKEN|SECRET|PASS|KEY|CRED|AUTH|COOKIE|PRIVATE/i;
 
 /** The interpreter a host needs, from what its channel knows of it. */
 function interpreterOf(channel: HostChannel): Interpreter {
@@ -49,6 +54,16 @@ export async function runStep(
   parameters: ScriptParameters,
   options: StepOptions,
 ): Promise<StepRun> {
+  const secretVariables = options.secretVariables ?? [];
+  const unmarked = Object.keys(options.environment ?? {}).find(
+    variable =>
+      SECRET_NAME.test(variable) && !secretVariables.includes(variable),
+  );
+  if (unmarked !== undefined) {
+    throw new Error(
+      `the run variable ${unmarked} looks secret and is not marked`,
+    );
+  }
   const interpreter = interpreterOf(channel);
   const lines: string[] = [];
   const outcome = await channel.runScript(
@@ -56,6 +71,7 @@ export async function runStep(
       script: scriptFor(request, interpreter, parameters),
       interpreter,
       environment: options.environment ?? {},
+      ...(secretVariables.length === 0 ? {} : {secretVariables}),
       input: options.input ?? {kind: 'text', text: ''},
       cancellation: options.cancellation,
     },

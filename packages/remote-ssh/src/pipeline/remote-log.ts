@@ -1,11 +1,11 @@
 /**
  * @fileoverview The remote side's script output in the log: each line a run prints is logged as remote output before
  * its reader gets it. The result block stays out of the log, line by line, and is logged once as the summary of its
- * parse. The connection token is masked, an address keeps no user, password, query or fragment, and a value the run
- * was given in its environment is logged by its name. No code reads what is logged.
+ * parse. The connection token is masked, an address keeps no user, password, query or fragment, and a value of the
+ * run's environment is logged by its name when it is marked secret or is long. No code reads what is logged.
  */
 
-import {type HostChannel, hostPathOf} from 'lib-host';
+import {type HostChannel, hostPathOf, type ScriptRequest} from 'lib-host';
 import type {Logger} from 'lib-log';
 import {parseResult, RESULT_BEGIN, RESULT_END} from 'lib-server';
 import {masked, serverResultLine} from '../diagnostics/log-content.ts';
@@ -30,16 +30,24 @@ function addressShown(address: string): string {
   return beforeQuery.replace(/:\/\/[^/]*@/, '://');
 }
 
-/** `line` with the token masked, each address's secrets left out, and each long environment value named. */
+/**
+ * `line` with the token masked, each address's secrets left out, and each value of the run's environment named that
+ * is marked secret or is long.
+ */
 function scrubbed(
   line: string,
   token: string | undefined,
-  environment: Readonly<Record<string, string>>,
+  request: Pick<ScriptRequest, 'environment' | 'secretVariables'>,
 ): string {
   let text = masked(line, token).replace(ADDRESS, addressShown);
+  const marked = request.secretVariables ?? [];
   // The longest value goes first, so a shorter value inside it can't leave the rest of it in clear.
-  const secrets = Object.entries(environment)
-    .filter(([, value]) => value.length >= SECRET_LENGTH)
+  const secrets = Object.entries(request.environment)
+    .filter(
+      ([variable, value]) =>
+        value !== '' &&
+        (marked.includes(variable) || value.length >= SECRET_LENGTH),
+    )
     .sort(([, first], [, second]) => second.length - first.length);
   for (const [variable, value] of secrets) {
     text = text.replaceAll(value, () => `\${${variable}}`);
@@ -72,7 +80,7 @@ export function loggedChannel(
         } else if (bare === RESULT_BEGIN) {
           block = [];
         } else if (bare !== '') {
-          logger.info(`[remote] ${scrubbed(bare, token, request.environment)}`);
+          logger.info(`[remote] ${scrubbed(bare, token, request)}`);
         }
         onLine(line);
       });
