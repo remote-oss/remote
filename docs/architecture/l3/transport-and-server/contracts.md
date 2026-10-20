@@ -83,6 +83,7 @@ Rules:
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `resolveServerArchive` | profile, host platform tokens (`os`, `arch`), the extension's override policy, the override value with the layer it came from | the URL, the step that produced it (`override`, `productTemplate`, `builtInTable`), the redirect rule V4 applies (`any` or a host list, from the step, the profile and P4; ADR-0006 decision 7, #1031) and the facts V6 needs (URL host, `serverLicense` empty or not) | `noSource` (the `applicationName` and the setting key); `invalidOverride` (the setting key and the problem from P2) |
+| `cliRedirectRule` | profile, the CLI archive's address (expanded from `cliDownloadUrlTemplate`) | the redirect rule of that download: the `productTemplate` rule at the address's host, because the CLI's only source is the product's template (ADR-0006 decision 7; ruled 2026-10-19 on #1047). It is the only way to get a rule outside a resolution: no export takes a step | none |
 
 Override policies (one table entry per extension, ADR-0006 decision 6):
 
