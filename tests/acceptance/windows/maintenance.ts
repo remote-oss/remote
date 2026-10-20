@@ -303,7 +303,7 @@ const ANSWERED_SURFACES = new Set([
  * answered. Unused entries of the window are dropped, and a missing count is made up with placeholders before the
  * cursor, which no question reads again. The entries of other windows are untouched.
  */
-function alignScript(window: string): void {
+export function alignScript(window: string): void {
   const scriptFile = variable('REMOTE_OSS_ACCEPTANCE_SCRIPT');
   const entries = existsSync(scriptFile)
     ? ((
