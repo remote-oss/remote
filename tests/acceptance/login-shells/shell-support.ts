@@ -4,12 +4,13 @@ import {
   inWindow,
   onHostAs,
   openWindow,
+  appendScript,
   recordLines,
   runProcessTask,
   terminalNamed,
   waitFor,
 } from '../windows/harness.ts';
-import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {dismissals, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 
 /** Writes `text` as `file` under the home folder of host user `user`; the text goes through base64, so any text is safe. */
 export async function writeHomeFile(
@@ -113,4 +114,39 @@ export async function newTerminalIs(
 /** The lines of the record of `window` for a surface: the notices, the failure dialogs. */
 export function surfaceLines(window: string, surface: string): string[] {
   return recordLines(surface, window).map(line => line.question);
+}
+
+/** The failure dialog and the pick lines of a window whose connect failed. */
+export interface FailedConnect {
+  /** The first failure dialog: its text, its buttons, and the milliseconds from the window's opening to it. */
+  dialog: {question: string; buttons: string[]; milliseconds: number};
+}
+
+/**
+ * Opens window `window` on the alias of host user `user`, with the dialog of its failure and the pick after it
+ * dismissed, and gives that dialog once it is shown.
+ */
+export async function failedOn(
+  user: string,
+  window: string,
+  wait = 120_000,
+): Promise<FailedConnect> {
+  appendScript([...dismissals(window)]);
+  const began = Date.now();
+  await openWindow(user, window);
+  await waitFor(
+    `the failure dialog of ${window}`,
+    () => recordLines('failureDialog', window).some(line => line.time >= began),
+    wait,
+  );
+  const line = recordLines('failureDialog', window).find(
+    each => each.time >= began,
+  );
+  return {
+    dialog: {
+      question: line?.question ?? '',
+      buttons: line?.buttons ?? [],
+      milliseconds: (line?.time ?? began) - began,
+    },
+  };
 }
