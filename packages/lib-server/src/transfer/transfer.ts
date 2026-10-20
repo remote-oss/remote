@@ -23,7 +23,7 @@ import {
   parseProgressLine,
   type ProgressStep,
 } from '../scripts/progress-line.ts';
-import type {ScriptStatus} from '../scripts/result-block.ts';
+import type {ResultBlock, ScriptStatus} from '../scripts/result-block.ts';
 import type {
   ClientFilePort,
   CredentialsPort,
@@ -128,7 +128,12 @@ export type TransferFailure =
 
 /** The outcome of a transfer. */
 export type TransferOutcome =
-  | {kind: 'transferred'; installFolder: string}
+  | {
+      kind: 'transferred';
+      installFolder: string;
+      /** Set when the step found the server installed by another under the same lock, and unpacked nothing. */
+      installedByAnother?: true;
+    }
   | {kind: 'failed'; failure: TransferFailure};
 
 /** Where the archive is downloaded. */
@@ -151,6 +156,17 @@ function channelFailure(failure: ChannelFailure): TransferFailure {
     : {kind: 'channelFailed', failure};
 }
 
+/**
+ * Whether the step unpacked the server itself: a tree install says so in `treeInstalled`, and a plain install times
+ * its unpack only when it ran one.
+ */
+function unpackedHere(block: ResultBlock): boolean {
+  const treeInstalled = block.serverFacts.treeInstalled;
+  return treeInstalled === undefined
+    ? block.timings.install !== undefined
+    : treeInstalled === 'yes';
+}
+
 /** The transfer outcome of a finished install step. */
 function outcomeOf(
   stepRun: StepRun | RetriesExhausted,
@@ -171,6 +187,7 @@ function outcomeOf(
       return {
         kind: 'transferred',
         installFolder: block.serverFacts.installDir ?? plan.installFolder,
+        ...(unpackedHere(block) ? {} : {installedByAnother: true as const}),
       };
     case 'ServerDownloadFailed': {
       const status = Number(block.serverFacts.downloadStatus);
