@@ -358,7 +358,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow('open-ask');
   });
 
-  it('F-0403 AC-17 (o6): declining shows S360 with S377 and one OK, then the same window is the local folder, restricted, with no container', async () => {
+  it('F-0403 AC-17, F-0301 AC-68 (o6): declining shows S360 with S377 and one OK, then the same window is the local folder, restricted, with no container', async () => {
     const folder = devContainerFolder('open-decline', {name: 'Open Decline'});
     const from = await openFolderWindow(
       devContainerFolder('open-decline-from'),

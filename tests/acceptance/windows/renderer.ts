@@ -925,6 +925,32 @@ export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
   );
 }
 
+/** Presses the button `button` beside the row labelled `label` of the quick pick open in window `name`. */
+export async function pressQuickPickRowButton(
+  name: string,
+  label: string,
+  button: string,
+): Promise<void> {
+  const pressed = await evaluate<boolean>(
+    name,
+    `(() => {
+      const rows = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')];
+      const row = rows.find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
+      const target = [...(row?.querySelectorAll('.quick-input-list-entry .action-label') ?? [])].find(each => (each.getAttribute('aria-label') ?? each.getAttribute('title')) === ${JSON.stringify(button)});
+      if (target === undefined) {
+        return false;
+      }
+      target.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+      return true;
+    })()`,
+  );
+  if (!pressed) {
+    throw new Error(
+      `window ${name}: no button ${JSON.stringify(button)} on the row ${JSON.stringify(label)}`,
+    );
+  }
+}
+
 /** Waits until window `name` shows a quick pick and returns it. */
 export async function waitForQuickPick(
   name: string,
