@@ -24,7 +24,10 @@ describe('the source types of a configuration (card containers-57)', () => {
 
   it('F-0301 7.E3: a dockerFile that is a number is invalid, and one that is a string is valid', () => {
     deepStrictEqual(
-      [sourceTypesValid({dockerFile: 7}), sourceTypesValid({dockerFile: 'Dockerfile'})],
+      [
+        sourceTypesValid({dockerFile: 7}),
+        sourceTypesValid({dockerFile: 'Dockerfile'}),
+      ],
       [false, true],
     );
   });

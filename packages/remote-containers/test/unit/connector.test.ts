@@ -164,7 +164,8 @@ describe('the container connector: the connect (card containers-08)', () => {
       [
         failedKind(first),
         failedKind(second),
-        scene.configurationReads.filter(read => read.containerId === undefined).length,
+        scene.configurationReads.filter(read => read.containerId === undefined)
+          .length,
         scene.prepared.length,
       ],
       ['configurationInvalid', 'connected', 2, 1],
