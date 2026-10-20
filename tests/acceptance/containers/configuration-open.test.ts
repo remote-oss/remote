@@ -22,9 +22,11 @@ import {
   dialogOf,
   editorTabs,
   notificationCentre,
+  notificationProgress,
   pressEscape,
   pressQuickPickRowButton,
   quickPickOf,
+  statusItem,
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -288,6 +290,46 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
         centre: [],
         containers: [],
       },
+    );
+  });
+
+  it('F-0301 AC-69 (o5): before the window connects, the connect shows the Connecting to Dev Container (show log) notification with an indeterminate bar and the status Opening Remote..., and the same window then reloads in place', async () => {
+    const folder = configFolder('c50-connecting', {
+      '.devcontainer/devcontainer.json': {name: 'Connecting'},
+    });
+    const window = await openFolderWindow(folder);
+    opened.push(window);
+    const plain = new Set<string>();
+    const indicators = new Set<string>();
+    const watch = {done: false};
+    const sampling = (async () => {
+      while (!watch.done) {
+        const toast = await notificationProgress(
+          window,
+          'Connecting to Dev Container',
+        ).catch(() => undefined);
+        if (toast?.message === 'Connecting to Dev Container (show log)') {
+          plain.add(toast.progress);
+        }
+        const indicator = await statusItem(window, 'status.host').catch(
+          () => undefined,
+        );
+        if (indicator !== undefined) {
+          indicators.add(indicator.text);
+        }
+        await new Promise(resolve => setTimeout(resolve, 80));
+      }
+    })();
+    await reopenInContainer(window);
+    watch.done = true;
+    await sampling;
+    deepStrictEqual(
+      [
+        [...plain],
+        indicators.has('Opening Remote...'),
+        (await windowState(window)).remoteName,
+      ],
+      [['infinite'], true, 'dev-container'],
     );
   });
 });
