@@ -92,6 +92,11 @@ import type {
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
 import type {DeclaredPorts} from '../ports/declared-forwards.ts';
+import {
+  appPortOf,
+  engineIsLocal,
+  staticForwards,
+} from '../ports/static-forwards.ts';
 
 /** The CLI's levels for an info, a warning and an error event. */
 const CLI_INFO_LEVEL = 3;
@@ -967,7 +972,15 @@ export function containerConnectorOf(
         probed,
         remoteEnvironment.entries,
       ),
-      environmentTunnels: [],
+      environmentTunnels: staticForwards(
+        configuration.kind === 'configuration'
+          ? appPortOf(configuration.configuration)
+          : undefined,
+        engineIsLocal({
+          context: folder.context,
+          dockerHost: dependencies.editorEnvironment.DOCKER_HOST,
+        }),
+      ),
       trusted: false,
     };
     held = {

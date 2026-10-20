@@ -93,6 +93,8 @@ interface EngineCall {
 
 /** What a test steers and reads: the fakes, their answers and what they recorded. */
 export interface Scene {
+  /** The `DOCKER_HOST` of the editor's environment; unset when undefined. */
+  dockerHost: string | undefined;
   connector: ContainerConnector;
   engineCalls: EngineCall[];
   engineFiles: string[];
@@ -211,6 +213,7 @@ export function sceneOf(
   const sink = new MemorySink();
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
+    dockerHost: undefined,
     engineCalls: [],
     engineFiles: [],
     cliEnvironments: [],
@@ -418,7 +421,15 @@ export function sceneOf(
       translate: template => template,
       dialogs: silentDialogs(),
     },
-    editorEnvironment: {HOME: '/home/u', GITHUB_TOKEN: 's3cr3t-token'},
+    get editorEnvironment() {
+      return {
+        HOME: '/home/u',
+        GITHUB_TOKEN: 's3cr3t-token',
+        ...(scene.dockerHost === undefined
+          ? {}
+          : {DOCKER_HOST: scene.dockerHost}),
+      };
+    },
     intents: {
       get: () => {
         if (scene.intentError !== undefined) {
