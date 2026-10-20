@@ -10,8 +10,10 @@ Design: athena's ruling on #253 (2026-10-20, F-2003 BR-14, option 3). The contra
 - **Every other value keeps connect-67's rule:** named when it's 8 characters or longer.
 - **The mark lives where the variable is put into the environment.** `loggedChannel` reads it, and never guesses
   from the name.
-- **A guard:** a variable whose name contains `TOKEN`, `SECRET`, `PASSWORD` or `KEY` (any case) must be marked.
-  A run that defines one unmarked is a defect, and a unit row catches it.
+- **A guard** (athena's amendment on #253): a variable whose name contains, in any case, `TOKEN`, `SECRET`, `PASS`
+  (so `PASSWORD`, `PASSWD`, `PASSPHRASE`), `KEY`, `CRED`, `AUTH`, `COOKIE` or `PRIVATE` must be marked. There are no
+  exemptions: over-marking only names a harmless value, as `SSH_AUTH_SOCK` would be. A run that defines one unmarked
+  is a defect, and a unit row catches it.
 - **The connection token** stays masked as today, from the parsed block.
 
 ## 2. The change
@@ -21,7 +23,8 @@ Design: athena's ruling on #253 (2026-10-20, F-2003 BR-14, option 3). The contra
    whatever their length. `RecordingChannel` records it with the request, as it records the rest.
 2. **lib-server, `run-step.ts`:**
    - `StepOptions` gains `secretVariables?: readonly string[]`, and `runStep` passes it into the request.
-   - Before the run, `runStep` checks the guard of §1: an `environment` name that matches `/TOKEN|SECRET|PASSWORD|KEY/i`
+   - Before the run, `runStep` checks the guard of §1: an `environment` name that matches
+     `/TOKEN|SECRET|PASS|KEY|CRED|AUTH|COOKIE|PRIVATE/i`
      and isn't in `secretVariables` throws `Error('the run variable <NAME> looks secret and is not marked')`. That's
      a programming defect, not a host failure.
 3. **lib-server, `cli.ts`:** the start of the CLI passes `secretVariables: [TOKEN_VARIABLE]` with its
@@ -36,7 +39,7 @@ Design: athena's ruling on #253 (2026-10-20, F-2003 BR-14, option 3). The contra
 | File | Cite | Given | Expected |
 |---|---|---|---|
 | `lifecycle.test.ts` (the `runStep` rows) | F-2003 BR-14 (ruling-253-mark) | `runStep` with `environment: {MY_TOKEN: 'x'}` and no mark; with the mark; with `{PLAIN: 'x'}` and no mark | throws naming `MY_TOKEN`; runs; runs |
-| `lifecycle.test.ts` (the `runStep` rows) | BR-14 | each of `A_SECRET`, `password1`, `SSH_KEY` unmarked | throws (the four words, any case) |
+| `lifecycle.test.ts` (the `runStep` rows) | BR-14 | each of `A_SECRET`, `password1`, `MY_PASSPHRASE`, `SSH_KEY`, `GIT_CREDENTIALS`, `SSH_AUTH_SOCK`, `cookie`, `PRIVATE_FILE` unmarked | throws (every word of the list, any case) |
 | `lifecycle.test.ts` (the `runStep` rows) | BR-14 | `secretVariables` reaches the channel's request | the recording channel's request has it |
 | `cli-lifecycle.test.ts` | BR-14 | the CLI start's request | `secretVariables` is `['VSCODE_CLI_REQUIRE_TOKEN']` |
 | `remote-log.test.ts` | BR-14 (ruling-253-mark) | a marked 3-character value `abc`, an unmarked 3-character value `xyz`, both printed | `${MARKED}`, and `xyz` as it is |
