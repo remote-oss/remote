@@ -262,7 +262,7 @@ describe('startHostContainer (card tooling-10)', () => {
             [
               'build',
               '--load',
-              '--quiet',
+              '--progress=plain',
               '--tag',
               'remote-oss-acceptance-host:77-2',
               path.join('/root', 'tests', 'acceptance', 'host'),
@@ -890,7 +890,7 @@ describe('the dev container image and its sweep (card containers-09)', () => {
             argv: [
               'build',
               '--load',
-              '--quiet',
+              '--progress=plain',
               '--label',
               'remote-oss.acceptance.run=77-2',
               '--label',

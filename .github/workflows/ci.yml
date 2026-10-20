@@ -120,15 +120,30 @@ jobs:
       - run: pnpm format:check
       # the unit tests' temporary folders go to the job's own temporary directory, which the runner empties after every
       # job (lib-server's fake host left about 350 folders per run in /tmp and filled a runner's disk; #386 fixes the cause)
-      - run: pnpm test:unit
-        env:
-          TMPDIR: ${{ runner.temp }}
       - run: pnpm build
       - run: pnpm package # vsce --no-dependencies; fails on node_modules in a VSIX (ADR-0002)
 
   # dupes: jscpd; dead: knip; coverage: c8 with the gates and the ratchet.
+  # The unit tests, in parallel on GitHub's runner (2026-10-20): in checks they ran one file at a time, 8.4 of its
+  # 11 minutes.
+  unit:
+    if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:unit --parallel --jobs 4
+        env:
+          TMPDIR: ${{ runner.temp }}
+
   quality:
-    name: ${{ matrix.check }}
+    name: coverage ${{ matrix.shard }}/4
     needs: changes
     if: >-
       !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
@@ -137,7 +152,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [coverage]
+        shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
     # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -150,9 +165,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm identifiers
-      - run: pnpm ${{ matrix.check }}
+      - run: pnpm coverage --shard ${{ matrix.shard }}/4
         env:
-          TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the checks job
+          TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
 
   # The acceptance jobs run on the X64 self-hosted runners (ci-1 to ci-8): the arm64 Mac mini runners carry the
   # runners' shared label too (2026-10-20), and these jobs haven't been shown to pass there yet. A dispatch with runner-arch
@@ -316,6 +331,7 @@ jobs:
     needs:
       - changes
       - checks
+      - unit
       - quality
       - acceptance-slice-1
       - acceptance-server
