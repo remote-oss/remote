@@ -1053,6 +1053,11 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         30_000,
       );
       await answerNotification(name, REOPEN_NOTICE, 'Reopen in Container');
+      await waitFor(
+        `container ${containerId} to be running again`,
+        async () => (await inspectOf(containerId)).status === 'running',
+        DIALOG_MILLISECONDS,
+      );
       await connectedToContainer(name, DIALOG_MILLISECONDS);
       const containers = await devContainersOf(folder);
       const {stdout: environment} = await execFileAsync('docker', [
@@ -1302,7 +1307,9 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     const folder = devContainerFolder('c54-indicator', {name: 'Indicator'});
     try {
       const name = await openFolderWindow(folder);
-      const seen = new Set<string>();
+      const seen = new Set<string>([
+        (await statusItem(name, 'status.host')).text,
+      ]);
       const sampling = {done: false};
       const sampler = (async () => {
         while (!sampling.done) {
@@ -1317,6 +1324,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       await reopenInContainer(name);
       sampling.done = true;
       await sampler;
+      seen.add((await statusItem(name, 'status.host')).text);
       await closeWindow(name);
       deepStrictEqual(
         [
