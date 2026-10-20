@@ -382,15 +382,17 @@ and publish templates into it before its launches (`tools/acceptance-templates.t
     `docs/` and a `README.md` and `NOTES.md`. For the options stage (F-0803) and the optional-files stage (F-0805).
   - `paths-free-lab`: one `enum` option and no `optionalPaths`. For a template with options and no optional files.
   - `bare-lab`: no options and no `optionalPaths`. For a template with neither.
-- **Five Features of our own** in two collections, metadata only (`tests/acceptance/fixtures/templates/custom-features.json`;
-  nothing builds them). The collection `remote-oss-run/features` holds `lab-options`, with five options (two booleans,
-  one with no description, an `enum`, `proposals` and a string), and `lab-plain`, with none. The collection
-  `remote-oss-community/features`, a second owner, holds `add-community`, `Add Community Tool` and `Adobe Community
+- **Five Features of our own** in two collections. The collection `remote-oss-run/features` is published, from the
+  Feature folders of `tests/acceptance/fixtures/templates/custom-features/src/` (a `devcontainer-feature.json` and an
+  `install.sh` that writes its environment to `/usr/local/share/remote-oss-run/<id>.env`), so a row can build with
+  them: `lab-options`, with five options (two booleans, one with no description, an `enum`, `proposals` and a string),
+  and `lab-plain`, with none. The collection `remote-oss-community/features`, a second owner, is only listed
+  (`custom-community-features.json`; nothing builds it): `add-community`, `Add Community Tool` and `Adobe Community
   Kit`, whose labels sort differently without regard to case than by code unit (F-0804's sort). For the Features stage
-  (F-0804, F-0803).
+  (F-0804, F-0803, F-0414).
 
 The CLI the package bundles publishes the templates, the mirrored ones as `devcontainers/templates` and ours as
-`remote-oss-run/custom`. The run's index, written to `<run>/downloads/templates/devcontainer-index.json`, is the
+`remote-oss-run/custom`, and our Features as `remote-oss-run/features`. The run's index, written to `<run>/downloads/templates/devcontainer-index.json`, is the
 pinned snapshot `tests/acceptance/fixtures/templates/devcontainer-index.json` with every `ghcr.io/devcontainers/templates/`
 id moved to the run's registry, plus a collection of our templates and the collections of our Features (`<registry>/<namespace>/<id>`, each with its
 repository, which gives the owner a Feature list shows).
