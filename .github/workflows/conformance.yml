@@ -1,6 +1,8 @@
-# Replays a recorded conformance suite against our build on the self-hosted runners (linux/x86_64). A workflow of its
-# own, so it never shares ci.yml's concurrency groups or slows pull requests. Dispatch only. The suite is a private
-# repository; CONFORMANCE_SUITES_TOKEN reads remote-oss/remote-containers only (contents, read-only).
+# Replays a recorded conformance suite against our build on the self-hosted X64 runners (linux/x86_64). The recordings
+# and the VS Code rpm are x86_64, so every job asks for the X64 label: the arm64 Mac mini runners carry the runners'
+# shared label too (2026-10-20). A workflow of its own, so it never shares ci.yml's concurrency groups or slows pull
+# requests. Dispatch only. The suite is a private repository; CONFORMANCE_SUITES_TOKEN reads
+# remote-oss/remote-containers only (contents, read-only).
 name: conformance
 
 on:
@@ -42,7 +44,7 @@ env:
 
 jobs:
   build:
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -69,7 +71,7 @@ jobs:
           if-no-files-found: error
 
   list:
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       shards: ${{ steps.list.outputs.shards }}
@@ -107,7 +109,7 @@ jobs:
   replay:
     needs: [build, list]
     if: needs.list.outputs.count != '0'
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
     timeout-minutes: 240
     strategy:
       fail-fast: false
@@ -224,7 +226,7 @@ jobs:
   summary:
     needs: [list, replay]
     if: always() && needs.list.result == 'success'
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7

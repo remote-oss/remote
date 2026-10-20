@@ -98,7 +98,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
 | `server.package` | Manifest, activation (with the startup activation its spec keeps for the check, constraint 26), stand-down, identifier tables, help, settings and issue commands | F-8001, F-8002, F-8901 | `standdown.guard`, `identifiers.*` |
-| `tunnels.explorer-endpoints` | Serves the nine `remote-tunnels.*` ids, the tunnel folder history in global state, connect through the window opener. Data-only for now: the tunnel client behind it is frozen pending the user (area A, ADR-0005) | F-8201 | `companion.protocol`, `authority.window-opener` |
+| `tunnels.explorer-endpoints` | Serves the nine `remote-tunnels.*` ids, the tunnel folder history in global state, connect through the window opener. Data-only: the tunnel client behind it isn't built (D-55; ADR-0005 decision 2) | F-8201 | `companion.protocol`, `authority.window-opener` |
 | `tunnels.web-surfaces` | Web only: the Explorer welcome, the `vscode-remote` web opener declaration, "Continue Working in VS Code Desktop" | F-8301, F-8302 | `authority.codecs`, `lib-product` (`urlProtocol`) |
 
 ### remote-containers (B part)

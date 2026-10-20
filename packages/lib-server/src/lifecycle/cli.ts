@@ -173,6 +173,7 @@ export async function startCli(
       runStep(channel, {installMode: 'singleScript', step: 'startCli'}, base, {
         cancellation,
         environment: {[TOKEN_VARIABLE]: token},
+        secretVariables: [TOKEN_VARIABLE],
       }),
     cancellation,
   );
