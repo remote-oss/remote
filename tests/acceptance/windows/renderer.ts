@@ -1186,6 +1186,24 @@ export async function waitForQuickPick(
   );
 }
 
+/** Types `text` into the input of the quick pick open in window `name`, in place of what it holds; its list follows. */
+export async function typeInQuickPick(
+  name: string,
+  text: string,
+): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
+      input.focus();
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, ${JSON.stringify(text)});
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      return null;
+    })()`,
+  );
+}
+
 /**
  * Chooses the item labelled `label` of the quick pick open in window `name`: it types the label into the pick's input,
  * which leaves that item alone and active, and presses Enter. It fails naming the items when the pick lacks the label.
@@ -1200,17 +1218,7 @@ export async function chooseQuickPickItem(
       `window ${name}: no item ${JSON.stringify(label)} among ${JSON.stringify(shown.items)}`,
     );
   }
-  await evaluate<null>(
-    name,
-    `(() => {
-      const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
-      input.focus();
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      setter.call(input, ${JSON.stringify(label)});
-      input.dispatchEvent(new Event('input', {bubbles: true}));
-      return null;
-    })()`,
-  );
+  await typeInQuickPick(name, label);
   await pressKey(await pageOf(name), name, 'Enter');
 }
 
