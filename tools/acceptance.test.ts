@@ -2160,9 +2160,9 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before each host-case launch', async () => {
+    it('coverage-11: the run waits for the helper of the launch before to end: the grace before the slow launch and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [5000, 3000, 3000, 3000]);
+      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {

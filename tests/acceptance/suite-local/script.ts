@@ -41,8 +41,9 @@ export type ScriptEntry = (
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
-  /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
-  surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
+  /** A question's surface, or `progress`, `downloadProgress` or `progressEnd` for a display-only line. */
+  surface:
+    ScriptEntry['surface'] | 'progress' | 'downloadProgress' | 'progressEnd';
   question: string;
   /** The answer given, `'held'` on a held entry's waiting line and `'withdrawn'` when its question ended while it waited. */
   answer: string;

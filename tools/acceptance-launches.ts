@@ -566,7 +566,10 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-slow',
       folderUri: REMOTE_FOLDER_URI,
+      ownScript: true,
       hostExtensions: ['slow-remote'],
+      // Without commands the entry still makes the run wait out the previous launch's helper, so the resolve is fresh.
+      hostSetup: [],
     },
     ...clientCases(root).map((each): Launch => ({
       label: each.label,

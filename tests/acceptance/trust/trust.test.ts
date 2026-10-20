@@ -93,7 +93,7 @@ describe('the trust launch (card tooling-33)', function () {
         state.remoteName,
         (await dialogOf('r14'))?.message,
         recordLines(undefined, 'r14')
-          .filter(line => line.surface !== 'progress')
+          .filter(line => !['progress', 'progressEnd'].includes(line.surface))
           .map(line => line.surface),
       ],
       [FOLDER_QUESTION, 'ssh-remote', FOLDER_QUESTION, []],

@@ -92,6 +92,7 @@ export interface ForwardedTunnel {
 
 /** One line of the record the extensions append to. */
 export interface RecordLine {
+  /** A question's surface, or `progress`, `downloadProgress` or `progressEnd` for a display-only line. */
   surface: string;
   question: string;
   /** The answer given: `'held'` on the waiting line of a held entry, `'withdrawn'` when its question ended while it waited. */

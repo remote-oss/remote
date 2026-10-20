@@ -152,6 +152,19 @@ describe('the remote window of the VSCodium run', () => {
     );
   });
 
+  it('F-2304 AC-5: the download stage has no details link and no percentage, and the record has no download progress line', () => {
+    deepStrictEqual(
+      [
+        recordLines('progress').find(
+          line => line.question === 'Downloading VS Code Server',
+        )?.details,
+        recordLines('progress').some(line => /\d+\s*%/.test(line.question)),
+        recordLines('downloadProgress').length,
+      ],
+      [false, false, 0],
+    );
+  });
+
   it("D-85: the connect's progress is in the record, title first", () => {
     strictEqual(
       recordLines('progress')[0]?.question.startsWith(
