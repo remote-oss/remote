@@ -40,13 +40,13 @@ on:
         type: string
         default: all
       genuine:
-        description: Also run the genuine launch, VS Code 1.139.1 with our VSIX, on X64 (tooling-51, D-97)
+        description: Also run the genuine launch, VS Code 1.139.1 with our VSIX, on X64
         type: boolean
         default: false
   # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
   # PR CI never runs. It ran on every merge until 2026-10-20, which kept one of the eight runners busy with it almost all
   # the time; the other jobs ran on the pull request's merge ref
-  # and once a day the genuine VS Code job runs alone on main (tooling-51, D-97). Each job reads which of the two fired
+  # and once a day the genuine VS Code job runs alone on main. Each job reads which of the two fired
   schedule:
     - cron: '17 */2 * * *'
     - cron: '43 4 * * *'
@@ -328,9 +328,9 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
-  # The genuine launch (card tooling-51, the user's D-97): VS Code at ADR-0007's floor runs our VSIX against the run's
-  # stand-in download host, with the real dialogs. Nothing clicks Accept on a Microsoft licence and no Microsoft server is
-  # downloaded. It runs on a dispatch (the `genuine` input), once a day on main, and on the tag of a release, never on
+  # The genuine launch: VS Code at ADR-0007's floor runs our VSIX against the run's stand-in download host, with the real
+  # dialogs. Nothing accepts a licence on the user's behalf, and no server is downloaded from the editor's publisher. It
+  # runs on a dispatch (the `genuine` input), once a day on main, and on the tag of a release, never on
   # a pull request, and always on X64, the architecture the launch is measured on. Its concurrency follows the VSCodium
   # job's: the daily run keeps one group, each tag its own, and dispatches queue.
   acceptance-genuine:
