@@ -33,7 +33,7 @@ describe('openWebUiHandler (card remote-ssh-16 table)', () => {
     deepStrictEqual(ports.opened, ['http://localhost:38123/']);
   });
 
-  it('F-2509 BR-5: arguments do not change the address', async () => {
+  it('F-2509 AC-12: arguments do not change the address', async () => {
     const ports = fakePorts(38123);
     await openWebUiHandler(ports).execute('x', 1);
     deepStrictEqual(ports.opened, ['http://localhost:38123/']);
@@ -74,7 +74,7 @@ describe('openWebUiHandler (card remote-ssh-16 table)', () => {
     deepStrictEqual(await openWebUiHandler(ports).execute(), undefined);
   });
 
-  it('F-2509 BR-6: running twice opens the same address twice', async () => {
+  it('F-2509 AC-11: running twice opens the same address twice', async () => {
     const ports = fakePorts(38123);
     const handler = openWebUiHandler(ports);
     await handler.execute();

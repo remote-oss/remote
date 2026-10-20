@@ -162,7 +162,7 @@ export {downloadPortOf, type HttpGet} from './transfer/http-download.ts';
 export {CLIENT_DOWNLOAD_BOUNDS} from './policy/bounds.ts';
 export {nodeClientFiles, sha256Of} from './transfer/node-files.ts';
 export {nodeCredentialsPort} from './transfer/node-netrc.ts';
-export {hostLockLoopOf} from './transfer/lock-loop.ts';
+export {hostLockLoopOf, type LockWait} from './transfer/lock-loop.ts';
 export {
   type ByteStream,
   type CliControl,

@@ -11,6 +11,12 @@
  */
 
 import {stopHelpersUnder} from './acceptance-helper-stop.ts';
+import {
+  daemonLock,
+  type LaunchLock,
+  NO_LOCK,
+  nodeProcessAlive,
+} from './acceptance-lock.ts';
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {
   type RunRegistry,
@@ -18,6 +24,7 @@ import {
   SYSTEM_CLOCK,
 } from './acceptance-registry.ts';
 import {staleRefusal} from './acceptance-stale.ts';
+import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -29,7 +36,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {tmpdir} from 'node:os';
+import {hostname, tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -172,6 +179,10 @@ export interface HarnessVariables {
   HARNESS_DEVCONTAINER_IMAGE?: string;
   /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
   HARNESS_REGISTRY?: string;
+  /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
+  HARNESS_TEMPLATE_REGISTRY?: string;
+  /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
+  REMOTE_OSS_TEMPLATE_INDEX?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -240,6 +251,12 @@ export interface HarnessDependencies {
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
   startRegistry: (runId: string) => Promise<RunRegistry>;
+  /** Publishes the run's templates into the registry at `address` and writes the run's index; gives the templates' registry. */
+  prepareTemplates: (
+    root: string,
+    runFolder: string,
+    address: string,
+  ) => Promise<string>;
 }
 
 /** How long the run waits for sshd to accept the first connection, in attempts half a second apart. */
@@ -763,12 +780,19 @@ async function prepare(
       writeStandIns(runFolder, launch, standInEngines(root, launch));
     }
   }
-  const registry = chosen.some(launch => launch.registry === true)
+  const registry = chosen.some(
+    launch => launch.registry === true || launch.templates === true,
+  )
     ? await dependencies.startRegistry(runId)
     : undefined;
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
+  const templateRegistry =
+    registry !== undefined && chosen.some(launch => launch.templates === true)
+      ? await dependencies.prepareTemplates(root, runFolder, registry.address)
+      : undefined;
+  const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
   const devContainerImage = launches.some(needsDevContainerImage)
     ? devContainerImageFor(command, root, runId)
     : undefined;
@@ -783,6 +807,12 @@ async function prepare(
       ? {}
       : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
     ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
+    ...(templateRegistry === undefined || templateIndex === undefined
+      ? {}
+      : {
+          HARNESS_TEMPLATE_REGISTRY: templateRegistry,
+          REMOTE_OSS_TEMPLATE_INDEX: `${templateIndex}/templates/devcontainer-index.json`,
+        }),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
@@ -906,6 +936,7 @@ export async function runLaunches(
   report: (line: string) => void = line => {
     console.log(line);
   },
+  lock: LaunchLock = NO_LOCK,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -918,38 +949,53 @@ export async function runLaunches(
       // reused by this resolve without any check, so the run waits the grace out.
       await sleep(FRESH_RESOLVE_WAIT_MILLISECONDS);
     }
-    exitCodes.push(
-      await runWithRetry(async () => {
-        // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
-        if (launch !== undefined) {
-          if (launch.hostSetup !== undefined) {
-            runHostSetup(command, container, launch.hostSetup);
-          }
-          writeUserSettings(
-            runFolder,
-            configFile,
-            withRunTokens(
-              withHarnessBases(launch.settings, bases),
-              runFolder,
-              process.env.PATH ?? '',
-            ),
-            launch.label,
-            launch.settingsTail,
-          );
-          await beforeAttempt(launch);
-        }
-        const held = await holdPorts(launch?.clientListeners ?? []);
-        try {
-          return await runLaunch(launch);
-        } finally {
-          await held.release();
-          // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
-          stopHelpersUnder(path.join(runFolder, 'user-data'), command);
-        }
-      }, report),
-    );
+    // A launch of dev containers holds the daemon's lock through all its attempts: see acceptance-lock.ts.
+    const locked =
+      launch !== undefined && launchGroupOf(launch) === 'containers';
+    if (locked) {
+      await lock.take();
+    }
+    try {
+      exitCodes.push(await runAttempts(launch));
+    } finally {
+      if (locked) {
+        lock.release();
+      }
+    }
   }
   return exitCodes;
+
+  /** The launch's attempts (one, or two after a hung window). */
+  function runAttempts(launch: Launch | undefined): Promise<number> {
+    return runWithRetry(async () => {
+      // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
+      if (launch !== undefined) {
+        if (launch.hostSetup !== undefined) {
+          runHostSetup(command, container, launch.hostSetup);
+        }
+        writeUserSettings(
+          runFolder,
+          configFile,
+          withRunTokens(
+            withHarnessBases(launch.settings, bases),
+            runFolder,
+            process.env.PATH ?? '',
+          ),
+          launch.label,
+          launch.settingsTail,
+        );
+        await beforeAttempt(launch);
+      }
+      const held = await holdPorts(launch?.clientListeners ?? []);
+      try {
+        return await runLaunch(launch);
+      } finally {
+        await held.release();
+        // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
+        stopHelpersUnder(path.join(runFolder, 'user-data'), command);
+      }
+    }, report);
+  }
 }
 
 /**
@@ -1084,6 +1130,21 @@ export async function runAcceptance(
           markDownloadRequests(runFolder, launch.label, variables);
         },
         {...variables},
+        undefined,
+        undefined,
+        daemonLock(
+          dependencies.command,
+          variables.HARNESS_RUN_ID,
+          {
+            now: Date.now,
+            sleep: dependencies.sleep,
+            hostName: hostname(),
+            processAlive: nodeProcessAlive,
+          },
+          line => {
+            console.log(line);
+          },
+        ),
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
@@ -1544,16 +1605,17 @@ export function boundReached(
 }
 
 /**
- * A launch's limits on a run: one minute for the editor to end after its results, twenty minutes of silence (a row's
- * own limit is at most ten), checked every five seconds. What is left is any editor on the run's profile folder, which
- * every launch of the run shares, so a stuck one would hold up every launch after it.
+ * A launch's limits on a run: three minutes for the editor to end after its results (a window connected to a container
+ * takes about a minute to quit), twenty minutes of silence (a row's own limit is at most ten), checked every five
+ * seconds. What is left is any editor on the run's profile folder, which every launch of the run shares, so a stuck one
+ * would hold up every launch after it.
  */
 export function launchLimits(
   runFolder: string,
   command: CommandRunner,
 ): LaunchLimits {
   return {
-    afterResultsMilliseconds: 60_000,
+    afterResultsMilliseconds: 3 * 60_000,
     quietMilliseconds: 20 * 60_000,
     checkMilliseconds: 5000,
     endLeftovers: () => {
@@ -1801,6 +1863,8 @@ if (isMainModule(import.meta.url)) {
         startAgent: startRunAgent,
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
+        prepareTemplates: (root, runFolder, address) =>
+          prepareRunTemplates(runCommand, root, runFolder, address, ghcrLayer),
         startDownloads: startRunDownloads.bind(
           undefined,
           runCommand,

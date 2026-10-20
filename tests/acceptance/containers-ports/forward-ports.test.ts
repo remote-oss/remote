@@ -27,28 +27,22 @@ import {
   statusItem,
 } from '../windows/renderer.ts';
 import {
-  connectedWindows,
   echoes,
   editConfiguration,
   folderOf,
   freePort,
   portsOf,
+  portsWindows,
   reloaded,
   rowsWhen,
   showPorts,
-} from './support.ts';
+} from './ports-support.ts';
 
 const execFileAsync = promisify(execFile);
 
 describe('the declared forwardPorts (card containers-72)', function () {
   this.timeout(900_000);
-  const windows = connectedWindows();
-  function connectedWith(
-    name: string,
-    configuration: Readonly<Record<string, unknown>>,
-  ): Promise<string> {
-    return windows.connectedWith(name, configuration);
-  }
+  const {connectedWith, closeNow} = portsWindows();
 
   it('F-1101 AC-1 (forward-declared): a declared port is forwarded once the window connects, with the origin Dev Containers and before any listener', async () => {
     const window = await connectedWith('c72-ac1', {forwardPorts: [3000]});
@@ -259,7 +253,7 @@ describe('the declared forwardPorts (card containers-72)', function () {
     });
     await new Promise(resolve => setTimeout(resolve, 5000));
     const shown = await hasStatusItem(quoted, 'status.forwardedPorts');
-    await windows.close(quoted);
+    await closeNow(quoted);
     const plain = await connectedWith('c72-ac32b', {forwardPorts: [port]});
     await showPorts(plain);
     deepStrictEqual(

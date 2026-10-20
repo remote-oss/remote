@@ -27,6 +27,13 @@ describe('the titles of the connection progress', () => {
     });
   }
 
+  it('F-2108 AC-3, AC-31: the running script stage has S118 with the show log link, whose command is the log command', () => {
+    deepStrictEqual(phaseTitleOf({name: 'runningPreconnectScript'}), {
+      id: 'S118',
+      values: ['[show log](command:opensshremotes.showLog "Show log")'],
+    });
+  });
+
   it('F-2304: the stage of starting the server has no message, which the ssh connector never reports', () => {
     deepStrictEqual(phaseTitleOf({name: 'startingServer'}), undefined);
   });

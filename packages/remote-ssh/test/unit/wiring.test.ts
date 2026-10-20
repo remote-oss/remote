@@ -162,6 +162,20 @@ function portsOf(
       },
     },
     configuredHosts: changes.configuredHosts ?? (() => ({hosts: []})),
+    preconnect: {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      exists: () => Promise.resolve(false),
+      spawner: () => Promise.reject(new Error('no process in this test')),
+      environment: {},
+      workingDirectory: '/work',
+      home: '/home/a',
+      approvals: {
+        hashFor: () => undefined,
+        remember: () => Promise.resolve(),
+      },
+      dialog: {askUser: () => Promise.resolve('skip')},
+      logger,
+    },
     settings: {
       preconnect: () => changes.preconnect,
       server: () => serverSettings(changes.server),
@@ -422,11 +436,29 @@ describe("the composition of a connect's steps", () => {
     });
   });
 
-  it('#140 R3 interim: the pre-connection step reads remote.SSH.preconnect', async () => {
+  it('F-2108 AC-3: the pre-connection step reads remote.SSH.preconnect, tells the running stage and asks about the script', async () => {
     const {ports} = portsOf({preconnect: '/home/a/renew.sh'});
+    const phases: string[] = [];
+    const asked: string[] = [];
+    ports.preconnect.dialog = {
+      askUser: path => {
+        asked.push(path);
+        return Promise.resolve('skip');
+      },
+    };
     deepStrictEqual(
-      await stepsOf(ports).preconnect(INPUT, new AbortController().signal),
-      {kind: 'failed', failure: {kind: 'preconnectFailed'}},
+      [
+        await stepsWith(ports, event => {
+          phases.push(event.kind);
+        }).preconnect(INPUT, new AbortController().signal),
+        asked,
+        phases,
+      ],
+      [
+        {kind: 'done', value: undefined},
+        ['/home/a/renew.sh'],
+        ['runningPreconnectScript', 'promptShown'],
+      ],
     );
   });
 

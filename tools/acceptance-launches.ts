@@ -29,6 +29,12 @@ interface LaunchCommon {
   clientListeners?: readonly number[];
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
+  /**
+   * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
+   * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
+   * HARNESS_TEMPLATE_REGISTRY.
+   */
+  templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
 }
@@ -385,7 +391,11 @@ export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
     suite: 'suite-install',
     prefix: 'install',
     caseVariable: 'HARNESS_INSTALL_CASE',
-    removed: ['/home/harness/.vscodium-server-insiders', '/tmp/srv'],
+    removed: [
+      '/home/harness/.vscodium-server-insiders',
+      '/tmp/srv',
+      '/home/harness/inst',
+    ],
   },
   {
     suite: 'suite-platform',
@@ -681,10 +691,33 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      ...RENDERER_LAUNCH,
+      label: 'web-ui',
+      suite: 'web-ui',
+      // A recording xdg-open that the suite writes into the run's folder comes first on the editor's PATH, so that
+      // opening the web UI opens nothing on the machine.
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'web-ui-trust',
+      suite: 'web-ui-trust',
+      // The same browser, in a launch with workspace trust on and core's startup prompt off, so that a window opens in
+      // Restricted Mode and silent.
+      // A terminal-mode connect in this launch waits on core's trust question before its login terminal starts, so its
+      // rows connect only through the local server.
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        'security.workspace.trust.startupPrompt': 'never',
+      },
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+    },
+    {
       ...CONTAINERS_LAUNCH,
       label: 'containers',
       suite: 'containers',
       registry: true,
+      templates: true,
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

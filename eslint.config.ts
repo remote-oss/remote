@@ -129,6 +129,8 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/containers-volume/tsconfig.json',
   './tests/acceptance/containers-explorer/tsconfig.json',
   './tests/acceptance/containers-ports/tsconfig.json',
+  './tests/acceptance/web-ui/tsconfig.json',
+  './tests/acceptance/web-ui-trust/tsconfig.json',
 ];
 
 const DEFAULT_EXPORT_BAN = {

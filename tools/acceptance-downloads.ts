@@ -1,7 +1,8 @@
 /**
  * @fileoverview The download host of the acceptance runs: an HTTP and an HTTPS server the run controls, from which
- * the harness host and the editor fetch the server archive, or fail on purpose: a status, a broken body, a hang. The behaviour is chosen
- * by the first segment of the path; every request is logged; the certificate is the run's own, trusted by nobody.
+ * the harness host and the editor fetch the server archive, or fail on purpose: a status, a broken body, a hang, and
+ * the run's template index under `/templates/`. The behaviour is chosen by the first segment of the path; every request
+ * is logged; the certificate is the run's own, trusted by nobody.
  */
 
 import {createHash, generateKeyPairSync, randomBytes, sign} from 'node:crypto';
@@ -23,6 +24,7 @@ import {createServer as createHttpsServer} from 'node:https';
 import {createSecureContext} from 'node:tls';
 import type {AddressInfo, Socket} from 'node:net';
 import path from 'node:path';
+import {servedTemplatesFolder} from './acceptance-templates.ts';
 import {type CommandRunner, checked} from './command-runner.ts';
 
 /** The VSCodium server for Alpine the download host serves: the release the client is pinned to, by architecture. */
@@ -258,6 +260,8 @@ export interface DownloadHostOptions {
   logFile: string;
   /** One line per TLS handshake that names a server is appended here: the time, and the server name the client asked for. */
   tlsLogFile: string;
+  /** The folder whose `devcontainer-index.json` the host serves under `/templates/`, once the run has written it. */
+  templatesFolder: string;
 }
 
 /** A running download host. */
@@ -268,15 +272,61 @@ export interface DownloadHost {
   stop(): Promise<void>;
 }
 
+/** The text `/templates/broken-index.json` answers: the start of an index, cut off, so it doesn't parse. */
+export const BROKEN_INDEX_TEXT = '{"collections": [';
+
+/**
+ * The answer under `/templates/`: the run's index once it is written (404 before), an index that doesn't parse, or a
+ * connection dropped before any answer.
+ */
+function answerTemplates(
+  request: IncomingMessage,
+  response: ServerResponse,
+  templatesFolder: string,
+): void {
+  const indexFile = path.join(templatesFolder, 'devcontainer-index.json');
+  switch (String(request.url).split('/')[2]) {
+    case 'devcontainer-index.json':
+      if (existsSync(indexFile)) {
+        const body = readFileSync(indexFile);
+        response.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': body.length,
+        });
+        response.end(body);
+        return;
+      }
+      break;
+    case 'broken-index.json':
+      response.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(BROKEN_INDEX_TEXT),
+      });
+      response.end(BROKEN_INDEX_TEXT);
+      return;
+    case 'unreachable':
+      request.socket.destroy();
+      return;
+    default:
+      break;
+  }
+  response.writeHead(404, {'Content-Length': 0});
+  response.end();
+}
+
 /** The answer to one request, chosen by the first segment of its path. */
 function answer(
   request: IncomingMessage,
   response: ServerResponse,
-  archiveFile: string,
+  options: Pick<DownloadHostOptions, 'archiveFile' | 'templatesFolder'>,
   held: Set<Socket>,
 ): void {
+  const {archiveFile} = options;
   const archiveLength = statSync(archiveFile).size;
   switch (String(request.url).split('/')[1]) {
+    case 'templates':
+      answerTemplates(request, response, options.templatesFolder);
+      return;
     case 'ok':
       response.writeHead(200, {'Content-Length': archiveLength});
       response.end(readFileSync(archiveFile));
@@ -381,7 +431,7 @@ export async function startDownloadHost(
       response.end();
       return;
     }
-    answer(request, response, options.archiveFile, held);
+    answer(request, response, options, held);
   }
   const secureOptions = {
     cert: readFileSync(options.certificateFile),
@@ -501,6 +551,7 @@ export async function startRunDownloads(
     ...certificate,
     logFile,
     tlsLogFile,
+    templatesFolder: servedTemplatesFolder(runFolder),
   });
   return {
     variables: downloadVariables(host, logFile, tlsLogFile),

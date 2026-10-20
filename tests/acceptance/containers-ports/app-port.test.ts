@@ -12,14 +12,14 @@ import {
   portRowActions,
 } from '../windows/renderer.ts';
 import {
-  connectedWindows,
   echoes,
   editConfiguration,
   folderOf,
   freePort,
+  portsWindows,
   rowsWhen,
   showPorts,
-} from './support.ts';
+} from './ports-support.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -42,7 +42,7 @@ async function publishedPorts(
 
 describe('the appPort rows (card containers-74)', function () {
   this.timeout(900_000);
-  const windows = connectedWindows();
+  const {connectedWith} = portsWindows();
 
   it('F-1101 AC-5 (app-port-published): an appPort number is published on 127.0.0.1 and a host:container string on all interfaces, both reachable from the host', async () => {
     const [number, host, container] = [
@@ -50,7 +50,7 @@ describe('the appPort rows (card containers-74)', function () {
       await freePort(),
       await freePort(),
     ];
-    await windows.connectedWith('c74-ac5', {
+    await connectedWith('c74-ac5', {
       appPort: [number, `${String(host)}:${String(container)}`],
     });
     const [containerId = ''] = await devContainersOf(folderOf('c74-ac5'));
@@ -89,7 +89,7 @@ describe('the appPort rows (card containers-74)', function () {
   it('F-1101 AC-6 (app-port-attribute): an attribute for the port, added with a rebuild, gives the row no label, and its origin is Statically Forwarded', async () => {
     // Core shows its Ports view once a tunnel is open, so the window also declares a forward.
     const [port, view] = [await freePort(), await freePort()];
-    const window = await windows.connectedWith('c74-ac6', {
+    const window = await connectedWith('c74-ac6', {
       appPort: [port],
       forwardPorts: [view],
     });
@@ -115,7 +115,7 @@ describe('the appPort rows (card containers-74)', function () {
 
   it('F-1101 AC-20 (app-port-and-forward): the same port in forwardPorts and in appPort gives two rows, one for each origin', async () => {
     const port = await freePort();
-    const window = await windows.connectedWith('c74-ac20', {
+    const window = await connectedWith('c74-ac20', {
       forwardPorts: [port],
       appPort: [port],
     });
@@ -135,7 +135,7 @@ describe('the appPort rows (card containers-74)', function () {
 
   it('F-1101 AC-24 (app-port-actions): a Statically Forwarded row offers copying the address, opening in the browser and previewing, and the menu adds only Forward a Port', async () => {
     const [port, view] = [await freePort(), await freePort()];
-    const window = await windows.connectedWith('c74-ac24', {
+    const window = await connectedWith('c74-ac24', {
       appPort: [port],
       forwardPorts: [view],
     });
@@ -168,7 +168,7 @@ describe('the appPort rows (card containers-74)', function () {
       await freePort(),
       await freePort(),
     ];
-    const window = await windows.connectedWith('c74-ac40', {
+    const window = await connectedWith('c74-ac40', {
       appPort: [number, `${String(host)}:${String(container)}`],
       forwardPorts: [view],
     });

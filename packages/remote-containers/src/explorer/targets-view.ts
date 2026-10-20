@@ -104,6 +104,8 @@ export interface TargetsViewPorts {
   held(): HeldConnection | undefined;
   /** `dev.containers.dockerPath` as the editor reports it now. */
   dockerPath(): unknown;
+  /** Whether the window's workspace is trusted now. */
+  trusted(): boolean;
   /** The paths of the window's workspace folders. */
   folders(): readonly string[];
   /** The Docker CLI for a program. */
@@ -117,6 +119,8 @@ export interface TargetsViewPorts {
   setTimer(milliseconds: number, callback: () => void): () => void;
   /** Calls the listener when `dev.containers.dockerPath` changes. */
   onDockerPathChange(listener: () => void): {dispose(): void};
+  /** Calls the listener when the window's workspace is granted trust. */
+  onTrustGranted(listener: () => void): {dispose(): void};
   translate: Translate;
   logger: Logger;
 }
@@ -163,15 +167,24 @@ function childrenOf(
   return 'rows' in node ? node.rows : node.children;
 }
 
-/** The engine of the connection the window holds, else the one the setting names; none when it names no program. */
+/**
+ * The engine of the connection the window holds, else the one the setting names; none when it names no program. A
+ * relative value is the folder's own file, so it names a program only once the folder is trusted.
+ */
 export function engineOfWindow(
-  ports: Pick<TargetsViewPorts, 'dockerPath' | 'folders' | 'engineFor'>,
+  ports: Pick<
+    TargetsViewPorts,
+    'dockerPath' | 'folders' | 'engineFor' | 'trusted'
+  >,
   held: HeldConnection | undefined,
 ): EngineHost | undefined {
   if (held !== undefined) {
     return held.engine;
   }
-  const executable = executableOf(ports.dockerPath(), ports.folders()[0]);
+  const executable = executableOf(
+    ports.dockerPath(),
+    ports.trusted() ? ports.folders()[0] : undefined,
+  );
   return executable.kind === 'spawn'
     ? ports.engineFor(executable.file)
     : undefined;
@@ -350,7 +363,8 @@ export async function showTargets(
       events.stop();
     }
   });
-  const dockerPath = ports.onDockerPathChange(() => {
+  /** The window may have another engine now: the events start again and the tree is read again, unless it holds one. */
+  function engineMayHaveChanged(): void {
     if (ports.held() !== undefined) {
       return;
     }
@@ -361,7 +375,9 @@ export async function showTargets(
     } else {
       stale.then(rebuildLogged, rebuildLogged);
     }
-  });
+  }
+  const dockerPath = ports.onDockerPathChange(engineMayHaveChanged);
+  const trustGranted = ports.onTrustGranted(engineMayHaveChanged);
   return {
     refresh: async () => {
       await rebuild();
@@ -373,6 +389,7 @@ export async function showTargets(
       stopping.abort();
       events.stop();
       dockerPath.dispose();
+      trustGranted.dispose();
       visibility.dispose();
       treeView.dispose();
       listeners.clear();

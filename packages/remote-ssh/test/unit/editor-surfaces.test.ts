@@ -51,6 +51,7 @@ function surfacesWith(
     linkTerminals: {runProgram: () => Promise.resolve()},
     failureDialog: {showError: () => Promise.resolve(changes.dialogAnswer)},
     licenceDialog: {showModal: () => Promise.resolve(undefined)},
+    preconnectDialog: {showModal: () => Promise.resolve(undefined)},
     platformPick: {pick: () => Promise.resolve(changes.platform)},
     mitigationPick: {pick: () => Promise.resolve(changes.mitigation)},
     downloadProgress: SILENT_PROGRESS,
@@ -281,6 +282,29 @@ describe("the connect's surfaces over the editor", () => {
     deepStrictEqual(
       [surfaces.acceptances.isAccepted('terms'), calls.stored],
       [true, [['other', true]]],
+    );
+  });
+
+  it('F-2108 AC-11: the pre-connection record is kept in the profile state', async () => {
+    const {surfaces, calls} = surfacesWith();
+    await surfaces.preconnectApprovals.remember('/x.sh', 'abc');
+    deepStrictEqual(calls.stored, [
+      [
+        `preconnectScriptConfirmed:${Buffer.from('/x.sh').toString('base64')}`,
+        'abc',
+      ],
+    ]);
+  });
+
+  it('F-2108 AC-4: a dismissed pre-connection dialog skips the script', async () => {
+    const {surfaces} = surfacesWith();
+    deepStrictEqual(
+      await surfaces.preconnectDialog.askUser(
+        '/x.sh',
+        false,
+        new AbortController().signal,
+      ),
+      'skip',
     );
   });
 

@@ -4,7 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
@@ -27,6 +27,11 @@ const LOCALES = [
   'zh-cn',
   'zh-tw',
 ];
+
+/** Whether none of the keys names telemetry, case-insensitively. */
+function noTelemetryKey(keys: string[]): boolean {
+  return keys.every(key => !/telemetry/i.test(key));
+}
 
 /** A JSON file of the package. */
 function jsonOf(file: string): Record<string, unknown> {
@@ -498,5 +503,16 @@ describe('the manifest of the Remote Explorer package', () => {
       ungated: [],
       locales: LOCALES,
     });
+  });
+
+  it('F-5901 AC-7: the package declares no telemetry: no telemetry.json, and no telemetry key in the manifest', () => {
+    deepStrictEqual(
+      [
+        existsSync(path.join(PACKAGE, 'telemetry.json')),
+        noTelemetryKey(Object.keys(MANIFEST)),
+        noTelemetryKey(Object.keys(CONTRIBUTES)),
+      ],
+      [false, true, true],
+    );
   });
 });

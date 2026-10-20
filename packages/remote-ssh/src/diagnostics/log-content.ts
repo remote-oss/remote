@@ -4,6 +4,7 @@
  * appears, and no answer is ever written.
  */
 
+import path from 'node:path';
 import type {ProbedHost, ResultBlock} from 'lib-server';
 
 /** `token` with every digit changed to `1` and every ASCII letter to `a`. */
@@ -83,6 +84,15 @@ export function hostPlatformLine(
   host: Pick<ProbedHost, 'operatingSystem' | 'architecture'>,
 ): string {
   return `Host platform: ${host.operatingSystem} ${host.architecture}`;
+}
+
+/** The login shell the probe found on the host, by its path and its name; none when the host reported none. */
+export function loginShellLine(
+  host: Pick<ProbedHost, 'loginShell'>,
+): string | undefined {
+  return host.loginShell === ''
+    ? undefined
+    : `the host's login shell is ${host.loginShell} (${path.posix.basename(host.loginShell)})`;
 }
 
 /**

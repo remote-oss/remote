@@ -196,10 +196,22 @@ class FakeHarness implements HarnessDependencies {
     });
   };
 
+  readonly prepareTemplates = (
+    root: string,
+    runFolder: string,
+    address: string,
+  ): Promise<string> => {
+    this.calls.push(`templates prepared ${address}`);
+    return Promise.resolve('localhost:5000');
+  };
+
   readonly startDownloads = (): Promise<RunDownloads> => {
     this.calls.push('downloads started');
     return Promise.resolve({
-      variables: {HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080'},
+      variables: {
+        HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080',
+        HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
+      },
       stop: () => {
         this.calls.push('downloads stopped');
         return Promise.resolve();
@@ -374,6 +386,8 @@ const LAUNCH_ORDER = [
   'explorer-standdown',
   'trust',
   'trust-terminal',
+  'web-ui',
+  'web-ui-trust',
   'containers',
   'containers-standdown',
   'containers-no-proposals',
@@ -1056,6 +1070,33 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-57: a run with the containers launch publishes its templates into the registry and passes the index and the templates registry', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['containers']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('templates')),
+          harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+          harness.variables?.HARNESS_TEMPLATE_REGISTRY,
+        ],
+        [
+          ['templates prepared 127.0.0.1:5000'],
+          'http://127.0.0.1:8080/templates/devcontainer-index.json',
+          'localhost:5000',
+        ],
+      );
+    });
+
+    it('tooling-57: a run whose chosen launches ask for no templates prepares none and passes no index', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('templates')),
+          harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+        ],
+        [[], undefined],
+      );
+    });
+
     it('tooling-51: a run given the genuine label makes it, with VS Code downloaded once and its folder installed with VS Code’s CLI', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['genuine']);
       deepStrictEqual(
@@ -1361,6 +1402,79 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    const CONTAINERS: Launch = {
+      label: 'containers',
+      kind: 'plain',
+      suite: 'containers',
+      withExtensions: ['remote-oss.remote-containers'],
+    };
+
+    /** Runs `launches` with `runLaunch` under a lock that notes its takes and releases in `events`. */
+    function runLocked(
+      launches: Launch[],
+      runLaunch: (launch?: Launch) => Promise<AttemptResult>,
+      events: string[],
+    ): Promise<number[]> {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        '',
+        sleep,
+        runLaunch,
+        undefined,
+        undefined,
+        undefined,
+        () => undefined,
+        {
+          take: () => {
+            events.push('take');
+            return Promise.resolve();
+          },
+          release: () => {
+            events.push('release');
+          },
+        },
+      );
+    }
+
+    it("tooling-58: a launch of dev containers holds the daemon's lock through its attempts; another launch takes none", async () => {
+      const events: string[] = [];
+      await runLocked(
+        [TERMINAL, CONTAINERS],
+        launch => {
+          events.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+        events,
+      );
+      deepStrictEqual(events, [
+        'ran terminal',
+        'take',
+        'ran containers',
+        'release',
+      ]);
+    });
+
+    it("tooling-58: the daemon's lock is released when a launch of dev containers throws", async () => {
+      const events: string[] = [];
+      const failure = await runLocked(
+        [CONTAINERS],
+        () => Promise.reject(new Error('the editor did not start')),
+        events,
+      ).then(
+        () => 'resolved',
+        (error: unknown) => (error as Error).message,
+      );
+      deepStrictEqual(
+        [failure, events],
+        ['the editor did not start', ['take', 'release']],
+      );
     });
 
     it("each launch runs the helper stop program on the run's user-data folder once it has run, when it holds records", async () => {

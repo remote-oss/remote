@@ -1,8 +1,3 @@
-/**
- * @fileoverview What the rows of the Ports view share: windows connected to a container of a configuration, the view
- * shown and read, a free port, and a check that a forwarded address answers.
- */
-
 import {writeFileSync} from 'node:fs';
 import {connect, createServer} from 'node:net';
 import path from 'node:path';
@@ -63,32 +58,6 @@ export function echoes(address: string): Promise<boolean> {
   });
 }
 
-/** The ports of the rows. */
-export function portsOf(rows: readonly PortsRow[]): string[] {
-  return rows.map(shown => shown.port);
-}
-
-/** The folder of the window `name` opened by `connectedWith`. */
-export function folderOf(name: string): string {
-  return path.join(variable('HARNESS_RUN_FOLDER'), name);
-}
-
-/** Writes `configuration` over the folder's devcontainer.json, as an edit of the file the window shows. */
-export function editConfiguration(
-  folder: string,
-  configuration: Readonly<Record<string, unknown>>,
-): void {
-  writeFileSync(
-    path.join(folder, '.devcontainer', 'devcontainer.json'),
-    JSON.stringify({
-      image: variable('HARNESS_DEVCONTAINER_IMAGE'),
-      runArgs: runLabelArguments(),
-      name: 'Forwards',
-      ...configuration,
-    }),
-  );
-}
-
 /** Shows the Ports view of window `window` once core has made it. */
 export async function showPorts(window: string): Promise<void> {
   await waitFor(
@@ -116,25 +85,50 @@ export async function rowsWhen(
   return rows;
 }
 
+/** The ports of the rows. */
+export function portsOf(rows: readonly PortsRow[]): string[] {
+  return rows.map(shown => shown.port);
+}
+
+/** The folder of the window `name` opened by `connectedWith`. */
+export function folderOf(name: string): string {
+  return path.join(variable('HARNESS_RUN_FOLDER'), name);
+}
+
+/** Writes `configuration` over the folder's devcontainer.json, as an edit of the file the window shows. */
+export function editConfiguration(
+  folder: string,
+  configuration: Readonly<Record<string, unknown>>,
+): void {
+  writeFileSync(
+    path.join(folder, '.devcontainer', 'devcontainer.json'),
+    JSON.stringify({
+      image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+      runArgs: runLabelArguments(),
+      name: 'Forwards',
+      ...configuration,
+    }),
+  );
+}
+
 /** Reloads window `window` and waits until it is connected to its container again. */
 export async function reloaded(window: string): Promise<void> {
   await reloadWindow(window);
   await connectedToContainer(window);
 }
 
-/** The windows a describe connects, closed and removed after each row. */
-export interface ConnectedWindows {
-  /** Opens a folder with `configuration` in a window and connects it to its container. */
-  connectedWith(
+/**
+ * Called inside a `describe`: closes the windows and removes the containers its `connectedWith` made after each row,
+ * and gives that function, which opens a folder with `configuration` in a window and connects it to its container.
+ */
+export function portsWindows(): {
+  connectedWith: (
     name: string,
     configuration: Readonly<Record<string, unknown>>,
-  ): Promise<string>;
-  /** Closes window `window` now; the cleanup after the row finds it gone. */
-  close(window: string): Promise<void>;
-}
-
-/** Registers the cleanup after each row of the describe it is called in, and gives the way to open windows. */
-export function connectedWindows(): ConnectedWindows {
+  ) => Promise<string>;
+  /** Closes `window` now, so that the clean-up after the row does not. */
+  closeNow: (window: string) => Promise<void>;
+} {
   const opened: string[] = [];
   const folders: string[] = [];
   afterEach(async () => {
@@ -157,9 +151,9 @@ export function connectedWindows(): ConnectedWindows {
       await reopenInContainer(window);
       return window;
     },
-    close: async window => {
-      await closeWindow(window);
+    closeNow: async window => {
       opened.splice(opened.indexOf(window), 1);
+      await closeWindow(window);
     },
   };
 }

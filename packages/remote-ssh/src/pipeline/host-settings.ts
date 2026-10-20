@@ -40,8 +40,11 @@ export function exactEntry(setting: unknown, alias: string): unknown {
     : undefined;
 }
 
-/** The characters an install folder may hold: ASCII letters and digits, `/`, `-`, `_`, `.` and the space. */
-const INSTALL_FOLDER = /^\/[A-Za-z0-9/_. -]*$/;
+/**
+ * An install folder: absolute, or the remote user's home folder as `~` alone or `~/` and a path. The path holds ASCII
+ * letters and digits, `/`, `-`, `_`, `.` and the space.
+ */
+const INSTALL_FOLDER = /^(?:\/[A-Za-z0-9/_. -]*|~(?:\/[A-Za-z0-9/_. -]*)?)$/;
 
 /** The install folder setting for the alias: none, a usable folder, or a value that is not allowed. */
 export type InstallFolder =
@@ -51,8 +54,8 @@ export type InstallFolder =
 
 /**
  * Reads `remote.SSH.serverInstallPath` for the alias. An entry that is not text counts as none, an empty text means
- * the default, and a text that does not start with `/` or holds another character is invalid. The folder is kept
- * exactly as written.
+ * the default, and a text that does not start with `/`, is not `~` or `~/` and a path, or holds another character is
+ * invalid. The folder is kept exactly as written; the host expands a leading `~` against its user's home folder.
  */
 export function installFolderFor(
   setting: unknown,
@@ -67,17 +70,45 @@ export function installFolderFor(
     : {kind: 'invalid', value: entry};
 }
 
+/** What `remote.SSH.preconnect` asks of a connect to the alias. */
+export type PreconnectChoice =
+  | {kind: 'none'}
+  | {kind: 'script'; path: string}
+  | {kind: 'notAPath'; valueKind: 'number' | 'boolean' | 'object' | 'list'};
+
+/** The kind of an entry that is not text, for the failure that names it. */
+function notAPathOf(entry: unknown): PreconnectChoice {
+  if (typeof entry === 'number') {
+    return {kind: 'notAPath', valueKind: 'number'};
+  }
+  if (typeof entry === 'boolean') {
+    return {kind: 'notAPath', valueKind: 'boolean'};
+  }
+  return {
+    kind: 'notAPath',
+    valueKind: Array.isArray(entry) ? 'list' : 'object',
+  };
+}
+
 /**
- * The pre-connection script that applies to the alias, or none: a text applies to every host, an object by the alias
- * exactly as written, and an empty text, a missing or empty entry, or a value of another type is no script.
+ * Reads `remote.SSH.preconnect` for the alias: a text applies to every host, an object by the alias exactly as
+ * written. An empty text, a missing or empty or `null` entry, and any other value at the top are no script. A
+ * number, a boolean, a list or an object as the alias's entry is not the path of a script.
  */
-export function preconnectScriptFor(
+export function preconnectChoiceOf(
   setting: unknown,
   alias: string,
-): string | undefined {
-  const script =
-    typeof setting === 'string' ? setting : entryText(setting, alias);
-  return script === '' ? undefined : script;
+): PreconnectChoice {
+  if (typeof setting === 'string') {
+    return setting === '' ? {kind: 'none'} : {kind: 'script', path: setting};
+  }
+  const entry = exactEntry(setting, alias);
+  if (entry === undefined || entry === null || entry === '') {
+    return {kind: 'none'};
+  }
+  return typeof entry === 'string'
+    ? {kind: 'script', path: entry}
+    : notAPathOf(entry);
 }
 
 /** The text of a per-host map entry that is a string, or the empty text. */

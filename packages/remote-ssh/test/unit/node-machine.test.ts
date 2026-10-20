@@ -25,6 +25,7 @@ const FACTS = {
   environment: {PATH: '/usr/bin', XDG_RUNTIME_DIR: '/run/user/1000'},
   homeFolder: '/home/alex',
   temporaryFolder: '/tmp',
+  workingDirectory: '/work',
 };
 
 /** Whether a listener can bind `port` on the loopback. */

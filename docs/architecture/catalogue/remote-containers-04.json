@@ -361,7 +361,7 @@
   "label": "spec:reviewed",
   "title": "Shutdown behavior when windows close",
   "epic": "E04",
-  "acCount": 67,
+  "acCount": 71,
   "surfaces": {
    "commands": [
     "Dev Containers: Reopen Folder Locally"

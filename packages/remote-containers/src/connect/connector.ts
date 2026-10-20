@@ -27,7 +27,7 @@ import {
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
-import {executableOf} from '../engine/executable.ts';
+import {type Executable, executableOf} from '../engine/executable.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf} from '../exec/exec-channel.ts';
@@ -42,6 +42,7 @@ import {
   effectiveExtensions,
   settingEntries,
 } from '../extensions/extension-list.ts';
+import {portAttributeSettings} from '../ports/port-attributes.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
@@ -243,6 +244,7 @@ function mappedPath(
 /** The settings, the program, the engine and the CLI of one folder. */
 interface Tools {
   settings: ReturnType<ContainerConnectorDependencies['settings']>;
+  /** The file that the engine and the CLI run: the setting's value, a relative one resolved against the folder. */
   dockerPath: string;
   configFile: string;
   engine: EngineHost;
@@ -634,16 +636,15 @@ export function containerConnectorOf(
   /** The settings, the program, the engine and the CLI a connect or a read of `folder` uses, made the same way for both. */
   function toolsOf(folder: DevContainerFolder): Tools {
     const settings = dependencies.settings();
-    const dockerPath =
-      typeof settings.dockerPath === 'string' && settings.dockerPath !== ''
-        ? settings.dockerPath
-        : 'docker';
-    const file = executableOf(settings.dockerPath, undefined);
-    const written = file.kind === 'spawn' ? file.file : dockerPath;
-    const unwrapped = dependencies.engineFor(written);
+    // With the folder as base, the setting always names a program: a relative value is the folder's file.
+    const executable = executableOf(
+      settings.dockerPath,
+      folder.hostPath,
+    ) as Extract<Executable, {kind: 'spawn'}>;
+    const unwrapped = dependencies.engineFor(executable.file);
     return {
       settings,
-      dockerPath,
+      dockerPath: executable.file,
       configFile: folder.configFile.fsPath ?? folder.configFile.path,
       engine:
         folder.context === undefined
@@ -812,7 +813,7 @@ export function containerConnectorOf(
         engineFor: () => engine,
         dockerPath: () => settings.dockerPath,
       },
-      undefined,
+      folder.hostPath,
       cancellation,
     );
     if (checked.kind === 'failed') {
@@ -873,13 +874,12 @@ export function containerConnectorOf(
       logCliEvent,
       cancellation,
     );
+    const merged =
+      configuration.kind === 'configuration'
+        ? configuration.mergedConfiguration
+        : undefined;
     const defaultExtensions = prepared.created
-      ? newContainerExtensions(
-          configuration.kind === 'configuration'
-            ? configuration.mergedConfiguration
-            : undefined,
-          settings,
-        )
+      ? newContainerExtensions(merged, settings)
       : [];
     let name: string | undefined;
     if (configuration.kind === 'configuration') {
@@ -902,6 +902,7 @@ export function containerConnectorOf(
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         defaultExtensions,
+        machineSettings: portAttributeSettings(merged),
         onPhase: phase => {
           phases.tell({name: phase});
         },
@@ -918,12 +919,8 @@ export function containerConnectorOf(
     if (isAborted(cancellation)) {
       return cancelled();
     }
-    const mergedConfiguration =
-      configuration.kind === 'configuration'
-        ? configuration.mergedConfiguration
-        : undefined;
-    const mode = probeModeOf(mergedConfiguration);
-    const remoteEnvironment = remoteEnvironmentOf(mergedConfiguration);
+    const mode = probeModeOf(merged);
+    const remoteEnvironment = remoteEnvironmentOf(merged);
     for (const name of remoteEnvironment.dropped) {
       logger.warn(`remoteEnv ${name} is neither a string nor null`);
     }
@@ -1002,9 +999,9 @@ export function containerConnectorOf(
       identity: {name, context: folder.context},
       connected,
       ports: {
-        forwardPorts: mergedConfiguration?.forwardPorts,
-        portsAttributes: mergedConfiguration?.portsAttributes,
-        otherPortsAttributes: mergedConfiguration?.otherPortsAttributes,
+        forwardPorts: merged?.forwardPorts,
+        portsAttributes: merged?.portsAttributes,
+        otherPortsAttributes: merged?.otherPortsAttributes,
       },
     };
     const connection = held;

@@ -30,8 +30,11 @@ import {
   notifications,
   pageText,
   waitForDialog,
+  welcomeText,
   windowTitle,
 } from '../windows/renderer.ts';
+import {VIEW} from '../windows/dev-containers-view.ts';
+import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 
 /** The question core asks of a folder, F-0106 5.0 step 2. */
 const TRUST_QUESTION = 'Do you trust the authors of the files in this folder?';
@@ -115,9 +118,11 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
           host: await ranOnHost(folder),
           title: await windowTitle(name),
         };
+        const before = await notifications(name);
         await answerDialog(name, 'Cancel');
         await running;
         await new Promise(resolve => setTimeout(resolve, 2000));
+        const after = await notifications(name);
         declined.push({
           shown: [shown.message, text?.includes(S265), shown.buttons],
           whileOpen,
@@ -127,7 +132,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
             remoteName: (await windowState(name)).remoteName,
             activated: activations(name),
             host: await ranOnHost(folder),
-            notifications: await notifications(name),
+            noNewNotification: after.every(text => before.includes(text)),
           },
         });
       }
@@ -158,7 +163,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
           remoteName: null,
           activated,
           host: NOTHING_RAN,
-          notifications: [],
+          noNewNotification: true,
         },
       };
       deepStrictEqual(
@@ -433,5 +438,81 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       },
     );
     await closeWindow('open-wait');
+  });
+
+  it('F-0201 AC-55 (t55): a relative dockerPath in the folder runs nothing while the folder is untrusted, in the window, the view, the trust dialog and its Cancel; after Trust Folder & Continue the wrapper runs the checks and the window connects', async () => {
+    const calls = inRun('t55-calls');
+    const folder = devContainerFolder('gate-trust-wrapper', {name: 'Wrapper'});
+    folderWrapper(folder, calls);
+    await setUserSetting('dev.containers.dockerPath', 'tools/dk');
+    try {
+      const name = await openFolderWindow(folder);
+      const untrusted = (await isTrusted(name)) === false;
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const atOpen = recordedCalls(calls);
+      await inWindow(name, 'workbench.view.remote');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const view = {
+        welcome: await welcomeText(name, VIEW),
+        calls: recordedCalls(calls),
+      };
+      const running = inWindow(name, 'remote-containers.reopenInContainer');
+      const shown = await waitForDialog(name);
+      const whileAsking = recordedCalls(calls);
+      await answerDialog(name, 'Cancel');
+      await running;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const declined = {
+        remoteName: (await windowState(name)).remoteName,
+        trusted: await isTrusted(name),
+        containers: await devContainersOf(folder),
+        calls: recordedCalls(calls),
+      };
+      const reopened = reopenInContainer(name);
+      await waitForDialog(name);
+      await answerDialog(name, 'Trust Folder & Continue');
+      await reopened;
+      const connected = {
+        remoteName: (await windowState(name)).remoteName,
+        dialog: await dialogOf(name),
+        wrapped: recordedCalls(calls).some(call => call.startsWith('version')),
+      };
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          untrusted,
+          atOpen,
+          view,
+          asked: shown.message,
+          whileAsking,
+          declined,
+          connected,
+        },
+        {
+          untrusted: true,
+          atOpen: [],
+          view: {
+            welcome:
+              'Get started with containers by installing Docker or by visiting the help view. Refresh after installation and startup.',
+            calls: [],
+          },
+          asked: TRUST_QUESTION,
+          whileAsking: [],
+          declined: {
+            remoteName: null,
+            trusted: false,
+            containers: [],
+            calls: [],
+          },
+          connected: {
+            remoteName: 'dev-container',
+            dialog: undefined,
+            wrapped: true,
+          },
+        },
+      );
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
   });
 });

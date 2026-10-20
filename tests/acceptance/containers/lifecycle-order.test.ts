@@ -215,7 +215,7 @@ describe('F-0415 the order of the commands and waitFor (card containers-44)', fu
       const name = await openFolderWindow(folder);
       await reopenInContainer(name);
       const containerId = await containerOf(folder);
-      const connected = await connectedState(name);
+      const connected = await connectedState(name, 'Dev Container: Wait Init');
       const labelsBefore = await labelsOf(containerId, folder);
       await signal(containerId, folder, 'go');
       await untilLabels(containerId, folder, ['updateContent']);
@@ -251,7 +251,7 @@ describe('F-0415 the order of the commands and waitFor (card containers-44)', fu
       const waiting = await stateOf(name);
       await signal(containerId, folder, 'go');
       await connectedToContainer(name);
-      const done = await stateOf(name);
+      const done = await stateOf(name, 'Dev Container: Wait Bad');
       await closeWindow(name);
       deepStrictEqual(
         {waiting, done},

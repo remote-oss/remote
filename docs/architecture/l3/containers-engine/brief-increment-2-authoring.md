@@ -1,8 +1,8 @@
 # Brief: Remote - Containers, increment 2, authoring
 
 Status: ruled by athena (architect), 2026-10-20, from daedalus's design request (remote-oss/remote#1204). Increment
-2's authoring part is the user's D-87 ("authoring and ports go to increment 2") and `brief-release-1.md` §2. One
-scope question is parked for the user (§2). Everything else here holds whatever the answer is. Sources:
+2's authoring part is the user's D-87 ("authoring and ports go to increment 2") and `brief-release-1.md` §2. §2's
+scope question is decided: the user chose (A), D-100 (2026-10-20). Sources:
 - the published specs F-0801 (remote-oss/remote-containers#53), F-0802 (#40) and F-0403 (#22), all `spec:reviewed`;
 - their cross-references F-0301, F-0401, F-0405, F-0106, F-0302, F-0803, F-0804, F-0805 and F-0413;
 - the area C dossier (C14);
@@ -24,7 +24,7 @@ The interim notice of release 1 (`CONFIG_TEMPLATES.noConfiguration`) goes. So do
 invented identifiers and its line under "Interim behaviour" in `release-1-notes.md`. The window kinds are a local
 single-folder window and an ordinary dev container window (F-0801 BR-12). The others come with their own features.
 
-## 2. Parked for the user: the wizard's later stages and the user-data folder
+## 2. Decided by the user, D-100: the wizard's later stages and the user-data folder are in
 
 F-0802 AC-6 to AC-8 require the screens after the template pick:
 - the options pick (F-0803, P1, 32 criteria);
@@ -40,9 +40,11 @@ the user's (AGENTS.md: scope).
 | **(A) In** (recommended) | F-0803 and F-0805 render the template's own `options` and `optionalPaths` from the catalogue. F-0804's pick comes with F-0414, which increment 2 already has ("the rest"). F-0302's store is built far enough for S026, copy-to-workspace, and discovery for Flow B. | All asserted. About 82 more criteria are seeded. |
 | (B) Out | The wizard goes straight from the template to the write with the template's defaults. S026 is hidden, and the location pick is skipped as in F-0801's reduced shape. | F-0802 AC-6 to AC-8, F-0801 AC-3, 5, 8 and 17 and F-0403 AC-4 become deviations (release notes plus spec questions). F-0803, F-0804 and F-0805 stay unseeded. |
 
-I recommend (A): without options a template can't be adapted at all, and the cost is small screens over data the
-catalogue already carries (*measured*: every template entry has `options` and `optionalPaths`). **Until the user
-answers, cards start only on what both options share**, which is rulings 1 to 9.
+**The user chose (A) on 2026-10-20 (D-100).** F-0803, F-0804 (with F-0414) and F-0805 join increment 2, and so
+does F-0302's store, as far as S026, copy-to-workspace and discovery for Flow B need it. Their criteria are seeded and
+built like the rest. The cards built on what both options shared (rulings 1 to 9) stand, and the later stages,
+the location pick and the user-data target are added to C14 by their own cards. Every criterion §2 had left `todo`
+for this answer is now in scope, and none of (B)'s deviations apply.
 
 ## 3. Rulings
 
@@ -50,7 +52,7 @@ answers, cards start only on what both options share**, which is rulings 1 to 9.
    `written {files, target}`, `cancelled` or `failed {detail}`. It never reloads and never starts a container. Each
    caller continues on its own:
    - F-0801's command opens the file as a preview and raises F-0402's notification (the folder variant, or the
-     user-data variant under (A));
+     user-data variant for the user-data target);
    - F-0403 Flow A reloads into the container through C6's existing `commandBeforeReload` and `reloadIntoContainer`,
      with no editor and no notification (5.0 step 9b);
    - Reopen and rebuild-and-reopen go on with release 1's connect on the written file;
@@ -66,7 +68,7 @@ answers, cards start only on what both options share**, which is rulings 1 to 9.
    - *Source:* `https://containers.dev/static/devcontainer-index.json`. *Measured:* about 2 MB, with 183 templates and
      1460 Features, each template carrying its `options` and `optionalPaths`.
    - *When:* once at the start of each wizard run, never reused (F-0802 BR-1), and one fetch feeds both the template
-     list and, under (A), the Feature list.
+     list and the Feature list.
    - *How:* the extension host's `https` module, which core makes follow `http.proxy`.
    - *Failure:* the preferred outcome, our own message naming the network cause, before any screen (F-0801 7.E10,
      F-0802 7.E3). Its text is ours (ADR-0008), so it's a spec question for an `[adaptation]` string, with a
@@ -133,9 +135,8 @@ answers, cards start only on what both options share**, which is rulings 1 to 9.
 
 - **The 21 `increment 2 (authoring)` rows** of `coverage-containers-r1.tsv` (F-0106, F-0301, F-0401, F-0403, F-0405)
   become `acceptance`.
-- **F-0801 (43) and F-0802 (37) are seeded and tagged,** less the criteria ruled `later` above (Compose, F-0105) and,
-  under (B), §2's deviations.
-- **Under (A),** F-0803, F-0804 and F-0805 are seeded too.
+- **F-0801 (43) and F-0802 (37) are seeded and tagged,** less the criteria ruled `later` above (Compose, F-0105).
+- **F-0803, F-0804 and F-0805 are seeded too** (D-100).
 
 ## 6. Spec questions, open
 

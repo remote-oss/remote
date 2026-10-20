@@ -248,7 +248,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('F-2501 AC-1: activationEvents: the seven, in order, with no wildcards or startup', () => {
+  it('F-2501 AC-1, F-5902 AC-24: activationEvents: the seven, in order, with no wildcards or startup', () => {
     deepStrictEqual(manifest().activationEvents, [
       'onCommand:remote-internal.getSshFoldersHistory',
       'onCommand:remote-internal.deleteSshFolderFromHistory',
@@ -286,7 +286,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     ]);
   });
 
-  it('F-2503.AC-2: commands: 17, every category, every title a key, no enablement, no internal ids', () => {
+  it('F-2503.AC-2, F-5902 AC-24: commands: 17, every category, every title a key, no enablement, no internal ids', () => {
     const contributed = manifest().contributes?.commands ?? [];
     deepStrictEqual(
       {
@@ -922,6 +922,40 @@ describe('the manifest rows of slice 1', () => {
         ) ?? [],
       ],
       ['Remote-SSH', 'Connect to Host...', [], []],
+    );
+  });
+
+  it('F-2509 AC-1: Open Web UI is in the palette only in a connected SSH window with the key on and the family is not standing down, in no other menu and with no keybinding', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.openWebUI',
+    );
+    deepStrictEqual(
+      [
+        command?.category,
+        resolved(command?.title),
+        manifest.contributes.menus.commandPalette?.filter(
+          entry => entry.command === 'opensshremotes.openWebUI',
+        ),
+        placesOf('opensshremotes.openWebUI'),
+      ],
+      [
+        'Remote-SSH',
+        'Open Web UI',
+        [
+          {
+            command: 'opensshremotes.openWebUI',
+            when: 'remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess && !opensshremotes.standingDown',
+          },
+        ],
+        ['commandPalette'],
+      ],
+    );
+  });
+
+  it('F-2509 AC-14: the key is contributed by no configuration', () => {
+    deepStrictEqual(
+      Object.keys(properties).includes('remote.SSH.enableWebAccess'),
+      false,
     );
   });
 

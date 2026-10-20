@@ -727,6 +727,43 @@ export async function portRowAction(
   }
 }
 
+/** Opens the Command Palette of window `name` with F1, types `text`, and gives the labels of its rows once they stop changing. */
+async function openedPalette(name: string, text: string): Promise<string[]> {
+  await pressStroke(await pageOf(name), name, {
+    key: 'F1',
+    code: 'F1',
+    windowsVirtualKeyCode: 112,
+    nativeVirtualKeyCode: 112,
+  });
+  // The palette starts with `>`, which is what makes it list commands.
+  await keyInFolderDialog(name, undefined, `>${text}`);
+  let labels: string[] = [];
+  let steady = 0;
+  for (let attempt = 0; attempt < 40 && steady < 3; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const now = (await quickPickRows(name)).map(each => each.label);
+    steady = JSON.stringify(now) === JSON.stringify(labels) ? steady + 1 : 0;
+    labels = now;
+  }
+  return labels;
+}
+
+/** The labels of the rows the Command Palette of window `name` lists for `text`; the palette is closed again with Escape. */
+export async function paletteRows(
+  name: string,
+  text: string,
+): Promise<string[]> {
+  const labels = await openedPalette(name, text);
+  await pressEscape(name);
+  return labels;
+}
+
+/** Runs the first command the Command Palette of window `name` lists for `text`, as Enter on it does. */
+export async function paletteRun(name: string, text: string): Promise<void> {
+  await openedPalette(name, text);
+  await pressKey(await pageOf(name), name, 'Enter');
+}
+
 /** Types `text` into the input box a command of window `name` shows, and accepts it. */
 export function answerInputBox(name: string, text: string): Promise<void> {
   return keyInFolderDialog(name, 'Enter', text);
@@ -1099,6 +1136,29 @@ export interface StatusItem {
   hover: string;
 }
 
+/** How long a row waits for the remote indicator to read the container once the window is connected. */
+export const INDICATOR_MILLISECONDS = 30_000;
+
+/**
+ * The text of the status bar item `itemId` of window `name` once it reads `expected`, or its last text after
+ * `milliseconds`: core updates the remote indicator a moment after the window connects, and on a loaded machine that
+ * moment is longer than a row's read.
+ */
+export async function statusItemText(
+  name: string,
+  itemId: string,
+  expected: string,
+  milliseconds: number,
+): Promise<string> {
+  const deadline = Date.now() + milliseconds;
+  let text = (await statusItem(name, itemId)).text;
+  while (text !== expected && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    text = (await statusItem(name, itemId)).text;
+  }
+  return text;
+}
+
 /**
  * The status bar item of window `name` whose DOM id is `itemId` (core's remote indicator is `status.host`). The hover
  * is read by moving the pointer onto the item and back off, with its non-breaking spaces read as spaces. It fails
@@ -1464,11 +1524,11 @@ export async function folderDialogOpen(name: string): Promise<boolean> {
 
 /**
  * Has window `name`'s in-window folder dialog take `key` (`Enter` or `Escape`), with `typed` in its input first when
- * given. It waits for the dialog to open, and fails when none does.
+ * given; with no key it only types. It waits for the dialog to open, and fails when none does.
  */
 async function keyInFolderDialog(
   name: string,
-  key: 'Enter' | 'Escape',
+  key: 'Enter' | 'Escape' | undefined,
   typed?: string,
 ): Promise<void> {
   await settled(
@@ -1488,7 +1548,9 @@ async function keyInFolderDialog(
       return null;
     })()`,
   );
-  await pressKey(await pageOf(name), name, key);
+  if (key !== undefined) {
+    await pressKey(await pageOf(name), name, key);
+  }
 }
 
 /**

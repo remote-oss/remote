@@ -96,5 +96,17 @@
   "Enter passphrase for ssh key {0}": "Enter passphrase for ssh key {0}",
   "Enter password": "Enter password",
   "Enter password for {0}": "Enter password for {0}",
-  "The remote host's architecture is not supported": "The remote host's architecture is not supported"
+  "The remote host's architecture is not supported": "The remote host's architecture is not supported",
+  "Running pre-connection script ({0})": "Running pre-connection script ({0})",
+  "The value of remote.SSH.preconnect for \"{0}\" is {1}, not the path of a script.": "The value of remote.SSH.preconnect for \"{0}\" is {1}, not the path of a script.",
+  "a boolean": "a boolean",
+  "a list": "a list",
+  "a number": "a number",
+  "an object": "an object",
+  "Execute pre-connection script?": "Execute pre-connection script?",
+  "Pre-connection script has changed since last confirmation": "Pre-connection script has changed since last confirmation",
+  "'{0}' will be executed on your local machine.": "'{0}' will be executed on your local machine.",
+  "Allow": "Allow",
+  "Allow and Don't Ask Again": "Allow and Don't Ask Again",
+  "Skip": "Skip"
 }

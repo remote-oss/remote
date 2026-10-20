@@ -250,7 +250,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       dependencies.revealLog();
     },
     serverPort() {
-      return held === undefined || held.lost
+      return held === undefined || held.lost || held.connection.serverPort === 0
         ? 'none'
         : held.connection.serverPort;
     },
