@@ -11,6 +11,11 @@
  */
 
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
+import {
+  type RunRegistry,
+  startRunRegistry,
+  SYSTEM_CLOCK,
+} from './acceptance-registry.ts';
 import {staleRefusal} from './acceptance-stale.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -164,6 +169,8 @@ export interface HarnessVariables {
   HARNESS_RUN_ID: string;
   /** The run's dev container image tag, when a launch of the run installs Dev Containers; VSCodium run only. */
   HARNESS_DEVCONTAINER_IMAGE?: string;
+  /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
+  HARNESS_REGISTRY?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -230,6 +237,8 @@ export interface HarnessDependencies {
   startDownloads: (root: string, runFolder: string) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
+  /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
+  startRegistry: (runId: string) => Promise<RunRegistry>;
 }
 
 /** How long the run waits for sshd to accept the first connection, in attempts half a second apart. */
@@ -753,6 +762,12 @@ async function prepare(
       writeStandIns(runFolder, launch, standInEngines(root, launch));
     }
   }
+  const registry = chosen.some(launch => launch.registry === true)
+    ? await dependencies.startRegistry(runId)
+    : undefined;
+  if (registry !== undefined) {
+    stops.push(() => registry.stop());
+  }
   const devContainerImage = launches.some(needsDevContainerImage)
     ? devContainerImageFor(command, root, runId)
     : undefined;
@@ -766,6 +781,7 @@ async function prepare(
     ...(devContainerImage === undefined
       ? {}
       : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
+    ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
@@ -1674,6 +1690,8 @@ if (isMainModule(import.meta.url)) {
         runTests: runTestCli,
         windowAgentVsix: packageWindowAgent,
         startAgent: startRunAgent,
+        startRegistry: runId =>
+          startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
         startDownloads: startRunDownloads.bind(
           undefined,
           runCommand,
