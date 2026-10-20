@@ -58,3 +58,9 @@ export const SSH_ENDPOINTS = Object.freeze({
     kind: 'change',
   } as const),
 });
+
+/** The commands of the SSH companion that the explorer's group row runs with no argument. */
+export const SSH_HAND_OVERS = Object.freeze({
+  openConfigFile: 'opensshremotes.openConfigFile',
+  addNewSshHost: 'opensshremotes.addNewSshHost',
+} as const);

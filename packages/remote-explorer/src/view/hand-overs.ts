@@ -3,12 +3,9 @@
  * and add a host. Each runs the companion's command with no argument, and nothing shows when it fails.
  */
 
+import {SSH_HAND_OVERS} from 'lib-companion';
 import type {CommandHandler} from 'lib-identifiers';
 import type {ViewSession} from './targets.ts';
-
-/** The commands of Remote - SSH that the two hand-overs run. */
-const OPEN_CONFIG_FILE = 'opensshremotes.openConfigFile';
-const ADD_NEW_SSH_HOST = 'opensshremotes.addNewSshHost';
 
 /** The editor's way to run a command. */
 export interface HandOverHost {
@@ -48,7 +45,7 @@ export function handOverHandlers(
   readonly remoteExplorerAdd: CommandHandler;
 } {
   return {
-    configureSsh: handOver(session, host, OPEN_CONFIG_FILE),
-    remoteExplorerAdd: handOver(session, host, ADD_NEW_SSH_HOST),
+    configureSsh: handOver(session, host, SSH_HAND_OVERS.openConfigFile),
+    remoteExplorerAdd: handOver(session, host, SSH_HAND_OVERS.addNewSshHost),
   };
 }
