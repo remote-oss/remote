@@ -90,21 +90,16 @@ export async function removeContainers(folder: string): Promise<void> {
   }
 }
 
-/** Removes every container of the run but its registry. */
+/** Removes every container of the run. */
 async function removeRunContainers(): Promise<void> {
   const {stdout} = await execFileAsync('docker', [
     'ps',
     '--all',
+    '--quiet',
     '--filter',
     `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
-    '--format',
-    '{{.ID}} {{.Label "remote-oss.acceptance.registry"}}',
   ]);
-  // The run's registry serves every later row; the run removes it at its end.
-  const containerIds = stdout
-    .split('\n')
-    .filter(line => line !== '' && !line.endsWith(' 1'))
-    .map(line => line.split(' ')[0] ?? '');
+  const containerIds = stdout.split('\n').filter(line => line !== '');
   if (containerIds.length > 0) {
     await execFileAsync('docker', ['rm', '-f', ...containerIds]);
   }

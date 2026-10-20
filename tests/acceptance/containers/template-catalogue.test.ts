@@ -3,6 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync} from 'node:fs';
 import path from 'node:path';
 import {variable} from '../windows/harness.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The dev container CLI the package bundles, which the run's templates were published with. */
 const BUNDLED_CLI = path.join(
@@ -49,6 +50,7 @@ describe("the run's template catalogue and registry (card tooling-57)", function
   this.timeout(120_000);
 
   it("#1235: the run's index lists the mirrored templates and the CLI applies one from the run's registry", async () => {
+    await runTemplatesReady();
     const registry = variable('HARNESS_TEMPLATE_REGISTRY');
     const index = (await (
       await fetch(variable('REMOTE_OSS_TEMPLATE_INDEX'))

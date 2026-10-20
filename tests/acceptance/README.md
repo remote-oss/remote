@@ -361,9 +361,7 @@ A launch with `registry: true` (today `containers` and `containers-ports`) makes
 launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
 `tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
 (`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
-The registry holds only what a row pushes to it, and nothing public is pushed. It also carries the label
-`remote-oss.acceptance.registry=1`, so the rows' clean-up of the run's containers (`clearEarlierRows`) leaves it for the
-rows after them. It carries the run's label and the dev
+The registry holds only what a row pushes to it, and nothing public is pushed. It carries the run's label and the dev
 container label, so the run's clean-up and the stale sweep remove it with its anonymous volume (`docker rm --force
 --volumes`), also after a killed run.
 
@@ -389,6 +387,10 @@ id moved to the run's registry, plus a collection of ours.
   - `HARNESS_TEMPLATE_REGISTRY` is the registry as the templates' ids name it, `localhost:<port>`;
   - `REMOTE_OSS_TEMPLATE_INDEX` is the index's URL on the download host. It is harness-only: the product reads it only
     when `REMOTE_OSS_ACCEPTANCE` is `1`.
+- **A row's clean-up removes the registry** with every other container of the run (`clearEarlierRows`), so the Dev
+  Containers views of later rows list no container but their own. A row that needs the templates calls
+  `runTemplatesReady()` (`windows/run-templates.ts`) first. It starts the registry again on the same port, which the
+  index's ids name, and publishes the templates into it again from the run's cache, with no network.
 
 Measured on CLI 0.89.0, on 2026-10-20:
 - **Plain HTTP is used only for `localhost:<port>`.** `templates publish` to `127.0.0.1:<port>` fails with a TLS error
