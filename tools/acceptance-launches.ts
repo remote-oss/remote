@@ -29,6 +29,12 @@ interface LaunchCommon {
   clientListeners?: readonly number[];
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
+  /**
+   * Whether the run publishes its templates into its registry and serves its template index for this launch; it starts
+   * the registry too. The index is REMOTE_OSS_TEMPLATE_INDEX, and the registry as the templates name it
+   * HARNESS_TEMPLATE_REGISTRY.
+   */
+  templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
 }
@@ -705,6 +711,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers',
       suite: 'containers',
       registry: true,
+      templates: true,
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
