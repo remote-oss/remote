@@ -909,6 +909,25 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** The kind of the open dialog, as its icon says ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`): the icon element carries `codicon-dialog-<kind>`. */
+export type DialogKind = 'info' | 'warning' | 'error';
+
+/** The kind of the dialog open in window `name`, or `undefined` when none is open or its icon names no kind. */
+export async function dialogKindOf(
+  name: string,
+): Promise<DialogKind | undefined> {
+  return (
+    (await evaluate<DialogKind | null>(
+      name,
+      `(() => {
+  const icon = document.querySelector('${DIALOG_BOX} .dialog-icon');
+  const kind = /codicon-dialog-(info|warning|error)/.exec(icon?.className ?? '');
+  return kind === null ? null : kind[1];
+})()`,
+    )) ?? undefined
+  );
+}
+
 /** The whole text of the dialog open in window `name`, the markdown details included, or `undefined` when none is. */
 export async function dialogText(name: string): Promise<string | undefined> {
   return (
@@ -1159,6 +1178,36 @@ export async function editorTabs(name: string): Promise<EditorTab[]> {
       active: tab.classList.contains('active'),
       preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
     }))`,
+  );
+}
+
+/** The open Settings editor: the label of its selected target (User, Workspace or Remote) and the text of its search box. */
+export interface SettingsEditor {
+  target: string;
+  search: string;
+}
+
+/**
+ * The Settings editor of window `name` when it is the one showing ([oss] `src/vs/workbench/contrib/preferences/browser/settingsEditor2.ts`),
+ * or `undefined` when no Settings editor is open in the window.
+ */
+export async function settingsEditorOf(
+  name: string,
+): Promise<SettingsEditor | undefined> {
+  return (
+    (await evaluate<SettingsEditor | null>(
+      name,
+      `(() => {
+  const editor = [...document.querySelectorAll('.settings-editor')].find(each => each.offsetParent !== null);
+  if (editor === undefined) {
+    return null;
+  }
+  return {
+    target: editor.querySelector('.settings-tabs-widget .action-label.checked')?.textContent?.replace(/\\s*\\[.*$/, '') ?? '',
+    search: (editor.querySelector('.suggest-input-container .view-lines')?.textContent ?? '').replaceAll('\\u00a0', ' '),
+  };
+})()`,
+    )) ?? undefined
   );
 }
 

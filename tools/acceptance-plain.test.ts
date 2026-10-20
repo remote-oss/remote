@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   debuggingPortFile,
   editorArguments,
+  extensionsFolderOf,
   launchFiles,
   packageWindowAgent,
   type PlainSteps,
@@ -14,7 +15,11 @@ import {
   startDetached,
   writeStandIns,
 } from './acceptance-plain.ts';
-import {launchesOf, type PlainLaunch} from './acceptance-launches.ts';
+import {
+  launchesOf,
+  launchLabelled,
+  type PlainLaunch,
+} from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -207,6 +212,24 @@ describe('the files of a launch', () => {
       logFile: '/run/windows-log.txt',
       containersLogFile: '/run/windows-containers-log.txt',
     });
+  });
+});
+
+describe('the extensions folder of a launch', () => {
+  it('tooling-51: the genuine launch has a folder of its own, and a launch with no extensions of its own has the run’s', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      ['genuine', 'windows'].map(label =>
+        extensionsFolderOf(
+          '/run',
+          launches.find(launch => launch.label === label),
+        ),
+      ),
+      [
+        path.join('/run', 'extensions-genuine'),
+        path.join('/run', 'extensions'),
+      ],
+    );
   });
 });
 
@@ -555,6 +578,32 @@ describe('runPlainLaunch', () => {
     deepStrictEqual(
       programs.map(program => program.environment.HOME),
       ['/run/home', '/run/home'],
+    );
+  });
+
+  const GENUINE = launchLabelled(launchesOf(REPOSITORY_ROOT), 'genuine');
+
+  it('tooling-51: the genuine launch’s editor is the executable given, and its editor and tests get the empty script and the executable that was started', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      {
+        runFolder: '/run',
+        executable: '/vscode/code',
+        environment: {HARNESS_RUN_FOLDER: '/run'},
+      },
+      GENUINE,
+      steps,
+    );
+    deepStrictEqual(
+      [
+        programs[0]?.file,
+        ...programs.map(program => [
+          program.environment.REMOTE_OSS_ACCEPTANCE_SCRIPT,
+          program.environment.HARNESS_EDITOR_EXECUTABLE,
+        ]),
+      ],
+      ['/vscode/code', ['', '/vscode/code'], ['', '/vscode/code']],
     );
   });
 });

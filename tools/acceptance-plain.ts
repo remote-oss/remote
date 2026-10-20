@@ -22,9 +22,10 @@ const PROPOSED_API_EXTENSIONS: readonly string[] = [
   'remote-oss.acceptance-window-agent',
 ];
 
-/** The extensions folder of a launch: its own when it installs extensions of its own, the run's otherwise. */
+/** The extensions folder of a launch: its own when it installs extensions of its own or starts VS Code, the run's otherwise. */
 export function extensionsFolderOf(runFolder: string, launch?: Launch): string {
-  return launch?.kind === 'plain' && launch.withExtensions !== undefined
+  return launch?.kind === 'plain' &&
+    (launch.withExtensions !== undefined || launch.client !== undefined)
     ? path.join(runFolder, `extensions-${launch.label}`)
     : path.join(runFolder, 'extensions');
 }
@@ -423,6 +424,7 @@ export async function runPlainLaunch(
       'pids',
     ),
     REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
+    HARNESS_EDITOR_EXECUTABLE: session.executable,
     ...withRunTokens(
       launch.environment,
       session.runFolder,

@@ -54,6 +54,7 @@
         "explorer-standdown/*.test.ts",
         "trust/*.test.ts",
         "trust-terminal/*.test.ts",
+        "genuine/*.test.ts",
         "containers/*.test.ts",
         "containers-standdown/*.test.ts",
         "containers-no-proposals/*.test.ts",

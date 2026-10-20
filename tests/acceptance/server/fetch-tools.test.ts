@@ -311,6 +311,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
             archiveFile: path.join(folder, 'archive.tar.gz'),
             ...makeCertificate(folder),
             logFile: path.join(folder, 'requests.log'),
+            tlsLogFile: path.join(folder, 'tls.log'),
           });
           failingHost = await startHost({fetch: variant, downloads: true});
         });

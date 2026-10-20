@@ -37,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the genuine launch last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -72,6 +72,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         ...hostLaunchLabels(),
+        'genuine',
       ],
     );
   });
@@ -190,6 +191,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['genuine', undefined, true, undefined],
       ],
     );
   });
@@ -350,6 +352,45 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('tooling-51: the genuine launch starts VS Code, is made only when named, shows the real dialogs and keeps the download on the run’s host', () => {
+    const genuine = launches.find(launch => launch.label === 'genuine');
+    deepStrictEqual(
+      [
+        genuine?.kind,
+        genuine?.kind === 'plain' ? genuine.client : undefined,
+        genuine?.namedOnly,
+        genuine?.environment,
+        genuine?.settings,
+        genuine?.kind === 'plain' ? genuine.withExtensions : undefined,
+      ],
+      [
+        'plain',
+        'vscode',
+        true,
+        {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+        {
+          'window.title': '[${rootName}]',
+          'window.dialogStyle': 'custom',
+          'remote.SSH.localServerDownload': 'off',
+        },
+        undefined,
+      ],
+    );
+  });
+
+  it('tooling-51: no other launch is named only or starts VS Code', () => {
+    deepStrictEqual(
+      launches
+        .filter(
+          launch =>
+            launch.namedOnly !== undefined ||
+            (launch.kind === 'plain' && launch.client !== undefined),
+        )
+        .map(launch => launch.label),
+      ['genuine'],
+    );
+  });
+
   it('D-85: no launch outside the list sets remote.SSH.configFile', () => {
     deepStrictEqual(
       launches
@@ -392,6 +433,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         ...hostLaunchLabels(),
+        'genuine',
       ],
     );
   });

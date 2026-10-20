@@ -561,12 +561,12 @@ export function scriptedAdapters(
         ),
     },
     licenceDialog: {
-      showModal: (message, detail, buttons) =>
+      showModal: (message, detail) =>
         answerFrom(
           'licenceModal',
           message,
           entry => ({
-            value: entry.answer === 'decline' ? buttons.at(-1) : undefined,
+            value: undefined,
             recorded: entry.answer,
           }),
           undefined,
