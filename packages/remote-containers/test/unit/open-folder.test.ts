@@ -51,6 +51,7 @@ function commandOf(state: Setup, authority?: string) {
       ...ports.window,
       remoteAuthority: () => authority,
       homeFolder: () => '/home/u',
+      isTrusted: () => state.trust === 'trusted',
     },
     pickFolder: async start => {
       dialog.starts.push(start);
@@ -73,6 +74,21 @@ describe('Open Folder in Container', () => {
       [state.calls, dialog.starts],
       [['firstCheck undefined'], []],
     );
+  });
+
+  it('F-0201 AC-55, BR-1: a relative dockerPath is the window folder’s file, so the engine check gets the folder as its base only once the window is trusted', async () => {
+    const calls = [];
+    for (const trust of ['trusted', 'declined'] as const) {
+      const state = setup();
+      state.check = 'stopped';
+      state.trust = trust;
+      await commandOf(state).handler();
+      calls.push(state.calls);
+    }
+    deepStrictEqual(calls, [
+      [`firstCheck ${FOLDER}`],
+      ['firstCheck undefined'],
+    ]);
   });
 
   it('F-0403 5.0 step 2: the dialog opens at the local window’s folder, at the container’s host folder, or at home', async () => {
