@@ -21,7 +21,7 @@ import {
 } from '../windows/harness.ts';
 
 /** The setting that names the script. */
-const SETTING = 'remote.SSH.preconnect';
+export const SETTING = 'remote.SSH.preconnect';
 
 /** The words both messages of the dialog hold, which the entries match. */
 const QUESTION = 're-connection script';

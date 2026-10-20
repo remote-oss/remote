@@ -1,12 +1,19 @@
 import {deepStrictEqual} from 'node:assert';
-import {rmSync} from 'node:fs';
+import {rmSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   appendScript,
   connectedWithin,
   connectionLog,
   cutHostNetwork,
+  inWindow,
+  nextEmptyName,
+  onHost,
+  openWindow,
+  reloadWindow,
   restoreHostNetwork,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {closeAllButLocal, pickHost, runWith} from '../windows/maintenance.ts';
 import {
@@ -14,8 +21,10 @@ import {
   dialogLines,
   dismissals,
   failureOf,
+  fixtureFolder,
   markerOf,
   openConnected,
+  SETTING,
   withSetting,
   writeScript,
 } from './support.ts';
@@ -58,6 +67,53 @@ describe('the pre-connection script and what else a window does (card connect-87
       ]);
     });
     deepStrictEqual([shown('po30'), markerOf(script)], [1, 'ran\n']);
+  });
+
+  it('F-2108 AC-32 (workspace-and-folder-settings): the setting of a local workspace file applies on the first load, and the one of the remote folder from the second load on', async () => {
+    const script = writeScript('scoped.sh', 'echo ran >> "$MARKER"');
+    const home = '/home/harness';
+    await onHost('mkdir', '-p', `${home}/po32/.vscode`, `${home}/po32w`);
+    await onHost(
+      'sh',
+      '-c',
+      `printf '%s' '${JSON.stringify({[SETTING]: script})}' > ${home}/po32/.vscode/settings.json`,
+    );
+    const workspace = path.join(fixtureFolder(), 'scoped.code-workspace');
+    writeFileSync(
+      workspace,
+      JSON.stringify({
+        remoteAuthority: 'ssh-remote+harness',
+        folders: [{uri: `vscode-remote://ssh-remote+harness${home}/po32w`}],
+        settings: {[SETTING]: script},
+      }),
+    );
+    appendScript([
+      answerEntry('po32', 'Allow'),
+      answerEntry('po32w', 'Allow'),
+      answerEntry(nextEmptyName(), 'Allow'),
+    ]);
+    const before = new Set(windowNames());
+    await inWindow(
+      'local',
+      'acceptance.agent.openWindow',
+      `file://${workspace}`,
+    );
+    let name = '';
+    await waitFor(
+      'the dialog of the window of the workspace file',
+      () => {
+        name = windowNames().find(each => !before.has(each)) ?? '';
+        return Promise.resolve(name !== '' && shown(name) > 0);
+      },
+      180_000,
+    );
+    await connectedWithin(name, 120_000);
+    await openWindow('harness', 'po32');
+    await connectedWithin('po32', 120_000);
+    const first = shown('po32');
+    await reloadWindow('po32');
+    await connectedWithin('po32', 120_000);
+    deepStrictEqual([shown(name), first, shown('po32')], [1, 0, 1]);
   });
 
   it("F-2108 AC-35 (deleted): a confirmed script that was deleted fails with the read's detail and no dialog, and its entry stays", async () => {

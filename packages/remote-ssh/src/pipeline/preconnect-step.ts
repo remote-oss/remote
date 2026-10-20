@@ -115,6 +115,9 @@ export function preconnectStep(
     } catch (error) {
       return failedWithText(messageOf(error));
     }
+    if (cancellation.aborted) {
+      return {kind: 'failed', failure: {kind: 'preconnectFailed'}};
+    }
     logger.info(`running the pre-connection script ${expanded}`);
     let handle: ProcessHandle;
     try {
