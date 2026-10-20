@@ -218,8 +218,19 @@ export function activate(context: vscode.ExtensionContext): void {
         activeTab: activeTabOf(
           vscode.window.tabGroups.activeTabGroup.activeTab,
         ),
+        dirtyDocuments: vscode.workspace.textDocuments
+          .filter(document => document.isDirty)
+          .map(document => document.uri.toString()),
       });
     }),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openUntitled',
+      async (content: string) => {
+        await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument({content}),
+        );
+      },
+    ),
     vscode.commands.registerCommand(
       'acceptance.agent.setting',
       (settingId: string) => {
