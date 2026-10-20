@@ -385,7 +385,11 @@ export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
     suite: 'suite-install',
     prefix: 'install',
     caseVariable: 'HARNESS_INSTALL_CASE',
-    removed: ['/home/harness/.vscodium-server-insiders', '/tmp/srv'],
+    removed: [
+      '/home/harness/.vscodium-server-insiders',
+      '/tmp/srv',
+      '/home/harness/inst',
+    ],
   },
   {
     suite: 'suite-platform',

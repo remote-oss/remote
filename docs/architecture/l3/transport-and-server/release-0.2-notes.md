@@ -35,3 +35,7 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     included, so the dismissed question reaches ssh as an empty answer and the connect reports the authentication
     failure; the window that ran the command is unchanged (athena on #253; spec question on
     remote-oss/remote-ssh#36).
+- **`remote.SSH.serverInstallPath` accepts `~` and a path that starts with `~/`**, meaning the remote user's home.
+  - F-2407 AC-7 describes the reference refusing such a value with "Provided: …". Ours installs under the home
+    folder, and every other value that doesn't start with `/` is still refused (athena on #1277, D-99; spec question
+    on remote-oss/remote-ssh#52).
