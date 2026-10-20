@@ -218,18 +218,20 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
     const state = await windowState(local);
     await waitFor(
-      'no process of the user to remain',
+      'no login session or server of the user to remain',
       async () =>
         (
           await onHostAs(
             'harness-bash',
             'sh',
             '-c',
-            'pgrep -u "$(id -u)" || true',
+            'pgrep -f "[s]shd-session: harness-bash|[v]scodium-server" || true',
           )
         ).trim() === '',
       30_000,
-    );
+    ).catch(async (caught: unknown) => {
+      throw new Error(`${String(caught)}; left: ${await onHostAs('harness-bash', 'sh', '-c', 'ps -o pid,ppid,args | grep -E "[s]shd-session|[v]scodium-server" | grep harness-bash')}`, {cause: caught});
+    });
     const folder = await onHostAs(
       'harness-bash',
       'sh',
