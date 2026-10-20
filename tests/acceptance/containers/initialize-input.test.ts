@@ -39,6 +39,34 @@ async function until(
   }
 }
 
+/** How long the window's agent has to answer for the terminals, in milliseconds. */
+const AGENT_ANSWER_MILLISECONDS = 20_000;
+
+/** What window `name`'s agent says of its terminals, or that it gave no answer in time. */
+async function agentTerminalReport(name: string): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const silent = new Promise<string>(resolve => {
+    timer = setTimeout(() => {
+      resolve(
+        `the agent gave no answer about the terminals in ${String(AGENT_ANSWER_MILLISECONDS)} ms`,
+      );
+    }, AGENT_ANSWER_MILLISECONDS);
+  });
+  const asked = terminalFacts(name).then(
+    facts =>
+      `the terminals are ${JSON.stringify(facts.terminals)}, the active one ${JSON.stringify(facts.active)}` +
+      `${facts.stuck === undefined ? '' : `, and the step ${facts.stuck} did not finish in 10 s`}; ` +
+      `the active terminal's buffer ends ${JSON.stringify((facts.text ?? '').slice(-600))}`,
+    // A wait that outlives this answer ends in its own failure, which nothing reads.
+    () => 'the agent failed to answer about the terminals',
+  );
+  try {
+    return await Promise.race([asked, silent]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Resolves once window `name`'s active terminal holds `needle`, for up to `milliseconds`. */
 async function untilText(
   name: string,
@@ -52,13 +80,9 @@ async function untilText(
       return;
     }
     if (Date.now() > deadline) {
-      const facts = await terminalFacts(name);
       throw new Error(
         `timed out waiting for the terminal of ${name} to hold ${needle}; the last read was ${JSON.stringify(text)}; ` +
-          `the terminals are ${JSON.stringify(facts.terminals)}, the active one ${JSON.stringify(facts.active)}` +
-          `${facts.stuck === undefined ? '' : `, and the step ${facts.stuck} did not finish in 10 s`}; ` +
-          `the page holds ${JSON.stringify(await terminalPageFacts(name))}; ` +
-          `the active terminal's buffer ends ${JSON.stringify((facts.text ?? '').slice(-600))}`,
+          `the page holds ${JSON.stringify(await terminalPageFacts(name))}; ${await agentTerminalReport(name)}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));
