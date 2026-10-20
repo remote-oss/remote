@@ -99,6 +99,92 @@ describe('the template catalogue (card containers-77)', () => {
     );
   });
 
+  it('F-0802 BR-5: a collection’s repository on github.com gives its templates that owner, in the public index’s shape and in the run’s', () => {
+    const publicIndex = JSON.stringify({
+      collections: [
+        {
+          sourceInformation: {
+            name: 'Dev Container Templates',
+            repository: 'https://github.com/devcontainers/templates',
+            ociReference: 'ghcr.io/devcontainers/templates',
+          },
+          templates: [
+            {
+              id: 'ghcr.io/devcontainers/templates/alpine',
+              version: '1',
+              name: 'Alpine',
+            },
+          ],
+        },
+      ],
+    });
+    const runIndex = JSON.stringify({
+      collections: [
+        {
+          sourceInformation: {
+            repository: 'https://github.com/devcontainers/templates',
+          },
+          templates: [
+            {
+              id: '127.0.0.1:5000/devcontainers/templates/alpine',
+              version: '1',
+              name: 'Alpine',
+            },
+          ],
+        },
+      ],
+    });
+    deepStrictEqual(
+      [publicIndex, runIndex].map(text => {
+        const result = parseCatalogue(text);
+        return result.kind === 'catalogue'
+          ? result.templates.map(each => [
+              each.owner,
+              each.collectionRepository,
+            ])
+          : [];
+      }),
+      [
+        [['devcontainers', 'https://github.com/devcontainers/templates']],
+        [['devcontainers', 'https://github.com/devcontainers/templates']],
+      ],
+    );
+  });
+
+  it('F-0802 BR-5: a collection with no repository, or one that is not on github.com or is not an address, leaves the owner to the reference and the publisher', () => {
+    const owners = (repository: unknown): string[] => {
+      const result = parseCatalogue(
+        JSON.stringify({
+          collections: [
+            {
+              sourceInformation: repository === undefined ? {} : {repository},
+              templates: [
+                {
+                  id: 'ghcr.io/spec/templates/x',
+                  version: '1',
+                  name: 'X',
+                  publisher: 'Pub',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      return result.kind === 'catalogue'
+        ? result.templates.map(each => each.owner)
+        : [];
+    };
+    deepStrictEqual(
+      [
+        owners(undefined),
+        owners('https://gitlab.com/devcontainers/templates'),
+        owners('not an address'),
+        owners('https://github.com/'),
+      ],
+      [['spec'], ['spec'], ['spec'], ['spec']],
+    );
+  });
+
   it('F-0802 BR-1: a template carries its description, documentation, options and optional paths, and a missing one is empty', () => {
     const result = parseCatalogue(INDEX);
     const expected: CatalogueTemplate[] = [
