@@ -23,8 +23,10 @@ import {
   buildDevContainerImage,
   cleanRun,
   connectRunNetwork,
+  createdSecondsOf,
   hostImageOf,
   type HostContainer,
+  NETWORK_AGE_FORMAT,
   newPassword,
   RUN_LABEL,
   runNetworkOf,
@@ -35,6 +37,7 @@ import {
   checked,
   type CommandResult,
   type CommandRunner,
+  runCommand,
 } from './command-runner.ts';
 
 const RUN_ID = '77-2';
@@ -405,6 +408,58 @@ describe('the run network (card tooling-47)', () => {
     strictEqual(runNetworkOf(RUN_ID), NETWORK);
   });
 
+  /** A creation time `seconds` before `nowMilliseconds`, as `{{json .Created}}` prints it. */
+  function agedBy(nowMilliseconds: number, seconds: number): string {
+    return JSON.stringify(
+      new Date(nowMilliseconds - seconds * 1000).toISOString(),
+    );
+  }
+
+  it('a creation time reads as seconds from its JSON string, and anything else as none', () => {
+    deepStrictEqual(
+      ['"2026-10-20T19:40:54Z"', '"later"', '12', 'later'].map(field =>
+        createdSecondsOf(field),
+      ),
+      [
+        Date.parse('2026-10-20T19:40:54Z') / 1000,
+        undefined,
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
+  it("the network age format is one the daemon formats, and its creation time reads back as now's", function () {
+    if (runCommand('docker', ['info', '--format', '{{.ID}}']).status !== 0) {
+      this.skip();
+    }
+    const name = `remote-oss-acceptance-format-${String(process.pid)}`;
+    runCommand('docker', [
+      'network',
+      'create',
+      '--label',
+      `${RUN_LABEL}=format`,
+      name,
+    ]);
+    try {
+      const line = runCommand('docker', [
+        'network',
+        'inspect',
+        '--format',
+        NETWORK_AGE_FORMAT,
+        name,
+      ]).stdout.trim();
+      const [created = '', containers = ''] = line.split(' ');
+      const ageSeconds = Date.now() / 1000 - (createdSecondsOf(created) ?? 0);
+      deepStrictEqual(
+        [ageSeconds >= 0 && ageSeconds < 120, containers],
+        [true, '0'],
+      );
+    } finally {
+      runCommand('docker', ['network', 'rm', name]);
+    }
+  });
+
   it('tooling-47: connectRunNetwork creates the labelled network once, connects the host and gives its address', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker network ls, the sweep
@@ -479,7 +534,7 @@ describe('the run network (card tooling-47)', () => {
     const scripted = scriptedCommands();
     const nowMilliseconds = 1_000_000_000;
     scripted.passes('stale1\n'); // docker network ls, the sweep
-    scripted.passes(`${String(nowMilliseconds / 1000 - 7201)} 0\n`); // docker network inspect stale1
+    scripted.passes(`${agedBy(nowMilliseconds, 7201)} 0\n`); // docker network inspect stale1
     scripted.passes(); // docker network rm stale1
     scripted.fails(1, 'No such network'); // docker network inspect, the run's
     scripted.passes(); // docker network create
@@ -508,14 +563,15 @@ describe('the run network (card tooling-47)', () => {
     );
   });
 
-  it('tooling-47: the sweep leaves a younger network, one with a container, and one it cannot read', () => {
+  it('tooling-47: the sweep leaves a younger network, one with a container, and one it cannot read or date', () => {
     const scripted = scriptedCommands();
     const nowMilliseconds = 1_000_000_000;
-    scripted.passes('young\nbusy\nunreadable\nodd\n'); // docker network ls
-    scripted.passes(`${String(nowMilliseconds / 1000 - 7199)} 0\n`); // young
-    scripted.passes(`${String(nowMilliseconds / 1000 - 9000)} 1\n`); // busy
+    scripted.passes('young\nbusy\nunreadable\nodd\nundated\n'); // docker network ls
+    scripted.passes(`${agedBy(nowMilliseconds, 7199)} 0\n`); // young
+    scripted.passes(`${agedBy(nowMilliseconds, 9000)} 1\n`); // busy
     scripted.fails(1, 'No such network'); // unreadable
     scripted.passes('not two numbers\n'); // odd
+    scripted.passes('"yesterday" 0\n'); // undated
     scripted.fails(1, 'No such network'); // docker network inspect, the run's
     scripted.passes(); // docker network create
     scripted.passes(); // docker network connect
@@ -535,7 +591,7 @@ describe('the run network (card tooling-47)', () => {
     const scripted = scriptedCommands();
     const nowMilliseconds = 1_000_000_000;
     scripted.passes('gone\n'); // docker network ls
-    scripted.passes(`${String(nowMilliseconds / 1000 - 8000)} 0\n`); // docker network inspect
+    scripted.passes(`${agedBy(nowMilliseconds, 8000)} 0\n`); // docker network inspect
     scripted.fails(1, 'No such network'); // docker network rm: already removed
     scripted.fails(1, 'No such network'); // docker network inspect, the run's
     scripted.passes(); // docker network create
