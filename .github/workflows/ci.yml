@@ -32,10 +32,12 @@ on:
           node tools/acceptance-select.ts --base <sha> --head <sha> prints the launches it can reach)
         type: string
         default: all
-  # a push to main runs the VSCodium job alone: the backstop that shows whether main's launches are green, which PR CI
-  # never runs; the other jobs ran on the pull request's merge ref
+  # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
+  # PR CI never runs. It ran on every merge until 2026-10-20, which kept one of the eight runners busy with it almost all
+  # the time; the other jobs ran on the pull request's merge ref
+  schedule:
+    - cron: '17 */2 * * *'
   push:
-    branches: [main]
     tags: ['*-v*']
 
 permissions:
@@ -47,7 +49,7 @@ permissions:
 # run side by side. The tag of a release is its own group and is never cancelled.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
   # Whether a pull request changes only docs/ (no .tsv): only the checks job reads docs/ (layout, public surface,
@@ -76,7 +78,7 @@ jobs:
           fi
 
   checks:
-    if: (github.event_name != 'pull_request' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')) || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
@@ -102,6 +104,9 @@ jobs:
       - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
+      # seconds each after the install above; as jobs of their own they waited minutes for a runner (2026-10-20)
+      - run: pnpm dupes
+      - run: pnpm dead
       - run: pnpm check-licences
       - run: pnpm format:check
       # the unit tests' temporary folders go to the job's own temporary directory, which the runner empties after every
@@ -117,13 +122,13 @@ jobs:
     name: ${{ matrix.check }}
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     strategy:
       fail-fast: false
       matrix:
-        check: [dupes, dead, coverage]
+        check: [coverage]
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
@@ -145,7 +150,7 @@ jobs:
     name: acceptance (slice 1)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -184,7 +189,7 @@ jobs:
     name: acceptance (server lifecycle)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -252,12 +257,12 @@ jobs:
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
   acceptance-vscodium:
     name: acceptance (vscodium)
-    if: inputs.vscodium || (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'))
-    # GitHub keeps one pending job per group, and a newer one replaces it. Pushes to main have their own group, where
+    if: inputs.vscodium || github.event_name == 'schedule' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group, where
     # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
-    # theirs, fed one at a time, so a main push never displaces them.
+    # theirs, fed one at a time, so the backstop never displaces them.
     concurrency:
-      group: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
+      group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     # the whole VSCodium suite outgrew 30 minutes in October 2026: main's backstop was cut at 30 every time, so it never
