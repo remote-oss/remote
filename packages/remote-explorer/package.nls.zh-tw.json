@@ -11,5 +11,7 @@
   "settings.foldersSortOrder.description": "Specifies the order in which to display folders under Remote targets in the Remote Explorer.",
   "settings.foldersSortOrder.mru.description": "Display folders in order of the most recently opened at the top",
   "settings.foldersSortOrder.alphabetical.description": "Display folders in alphabetical order",
-  "settings.collapseRecentFolders.description": "Collapse the recent folders under Remote targets in the Remote Explorer."
+  "settings.collapseRecentFolders.description": "Collapse the recent folders under Remote targets in the Remote Explorer.",
+  "commands.configureSsh.title": "Open SSH Config File",
+  "commands.add.title": "New Remote"
 }
