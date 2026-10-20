@@ -59,9 +59,12 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 4. **A floor run proves what it can of the floor.** The daily genuine job runs over the versions [1.139.1, 1.125.0],
    with the editor version taken from the job and limited to those two (D-97 allows genuine VS Code in CI). VSCodium
    has no 1.125 release: its stable tags go from 1.121 to 1.126.
-   - **On 1.125.0 it covers:** install at `^1.125.0`, activation with and without the proposals, the Remote
-     Explorer's rows without a connect, and a connect up to the declined licence. Those are the genuine and the
-     `ssh-no-proposals` launches.
+   - **On 1.125.0 it covers:**
+     - install at `^1.125.0`;
+     - activation with and without the proposals (the genuine and `ssh-no-proposals` launches);
+     - a connect up to the declined licence;
+     - the Remote Explorer's rows without a connect. That needs the genuine launch to load the explorer and one row of
+       its own (tooling-69), because neither launch opens the explorer today.
    - **It doesn't cover a connect, a container open or the Ports view.** Those need the server of genuine 1.125.0's
      own commit, which is Microsoft's server under its licence. The genuine job runs on the opposite terms: nothing
      accepts that licence for the user, and no server comes from the publisher. VSCodium's server doesn't match a
@@ -101,4 +104,4 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 - **The constant:** `tools/check-layout` verifies that every extension manifest's `engines.vscode` equals the root
   constant, and that a package declaring `enabledApiProposals` carries the pinned declaration files.
 - **The recorded suite** runs on 1.139.1.
-- **The floor run** (decision 4) runs the genuine and `ssh-no-proposals` launches on 1.125.0.
+- **The floor run** (decision 4) runs the genuine launch, with the explorer, and the `ssh-no-proposals` launch on 1.125.0.
