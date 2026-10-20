@@ -27,7 +27,9 @@ describe('the Statically Forwarded rows of appPort (card containers-74)', () => 
   it('F-1101 BR-15: the entries keep their order, and a single number or string is a list of one', () => {
     deepStrictEqual(
       [
-        staticForwards([9, '10:11'], true).map(row => row.remoteAddress.port),
+        staticForwards([9, '10:11'], true).map(
+          tunnel => tunnel.remoteAddress.port,
+        ),
         staticForwards(9, true).length,
         staticForwards('10:11', true).length,
       ],

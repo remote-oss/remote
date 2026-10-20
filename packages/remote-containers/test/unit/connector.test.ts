@@ -2034,7 +2034,7 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
     };
   }
 
-  const ROW = {
+  const STATIC_ROW = {
     remoteAddress: {host: '0.0.0.0', port: 8080},
     localAddress: '127.0.0.1:8080',
   };
@@ -2042,7 +2042,7 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
   it('F-1101 BR-15: the connection hands core the rows of the configuration’s appPort', async () => {
     const scene = sceneOf();
     scene.configuration = configurationWith({appPort: [8080]});
-    deepStrictEqual((await connected(scene)).environmentTunnels, [ROW]);
+    deepStrictEqual((await connected(scene)).environmentTunnels, [STATIC_ROW]);
   });
 
   it('F-1101 BR-14: a Compose configuration hands core none', async () => {

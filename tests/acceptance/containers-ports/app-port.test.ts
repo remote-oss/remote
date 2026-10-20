@@ -165,11 +165,11 @@ describe('the appPort rows (card containers-74)', function () {
     const rows = await rowsWhen(window, shown => shown.length > 2);
     await new Promise(resolve => setTimeout(resolve, 3000));
     await stop();
-    const shown = rows.find(row => row.port === String(container));
+    const shown = rows.find(each => each.port === String(container));
     deepStrictEqual(
       {
         tooltip: shown?.tooltip,
-        origins: rows.map(row => row.origin).sort(),
+        origins: rows.map(each => each.origin).sort(),
       },
       {
         tooltip: `Remote port 0.0.0.0:${String(container)} forwarded to local address [::1]:${String(host)}.`,

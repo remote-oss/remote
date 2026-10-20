@@ -43,7 +43,12 @@ const execFileAsync = promisify(execFile);
 describe('the declared forwardPorts (card containers-72)', function () {
   this.timeout(900_000);
   const windows = connectedWindows();
-  const connectedWith = windows.connectedWith;
+  function connectedWith(
+    name: string,
+    configuration: Readonly<Record<string, unknown>>,
+  ): Promise<string> {
+    return windows.connectedWith(name, configuration);
+  }
 
   it('F-1101 AC-1 (forward-declared): a declared port is forwarded once the window connects, with the origin Dev Containers and before any listener', async () => {
     const window = await connectedWith('c72-ac1', {forwardPorts: [3000]});
