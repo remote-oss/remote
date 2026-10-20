@@ -4,6 +4,7 @@
  *
  *     node tools/coverage.ts            check every unit
  *     node tools/coverage.ts --update   check, then record the new numbers in each unit's coverage.json
+ *     node tools/coverage.ts --shard 2/4   check the second of four shards of the units (CI runs the four at once)
  *
  * A unit is tools/, or a package under packages/ that has a src/ folder. Its coverage.json holds the files excluded
  * from measurement, each with a reason, and the ratchet: the best numbers recorded so far.
@@ -229,9 +230,10 @@ export function runCoverage(
   root: string,
   update: boolean,
   measure: typeof measureUnit = measureUnit,
+  shard?: Shard,
 ): string[] {
   const problems: string[] = [];
-  for (const unit of coverageUnits(root)) {
+  for (const unit of shardOf(coverageUnits(root), shard)) {
     const configuration = readConfiguration(unit);
     const unitProblems = exclusionProblems(unit, configuration);
     if (configuration.ratchet === undefined && !update) {
@@ -266,11 +268,47 @@ export function runCoverage(
   return problems;
 }
 
+/** One of `count` shards of the units, 1-based. */
+export interface Shard {
+  index: number;
+  count: number;
+}
+
+/** The units of `shard`: every `count`-th, from the `index`-th, so the shards together hold each unit once. */
+export function shardOf<Item>(units: readonly Item[], shard?: Shard): Item[] {
+  const chosen: Item[] = [];
+  for (const [position, unit] of units.entries()) {
+    if (shard === undefined || position % shard.count === shard.index - 1) {
+      chosen.push(unit);
+    }
+  }
+  return chosen;
+}
+
+/** The shard `--shard <index>/<count>` names in `argv`, or undefined without the option; a malformed one throws. */
+export function shardArgument(argv: readonly string[]): Shard | undefined {
+  const position = argv.indexOf('--shard');
+  if (position === -1) {
+    return undefined;
+  }
+  const match = /^(\d+)\/(\d+)$/.exec(argv[position + 1] ?? '');
+  const index = Number(match?.[1]);
+  const count = Number(match?.[2]);
+  if (match === null || count < 1 || index < 1 || index > count) {
+    throw new Error(
+      `--shard takes <index>/<count>, 1 <= index <= count, not ${String(argv[position + 1])}`,
+    );
+  }
+  return {index, count};
+}
+
 if (isMainModule(import.meta.url)) {
   try {
     const problems = runCoverage(
       REPOSITORY_ROOT,
       process.argv.includes('--update'),
+      measureUnit,
+      shardArgument(process.argv),
     );
     for (const problem of problems) {
       console.error(`coverage: ${problem}`);
