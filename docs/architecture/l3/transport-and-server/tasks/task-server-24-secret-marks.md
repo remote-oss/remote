@@ -35,10 +35,10 @@ Design: athena's ruling on #253 (2026-10-20, F-2003 BR-14, option 3). The contra
 
 | File | Cite | Given | Expected |
 |---|---|---|---|
-| `run-step.test.ts` | F-2003 BR-14 (ruling-253-mark) | `runStep` with `environment: {MY_TOKEN: 'x'}` and no mark; with the mark; with `{PLAIN: 'x'}` and no mark | throws naming `MY_TOKEN`; runs; runs |
-| `run-step.test.ts` | BR-14 | each of `A_SECRET`, `password1`, `SSH_KEY` unmarked | throws (the four words, any case) |
-| `run-step.test.ts` | BR-14 | `secretVariables` reaches the channel's request | the recording channel's request has it |
-| `cli.test.ts` | BR-14 | the CLI start's request | `secretVariables` is `['VSCODE_CLI_REQUIRE_TOKEN']` |
+| `lifecycle.test.ts` (the `runStep` rows) | F-2003 BR-14 (ruling-253-mark) | `runStep` with `environment: {MY_TOKEN: 'x'}` and no mark; with the mark; with `{PLAIN: 'x'}` and no mark | throws naming `MY_TOKEN`; runs; runs |
+| `lifecycle.test.ts` (the `runStep` rows) | BR-14 | each of `A_SECRET`, `password1`, `SSH_KEY` unmarked | throws (the four words, any case) |
+| `lifecycle.test.ts` (the `runStep` rows) | BR-14 | `secretVariables` reaches the channel's request | the recording channel's request has it |
+| `cli-lifecycle.test.ts` | BR-14 | the CLI start's request | `secretVariables` is `['VSCODE_CLI_REQUIRE_TOKEN']` |
 | `remote-log.test.ts` | BR-14 (ruling-253-mark) | a marked 3-character value `abc`, an unmarked 3-character value `xyz`, both printed | `${MARKED}`, and `xyz` as it is |
 | `remote-log.test.ts` | BR-14 | a marked empty value | the line unchanged |
 | `remote-log.test.ts` | BR-14 | a marked short value inside an unmarked long one | the long one named; the short one's text isn't left over |
