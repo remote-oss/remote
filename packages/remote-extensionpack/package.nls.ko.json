@@ -1,0 +1,4 @@
+{
+  "displayName": "원격 개발",
+  "description": "remote-oss 프로젝트의 확장 팩으로, Dev Containers 및 Remote - SSH 확장을 함께 설치합니다."
+}

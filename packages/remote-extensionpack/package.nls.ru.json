@@ -1,0 +1,4 @@
+{
+  "displayName": "Удаленная разработка",
+  "description": "Набор расширений проекта remote-oss, который устанавливает вместе расширения Dev Containers и Remote - SSH."
+}

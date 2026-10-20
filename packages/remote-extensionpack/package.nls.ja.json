@@ -1,0 +1,4 @@
+{
+  "displayName": "リモート開発",
+  "description": "remote-oss プロジェクトの拡張機能パックです。Dev Containers と Remote - SSH の拡張機能をまとめてインストールします。"
+}
