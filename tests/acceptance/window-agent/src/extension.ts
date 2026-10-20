@@ -256,6 +256,29 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.recentlyOpened',
+      async () => {
+        const recent = await vscode.commands.executeCommand<{
+          workspaces: Array<{
+            folderUri?: vscode.Uri;
+            workspace?: {configPath: vscode.Uri};
+            label?: string;
+            remoteAuthority?: string;
+          }>;
+        }>('_workbench.getRecentlyOpened');
+        report(agentFolder, name, {
+          event: 'recentlyOpened',
+          recent: recent.workspaces.map(entry => ({
+            uri:
+              (entry.folderUri ?? entry.workspace?.configPath)?.toString() ??
+              '',
+            label: entry.label ?? null,
+            remoteAuthority: entry.remoteAuthority ?? null,
+          })),
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.extensionPresent',
       (extensionId: string) => {
         report(agentFolder, name, {

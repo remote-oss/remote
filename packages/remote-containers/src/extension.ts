@@ -28,6 +28,7 @@ import {systemCliPorts} from './cli/node-cli-ports.ts';
 import {overrideStoreOf} from './cli/override-files.ts';
 import {containerConnectorOf} from './connect/connector.ts';
 import {openHostRelay} from './connect/host-relay.ts';
+import {recentLabelPortsOf} from './connect/recent-editor.ts';
 import {registerContainerResolver} from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
@@ -732,6 +733,7 @@ export async function activate(
         }),
         labels: vscode.workspace,
         commands: host,
+        recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
         presenter: recoveryPortsOf(vscode, {
           keepEdit: (folder, configFile) =>
             storePendingEdit(

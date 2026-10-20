@@ -632,14 +632,14 @@ F-0419.AC-39	deferred	containers release 1: increment 2 (the extension-cache hal
 F-0419.AC-40	acceptance	
 F-0419.AC-41	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
 F-0419.AC-42	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
-F-0501.AC-1	todo	
+F-0501.AC-1	acceptance	
 F-0501.AC-2	acceptance	
 F-0501.AC-3	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-4	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-5	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-6	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-7	todo	
-F-0501.AC-8	todo	
+F-0501.AC-8	acceptance	
 F-0501.AC-9	core	core: an authority nothing resolves opens a local empty window
 F-0501.AC-10	core	core: a single-colon vscode-remote argument read as a local path
 F-0501.AC-11	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
