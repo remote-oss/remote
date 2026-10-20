@@ -1,8 +1,9 @@
 /**
- * @fileoverview The acceptance run's templates, for a launch that asks for them: two of the specification's published
- * templates mirrored from `ghcr.io` into the run's cache by the digest of their one layer, and one template of our own,
- * published together into the run's registry; and the run's copy of the pinned index, naming them there. The CLI
- * speaks plain HTTP only to a registry it reaches as `localhost:<port>`, so the run names its registry that way.
+ * @fileoverview The acceptance run's templates, for a launch that asks for them: three of the specification's published
+ * templates mirrored from `ghcr.io` into the run's cache by the digest of their one layer, and the templates of our own,
+ * published together into the run's registry; and the run's copy of the pinned index, naming them there, with the
+ * Features the snapshot keeps and two of our own. The CLI speaks plain HTTP only to a registry it reaches as
+ * `localhost:<port>`, so the run names its registry that way.
  */
 
 import {createHash} from 'node:crypto';
@@ -10,6 +11,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs';
@@ -38,13 +40,22 @@ export const MIRRORED_TEMPLATES: readonly MirroredTemplate[] = [
     layerDigest:
       'sha256:1413e22cf66b77dea458ceffed09306bd8540caa8256f49eb2d6c82e44f72bda',
   },
+  {
+    name: 'docker-in-docker',
+    version: '1.3.5',
+    layerDigest:
+      'sha256:97c627da9c1da8bc826fe70b6ad1ab1f9be10258532dbffd1a408bb979a358a0',
+  },
 ];
 
 /** The namespace the mirrored templates keep in the run's registry, as they have on `ghcr.io`. */
 export const MIRROR_NAMESPACE = 'devcontainers/templates';
 
-/** The namespace of the run's own template. */
+/** The namespace of the run's own templates. */
 export const CUSTOM_NAMESPACE = 'remote-oss-run/custom';
+
+/** The namespace of the run's own Features. */
+export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
 
 /** Fetches the layer of a mirrored template; the run's goes to `ghcr.io`, a test's is a fake. */
 export type LayerFetch = (template: MirroredTemplate) => Promise<Uint8Array>;
@@ -115,48 +126,65 @@ export async function ghcrLayer(
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** One template entry of an index, as far as the run's copy changes it. */
-interface IndexTemplate {
+/** One entry of an index, as far as the run's copy changes it. */
+interface IndexEntry {
   id: string;
 }
 
+/** The metadata of one of the run's own templates or Features: its `id` is its folder's name. */
+export type CustomMetadata = Readonly<Record<string, unknown>> & {id: string};
+
 /**
- * The run's index: the pinned snapshot with its templates' ids moved from `ghcr.io` to `registry`, and a collection of
- * the run's own template, whose metadata is `customMetadata` and whose id names it in `registry`.
+ * The run's index: the pinned snapshot with its templates' ids moved from `ghcr.io` to `registry` and its Features'
+ * ids left as they are, a collection of the run's own templates, whose metadata is `customTemplates` and whose ids name
+ * them in `registry`, and a collection of the run's own Features, `customFeatures`, named the same way.
  */
 export function runIndexText(
   snapshotText: string,
-  customMetadata: Readonly<Record<string, unknown>> & {id: string},
+  customTemplates: readonly CustomMetadata[],
+  customFeatures: readonly CustomMetadata[],
   registry: string,
 ): string {
   const snapshot = JSON.parse(snapshotText) as {
-    collections: Array<{templates: IndexTemplate[]}>;
+    collections: Array<{templates?: IndexEntry[]}>;
   };
   const prefix = `${TEMPLATES_REFERENCE}/`;
-  const collections = snapshot.collections.map(collection => ({
-    ...collection,
-    templates: collection.templates.map(template =>
-      template.id.startsWith(prefix)
-        ? {
-            ...template,
-            id: `${registry}/${MIRROR_NAMESPACE}/${template.id.slice(prefix.length)}`,
-          }
-        : template,
-    ),
-  }));
-  const customCollection = {
+  const collections = snapshot.collections.map(collection =>
+    collection.templates === undefined
+      ? collection
+      : {
+          ...collection,
+          templates: collection.templates.map(template =>
+            template.id.startsWith(prefix)
+              ? {
+                  ...template,
+                  id: `${registry}/${MIRROR_NAMESPACE}/${template.id.slice(prefix.length)}`,
+                }
+              : template,
+          ),
+        },
+  );
+  function named(namespace: string, entry: CustomMetadata): CustomMetadata {
+    return {...entry, id: `${registry}/${namespace}/${entry.id}`};
+  }
+  const customTemplatesCollection = {
     sourceInformation: {
       name: "The acceptance run's own templates",
       ociReference: `${registry}/${CUSTOM_NAMESPACE}`,
     },
-    templates: [
-      {
-        ...customMetadata,
-        id: `${registry}/${CUSTOM_NAMESPACE}/${customMetadata.id}`,
-      },
-    ],
+    templates: customTemplates.map(entry => named(CUSTOM_NAMESPACE, entry)),
   };
-  return `${JSON.stringify({collections: [...collections, customCollection]}, undefined, 2)}\n`;
+  const customFeaturesCollection = {
+    sourceInformation: {
+      name: "The acceptance run's own Features",
+      repository: 'https://github.com/remote-oss-run/features',
+      ociReference: `${registry}/${CUSTOM_FEATURES_NAMESPACE}`,
+    },
+    features: customFeatures.map(entry =>
+      named(CUSTOM_FEATURES_NAMESPACE, entry),
+    ),
+  };
+  return `${JSON.stringify({collections: [...collections, customTemplatesCollection, customFeaturesCollection]}, undefined, 2)}\n`;
 }
 
 /** The CLI's arguments that publish every template under `sourceFolder` into `namespace` of `registry`. */
@@ -240,16 +268,23 @@ export async function prepareRunTemplates(
   );
   const served = servedTemplatesFolder(runFolder);
   mkdirSync(served, {recursive: true});
+  function metadata(file: string): CustomMetadata {
+    return JSON.parse(readFileSync(file, 'utf8')) as CustomMetadata;
+  }
   writeFileSync(
     path.join(served, 'devcontainer-index.json'),
     runIndexText(
       readFileSync(path.join(fixtures, 'devcontainer-index.json'), 'utf8'),
-      JSON.parse(
-        readFileSync(
-          path.join(customSources, 'mini', 'devcontainer-template.json'),
-          'utf8',
+      readdirSync(customSources)
+        .sort()
+        .map(name =>
+          metadata(
+            path.join(customSources, name, 'devcontainer-template.json'),
+          ),
         ),
-      ) as Record<string, unknown> & {id: string},
+      JSON.parse(
+        readFileSync(path.join(fixtures, 'custom-features.json'), 'utf8'),
+      ) as CustomMetadata[],
       registry,
     ),
   );

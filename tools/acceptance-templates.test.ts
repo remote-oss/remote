@@ -16,6 +16,7 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
+  CUSTOM_FEATURES_NAMESPACE,
   CUSTOM_NAMESPACE,
   ghcrLayer,
   type MirroredTemplate,
@@ -30,7 +31,16 @@ import {
 } from './acceptance-templates.ts';
 import type {CommandResult, CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
-import {SNAPSHOT_FOLDER, TEMPLATES_REFERENCE} from './trim-template-index.ts';
+import {
+  FEATURES_REFERENCE,
+  KEPT_COMMUNITY_FEATURES,
+  KEPT_FEATURES,
+  SNAPSHOT_FOLDER,
+  TEMPLATES_REFERENCE,
+} from './trim-template-index.ts';
+
+/** The run's own templates, in name order. */
+const CUSTOM_TEMPLATES = ['bare-lab', 'mini', 'options-lab', 'paths-free-lab'];
 
 const LAYER = new TextEncoder().encode('a layer');
 
@@ -196,9 +206,13 @@ describe('the run templates', () => {
   });
 
   describe('runIndexText', () => {
-    it("tooling-57: the snapshot's ids move to the run's registry, other ids stay, and the run's own collection follows", () => {
+    it("tooling-57: the snapshot's template ids move to the run's registry, Feature ids and other ids stay, and the run's own collections follow", () => {
       const snapshot = JSON.stringify({
         collections: [
+          {
+            sourceInformation: {ociReference: FEATURES_REFERENCE},
+            features: [{id: `${FEATURES_REFERENCE}/git`, name: 'Git'}],
+          },
           {
             sourceInformation: {ociReference: TEMPLATES_REFERENCE},
             templates: [
@@ -209,19 +223,35 @@ describe('the run templates', () => {
         ],
       });
       const index = JSON.parse(
-        runIndexText(snapshot, {id: 'mini', name: 'Mini'}, 'localhost:49200'),
+        runIndexText(
+          snapshot,
+          [
+            {id: 'mini', name: 'Mini'},
+            {id: 'options-lab', name: 'Options Lab'},
+          ],
+          [
+            {id: 'lab-options', name: 'Lab Options'},
+            {id: 'lab-plain', name: 'Lab Plain'},
+          ],
+          'localhost:49200',
+        ),
       ) as {
         collections: Array<{
           sourceInformation: {ociReference: string};
-          templates: Array<{id: string; name: string}>;
+          features?: Array<{id: string; name: string}>;
+          templates?: Array<{id: string; name: string}>;
         }>;
       };
       deepStrictEqual(
         index.collections.map(collection => [
           collection.sourceInformation.ociReference,
-          collection.templates.map(template => [template.id, template.name]),
+          (collection.features ?? collection.templates ?? []).map(entry => [
+            entry.id,
+            entry.name,
+          ]),
         ]),
         [
+          [FEATURES_REFERENCE, [[`${FEATURES_REFERENCE}/git`, 'Git']]],
           [
             TEMPLATES_REFERENCE,
             [
@@ -231,10 +261,40 @@ describe('the run templates', () => {
           ],
           [
             `localhost:49200/${CUSTOM_NAMESPACE}`,
-            [[`localhost:49200/${CUSTOM_NAMESPACE}/mini`, 'Mini']],
+            [
+              [`localhost:49200/${CUSTOM_NAMESPACE}/mini`, 'Mini'],
+              [
+                `localhost:49200/${CUSTOM_NAMESPACE}/options-lab`,
+                'Options Lab',
+              ],
+            ],
+          ],
+          [
+            `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}`,
+            [
+              [
+                `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}/lab-options`,
+                'Lab Options',
+              ],
+              [
+                `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}/lab-plain`,
+                'Lab Plain',
+              ],
+            ],
           ],
         ],
       );
+    });
+
+    it("tooling-61: the run's Features collection names its repository, for the owner a Feature list shows", () => {
+      const index = JSON.parse(
+        runIndexText('{"collections":[]}', [], [], 'localhost:49200'),
+      ) as {collections: Array<{sourceInformation: unknown}>};
+      deepStrictEqual(index.collections.at(-1)?.sourceInformation, {
+        name: "The acceptance run's own Features",
+        repository: 'https://github.com/remote-oss-run/features',
+        ociReference: `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}`,
+      });
     });
   });
 
@@ -286,13 +346,23 @@ describe('the run templates', () => {
           ),
           'utf8',
         ),
-      ) as {collections: Array<{templates: Array<{id: string}>}>};
+      ) as {
+        collections: Array<{
+          features?: Array<{id: string}>;
+          templates?: Array<{id: string}>;
+        }>;
+      };
+      const features = index.collections.at(-1);
+      const templates = index.collections.at(-2);
       deepStrictEqual(
         [
           registry,
           calls,
-          readdirSync(path.join(runFolder, 'templates', 'custom', 'src')),
-          index.collections.at(-1)?.templates.map(template => template.id),
+          readdirSync(
+            path.join(runFolder, 'templates', 'custom', 'src'),
+          ).sort(),
+          templates?.templates?.map(template => template.id),
+          features?.features?.map(feature => feature.id),
         ],
         [
           'localhost:49200',
@@ -323,15 +393,20 @@ describe('the run templates', () => {
               ),
             ],
           ],
-          ['mini'],
-          [`localhost:49200/${CUSTOM_NAMESPACE}/mini`],
+          CUSTOM_TEMPLATES,
+          CUSTOM_TEMPLATES.map(
+            name => `localhost:49200/${CUSTOM_NAMESPACE}/${name}`,
+          ),
+          ['lab-options', 'lab-plain'].map(
+            name => `localhost:49200/${CUSTOM_FEATURES_NAMESPACE}/${name}`,
+          ),
         ],
       );
     });
   });
 
   describe('the pinned data', () => {
-    it("tooling-57: the snapshot holds the specification's collection with every mirrored template, and no Features", () => {
+    it("tooling-61: the snapshot holds the specification's templates with every mirrored one, and only the Features the cut keeps", () => {
       const snapshot = JSON.parse(
         readFileSync(
           path.join(
@@ -344,28 +419,46 @@ describe('the run templates', () => {
       ) as {
         collections: Array<{
           sourceInformation: {ociReference: string};
-          features?: unknown;
-          templates: Array<{id: string; version: string}>;
+          features?: Array<{id: string; name: string}>;
+          templates?: Array<{id: string; version: string}>;
         }>;
       };
-      const [collection] = snapshot.collections;
+      const specification = snapshot.collections.find(
+        collection =>
+          collection.sourceInformation.ociReference === TEMPLATES_REFERENCE,
+      );
       deepStrictEqual(
         [
-          snapshot.collections.length,
-          collection?.sourceInformation.ociReference,
-          collection?.features,
           MIRRORED_TEMPLATES.map(
             template =>
-              collection?.templates.find(
+              specification?.templates?.find(
                 each => each.id === `${TEMPLATES_REFERENCE}/${template.name}`,
               )?.version,
           ),
+          snapshot.collections
+            .flatMap(collection =>
+              (collection.features ?? []).map(feature =>
+                collection.sourceInformation.ociReference === FEATURES_REFERENCE
+                  ? feature.id
+                  : feature.name,
+              ),
+            )
+            .sort(),
+          snapshot.collections.map(collection =>
+            Object.keys(collection).sort().join(),
+          ),
         ],
         [
-          1,
-          TEMPLATES_REFERENCE,
-          undefined,
           MIRRORED_TEMPLATES.map(template => template.version),
+          [
+            ...KEPT_FEATURES.map(name => `${FEATURES_REFERENCE}/${name}`),
+            ...KEPT_COMMUNITY_FEATURES,
+          ].sort(),
+          snapshot.collections.map(collection =>
+            collection === specification
+              ? 'sourceInformation,templates'
+              : 'features,sourceInformation',
+          ),
         ],
       );
     });
@@ -382,6 +475,96 @@ describe('the run templates', () => {
           ),
         ],
         [true, true],
+      );
+    });
+
+    it("tooling-61: the run's own templates have the shapes the later wizard rows need", () => {
+      const templates = path.join(
+        REPOSITORY_ROOT,
+        SNAPSHOT_FOLDER,
+        'custom',
+        'src',
+      );
+      function read(name: string) {
+        return JSON.parse(
+          readFileSync(
+            path.join(templates, name, 'devcontainer-template.json'),
+            'utf8',
+          ),
+        ) as {
+          id: string;
+          options?: Record<
+            string,
+            {
+              type: string;
+              enum?: string[];
+              default: unknown;
+              description?: string;
+              proposals?: string[];
+            }
+          >;
+          optionalPaths?: string[];
+        };
+      }
+      const optionsLab = read('options-lab');
+      deepStrictEqual(
+        [
+          readdirSync(templates).sort(),
+          readdirSync(templates).map(name => read(name).id),
+          Object.entries(optionsLab.options ?? {}).map(([name, option]) => [
+            name,
+            option.type,
+            option.enum ?? option.proposals ?? null,
+            option.default,
+            option.description ?? null,
+          ]),
+          optionsLab.optionalPaths,
+          Object.keys(read('paths-free-lab').options ?? {}),
+          read('paths-free-lab').optionalPaths,
+          read('bare-lab').options,
+          read('bare-lab').optionalPaths,
+        ],
+        [
+          CUSTOM_TEMPLATES,
+          CUSTOM_TEMPLATES,
+          [
+            ['flavour', 'string', ['a', 'b', 'c'], 'b', 'Flavour:'],
+            ['channel', 'string', ['stable', 'edge'], 'stable', 'Channel:'],
+            ['motto', 'string', null, 'plain', 'Motto:'],
+            ['withDocs', 'boolean', null, true, 'With docs'],
+            ['withTests', 'boolean', null, false, 'With tests'],
+            ['quiet', 'boolean', null, false, null],
+          ],
+          ['zeta.txt', 'docs/*', 'alpha.txt'],
+          ['size'],
+          undefined,
+          undefined,
+          undefined,
+        ],
+      );
+    });
+
+    it("tooling-61: the run's own Features are two, one with every shape of option and one with none", () => {
+      const features = JSON.parse(
+        readFileSync(
+          path.join(REPOSITORY_ROOT, SNAPSHOT_FOLDER, 'custom-features.json'),
+          'utf8',
+        ),
+      ) as Array<{id: string; name: string; options?: Record<string, unknown>}>;
+      deepStrictEqual(
+        features.map(feature => [
+          feature.id,
+          feature.name,
+          Object.keys(feature.options ?? {}),
+        ]),
+        [
+          [
+            'lab-options',
+            'Lab Options',
+            ['enabled', 'verbose', 'level', 'tone', 'installPath'],
+          ],
+          ['lab-plain', 'Lab Plain', []],
+        ],
       );
     });
 

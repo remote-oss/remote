@@ -2,6 +2,457 @@
   "collections": [
     {
       "sourceInformation": {
+        "name": "Reference Implementation Features",
+        "maintainer": "Dev Container Spec Maintainers",
+        "contact": "https://github.com/devcontainers/features/issues",
+        "repository": "https://github.com/devcontainers/features",
+        "ociReference": "ghcr.io/devcontainers/features"
+      },
+      "features": [
+        {
+          "id": "ghcr.io/devcontainers/features/common-utils",
+          "version": "2.7.1",
+          "name": "Common Utilities",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/common-utils",
+          "description": "Installs a set of common command line utilities, Oh My Zsh!, and sets up a non-root user.",
+          "options": {
+            "installZsh": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install ZSH?"
+            },
+            "configureZshAsDefaultShell": {
+              "type": "boolean",
+              "default": false,
+              "description": "Change default shell to ZSH?"
+            },
+            "installOhMyZsh": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install Oh My Zsh!?"
+            },
+            "installOhMyZshConfig": {
+              "type": "boolean",
+              "default": true,
+              "description": "Allow installing the default dev container .zshrc templates?"
+            },
+            "ohMyZshTheme": {
+              "type": "string",
+              "default": "devcontainers",
+              "description": "Oh My Zsh theme to use (e.g., 'robbyrussell', 'agnoster', 'fino'). Default is 'devcontainers'."
+            },
+            "upgradePackages": {
+              "type": "boolean",
+              "default": true,
+              "description": "Upgrade OS packages?"
+            },
+            "username": {
+              "type": "string",
+              "proposals": [
+                "devcontainer",
+                "vscode",
+                "codespace",
+                "none",
+                "automatic"
+              ],
+              "default": "automatic",
+              "description": "Enter name of a non-root user to configure or none to skip"
+            },
+            "userUid": {
+              "type": "string",
+              "proposals": [
+                "1001",
+                "automatic"
+              ],
+              "default": "automatic",
+              "description": "Enter UID for non-root user"
+            },
+            "userGid": {
+              "type": "string",
+              "proposals": [
+                "1001",
+                "automatic"
+              ],
+              "default": "automatic",
+              "description": "Enter GID for non-root user"
+            },
+            "addGroups": {
+              "type": "string",
+              "default": "",
+              "description": "Comma-separated list of additional groups to add the non-root user to. Groups are created if needed."
+            },
+            "sudoers": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add non-root user to passwordless sudoers?"
+            },
+            "nonFreePackages": {
+              "type": "boolean",
+              "default": false,
+              "description": "Add packages from non-free Debian repository? (Debian only)"
+            },
+            "installSsl": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install SSL?"
+            }
+          },
+          "owner": "devcontainers",
+          "majorVersion": "2"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/docker-in-docker",
+          "version": "4.1.3",
+          "name": "Docker (Docker-in-Docker)",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/docker-in-docker",
+          "description": "Create child containers *inside* a container, independent from the host's docker instance. Installs Docker extension in the container along with needed CLIs.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "none",
+                "20.10"
+              ],
+              "default": "latest",
+              "description": "Select or enter a Docker/Moby Engine version. (Availability can vary by OS version.)"
+            },
+            "moby": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install OSS Moby build instead of Docker CE"
+            },
+            "mobyBuildxVersion": {
+              "type": "string",
+              "default": "latest",
+              "description": "Install a specific version of moby-buildx when using Moby"
+            },
+            "dockerDashComposeVersion": {
+              "type": "string",
+              "enum": [
+                "none",
+                "latest",
+                "v1",
+                "v2"
+              ],
+              "default": "latest",
+              "description": "Default version of Docker Compose (v1, v2, latest or none)"
+            },
+            "azureDnsAutoDetection": {
+              "type": "boolean",
+              "default": true,
+              "description": "Allow automatically setting the dockerd DNS server when the installation script detects it is running in Azure"
+            },
+            "dockerDefaultAddressPool": {
+              "type": "string",
+              "default": "",
+              "proposals": [],
+              "description": "Define default address pools for Docker networks. e.g. base=192.168.0.0/16,size=24"
+            },
+            "dockerHostGatewayIP": {
+              "type": "string",
+              "default": "",
+              "proposals": [],
+              "description": "Set the IP used to resolve the special 'host-gateway' value in --add-host. e.g. 192.168.0.1"
+            },
+            "installDockerBuildx": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install Docker Buildx"
+            },
+            "installDockerComposeSwitch": {
+              "type": "boolean",
+              "default": false,
+              "description": "Install Compose Switch (provided docker compose is available) which is a replacement to the Compose V1 docker-compose (python) executable. It translates the command line into Compose V2 docker compose then runs the latter."
+            },
+            "disableIp6tables": {
+              "type": "boolean",
+              "default": false,
+              "description": "Disable ip6tables (this option is only applicable for Docker versions 27 and greater)"
+            },
+            "iptablesSwitchAtRuntime": {
+              "type": "boolean",
+              "default": true,
+              "description": "If true, the iptables alternative is selected at container start (inside docker-init.sh) instead of at image build time. Useful when the desired iptables backend depends on the host kernel at runtime rather than at build time."
+            }
+          },
+          "entrypoint": "/usr/local/share/docker-init.sh",
+          "privileged": true,
+          "containerEnv": {
+            "DOCKER_BUILDKIT": "1"
+          },
+          "customizations": {
+            "vscode": {
+              "extensions": [
+                "ms-azuretools.vscode-containers"
+              ],
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes the Docker CLI (`docker`) pre-installed and available on the `PATH` for running and managing containers using a dedicated Docker daemon running inside the dev container."
+                  }
+                ]
+              }
+            }
+          },
+          "mounts": [
+            {
+              "source": "dind-var-lib-docker-${devcontainerId}",
+              "target": "/var/lib/docker",
+              "type": "volume"
+            },
+            {
+              "source": "dind-var-lib-containerd-${devcontainerId}",
+              "target": "/var/lib/containerd",
+              "type": "volume"
+            }
+          ],
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "4"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/git",
+          "version": "1.3.8",
+          "name": "Git (from source)",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/git",
+          "description": "Install an up-to-date version of Git, built from source as needed. Useful for when you want the latest and greatest features. Auto-detects latest stable version and installs needed dependencies.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "system",
+                "os-provided"
+              ],
+              "default": "os-provided",
+              "description": "Select or enter a Git version."
+            },
+            "ppa": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install from PPA if available (only supported for Ubuntu distributions)"
+            }
+          },
+          "customizations": {
+            "vscode": {
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes an up-to-date version of Git, built from source as needed, pre-installed and available on the `PATH`."
+                  }
+                ]
+              }
+            }
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "1"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/node",
+          "version": "2.1.1",
+          "name": "Node.js (via nvm), yarn and pnpm.",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/node",
+          "description": "Installs Node.js, nvm, yarn, pnpm, and needed dependencies.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "lts",
+                "latest",
+                "none",
+                "22",
+                "20"
+              ],
+              "default": "lts",
+              "description": "Select or enter a Node.js version to install"
+            },
+            "nodeGypDependencies": {
+              "type": "boolean",
+              "default": true,
+              "description": "Install dependencies to compile native node modules (node-gyp)?"
+            },
+            "nvmInstallPath": {
+              "type": "string",
+              "default": "/usr/local/share/nvm",
+              "description": "The path where NVM will be installed."
+            },
+            "npmVersion": {
+              "type": "string",
+              "proposals": [
+                "lts",
+                "latest",
+                "10.9.0",
+                "10.8.0",
+                "10.7.0",
+                "9.9.3",
+                "8.19.4",
+                "none"
+              ],
+              "default": "none",
+              "description": "Select or enter a specific NPM version to install globally. Use 'latest' for the latest version, 'none' to skip npm version update, or specify a version like '10.9.0'."
+            },
+            "pnpmVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "8.8.0",
+                "8.0.0",
+                "7.30.0",
+                "6.14.8",
+                "5.18.10",
+                "none"
+              ],
+              "default": "latest",
+              "description": "Select or enter the PNPM version to install"
+            },
+            "nvmVersion": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "0.39"
+              ],
+              "default": "latest",
+              "description": "Version of NVM to install."
+            },
+            "installYarnUsingApt": {
+              "type": "boolean",
+              "default": false,
+              "description": "On Debian and Ubuntu systems, you have the option to install Yarn globally via APT. If you choose not to use this option, Yarn will be set up using Corepack instead. This choice is specific to Debian and Ubuntu; for other Linux distributions, Yarn is always installed using Corepack, with a fallback to installation via NPM if an error occurs."
+            }
+          },
+          "customizations": {
+            "vscode": {
+              "extensions": [
+                "dbaeumer.vscode-eslint"
+              ],
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes `node`, `npm` and `eslint` pre-installed and available on the `PATH` for Node.js and JavaScript development."
+                  }
+                ]
+              }
+            }
+          },
+          "containerEnv": {
+            "NVM_DIR": "/usr/local/share/nvm",
+            "NVM_SYMLINK_CURRENT": "true",
+            "PATH": "/usr/local/share/nvm/current/bin:${PATH}"
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "2"
+        },
+        {
+          "id": "ghcr.io/devcontainers/features/python",
+          "version": "1.8.0",
+          "name": "Python",
+          "documentationURL": "https://github.com/devcontainers/features/tree/main/src/python",
+          "description": "Installs the provided version of Python, as well as PIPX, and other common Python utilities.  JupyterLab is conditionally installed with the python feature. Note: May require source code compilation.",
+          "options": {
+            "version": {
+              "type": "string",
+              "proposals": [
+                "latest",
+                "os-provided",
+                "none",
+                "3.12",
+                "3.11",
+                "3.10",
+                "3.9",
+                "3.8",
+                "3.7",
+                "3.6"
+              ],
+              "default": "os-provided",
+              "description": "Select a Python version to install."
+            },
+            "installTools": {
+              "type": "boolean",
+              "default": true,
+              "description": "Flag indicating whether or not to install the tools specified via the 'toolsToInstall' option. Default is 'true'."
+            },
+            "toolsToInstall": {
+              "type": "string",
+              "default": "flake8,autopep8,black,yapf,mypy,pydocstyle,pycodestyle,bandit,pipenv,virtualenv,pytest,pylint",
+              "description": "Comma-separated list of tools to install when 'installTools' is true. Defaults to a set of common Python tools like pylint."
+            },
+            "optimize": {
+              "type": "boolean",
+              "default": false,
+              "description": "Optimize Python for performance when compiled (slow)"
+            },
+            "enableShared": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable building a shared Python library"
+            },
+            "installPath": {
+              "type": "string",
+              "default": "/usr/local/python",
+              "description": "The path where python will be installed."
+            },
+            "installJupyterlab": {
+              "type": "boolean",
+              "default": false,
+              "description": "Install JupyterLab, a web-based interactive development environment for notebooks"
+            },
+            "configureJupyterlabAllowOrigin": {
+              "type": "string",
+              "default": "",
+              "description": "Configure JupyterLab to accept HTTP requests from the specified origin"
+            },
+            "httpProxy": {
+              "type": "string",
+              "default": "",
+              "description": "Connect to GPG keyservers using a proxy for fetching source code signatures by configuring this option"
+            }
+          },
+          "containerEnv": {
+            "PYTHON_PATH": "/usr/local/python/current",
+            "PIPX_HOME": "/usr/local/py-utils",
+            "PIPX_BIN_DIR": "/usr/local/py-utils/bin",
+            "PATH": "/usr/local/python/current/bin:/usr/local/py-utils/bin:/usr/local/jupyter:${PATH}"
+          },
+          "customizations": {
+            "vscode": {
+              "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.autopep8"
+              ],
+              "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                  {
+                    "text": "This dev container includes `python3` and `pip3` pre-installed and available on the `PATH`, along with the Python language extensions for Python development."
+                  }
+                ],
+                "python.defaultInterpreterPath": "/usr/local/python/current/bin/python",
+                "[python]": {
+                  "editor.defaultFormatter": "ms-python.autopep8"
+                }
+              }
+            }
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/common-utils",
+            "ghcr.io/devcontainers/features/oryx"
+          ],
+          "owner": "devcontainers",
+          "majorVersion": "1"
+        }
+      ]
+    },
+    {
+      "sourceInformation": {
         "name": "Reference Implementation Templates",
         "maintainer": "Dev Container Spec Maintainers",
         "contact": "https://github.com/devcontainers/templates/issues",
@@ -1654,6 +2105,147 @@
           "fileCount": 5,
           "featureIds": [],
           "owner": "devcontainers"
+        }
+      ]
+    },
+    {
+      "sourceInformation": {
+        "name": "Assorted Features",
+        "maintainer": "Stuart Leeks",
+        "contact": "https://github.com/stuartleeks/dev-container-features/issues",
+        "repository": "https://github.com/stuartleeks/dev-container-features",
+        "ociReference": "ghcr.io/stuartleeks/dev-container-features"
+      },
+      "features": [
+        {
+          "id": "ghcr.io/stuartleeks/dev-container-features/add-host",
+          "version": "1.0.3",
+          "name": "Add Host",
+          "description": "Add a hosts file entry in the dev container.",
+          "documentationURL": "https://github.com/stuartleeks/dev-container-features/tree/main/src/add-host",
+          "options": {
+            "host_name": {
+              "type": "string",
+              "default": "host.docker.internal",
+              "description": "Host name to add to the container's hosts file"
+            },
+            "host_ip": {
+              "type": "string",
+              "default": "",
+              "description": "The IP Address to associate with the host name"
+            }
+          },
+          "postStartCommand": {
+            "azure-cli-persistence": "/usr/local/share/stuartleeks-devcontainer-features/add-host/scripts/poststart.sh"
+          },
+          "owner": "stuartleeks",
+          "majorVersion": "1"
+        }
+      ]
+    },
+    {
+      "sourceInformation": {
+        "name": "Devcontainer features by Juan Ayala",
+        "maintainer": "Juan Ayala",
+        "contact": "https://github.com/juan-ayala/devcontainer-features/issues",
+        "repository": "https://github.com/juan-ayala/devcontainer-features",
+        "ociReference": "ghcr.io/juan-ayala/devcontainer-features"
+      },
+      "features": [
+        {
+          "id": "ghcr.io/juan-ayala/devcontainer-features/aem-lts",
+          "version": "1.2.1",
+          "name": "Adobe Experience Manager LTS",
+          "description": "Setup author and publish services. Requires the AEM LTS quickstart jar and license details.",
+          "options": {
+            "quickstartJar": {
+              "type": "string",
+              "description": "AEM LTS Quickstart Jar.",
+              "default": ""
+            },
+            "licenseCustomerName": {
+              "type": "string",
+              "description": "AEM LTS License Customer Name.",
+              "default": ""
+            },
+            "licenseDownloadId": {
+              "type": "string",
+              "description": "AEM LTS License Download Id.",
+              "default": ""
+            },
+            "authorPort": {
+              "type": "string",
+              "description": "Author service port",
+              "default": "4502"
+            },
+            "publishPort": {
+              "type": "string",
+              "description": "Publish service port",
+              "default": "4503"
+            }
+          },
+          "containerEnv": {
+            "AEM_LTS_FEATURE_DIR": "/aem-lts",
+            "PATH": "/aem-lts/bin:/aem-lts/dispatcher/bin:${PATH}"
+          },
+          "mounts": [
+            {
+              "source": "aem-lts-author-${devcontainerId}",
+              "target": "/aem-lts/author/crx-quickstart",
+              "type": "volume"
+            },
+            {
+              "source": "aem-lts-publish-${devcontainerId}",
+              "target": "/aem-lts/publish/crx-quickstart",
+              "type": "volume"
+            }
+          ],
+          "installsAfter": [
+            "ghcr.io/devcontainers/features/java:1"
+          ],
+          "documentationURL": "https://github.com/juan-ayala/devcontainer-features",
+          "owner": "juan-ayala",
+          "majorVersion": "1"
+        }
+      ]
+    },
+    {
+      "sourceInformation": {
+        "name": "Community features by devcontainer.community",
+        "maintainer": "devcontainer.community",
+        "contact": "https://devcontainer.community",
+        "repository": "https://github.com/devcontainer-community/devcontainer-features",
+        "ociReference": "ghcr.io/devcontainer-community/devcontainer-features"
+      },
+      "features": [
+        {
+          "name": "add-script",
+          "id": "ghcr.io/devcontainer-community/devcontainer-features/add-script",
+          "version": "1.1.2",
+          "description": "Add a script from a URL or inline text to /usr/local/bin during devcontainer build",
+          "documentationURL": "https://github.com/devcontainer-community/devcontainer-features/tree/main/src/add-script",
+          "options": {
+            "name": {
+              "type": "string",
+              "default": "",
+              "description": "Name for the script placed in /usr/local/bin."
+            },
+            "url": {
+              "type": "string",
+              "default": "",
+              "description": "URL of a script to download."
+            },
+            "script": {
+              "type": "string",
+              "default": "",
+              "description": "Inline script text to add."
+            }
+          },
+          "installsAfter": [
+            "ghcr.io/devcontainer-community/devcontainer-features/ca-certificates:latest"
+          ],
+          "owner": "devcontainer-community",
+          "majorVersion": "1"
         }
       ]
     }
