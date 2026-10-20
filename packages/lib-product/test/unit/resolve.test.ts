@@ -37,6 +37,10 @@ function redirectOf(resolution: ArchiveResolution): unknown {
   return resolution.kind === 'resolved' ? resolution.redirect : resolution.kind;
 }
 
+function hostOf(resolution: ArchiveResolution): string {
+  return resolution.kind === 'resolved' ? resolution.urlHost : resolution.kind;
+}
+
 function resolvedAddress(resolution: ArchiveResolution): string {
   return resolution.kind === 'resolved' ? resolution.address : resolution.kind;
 }
@@ -542,32 +546,73 @@ describe('resolveServerArchive', () => {
       );
     });
 
-    for (const [applicationName, repository] of [
-      ['codium', 'vscodium'],
-      ['codium-insiders', 'vscodium-insiders'],
-    ] as const) {
-      it(`F-0503 AC-36: ${applicationName} with no template resolves from the built-in table of ${repository}`, () => {
-        const resolution = resolveServerArchive(
-          fixtureProfile('vscodium-reduced', {
-            applicationName,
-            serverDownloadUrlTemplate: '',
-          }),
-          LINUX_X64,
-          CONTAINERS_POLICY,
-        );
-        deepStrictEqual(
-          resolution.kind === 'resolved'
-            ? [
-                resolution.step,
-                resolution.address.startsWith(
-                  `https://github.com/VSCodium/${repository}/releases/download/`,
-                ),
-              ]
-            : resolution.kind,
-          ['builtInTable', true],
-        );
-      });
+    /** The step and whether the address is of `repository`'s releases, for `applicationName` with no template and no override. */
+    function builtInOf(applicationName: string, repository: string): unknown {
+      const resolution = resolveServerArchive(
+        fixtureProfile('vscodium-reduced', {
+          applicationName,
+          serverDownloadUrlTemplate: '',
+        }),
+        LINUX_X64,
+        CONTAINERS_POLICY,
+      );
+      return resolution.kind === 'resolved'
+        ? [
+            resolution.step,
+            resolution.address.startsWith(
+              `https://github.com/VSCodium/${repository}/releases/download/`,
+            ),
+          ]
+        : resolution.kind;
     }
+
+    it('F-0503 AC-36: codium with no template resolves from the built-in table of vscodium', () => {
+      deepStrictEqual(builtInOf('codium', 'vscodium'), ['builtInTable', true]);
+    });
+
+    it('F-0503 AC-54: codium-insiders with no template resolves from the built-in table of vscodium-insiders', () => {
+      deepStrictEqual(builtInOf('codium-insiders', 'vscodium-insiders'), [
+        'builtInTable',
+        true,
+      ]);
+    });
+
+    it("F-0503 AC-39 (policy-hosts): VSCodium's built-in sources are not on Microsoft's two download hosts, and a configured URL on them is used as written", () => {
+      const microsoftHosts = [
+        'update.code.visualstudio.com',
+        'vscode.download.prss.microsoft.com',
+      ];
+      deepStrictEqual(
+        [
+          ...['codium', 'codium-insiders'].map(applicationName =>
+            microsoftHosts.includes(
+              hostOf(
+                resolveServerArchive(
+                  fixtureProfile('vscodium-reduced', {
+                    applicationName,
+                    serverDownloadUrlTemplate: '',
+                  }),
+                  LINUX_X64,
+                  CONTAINERS_POLICY,
+                ),
+              ),
+            ),
+          ),
+          hostOf(
+            resolveServerArchive(
+              fixtureProfile('vscodium-reduced'),
+              LINUX_X64,
+              CONTAINERS_POLICY,
+              {
+                value: 'https://update.code.visualstudio.com',
+                layer: 'defaultProfileUser',
+              },
+            ),
+          ),
+        ],
+        [false, false, 'update.code.visualstudio.com'],
+      );
+    });
 
     it('F-0503 AC-37: code with no override and no template has no source and names the setting', () => {
       const resolution = resolveServerArchive(

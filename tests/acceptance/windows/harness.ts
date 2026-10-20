@@ -638,6 +638,10 @@ export async function devContainersOf(folder: string): Promise<string[]> {
   return stdout.split('\n').filter(line => line !== '');
 }
 
+/** `ubuntu:18.04`, whose glibc 2.27 is below the server's 2.28, pinned by digest as the Alpine base is. */
+export const OLD_GLIBC_IMAGE =
+  'ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98';
+
 /** The facts of the run's editor that the server's names and paths come from, read from its product.json. */
 export function editorProduct(): {
   applicationName: string;
