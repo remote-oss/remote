@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {volumeServerFolder} from 'lib-product';
@@ -584,6 +584,48 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
       );
     } finally {
       await removeContainers(folder);
+    }
+  });
+
+  it('F-0419 AC-29 (s29): a build that fails on a host without a vscode volume ends in the setup dialog, with no container for the folder and no vscode volume made', async () => {
+    await clearVolume();
+    await removeVolume();
+    const folder = devContainerFolder('volume-build-fails', {
+      name: 'Volume Build Fails',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeFileSync(
+      path.join(folder, '.devcontainer', 'Dockerfile'),
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nRUN exit 7\n`,
+    );
+    try {
+      const failed = await failedReopen(folder);
+      const holders = await docker(
+        'ps',
+        '--all',
+        '--quiet',
+        '--filter',
+        'volume=vscode',
+      );
+      const volumes = (
+        await docker('volume', 'ls', '--quiet', '--filter', 'name=^vscode$')
+      )
+        .split('\n')
+        .filter(line => line !== '');
+      await leaveFailed(failed.name);
+      deepStrictEqual(
+        {
+          detail: failed.detail,
+          containers: failed.containers,
+          held: holders === '' ? [] : holders.split('\n'),
+          volumes,
+        },
+        {detail: SETUP_FAILED, containers: [], held: [], volumes: []},
+      );
+    } finally {
+      await removeContainers(folder);
+      await recreateVolume();
     }
   });
 });
