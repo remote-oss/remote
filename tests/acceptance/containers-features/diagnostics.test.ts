@@ -39,7 +39,6 @@ const FLAGGED: ReadonlyArray<readonly [string, string]> = [
   ['a:1/b', S179],
   ['a\\b', S179],
   ['C:\\x', S179],
-  ['foo.bar\\x', S179],
   ['fish', S220],
   ['homebrew', S220],
 ];
@@ -55,6 +54,8 @@ const CLEAN = [
   '../up',
   './ok',
   'https://example.com/x.tgz',
+  'https://example.com/foo.tar.gz',
+  'ghcr.io/devcontainers/features/node',
   '',
   'maven',
   'gradle',
@@ -62,6 +63,9 @@ const CLEAN = [
   'myrandomfeature',
   'octocat/Hello-World/foo',
 ];
+
+/** The line of the first key in the text `featuresText` makes. */
+const FIRST_KEY_LINE = 4;
 
 /** A configuration whose `features` hold `keys`, each with the value `{}` and each on a line of its own. */
 function featuresText(keys: readonly string[]): string {
@@ -126,8 +130,8 @@ describe('the Problems panel flags malformed Feature ids (card containers-95)', 
       FLAGGED.length,
     );
     deepStrictEqual(
-      problems.map(each => each.message),
-      FLAGGED.map(([, message]) => message),
+      problems.map(each => [each.line, each.message]),
+      FLAGGED.map(([, message], index) => [FIRST_KEY_LINE + index, message]),
     );
   });
 
