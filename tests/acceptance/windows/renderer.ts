@@ -1979,6 +1979,32 @@ async function pressCharacter(
   await pressStroke(address, owner, characterStroke(character));
 }
 
+/** The modifier bits of the protocol's key events. */
+const ALT_AND_CONTROL = 3;
+
+/** Presses Ctrl+Alt+`character` in window `name`, as the keyboard does, so that a keybinding on it runs its command. */
+export async function pressControlAlt(
+  name: string,
+  character: string,
+): Promise<void> {
+  const upper = character.toUpperCase();
+  await pressStroke(await pageOf(name), name, {
+    key: character,
+    code: `Key${upper}`,
+    windowsVirtualKeyCode: upper.charCodeAt(0),
+    nativeVirtualKeyCode: upper.charCodeAt(0),
+    modifiers: ALT_AND_CONTROL,
+  });
+}
+
+/** The label of the activity bar item that is checked in window `name`, the side bar in front; empty when none is. */
+export async function activeSideBar(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `document.querySelector('.activitybar .action-item.checked .action-label')?.getAttribute('aria-label') ?? ''`,
+  );
+}
+
 /** Types `folder` into window `name`'s folder dialog and confirms it, as Enter does with no item focused. */
 export function answerFolderDialog(
   name: string,
