@@ -19,6 +19,7 @@ import {
   decodedFolderOf,
 } from '../authority/payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
+import type {Forwarder} from '../ports/forwarder.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {
   type RecoveryPorts,
@@ -35,6 +36,8 @@ export interface ConnectorRegistrationHost {
   commands: CommandHost;
   presenter: Omit<RecoveryPorts, 'disconnected'>;
   translate: Translate;
+  /** Opens the forwards the connection declares, once core has the connection. */
+  forwarder: Forwarder;
 }
 
 /** What the activation hands over: whether the proposed resolvers API is there, and the log to reveal. */
@@ -126,6 +129,7 @@ export async function registerContainerResolver(
         return;
       }
       if (connection.state === 'connected') {
+        void host.forwarder.forward(connector.heldPorts());
         label?.dispose();
         label = registerAuthorityLabel(
           host.labels,

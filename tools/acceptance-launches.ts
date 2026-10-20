@@ -731,6 +731,9 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-ports',
       suite: 'containers-ports',
       registry: true,
+      // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that opening a
+      // port in the browser opens nothing on the machine.
+      environment: {PATH: '<run>/xdg-bin:<path>'},
       // The other Dev Containers, installed and disabled, as in `containers`: the Ports view's rows are core's.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

@@ -51,6 +51,7 @@ import {
   resetReopenNotification,
 } from './open/reopen-notification.ts';
 import {openFolderInContainer} from './open/open-folder.ts';
+import {forwarderOf, type TunnelHost} from './ports/forwarder.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import type {ReopenPorts} from './open/reopen-ports.ts';
 import {
@@ -745,6 +746,13 @@ export async function activate(
           logger,
         }),
         translate,
+        forwarder: forwarderOf({
+          // openTunnel is a proposed API ('tunnels'); the types of the proposal are not part of this project.
+          tunnels: vscode.workspace as unknown as TunnelHost,
+          showError: text => vscode.window.showErrorMessage(text),
+          logger,
+          translate,
+        }),
       },
       connector,
       {
