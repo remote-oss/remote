@@ -11,6 +11,7 @@ import {
   registerAuthorityLabel,
   registerResolver,
   type ResolverEditor,
+  type ResolverEditorOptions,
 } from 'lib-authority';
 import type {CommandHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
@@ -27,6 +28,15 @@ import {
 import type {ContainerConnector} from './connector.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
 import {workspaceSuffixOf} from './window-identity.ts';
+
+/**
+ * What the extension decides about its editor adapter: the details link and nothing about ports. The resolver then
+ * gives core no tunnel factory, no tunnel features and no candidate port source, so core's own detection and forwards
+ * serve the window (F-1102 §16).
+ */
+export const RESOLVER_EDITOR_OPTIONS: ResolverEditorOptions = {
+  detailsCommand: runtimeCommands.revealLogTerminal,
+};
 
 /** What the registration needs of the editor. */
 export interface ConnectorRegistrationHost {
