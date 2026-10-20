@@ -523,6 +523,73 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
+  /** The log lines that echo a server-download setting, for a run with `options`. */
+  async function settingLines(
+    options: Parameters<typeof runSteps>[1],
+    channel = channelOf(),
+  ): Promise<string[]> {
+    const {seen} = await runSteps(channel, options);
+    return seen.sink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith('remote.serverDownload'));
+  }
+
+  it('F-0503 AC-26: with neither setting set, no line echoes a setting', async () => {
+    deepStrictEqual(
+      await settingLines({override: undefined, downloadFolder: ''}),
+      [],
+    );
+  });
+
+  it('F-0503 AC-26: each setting with a value gets its own line, the base URL as scheme, host and path', async () => {
+    deepStrictEqual(
+      await settingLines({
+        override: {
+          value: 'https://downloads.example.invalid/server/base',
+          layer: 'defaultProfileUser',
+        },
+        downloadFolder: '/var/cache/servers',
+      }),
+      [
+        'remote.serverDownloadBaseUrl = https://downloads.example.invalid/server/base',
+        'remote.serverDownloadFolder = /var/cache/servers',
+      ],
+    );
+  });
+
+  it('F-0503 AC-26: a base URL with a user, a password, a query and a fragment is logged without them', async () => {
+    deepStrictEqual(
+      await settingLines({
+        override: {
+          value:
+            'https://user:secret@downloads.example.invalid/base?token=x#top',
+          layer: 'defaultProfileUser',
+        },
+      }),
+      ['remote.serverDownloadBaseUrl = https://downloads.example.invalid/base'],
+    );
+  });
+
+  it('F-0503 AC-26: the lines come on a connect that reuses the server as well', async () => {
+    deepStrictEqual(
+      await settingLines(
+        {
+          volume: true,
+          override: {
+            value: 'https://downloads.example.invalid/server/base',
+            layer: 'defaultProfileUser',
+          },
+          downloadFolder: '/var/cache/servers',
+        },
+        channelOf({volume: true, treeComplete: true}),
+      ),
+      [
+        'remote.serverDownloadBaseUrl = https://downloads.example.invalid/server/base',
+        'remote.serverDownloadFolder = /var/cache/servers',
+      ],
+    );
+  });
+
   it('F-0503 AC-1: a complete tree is reused: no installing phase, no download, no install', async () => {
     const channel = channelOf({volume: true, treeComplete: true});
     const {result, seen} = await runSteps(channel, {volume: true});
@@ -642,7 +709,12 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
     const {result, seen} = await runSteps(channel);
     deepStrictEqual(
-      [failureKind(result), seen.sink.lines.map(line => line.message)],
+      [
+        failureKind(result),
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => !message.startsWith('remote.serverDownload')),
+      ],
       [
         'serverFailed',
         ['the probe failed: prerequisiteMissing', 'the container lacks: tar'],

@@ -465,7 +465,7 @@ function isAllowedFinalHost(plan: DownloadPlan, finalAddress: string): boolean {
 }
 
 /** An address for the log: its origin and path, never the query, the fragment or a user name, which may hold a token. */
-function addressForLog(address: string): string {
+export function addressForLog(address: string): string {
   if (!URL.canParse(address)) {
     return '(not an address)';
   }

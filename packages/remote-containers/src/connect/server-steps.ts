@@ -19,6 +19,7 @@ import {
 } from 'lib-product';
 import {
   type AcceptanceStore,
+  addressForLog,
   archiveKeyOf,
   cacheFolders,
   CLIENT_DOWNLOAD_BOUNDS,
@@ -276,12 +277,29 @@ function retryLine(
   return `the server download failed (${address}, ${cachePath}): ${failure.detail}; retrying once`;
 }
 
+/**
+ * Logs each server-download setting that has a value, at every connect: the base URL as its scheme, host and path, and
+ * the download folder as written.
+ */
+function logDownloadSettings(dependencies: ServerStepDependencies): void {
+  const {override, downloadFolder, logger} = dependencies;
+  if (override !== undefined) {
+    logger.info(
+      `remote.serverDownloadBaseUrl = ${addressForLog(override.value)}`,
+    );
+  }
+  if (typeof downloadFolder === 'string' && downloadFolder !== '') {
+    logger.info(`remote.serverDownloadFolder = ${downloadFolder}`);
+  }
+}
+
 /** Runs the steps of one connect. */
 export async function runServerSteps(
   dependencies: ServerStepDependencies,
   request: ServerRequest,
 ): Promise<ServerResult> {
   const {profile, logger} = dependencies;
+  logDownloadSettings(dependencies);
   const {channel, cancellation} = request;
   const discovered = await probe(
     channel,
