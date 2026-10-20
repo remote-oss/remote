@@ -182,6 +182,7 @@ export function activate(context: vscode.ExtensionContext): void {
         folders: (vscode.workspace.workspaceFolders ?? []).map(each =>
           each.uri.toString(),
         ),
+        workspaceFile: vscode.workspace.workspaceFile?.toString() ?? null,
         visibleOutputChannel: visibleOutputChannelOf(
           vscode.window.visibleTextEditors.map(editor => editor.document.uri),
         ),

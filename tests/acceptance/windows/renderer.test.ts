@@ -98,4 +98,62 @@ describe('pageTitleFor', () => {
       undefined,
     );
   });
+
+  it('containers-40 harness: a workspace window finds its page by the workspace name, not by its folder', () => {
+    deepStrictEqual(
+      [
+        pageTitleFor(
+          {
+            folders: ['file:///run/ws/app'],
+            remoteName: null,
+            workspaceFile: 'file:///run/ws/team.code-workspace',
+          },
+          ['[app]', '[team (Workspace)]'],
+        ),
+        pageTitleFor(
+          {
+            folders: ['file:///run/ws/app'],
+            remoteName: 'dev-container',
+            workspaceFile: 'file:///run/ws/team.code-workspace',
+          },
+          ['[team (Workspace) [Dev Container: Team]]', '[team-2 (Workspace)]'],
+        ),
+      ],
+      ['[team (Workspace)]', '[team (Workspace) [Dev Container: Team]]'],
+    );
+  });
+
+  it('containers-40 harness: an unsaved workspace is Untitled (Workspace), and a decoded file name is matched', () => {
+    deepStrictEqual(
+      [
+        pageTitleFor(
+          {
+            folders: ['file:///run/a'],
+            remoteName: null,
+            workspaceFile: 'untitled:Untitled-1',
+          },
+          ['[a]', '[Untitled (Workspace)]'],
+        ),
+        pageTitleFor(
+          {
+            folders: ['file:///run/a'],
+            remoteName: null,
+            workspaceFile: 'file:///run/my%20team.code-workspace',
+          },
+          ['[my team (Workspace)]'],
+        ),
+      ],
+      ['[Untitled (Workspace)]', '[my team (Workspace)]'],
+    );
+  });
+
+  it('containers-40 harness: a folder window with a null workspace file matches by its folder as before', () => {
+    strictEqual(
+      pageTitleFor(
+        {folders: ['/x/k1'], remoteName: null, workspaceFile: null},
+        ['[k1]', '[k1 (Workspace)]'],
+      ),
+      '[k1]',
+    );
+  });
 });
