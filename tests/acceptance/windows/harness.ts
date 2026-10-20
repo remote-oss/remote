@@ -181,9 +181,9 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
   );
 }
 
-/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
-export function connectionLog(): string[] {
-  const file = variable('REMOTE_OSS_ACCEPTANCE_LOG');
+/** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
+function logLinesOf(variableName: string): string[] {
+  const file = variable(variableName);
   if (!existsSync(file)) {
     return [];
   }
@@ -191,6 +191,21 @@ export function connectionLog(): string[] {
     .split('\n')
     .filter(line => line !== '')
     .map(line => line.slice(line.indexOf('] ') + 2));
+}
+
+/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
+export function connectionLog(): string[] {
+  return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+}
+
+/** The lines of the Dev Containers log, without their time stamps; none before the first is written. */
+export function containersLog(): string[] {
+  return logLinesOf('REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG');
+}
+
+/** The lines of the Dev Containers log after the first `mark` of them, `mark` being a count taken earlier. */
+export function containersLogSince(mark: number): string[] {
+  return containersLog().slice(mark);
 }
 
 /** The waiting lines of the record, optionally of one window: a held entry's line while it waits for its signal. */
