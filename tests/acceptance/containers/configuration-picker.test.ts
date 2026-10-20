@@ -265,10 +265,11 @@ describe('F-0301 configuration discovery and picker (card containers-50)', funct
     const window = await open(folder);
     const shown = await pickOf(window);
     await pressQuickPickRowButton(window, 'A', 'Open File');
-    const opened = async (): Promise<string[]> =>
-      (await editorTabs(window))
+    async function opened(): Promise<string[]> {
+      return (await editorTabs(window))
         .filter(entry => entry.preview && entry.label !== 'Welcome')
         .map(entry => entry.label);
+    }
     await waitFor(
       `window ${window} to show the configuration`,
       async () => (await opened()).length > 0,
