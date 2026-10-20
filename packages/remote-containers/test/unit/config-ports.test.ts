@@ -222,6 +222,7 @@ describe('the files of the configuration choice (card containers-13)', () => {
             ['u', 0],
           ]),
         readFile: () => Promise.resolve(new Uint8Array()),
+        stat: () => Promise.resolve({}),
       },
       TYPES,
     );
@@ -240,10 +241,29 @@ describe('the files of the configuration choice (card containers-13)', () => {
       {
         readDirectory: () => Promise.reject(new Error('gone')),
         readFile: () => Promise.resolve(new Uint8Array()),
+        stat: () => Promise.resolve({}),
       },
       TYPES,
     );
     deepStrictEqual(await files.list('/w'), []);
+  });
+
+  it('F-0412 7.E3: a path exists when the editor can stat it, and does not when it cannot', async () => {
+    const files = configFilesOf(
+      {
+        readDirectory: () => Promise.resolve([]),
+        readFile: () => Promise.resolve(new Uint8Array()),
+        stat: path =>
+          path === '/w/Dockerfile'
+            ? Promise.resolve({})
+            : Promise.reject(new Error('ENOENT')),
+      },
+      TYPES,
+    );
+    deepStrictEqual(
+      [await files.exists('/w/Dockerfile'), await files.exists('/w/Missing')],
+      [true, false],
+    );
   });
 
   it('F-0301 7.E9: a file is its bytes, and one that cannot be opened is unreadable', async () => {
@@ -251,6 +271,7 @@ describe('the files of the configuration choice (card containers-13)', () => {
       {
         readDirectory: () => Promise.resolve([]),
         readFile: () => Promise.resolve(Uint8Array.from([1, 2])),
+        stat: () => Promise.resolve({}),
       },
       TYPES,
     );
@@ -258,6 +279,7 @@ describe('the files of the configuration choice (card containers-13)', () => {
       {
         readDirectory: () => Promise.resolve([]),
         readFile: () => Promise.reject(new Error('EACCES')),
+        stat: () => Promise.resolve({}),
       },
       TYPES,
     );

@@ -96,6 +96,7 @@ function portsOf(scene: Scene): PreReloadPorts {
           ),
         read: file =>
           Promise.resolve(Buffer.from(scene.contents[file] ?? '{"image":"i"}')),
+        exists: () => Promise.resolve(true),
       },
       surfaces: {
         pick: () => {

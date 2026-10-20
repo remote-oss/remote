@@ -267,6 +267,7 @@ export async function activate(
       readDirectory: folder =>
         vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
       readFile: file => vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+      stat: path => vscode.workspace.fs.stat(vscode.Uri.file(path)),
     },
     vscode.FileType,
   );
