@@ -165,7 +165,7 @@ export interface Scene {
 }
 
 /** What a probe that worked prints: noise, the markers and two variables. */
-export const PROBE_OUTPUT =
+const PROBE_OUTPUT =
   'motd\nremote-oss-env-probe-begin\nALPHA=probe\0BRAVO=probe\0\nremote-oss-env-probe-end\n';
 
 /** A container prepared and ready. */
