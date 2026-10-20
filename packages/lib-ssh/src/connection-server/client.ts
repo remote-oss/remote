@@ -114,6 +114,8 @@ export type ConnectionFailure =
       hints: FailureHint[];
       /** `ssh`'s exit status, or `null` when it ended on a signal; absent from a helper of an earlier build. */
       exitStatus?: number | null;
+      /** What the helper logged about the failure, for the window's own log. */
+      detail?: string;
     }
   | {kind: 'spawnFailed'; cause: SpawnFailure; detail: string}
   | {kind: 'transportLost'}
@@ -276,6 +278,7 @@ class LoginWait {
               ...(event.exitStatus === undefined
                 ? {}
                 : {exitStatus: event.exitStatus}),
+              ...(event.detail === undefined ? {} : {detail: event.detail}),
             },
           });
         }

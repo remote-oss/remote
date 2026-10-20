@@ -220,6 +220,9 @@ export function ofConnection(failure: ConnectionFailure): FailureDetail & {
         ...(failure.exitStatus === undefined
           ? {}
           : {sshExitStatus: failure.exitStatus}),
+        ...(failure.detail === undefined || failure.detail === ''
+          ? {}
+          : {logDetail: failure.detail}),
       };
     case 'spawnFailed':
       return failure.cause === 'clientVanished'
