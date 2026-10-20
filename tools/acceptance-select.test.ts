@@ -3,8 +3,9 @@
  */
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import type {Launch} from './acceptance-launches.ts';
+import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {launchesInput, selectLaunches} from './acceptance-select.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 
 /** A launch table of each kind the selector reads: runner and plain launches, with and without extensions. */
 const LAUNCHES: Launch[] = [
@@ -56,6 +57,19 @@ describe('acceptance-select', () => {
     deepStrictEqual(labelsFor('tests/acceptance/suite-trust/x.test.ts'), [
       'trust-one',
     ]);
+  });
+
+  it("coverage-25c: the explorer-trust and explorer-home suites' tests select their own launches in the real table", () => {
+    deepStrictEqual(
+      selectLaunches(
+        [
+          'tests/acceptance/explorer-home/home-files.test.ts',
+          'tests/acceptance/explorer-trust/restricted.test.ts',
+        ],
+        launchesOf(REPOSITORY_ROOT),
+      ).labels,
+      ['explorer-trust', 'explorer-home'],
+    );
   });
 
   it('a containers test change reaches the containers launches only', () => {
