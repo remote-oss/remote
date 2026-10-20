@@ -285,5 +285,39 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
+  # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
+  # that failed or was cancelled fails it; a skipped job passes (a docs-only change, a draft, a dispatch's opt-in jobs).
+  # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
+  # on skipped jobs; it runs on a GitHub runner then, so even this step of a fork's run never reaches a lab runner.
+  ci-gate:
+    name: ci-gate
+    needs:
+      - changes
+      - checks
+      - quality
+      - acceptance-slice-1
+      - acceptance-server
+      - acceptance-host-variants
+      - acceptance-real-server
+      - acceptance-vscodium
+    if: always()
+    runs-on: >-
+      ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+      && 'ubuntu-latest' || vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 2
+    steps:
+      - name: The needed jobs' results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "changes checks quality slice-1 server host-variants real-server vscodium: $RESULTS"
+      - name: A failed or cancelled job, or a fork's pull request, fails the gate
+        if: >-
+          contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+        run: |
+          echo 'refused: a needed job failed or was cancelled, or this is a fork'"'"'s pull request (no CI runs for forks)' >&2
+          exit 1
+
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # per-package checks by profile: added in a later change
