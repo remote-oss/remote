@@ -138,6 +138,7 @@ describe('the download host', function () {
       logFile,
       tlsLogFile,
       templatesFolder: path.join(folder, 'templates'),
+      controlFolder: path.join(folder, 'control'),
     });
   });
 
@@ -303,6 +304,35 @@ describe('the download host', function () {
     await rejects(get('http', host.httpPort, '/templates/unreachable'));
   });
 
+  it("tooling-62: the control manifest gives 404 until the run writes it, then the run's file, and another control path gives 404", async () => {
+    const before = (
+      await get(
+        'http',
+        host.httpPort,
+        '/control/devcontainer-control-manifest.json',
+      )
+    ).status;
+    mkdirSync(path.join(folder, 'control'), {recursive: true});
+    writeFileSync(
+      path.join(folder, 'control', 'devcontainer-control-manifest.json'),
+      '{"disallowedFeatures": []}',
+    );
+    const after = await get(
+      'http',
+      host.httpPort,
+      '/control/devcontainer-control-manifest.json',
+    );
+    const other = await get('http', host.httpPort, '/control/other.json');
+    deepStrictEqual(
+      [before, after.status, after.body.toString(), other.status],
+      [404, 200, '{"disallowedFeatures": []}', 404],
+    );
+  });
+
+  it('tooling-62: the control unreachable path drops the connection before any answer', async () => {
+    await rejects(get('http', host.httpPort, '/control/unreachable'));
+  });
+
   it('tooling-27: hang holds the request until the hung connections are dropped', async () => {
     const hung = get('http', host.httpPort, '/hang/x');
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -373,6 +403,7 @@ describe('startDownloadHost', () => {
           logFile: path.join(folder, 'log'),
           tlsLogFile: path.join(folder, 'tls-log'),
           templatesFolder: path.join(folder, 'templates'),
+          controlFolder: path.join(folder, 'control'),
         }),
       );
     } finally {

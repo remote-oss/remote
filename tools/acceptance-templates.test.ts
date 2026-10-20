@@ -20,6 +20,7 @@ import {
   CUSTOM_FEATURES_NAMESPACE,
   CUSTOM_NAMESPACE,
   type CustomFeatureCollection,
+  featureMetadataText,
   ghcrLayer,
   type MirroredTemplate,
   MIRROR_NAMESPACE,
@@ -58,11 +59,23 @@ function collectionOf(
 
 /** The ids of the run's own Features in the registry, as `custom-features.json` lists them. */
 const CUSTOM_FEATURE_IDS = [
+  'remote-oss-run/features/lab-advised',
+  'remote-oss-run/features/lab-depends-a',
+  'remote-oss-run/features/lab-depends-e',
   'remote-oss-run/features/lab-options',
   'remote-oss-run/features/lab-plain',
   'remote-oss-community/features/add-community',
   'remote-oss-community/features/add-community-tool',
   'remote-oss-community/features/adobe-community-kit',
+];
+
+/** The folders of the run's published Features, in name order. */
+const LAB_FEATURES = [
+  'lab-advised',
+  'lab-depends-a',
+  'lab-depends-e',
+  'lab-options',
+  'lab-plain',
 ];
 
 const LAYER = new TextEncoder().encode('a layer');
@@ -336,6 +349,18 @@ describe('the run templates', () => {
             ociReference: 'localhost:49200/other/features',
           },
         ],
+      );
+    });
+  });
+
+  describe('featureMetadataText', () => {
+    it("tooling-62: the run's registry is written in place of every placeholder, and nothing else changes", () => {
+      deepStrictEqual(
+        featureMetadataText(
+          '{"dependsOn": {"${registry}/a/b:1": {}, "${registry}/a/c:1": {}}, "id": "x"}',
+          'localhost:49200',
+        ),
+        '{"dependsOn": {"localhost:49200/a/b:1": {}, "localhost:49200/a/c:1": {}}, "id": "x"}',
       );
     });
   });
@@ -629,8 +654,11 @@ describe('the run templates', () => {
           ),
         ],
         [
-          ['lab-options', 'lab-plain'],
+          LAB_FEATURES,
           [
+            ['lab-advised', 'Lab Advised', []],
+            ['lab-depends-a', 'Lab Depends A', []],
+            ['lab-depends-e', 'Lab Depends E', []],
             [
               'lab-options',
               'Lab Options',
@@ -638,7 +666,7 @@ describe('the run templates', () => {
             ],
             ['lab-plain', 'Lab Plain', []],
           ],
-          ['lab-options', 'lab-plain'].map(
+          LAB_FEATURES.map(
             featureId =>
               `#!/bin/sh\nset -e\nmkdir -p /usr/local/share/remote-oss-run\nenv > /usr/local/share/remote-oss-run/${featureId}.env\n`,
           ),

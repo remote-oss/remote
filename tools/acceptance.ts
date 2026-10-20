@@ -183,6 +183,8 @@ export interface HarnessVariables {
   HARNESS_TEMPLATE_REGISTRY?: string;
   /** The URL of the run's template index on the download host, when a chosen launch asks for templates; harness-only. */
   REMOTE_OSS_TEMPLATE_INDEX?: string;
+  /** The URL of the run's control manifest on the download host, when a chosen launch asks for templates; harness-only. */
+  REMOTE_OSS_CONTROL_MANIFEST?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -854,6 +856,7 @@ async function prepare(
       : {
           HARNESS_TEMPLATE_REGISTRY: templateRegistry,
           REMOTE_OSS_TEMPLATE_INDEX: `${templateIndex}/templates/devcontainer-index.json`,
+          REMOTE_OSS_CONTROL_MANIFEST: `${templateIndex}/control/devcontainer-control-manifest.json`,
         }),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),

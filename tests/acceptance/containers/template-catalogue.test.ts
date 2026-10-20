@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile, spawnSync} from 'node:child_process';
-import {existsSync, mkdtempSync, readFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -8,6 +8,11 @@ import {
   devContainersOf,
   variable,
 } from '../windows/harness.ts';
+import {
+  cachedManifestFile,
+  removeControlManifest,
+  seedControlManifest,
+} from '../windows/control-manifest.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
@@ -230,6 +235,52 @@ describe("the run's template catalogue and registry (card tooling-57)", function
       );
     } finally {
       await removeContainers(folder);
+    }
+  });
+
+  it("#1305: lab-depends-a pulls in lab-depends-e, and the seeded control manifest is the CLI's", async () => {
+    await runTemplatesReady();
+    const registry = variable('HARNESS_TEMPLATE_REGISTRY');
+    const folder = devContainerFolder('c1305-up', {
+      features: {
+        [`${registry}/remote-oss-run/features/lab-depends-a:1`]: {},
+      },
+    });
+    try {
+      await seedControlManifest();
+      const seeded = readFileSync(cachedManifestFile(), 'utf8');
+      const fresh =
+        Date.now() - statSync(cachedManifestFile()).mtimeMs < 60_000;
+      const started = spawnSync(
+        process.execPath,
+        [BUNDLED_CLI, 'up', '--workspace-folder', folder],
+        {encoding: 'utf8'},
+      );
+      const [container = ''] = await devContainersOf(folder);
+      const environments = await Promise.all(
+        ['lab-depends-a', 'lab-depends-e'].map(async feature => {
+          const {stdout} = await execFileAsync('docker', [
+            'exec',
+            container,
+            'cat',
+            `/usr/local/share/remote-oss-run/${feature}.env`,
+          ]);
+          return stdout.length > 0;
+        }),
+      );
+      deepStrictEqual(
+        [
+          started.status,
+          environments,
+          fresh,
+          seeded.includes(`${registry}/remote-oss-run/features/lab-advised`),
+          readFileSync(cachedManifestFile(), 'utf8') === seeded,
+        ],
+        [0, [true, true], true, true, true],
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeControlManifest();
     }
   });
 });

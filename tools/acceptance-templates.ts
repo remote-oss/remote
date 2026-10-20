@@ -17,6 +17,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {checked, type CommandRunner} from './command-runner.ts';
+import {controlManifestText} from './acceptance-control-manifest.ts';
 import {SNAPSHOT_FOLDER, TEMPLATES_REFERENCE} from './trim-template-index.ts';
 
 /** A published template the run mirrors: its name in the collection, its version, and the digest of its layer. */
@@ -227,11 +228,24 @@ export function servedTemplatesFolder(runFolder: string): string {
   return path.join(runFolder, 'downloads', 'templates');
 }
 
+/** Where the download host serves the run's control manifest from. */
+export function servedControlFolder(runFolder: string): string {
+  return path.join(runFolder, 'downloads', 'control');
+}
+
+/** The placeholder of the run's registry in a Feature's metadata, as the dependencies of a Feature name its siblings. */
+const REGISTRY_TOKEN = '${registry}';
+
+/** The text of a Feature's metadata with the run's registry written in. */
+export function featureMetadataText(text: string, registry: string): string {
+  return text.replaceAll(REGISTRY_TOKEN, registry);
+}
+
 /**
  * Prepares the run's templates: the layer of each of `templates` from the cache under `root` (fetched by `fetchLayer` when it is
  * missing) unpacked, the run's own templates and Features copied, all published into the registry at `registryAddress` with the
- * dev container CLI the package bundles, and the run's index written where the download host serves it. Gives the
- * registry as the templates' ids name it.
+ * dev container CLI the package bundles, and the run's index and control manifest written where the download host
+ * serves them. Gives the registry as the templates' ids name it.
  */
 export async function prepareRunTemplates(
   command: CommandRunner,
@@ -293,6 +307,17 @@ export async function prepareRunTemplates(
   cpSync(path.join(fixtures, 'custom-features', 'src'), featureSources, {
     recursive: true,
   });
+  for (const name of readdirSync(featureSources)) {
+    const metadataFile = path.join(
+      featureSources,
+      name,
+      'devcontainer-feature.json',
+    );
+    writeFileSync(
+      metadataFile,
+      featureMetadataText(readFileSync(metadataFile, 'utf8'), registry),
+    );
+  }
   checked(
     command,
     process.execPath,
@@ -342,6 +367,12 @@ export async function prepareRunTemplates(
       ],
       registry,
     ),
+  );
+  const control = servedControlFolder(runFolder);
+  mkdirSync(control, {recursive: true});
+  writeFileSync(
+    path.join(control, 'devcontainer-control-manifest.json'),
+    controlManifestText(registry),
   );
   return registry;
 }

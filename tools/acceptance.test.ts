@@ -1104,11 +1104,13 @@ describe('acceptance', () => {
         [
           harness.calls.filter(call => call.startsWith('templates')),
           harness.variables?.REMOTE_OSS_TEMPLATE_INDEX,
+          harness.variables?.REMOTE_OSS_CONTROL_MANIFEST,
           harness.variables?.HARNESS_TEMPLATE_REGISTRY,
         ],
         [
           ['templates prepared 127.0.0.1:5000'],
           'http://127.0.0.1:8080/templates/devcontainer-index.json',
+          'http://127.0.0.1:8080/control/devcontainer-control-manifest.json',
           'localhost:5000',
         ],
       );
