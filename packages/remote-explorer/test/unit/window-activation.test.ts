@@ -11,11 +11,15 @@ const REFERENCE_ID = 'ms-vscode.remote-explorer';
 const PULL = 'remote-internal.getActiveSshRemote';
 const HOSTS = 'remote-internal.getConfiguredHostnames';
 const OPEN = 'remote-internal.openRemoteSshTarget';
+const HISTORY = 'remote-internal.getSshFoldersHistory';
+const DELETE = 'remote-internal.deleteSshFolderFromHistory';
 const VERSION = {major: 1, minor: 0};
 
 interface EditorOptions {
   referencePresent?: boolean;
   focusListed?: boolean;
+  /** The user values the editor reports for the two folder settings, by key. */
+  userValues?: Record<string, unknown>;
 }
 
 interface Registered {
@@ -31,6 +35,8 @@ interface Fixture {
   providers: Array<vscode.TreeDataProvider<unknown>>;
   /** The arguments of the open requests the bus saw. */
   opened: unknown[];
+  /** The arguments of the delete requests the bus saw. */
+  deleted: unknown[];
 }
 
 class FakeEmitter {
@@ -49,6 +55,7 @@ function fixtureOf(options: EditorOptions): Fixture {
   const registered: Registered[] = [];
   const providers: Fixture['providers'] = [];
   const opened: unknown[] = [];
+  const deleted: unknown[] = [];
   const editor = {
     extensions: {
       getExtension: (extensionId: string) =>
@@ -77,9 +84,33 @@ function fixtureOf(options: EditorOptions): Fixture {
             hostnames: ['harness'],
           });
         }
+        if (command === HISTORY) {
+          events.push('ask history');
+          return Promise.resolve({
+            interfaceVersion: VERSION,
+            hosts: [
+              {
+                hostKey: 'harness',
+                entries: [
+                  {path: '/w/team.code-workspace', kind: 'folder'},
+                  {path: '/w/proj', kind: 'workspace'},
+                  {path: '/w/proj', kind: 'folder'},
+                ],
+              },
+              {
+                hostKey: 'unknown',
+                entries: [{path: '/w/none', kind: 'folder'}],
+              },
+            ],
+          });
+        }
         if (command === OPEN) {
           opened.push(commandArguments[0]);
           return Promise.resolve({interfaceVersion: VERSION});
+        }
+        if (command === DELETE) {
+          deleted.push(commandArguments[0]);
+          return Promise.resolve({interfaceVersion: VERSION, changed: true});
         }
         events.push(`${command} ${commandArguments.join(' ')}`);
         return Promise.resolve();
@@ -121,7 +152,12 @@ function fixtureOf(options: EditorOptions): Fixture {
       },
     },
     workspace: {
-      getConfiguration: () => ({inspect: () => undefined}),
+      getConfiguration: () => ({
+        inspect: (key: string) =>
+          key in (options.userValues ?? {})
+            ? {globalValue: options.userValues?.[key]}
+            : undefined,
+      }),
       onDidChangeConfiguration: () => ({dispose: () => undefined}),
     },
     l10n: {t: (template: string) => template},
@@ -133,6 +169,7 @@ function fixtureOf(options: EditorOptions): Fixture {
     registered,
     providers,
     opened,
+    deleted,
   };
 }
 
@@ -150,10 +187,15 @@ async function activated(
 ): Promise<Fixture & {context: Context}> {
   const fixture = fixtureOf(options);
   const context = contextOf();
-  await activateInWindow(fixture.editor, context as never, () => {
-    fixture.events.push('setup');
-    return Promise.resolve();
-  });
+  await activateInWindow(
+    fixture.editor,
+    context as never,
+    () => {
+      fixture.events.push('setup');
+      return Promise.resolve();
+    },
+    'other',
+  );
   return {...fixture, context};
 }
 
@@ -207,8 +249,11 @@ describe('the activation of a window (card explorer-03c)', () => {
 
   it('F-5902.AC-25: with the setup of the web entry the commands are registered and nothing is warned', async () => {
     const fixture = fixtureOf({});
-    await activateInWindow(fixture.editor, contextOf() as never, () =>
-      Promise.resolve(),
+    await activateInWindow(
+      fixture.editor,
+      contextOf() as never,
+      () => Promise.resolve(),
+      'other',
     );
     deepStrictEqual(
       fixture.events.filter(event => event.startsWith('warning')),
@@ -225,7 +270,7 @@ describe('the activation of a window (card explorer-03c)', () => {
         scenario.events.filter(event => event.startsWith('ask ')),
         scenario.context.subscriptions.length,
       ],
-      [1, ['ask pull', 'ask hosts'], 2],
+      [1, ['ask pull', 'ask history', 'ask hosts'], 2],
     );
   });
 
@@ -234,7 +279,17 @@ describe('the activation of a window (card explorer-03c)', () => {
     const outcome = await refreshOf(scenario)?.();
     deepStrictEqual(
       [outcome, scenario.events.filter(event => event.startsWith('ask '))],
-      [undefined, ['ask pull', 'ask hosts', 'ask pull', 'ask hosts']],
+      [
+        undefined,
+        [
+          'ask pull',
+          'ask history',
+          'ask hosts',
+          'ask pull',
+          'ask history',
+          'ask hosts',
+        ],
+      ],
     );
   });
 
@@ -287,5 +342,85 @@ describe('the activation of a window (card explorer-03c)', () => {
       commands.connectToRemoteInNewWindow.id,
     )?.();
     deepStrictEqual([outcome, scenario.opened], [undefined, []]);
+  });
+
+  /** The host node and its folder nodes the tree gives, once the first build settled. */
+  async function treeOf(fixture: Fixture) {
+    await Promise.resolve();
+    const provider = fixture.providers[0];
+    const [group] = [...((await provider?.getChildren(undefined)) ?? [])];
+    const [host] = [...((await provider?.getChildren(group)) ?? [])];
+    const folders = [...((await provider?.getChildren(host)) ?? [])];
+    return {provider, host, folders};
+  }
+
+  it('F-5104.BR-1, BR-2, BR-3: the host the history names has one folder row per entry, repeats kept, and the key that names no host shows nowhere', async () => {
+    const scenario = await activated({});
+    const {folders} = await treeOf(scenario);
+    deepStrictEqual(
+      folders.map(node => (node as {folderRow: {path: string}}).folderRow.path),
+      ['/w/team.code-workspace', '/w/proj', '/w/proj'],
+    );
+  });
+
+  it('F-5104.BR-15: the folder commands open the path with the kind the path rule gives, whatever kind the history entry carries', async () => {
+    const scenario = await activated({});
+    const {folders} = await treeOf(scenario);
+    await commandOf(
+      scenario,
+      commands.connectToFolderInCurrentWindow.id,
+    )?.(folders[0]);
+    await commandOf(
+      scenario,
+      commands.connectToFolderInNewWindow.id,
+    )?.(folders[1]);
+    deepStrictEqual(scenario.opened, [
+      {
+        interfaceVersion: VERSION,
+        hostKey: 'harness',
+        path: '/w/team.code-workspace',
+        kind: 'workspace',
+        window: 'current',
+      },
+      {
+        interfaceVersion: VERSION,
+        hostKey: 'harness',
+        path: '/w/proj',
+        kind: 'folder',
+        window: 'new',
+      },
+    ]);
+  });
+
+  it('F-5104.BR-13: Remove from Recent List deletes the path under its host and drops every copy from the tree at once', async () => {
+    const scenario = await activated({});
+    const {provider, host, folders} = await treeOf(scenario);
+    await commandOf(
+      scenario,
+      commands.deleteFolderHistoryItem.id,
+    )?.(folders[1]);
+    deepStrictEqual(
+      [
+        scenario.deleted,
+        [...((await provider?.getChildren(host)) ?? [])].length,
+        scenario.events.filter(event => event.startsWith('ask history')).length,
+      ],
+      [
+        [{interfaceVersion: VERSION, hostKey: 'harness', path: '/w/proj'}],
+        3,
+        1,
+      ],
+    );
+  });
+
+  it('F-5104.BR-5, BR-6: only the user value alphabetical sorts the rows', async () => {
+    const scenario = await activated({
+      userValues: {'remote-explorer.foldersSortOrder': 'alphabetical'},
+    });
+    const {folders} = await treeOf(scenario);
+    deepStrictEqual(
+      folders.map(node => (node as {folderRow: {path: string}}).folderRow.path),
+      ['/w/proj', '/w/proj', '/w/team.code-workspace'],
+    );
   });
 });

@@ -13,6 +13,7 @@ import {createRecordingFake} from 'lib-companion/testing/recording-fake';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {HostListResult} from 'lib-ssh';
+import {windowlessLine} from '../../src/connect/windowless.ts';
 import {
   hostListLine,
   mismatchLine,
@@ -42,6 +43,8 @@ interface World {
   connection: () => {hostKey: string; lastResolve: LastResolve} | undefined;
   openerFailure: Error | undefined;
   mismatches: string[];
+  /** Whether the editor grants `resolvers`. */
+  resolversGranted: boolean;
 }
 
 function worldWith(changes: Partial<World> = {}): World {
@@ -55,6 +58,7 @@ function worldWith(changes: Partial<World> = {}): World {
     connection: () => undefined,
     openerFailure: undefined,
     mismatches: [],
+    resolversGranted: true,
     ...changes,
   };
 }
@@ -80,6 +84,7 @@ function served(world: World) {
     },
     opener,
     logger: createLogger(world.sink, {minimumLevel: () => 'trace'}),
+    resolversGranted: world.resolversGranted,
   };
   const protocol = createProtocol({
     // eslint-disable-next-line id-length -- the protocol's option is named bus
@@ -290,6 +295,20 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
           ],
         ],
       ],
+    );
+  });
+
+  it('F-3903 §5 rule 4: without the resolvers grant an open answers no change, opens no window and logs one line', async () => {
+    const world = worldWith({resolversGranted: false});
+    served(world);
+    const answer = await call(world, OPEN, OPEN_NEW);
+    deepStrictEqual(
+      [
+        answer,
+        world.opened,
+        world.sink.lines.map(line => [line.level, line.message]),
+      ],
+      [ENVELOPE, [], [['info', windowlessLine(OPEN)]]],
     );
   });
 

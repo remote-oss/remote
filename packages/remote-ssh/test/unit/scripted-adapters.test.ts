@@ -1260,6 +1260,21 @@ describe('the scripted configuration-file pick (card tooling-25)', () => {
   });
 });
 
+const ENDED = {
+  surface: 'progressEnd',
+  question: 'Setting up SSH Host harness',
+  answer: 'ended',
+  matched: true,
+  window: WINDOW,
+};
+
+/** The progress record the files hold, without the times. */
+function progressRecordOf(files: AppendedFiles) {
+  return withoutTime(
+    files.linesOf(RECORD_FILE).map(line => JSON.parse(line) as RecordLine),
+  );
+}
+
 describe('progressFor (card tooling-18)', () => {
   const SWITCHED_RECORD = {
     REMOTE_OSS_ACCEPTANCE: '1',
@@ -1329,36 +1344,32 @@ describe('progressFor (card tooling-18)', () => {
       files,
       WINDOW,
     ).withProgress(REQUEST, twoUpdates);
-    deepStrictEqual(
-      withoutTime(
-        files.linesOf(RECORD_FILE).map(line => JSON.parse(line) as RecordLine),
-      ),
-      [
-        {
-          surface: 'progress',
-          question: 'Setting up SSH Host harness',
-          answer: 'shown',
-          matched: true,
-          window: WINDOW,
-        },
-        {
-          surface: 'progress',
-          question: 'A',
-          answer: 'shown',
-          matched: true,
-          window: WINDOW,
-          details: true,
-        },
-        {
-          surface: 'progress',
-          question: 'B',
-          answer: 'shown',
-          matched: true,
-          window: WINDOW,
-          details: false,
-        },
-      ],
-    );
+    deepStrictEqual(progressRecordOf(files), [
+      {
+        surface: 'progress',
+        question: 'Setting up SSH Host harness',
+        answer: 'shown',
+        matched: true,
+        window: WINDOW,
+      },
+      {
+        surface: 'progress',
+        question: 'A',
+        answer: 'shown',
+        matched: true,
+        window: WINDOW,
+        details: true,
+      },
+      {
+        surface: 'progress',
+        question: 'B',
+        answer: 'shown',
+        matched: true,
+        window: WINDOW,
+        details: false,
+      },
+      ENDED,
+    ]);
   });
 
   it('D-85: the real port gets both updates, in order, with their details', async () => {
@@ -1398,15 +1409,25 @@ describe('progressFor (card tooling-18)', () => {
     );
   });
 
-  it('D-85: nothing is appended when the task ends', async () => {
+  it('F-2304.AC-8: a task that fulfils ends the record with one progressEnd line, after the phase lines, with the title', async () => {
     const files = new AppendedFiles();
     await progressFor(
       SWITCHED_RECORD,
       new NotingProgress(),
       files,
       WINDOW,
-    ).withProgress(REQUEST, () => Promise.resolve(0));
-    strictEqual(files.linesOf(RECORD_FILE).length, 1);
+    ).withProgress(REQUEST, twoUpdates);
+    deepStrictEqual(progressRecordOf(files).slice(-2), [
+      {
+        surface: 'progress',
+        question: 'B',
+        answer: 'shown',
+        matched: true,
+        window: WINDOW,
+        details: false,
+      },
+      ENDED,
+    ]);
   });
 
   it("D-85: a task that fails fails the progress with the task's error", async () => {
@@ -1421,6 +1442,25 @@ describe('progressFor (card tooling-18)', () => {
       ),
       {message: 'connect failed'},
     );
+  });
+
+  it('F-2304.AC-8: a task that fails also ends the record with the progressEnd line', async () => {
+    const files = new AppendedFiles();
+    await progressFor(SWITCHED_RECORD, new NotingProgress(), files, WINDOW)
+      .withProgress(REQUEST, () => Promise.reject(new Error('connect failed')))
+      .catch(() => undefined);
+    deepStrictEqual(progressRecordOf(files).slice(1), [ENDED]);
+  });
+
+  it('D-85: with the switch off no line is appended at all', async () => {
+    const files = new AppendedFiles();
+    await progressFor(
+      {REMOTE_OSS_ACCEPTANCE_RECORD: RECORD_FILE},
+      new NotingProgress(),
+      files,
+      WINDOW,
+    ).withProgress(REQUEST, twoUpdates);
+    deepStrictEqual(files.linesOf(RECORD_FILE), []);
   });
 });
 

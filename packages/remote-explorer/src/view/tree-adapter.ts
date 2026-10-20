@@ -5,7 +5,8 @@
 
 import type {Registration} from 'lib-companion';
 import type * as vscode from 'vscode';
-import type {TargetNode, Targets} from './targets.ts';
+import {settings} from '../identifiers.generated.ts';
+import type {FolderSettings, TargetNode, Targets} from './targets.ts';
 
 const CONFIG_FILE_SETTING = 'remote.SSH.configFile';
 
@@ -69,6 +70,21 @@ export function configFileChangesOf(
     });
 }
 
+/** The user's values of the two folder settings: a folder value, a profile value and every other source don't count. */
+export function folderSettingsOf(
+  editor: Pick<TreeEditor, 'workspace'>,
+): () => FolderSettings {
+  return () => {
+    const configuration = editor.workspace.getConfiguration();
+    return {
+      sortOrder: configuration.inspect(settings.foldersSortOrder.id)
+        ?.globalValue,
+      collapse: configuration.inspect(settings.collapseRecentFolders.id)
+        ?.globalValue,
+    };
+  };
+}
+
 function treeItemOf(
   editor: TreeEditor,
   targets: Targets,
@@ -78,7 +94,11 @@ function treeItemOf(
   const state = editor.TreeItemCollapsibleState;
   const item = new editor.TreeItem(
     shown.label,
-    shown.expanded === true ? state.Expanded : state.None,
+    {
+      expanded: state.Expanded,
+      collapsed: state.Collapsed,
+      none: state.None,
+    }[shown.collapsibleState],
   );
   item.id = shown.id;
   item.tooltip = shown.tooltip;

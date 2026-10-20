@@ -47,7 +47,8 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
   before(async () => {
     lines = await recordAfterDialog();
     record = lines.filter(
-      line => !['progress', 'downloadProgress'].includes(line.surface),
+      line =>
+        !['progress', 'downloadProgress', 'progressEnd'].includes(line.surface),
     );
   });
 

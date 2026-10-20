@@ -1,6 +1,6 @@
-import {ok} from 'node:assert';
+import {deepStrictEqual, ok} from 'node:assert';
 import {setTimeout as delay} from 'node:timers/promises';
-import {onHost} from '../suite/harness.ts';
+import {onHost, recordLines} from '../suite/harness.ts';
 
 /** The modification time of a file on the host, in seconds. */
 async function modifiedAt(file: string): Promise<number> {
@@ -26,5 +26,20 @@ describe('a slow extension in the remote extension host', () => {
     const started = await modifiedAt('/tmp/acceptance-slow-started');
     const done = await modifiedAt('/tmp/acceptance-slow-done');
     ok(done - started >= 15, `${String(done - started)} s`);
+  });
+
+  it('F-2304 AC-8: the progress ends once, at least 10 s before the slow extension is done, and no progress line follows', async () => {
+    const done = (await modifiedAt('/tmp/acceptance-slow-done')) * 1000;
+    const ends = recordLines('progressEnd');
+    const lines = recordLines();
+    const endAt = lines.findIndex(line => line.surface === 'progressEnd');
+    deepStrictEqual(
+      [
+        ends.length,
+        done - (ends[0]?.time ?? done) >= 10_000,
+        lines.slice(endAt + 1).some(line => line.surface === 'progress'),
+      ],
+      [1, true, false],
+    );
   });
 });

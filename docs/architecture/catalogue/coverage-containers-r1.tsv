@@ -332,7 +332,7 @@ F-0409.AC-5	deferred	containers release 1: increment 2 (shutdown)
 F-0409.AC-6	acceptance	
 F-0409.AC-7	acceptance	
 F-0409.AC-8	acceptance	
-F-0409.AC-9	todo	
+F-0409.AC-9	acceptance	
 F-0409.AC-10	acceptance	
 F-0409.AC-11	todo	
 F-0409.AC-12	todo	
@@ -343,7 +343,7 @@ F-0409.AC-16	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-17	todo	
 F-0409.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0409.AC-20	todo	
+F-0409.AC-20	deferred	containers release 1: later (Reopen Folder Locally)
 F-0409.AC-21	deferred	containers release 1: later (remote engines)
 F-0409.AC-22	acceptance	
 F-0409.AC-23	acceptance	
@@ -353,23 +353,23 @@ F-0409.AC-26	acceptance
 F-0409.AC-27	deferred	containers release 1: later (Compose)
 F-0409.AC-28	unit	
 F-0409.AC-30	deferred	containers release 1: later (the Remote Explorer views)
-F-0409.AC-31	todo	
+F-0409.AC-31	acceptance	
 F-0409.AC-32	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0409.AC-33	todo	
+F-0409.AC-33	acceptance	
 F-0409.AC-34	acceptance	
 F-0409.AC-35	acceptance	
 F-0409.AC-36	todo	
 F-0409.AC-37	unit	
 F-0409.AC-38	todo	
 F-0409.AC-39	todo	
-F-0409.AC-40	todo	
-F-0409.AC-41	todo	
+F-0409.AC-40	acceptance	
+F-0409.AC-41	deferred	containers 0.4: F-0407 later
 F-0409.AC-42	todo	
 F-0409.AC-43	todo	
 F-0409.AC-44	acceptance	
 F-0409.AC-45	acceptance	
-F-0409.AC-46	todo	
-F-0409.AC-47	todo	
+F-0409.AC-46	acceptance	
+F-0409.AC-47	acceptance	
 F-0410.AC-1	acceptance	
 F-0410.AC-2	acceptance	
 F-0410.AC-3	acceptance	

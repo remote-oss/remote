@@ -25,8 +25,10 @@ import {
 import type {ConnectAssembly} from './connect-ports.ts';
 import {
   type ConnectCommandEditor,
+  type ConnectCommandHandlers,
   connectCommandHandlers,
 } from './connect/connect-commands.ts';
+import {windowlessLine} from './connect/windowless.ts';
 import {commands, runtimeCommands} from './identifiers.generated.ts';
 import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
 import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
@@ -82,8 +84,36 @@ export interface ConnectRegistration {
 }
 
 /**
+ * The connect commands of an editor that does not grant `resolvers`: each opens no window, asks nothing and logs one
+ * line, so the setup notice stays in the window the command ran from. Kill Local Connection Server keeps its handler.
+ */
+function windowlessHandlers(
+  handlers: ConnectCommandHandlers,
+  logger: Pick<Logger, 'info'>,
+): ConnectCommandHandlers {
+  function windowless(commandId: string): {execute(): Promise<void>} {
+    return {
+      execute: () => {
+        logger.info(windowlessLine(commandId));
+        return Promise.resolve();
+      },
+    };
+  }
+  return {
+    ...handlers,
+    openEmptyWindow: windowless(commands.openEmptyWindow.id),
+    openEmptyWindowInCurrentWindow: windowless(
+      commands.openEmptyWindowInCurrentWindow.id,
+    ),
+    openEmptyWindowOnCurrentHost: windowless(
+      commands.openEmptyWindowOnCurrentHost.id,
+    ),
+  };
+}
+
+/**
  * Registers the connect. `resolversGranted` is what activation's probe found, so the editor is not probed again; the
- * guard has already decided to serve.
+ * guard has already decided to serve. Without the grant the connect commands open no window.
  */
 export async function registerConnect(
   host: ConnectRegistrationHost,
@@ -137,7 +167,12 @@ export async function registerConnect(
       cleanCurrentRemoteServer: commands.cleanCurrentRemoteServer,
     },
     {
-      ...connectCommandHandlers(host.connectEditor, connection),
+      ...(resolversGranted
+        ? connectCommandHandlers(host.connectEditor, connection)
+        : windowlessHandlers(
+            connectCommandHandlers(host.connectEditor, connection),
+            host.logger,
+          )),
       addNewSshHost: addNewSshHostHandler({
         ...host.addHost,
         windows: host.connectEditor,

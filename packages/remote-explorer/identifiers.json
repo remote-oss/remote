@@ -39,7 +39,17 @@
       "kind": "query"
     },
     {
+      "id": "remote-internal.getSshFoldersHistory",
+      "role": "called",
+      "kind": "query"
+    },
+    {
       "id": "remote-internal.openRemoteSshTarget",
+      "role": "called",
+      "kind": "change"
+    },
+    {
+      "id": "remote-internal.deleteSshFolderFromHistory",
       "role": "called",
       "kind": "change"
     },

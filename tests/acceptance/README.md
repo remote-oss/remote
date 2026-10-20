@@ -251,6 +251,29 @@ failure that comes in about the first second after the window connects, whatever
 card containers-61: the dialog came in 0 to 3 of 5 stops made at once, and in 12 of 12 made from two seconds on, while
 the extension's answer was the same in all of them).
 
+**Choosing launches.** `--launches` takes `all` (every launch that isn't named only), `none`, or a comma list of
+entries, applied in turn:
+- a label;
+- `all`;
+- `@<group>`, every launch of a group, named-only ones included;
+- `!` before any of these, which takes out what the entries before it put in.
+
+The launches are made in the table's order whatever the order of the entries. Every launch is in one group, computed
+from the table (`launchGroupOf`):
+- `genuine`: the genuine client;
+- `containers`: installs Dev Containers;
+- `explorer`: installs Remote Explorer and not Dev Containers;
+- `hosts`: the ports, install and platform cases;
+- `ssh`: every other.
+
+An entry that names no label or group fails, listing both. The backstop splits across three runners this way:
+
+    node tools/acceptance.ts --editor vscodium --launches @ssh
+    node tools/acceptance.ts --editor vscodium --launches @containers
+    node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
+
+`@ssh,!terminal` is the ssh group without one launch.
+
 To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
 in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root
 `tsconfig.json`'s `references` and in `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`. Either kind's test files go in the
@@ -311,6 +334,16 @@ root's holder shows `-`); `listenAddress(port)` is the address of the `LISTEN` l
 when there is none; `containerAddress()` is the host container's own address; `reaches(address, port)` is a
 `net.connect` bounded at five seconds. The log has no line with the port: nothing writes F-2003's "Remote server
 listening on port" line yet.
+
+## The run's registry
+
+A launch with `registry: true` (today only `containers`) makes the run start a registry of its own before its
+launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
+`tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
+(`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
+The registry holds only what a row pushes to it, and nothing public is pushed. It carries the run's label and the dev
+container label, so the run's clean-up and the stale sweep remove it with its anonymous volume (`docker rm --force
+--volumes`), also after a killed run.
 
 ## Cutting the host's network
 
@@ -420,7 +453,7 @@ the server suite the same names, and `server/downloads.test.ts` holds the rows t
 The `genuine` launch starts VS Code at the floor of ADR-0007 (`EDITOR_VERSION`, downloaded under `.vscode-test/` on
 first use) instead of the run's VSCodium, with the extensions installed in a folder of its own, `<run>/extensions-genuine`,
 by VS Code's CLI. Two launch fields do it: `client: 'vscode'` names the editor, and `namedOnly: true` keeps the launch
-out of a run that names no launches, so only `--launches genuine` makes it (it is the table's last launch). The launch
+out of a run that names no launches, so only `--launches genuine` makes it (it comes after every VSCodium launch, and only `ssh-no-proposals` comes after it). The launch
 sets `REMOTE_OSS_ACCEPTANCE_SCRIPT` to the empty string, so the extension shows its real dialogs, which the rows read and
 answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settingsEditorOf`); `localServerDownload` is off,
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
@@ -434,9 +467,17 @@ built-in chat) is not seen there, so the launch turns each off in its settings: 
 `workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
-removes both when it ends. The container's removal at the end of the run is the backstop.
+removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
 
     node tools/acceptance.ts --editor vscodium --launches genuine
+
+`ssh-no-proposals` is the same client and settings with the proposed API not enabled (`proposedApi: false`), for F-2001
+§3.4's setup notice in the editor the family's users start from. It also comes last and only when named, after
+`genuine`. The family's gate tells a profile once, and a "Not Now" keeps it silent until a probe passes. So in a run
+that also makes the VSCodium `no-proposals` launch, whose rows dismiss the notice, this launch's rows find none and say
+so. `genuine` before it clears the flag, because its probe passes:
+
+    node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
 
 ## The host's other accounts (D-85)
 

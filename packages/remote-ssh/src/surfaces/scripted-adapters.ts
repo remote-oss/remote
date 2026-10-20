@@ -82,8 +82,9 @@ export type ScriptEntry = (
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
-  /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
-  surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
+  /** A question's surface, or `progress`, `downloadProgress` or `progressEnd` for a display-only line. */
+  surface:
+    ScriptEntry['surface'] | 'progress' | 'downloadProgress' | 'progressEnd';
   /** The question's text: a pick's title (or its placeholder when it has none), a masked input's placeholder, a text input's prompt (or its placeholder), a dialog's or a notice's message. */
   question: string;
   /** The answer given: the entry's answer, `'dismiss'` on fail-closed, a text input's text as typed, `'<supplied>'` for a masked input's text, `'held'` on a held entry's waiting line, and `'withdrawn'` when the question ended while it waited. */
@@ -674,7 +675,7 @@ function namedBy(
 /**
  * The progress the extension uses: the real one, whose every title the record also gets, when the harness's switch
  * is on and the record file is named; the real one itself in every other case. The first line is the title the
- * progress starts with, a later one is a phase with its details flag. Nothing is appended when the progress ends.
+ * progress starts with, a later one is a phase with its details flag, and the last one marks the end of the task, fulfilled or rejected.
  */
 export function progressFor(
   environment: Readonly<Record<string, string | undefined>>,
@@ -686,11 +687,16 @@ export function progressFor(
   if (!switchedOn(environment) || recordFile === undefined) {
     return real;
   }
-  function shown(question: string, details?: boolean): void {
+  function recorded(
+    surface: 'progress' | 'progressEnd',
+    question: string,
+    answer: string,
+    details?: boolean,
+  ): void {
     const line: Omit<RecordLine, 'time'> = {
-      surface: 'progress',
+      surface,
       question,
-      answer: 'shown',
+      answer,
       matched: true,
       window: windowName,
       ...(details === undefined ? {} : {details}),
@@ -700,15 +706,22 @@ export function progressFor(
       `${JSON.stringify({...line, time: Date.now()})}\n`,
     );
   }
+  function shown(question: string, details?: boolean): void {
+    recorded('progress', question, 'shown', details);
+  }
   return {
     withProgress: (request, task) => {
       shown(request.title);
-      return real.withProgress(request, update =>
-        task((title, details) => {
-          shown(title, details);
-          update(title, details);
-        }),
-      );
+      return real
+        .withProgress(request, update =>
+          task((title, details) => {
+            shown(title, details);
+            update(title, details);
+          }),
+        )
+        .finally(() => {
+          recorded('progressEnd', request.title, 'ended');
+        });
     },
   };
 }

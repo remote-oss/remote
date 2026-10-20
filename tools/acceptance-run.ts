@@ -157,7 +157,12 @@ export function sweepStaleDevContainers(
         ...containers,
       ]),
     ).filter(isStale)) {
-      checked(command, 'docker', ['rm', '--force', stale.objectId]);
+      checked(command, 'docker', [
+        'rm',
+        '--force',
+        '--volumes',
+        stale.objectId,
+      ]);
     }
   }
   const images = idsOf(
@@ -389,7 +394,7 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   for (const containerId of idsOf(
     checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
   )) {
-    checked(command, 'docker', ['rm', '--force', containerId]);
+    checked(command, 'docker', ['rm', '--force', '--volumes', containerId]);
   }
   for (const networkId of idsOf(
     checked(command, 'docker', [

@@ -29,6 +29,7 @@ import {
   downloadWithRetry,
   editorChoiceOf,
   chosenLaunches,
+  selectionLine,
   editorExecutableOf,
   runArgumentsOf,
   type CommandResult,
@@ -61,10 +62,12 @@ import type {Started} from './acceptance-plain.ts';
 import {
   failureCases,
   launchesOf,
+  launchGroupOf,
   launchLabelled,
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
+import type {RunRegistry} from './acceptance-registry.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -179,6 +182,17 @@ class FakeHarness implements HarnessDependencies {
         return Promise.resolve();
       },
     };
+  };
+
+  readonly startRegistry = (runId: string): Promise<RunRegistry> => {
+    this.calls.push(`registry started ${runId}`);
+    return Promise.resolve({
+      address: '127.0.0.1:5000',
+      stop: () => {
+        this.calls.push('registry stopped');
+        return Promise.resolve();
+      },
+    });
   };
 
   readonly startDownloads = (): Promise<RunDownloads> => {
@@ -378,6 +392,16 @@ const CLIENT_CASE = {
   used: 'path/ssh',
 };
 
+/** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
+function chosenLabels(
+  launches: readonly Launch[],
+  selected: string[] | undefined,
+): string[] {
+  const chosen = chosenLaunches(launches, selected);
+  return typeof chosen === 'string'
+    ? [chosen]
+    : chosen.map(launch => launch.label);
+}
 describe('acceptance', () => {
   let workspace: TemporaryWorkspace;
   let harness: FakeHarness;
@@ -897,7 +921,7 @@ describe('acceptance', () => {
   });
 
   describe('installsOf (card tooling-30)', () => {
-    it('tooling-30, containers-09: the run installs once into its folder, and once into each explorer and containers launch’s folder with its own extension', () => {
+    it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       deepStrictEqual(
@@ -952,11 +976,11 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
-          {
-            folder: path.join('/run', 'extensions-genuine'),
+          ...['genuine', 'ssh-no-proposals'].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
             client: 'vscode',
-          },
+          })),
         ],
       );
     });
@@ -991,6 +1015,34 @@ describe('acceptance', () => {
         'local',
       ]);
       deepStrictEqual(harness.launched, ['local', 'remote']);
+    });
+
+    it('containers-59: a run whose chosen launches ask for no registry starts none', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('registry')),
+          harness.variables?.HARNESS_REGISTRY,
+        ],
+        [[], undefined],
+      );
+    });
+
+    it('containers-59: a run with the containers launch starts the registry once, passes its address, and stops it at the end', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['containers']);
+      deepStrictEqual(
+        [
+          harness.calls.filter(call => call.startsWith('registry')),
+          harness.variables?.HARNESS_REGISTRY,
+        ],
+        [
+          [
+            `registry started ${acceptanceRunId(process.env, process.pid)}`,
+            'registry stopped',
+          ],
+          '127.0.0.1:5000',
+        ],
+      );
     });
 
     it('tooling-51: a run given the genuine label makes it, with VS Code downloaded once and its folder installed with VS Code’s CLI', async () => {
@@ -2160,9 +2212,9 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before each host-case launch', async () => {
+    it('coverage-11: the run waits for the helper of the launch before to end: the grace before the slow launch and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [5000, 3000, 3000, 3000]);
+      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -2675,10 +2727,7 @@ describe('acceptance', () => {
     it('tooling-51: no selection leaves the launches that are named only out, a selection that names one keeps it, in table order', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       function labels(selected: string[] | undefined): string[] {
-        const chosen = chosenLaunches(launches, selected);
-        return typeof chosen === 'string'
-          ? [chosen]
-          : chosen.map(launch => launch.label);
+        return chosenLabels(launches, selected);
       }
       deepStrictEqual(
         [
@@ -2690,8 +2739,13 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51: the genuine launch is the last of the table', () => {
-      strictEqual(launchesOf(REPOSITORY_ROOT).at(-1)?.label, 'genuine');
+    it('tooling-51, connect-84: the genuine-client launches are the last of the table', () => {
+      deepStrictEqual(
+        launchesOf(REPOSITORY_ROOT)
+          .slice(-2)
+          .map(launch => launch.label),
+        ['genuine', 'ssh-no-proposals'],
+      );
     });
 
     it('tooling-51: the executable of a launch is VS Code’s for a launch of that client and VSCodium’s for any other', () => {
@@ -2720,7 +2774,80 @@ describe('acceptance', () => {
           ],
           ['remote', 'nope'],
         ),
-        'unknown launch label(s): nope; the known ones: local, remote',
+        'unknown launch label(s): nope; the known ones: local, remote; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+      );
+    });
+
+    it('tooling-53: a group names its launches in table order, ! takes out what came before, and all,!genuine is all', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      function labels(selected: string[] | undefined): string[] {
+        return chosenLabels(launches, selected);
+      }
+      function ofGroup(group: string): string[] {
+        return launches
+          .filter(launch => launchGroupOf(launch) === group)
+          .map(launch => launch.label);
+      }
+      deepStrictEqual(
+        [
+          labels(['@containers']),
+          labels(['all', '!genuine']),
+          labels(['@ssh', '!terminal']).includes('terminal'),
+          labels(['@ssh', '!terminal']).length,
+          labels(['@hosts', '@explorer']),
+          labels(['!remote']),
+          labels(['@genuine']),
+          labels(['@containers', '!@containers', 'containers']),
+        ],
+        [
+          ofGroup('containers'),
+          labels(undefined),
+          false,
+          ofGroup('ssh').length - 1,
+          launches
+            .filter(launch =>
+              ['explorer', 'hosts'].includes(launchGroupOf(launch)),
+            )
+            .map(launch => launch.label),
+          [],
+          ['genuine', 'ssh-no-proposals'],
+          ['containers'],
+        ],
+      );
+    });
+
+    it('tooling-53: an unknown group fails like an unknown label, listing the groups', () => {
+      deepStrictEqual(
+        [
+          chosenLaunches(
+            [{label: 'local', runner: 'runner', suite: 'suite-local'}],
+            ['@nope', '!@nada'],
+          ),
+          runArgumentsOf([
+            '--editor',
+            'vscodium',
+            '--launches',
+            'all,!genuine',
+          ]),
+        ],
+        [
+          'unknown launch label(s): @nope, !@nada; the known ones: local; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          {editor: 'vscodium', launches: ['all', '!genuine']},
+        ],
+      );
+    });
+
+    it('tooling-53: the selection line names the groups of the launches it makes', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const chosen = chosenLaunches(launches, ['explorer', 'genuine']);
+      deepStrictEqual(
+        [
+          typeof chosen === 'string'
+            ? chosen
+            : selectionLine(launches, chosen).split(':')[0],
+          selectionLine(launches, []).startsWith('no launch reachable'),
+        ],
+        ['launches made (2, groups @explorer, @genuine)', true],
       );
     });
 

@@ -27,6 +27,8 @@ interface LaunchCommon {
   hostSetup?: readonly HostSetupEntry[];
   /** Ports of the client's loopback the run listens on while each attempt of the launch runs, to make a configured range busy. */
   clientListeners?: readonly number[];
+  /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
+  registry?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
 }
@@ -170,6 +172,14 @@ const GENUINE_LAUNCH: PlainLaunch = {
   },
   // The empty script makes the extension show its real dialogs.
   environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+};
+
+/** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
+const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'ssh-no-proposals',
+  suite: 'ssh-no-proposals',
+  proposedApi: false,
 };
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
@@ -566,7 +576,10 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-slow',
       folderUri: REMOTE_FOLDER_URI,
+      ownScript: true,
       hostExtensions: ['slow-remote'],
+      // Without commands the entry still makes the run wait out the previous launch's helper, so the resolve is fresh.
+      hostSetup: [],
     },
     ...clientCases(root).map((each): Launch => ({
       label: each.label,
@@ -670,6 +683,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers',
       suite: 'containers',
+      registry: true,
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
@@ -729,6 +743,7 @@ export function launchesOf(root: string): Launch[] {
       })),
     ),
     GENUINE_LAUNCH,
+    SSH_NO_PROPOSALS_LAUNCH,
   ];
   return launches;
 }
@@ -743,6 +758,41 @@ export function launchLabelled(
     throw new Error(`no launch is labelled ${label}`);
   }
   return found;
+}
+
+/** The groups a run can name with `@<group>`, in the order a selection line lists them. */
+export const LAUNCH_GROUPS = [
+  'ssh',
+  'hosts',
+  'explorer',
+  'containers',
+  'genuine',
+] as const;
+
+/** One of the groups of launches. */
+export type LaunchGroup = (typeof LAUNCH_GROUPS)[number];
+
+/**
+ * The one group of `launch`, from the table alone: `genuine` for the genuine client, `containers` for a launch that
+ * installs Dev Containers, `explorer` for one that installs Remote Explorer and not Dev Containers, `hosts` for the
+ * host-case launches, `ssh` for every other.
+ */
+export function launchGroupOf(launch: Launch): LaunchGroup {
+  if (launch.kind === 'plain') {
+    const extensions = launch.withExtensions ?? [];
+    if (launch.client === 'vscode') {
+      return 'genuine';
+    }
+    if (extensions.includes('remote-oss.remote-containers')) {
+      return 'containers';
+    }
+    return extensions.includes('remote-oss.remote-explorer')
+      ? 'explorer'
+      : 'ssh';
+  }
+  return HOST_CASE_SUITES.some(suite => suite.suite === launch.suite)
+    ? 'hosts'
+    : 'ssh';
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */
