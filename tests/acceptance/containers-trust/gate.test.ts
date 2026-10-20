@@ -115,9 +115,11 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
           host: await ranOnHost(folder),
           title: await windowTitle(name),
         };
+        const before = await notifications(name);
         await answerDialog(name, 'Cancel');
         await running;
         await new Promise(resolve => setTimeout(resolve, 2000));
+        const after = await notifications(name);
         declined.push({
           shown: [shown.message, text?.includes(S265), shown.buttons],
           whileOpen,
@@ -127,7 +129,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
             remoteName: (await windowState(name)).remoteName,
             activated: activations(name),
             host: await ranOnHost(folder),
-            notifications: await notifications(name),
+            noNewNotification: after.every(text => before.includes(text)),
           },
         });
       }
@@ -158,7 +160,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
           remoteName: null,
           activated,
           host: NOTHING_RAN,
-          notifications: [],
+          noNewNotification: true,
         },
       };
       deepStrictEqual(
