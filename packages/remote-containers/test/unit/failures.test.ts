@@ -34,7 +34,7 @@ describe('the failures of the container connector (card containers-08)', () => {
         shape(malformedAuthority()),
         shape(remoteEngine()),
         shape(engineCheckFailed('S104')),
-        shape(containerUnusable()),
+        shape(containerUnusable('exited')),
         shape(containerSetupFailed()),
       ],
       [
@@ -43,6 +43,19 @@ describe('the failures of the container connector (card containers-08)', () => {
         ['engineCheckFailed', {id: 'S104'}, false, false, false],
         ['containerUnusable', {id: 'S034'}, false, false, false],
         ['containerSetupFailed', {id: 'S034'}, false, false, false],
+      ],
+    );
+  });
+
+  it('F-0409 AC-7, ruling 12: a paused container has a kind of its own, with the same reason as any unusable one', () => {
+    deepStrictEqual(
+      [
+        shape(containerUnusable('paused')),
+        shape(containerUnusable('restarting')),
+      ],
+      [
+        ['containerPaused', {id: 'S034'}, false, false, false],
+        ['containerUnusable', {id: 'S034'}, false, false, false],
       ],
     );
   });

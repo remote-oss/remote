@@ -22,7 +22,10 @@ export interface FailureDialog {
 
 /** One item of the quick pick and what choosing it does. */
 type PickItem =
-  | {label: string; action: 'reload' | 'openRecent' | 'openDocumentation'}
+  | {
+      label: string;
+      action: 'reload' | 'rebuild' | 'openRecent' | 'openDocumentation';
+    }
   | {label: string; action: 'editLocally'; folder: DevContainerFolder};
 
 /** The quick pick of More Actions...: its placeholder and its items. */
@@ -75,9 +78,10 @@ export function failureDialogOf(
   };
 }
 
-/** The quick pick that More Actions... opens. */
+/** The quick pick that More Actions... opens; it offers a rebuild when the failed connect found a container. */
 export function quickPickOf(
   target: DevContainerFolder | undefined,
+  containerFound: boolean,
   translate: Translate,
 ): QuickPick {
   const edit: PickItem[] =
@@ -90,10 +94,19 @@ export function quickPickOf(
             folder: target,
           },
         ];
+  const rebuild: PickItem[] = containerFound
+    ? [
+        {
+          label: failureText('S285', [], translate),
+          action: 'rebuild',
+        },
+      ]
+    : [];
   return {
     placeholder: failureText('S272', [], translate),
     items: [
       {label: failureText('S289', [], translate), action: 'reload'},
+      ...rebuild,
       ...edit,
       {label: failureText('S260', [], translate), action: 'openRecent'},
       {label: failureText('S256', [], translate), action: 'openDocumentation'},

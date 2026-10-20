@@ -206,7 +206,7 @@ describe('the failure dialog (card containers-11)', () => {
   });
 
   it('F-0202 AC-9: the quick pick', () => {
-    deepStrictEqual(quickPickOf(TARGET, identity), {
+    deepStrictEqual(quickPickOf(TARGET, false, identity), {
       placeholder: 'Pick an action to help resolve the problem.',
       items: [
         {label: 'Reload Window', action: 'reload'},
@@ -217,9 +217,33 @@ describe('the failure dialog (card containers-11)', () => {
     });
   });
 
+  it('F-0409 AC-34, ruling 14: the quick pick offers Rebuild Container second when the failed connect found a container', () => {
+    deepStrictEqual(
+      [
+        quickPickOf(TARGET, true, identity).items,
+        quickPickOf(undefined, true, identity).items.map(item => item.label),
+      ],
+      [
+        [
+          {label: 'Reload Window', action: 'reload'},
+          {label: 'Rebuild Container', action: 'rebuild'},
+          EDIT,
+          {label: 'Open Recent...', action: 'openRecent'},
+          {label: 'Open Documentation', action: 'openDocumentation'},
+        ],
+        [
+          'Reload Window',
+          'Rebuild Container',
+          'Open Recent...',
+          'Open Documentation',
+        ],
+      ],
+    );
+  });
+
   it('F-0410: the quick pick without a target', () => {
     deepStrictEqual(
-      quickPickOf(undefined, identity).items.map(item => item.label),
+      quickPickOf(undefined, false, identity).items.map(item => item.label),
       ['Reload Window', 'Open Recent...', 'Open Documentation'],
     );
   });

@@ -200,11 +200,7 @@ its own (F-0410 5.0 step 2, AC-2).
 
 - Escape on the quick pick does nothing more. The window stays disconnected (F-0202 AC-19's second half).
 - The pick has no title, is single-select, and has no Back button: `showQuickPick(labels, {placeHolder})`.
-- **Not in release 1:** "Rebuild Container" (S285, F-0410 BR-4 and AC-6; F-0405 6.9). containers-14 (#884)
-  registers `remote-containers.rebuildContainer`, but the item, with its check that a container exists for the folder
-  and configuration, is the recovery path: no gate row needs it, and containers-14 §1 leaves it out (daedalus,
-  2026-10-14). This card adds no item and no check. Retry after a failed rebuild is an ordinary open, which creates
-  the container.
+- "Rebuild Container" (S285) is added by containers-47 (#1064), athena's ruling 14 on #737.
 
 ### 3.6 The documentation address
 

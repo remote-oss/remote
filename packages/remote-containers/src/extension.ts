@@ -43,6 +43,7 @@ import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
+import {storePausedRetry} from './state/paused-retry.ts';
 import {
   offerReopen,
   resetReopenNotification,
@@ -727,6 +728,10 @@ export async function activate(
               configFile,
               Date.now(),
             ),
+          storePausedRetry: containerId =>
+            storePausedRetry(context.globalState, containerId, Date.now()),
+          rebuildContainer: () =>
+            vscode.commands.executeCommand(commands.rebuildContainer.id),
           logger,
         }),
         translate,
