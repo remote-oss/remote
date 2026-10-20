@@ -591,6 +591,33 @@ export async function devContainersOf(folder: string): Promise<string[]> {
   return stdout.split('\n').filter(line => line !== '');
 }
 
+/** The facts of the run's editor that the server's names and paths come from, read from its product.json. */
+export function editorProduct(): {
+  applicationName: string;
+  commit: string;
+  quality: string;
+  serverApplicationName: string;
+  serverDataFolderName: string;
+} {
+  return JSON.parse(
+    readFileSync(
+      path.join(
+        path.dirname(variable('HARNESS_VSCODIUM_EXECUTABLE')),
+        'resources',
+        'app',
+        'product.json',
+      ),
+      'utf8',
+    ),
+  ) as {
+    applicationName: string;
+    commit: string;
+    quality: string;
+    serverApplicationName: string;
+    serverDataFolderName: string;
+  };
+}
+
 /** The names of the engine's volumes, sorted. */
 export async function dockerVolumes(): Promise<string[]> {
   const {stdout} = await execFileAsync('docker', ['volume', 'ls', '--quiet']);

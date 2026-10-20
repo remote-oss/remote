@@ -29,7 +29,7 @@ behaviour over a table, because a library never imports an extension (layout rul
 | settings | name, key, scope, legacy twin key and the winning side if any | `contributes.configuration`, F-0102 BR-4 |
 | contextKeys | name, key, `extensionSet` or `core` | the identity decision's list |
 | views, authorities, languages | name, id | `contributes.views`, `activationEvents`, `contributes.languages` |
-| internalCommands | id, `served` or `called`, kind `query`, `change` or `push` | the companion and internal list (F-5902 §5) |
+| internalCommands | id, `served` or `called`, kind `query`, `change` or `push`, and for a served id `activates` (absent means true): the identifier check asks for `onCommand:<id>` unless it is false, and reports a false one that names the event (ruling 6 on #636, card #638) | the companion and internal list (F-5902 §5) |
 | runtimeCommands | id, purpose | reference command ids a spec names that the extension registers at runtime only: never contributed, no palette entry, no activation event (a keybinding in a window where the extension never ran gets core's "not found", R-46). The check verifies the namespace and that the id is not contributed; the generator emits them into the table, so code registers the generated id, never a literal (ruled 2026-10-12, #253 Q4; first entry `opensshremotes.showDetails`, F-2304 BR-12) |
 | invented | id, kind, spec, date | the ledger (R-27) |
 
@@ -317,6 +317,16 @@ C-14.
   - `extensionsAny` is always requested (Option B), with the stable same-host lookup as the silent fallback.
   - Still open: the F-3906 side, which lands when remote-ssh#83 is edited. The interface document is frozen at
     1.0 then.
+- **Companion interface 1.0, increment 2 settled** (athena, 2026-10-19, #745; `brief-explorer-increment-2.md` §2).
+  No field is added, and the interface stays 1.0.
+  - The store holds no duplicates, and the explorer renders repeats it receives.
+  - A delete that empties a host drops the host, so no host is ever sent with no entries.
+  - Any window whose authority isn't `ssh-remote` pushes as a local window: outcome `"none"`, no host key.
+  - `folders` is never sent.
+  - Each trigger sends one `sshHostsChanged`, with no debounce.
+  - `sshHostsChanged` is a push.
+  - Both sides take the host key from `hostKeyOfAuthority`.
+  - The explorer decides a row's kind from its path (F-5104 BR-15), and remote-ssh opens by the kind it is sent.
 - F-8201 Q1 is decided as "three quirks fixed": `currentConnection` answers from the window's own connection in every
   tunnel window, and the history is read from storage on every query.
 - Provisional (lab), held under D-60: the `ssh-remote` codec's handling of Windows client user names (F-2301 Q2) and
