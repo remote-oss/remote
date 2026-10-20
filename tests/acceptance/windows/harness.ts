@@ -338,15 +338,43 @@ function countOf(name: string, event: AgentEvent['event']): number {
   return windowEvents(name).filter(each => each.event === event).length;
 }
 
-/** Writes a command for window `name` as one append, and returns its id. */
-function send(name: string, command: string, parameters: unknown[]): string {
+/**
+ * Writes a command for window `name` as one append, and returns its id. A `concurrent` command doesn't wait for the
+ * commands before it, and the ones after it don't wait for it.
+ */
+function send(
+  name: string,
+  command: string,
+  parameters: unknown[],
+  concurrent = false,
+): string {
   const commandId = `${String(Date.now())}-${Math.random().toString(36).slice(2)}`;
   mkdirSync(path.dirname(agentFile(name, 'commands')), {recursive: true});
   appendFileSync(
     agentFile(name, 'commands'),
-    `${JSON.stringify({id: commandId, command, parameters})}\n`,
+    `${JSON.stringify({id: commandId, command, parameters, ...(concurrent ? {concurrent: true} : {})})}\n`,
   );
   return commandId;
+}
+
+/**
+ * Has window `name` start a command while others may still run, and resolves once the window has accepted it, not
+ * when it ends: two of them are in flight at once, as two quick invocations by the user are.
+ */
+export async function startInWindow(
+  name: string,
+  command: string,
+  ...parameters: unknown[]
+): Promise<void> {
+  await waitUntil(`window ${name} to activate its agent`, () =>
+    windowEvents(name).some(each => each.event === 'activated'),
+  );
+  const commandId = send(name, command, parameters, true);
+  await waitUntil(`window ${name} to accept ${command}`, () =>
+    windowEvents(name).some(
+      each => each.id === commandId && each.event === 'accepted',
+    ),
+  );
 }
 
 /** Has window `name` run a command; resolves on `done` and fails, naming the window and the command, on `failed`. */

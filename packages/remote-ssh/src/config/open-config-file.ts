@@ -35,6 +35,11 @@ export interface ConfigFileEditor {
   open(file: string): PromiseLike<OpenedEditor>;
   /** Inserts `template` as a snippet at the start of `opened`; the editor adjusts its indentation. */
   insertTemplate(opened: OpenedEditor, template: Template): PromiseLike<void>;
+  /**
+   * Calls `onSave` at each save of the opened document, for as long as a tab of it stays open; a save of the same
+   * file while no tab this command opened is open, calls nothing.
+   */
+  watchSaves(opened: OpenedEditor, onSave: () => void): void;
 }
 
 /** The editor `open` opened; only the adapter reads it. */
@@ -149,6 +154,8 @@ export function openConfigFileHandler(
   extension: ConfigFileExtension,
   /** An English template into the display language. */
   translate: Translate,
+  /** Tells Remote Explorer that the configured hosts may have changed. */
+  hostsChanged: () => void,
 ): CommandHandler {
   return {
     execute: async () => {
@@ -183,6 +190,7 @@ export function openConfigFileHandler(
       if (created.insertTemplate) {
         await editor.insertTemplate(opened, starterTemplate(STARTER_INDENT));
       }
+      editor.watchSaves(opened, hostsChanged);
     },
   };
 }

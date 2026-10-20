@@ -18,6 +18,8 @@ interface AgentCommand {
   id: string;
   command: string;
   parameters?: unknown[];
+  /** Whether the command starts without waiting for the ones before it to end, and the next ones without waiting for it. */
+  concurrent?: true;
 }
 
 /** The name of this window's current start: claimed or kept at activation, reported at deactivation. */
@@ -174,6 +176,13 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.sleep',
+      (milliseconds: number) =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, milliseconds);
+        }),
+    ),
     vscode.commands.registerCommand('acceptance.agent.state', () => {
       report(agentFolder, name, {
         event: 'state',
@@ -304,7 +313,12 @@ export function activate(context: vscode.ExtensionContext): void {
     const waiting = pendingCommands(agentFolder, name);
     void (async () => {
       for (const each of waiting) {
-        await execute(agentFolder, name, each);
+        if (each.concurrent === true) {
+          // `execute` reports `accepted` before it awaits, so the next poll doesn't start the command again.
+          void execute(agentFolder, name, each);
+        } else {
+          await execute(agentFolder, name, each);
+        }
       }
       busy = false;
     })();

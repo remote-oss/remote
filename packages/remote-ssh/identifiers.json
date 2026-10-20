@@ -48,9 +48,14 @@
       "kind": "change"
     },
     {
+      "id": "remote-internal.setActiveFolders",
+      "role": "called",
+      "kind": "push"
+    },
+    {
       "id": "remote-internal.sshHostsChanged",
       "role": "called",
-      "kind": "change"
+      "kind": "push"
     },
     {
       "id": "remote-oss.gate.claim",
