@@ -418,6 +418,7 @@ Besides `harness`, the host image has three users, and the run's `ssh_config` ha
 | `i686` | `harness-i686` | the run's key; its `~/.profile` puts a folder first on `PATH` whose `uname -m` prints `i686` (the connect's shell is a login shell) |
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |
+| `harness-fish` | `harness-fish` | the run's key; its login shell is `/usr/bin/fish` |
 | `master` | `harness-pw` | `password`, behind `ControlMaster auto` (socket `cm-%C` in the run's folder, `ControlPersist 600`) |
 | `master-ask` | `harness-pw` | `password`, behind `ControlMaster ask` (socket `cm-ask-%C`) |
 | `master-yes` | `harness-pw` | `password`, behind `ControlMaster yes` (socket `cm-yes-%C`) |

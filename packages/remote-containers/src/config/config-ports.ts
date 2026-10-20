@@ -132,6 +132,8 @@ export function configSurfacesOf(
 export interface ConfigFileSystem {
   readDirectory(folder: string): PromiseLike<Array<[string, number]>>;
   readFile(file: string): PromiseLike<Uint8Array>;
+  /** Settles when something exists at `path`, and rejects when nothing does. */
+  stat(path: string): PromiseLike<unknown>;
 }
 
 /** The flags of the editor's `FileType` that a listing tells apart. */
@@ -160,6 +162,14 @@ export function configFilesOf(
         }));
       } catch {
         return [];
+      }
+    },
+    exists: async path => {
+      try {
+        await system.stat(path);
+        return true;
+      } catch {
+        return false;
       }
     },
     read: async file => {

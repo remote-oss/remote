@@ -4,11 +4,14 @@ import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   agentClear,
+  appendScript,
+  closeWindow,
   connectionLog,
   connectedWithin,
   hostAliases,
   hostAnswer,
   inWindow,
+  nextEmptyWindow,
   onHost,
   onHostAs,
   recordLines,
@@ -504,6 +507,31 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     }
   });
 
+  it('F-2412 AC-17 (c43-own-alias): picking the window’s own host turns the window into an empty local window within 1 s, with no notice, and leaves the host', async () => {
+    await closeAllButLocal();
+    await openConnected('u1', INSTALL_MILLISECONDS);
+    await makeDataFolder();
+    const started = Date.now();
+    let picked = 0;
+    const name = await nextEmptyWindow(async () => {
+      appendScript([{...pickHost('harness'), window: 'u1'}]);
+      await inWindow('u1', 'opensshremotes.cleanDevBox');
+      picked = Date.now();
+    });
+    const state = await windowState(name);
+    deepStrictEqual(
+      [
+        state.remoteName,
+        state.folders,
+        picked - started <= 1000 ? true : picked - started,
+        linesSince(0, name).filter(line => line.surface === 'notice'),
+        await existsOnHost(DATA_FOLDER),
+      ],
+      [null, [], true, [], true],
+    );
+    await closeWindow(name);
+  });
+
   describe('with remote.SSH.useLocalServer false', () => {
     before(async () => {
       await closeAllButLocal();
@@ -655,6 +683,28 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
             ),
         ),
         'no install progress line after the reload',
+      );
+    });
+
+    it('F-2412 AC-25 (c43-unknown-key): with no local server, a host whose key is unknown is not uninstalled by the pick, writes no setting, and leaves the window usable', async () => {
+      rmSync(passwordAskHosts(), {force: true});
+      await onHostAs('harness-pw', 'mkdir', '-p', PASSWORD_DATA_FOLDER);
+      const before = userFiles();
+      const mark = recordLines().length;
+      await uninstallWith('local', [
+        pickHost('password-ask'),
+        platform('linux'),
+      ]).catch(() => undefined);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      await inWindow('local', 'acceptance.agent.state');
+      deepStrictEqual(
+        [
+          surfacesSince(mark, 'local'),
+          await existsOnHost(PASSWORD_DATA_FOLDER),
+          userFiles(),
+          existsSync(passwordAskHosts()),
+        ],
+        [['hostPick', 'platformPick', 'pick'], true, before, false],
       );
     });
   });

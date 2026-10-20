@@ -150,7 +150,7 @@ describe('resolveServerArchive', () => {
       );
     });
 
-    it('takes the built-in table entry matched on applicationName', () => {
+    it('F-0503 AC-27 (f1402-rule-4): with no override the built-in table entry matched on applicationName gives the address', () => {
       deepStrictEqual(
         resolvedAddress(
           resolveServerArchive(

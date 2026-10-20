@@ -4,6 +4,7 @@
  * Nothing here writes a file.
  */
 
+import path from 'node:path';
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {
@@ -16,6 +17,7 @@ import {filled} from '../surfaces/filled.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
   decodeConfiguration,
+  dockerfileOf,
   hasContainerSource,
   labelOf,
   parseConfiguration,
@@ -34,6 +36,8 @@ const CONFIG_TEMPLATES = {
   S113: "Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.",
   S411: 'Workspace folder in devcontainer.json must be an absolute path.',
   S049: 'Cancelled container configuration selection.',
+  S004: '"{0}" does not exist.',
+  openConfiguration: 'Open {0}',
   noConfiguration:
     'No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.',
 } as const;
@@ -255,8 +259,11 @@ export async function chooseConfiguration(
     bytes === 'unreadable'
       ? undefined
       : parseConfiguration(decodeConfiguration(bytes));
+  const dockerfile =
+    parsed === undefined ? undefined : dockerfileOf(parsed, candidate.file);
+  const missing = dockerfile !== undefined && !(await files.exists(dockerfile));
   const reading =
-    parsed !== undefined && hasContainerSource(parsed)
+    parsed !== undefined && hasContainerSource(parsed) && !missing
       ? startRead(candidate)
       : undefined;
   if (!(await engineAllows())) {
@@ -272,6 +279,20 @@ export async function chooseConfiguration(
       textOf(translate, CONFIG_TEMPLATES.S181, [candidate.relative]),
     );
     await opening;
+    return {kind: 'rejected'};
+  }
+  if (dockerfile !== undefined && missing) {
+    const button = textOf(translate, CONFIG_TEMPLATES.openConfiguration, [
+      path.basename(candidate.file),
+    ]);
+    const chosen = await surfaces.dialogs.showError(
+      '',
+      textOf(translate, CONFIG_TEMPLATES.S004, [dockerfile]),
+      [button],
+    );
+    if (chosen === button) {
+      await surfaces.openPreview(candidate.file);
+    }
     return {kind: 'rejected'};
   }
   if (reading === undefined) {

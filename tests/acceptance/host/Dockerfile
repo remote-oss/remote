@@ -1,8 +1,8 @@
 # The SSH host of the acceptance tests: OpenSSH's server, key login only, and one user whose login shell is POSIX sh
-# unless HOST_SHELL names another of the shells installed here. Six more users serve tests that need another kind of account:
+# unless HOST_SHELL names another of the shells installed here. Seven more users serve tests that need another kind of account:
 # harness-pw (password login only), harness-nofwd (TCP forwarding refused), harness-mute (a login shell that
 # answers only a command given with -c), harness-ro (a server data folder that exists and cannot be written),
-# harness-i686 (a host whose `uname -m` says i686) and harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
+# harness-i686 (a host whose `uname -m` says i686), harness-fish (a login shell that is fish) and harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
 # /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
@@ -23,6 +23,8 @@ RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ cu
   && sed -i 's/^harness-nofwd:!/harness-nofwd:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-i686 \
   && sed -i 's/^harness-i686:!/harness-i686:*/' /etc/shadow \
+  && adduser -D -s /usr/bin/fish harness-fish \
+  && sed -i 's/^harness-fish:!/harness-fish:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-ro \
   && sed -i 's/^harness-ro:!/harness-ro:*/' /etc/shadow \
   && mkdir -p /home/harness-ro/.vscodium-server-insiders/bin \
