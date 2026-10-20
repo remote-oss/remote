@@ -43,6 +43,13 @@ const WORKFLOW = readFileSync(
   'utf8',
 );
 
+/** `git ls-tree -r` output for entries of a mode and a path. */
+function treeText(entries: ReadonlyArray<readonly [string, string]>): string {
+  return entries
+    .map(([mode, file]) => `${mode} blob ${'b'.repeat(40)}\t${file}\n`)
+    .join('');
+}
+
 /** What the scripted repositories answer; a row changes any of it. */
 interface Script {
   fetched: string[];
@@ -54,8 +61,10 @@ interface Script {
 
 const ANSWERS: Script = {
   fetched: [COMMIT, COMMIT],
-  paths:
-    'tests/conformance/cases/F-2104-AC5-1.yaml\ntests/conformance/runner/encode/suite.py\n',
+  paths: treeText([
+    ['100644', 'tests/conformance/cases/F-2104-AC5-1.yaml'],
+    ['100755', 'tests/conformance/runner/encode/suite.py'],
+  ]),
   subject: `Conformance suite 0123456789ab for ${TARGET}: F-2104`,
   status: ' M tests/conformance/cases/F-2104-AC5-1.yaml\n',
   scope: {status: 0, stdout: 'changed:\n', stderr: ''},
@@ -366,9 +375,32 @@ describe('import-suite', () => {
     ]);
   });
 
+  it('a symbolic link or a submodule in the suite is refused by name before the target repository is cloned', () => {
+    const {code, lines, calls} = importOn({
+      paths: treeText([
+        ['100644', 'tests/conformance/a.yaml'],
+        ['120000', 'tests/conformance/link'],
+        ['160000', 'tests/conformance/vendor'],
+      ]),
+    });
+    deepStrictEqual(
+      [code, lines, gave(calls, / clone /)],
+      [
+        2,
+        [
+          'import-suite: refused: the branch holds entries that are not files: tests/conformance/link (120000), tests/conformance/vendor (160000)',
+        ],
+        false,
+      ],
+    );
+  });
+
   it('a branch with a path outside the suite is refused before the target repository is cloned', () => {
     const {code, lines, calls} = importOn({
-      paths: 'tests/conformance/a.yaml\nnotes.md\n',
+      paths: treeText([
+        ['100644', 'tests/conformance/a.yaml'],
+        ['100644', 'notes.md'],
+      ]),
     });
     deepStrictEqual(
       [code, lines, gave(calls, / clone /), gave(calls, /^gh /)],

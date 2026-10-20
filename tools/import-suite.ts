@@ -94,6 +94,34 @@ export function importRequestOf(
   return {staging, branch, target, date, digest};
 }
 
+/** The modes a suite's entries may have: a file or an executable file; never a link or another repository. */
+const FILE_MODES = new Set(['100644', '100755']);
+
+/** One entry of `git ls-tree -r`: its mode and its path. */
+export interface TreeEntry {
+  mode: string;
+  path: string;
+}
+
+/** The entries of `git ls-tree -r` output: `<mode> <type> <object>\t<path>` per line. */
+export function treeEntriesOf(text: string): TreeEntry[] {
+  return linesOf(text).map(line => {
+    const [head = '', ...rest] = line.split('\t');
+    const [mode = ''] = head.split(' ');
+    return {mode, path: rest.join('\t')};
+  });
+}
+
+/** A refusal unless every entry is a plain or executable file: a symbolic link or a submodule is refused by name. */
+export function checkSuiteModes(entries: readonly TreeEntry[]): void {
+  const others = entries.filter(entry => !FILE_MODES.has(entry.mode));
+  if (others.length > 0) {
+    throw new ImportRefusal(
+      `the branch holds entries that are not files: ${others.map(entry => `${entry.path} (${entry.mode})`).join(', ')}`,
+    );
+  }
+}
+
 /** A refusal unless every path lies under tests/conformance/ and there is at least one. */
 export function checkSuitePaths(paths: readonly string[]): void {
   if (paths.length === 0) {
@@ -223,10 +251,11 @@ export function importSuite(
     branchRef,
   );
   const commit = runGit('-C', staging, 'rev-parse', 'FETCH_HEAD');
-  const paths = linesOf(
-    runGit('-C', staging, 'ls-tree', '-r', '--name-only', 'FETCH_HEAD'),
+  const entries = treeEntriesOf(
+    runGit('-C', staging, 'ls-tree', '-r', 'FETCH_HEAD'),
   );
-  checkSuitePaths(paths);
+  checkSuitePaths(entries.map(entry => entry.path));
+  checkSuiteModes(entries);
   checkSubject(
     runGit('-C', staging, 'log', '-1', '--format=%s', 'FETCH_HEAD'),
     request,
@@ -300,7 +329,7 @@ export function importSuite(
     '--title',
     `tests/conformance: the suite of ${request.branch}`,
     '--body',
-    pullRequestBody(request, commit, paths.length, changed.length),
+    pullRequestBody(request, commit, entries.length, changed.length),
   ]).trim();
 }
 
