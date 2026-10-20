@@ -121,8 +121,8 @@ describe('the lines of the client search and the probed platform (card connect-2
 describe('the login shell in the log (card coverage-49)', () => {
   it('F-2704 BR-2: the login shell the probe found is named in a line', () => {
     deepStrictEqual(
-      loginShellLine({loginShell: 'zsh'}),
-      "the host's login shell is zsh",
+      loginShellLine({loginShell: '/usr/bin/zsh'}),
+      "the host's login shell is /usr/bin/zsh (zsh)",
     );
   });
 

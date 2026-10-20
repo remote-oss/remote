@@ -82,7 +82,7 @@ describe('the connect pipeline, when it works', () => {
       logSink.lines
         .map(line => line.message)
         .filter(message => message.startsWith("the host's login shell")),
-      ["the host's login shell is sh"],
+      ["the host's login shell is /bin/sh (sh)"],
     );
   });
 
