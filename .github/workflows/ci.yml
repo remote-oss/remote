@@ -288,7 +288,7 @@ jobs:
   # The one check the main ruleset requires (athena, 2026-10-19): it needs every job and runs whatever they did. A job
   # that failed or was cancelled fails it; a skipped job passes (a docs-only change, a draft, a dispatch's opt-in jobs).
   # A fork's pull request runs no CI here (every job checks the head's repo), so the gate fails it rather than passing
-  # on skipped jobs; it runs on a GitHub runner then, so even this step of a fork's run never reaches a lab runner.
+  # on skipped jobs; it runs on a GitHub runner then, so even this step of a fork's run never reaches a self-hosted runner.
   ci-gate:
     name: ci-gate
     needs:
