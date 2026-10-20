@@ -293,6 +293,41 @@ async function evaluate<Value>(
   return evaluateAt(await pageOf(name), `window ${name}`, expression);
 }
 
+/** How many terminals' text areas window `name`'s page holds and the titles of its terminal tabs. */
+export interface TerminalPageFacts {
+  rows: number;
+  tabs: string[];
+}
+
+/** How long the page may take to answer a read of its terminals, in milliseconds. */
+const PAGE_FACTS_MILLISECONDS = 10_000;
+
+/** What window `name`'s page holds of terminals, or `unavailable` when it does not answer within 10 s. */
+export async function terminalPageFacts(
+  name: string,
+): Promise<TerminalPageFacts | 'unavailable'> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<'unavailable'>(resolve => {
+    timer = setTimeout(() => {
+      resolve('unavailable');
+    }, PAGE_FACTS_MILLISECONDS);
+  });
+  try {
+    return await Promise.race([
+      evaluate<TerminalPageFacts>(
+        name,
+        `({
+          rows: document.querySelectorAll('.xterm-rows').length,
+          tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
+        })`,
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
 function paneExpression(viewName: string): string {
   return `[...document.querySelectorAll('.pane')].find(pane => pane.querySelector('.pane-header .title')?.textContent === ${JSON.stringify(viewName)})`;

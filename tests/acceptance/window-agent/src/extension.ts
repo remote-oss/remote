@@ -160,6 +160,41 @@ function activeTabOf(
   return {uri: current.input.uri.toString(), preview: current.isPreview};
 }
 
+/** The editor commands that copy the active terminal's whole buffer to the clipboard, in order. */
+const COPY_STEPS = [
+  'workbench.action.terminal.focus',
+  'workbench.action.terminal.selectAll',
+  'workbench.action.terminal.copySelection',
+  'workbench.action.terminal.clearSelection',
+];
+
+/** How long a copy step may take before the read gives up and names it. */
+const COPY_STEP_MILLISECONDS = 10_000;
+
+/** Whether `pending` settled within `milliseconds`; one that did not is left to settle on its own. */
+async function settledWithin(
+  pending: PromiseLike<unknown>,
+  milliseconds: number,
+): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<false>(resolve => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve(pending).then(
+        () => true,
+        () => true,
+      ),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Starts the agent: reports the window's activation, registers its own commands and polls for the test's commands. */
 export function activate(context: vscode.ExtensionContext): void {
   const agentFolder = agentFolderOf();
@@ -359,19 +394,47 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'acceptance.agent.terminalBuffer',
       async () => {
-        await vscode.commands.executeCommand('workbench.action.terminal.focus');
-        await vscode.commands.executeCommand(
-          'workbench.action.terminal.selectAll',
-        );
-        await vscode.commands.executeCommand(
-          'workbench.action.terminal.copySelection',
-        );
-        await vscode.commands.executeCommand(
-          'workbench.action.terminal.clearSelection',
+        const terminals = vscode.window.terminals.map(each => each.name);
+        const active = vscode.window.activeTerminal?.name ?? null;
+        if (active === null) {
+          // Focusing would create a terminal and wait for it, so a window with none answers at once.
+          report(agentFolder, name, {
+            event: 'terminalBuffer',
+            text: '',
+            terminals,
+            active,
+          });
+          return;
+        }
+        for (const step of COPY_STEPS) {
+          const finished = await settledWithin(
+            vscode.commands.executeCommand(step),
+            COPY_STEP_MILLISECONDS,
+          );
+          if (!finished) {
+            report(agentFolder, name, {
+              event: 'terminalBuffer',
+              text: null,
+              terminals,
+              active,
+              stuck: step,
+            });
+            return;
+          }
+        }
+        let copied: string | undefined;
+        const read = await settledWithin(
+          Promise.resolve(vscode.env.clipboard.readText()).then(text => {
+            copied = text;
+          }),
+          COPY_STEP_MILLISECONDS,
         );
         report(agentFolder, name, {
           event: 'terminalBuffer',
-          text: await vscode.env.clipboard.readText(),
+          text: read ? (copied ?? '') : null,
+          terminals,
+          active,
+          ...(read ? {} : {stuck: 'clipboard.readText'}),
         });
       },
     ),
