@@ -138,7 +138,7 @@ describe('a launch past its limits', () => {
     };
   }
 
-  it('a child that prints its results and stays: killed after the grace, failed with the reason, its leftovers ended', async () => {
+  it("a child that prints passing results and stays: killed after the grace, its leftovers ended, and the rows' pass stands", async () => {
     const ended: string[] = [];
     const result = await runAndCollect(
       process.execPath,
@@ -154,13 +154,27 @@ describe('a launch past its limits', () => {
       [result, ended],
       [
         {
-          exitCode: 1,
+          exitCode: 0,
           output:
-            "  3 passing (2s)\nlate\nacceptance: the editor had not ended 0.3 s after its results; the launch's processes were ended\n",
+            "  3 passing (2s)\nlate\nacceptance: the editor had not ended 0.3 s after its results; the launch's processes were ended, and its rows' result stands\n",
         },
         ['leftovers'],
       ],
     );
+  });
+
+  it("a child that prints failing results and stays: killed after the grace, and the rows' failure stands", async () => {
+    const result = await runAndCollect(
+      process.execPath,
+      [
+        '-e',
+        'process.stdout.write("  2 passing (2s)\\n  1 failing\\n"); setInterval(() => {}, 1000)',
+      ],
+      {},
+      () => undefined,
+      limits([]),
+    );
+    deepStrictEqual(result.exitCode, 1);
   });
 
   it('a child that prints nothing: killed after the quiet limit', async () => {

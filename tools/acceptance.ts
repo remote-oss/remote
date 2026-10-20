@@ -1562,6 +1562,7 @@ export function runAndCollect(
     let resultsAt: number | undefined;
     let tail = '';
     let ended: string | undefined;
+    let resultsStand = false;
     for (const stream of [child.stdout, child.stderr]) {
       stream.on('data', (chunk: Buffer) => {
         chunks.push(chunk);
@@ -1588,7 +1589,9 @@ export function runAndCollect(
               return;
             }
             clearInterval(watch);
-            ended = `acceptance: ${reason}; the launch's processes were ended\n`;
+            // Past its results, the rows have run: a slow quit ends the processes, and the rows' result stands.
+            resultsStand = resultsAt !== undefined;
+            ended = `acceptance: ${reason}; the launch's processes were ended${resultsStand ? ", and its rows' result stands" : ''}\n`;
             echo(ended);
             child.kill('SIGKILL');
             limits.endLeftovers();
@@ -1599,7 +1602,10 @@ export function runAndCollect(
       resolve(
         ended === undefined
           ? {exitCode: code ?? 1, output}
-          : {exitCode: 1, output: output + ended},
+          : {
+              exitCode: resultsStand && !FAILING_LINE.test(output) ? 0 : 1,
+              output: output + ended,
+            },
       );
     });
     child.on('error', reject);
@@ -1620,6 +1626,9 @@ export interface LaunchLimits {
 
 /** Mocha's results line, which a launch prints once all its rows have run. */
 const RESULTS_LINE = /^\s*\d+ passing \(/m;
+
+/** Mocha's line for the rows that failed, which follows its results line when any did. */
+const FAILING_LINE = /^\s*\d+ failing$/m;
 
 /** How much of the output's end is kept to find the results line across two chunks. */
 const RESULTS_TAIL_LENGTH = 400;
