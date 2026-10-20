@@ -73,7 +73,11 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
-import {reconnectionOutcomeOf, type ContainerState} from './reconnection.ts';
+import {
+  type ContainerState,
+  type ReconnectionOutcome,
+  reconnectionOutcomeOf,
+} from './reconnection.ts';
 import type {
   ServerRequest,
   ServerResult,
@@ -350,6 +354,24 @@ async function probedEnvironment(
   return environment;
 }
 
+/** The log line for one answer to a reconnecting window: what was found of the container and the server, and the outcome. */
+function reconnectionLine(
+  connection: Pick<Held, 'containerId' | 'startedAt'>,
+  state: ContainerState,
+  alive: boolean | undefined,
+  outcome: ReconnectionOutcome,
+): string {
+  const status = state === 'missing' ? 'missing' : state.status;
+  const start =
+    state === 'missing'
+      ? 'no start'
+      : state.startedAt === connection.startedAt
+        ? 'same start'
+        : 'another start';
+  const server = alive === undefined ? 'not checked' : alive ? 'alive' : 'down';
+  return `reconnection: container ${shortId(connection.containerId)} is ${status}, ${start}, server ${server}: ${outcome}`;
+}
+
 /** The connector of Dev Containers. */
 export function containerConnectorOf(
   dependencies: ContainerConnectorDependencies,
@@ -414,6 +436,9 @@ export function containerConnectorOf(
       cancellation,
     );
     if (state === 'unreachable') {
+      logger.info(
+        `reconnection: container ${shortId(connection.containerId)} is unreachable, no start, server not checked: transportLost`,
+      );
       return transportLost();
     }
     const alive =
@@ -423,6 +448,7 @@ export function containerConnectorOf(
         ? await serverAlive(connection, cancellation)
         : undefined;
     const outcome = reconnectionOutcomeOf(connection, state, alive);
+    logger.info(reconnectionLine(connection, state, alive, outcome));
     if (outcome === 'held') {
       return connection.connected;
     }
