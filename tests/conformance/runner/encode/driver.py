@@ -24,7 +24,8 @@ STATE_WHATS = ("title", "dialogs", "notifications", "statusbar", "contextmenu", 
                "sidebar")
 SIMPLE_WHATS = STATE_WHATS + ("quickpick", "notification_center", "windows", "files", "opened_urls")
 DICT_WHATS = ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "suggest", "hovertext", "markers", "tokens", "folds", "outline",
-              "breadcrumbs", "target_files", "user_settings", "notification_order", "target_logins")
+              "breadcrumbs", "target_files", "user_settings", "notification_order", "target_logins",
+              "client_listeners", "settings_editor")
 TARGET_FILES_INTERVAL = 2   # seconds between the two reads of a target_files observation (the case may say 1 to 30)
 # Editor observations (lab verbs of the same name, remote-ssh-edit 2026-10-02): the payload keys kept from the verb's
 # JSON output. Expectation key: <kind>:<file or "active">[@line[:col]].
@@ -179,6 +180,7 @@ class Session:
         self.target_logins = None  # the run's `sshtarget logins` on its per-case target (record sets it), else None
         self.logins_seen = None    # the target's accepted logins at the case's start, then at the last target_logins
         self.user_settings = None  # the run's reader of its slot profile's settings.json (record sets it), else None
+        self.client_listeners = None   # the run's reader of its window's listeners (record sets it), else None
         self.urls_start = 0        # how many URLs the slot's log held when the case began (mark_urls); older ones are not its
         self.window = None
         self.log = log or (lambda *_: None)
@@ -401,6 +403,11 @@ class Session:
                     out[f"target_files:{arg['path']}"] = self._observe_target_files(arg)
                 elif kind == "target_logins":
                     out["target_logins"] = self._observe_target_logins()
+                elif kind == "client_listeners":   # kit #289, K2: the window's listeners, addresses, ports and holder names
+                    out["client_listeners"] = self.client_listeners() if self.client_listeners else \
+                        {"error": "client_listeners needs the run's window"}
+                elif kind == "settings_editor":   # kit #289, K6: the Settings editor's rows the case's search shows
+                    out["settings_editor"] = self._observe_settings_editor(arg)
                 elif kind == "notification_order":
                     out["notification_order"] = self._observe_order(arg)
                 elif kind in EDITOR_PAYLOAD:
@@ -477,6 +484,14 @@ class Session:
         if not p.get("ok"):
             return {"error": p.get("error")}
         return {k: v for k, v in p.items() if k not in ("command", "args", "ok") and not k.startswith("_")}
+
+    def _observe_settings_editor(self, arg):
+        """`lab settings-editor`: the tab in front, the tabs shown and each row the search shows (with `tabs: all`, the
+        row ids of every tab too), without the call's bookkeeping."""
+        p = self.lab("settings-editor", json.dumps(arg), timeout=120)
+        if not p.get("ok"):
+            return {"error": p.get("error")}
+        return {k: p[k] for k in ("tab", "tabs", "rows", "by_tab") if k in p}
 
     def _observe_editor(self, kind, arg):
         """One editor observation through the lab verb of the same name (one JSON argument; LAB_JSON output)."""

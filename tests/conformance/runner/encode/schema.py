@@ -18,7 +18,10 @@ WRITER_KEYS = ("id", "feature", "title", "ac", "atoms", "kind", "covers", "profi
                "reference-only", "issue", "ac_issue_refs")   # the last two are added when a case is published
 VERBS = ("cmd", "palette", "pick", "check", "type", "key", "button", "link", "remote", "view", "rowmenu", "rowaction",
          "viewaction", "menu", "focus", "hover", "window", "wait", "observe", "engine", "settings", "restart", "target",
-         "goto", "open")   # goto/open: the editor helpers of the lab driver (remote-ssh-edit, 2026-10-02)
+         "goto", "open", "settings_search", "setting_input", "client_ports")   # goto/open: the editor helpers of the lab driver
+# (remote-ssh-edit, 2026-10-02); settings_search/setting_input: the Settings editor's search and a row's box (kit #289, K6);
+# client_ports: free, the case's held client ports unbound mid-case (kit #289, F-2104 AC-16)
+SETTING_ID = re.compile(r"[A-Za-z][\w-]*(\.[\w-]+)+")
 TARGET_ACTIONS = ("cut", "heal", "rekey", "free")
 ENGINE_CONTAINER_ACTIONS = ("pause", "unpause", "stop", "start", "kill", "remove")
 ENGINE_ACTIONS = ENGINE_CONTAINER_ACTIONS + ("create_volume", "remove_volume", "run")
@@ -182,6 +185,10 @@ def _observe_errors(where, arg, seen):
                 errs.append(f"{where}: panel takes no arguments (panel: {{}})")
             elif k == "target_logins" and v != {}:   # kit #289, K3: a count of accepted logins, as a delta
                 errs.append(f"{where}: target_logins takes no arguments (target_logins: {{}})")
+            elif k == "client_listeners" and v != {}:   # kit #289, K2: the window's listeners and their holders
+                errs.append(f"{where}: client_listeners takes no arguments (client_listeners: {{}})")
+            elif k == "settings_editor" and v not in ({}, {"tabs": "all"}):   # kit #289, K6
+                errs.append(f"{where}: settings_editor takes {{}} or {{tabs: all}}")
             elif k == "target_files":   # athena on #218 (item 3): names, size changes, executable names; never contents
                 if not (isinstance(v, dict) and "path" in v and not set(v) - {"path", "interval"}
                         and isinstance(v["path"], str) and TARGET_FILES_PATH.fullmatch(v["path"])
@@ -204,7 +211,7 @@ def _observe_errors(where, arg, seen):
             elif k in EDITOR_WHATS:
                 errs += _editor_arg_errors(where, k, v)
             elif k not in ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "notification_order",
-                           "target_logins"):
+                           "target_logins", "client_listeners", "settings_editor"):
                 errs.append(f"{where}: unknown observation {k!r}")
         else:
             errs.append(f"{where}: bad observation {w!r}")
@@ -304,6 +311,14 @@ def _step_errors(i, step, seen):
         if not isinstance(arg, dict) or not arg or not all(isinstance(k, str) and k.strip() for k in arg):
             return [f"{where}: settings wants {{<setting key>: <value or null to remove>}}"]
         return []
+    if verb == "settings_search":
+        return [] if isinstance(arg, str) else [f"{where}: settings_search wants the search text (\"\" clears it)"]
+    if verb == "setting_input":
+        ok = isinstance(arg, dict) and set(arg) == {"id", "value"} and isinstance(arg["id"], str) \
+            and SETTING_ID.fullmatch(arg["id"]) and isinstance(arg["value"], str)
+        return [] if ok else [f"{where}: setting_input wants {{id: <dotted setting id>, value: <text>}}"]
+    if verb == "client_ports":   # kit #289, F-2104 AC-16: every held client port unbound from here to the case's end
+        return [] if arg == "free" else [f"{where}: client_ports: free (unbinds every port the case's fixture holds)"]
     if verb == "restart":
         return [] if arg is True else [f"{where}: restart: true (restarts the window on the same profile, folder and daemon)"]
     # athena on #198: rekey = new host keys on the per-case target, ${SSH_TARGET_FINGERPRINT_NEW} bound to them; on #218:
@@ -467,6 +482,10 @@ def client_port_errors(case):
     named = {clientports.placeholder(p["name"]) for p in ports or [] if isinstance(p, dict) and isinstance(p.get("name"), str)}
     used = set(PORT_PLACEHOLDER.findall(json.dumps(case)))
     errs += [f"${{{name}}} names no port of fixture.client_ports" for name in sorted(used - named)]
+    held = [p for p in ports or [] if isinstance(p, dict) and p.get("kind") in clientports.PLACES]
+    if not held and any(isinstance(st, dict) and "client_ports" in st for st in case.get("steps") or []):
+        errs.append("client_ports: free needs a port the fixture holds (fixture.client_ports of kind v4, v6, both, any or "
+                    "stalled)")
     return errs
 
 

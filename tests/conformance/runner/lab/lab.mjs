@@ -54,6 +54,11 @@
 //   lab breadcrumbs [<line>:<col>] the breadcrumb bar at the cursor: folders, file, symbols with their kind icons
 //   lab panel                      the panel: shown or hidden, position, its tabs and the one in front, the terminal tabs (active,
 //                                  focused), the Output channel shown, and how many lines of text it shows (not the text)
+//   lab settings-editor [{"tabs":"all"}]  the open Settings editor: the tab in front, the tabs shown, and each setting row the
+//                                  search shows: id, title, control, value, modified, indicators, description, validation;
+//                                  with tabs all, also the row ids each tab lists (it clicks each tab, then the first again)
+//   lab setting-input {"id":..,"value":..}  types a value into the text or number box of the shown row with that setting id
+//   lab settings-search <text>     replaces the open Settings editor's search with <text> and waits for its rows to settle
 
 import { createRequire } from "module";
 import fs from "fs";
@@ -913,6 +918,45 @@ function obsPanel() {
   };
 }
 
+/* the open Settings editor (kit #289, K6): the tab in front, the tabs shown, and every setting row the search shows, in
+   screen order: its id (the row's own data-key), its title as shown, its control, the control's value (a checkbox's state,
+   a box's text, an enum's shown choice; none for a list, an object or an "Edit in settings.json" link), whether the row
+   is modified in this tab's scope, the indicators beside its title, its description as text (code spans and links as
+   their text) and the validation message under it */
+function obsSettingsEditor() {
+  const ed = [...document.querySelectorAll(".settings-editor")].find(shown);
+  if (!ed) return { open: false };
+  const tabs = [...ed.querySelectorAll(".settings-tabs-widget .action-item")].filter(shown).map((t) => {
+    const l = t.querySelector(".action-label") || t;
+    return { label: norm(t.textContent), active: l.classList.contains("checked"), disabled: t.classList.contains("disabled") };
+  });
+  const CONTROLS = { bool: "checkbox", text: "text", multilineText: "text", number: "number", enum: "enum", list: "list",
+    include: "list", exclude: "list", object: "object", boolObject: "object", complex: "json-link", complexObject: "json-link" };
+  const rows = [...ed.querySelectorAll(".settings-tree-container .monaco-list-row")]
+    .filter((r) => r.querySelector(".setting-item-contents[data-key]"))
+    .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index)).map((r) => {
+      const item = r.querySelector(".setting-item"), c = r.querySelector(".setting-item-contents");
+      const kind = [...item.classList].map((x) => /^setting-item-(.+)$/.exec(x)).filter(Boolean).map((m) => m[1])[0] || null;
+      const control = CONTROLS[kind] || kind;
+      const box = r.querySelector(".setting-item-control input.input, .setting-item-control textarea");
+      const check = r.querySelector(".setting-value-checkbox"), select = r.querySelector(".setting-item-control select");
+      const value = control === "checkbox" ? (check ? check.getAttribute("aria-checked") === "true" : null)
+        : control === "text" || control === "number" ? (box ? box.value : null)
+        : control === "enum" ? (select && select.selectedOptions[0] ? norm(select.selectedOptions[0].textContent) : null) : null;
+      const v = r.querySelector(".setting-item-validation-message");
+      return {
+        id: c.dataset.key,
+        title: norm([r.querySelector(".setting-item-category"), r.querySelector(".setting-item-label")].map((e) => e ? e.textContent : "").join("")),
+        control, value, modified: c.classList.contains("is-configured"),
+        indicators: [...r.querySelectorAll(".setting-indicators-container .setting-indicator")].filter(shown).map((e) => norm(e.textContent)),
+        description: norm((r.querySelector(".setting-item-description") || {}).textContent) || null,
+        validation: c.classList.contains("invalid-input") && v ? norm(v.textContent) || null : null,
+      };
+    });
+  const front = tabs.find((t) => t.active);
+  return { open: true, tab: front ? front.label : null, tabs: tabs.map((t) => t.label), disabled: tabs.filter((t) => t.disabled).map((t) => t.label), rows };
+}
+
 /* ---- waits ---- */
 
 const observe = (page, reader, arg) => page.evaluate(inPage(reader, arg));
@@ -1381,6 +1425,56 @@ async function verbBreadcrumbs(page, o) {
 
 async function verbPanel(page) {
   return await observe(page, obsPanel);
+}
+
+/* kit #289, K6: the Settings editor as it settles; with tabs all, each tab's row ids too (an empty list when a tab lists
+   none, null for a tab shown disabled, which can't be opened), clicking each tab and the first one again at the end */
+async function verbSettingsEditor(page, o) {
+  const read = () => settle(page, obsSettingsEditor, null, null, 10000, 4, "the Settings editor");
+  const first = await read();
+  if (!first.open) throw new Error("settings-editor: no Settings editor is open");
+  const { disabled, ...out } = first;
+  if (o.tabs !== "all") return out;
+  const tab = (label) => page.locator(".settings-editor .settings-tabs-widget .action-item").filter({ hasText: label }).first();
+  out.by_tab = {};
+  for (const label of first.tabs) {
+    if (disabled.includes(label)) { out.by_tab[label] = null; continue; }
+    if (label !== first.tab) await tab(label).click({ timeout: 5000 });
+    out.by_tab[label] = (await read()).rows.map((r) => r.id);
+  }
+  if (first.tab) { await tab(first.tab).click({ timeout: 5000 }); await read(); }
+  return out;
+}
+
+/* kit #289, K6: the open Settings editor's search box gets `query` in place of what it held; the rows then settle */
+async function verbSettingsSearch(page, query) {
+  const box = page.locator(".settings-editor .settings-header .monaco-editor").first();
+  if (!(await box.count()) || !(await box.isVisible())) throw new Error("settings-search: no Settings editor is open");
+  await box.click({ timeout: 5000 });
+  await page.keyboard.press("Control+a");
+  if (query) await page.keyboard.type(query);
+  else await page.keyboard.press("Delete");
+  /* the editor filters after a short pause in typing: the old rows stay a while, so the rows count once they have held
+     for 600 ms after that pause */
+  await page.waitForTimeout(400);
+  const r = await settle(page, obsSettingsEditor, null, null, 10000, 12, "the Settings editor's rows");
+  return { query, rows: r.rows.length };
+}
+
+/* kit #289, K6: select all of the text or number box of the shown row whose setting id is o.id and type o.value; Enter is
+   never pressed and the box keeps the focus, so the editor's validation shows under it */
+async function verbSettingInput(page, o) {
+  if (typeof o.id !== "string" || typeof o.value !== "string") throw new Error("setting-input: wants {\"id\": <setting id>, \"value\": <text>}");
+  const row = page.locator(`.settings-editor .settings-tree-container .setting-item-contents[data-key="${o.id.replace(/["\\]/g, "\\$&")}"]`);
+  if (!(await row.count()) || !(await row.first().isVisible())) throw new Error("setting-input: no shown row for " + o.id);
+  const box = row.first().locator(".setting-item-control input.input, .setting-item-control textarea");
+  if (!(await box.count())) throw new Error("setting-input: the row for " + o.id + " has no text or number box");
+  await box.first().click({ timeout: 5000 });
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type(o.value);
+  await frames(page);
+  await page.waitForTimeout(500);
+  return { id: o.id, typed: o.value.length };
 }
 
 const EDITOR_VERBS = { panel: verbPanel, open: verbOpen, goto: verbGoto, suggest: verbSuggest, hovertext: verbHoverText, markers: verbMarkers, tokens: verbTokens, folds: verbFolds, outline: verbOutline, breadcrumbs: verbBreadcrumbs };
@@ -1946,6 +2040,17 @@ async function main() {
         console.log("saved " + f);
         break;
       }
+      case "settings-editor":
+      case "setting-input":
+      case "settings-search": {
+        const payload = sub === "settings-search" ? await verbSettingsSearch(page, args.join(" "))
+          : sub === "settings-editor" ? await verbSettingsEditor(page, args.length ? JSON.parse(args[0]) : {})
+          : await verbSettingInput(page, args.length ? JSON.parse(args[0]) : {});
+        if (JSON_MODE) Object.assign(RESULT, payload);
+        else console.log(JSON.stringify(payload, null, 1));
+        if (sub !== "settings-editor") await printState(page, 300);
+        break;
+      }
       case "panel":
       case "open":
       case "goto":
@@ -2024,7 +2129,7 @@ async function publishRefused(pages) {
 const PUBLISH_MSG = "REFUSED (R-56): the lab never publishes, signs in or sends data online; the Issue Reporter and every such flow are open, read and close only (AGENTS.md)";
 /* verbs whose LAB_JSON output is one JSON object (the rest print text as always) */
 const JSON_VERBS = new Set(["state", "windows", "view", "items", "notifications", "notifications-seen", "editor", "cmd", "palette", "pick", "check", "type", "typeraw", "key", "viewaction", "button", "link", "remote", "rowmenu", "rowaction", "menu", "focus", "hover", "wait",
-  "panel", "open", "goto", "suggest", "hovertext", "markers", "tokens", "folds", "outline", "breadcrumbs"]);
+  "panel", "open", "goto", "suggest", "hovertext", "markers", "tokens", "folds", "outline", "breadcrumbs", "settings-editor", "setting-input", "settings-search"]);
 main().then(r63Enforce).then(hostSleepNote).catch((e) => {
   hostSleepNote();
   if (JSON_MODE) console.log(JSON.stringify({ ok: false, error: "lab error: " + e.message.split("\n")[0], errorDetail: e.message.slice(0, 3000) }));

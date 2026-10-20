@@ -10,6 +10,8 @@ A case names them in `fixture.client_ports: [{name, kind}]`; each is bound as ${
   stalled     a listener on 127.0.0.1 that neither accepts nor refuses: its accept queue is full, so a connect hangs
   unbindable  a privileged port the recording user can't bind (proven at up, refused where it binds)
 
+The step `client_ports: free` ends the holder mid-case: every port it held is unbound from then to the case's end.
+
 The slot's ports are PORT_BASE + 16 * slot + i (i < 16), refused when they overlap the kernel's ephemeral range. A
 detached holder process keeps the listeners; its pid sits beside the slot (the slot's folder is made again each case),
 and the slot's next case removes a holder its last case left behind.
@@ -188,6 +190,11 @@ def hangs(port, seconds):
         c.close()
 
 
+PLACES = {"v4": [(socket.AF_INET, "127.0.0.1")], "v6": [(socket.AF_INET6, "::1")],
+          "both": [(socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")], "any": [(socket.AF_INET, "0.0.0.0")],
+          "stalled": [(socket.AF_INET, "127.0.0.1")]}   # where the holder listens, by kind
+
+
 def hold(planned):
     """Open every port of the plan, say ready, and keep them until TERM."""
     keep = []
@@ -198,15 +205,36 @@ def hold(planned):
         if kind == "stalled":
             keep.append(_stall(port))
             continue
-        places = {"v4": [(socket.AF_INET, "127.0.0.1")], "v6": [(socket.AF_INET6, "::1")],
-                  "both": [(socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")],
-                  "any": [(socket.AF_INET, "0.0.0.0")]}[kind]
-        for family, address in places:
+        for family, address in PLACES[kind]:
             s = _listener(family, address, port)
             keep.append(s)
             threading.Thread(target=_serve, args=(s,), daemon=True).start()
     print(READY, flush=True)
     signal.sigwait({signal.SIGTERM, signal.SIGINT})
+
+
+def still_held(planned, seconds=5):
+    """The names of the plan's held ports that a listener still can't bind after up to `seconds`, as a listener binds
+    (SO_REUSEADDR: the holder's closed connections linger in TIME_WAIT, which no listener waits for)."""
+    def bound(family, address, port):
+        s = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if family == socket.AF_INET6:
+                s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            s.bind((address, port))
+            return False
+        except OSError:
+            return True
+        finally:
+            s.close()
+    held = [p for p in planned if p["kind"] in PLACES]
+    deadline = time.monotonic() + seconds
+    while True:
+        left = [p["name"] for p in held if any(bound(f, a, p["port"]) for f, a in PLACES[p["kind"]])]
+        if not left or time.monotonic() > deadline:
+            return left
+        time.sleep(0.1)
 
 
 # ---- start, stop, and the slot's leftovers
