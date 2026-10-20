@@ -132,6 +132,8 @@ export interface Scene {
   timers: Array<() => void>;
   server: ServerResult | (() => Promise<ServerResult>);
   phasesOfServer: Array<'installing' | 'startingServer'>;
+  /** The percents of the server download the server step reports. */
+  percentsOfServer: number[];
   relayOutcome: 'open' | Failed;
   dockerPath: unknown;
   /** What the settings' `inspect` answers for the two `cacheVolume` settings; nothing, when the scene leaves it absent. */
@@ -232,6 +234,7 @@ export function sceneOf(
     },
     server: STARTED_SERVER,
     phasesOfServer: ['installing', 'startingServer'],
+    percentsOfServer: [],
     relayOutcome: 'open',
     dockerPath: 'docker',
     cacheVolumeInspect: undefined,
@@ -462,6 +465,9 @@ export function sceneOf(
       scene.serverRequests.push(request);
       for (const phase of scene.phasesOfServer) {
         request.onPhase(phase);
+      }
+      for (const percent of scene.percentsOfServer) {
+        request.onDownloadPercent(percent);
       }
       return typeof scene.server === 'function' ? scene.server() : scene.server;
     },

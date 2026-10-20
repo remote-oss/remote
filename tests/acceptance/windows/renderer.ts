@@ -554,6 +554,38 @@ export async function notifications(name: string): Promise<string[]> {
   );
 }
 
+/** The connecting toast of a window: its message and its bar, which core draws as `infinite` or `discrete`. */
+export interface ConnectingToast {
+  message: string;
+  progress: 'infinite' | 'discrete' | 'none';
+}
+
+/**
+ * The toast of window `name` whose message starts with `messageStart`, with the state of its progress bar, or nothing
+ * when there is none. Core draws an indeterminate bar with the class `infinite` on the toast's `.monaco-progress-container`
+ * and a determinate one without it ([oss] `src/vs/base/browser/ui/progressbar/progressbar.ts`).
+ */
+export async function notificationProgress(
+  name: string,
+  messageStart: string,
+): Promise<ConnectingToast | undefined> {
+  return evaluate<ConnectingToast | null>(
+    name,
+    `(() => {
+  const item = [...document.querySelectorAll('.notifications-toasts .notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  if (item === undefined) {
+    return null;
+  }
+  const bar = item.parentElement?.querySelector('.monaco-progress-container') ?? null;
+  const shown = bar !== null && bar.classList.contains('active') && !bar.classList.contains('done');
+  return {
+    message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+    progress: !shown ? 'none' : bar.classList.contains('infinite') ? 'infinite' : 'discrete',
+  };
+})()`,
+  ).then(found => found ?? undefined);
+}
+
 /** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */
 const OPEN_CENTRE = '.notifications-center.visible';
 

@@ -813,6 +813,9 @@ export function containerConnectorOf(
         onPhase: phase => {
           phases.tell({name: phase});
         },
+        onDownloadPercent: percent => {
+          phases.tell({name: 'serverDownloadPercent', percent});
+        },
         cancellation,
       },
       settings,

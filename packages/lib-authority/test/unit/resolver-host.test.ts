@@ -137,7 +137,9 @@ class FakeEditor implements ResolverEditor {
   registered: Array<{prefix: string; resolver: EditorResolver}> = [];
   refuses = false;
   disposed = 0;
-  progressRuns: Array<ProgressRequest & {updates: string[]}> = [];
+  progressRuns: Array<
+    ProgressRequest & {updates: string[]; increments: Array<number | undefined>}
+  > = [];
   progressEnded = 0;
   actions: string[] = [];
   timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
@@ -146,14 +148,19 @@ class FakeEditor implements ResolverEditor {
     withProgress: async <Result>(
       request: ProgressRequest,
       task: (
-        update: (title: string, details: boolean) => void,
+        update: (title: string, details: boolean, increment?: number) => void,
       ) => Promise<Result>,
     ): Promise<Result> => {
-      const entry = {...request, updates: [] as string[]};
+      const entry = {
+        ...request,
+        updates: [] as string[],
+        increments: [] as Array<number | undefined>,
+      };
       this.progressRuns.push(entry);
       try {
-        return await task((title, details) => {
+        return await task((title, details, increment) => {
           entry.updates.push(details ? `${title} (details)` : title);
+          entry.increments.push(increment);
         });
       } finally {
         this.progressEnded += 1;
@@ -624,6 +631,109 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
         context.editor.progressRuns[0]?.updates,
       ],
       [1, ['phase downloading', 'phase settingUpTunnel']],
+    );
+  });
+
+  /** The increments the progress got for `phases`, with the stage text `titleOf` gives them and the option as given. */
+  async function incrementsFor(
+    phases: ConnectPhase[],
+    determinateStages: boolean | undefined,
+    quietFirst = false,
+  ): Promise<Array<number | undefined>> {
+    const context = await setup({
+      ...(determinateStages === undefined ? {} : {determinateStages}),
+      titleOf: phase => (phase.name === 'initializing' ? '' : phase.name),
+    });
+    context.connector.phases = quietFirst
+      ? phases.map(phase => ({...phase, quiet: true}))
+      : phases;
+    await resolve(context);
+    return context.editor.progressRuns[0]?.increments ?? [];
+  }
+
+  it('containers-55: with determinate stages on, a stage report carries increment 0', async () => {
+    deepStrictEqual(
+      await incrementsFor(
+        [{name: 'startingServer'}, {name: 'installing'}],
+        true,
+      ),
+      [0, 0],
+    );
+  });
+
+  it('containers-55: the increments of the download follow its percents: 0, 40, 100 add 0, 40, 60', async () => {
+    deepStrictEqual(
+      await incrementsFor(
+        [
+          {name: 'serverDownloadPercent', percent: 0},
+          {name: 'serverDownloadPercent', percent: 40},
+          {name: 'serverDownloadPercent', percent: 100},
+        ],
+        true,
+      ),
+      [0, 40, 60],
+    );
+  });
+
+  it('containers-55: a percent lower than the last adds nothing, and a later higher one adds only the difference', async () => {
+    deepStrictEqual(
+      await incrementsFor(
+        [
+          {name: 'serverDownloadPercent', percent: 50},
+          {name: 'serverDownloadPercent', percent: 30},
+          {name: 'serverDownloadPercent', percent: 70},
+        ],
+        true,
+      ),
+      [50, 0, 20],
+    );
+  });
+
+  it('containers-55: a download phase with no percent counts as 0', async () => {
+    deepStrictEqual(
+      await incrementsFor([{name: 'serverDownloadPercent'}], true),
+      [0],
+    );
+  });
+
+  it('containers-55: a report with no stage text carries no increment', async () => {
+    deepStrictEqual(
+      await incrementsFor(
+        [{name: 'initializing'}, {name: 'startingServer'}],
+        true,
+      ),
+      [undefined, 0],
+    );
+  });
+
+  it('containers-55: the percents counted before the progress opened reach its first report', async () => {
+    const context = await setup({
+      determinateStages: true,
+      titleOf: phase => phase.name,
+    });
+    context.connector.phases = [
+      {name: 'serverDownloadPercent', percent: 30, quiet: true},
+      {name: 'serverDownloadPercent', percent: 80, quiet: true},
+      {name: 'startingServer'},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.increments, [80]);
+  });
+
+  it('containers-55: with the option off or absent no report carries an increment', async () => {
+    const phases: ConnectPhase[] = [
+      {name: 'serverDownloadPercent', percent: 40},
+      {name: 'startingServer'},
+    ];
+    deepStrictEqual(
+      [
+        await incrementsFor(phases, false),
+        await incrementsFor(phases, undefined),
+      ],
+      [
+        [undefined, undefined],
+        [undefined, undefined],
+      ],
     );
   });
 

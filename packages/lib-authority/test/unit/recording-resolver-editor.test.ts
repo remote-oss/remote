@@ -55,7 +55,12 @@ describe('the recording resolver host editor', () => {
     ]);
   });
 
-  it('contracts §3.2: records a stage that carries the details link', async () => {
+  /** The events of an uncancellable progress titled `Setting up` whose task reports its stages through `report`. */
+  async function stagesRecordedFor(
+    report: (
+      update: (title: string, details: boolean, increment?: number) => void,
+    ) => void,
+  ): Promise<string[]> {
     const events: string[] = [];
     await recordingResolverEditor(events).editor.progress.withProgress(
       {
@@ -65,11 +70,36 @@ describe('the recording resolver host editor', () => {
         onDetails: () => undefined,
       },
       update => {
-        update('stage', true);
+        report(update);
         return Promise.resolve();
       },
     );
-    deepStrictEqual(events, ['progress Setting up', 'phase stage (details)']);
+    return events;
+  }
+
+  it('containers-55: records the increment of a stage that carries one', async () => {
+    deepStrictEqual(
+      await stagesRecordedFor(update => {
+        update('stage', false, 40);
+        update('stage', true, 0);
+        update('stage', false);
+      }),
+      [
+        'progress Setting up',
+        'phase stage +40',
+        'phase stage (details) +0',
+        'phase stage',
+      ],
+    );
+  });
+
+  it('contracts §3.2: records a stage that carries the details link', async () => {
+    deepStrictEqual(
+      await stagesRecordedFor(update => {
+        update('stage', true);
+      }),
+      ['progress Setting up', 'phase stage (details)'],
+    );
   });
 
   it('cancels nothing when no progress runs', () => {
