@@ -80,7 +80,8 @@ jobs:
 
   checks:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
+    runs-on: ubuntu-latest
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
@@ -130,7 +131,8 @@ jobs:
       fail-fast: false
       matrix:
         check: [coverage]
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
