@@ -236,8 +236,12 @@ describe('a build with Features (card containers-93)', function () {
       });
       const environment = await environmentOf(built.containerId, 'lab-options');
       deepStrictEqual(
-        [environment.LEVEL, idsOf(await metadataOf(built.containerId)).length],
-        ['high', 1],
+        [
+          environment.LEVEL,
+          environment.TONE,
+          idsOf(await metadataOf(built.containerId)).length,
+        ],
+        ['high', 'calm', 1],
       );
     } finally {
       await setUserSetting('dev.containers.defaultFeatures', undefined);
