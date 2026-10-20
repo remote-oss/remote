@@ -46,7 +46,7 @@ export type TemplateChoice =
       templateId: string;
       metadata?: Readonly<Record<string, unknown>>;
     }
-  | {kind: 'reuse'; templateId: string; entry: string}
+  | {kind: 'reuse'; template: CatalogueTemplate; entry: string}
   | {kind: 'learnMore'}
   | {kind: 'cancelled'}
   | {kind: 'failed'; cause: string};
@@ -350,7 +350,7 @@ async function chooserPick(
                 kind: 'failed',
                 cause: `the catalogue has no ${EXISTING_DOCKERFILE} template`,
               }
-            : {kind: 'reuse', templateId: existing.id, entry},
+            : {kind: 'reuse', template: existing, entry},
         );
       }
     });

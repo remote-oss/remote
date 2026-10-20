@@ -17,7 +17,7 @@ const SPECIFICATION_TEMPLATES_REPOSITORY =
   'https://github.com/devcontainers/templates';
 
 /** One entry of the folder's root. */
-interface RootEntry {
+export interface RootEntry {
   name: string;
   kind: 'file' | 'folder' | 'other';
 }
@@ -171,11 +171,11 @@ function folderOf(template: CatalogueTemplate): string {
 
 /**
  * The prefix of the specification's collection: the folder its templates' ids share. Nothing when the catalogue has no
- * such template or their folders differ, which leaves the flat list; `log` is told why, once.
+ * such template or their folders differ, which leaves the flat list; `report` is told why, once.
  */
 export function curatedPrefixOf(
   templates: readonly CatalogueTemplate[],
-  log: (line: string) => void,
+  report: (line: string) => void,
 ): string | undefined {
   const folders = new Set(
     templates.filter(isSpecificationTemplate).map(folderOf),
@@ -183,7 +183,7 @@ export function curatedPrefixOf(
   if (folders.size === 1) {
     return [...folders][0];
   }
-  log(
+  report(
     folders.size === 0
       ? 'the catalogue has no specification template collection; the flat list is shown'
       : 'the specification template collection has no common folder; the flat list is shown',

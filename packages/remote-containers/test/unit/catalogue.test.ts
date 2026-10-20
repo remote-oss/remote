@@ -152,7 +152,7 @@ describe('the template catalogue (card containers-77)', () => {
   });
 
   it('F-0802 BR-5: a collection with no repository, or one that is not on github.com or is not an address, leaves the owner to the reference and the publisher', () => {
-    const owners = (repository: unknown): string[] => {
+    function owners(repository: unknown): string[] {
       const result = parseCatalogue(
         JSON.stringify({
           collections: [
@@ -173,7 +173,7 @@ describe('the template catalogue (card containers-77)', () => {
       return result.kind === 'catalogue'
         ? result.templates.map(each => each.owner)
         : [];
-    };
+    }
     deepStrictEqual(
       [
         owners(undefined),

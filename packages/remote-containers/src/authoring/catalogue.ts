@@ -82,8 +82,9 @@ function repositoryOwnerOf(repository: string | undefined): string | undefined {
   }
   try {
     const address = new URL(repository);
-    return address.hostname === 'github.com'
-      ? address.pathname.split('/')[1] || undefined
+    const [, owner] = address.pathname.split('/');
+    return address.hostname === 'github.com' && owner !== ''
+      ? owner
       : undefined;
   } catch {
     return undefined;
