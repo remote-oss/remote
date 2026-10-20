@@ -572,10 +572,10 @@
   "issue": 26,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Pre-connection script",
   "epic": "E21",
-  "acCount": 41,
+  "acCount": 42,
   "surfaces": {
    "commands": [],
    "settings": [

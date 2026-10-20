@@ -185,7 +185,7 @@ def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counte
         known = [c["name"] for c in (case.get("fixture") or {}).get("containers") or []] + run.known_names
         sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log, run_target=run.run_target())
         sess.user_settings = lambda keys: run.read_user_settings(keys)
-        sess.client_listeners = lambda: run.client_listeners()
+        sess.client_listeners = lambda holder=None: run.client_listeners(holder)
         sess.mark_urls()   # opened_urls counts from here: this case's URLs only
         run.start_window()
         run.ready(sess)
