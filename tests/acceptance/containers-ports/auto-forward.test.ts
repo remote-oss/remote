@@ -3,15 +3,14 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
+  connectedToContainer,
   devContainersOf,
   inWindow,
   listenIn,
-  waitFor,
 } from '../windows/harness.ts';
 import {
   answerDialog,
   answerInputBox,
-  portsRows,
   waitForDialog,
 } from '../windows/renderer.ts';
 import {
@@ -95,15 +94,9 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       await execFileAsync('docker', ['kill', containerId]);
       const dialog = await waitForDialog(window, 60_000);
       await answerDialog(window, 'Reload Window');
-      await waitFor(
-        `window ${window} to connect again`,
-        async () =>
-          (await portsRows(window).catch(() => [])).some(
-            shown => shown.port === String(port),
-          ),
-        180_000,
-      );
-      const back = await portsRows(window);
+      await connectedToContainer(window, 240_000);
+      await showPorts(window);
+      const back = await rowsWhen(window, shown => shown.length > 0);
       deepStrictEqual(
         [dialog.details, back.map(shown => [shown.port, shown.origin])],
         [
