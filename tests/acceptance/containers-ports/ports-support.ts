@@ -17,7 +17,7 @@ import {
 import {portsRows, type PortsRow} from '../windows/renderer.ts';
 
 /** The command that focuses core's Ports view. */
-export const FOCUS_PORTS = '~remote.forwardedPorts.focus';
+const FOCUS_PORTS = '~remote.forwardedPorts.focus';
 
 /** A port nothing on this machine listens on, from the range the system hands out. */
 export async function freePort(): Promise<number> {
