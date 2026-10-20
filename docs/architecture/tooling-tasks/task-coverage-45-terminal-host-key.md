@@ -15,6 +15,12 @@ else, that's an open row (§3).
 
 ## 2. Rows
 
+**F-2308's ruling (athena on remote-oss/remote-ssh#41, option (a)):** when `remote.SSH.showLoginTerminal` is true in
+terminal mode, every question stays in the terminal, the host-key question included. F-2305 AC-43 and §6.6 apply
+only when the setting is false. The `terminal` launch leaves the setting at its default, false, so both rows below
+are unchanged. Don't set it in this card's launch, and assert it in the rows' setup
+(`remote.SSH.showLoginTerminal` reads `false` in the window). The true case belongs to F-2308's rows, not this card.
+
 In the `terminal` launch (`useLocalServer` false, the platform named), a new file
 `tests/acceptance/suite-terminal/host-key.test.ts`, or the terminal launch's existing host-key file if one exists.
 The runner's client is OpenSSH 10.2 (`ssh -V`), so its question is the 10.x wording.
