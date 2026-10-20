@@ -1,4 +1,5 @@
-import {strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual} from 'node:assert';
+import {createHash} from 'node:crypto';
 import {redact} from '../../src/index.ts';
 
 /** The card's 40-hex commit id and 64-hex digest. */
@@ -124,5 +125,31 @@ describe('redaction (the outer-hyphen trim of a run)', () => {
 describe('redaction (a candidate whose trimmed run is short)', () => {
   it('a 32-character candidate that trims below 32 stays untouched', () => {
     strictEqual(redact(`-${'a'.repeat(30)}-`, []), `-${'a'.repeat(30)}-`);
+  });
+
+  it('redact of an OpenSSH key fingerprint, with or without + and / in it -> unchanged', () => {
+    const lines = Array.from(
+      {length: 400},
+      (unused, index) =>
+        `debug1: Server host key: ssh-ed25519 SHA256:${createHash('sha256').update(String(index)).digest('base64').replace(/=+$/, '')}`,
+    );
+    deepStrictEqual(
+      [
+        lines.map(line => redact(line, [])),
+        lines.some(line => /[+/]/.test(line.split('SHA256:')[1] ?? '')),
+        lines.some(line => !/[+/]/.test(line.split('SHA256:')[1] ?? '')),
+      ],
+      [lines, true, true],
+    );
+  });
+
+  it('redact of a longer base64 run behind SHA256: -> the run is still marked', () => {
+    deepStrictEqual(
+      redact(
+        `SHA256:${'A'.repeat(43)}${'B'.repeat(10)} and ${'C'.repeat(44)}`,
+        [],
+      ),
+      'SHA256:[redacted] and [redacted]',
+    );
   });
 });

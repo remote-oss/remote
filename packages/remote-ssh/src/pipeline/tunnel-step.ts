@@ -22,6 +22,7 @@ import {
   connectWaitMilliseconds,
   type Forward,
   type Invocation,
+  LineSplitter,
   type LoginTerminals,
   openTunnelSession,
   PromptReader,
@@ -31,6 +32,7 @@ import {
 } from 'lib-ssh';
 import {isAborted, portOf} from './connect.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
+import {logSshLines} from './ssh-log.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
@@ -201,8 +203,13 @@ async function openTerminalTunnel(
     {terminal: session, reader},
     input,
   );
+  // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
+  const sshOutput = new LineSplitter(line => {
+    logSshLines(dependencies.logger, [line], undefined);
+  });
   session.onOutput(text => {
     reader.push(text);
+    sshOutput.push(text);
   });
   function takeDown(): void {
     reader.stop();

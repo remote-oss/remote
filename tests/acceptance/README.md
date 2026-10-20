@@ -245,6 +245,12 @@ launch's extensions folder before it starts and removed with the run's folder; i
 which it opens: core doesn't always raise a notice that comes beside its own failed-resolve error as a toast, so a
 row that must find such a notice reads the centre.
 
+The rows that stop, pause or remove the container of a connected window (`containers/reconnect.test.ts`) leave the
+window about five seconds after the connect first. Core's remote status listener draws no dialog for a permanent
+failure that comes in about the first second after the window connects, whatever the extension answers (measured in
+card containers-61: the dialog came in 0 to 3 of 5 stops made at once, and in 12 of 12 made from two seconds on, while
+the extension's answer was the same in all of them).
+
 To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
 in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root
 `tsconfig.json`'s `references` and in `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`. Either kind's test files go in the

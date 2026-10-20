@@ -94,6 +94,8 @@ export type ConnectionEvent =
     }
   | {type: 'spawnFailed'; cause: SpawnFailure; detail: string}
   | {type: 'scriptLine'; runId: number; line: string}
+  /** Lines of ssh's error stream, in order, since the last such event. */
+  | {type: 'sshLines'; lines: string[]}
   | {type: 'transportLost'};
 
 type Fields = Record<string, unknown>;
@@ -332,6 +334,11 @@ export function readConnectionEvent(
     case 'scriptLine':
       return typeof body.runId === 'number' && typeof body.line === 'string'
         ? {type: 'scriptLine', runId: body.runId, line: body.line}
+        : undefined;
+    case 'sshLines':
+      return Array.isArray(body.lines) &&
+        body.lines.every(line => typeof line === 'string')
+        ? {type: 'sshLines', lines: body.lines}
         : undefined;
     case 'waitingForOtherWindow':
     case 'transportLost':

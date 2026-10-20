@@ -16,6 +16,7 @@ import {
   startRunRegistry,
   SYSTEM_CLOCK,
 } from './acceptance-registry.ts';
+import {staleRefusal} from './acceptance-stale.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -1609,8 +1610,15 @@ export function unpackArchive(archive: Uint8Array, folder: string): void {
 
 if (isMainModule(import.meta.url)) {
   const parsed = runArgumentsOf(process.argv.slice(2));
+  const stale =
+    parsed === undefined
+      ? undefined
+      : staleRefusal(REPOSITORY_ROOT, packagedExtensions(REPOSITORY_ROOT));
   if (parsed === undefined) {
     console.error(USAGE);
+    process.exitCode = 2;
+  } else if (stale !== undefined) {
+    console.error(`acceptance: refused: ${stale}`);
     process.exitCode = 2;
   } else {
     process.exitCode = await runAcceptance(

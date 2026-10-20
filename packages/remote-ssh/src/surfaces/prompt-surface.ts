@@ -155,6 +155,7 @@ export function attachPromptSurface(
       case 'ownerChanged':
       case 'loginOwned':
       case 'loginStarted':
+      case 'sshLines':
         break;
       default:
         takeDownAll();

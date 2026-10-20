@@ -7,11 +7,15 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  dockerContainers,
+  dockerImages,
   dockerVolumes,
   inWindow,
+  readUserSettings,
   reopenInContainer,
   variable,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {notificationCentre, toggleRow, viewRows} from '../windows/renderer.ts';
 
@@ -53,7 +57,11 @@ describe('the Details (Containers) view (card containers-33)', function () {
     await toggleRow(name, title, 'Attributes');
     await toggleRow(name, title, 'Volume mount');
     const mounts = await rows();
-    const before = [await devContainersOf(folder), await dockerVolumes()];
+    const before = [
+      await devContainersOf(folder),
+      await dockerVolumes(),
+      await dockerImages(),
+    ];
     await inWindow(name, 'remote-containers.explorerDetailsRefresh');
     await new Promise(resolve => setTimeout(resolve, 2000));
     deepStrictEqual(
@@ -62,7 +70,11 @@ describe('the Details (Containers) view (card containers-33)', function () {
         mounts,
         await rows(),
         await notificationCentre(name),
-        [await devContainersOf(folder), await dockerVolumes()],
+        [
+          await devContainersOf(folder),
+          await dockerVolumes(),
+          await dockerImages(),
+        ],
       ],
       [
         [
@@ -84,6 +96,87 @@ describe('the Details (Containers) view (card containers-33)', function () {
         [],
         before,
       ],
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0903 AC-35 (refresh-anywhere): the Refresh command, run before the Remote Explorer is shown and after, in a window with no Details section, changes no container, volume or image, writes no settings, and leaves the window usable', async () => {
+    const before = [
+      await dockerContainers(),
+      await dockerVolumes(),
+      await dockerImages(),
+      readUserSettings(),
+    ];
+    await inWindow('local', 'remote-containers.explorerDetailsRefresh');
+    await inWindow('local', SHOW_REMOTE_EXPLORER);
+    await inWindow('local', 'remote-containers.explorerDetailsRefresh');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    deepStrictEqual(
+      [
+        await dockerContainers(),
+        await dockerVolumes(),
+        await dockerImages(),
+        readUserSettings(),
+        (await windowState('local')).remoteName,
+      ],
+      [...before, null],
+    );
+  });
+
+  it('F-0903 AC-8 (rebuild): after Rebuild Container the section is the container’s again, titled with its folder, with a new Name and the same Image and volumes', async () => {
+    const folder = devContainerFolder('details-rebuild', {name: 'Rebuild'});
+    const name = await openFolderWindow(folder);
+    await reopenInContainer(name);
+    await inWindow(name, SHOW_REMOTE_EXPLORER);
+    const title = path.basename(folder);
+    /** The Name and Image descriptions of the section, and the names of its volumes. */
+    async function shown(): Promise<{
+      name: string;
+      image: string;
+      volumes: string[];
+    }> {
+      let found = {name: '', image: '', volumes: [] as string[]};
+      await waitFor(
+        `the Details section ${title} to show its rows`,
+        async () => {
+          try {
+            const rows = (await viewRows(name, title)) ?? [];
+            const named = rows.find(each => each.label === 'Name');
+            if (named === undefined) {
+              return false;
+            }
+            found = {
+              name: named.description,
+              image:
+                rows.find(each => each.label === 'Image')?.description ?? '',
+              volumes: rows
+                .filter(each => each.label === 'Volume')
+                .map(each => each.description),
+            };
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        60_000,
+      );
+      return found;
+    }
+    const first = await shown();
+    await reopenInContainer(
+      name,
+      300_000,
+      'remote-containers.rebuildContainer',
+    );
+    await inWindow(name, SHOW_REMOTE_EXPLORER);
+    const second = await shown();
+    deepStrictEqual(
+      [
+        first.name !== second.name && second.name !== '',
+        second.image,
+        second.volumes,
+      ],
+      [true, first.image, first.volumes],
     );
     await closeWindow(name);
   });

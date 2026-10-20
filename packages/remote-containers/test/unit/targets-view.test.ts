@@ -700,7 +700,7 @@ describe('the Dev Containers view (card containers-30)', () => {
     deepStrictEqual(await provider.getChildren(target), []);
   });
 
-  it('F-0901 BR-12, AC-56: a Refresh builds the next tree and fires one change; the first population fires none', async () => {
+  it('F-0901 AC-15, BR-12, AC-56: a Refresh builds the next tree and fires one change; the first population fires none', async () => {
     const scene = sceneOf();
     scene.containers = [containerOf(OTHER)];
     const {view, provider} = await shown(scene);

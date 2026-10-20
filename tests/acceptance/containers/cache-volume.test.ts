@@ -8,6 +8,7 @@ import {
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
+  editorProduct,
   inWindow,
   reloadingCommand,
   reopenInContainer,
@@ -95,6 +96,19 @@ async function commitsBesideOf(
   return (await docker('exec', containerId, 'ls', link.replace(/\/[^/]*$/, '')))
     .split('\n')
     .filter(line => line !== '');
+}
+
+/** How many extension folders the remote user of container `containerId` has installed. */
+async function installedCountOf(containerId: string): Promise<number> {
+  return Number(
+    await docker(
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `ls "$(cd; pwd)/${editorProduct().serverDataFolderName}/extensions" 2>/dev/null | grep -c . ; true`,
+    ),
+  );
 }
 
 /** Opens a window on `folder` and reopens it in its container; gives the window and the container's id. */
@@ -419,5 +433,64 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
       {...baseOf(looks[0]), indicator: 'Dev Container: Volume Look'},
       {...baseOf(looks[0]), indicator: 'Dev Container: Volume Look'},
     ]);
+  });
+
+  it('F-0419 AC-17 (c17): with an extension pack to install, with cacheVolume on and off, there is a moment when the window is connected and the extensions are not all installed, and they are installed after', async () => {
+    const results = [];
+    for (const cacheVolume of [false, true]) {
+      await setUserSetting('dev.containers.cacheVolume', cacheVolume);
+      const folder = devContainerFolder('c53v-pack', {
+        name: 'Volume Pack',
+        customizations: {vscode: {extensions: ['vscjava.vscode-java-pack']}},
+      });
+      try {
+        const name = await openFolderWindow(folder);
+        const samples: Array<{connected: boolean; installed: number}> = [];
+        const gate = {done: false};
+        const sampler = (async () => {
+          let settled = 0;
+          while (!gate.done || settled < 20) {
+            try {
+              const connected = (
+                await statusBarText(name, 'status.host')
+              ).startsWith('Dev Container:');
+              const [containerId = ''] = await devContainersOf(folder);
+              const installed =
+                connected && containerId !== ''
+                  ? await installedCountOf(containerId)
+                  : 0;
+              samples.push({connected, installed});
+              settled =
+                gate.done && installed === samples.at(-2)?.installed
+                  ? settled + 1
+                  : 0;
+            } catch {
+              // The window is reloading.
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        })();
+        await reopenInContainer(name);
+        gate.done = true;
+        await sampler;
+        const connectedSamples = samples.filter(sample => sample.connected);
+        results.push({
+          cacheVolume,
+          atFirstConnected: connectedSamples[0]?.installed,
+          atEnd: samples.at(-1)?.installed,
+        });
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    }
+    await setUserSetting('dev.containers.cacheVolume', undefined);
+    console.log(`c53v c17: ${JSON.stringify(results)}`);
+    deepStrictEqual(
+      results.map(
+        result => (result.atFirstConnected ?? 0) < (result.atEnd ?? 0),
+      ),
+      [true, true],
+    );
   });
 });

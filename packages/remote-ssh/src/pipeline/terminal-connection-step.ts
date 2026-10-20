@@ -29,6 +29,7 @@ import {
   type TerminalLogin,
 } from 'lib-ssh';
 import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
+import {isForwardingLine, logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -253,6 +254,20 @@ export function openTerminalConnectionStep(
         ) {
           startSession();
         }
+      });
+      // ssh's own lines are logged up to its authentication; after it the terminal also holds the bootstrap's echo and
+      // the remote shell, so only ssh's lines for a channel or a forward go on being logged.
+      let sshPhase = true;
+      const sshOutput = new LineSplitter(line => {
+        if (sshPhase || isForwardingLine(line)) {
+          logSshLines(dependencies.logger, [line], undefined);
+        }
+        if (sshPhase && setupMarkerOf(line) === 'authenticated') {
+          sshPhase = false;
+        }
+      });
+      terminal.onOutput(text => {
+        sshOutput.push(text);
       });
       followLoginOutput(terminal, {
         isFinished: () => finished,

@@ -845,7 +845,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0901 3.1, BR-6, BR-7: Refresh is out of the palette, and the view title shows it only with Docker reachable and at least one container', () => {
+  it('F-0901 AC-15: F-0901 3.1, BR-6, BR-7: Refresh is out of the palette, and the view title shows it only with Docker reachable and at least one container', () => {
     deepStrictEqual(
       [
         VIEW_PARTS.menus.commandPalette?.find(

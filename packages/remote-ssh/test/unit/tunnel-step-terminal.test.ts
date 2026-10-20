@@ -282,6 +282,25 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     deepStrictEqual(questions, ["alex@dev's password: "]);
   });
 
+  it('F-2003 BR-8: every line of the SSH Tunnel terminal is logged as ssh’s, including a refused channel', async () => {
+    const {open, opened, sink} = stepWith();
+    void open();
+    await settled();
+    opened().write(
+      'channel 3: open failed: administratively prohibited: open failed\nWarning: remote port forwarding failed\n',
+    );
+    await settled();
+    deepStrictEqual(
+      sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('[ssh] ')),
+      [
+        '[ssh] channel 3: open failed: administratively prohibited: open failed',
+        '[ssh] Warning: remote port forwarding failed',
+      ],
+    );
+  });
+
   it('F-2104 7.E10: the terminal ending before the success line fails without a reason', async () => {
     const {open, opened} = stepWith();
     const pending = open();
