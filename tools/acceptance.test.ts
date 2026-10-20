@@ -897,7 +897,7 @@ describe('acceptance', () => {
   });
 
   describe('installsOf (card tooling-30)', () => {
-    it('tooling-30, containers-09: the run installs once into its folder, and once into each explorer and containers launch’s folder with its own extension', () => {
+    it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       deepStrictEqual(
@@ -952,11 +952,11 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
-          {
-            folder: path.join('/run', 'extensions-genuine'),
+          ...['genuine', 'ssh-no-proposals'].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
             client: 'vscode',
-          },
+          })),
         ],
       );
     });
@@ -2690,8 +2690,13 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51: the genuine launch is the last of the table', () => {
-      strictEqual(launchesOf(REPOSITORY_ROOT).at(-1)?.label, 'genuine');
+    it('tooling-51, connect-84: the genuine-client launches are the last of the table', () => {
+      deepStrictEqual(
+        launchesOf(REPOSITORY_ROOT)
+          .slice(-2)
+          .map(launch => launch.label),
+        ['genuine', 'ssh-no-proposals'],
+      );
     });
 
     it('tooling-51: the executable of a launch is VS Code’s for a launch of that client and VSCodium’s for any other', () => {

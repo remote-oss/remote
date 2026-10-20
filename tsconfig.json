@@ -164,6 +164,9 @@
       "path": "tests/acceptance/genuine"
     },
     {
+      "path": "tests/acceptance/ssh-no-proposals"
+    },
+    {
       "path": "tests/acceptance/containers"
     },
     {

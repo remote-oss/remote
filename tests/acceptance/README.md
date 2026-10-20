@@ -432,6 +432,14 @@ removes both when it ends. The container's removal at the end of the run is the 
 
     node tools/acceptance.ts --editor vscodium --launches genuine
 
+`ssh-no-proposals` is the same client and settings with the proposed API not enabled (`proposedApi: false`), for F-2001
+§3.4's setup notice in the editor the family's users start from. It also comes last and only when named, after
+`genuine`. The family's gate tells a profile once, and a "Not Now" keeps it silent until a probe passes. So in a run
+that also makes the VSCodium `no-proposals` launch, whose rows dismiss the notice, this launch's rows find none and say
+so. `genuine` before it clears the flag, because its probe passes:
+
+    node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
+
 ## The host's other accounts (D-85)
 
 Besides `harness`, the host image has three users, and the run's `ssh_config` has an alias for each use of them. The
