@@ -16,7 +16,7 @@ interface FolderPresentation {
 }
 
 /** A recent folder or workspace of a host. */
-interface FolderRow extends FolderPresentation {
+export interface FolderRow extends FolderPresentation {
   /** Unique among all rows: built from the host and the position, never from the path alone. */
   rowId: string;
   kind: 'folder' | 'workspace';

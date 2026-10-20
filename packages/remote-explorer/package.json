@@ -59,6 +59,21 @@
         "command": "remote-explorer.connectToRemoteInCurrentWindow",
         "title": "%commands.connectToRemoteInCurrentWindow.title%",
         "icon": "$(arrow-right)"
+      },
+      {
+        "command": "remote-explorer.connectToFolderInNewWindow",
+        "title": "%commands.connectToFolderInNewWindow.title%",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "remote-explorer.connectToFolderInCurrentWindow",
+        "title": "%commands.connectToFolderInCurrentWindow.title%",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "remote-explorer.deleteFolderHistoryItem",
+        "title": "%commands.deleteFolderHistoryItem.title%",
+        "icon": "$(remove)"
       }
     ],
     "views": {
@@ -86,6 +101,18 @@
         },
         {
           "command": "remote-explorer.connectToRemoteInCurrentWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.connectToFolderInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.connectToFolderInCurrentWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.deleteFolderHistoryItem",
           "when": "false"
         }
       ],
@@ -116,8 +143,58 @@
           "command": "remote-explorer.connectToRemoteInNewWindow",
           "group": "navigation@2",
           "when": "viewItem == remote-explorer.tunnelRemoteTarget && !remote-explorer.standingDown || viewItem == remote-explorer.sshRemoteTarget && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToFolderInCurrentWindow",
+          "group": "inline@1",
+          "when": "viewItem == remote-explorer.remoteFolder && !remote-explorer.standingDown || viewItem == remote-explorer.tunnelWsl && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToFolderInCurrentWindow",
+          "group": "navigation@1",
+          "when": "viewItem == remote-explorer.remoteFolder && !remote-explorer.standingDown || viewItem == remote-explorer.tunnelWsl && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToFolderInNewWindow",
+          "group": "inline@2",
+          "when": "viewItem == remote-explorer.remoteFolder && !remote-explorer.standingDown || viewItem == remote-explorer.tunnelWsl && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToFolderInNewWindow",
+          "group": "navigation@2",
+          "when": "viewItem == remote-explorer.remoteFolder && !remote-explorer.standingDown || viewItem == remote-explorer.tunnelWsl && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.deleteFolderHistoryItem",
+          "group": "navigation@3",
+          "when": "viewItem == remote-explorer.remoteFolder && !remote-explorer.standingDown"
         }
       ]
+    },
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "remote-explorer.foldersSortOrder": {
+          "type": "string",
+          "default": "most recently used",
+          "scope": "application",
+          "enum": [
+            "most recently used",
+            "alphabetical"
+          ],
+          "enumDescriptions": [
+            "%settings.foldersSortOrder.mru.description%",
+            "%settings.foldersSortOrder.alphabetical.description%"
+          ],
+          "description": "%settings.foldersSortOrder.description%"
+        },
+        "remote-explorer.collapseRecentFolders": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "%settings.collapseRecentFolders.description%"
+        }
+      }
     }
   },
   "dependencies": {

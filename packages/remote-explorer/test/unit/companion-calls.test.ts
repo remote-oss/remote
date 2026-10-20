@@ -9,6 +9,8 @@ import {companionCallsOf} from '../../src/view/companion-calls.ts';
 const ACTIVE = 'remote-internal.getActiveSshRemote';
 const HOSTNAMES = 'remote-internal.getConfiguredHostnames';
 const OPEN = 'remote-internal.openRemoteSshTarget';
+const HISTORY = 'remote-internal.getSshFoldersHistory';
+const DELETE = 'remote-internal.deleteSshFolderFromHistory';
 const VERSION = {major: 1, minor: 0};
 
 /** A clock with one timer that a test runs by hand. */
@@ -114,5 +116,102 @@ describe('the companion calls of the view (card explorer-04)', () => {
       status: 'unavailable',
       cause: 'rejected',
     });
+  });
+
+  it('F-5902.5.rules: the history query goes out with the interface version and its answer is read', async () => {
+    const fake = createRecordingFake();
+    fake.answerWith(HISTORY, {
+      kind: 'answer',
+      result: {
+        interfaceVersion: VERSION,
+        hosts: [{hostKey: 'dev', entries: []}],
+      },
+    });
+    const outcome = await callsOver(fake).history();
+    deepStrictEqual(
+      [
+        fake.calls.map(call => [call.commandId, call.interfaceVersion]),
+        outcome,
+      ],
+      [
+        [[HISTORY, VERSION]],
+        {
+          status: 'answered',
+          value: {
+            interfaceVersion: VERSION,
+            hosts: [{hostKey: 'dev', entries: []}],
+          },
+        },
+      ],
+    );
+  });
+
+  it('F-5902.5.rules: a history the companion rejects is unavailable', async () => {
+    const fake = createRecordingFake();
+    fake.answerWith(HISTORY, {kind: 'reject', reason: new Error('no')});
+    deepStrictEqual(await callsOver(fake).history(), {
+      status: 'unavailable',
+      cause: 'rejected',
+    });
+  });
+
+  it('F-5902.5.rules: a delete request carries the version, the host key and the path, and its result is read', async () => {
+    const fake = createRecordingFake();
+    const received: unknown[] = [];
+    fake.registerCommand(DELETE, argument => {
+      received.push(argument);
+      return {interfaceVersion: VERSION, changed: true};
+    });
+    const outcome = await callsOver(fake).deleteFolder('Alias', '/home/a');
+    deepStrictEqual(
+      [received, outcome],
+      [
+        [{interfaceVersion: VERSION, hostKey: 'Alias', path: '/home/a'}],
+        {
+          status: 'answered',
+          value: {interfaceVersion: VERSION, changed: true},
+        },
+      ],
+    );
+  });
+
+  it('F-5902.5.rules: a delete that the companion rejects is unavailable and throws nothing', async () => {
+    const fake = createRecordingFake();
+    fake.answerWith(DELETE, {kind: 'reject', reason: new Error('no')});
+    deepStrictEqual(await callsOver(fake).deleteFolder('Alias', '/home/a'), {
+      status: 'unavailable',
+      cause: 'rejected',
+    });
+  });
+
+  it('F-5902.5.rules: a foreign delete result is unavailable', async () => {
+    const fake = createRecordingFake();
+    fake.answerWith(DELETE, {kind: 'foreign'});
+    deepStrictEqual(await callsOver(fake).deleteFolder('Alias', '/home/a'), {
+      status: 'unavailable',
+      cause: 'foreignPayload',
+    });
+  });
+
+  it('F-5902.5.rules: an open of a folder carries the path and the kind beside the host key and the window', async () => {
+    const fake = createRecordingFake();
+    const received: unknown[] = [];
+    fake.registerCommand(OPEN, argument => {
+      received.push(argument);
+      return writeEnvelope();
+    });
+    await callsOver(fake).open('Alias', 'current', {
+      path: '/home/a',
+      kind: 'folder',
+    });
+    deepStrictEqual(received, [
+      {
+        interfaceVersion: VERSION,
+        hostKey: 'Alias',
+        window: 'current',
+        path: '/home/a',
+        kind: 'folder',
+      },
+    ]);
   });
 });

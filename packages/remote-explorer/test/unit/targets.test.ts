@@ -4,6 +4,7 @@ import {
   type CallOutcome,
   type CompanionDetector,
   createProtocol,
+  type FoldersHistory,
   type Hostnames,
   type Timers,
 } from 'lib-companion';
@@ -14,6 +15,7 @@ import {
 } from '../../src/view/companion-calls.ts';
 import {
   createTargets,
+  type FolderSettings,
   type HostNode,
   type TargetNode,
 } from '../../src/view/targets.ts';
@@ -30,6 +32,22 @@ function pullOf(connected: boolean, hostKey?: string): ActiveRemote {
 
 function hostsOf(...hostnames: string[]): Hostnames {
   return {interfaceVersion: VERSION, hostnames};
+}
+
+/** The open history of the hosts, each key with its paths, as the companion sends it. */
+function historyOf(
+  ...hosts: Array<readonly [string, ...string[]]>
+): FoldersHistory {
+  return {
+    interfaceVersion: VERSION,
+    hosts: hosts.map(([hostKey, ...paths]) => ({
+      hostKey,
+      entries: paths.map(path => ({
+        path,
+        kind: path.endsWith('.code-workspace') ? 'workspace' : 'folder',
+      })),
+    })),
+  };
 }
 
 function answered<Value>(value: Value): CallOutcome<Value> {
@@ -65,6 +83,8 @@ interface FakeCalls extends CompanionCalls {
   order: string[];
   pulls: Array<Held<ActiveRemote>>;
   hosts: Array<Held<Hostnames>>;
+  /** What the next history calls answer; nothing recorded by default. */
+  historyAnswer: CallOutcome<FoldersHistory>;
 }
 
 function fakeCalls(): FakeCalls {
@@ -72,6 +92,7 @@ function fakeCalls(): FakeCalls {
     order: [],
     pulls: [],
     hosts: [],
+    historyAnswer: answered(historyOf()),
     activeRemote: () => {
       calls.order.push('activeRemote');
       const call = held<ActiveRemote>();
@@ -83,6 +104,13 @@ function fakeCalls(): FakeCalls {
       const call = held<Hostnames>();
       calls.hosts.push(call);
       return call.promise;
+    },
+    history: () => {
+      calls.order.push('history');
+      return Promise.resolve(calls.historyAnswer);
+    },
+    deleteFolder: () => {
+      throw new Error('the targets never delete a folder');
     },
     open: () => {
       throw new Error('the targets never open a host');
@@ -123,6 +151,7 @@ function fakeDetector(present: boolean): FakeDetector {
 }
 
 interface Setup {
+  settings: FolderSettings;
   calls: FakeCalls;
   detector: FakeDetector;
   targets: ReturnType<typeof createTargets>;
@@ -140,6 +169,7 @@ interface Setup {
 function setup(present = true): Setup {
   const calls = fakeCalls();
   const detector = fakeDetector(present);
+  const settings: FolderSettings = {sortOrder: undefined, collapse: undefined};
   let configListener: (() => void) | undefined;
   const targets = createTargets({
     calls,
@@ -153,6 +183,8 @@ function setup(present = true): Setup {
       };
     },
     connectedText: 'connected',
+    folderSettings: () => ({...settings}),
+    clientPlatform: 'other',
   });
   const changes: number[] = [];
   targets.onDidChange(() => changes.push(changes.length));
@@ -163,6 +195,7 @@ function setup(present = true): Setup {
       : ((await targets.children(first)) as HostNode[]);
   }
   return {
+    settings,
     calls,
     detector,
     targets,
@@ -203,7 +236,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
         label: 'SSH',
         tooltip: 'SSH',
         contextValue: 'remote-explorer.sshGroup',
-        expanded: true,
+        collapsibleState: 'expanded',
       },
     );
   });
@@ -216,7 +249,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     await scenario.settleAll(answered(pullOf(false)), answered(hostsOf('a')));
     deepStrictEqual(
       [asked, before, scenario.changes.length],
-      [['activeRemote', 'hostnames'], 0, 1],
+      [['activeRemote', 'history', 'hostnames'], 0, 1],
     );
   });
 
@@ -255,6 +288,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
           tooltip: 'zeta',
           iconId: 'vm',
           contextValue: 'remote-explorer.sshRemoteTarget',
+          collapsibleState: 'none',
         },
       ],
     );
@@ -389,6 +423,8 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
       detector: fakeDetector(true),
       configFileChanges: () => ({dispose: () => undefined}),
       connectedText: 'connected',
+      folderSettings: () => ({sortOrder: undefined, collapse: undefined}),
+      clientPlatform: 'other',
     });
     const changes: number[] = [];
     targets.onDidChange(() => changes.push(1));
@@ -434,7 +470,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
         nodes.map(node => [node.hostRow.alias, node.connected]),
       ],
       [
-        ['activeRemote', 'hostnames', 'hostnames'],
+        ['activeRemote', 'history', 'hostnames', 'hostnames'],
         [
           ['Alpha', true],
           ['beta', false],
@@ -474,7 +510,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     await scenario.settleAll(answered(pullOf(false)), answered(hostsOf('a')));
     deepStrictEqual(
       [asked, await scenario.names()],
-      [['activeRemote', 'hostnames'], ['a']],
+      [['activeRemote', 'history', 'hostnames'], ['a']],
     );
   });
 
@@ -545,6 +581,314 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
         ? undefined
         : await scenario.targets.children(nodes[0]),
       [],
+    );
+  });
+
+  /** A full build over `history` and the aliases, settled; the host nodes it gives. */
+  async function hostsFor(
+    scenario: Setup,
+    history: FoldersHistory,
+    ...aliases: string[]
+  ): Promise<HostNode[]> {
+    scenario.calls.historyAnswer = answered(history);
+    void scenario.targets.rebuild();
+    const built = scenario.calls.pulls.length - 1;
+    await scenario.settleAll(
+      answered(pullOf(false)),
+      answered(hostsOf(...aliases)),
+      built,
+    );
+    return scenario.hosts();
+  }
+
+  it('F-5104.BR-1, BR-2: each host gets the folders recorded under its exact alias, and a key that matches no alias, or only by case, shows nowhere', async () => {
+    const scenario = setup();
+    const nodes = await hostsFor(
+      scenario,
+      historyOf(
+        ['devbox', '/w/a', '/w/b'],
+        ['DEVBOX', '/w/upper'],
+        ['gone', '/w/gone'],
+        ['other', '/w/c'],
+      ),
+      'devbox',
+      'other',
+      'empty',
+    );
+    deepStrictEqual(
+      nodes.map(node => [
+        node.hostRow.alias,
+        node.folders.map(folder => folder.folderRow.path),
+      ]),
+      [
+        ['devbox', ['/w/a', '/w/b']],
+        ['other', ['/w/c']],
+        ['empty', []],
+      ],
+    );
+  });
+
+  it('F-5104.AC-27: a folder row shows its label, its path and its tooltip, has no icon, is a leaf and has no children', async () => {
+    const scenario = setup();
+    const [host] = await hostsFor(
+      scenario,
+      historyOf(['devbox', '/w/bravo']),
+      'devbox',
+    );
+    const folder = host?.folders[0];
+    deepStrictEqual(
+      [
+        folder === undefined ? undefined : scenario.targets.itemOf(folder),
+        folder === undefined
+          ? undefined
+          : await scenario.targets.children(folder),
+      ],
+      [
+        {
+          id: 'ssh-folder:0:devbox',
+          label: 'bravo',
+          description: '/w/bravo',
+          tooltip: "'/w/bravo' on devbox",
+          contextValue: 'remote-explorer.remoteFolder',
+          collapsibleState: 'none',
+        },
+        [],
+      ],
+    );
+  });
+
+  it('F-5104.BR-3: the children of a host are its folder nodes, repeats kept', async () => {
+    const scenario = setup();
+    const [host] = await hostsFor(
+      scenario,
+      historyOf(['devbox', '/w/a', '/w/a']),
+      'devbox',
+    );
+    deepStrictEqual(
+      host === undefined
+        ? undefined
+        : (await scenario.targets.children(host)).map(node =>
+            node.kind === 'sshFolder' ? node.folderRow.rowId : node.kind,
+          ),
+      ['ssh-folder:0:devbox', 'ssh-folder:1:devbox'],
+    );
+  });
+
+  it('F-5902.5.order, F-5104.BR-10: the first render waits for the history too, and a full build changes once after all three answered', async () => {
+    const scenario = setup();
+    const pending = held<FoldersHistory>();
+    scenario.calls.history = () => {
+      scenario.calls.order.push('history');
+      return pending.promise;
+    };
+    void scenario.targets.rebuild();
+    await scenario.settleAll(answered(pullOf(false)), answered(hostsOf('a')));
+    const before = scenario.changes.length;
+    pending.settle(answered(historyOf(['a', '/w/x'])));
+    await scenario.hosts();
+    deepStrictEqual([before, scenario.changes.length], [0, 1]);
+  });
+
+  it('F-5902.AC-16: a history that fails shows the host rows as leaves', async () => {
+    const scenario = setup();
+    scenario.calls.historyAnswer = UNAVAILABLE;
+    void scenario.targets.rebuild();
+    await scenario.settleAll(answered(pullOf(false)), answered(hostsOf('a')));
+    const [host] = await scenario.hosts();
+    deepStrictEqual(
+      [
+        host?.folders,
+        host === undefined
+          ? undefined
+          : scenario.targets.itemOf(host).collapsibleState,
+      ],
+      [[], 'none'],
+    );
+  });
+
+  it('F-5104.BR-10: a hosts-only build keeps the history of the last full build', async () => {
+    const scenario = setup();
+    await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    scenario.configChanged();
+    scenario.calls.hosts[1]?.settle(answered(hostsOf('a', 'b')));
+    await scenario.targets.children(undefined);
+    const nodes = await scenario.hosts();
+    deepStrictEqual(
+      [
+        nodes.map(node => [node.hostRow.alias, node.folders.length]),
+        scenario.calls.order,
+      ],
+      [
+        [
+          ['a', 1],
+          ['b', 0],
+        ],
+        ['activeRemote', 'history', 'hostnames', 'hostnames'],
+      ],
+    );
+  });
+
+  it('F-5104.BR-7: a host with history starts expanded, one without a leaf, and with the collapse setting on every host starts collapsed', async () => {
+    const scenario = setup();
+    const history = historyOf(['with', '/w/x']);
+    async function states(): Promise<string[]> {
+      return (await scenario.hosts()).map(
+        node => scenario.targets.itemOf(node).collapsibleState,
+      );
+    }
+    await hostsFor(scenario, history, 'with', 'without');
+    const collapseOff = await states();
+    scenario.settings.collapse = true;
+    await hostsFor(scenario, history, 'with', 'without');
+    deepStrictEqual(
+      [collapseOff, await states()],
+      [
+        ['expanded', 'none'],
+        ['collapsed', 'collapsed'],
+      ],
+    );
+  });
+
+  for (const [value, collapsed] of [
+    ['true', true],
+    ['false', true],
+    [1, true],
+    [0, false],
+    ['', false],
+    [undefined, false],
+    [null, false],
+  ] as const) {
+    it(`F-5104.BR-7: the collapse setting ${JSON.stringify(value)} is read by truthiness`, async () => {
+      const scenario = setup();
+      scenario.settings.collapse = value;
+      const [host] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+      deepStrictEqual(
+        host === undefined
+          ? undefined
+          : scenario.targets.itemOf(host).collapsibleState === 'collapsed',
+        collapsed,
+      );
+    });
+  }
+
+  it('F-5104.BR-5: the alphabetical setting orders the rows of a host by the recorded string, and any other value keeps the recorded order', async () => {
+    const scenario = setup();
+    const history = historyOf(['a', '/w/b', '/w/A', '/w/a']);
+    async function order(): Promise<string[]> {
+      const [host] = await hostsFor(scenario, history, 'a');
+      return host?.folders.map(folder => folder.folderRow.path) ?? [];
+    }
+    const recorded = await order();
+    scenario.settings.sortOrder = 'alphabetical';
+    const sorted = await order();
+    scenario.settings.sortOrder = 'Alphabetical';
+    deepStrictEqual(
+      [recorded, sorted, await order()],
+      [
+        ['/w/b', '/w/A', '/w/a'],
+        ['/w/A', '/w/a', '/w/b'],
+        ['/w/b', '/w/A', '/w/a'],
+      ],
+    );
+  });
+
+  it('F-5104.BR-10: a setting change rebuilds nothing by itself, and the next full build reads it', async () => {
+    const scenario = setup();
+    await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    const before = [scenario.calls.order.length, scenario.changes.length];
+    scenario.settings.collapse = true;
+    const [host] = await scenario.hosts();
+    const unchanged = [
+      scenario.calls.order.length,
+      scenario.changes.length,
+      host === undefined
+        ? undefined
+        : scenario.targets.itemOf(host).collapsibleState,
+    ];
+    const [after] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    deepStrictEqual(
+      [
+        unchanged,
+        after === undefined
+          ? undefined
+          : scenario.targets.itemOf(after).collapsibleState,
+      ],
+      [[before[0], before[1], 'expanded'], 'collapsed'],
+    );
+  });
+
+  it('F-5104.BR-9: the ids of the rows stay the same across a Refresh, so a manual expansion is kept', async () => {
+    const scenario = setup();
+    async function idsOf(): Promise<string[]> {
+      return (await scenario.hosts()).flatMap(node => [
+        scenario.targets.itemOf(node).id,
+        ...node.folders.map(folder => scenario.targets.itemOf(folder).id),
+      ]);
+    }
+    await hostsFor(scenario, historyOf(['a', '/w/x', '/w/y']), 'a', 'b');
+    const first = await idsOf();
+    await hostsFor(scenario, historyOf(['a', '/w/x', '/w/y']), 'a', 'b');
+    deepStrictEqual(await idsOf(), first);
+  });
+
+  it('F-5104.BR-13: dropFolder removes every row of the path under the host at once, with one change and no new call, and leaves the other hosts alone', async () => {
+    const scenario = setup();
+    await hostsFor(
+      scenario,
+      historyOf(['a', '/w/x', '/w/y', '/w/x'], ['b', '/w/x']),
+      'a',
+      'b',
+    );
+    const calls = scenario.calls.order.length;
+    const changes = scenario.changes.length;
+    scenario.targets.dropFolder('a', '/w/x');
+    const nodes = await scenario.hosts();
+    deepStrictEqual(
+      [
+        nodes.map(node => node.folders.map(folder => folder.folderRow.path)),
+        scenario.calls.order.length - calls,
+        scenario.changes.length - changes,
+      ],
+      [[['/w/y'], ['/w/x']], 0, 1],
+    );
+  });
+
+  it('F-5104.BR-13: dropping the last folder of a host leaves a leaf, and after dispose nothing changes', async () => {
+    const scenario = setup();
+    const [host] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    scenario.targets.dropFolder('a', '/w/x');
+    const [dropped] = await scenario.hosts();
+    scenario.targets.dispose();
+    const changes = scenario.changes.length;
+    scenario.targets.dropFolder('a', '/w/y');
+    deepStrictEqual(
+      [
+        host === undefined
+          ? undefined
+          : scenario.targets.itemOf(host).collapsibleState,
+        dropped === undefined
+          ? undefined
+          : scenario.targets.itemOf(dropped).collapsibleState,
+        scenario.changes.length - changes,
+      ],
+      ['expanded', 'none', 0],
+    );
+  });
+
+  it('F-5002.19: folderOf gives the node itself when it is a folder node of the current list, and nothing for any other value', async () => {
+    const scenario = setup();
+    const [host] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    const folder = host?.folders[0];
+    const [renewed] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    deepStrictEqual(
+      [
+        scenario.targets.folderOf(renewed?.folders[0]) === renewed?.folders[0],
+        scenario.targets.folderOf(folder),
+        scenario.targets.folderOf(host),
+        scenario.targets.folderOf({...renewed?.folders[0]}),
+        scenario.targets.folderOf('x'),
+      ],
+      [true, undefined, undefined, undefined, undefined],
     );
   });
 });

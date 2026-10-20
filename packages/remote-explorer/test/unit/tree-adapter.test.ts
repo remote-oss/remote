@@ -5,6 +5,7 @@ import {buildSshRows} from '../../src/model/ssh-group.ts';
 import type {TargetItem, TargetNode, Targets} from '../../src/view/targets.ts';
 import {
   configFileChangesOf,
+  folderSettingsOf,
   showTargets,
   type TreeEditor,
 } from '../../src/view/tree-adapter.ts';
@@ -19,16 +20,31 @@ function itemFor(node: TargetNode): TargetItem {
   return item;
 }
 
-function hostNodeOf(alias: string, connected: boolean): TargetNode {
-  const [hostRow] = buildSshRows([alias], new Map(), undefined);
+function hostNodeOf(
+  alias: string,
+  connected: boolean,
+  ...paths: string[]
+): TargetNode {
+  const [hostRow] = buildSshRows([alias], new Map([[alias, paths]]), undefined);
   if (hostRow === undefined) {
     throw new Error('no row');
   }
-  return {kind: 'sshHost', hostRow, connected};
+  return {
+    kind: 'sshHost',
+    hostRow,
+    connected,
+    folders: hostRow.folders.map(folderRow => ({kind: 'sshFolder', folderRow})),
+  };
 }
 
 const IDLE = hostNodeOf('idle', false);
 const ACTIVE = hostNodeOf('live', true);
+const EXPANDED = hostNodeOf('open', false, '/w/x');
+const COLLAPSED = hostNodeOf('shut', false, '/w/x');
+const FOLDER: TargetNode =
+  EXPANDED.kind === 'sshHost' && EXPANDED.folders[0] !== undefined
+    ? EXPANDED.folders[0]
+    : GROUP;
 
 const ITEMS = new Map<TargetNode, TargetItem>([
   [
@@ -38,7 +54,7 @@ const ITEMS = new Map<TargetNode, TargetItem>([
       label: 'SSH',
       tooltip: 'SSH',
       contextValue: 'group',
-      expanded: true,
+      collapsibleState: 'expanded',
     },
   ],
   [
@@ -49,6 +65,40 @@ const ITEMS = new Map<TargetNode, TargetItem>([
       tooltip: 'idle',
       iconId: 'vm',
       contextValue: 'host',
+      collapsibleState: 'none',
+    },
+  ],
+  [
+    EXPANDED,
+    {
+      id: 'ssh-host:open',
+      label: 'open',
+      tooltip: 'open',
+      iconId: 'vm',
+      contextValue: 'host',
+      collapsibleState: 'expanded',
+    },
+  ],
+  [
+    COLLAPSED,
+    {
+      id: 'ssh-host:shut',
+      label: 'shut',
+      tooltip: 'shut',
+      iconId: 'vm',
+      contextValue: 'host',
+      collapsibleState: 'collapsed',
+    },
+  ],
+  [
+    FOLDER,
+    {
+      id: 'ssh-folder:0:open',
+      label: 'x',
+      description: '/w/x',
+      tooltip: "'/w/x' on open",
+      contextValue: 'folder',
+      collapsibleState: 'none',
     },
   ],
   [
@@ -60,6 +110,7 @@ const ITEMS = new Map<TargetNode, TargetItem>([
       description: 'connected',
       iconId: 'vm-active',
       contextValue: 'host',
+      collapsibleState: 'none',
     },
   ],
 ]);
@@ -306,5 +357,82 @@ describe('the tree of the Remotes view (card explorer-04)', () => {
       });
     }
     deepStrictEqual(invocations, 1);
+  });
+
+  it('F-5104.BR-7: a host item is expanded, collapsed or a leaf as its state says, and a folder item is a leaf with no icon', async () => {
+    const scenario = setup(FOCUS);
+    await showTargets(scenario.editor, scenario.targets, 'remoteTargets');
+    const items = await Promise.all(
+      [EXPANDED, COLLAPSED, IDLE, FOLDER].map(
+        async node =>
+          (await providerOf(scenario).getTreeItem(
+            node,
+          )) as unknown as FakeTreeItem,
+      ),
+    );
+    deepStrictEqual(
+      items.map(item => [
+        item.collapsibleState,
+        item.iconPath,
+        item.description,
+      ]),
+      [
+        [2, new FakeThemeIcon('vm'), undefined],
+        [1, new FakeThemeIcon('vm'), undefined],
+        [0, new FakeThemeIcon('vm'), undefined],
+        [0, undefined, '/w/x'],
+      ],
+    );
+  });
+
+  it('F-5104.3.3: a folder item carries its id, label, tooltip and context value, and no command', async () => {
+    const scenario = setup(FOCUS);
+    await showTargets(scenario.editor, scenario.targets, 'remoteTargets');
+    const item = (await providerOf(scenario).getTreeItem(
+      FOLDER,
+    )) as unknown as FakeTreeItem & {command?: unknown};
+    deepStrictEqual(
+      [item.id, item.label, item.tooltip, item.contextValue, item.command],
+      ['ssh-folder:0:open', 'x', "'/w/x' on open", 'folder', undefined],
+    );
+  });
+
+  it('F-5104.BR-6, BR-12: only the user value of each folder setting counts', () => {
+    const inspected: Record<string, unknown> = {
+      'remote-explorer.foldersSortOrder': {
+        defaultValue: 'most recently used',
+        globalValue: 'alphabetical',
+        workspaceValue: 'most recently used',
+        workspaceFolderValue: 'most recently used',
+      },
+      'remote-explorer.collapseRecentFolders': {
+        defaultValue: false,
+        workspaceValue: true,
+        workspaceFolderValue: true,
+      },
+    };
+    const editor = {
+      workspace: {
+        getConfiguration: () => ({
+          inspect: (key: string) => inspected[key],
+        }),
+      },
+    } as unknown as TreeEditor;
+    deepStrictEqual(folderSettingsOf(editor)(), {
+      sortOrder: 'alphabetical',
+      collapse: undefined,
+    });
+  });
+
+  it('F-5104.BR-6: a setting the editor does not know gives nothing', () => {
+    const editor = {
+      workspace: {
+        getConfiguration: () => ({inspect: () => undefined}),
+      },
+    } as unknown as TreeEditor;
+    deepStrictEqual(folderSettingsOf(editor)(), {
+      sortOrder: undefined,
+      collapse: undefined,
+    });
   });
 });
