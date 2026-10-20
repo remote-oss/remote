@@ -62,6 +62,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        'explorer-standdown',
         'trust',
         'trust-terminal',
         'containers',
@@ -154,6 +155,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
         [
@@ -252,6 +254,17 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
       ],
+    );
+  });
+
+  it('coverage-25b: the explorer-standdown launch installs Remote Explorer and carries the reference explorer’s stand-in', () => {
+    deepStrictEqual(
+      launches.flatMap(launch =>
+        launch.label === 'explorer-standdown' && launch.kind === 'plain'
+          ? [[launch.withExtensions, launch.standIns]]
+          : [],
+      ),
+      [[['remote-oss.remote-explorer'], ['ms-vscode.remote-explorer']]],
     );
   });
 
@@ -368,6 +381,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        'explorer-standdown',
         'trust',
         'trust-terminal',
         'containers',
@@ -386,7 +400,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 3}, () => ({
+      Array.from({length: 4}, () => ({
         'window.title': '[${rootName}]${remoteName}',
       })),
     );
