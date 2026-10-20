@@ -260,9 +260,113 @@ describe('helper client', () => {
         [false, 'secret-nonce'],
       );
     });
+
+    it('runs a launcher, when there is one, with the script as its one argument and waits for its exit', () => {
+      const parameters: HelperParameters = {
+        endpoint: '/run/rh.sock',
+        nonce: 'n',
+        recordFile: '/registry/ssh.connection/n.json',
+        policy: {kind: 'idleAfterLastLease', milliseconds: 1},
+        payload: {},
+        options: {},
+      };
+      const direct = spawnSpecification('/editor/code', '/x.js', parameters, {
+        HOME: '/home/user',
+      });
+      const launched = spawnSpecification(
+        '/editor/code',
+        '/x.js',
+        parameters,
+        {HOME: '/home/user'},
+        '/ext/dist/helper-launcher.js',
+      );
+      deepStrictEqual(
+        [
+          'waitForExit' in direct,
+          launched.command,
+          launched.commandArguments,
+          launched.waitForExit,
+          launched.environment,
+        ],
+        [
+          false,
+          '/editor/code',
+          ['/ext/dist/helper-launcher.js', '/x.js'],
+          true,
+          direct.environment,
+        ],
+      );
+    });
   });
 
   describe('acquire', () => {
+    /** A named profile's global storage folder, and the instance registry folder it resolves to. */
+    const PROFILE_STORAGE =
+      '/data/User/profiles/abc/globalStorage/remote-oss.remote-containers';
+    const INSTANCE_FOLDER =
+      '/data/User/globalStorage/remote-oss.remote-containers/instance-registry';
+
+    it("claims under the instance's folder when the request names an instance", async () => {
+      await drive(
+        acquire(environment, request({folder: {instanceOf: PROFILE_STORAGE}})),
+      );
+      const parameters = helperParameters(spawned[0]?.environment ?? {});
+      const recordFile = recordPath(
+        INSTANCE_FOLDER,
+        'ssh.connection',
+        'user@host:22',
+      );
+      deepStrictEqual(
+        [files.files.has(recordFile), parameters.recordFile],
+        [true, recordFile],
+      );
+    });
+
+    it("fails as registryUnresolved, before it prepares, reads or writes anything, when the instance's folder can't be found", async () => {
+      const outcome = await drive(
+        acquire(
+          environment,
+          request({folder: {instanceOf: '/data/storage/remote-oss.x'}}),
+        ),
+      );
+      deepStrictEqual(
+        [outcome, files.calls.length, prepares, spawned.length],
+        [{kind: 'failed', failure: 'registryUnresolved'}, 0, 0, 0],
+      );
+    });
+
+    it("starts the helper through the launcher when it leaves the starter's tree, and stays the starter", async () => {
+      const lease = leaseOf(
+        await drive(
+          acquire(
+            environment,
+            request({
+              leaveStarterTree: true,
+              launcherScript: '/ext/dist/helper-launcher.js',
+            }),
+          ),
+        ),
+      );
+      const record = parseRecord(files.files.get(RECORD_PATH) ?? '');
+      deepStrictEqual(
+        [
+          spawned[0]?.commandArguments,
+          spawned[0]?.waitForExit,
+          lease.startedByMe,
+          record?.startedByProcessId,
+        ],
+        [
+          [
+            '/ext/dist/helper-launcher.js',
+            '/ext/dist/helpers/connection-server.js',
+          ],
+          true,
+          true,
+          777,
+        ],
+      );
+    });
+
     it('claims a free key, starts the helper once and holds the first lease', async () => {
       const lease = leaseOf(await drive(acquire(environment, request())));
       deepStrictEqual(
@@ -717,6 +821,30 @@ describe('helper client', () => {
 
     it('is done when nothing runs', async () => {
       await stop(environment, '/registry', 'ssh.connection', 'user@host:22');
+    });
+
+    it("ends the helper of an instance's folder", async () => {
+      const instance = {
+        instanceOf: '/data/User/globalStorage/remote-oss.remote-containers',
+      };
+      const lease = leaseOf(
+        await drive(acquire(environment, request({folder: instance}))),
+      );
+      await stop(environment, instance, 'ssh.connection', 'user@host:22');
+      await settled();
+      deepStrictEqual(await drive(lease.request('ping', 1000)), {
+        kind: 'helperGone',
+      });
+    });
+
+    it("is done at once, touching nothing, when the instance's folder can't be found", async () => {
+      await stop(
+        environment,
+        {instanceOf: '/data/storage/remote-oss.x'},
+        'ssh.connection',
+        'user@host:22',
+      );
+      strictEqual(files.calls.length, 0);
     });
 
     it('is done when the recorded helper cannot be reached', async () => {
