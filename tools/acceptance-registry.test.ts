@@ -14,7 +14,10 @@ import type {CommandResult, CommandRunner} from './command-runner.ts';
 const RUN_ID = '77-2';
 
 /** A runner that records each call and answers `docker run` with a container id and `docker port` with a port line. */
-function recording(): {command: CommandRunner; calls: string[][]} {
+function recording(portLine = '127.0.0.1:49200\n'): {
+  command: CommandRunner;
+  calls: string[][];
+} {
   const calls: string[][] = [];
   function command(
     program: string,
@@ -27,7 +30,7 @@ function recording(): {command: CommandRunner; calls: string[][]} {
         programArguments[0] === 'run'
           ? 'registry-container\n'
           : programArguments[0] === 'port'
-            ? '127.0.0.1:49200\n'
+            ? portLine
             : '',
       stderr: '',
     };
@@ -133,18 +136,7 @@ describe('the run’s registry (card containers-59)', () => {
   });
 
   it('fails when the container publishes no port', async () => {
-    const calls: string[][] = [];
-    function command(
-      program: string,
-      programArguments: readonly string[],
-    ): CommandResult {
-      calls.push([program, ...programArguments]);
-      return {
-        status: 0,
-        stdout: programArguments[0] === 'run' ? 'registry-container\n' : '',
-        stderr: '',
-      };
-    }
+    const {command} = recording('');
     await rejects(
       startRunRegistry(command, clockOf([200]).clock, RUN_ID),
       /publishes no port/,
