@@ -78,9 +78,10 @@ export interface AgentEvent {
   /** The prefix a `commands` event was asked for, and the registered command ids that start with it, sorted. */
   prefix?: string;
   commandIds?: string[];
-  /** The extension an `extension` event was asked about, and whether the window's editor has it. */
+  /** The extension an `extension` event was asked about, whether the window's editor has it, and whether it is active there. */
   extensionId?: string;
   present?: boolean;
+  extensionActive?: boolean;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
   /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
@@ -929,15 +930,27 @@ export async function extensionPresent(
   name: string,
   extensionId: string,
 ): Promise<boolean> {
-  return (
-    (
-      await reported(
-        name,
-        'extension',
-        'acceptance.agent.extensionPresent',
-        extensionId,
-      )
-    )?.present === true
+  return (await extensionReport(name, extensionId))?.present === true;
+}
+
+/** Whether the extension `extensionId` has activated in window `name`'s local extension host. */
+export async function extensionActive(
+  name: string,
+  extensionId: string,
+): Promise<boolean> {
+  return (await extensionReport(name, extensionId))?.extensionActive === true;
+}
+
+/** What window `name` reports of the extension `extensionId`: whether its editor has it, and whether it is active. */
+function extensionReport(
+  name: string,
+  extensionId: string,
+): Promise<AgentEvent | undefined> {
+  return reported(
+    name,
+    'extension',
+    'acceptance.agent.extensionPresent',
+    extensionId,
   );
 }
 

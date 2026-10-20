@@ -373,6 +373,37 @@ function paneExpression(viewName: string): string {
   return `[...document.querySelectorAll('.pane')].find(pane => pane.querySelector('.pane-header .title')?.textContent === ${JSON.stringify(viewName)})`;
 }
 
+/** A row of a view as the list renders it now, with the size of the set it belongs to. */
+export interface RenderedRow {
+  label: string;
+  level: number;
+  setSize: number;
+}
+
+/**
+ * The rows view `viewName` of window `name` renders now, without scrolling: a virtualized list's viewport only, each
+ * with its `aria-setsize`, which counts the rows of its set also when they are off screen; none when the view isn't
+ * there.
+ */
+export async function renderedRows(
+  name: string,
+  viewName: string,
+): Promise<RenderedRow[]> {
+  return evaluate<RenderedRow[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])]
+        .filter(row => row.getAttribute('aria-level') !== null)
+        .map(row => ({
+          label: row.querySelector('.label-name')?.textContent ?? '',
+          level: Number(row.getAttribute('aria-level')),
+          setSize: Number(row.getAttribute('aria-setsize')),
+        }));
+    })()`,
+  );
+}
+
 /**
  * The rows of view `viewName` in window `name`, in the order shown; `undefined` when the window has no such view. A
  * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read by
@@ -885,6 +916,34 @@ export async function rowDetails(
     })()`,
     )) ?? undefined
   );
+}
+
+/**
+ * Whether the label of the row `label` of view `viewName` in window `name` is cut: its text is wider than the space the
+ * row gives it, so core shows it with an ellipsis. Throws when the view has no such row.
+ */
+export async function labelCut(
+  name: string,
+  viewName: string,
+  label: string,
+): Promise<boolean> {
+  const overflowing = await evaluate<boolean | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const row = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].find(
+        each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)},
+      );
+      const container = row?.querySelector('.monaco-icon-label-container');
+      return container === undefined || container === null
+        ? null
+        : container.scrollWidth > container.clientWidth;
+    })()`,
+  );
+  if (overflowing === null) {
+    throw new Error(`window ${name} shows no row ${label} in ${viewName}`);
+  }
+  return overflowing;
 }
 
 /**

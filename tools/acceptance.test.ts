@@ -384,6 +384,9 @@ const LAUNCH_ORDER = [
   'no-proposals',
   'explorer',
   'explorer-alone',
+  'explorer-trust',
+  'explorer-home',
+  'explorer-rows',
   'explorer-no-proposals',
   'explorer-standdown',
   'trust',
@@ -975,6 +978,9 @@ describe('acceptance', () => {
           ...[
             'explorer',
             'explorer-alone',
+            'explorer-trust',
+            'explorer-home',
+            'explorer-rows',
             'explorer-no-proposals',
             'explorer-standdown',
           ].map(label => ({
