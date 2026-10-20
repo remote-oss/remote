@@ -7,23 +7,12 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {connect, createServer} from 'node:net';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {setUserSetting} from '../windows/folder-windows.ts';
 import {
-  openFolderWindow,
-  removeContainers,
-  setUserSetting,
-} from '../windows/folder-windows.ts';
-import {
-  closeWindow,
-  commandsOf,
-  connectedToContainer,
-  devContainerFolder,
   devContainersOf,
-  inWindow,
   listenIn,
-  reloadWindow,
   reopenInContainer,
   runLabelArguments,
   variable,
@@ -35,87 +24,26 @@ import {
   notificationCentre,
   portRowAction,
   portsRows,
-  type PortsRow,
   statusItem,
 } from '../windows/renderer.ts';
+import {
+  connectedWindows,
+  echoes,
+  editConfiguration,
+  folderOf,
+  freePort,
+  portsOf,
+  reloaded,
+  rowsWhen,
+  showPorts,
+} from './support.ts';
 
 const execFileAsync = promisify(execFile);
 
-/** The command that focuses core's Ports view. */
-const FOCUS_PORTS = '~remote.forwardedPorts.focus';
-
-/** A port nothing on this machine listens on, from the range the system hands out. */
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      const port =
-        typeof address === 'object' && address !== null ? address.port : 0;
-      probe.close(() => {
-        resolve(port);
-      });
-    });
-  });
-}
-
 describe('the declared forwardPorts (card containers-72)', function () {
   this.timeout(900_000);
-  const opened: string[] = [];
-  const folders: string[] = [];
-
-  afterEach(async () => {
-    for (const window of opened.splice(0)) {
-      await closeWindow(window);
-    }
-    for (const folder of folders.splice(0)) {
-      await removeContainers(folder);
-    }
-  });
-
-  /** Opens a folder with `configuration` in a window and connects it to its container. */
-  async function connectedWith(
-    name: string,
-    configuration: Readonly<Record<string, unknown>>,
-  ): Promise<string> {
-    const folder = devContainerFolder(name, {
-      name: 'Forwards',
-      ...configuration,
-    });
-    folders.push(folder);
-    const window = await openFolderWindow(folder);
-    opened.push(window);
-    await reopenInContainer(window);
-    return window;
-  }
-
-  /** Shows the Ports view of window `window` once core has made it. */
-  async function showPorts(window: string): Promise<void> {
-    await waitFor(
-      'core to register the Ports view',
-      async () => (await commandsOf(window, FOCUS_PORTS)).includes(FOCUS_PORTS),
-      30_000,
-    );
-    await inWindow(window, FOCUS_PORTS);
-  }
-
-  /** The rows of the Ports view of window `window` once `ready` holds for them, or whatever they are after 30 s. */
-  async function rowsWhen(
-    window: string,
-    ready: (rows: PortsRow[]) => boolean,
-  ): Promise<PortsRow[]> {
-    let rows: PortsRow[] = [];
-    await waitFor(
-      'the Ports rows',
-      async () => {
-        rows = await portsRows(window).catch(() => []);
-        return ready(rows);
-      },
-      30_000,
-    ).catch(() => undefined);
-    return rows;
-  }
+  const windows = connectedWindows();
+  const connectedWith = windows.connectedWith;
 
   it('F-1101 AC-1 (forward-declared): a declared port is forwarded once the window connects, with the origin Dev Containers and before any listener', async () => {
     const window = await connectedWith('c72-ac1', {forwardPorts: [3000]});
@@ -131,38 +59,6 @@ describe('the declared forwardPorts (card containers-72)', function () {
       [[['3000', 'Dev Containers']], 'Forwarded Ports: 3000', '1'],
     );
   });
-
-  /** Writes `configuration` over the folder's devcontainer.json, as an edit of the file the window shows. */
-  function editConfiguration(
-    folder: string,
-    configuration: Readonly<Record<string, unknown>>,
-  ): void {
-    writeFileSync(
-      path.join(folder, '.devcontainer', 'devcontainer.json'),
-      JSON.stringify({
-        image: variable('HARNESS_DEVCONTAINER_IMAGE'),
-        runArgs: runLabelArguments(),
-        name: 'Forwards',
-        ...configuration,
-      }),
-    );
-  }
-
-  /** The folder of the window `name` opened by `connectedWith`. */
-  function folderOf(name: string): string {
-    return path.join(variable('HARNESS_RUN_FOLDER'), name);
-  }
-
-  /** Reloads window `window` and waits until it is connected to its container again. */
-  async function reloaded(window: string): Promise<void> {
-    await reloadWindow(window);
-    await connectedToContainer(window);
-  }
-
-  /** The ports of the rows. */
-  function portsOf(rows: readonly PortsRow[]): string[] {
-    return rows.map(shown => shown.port);
-  }
 
   it('F-1101 AC-11 (forward-new-entry): an entry added to the file is not forwarded by a reload, and is by a rebuild', async () => {
     const [first, second] = [await freePort(), await freePort()];
@@ -358,8 +254,7 @@ describe('the declared forwardPorts (card containers-72)', function () {
     });
     await new Promise(resolve => setTimeout(resolve, 5000));
     const shown = await hasStatusItem(quoted, 'status.forwardedPorts');
-    await closeWindow(quoted);
-    opened.splice(opened.indexOf(quoted), 1);
+    await windows.close(quoted);
     const plain = await connectedWith('c72-ac32b', {forwardPorts: [port]});
     await showPorts(plain);
     deepStrictEqual(
@@ -424,29 +319,6 @@ describe('the declared forwardPorts (card containers-72)', function () {
     );
   });
 });
-
-/** Whether a connection to `address` (`host:port`) is answered with what it sent. */
-function echoes(address: string): Promise<boolean> {
-  const port = Number(address.slice(address.lastIndexOf(':') + 1));
-  return new Promise(resolve => {
-    const socket = connect({host: '127.0.0.1', port});
-    socket.setTimeout(5000);
-    socket.once('connect', () => {
-      socket.write('ping\n');
-    });
-    socket.once('data', data => {
-      socket.destroy();
-      resolve(data.toString().includes('ping'));
-    });
-    socket.once('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once('error', () => {
-      resolve(false);
-    });
-  });
-}
 
 /** A container of the run, apart from the dev container, that echoes on `port`: its address and the way to remove it. */
 async function siblingListening(
