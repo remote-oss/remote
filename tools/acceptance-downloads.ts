@@ -282,6 +282,13 @@ function answer(
       response.writeHead(404, {'Content-Length': 0});
       response.end();
       return;
+    case 'missing-cors':
+      response.writeHead(404, {
+        'Content-Length': 0,
+        'Access-Control-Allow-Origin': '*',
+      });
+      response.end();
+      return;
     case 'busy':
       response.writeHead(503, {'Content-Length': 0});
       response.end();
