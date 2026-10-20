@@ -1964,3 +1964,59 @@ describe('the container connector: the remote environment (card containers-45)',
     );
   });
 });
+
+describe('the container connector: the declared ports (card containers-72)', () => {
+  function configurationWith(
+    mergedConfiguration: Record<string, unknown> | undefined,
+  ): Scene['configuration'] {
+    return {
+      kind: 'configuration',
+      configuration: {name: 'Proj'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration,
+    };
+  }
+
+  it('F-1101 BR-1: the connection holds the forwardPorts, portsAttributes and otherPortsAttributes of the merged configuration', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({
+      forwardPorts: [3000, 'side:4000'],
+      portsAttributes: {'3000': {label: 'web'}},
+      otherPortsAttributes: {onAutoForward: 'silent'},
+    });
+    await connected(scene);
+    deepStrictEqual(scene.connector.heldPorts(), {
+      forwardPorts: [3000, 'side:4000'],
+      portsAttributes: {'3000': {label: 'web'}},
+      otherPortsAttributes: {onAutoForward: 'silent'},
+    });
+  });
+
+  it('F-1101 AC-11, AC-30: a reconnect keeps the ports read when the connection was made', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({forwardPorts: [3000]});
+    await connected(scene);
+    scene.configuration = configurationWith({forwardPorts: [4000]});
+    await scene.connector.connect({...inputOf(PAYLOAD), isReconnection: true});
+    deepStrictEqual(scene.connector.heldPorts()?.forwardPorts, [3000]);
+  });
+
+  it('F-1101 AC-1: a configuration that cannot be read declares no ports, and a connector that never connected holds none', async () => {
+    const scene = sceneOf();
+    const before = scene.connector.heldPorts();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    await connected(scene);
+    deepStrictEqual(
+      [before, scene.connector.heldPorts()],
+      [
+        undefined,
+        {
+          forwardPorts: undefined,
+          portsAttributes: undefined,
+          otherPortsAttributes: undefined,
+        },
+      ],
+    );
+  });
+});

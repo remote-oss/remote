@@ -696,6 +696,34 @@ export async function portRowActions(
   return found;
 }
 
+/** Clicks the inline action `title` of row `port` of core's Ports view, as a user's click on its icon. */
+export async function portRowAction(
+  name: string,
+  port: string,
+  title: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const entry = ${PORTS_ROWS_EXPRESSION}.find(each => each.cells[1] === ${JSON.stringify(port)});
+      if (entry === undefined) {
+        return 'no Ports row for ' + ${JSON.stringify(port)};
+      }
+      const action = [...entry.row.querySelectorAll('.actions-container .action-label')].find(
+        label => (label.getAttribute('aria-label') ?? '').replace(/ \\([^)]*\\)$/, '') === ${JSON.stringify(title)},
+      );
+      if (action === undefined) {
+        return 'no action ' + ${JSON.stringify(title)};
+      }
+      action.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
 /** Types `text` into the input box a command of window `name` shows, and accepts it. */
 export function answerInputBox(name: string, text: string): Promise<void> {
   return keyInFolderDialog(name, 'Enter', text);

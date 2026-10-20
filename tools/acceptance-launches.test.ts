@@ -1153,6 +1153,19 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
+  it('containers-72: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, and no other containers launch does', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label.startsWith('containers'))
+        .map(launch => [
+          launch.label,
+          launch.kind === 'plain' ? launch.environment : undefined,
+        ])
+        .filter(([, environment]) => environment !== undefined),
+      [['containers-ports', {PATH: '<run>/xdg-bin:<path>'}]],
+    );
+  });
+
   it('containers-59, tooling-56: only the containers launch and containers-ports ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)

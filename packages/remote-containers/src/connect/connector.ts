@@ -90,6 +90,7 @@ import type {
   StartedContainerServer,
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
+import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 
 /** The CLI's levels for an info, a warning and an error event. */
 const CLI_INFO_LEVEL = 3;
@@ -125,6 +126,8 @@ export interface ContainerConnector extends Connector {
   failedContainer(): FailedContainer | undefined;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
+  /** The ports the connection the window holds declared; nothing before the first connect. */
+  heldPorts(): DeclaredPorts | undefined;
   /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
   heldConnection(): HeldConnection | undefined;
   /** Calls the listener when the connection the window holds is made or given back; gives the way to stop listening. */
@@ -257,6 +260,8 @@ interface Held {
   relay: OpenRelay;
   identity: WindowIdentity;
   connected: Connected;
+  /** The ports the merged configuration declared when the connection was made; a reconnect keeps them. */
+  ports: DeclaredPorts;
 }
 
 /** The state of a container, or why it is not known. */
@@ -983,6 +988,11 @@ export function containerConnectorOf(
       relay,
       identity: {name, context: folder.context},
       connected,
+      ports: {
+        forwardPorts: mergedConfiguration?.forwardPorts,
+        portsAttributes: mergedConfiguration?.portsAttributes,
+        otherPortsAttributes: mergedConfiguration?.otherPortsAttributes,
+      },
     };
     const connection = held;
     owner.connection = connection;
@@ -1042,6 +1052,7 @@ export function containerConnectorOf(
     },
     failedContainer: () => failedContainer,
     heldIdentity: () => held?.identity,
+    heldPorts: () => held?.ports,
     heldConnection: () =>
       held === undefined
         ? undefined
