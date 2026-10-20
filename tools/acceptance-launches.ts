@@ -694,6 +694,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'web-ui-trust',
       // The same browser, in a launch with workspace trust on and core's startup prompt off, so that a window opens in
       // Restricted Mode and silent.
+      // A terminal-mode connect in this launch waits on core's trust question before its login terminal starts, so its
+      // rows connect only through the local server.
       settings: {
         ...TRUST_LAUNCH.settings,
         'security.workspace.trust.startupPrompt': 'never',
