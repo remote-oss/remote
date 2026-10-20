@@ -146,6 +146,8 @@ export interface Scene {
   legacyWorkspaceMountConsistency: unknown;
   mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
+  defaultFeatures: unknown;
+  lockfile: unknown;
   defaultExtensions: unknown;
   deprecatedDefaultExtensions: unknown;
   /** The exit statuses of the next `kill -0` runs. */
@@ -248,6 +250,8 @@ export function sceneOf(
     workspaceMountConsistency: undefined,
     legacyWorkspaceMountConsistency: undefined,
     mountGitWorktreeCommonDir: undefined,
+    defaultFeatures: undefined,
+    lockfile: undefined,
     defaultExtensions: undefined,
     deprecatedDefaultExtensions: undefined,
     killStatuses: [],
@@ -400,6 +404,8 @@ export function sceneOf(
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
       serverDownloadFolder: undefined,
+      defaultFeatures: scene.defaultFeatures,
+      lockfile: scene.lockfile,
       cacheVolume: () =>
         cacheVolumeOf(
           scene.cacheVolumeInspect?.globalValue,

@@ -551,6 +551,13 @@ export async function activate(
               .getConfiguration()
               .inspect(settings.experimentalMountGitWorktreeCommonDir.id)
               ?.globalValue,
+          defaultFeatures: () =>
+            vscode.workspace
+              .getConfiguration()
+              .inspect(settings.defaultFeatures.id)?.globalValue,
+          lockfile: () =>
+            vscode.workspace.getConfiguration().inspect(settings.lockfile.id)
+              ?.globalValue,
         },
         engine: {
           firstCheck: (base, dialogs) =>
@@ -730,6 +737,9 @@ export async function activate(
           mountGitWorktreeCommonDir: configuration.inspect(
             settings.experimentalMountGitWorktreeCommonDir.id,
           )?.globalValue,
+          defaultFeatures: configuration.inspect(settings.defaultFeatures.id)
+            ?.globalValue,
+          lockfile: configuration.inspect(settings.lockfile.id)?.globalValue,
           defaultExtensions: configuration.inspect(
             settings.defaultExtensions.id,
           )?.globalValue,

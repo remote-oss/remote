@@ -43,6 +43,7 @@ const REQUEST: ContainerRequest = {
   cacheVolume: true,
   workspaceMountConsistency: 'cached',
   mountGitWorktreeCommonDir: false,
+  features: {defaultFeatures: {}, lockfile: true},
   pausedRetry: () => Promise.resolve(false),
 };
 const UP: UpResult = {
@@ -409,6 +410,7 @@ describe('containerLifecycleOf', () => {
               idLabels: idLabels(FOLDER, CONFIG),
               mountWorkspaceGitRoot: true,
               mountGitWorktreeCommonDir: false,
+              features: {defaultFeatures: {}, lockfile: true},
               mounts: ['type=volume,source=vscode,target=/vscode'],
               logLevel: 'info',
               terminalSize: {rows: 30, columns: 100},
@@ -1177,6 +1179,7 @@ describe('containerLifecycleOf', () => {
         ...REQUEST,
         workspaceMountConsistency: 'delegated',
         mountGitWorktreeCommonDir: true,
+        features: {defaultFeatures: {}, lockfile: true},
       },
     ]) {
       const result = await prepared(

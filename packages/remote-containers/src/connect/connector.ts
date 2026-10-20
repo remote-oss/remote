@@ -80,6 +80,7 @@ import {
   mountGitWorktreeCommonDirOf,
   workspaceMountConsistencyOf,
 } from './mount-settings.ts';
+import {featureSettingsOf} from './feature-settings.ts';
 import {
   type ContainerState,
   type ReconnectionOutcome,
@@ -166,6 +167,10 @@ export interface ContainerConnectorDependencies {
     legacyWorkspaceMountConsistency: unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir: unknown;
+    /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
+    defaultFeatures: unknown;
+    /** The user's value of `dev.containers.lockfile`, `undefined` when unset. */
+    lockfile: unknown;
     /** The user's value of `dev.containers.defaultExtensions`, `undefined` when unset. */
     defaultExtensions: unknown;
     /** The user's value of the deprecated `remote.containers.defaultExtensions`, `undefined` when unset. */
@@ -559,6 +564,10 @@ export function containerConnectorOf(
       mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
         tools.settings.mountGitWorktreeCommonDir,
       ),
+      features: featureSettingsOf(
+        tools.settings.defaultFeatures,
+        tools.settings.lockfile,
+      ),
       mounts: [],
       logLevel: 'info',
     };
@@ -846,6 +855,10 @@ export function containerConnectorOf(
         ),
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
+        ),
+        features: featureSettingsOf(
+          settings.defaultFeatures,
+          settings.lockfile,
         ),
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined

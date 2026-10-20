@@ -118,6 +118,7 @@ describe('Reopen in Container', () => {
             idLabels: [],
             mountWorkspaceGitRoot: true,
             mountGitWorktreeCommonDir: false,
+            features: {defaultFeatures: {}, lockfile: true},
             mounts: [],
             logLevel: 'info',
           },

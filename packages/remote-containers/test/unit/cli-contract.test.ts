@@ -73,6 +73,7 @@ describe('the contract rows of the CLI bridge (card containers-04)', () => {
         idLabels: [],
         mountWorkspaceGitRoot: true,
         mountGitWorktreeCommonDir: false,
+        features: {defaultFeatures: {}, lockfile: true},
         mounts: [],
         logLevel: 'info',
       },

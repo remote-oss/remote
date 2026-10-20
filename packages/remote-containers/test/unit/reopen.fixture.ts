@@ -188,6 +188,8 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     settings: {
       dockerPath: () => state.dockerPath,
       mountGitWorktreeCommonDir: () => state.mountGitWorktreeCommonDir,
+      defaultFeatures: () => undefined,
+      lockfile: () => undefined,
     },
     engine: {
       firstCheck: async base => {

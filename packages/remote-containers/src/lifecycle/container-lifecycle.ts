@@ -7,7 +7,7 @@
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {StdinPresentation} from '../cli/cli-host.ts';
-import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {CliTarget, FeatureSettings} from '../cli/cli-arguments.ts';
 import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
@@ -43,6 +43,8 @@ export interface ContainerRequest {
   workspaceMountConsistency: string;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
+  /** The Feature settings: the default Features and the lockfile. */
+  features: FeatureSettings;
   /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
   pausedRetry: (containerId: string) => Promise<boolean>;
 }
@@ -457,6 +459,7 @@ export function containerLifecycleOf(dependencies: {
       idLabels: targetIdLabels,
       mountWorkspaceGitRoot: true,
       mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
+      features: request.features,
       mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
       logLevel: request.logLevel,
     };
