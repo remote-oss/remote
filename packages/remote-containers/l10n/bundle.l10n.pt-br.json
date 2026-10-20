@@ -26,6 +26,7 @@
   "Dev Container{0}": "Dev Container{0}",
   "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.": "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.",
   "An error occurred setting up the container.": "An error occurred setting up the container.",
+  "Configuration \"{0}\" not valid.": "Configuration \"{0}\" not valid.",
   "Alpine Linux is not supported on the hardware architecture '{0}' of the container.": "Alpine Linux is not supported on the hardware architecture '{0}' of the container.",
   "Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.": "Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.",
   "Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.": "Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.",
