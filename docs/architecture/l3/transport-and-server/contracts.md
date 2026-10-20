@@ -538,6 +538,11 @@ Rules inside the scripts:
 - Lowercase `http_proxy` and `https_proxy` are exported in F-2404 BR-5's text, and the host's login environment
   wins (F-2404 BR-10).
 - Locks use `flock` or atomic `ln` (F-2408, F-2702).
+- **A secret never enters a script as text** (F-2003 BR-14; athena on #253, 2026-10-20, with proteus). A credential, a
+  token, or a value that comes from a user setting reaches the run only through the run's `environment`, where it's
+  marked secret, so the log names it whatever its length. A value written into the script itself (an `assignment()`)
+  is seen by neither the mark nor the name guard. An address that may carry a token (the template override, V4) is
+  logged with its scheme, host and path only (#1087).
 - The scripts trap HUP, INT and TERM and release the host lock before exiting, so a killed `ssh` never leaves later
   connects at `LockBusy` (found in review, 2026-10-08).
 - macOS sockets go in `TMPDIR` (F-2702).
