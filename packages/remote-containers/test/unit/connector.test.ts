@@ -112,6 +112,86 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it("F-0301 AC-11: an image that is a number ends the connect with S081 and the configuration's path, before any container step", async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 42},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [result, scene.prepared],
+      [
+        {
+          kind: 'configurationInvalid',
+          reason: {
+            id: 'S081',
+            values: ['/work/proj/.devcontainer/devcontainer.json'],
+          },
+          retryable: false,
+          silent: false,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+        [],
+      ],
+    );
+  });
+
+  it('F-0301 AC-11: after an invalid configuration the next connect reads it again', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 42},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    const first = await scene.connector.connect(inputOf(PAYLOAD));
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 'node:22'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    const second = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        failedKind(first),
+        failedKind(second),
+        scene.configurationReads.filter(read => read.containerId === undefined)
+          .length,
+        scene.prepared.length,
+      ],
+      ['configurationInvalid', 'connected', 2, 1],
+    );
+  });
+
+  it("F-0410 AC-13: an image that is a string that doesn't exist still reaches the container step", async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {image: 'nope:latest'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await connected(scene);
+    deepStrictEqual(scene.prepared.length, 1);
+  });
+
+  it("F-0301 7.E3: a configuration read that fails isn't checked, and the connect goes on", async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    await connected(scene);
+    deepStrictEqual(scene.prepared.length, 1);
+  });
+
   it('contracts §2 step 3: unusable, discovery failed, a build failure and a cancel are rows 4, 5, 5 and 11', async () => {
     const kinds: string[] = [];
     for (const outcome of [
