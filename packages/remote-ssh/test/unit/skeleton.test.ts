@@ -285,7 +285,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     ]);
   });
 
-  it('commands: 17, every category, every title a key, no enablement, no internal ids', () => {
+  it('F-2503.AC-2: commands: 17, every category, every title a key, no enablement, no internal ids', () => {
     const contributed = manifest().contributes?.commands ?? [];
     deepStrictEqual(
       {

@@ -20,6 +20,7 @@ import {
   type ServerResponse,
 } from 'node:http';
 import {createServer as createHttpsServer} from 'node:https';
+import {createSecureContext} from 'node:tls';
 import type {AddressInfo, Socket} from 'node:net';
 import path from 'node:path';
 import {type CommandRunner, checked} from './command-runner.ts';
@@ -255,6 +256,8 @@ export interface DownloadHostOptions {
   keyFile: string;
   /** One line per request is appended here. */
   logFile: string;
+  /** One line per TLS handshake that names a server is appended here: the time, and the server name the client asked for. */
+  tlsLogFile: string;
 }
 
 /** A running download host. */
@@ -384,6 +387,7 @@ export async function startDownloadHost(
     cert: readFileSync(options.certificateFile),
     key: readFileSync(options.keyFile),
   };
+  const context = createSecureContext(secureOptions);
   const servers: Server[] = [];
   let httpPort = 0;
   let httpsPort = 0;
@@ -392,7 +396,19 @@ export async function startDownloadHost(
       const plain = createHttpServer(handle);
       servers.push(plain);
       httpPort = await listen(plain, address, httpPort);
-      const secure = createHttpsServer(secureOptions, handle);
+      const secure = createHttpsServer(
+        {
+          ...secureOptions,
+          SNICallback: (servername, done) => {
+            appendFileSync(
+              options.tlsLogFile,
+              `${new Date().toISOString()} ${servername}\n`,
+            );
+            done(null, context);
+          },
+        },
+        handle,
+      );
       servers.push(secure);
       httpsPort = await listen(secure, address, httpsPort);
     }
@@ -416,6 +432,7 @@ export async function startDownloadHost(
 export function downloadVariables(
   host: Pick<DownloadHost, 'httpPort' | 'httpsPort'>,
   logFile: string,
+  tlsLogFile: string,
 ): Record<string, string> {
   return {
     HARNESS_DOWNLOADS_HTTP: `http://downloads:${String(host.httpPort)}`,
@@ -423,6 +440,7 @@ export function downloadVariables(
     HARNESS_DOWNLOADS_LICENSED: `https://update.code.visualstudio.com:${String(host.httpsPort)}`,
     HARNESS_DOWNLOADS_LOCAL: `http://127.0.0.1:${String(host.httpPort)}`,
     HARNESS_DOWNLOADS_LOG: logFile,
+    HARNESS_DOWNLOADS_TLS_LOG: tlsLogFile,
   };
 }
 
@@ -475,14 +493,17 @@ export async function startRunDownloads(
   const certificate = makeCertificate(folder);
   const logFile = path.join(folder, 'requests.log');
   writeFileSync(logFile, '');
+  const tlsLogFile = path.join(runFolder, 'downloads-tls.log');
+  writeFileSync(tlsLogFile, '');
   const host = await startDownloadHost({
     addresses: ['127.0.0.1', bridgeGateway(command)],
     archiveFile,
     ...certificate,
     logFile,
+    tlsLogFile,
   });
   return {
-    variables: downloadVariables(host, logFile),
+    variables: downloadVariables(host, logFile, tlsLogFile),
     stop: () => host.stop(),
   };
 }

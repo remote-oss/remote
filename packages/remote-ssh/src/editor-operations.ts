@@ -17,8 +17,8 @@ const CLOSE_REMOTE_COMMAND = 'workbench.action.remote.close';
 /** The editor's command that opens the recent list. */
 const OPEN_RECENT_COMMAND = 'workbench.action.openRecent';
 
-/** The editor's command that opens the Settings editor with a query. */
-const OPEN_SETTINGS_COMMAND = 'workbench.action.openSettings';
+/** The editor's command that opens the user's settings file; given a setting to reveal, it only shows it. */
+const OPEN_SETTINGS_FILE_COMMAND = 'workbench.action.openSettingsJson';
 
 /** The operations over `editor`; `revealLog` is the log channel's. */
 export function editorOperationsOf(
@@ -32,7 +32,9 @@ export function editorOperationsOf(
     openConfigFile: () =>
       editor.commands.executeCommand(commands.openConfigFile.id),
     openSetting: settingId =>
-      editor.commands.executeCommand(OPEN_SETTINGS_COMMAND, settingId),
+      editor.commands.executeCommand(OPEN_SETTINGS_FILE_COMMAND, {
+        revealSetting: {key: settingId},
+      }),
     writeUserSetting: (settingId, value) =>
       editor.workspace
         .getConfiguration()

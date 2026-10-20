@@ -162,13 +162,12 @@ describe('failureDialogOf (card remote-ssh-17 table)', () => {
 });
 
 describe('licenceDialogOf (card remote-ssh-17 table)', () => {
-  it('F-3902 rule 11: shows a modal warning with the detail and the cancel as close affordance', async () => {
+  it('F-3902 rule 11: shows a modal information message with the detail and the extension’s one item, and no close affordance', async () => {
     const fake = fakeEditor(() => undefined);
     await licenceDialogOf(fake.editor).showModal('m', 'd', [
       'Accept and Continue',
-      'Cancel',
     ]);
-    const shown = fake.warnings[0];
+    const shown = fake.infos[0];
     deepStrictEqual(
       [
         shown?.text,
@@ -178,26 +177,34 @@ describe('licenceDialogOf (card remote-ssh-17 table)', () => {
             ? item
             : [item.title, item.isCloseAffordance],
         ),
+        fake.warnings.length,
       ],
       [
         'm',
         {modal: true, detail: 'd'},
-        [
-          ['Accept and Continue', false],
-          ['Cancel', true],
-        ],
+        [['Accept and Continue', undefined]],
+        0,
       ],
     );
   });
 
-  it('F-3902 rule 11: resolves the title of the chosen button', async () => {
+  it('F-3902 rule 11: resolves the title of the chosen item', async () => {
     const fake = fakeEditor(() => 'Accept and Continue');
     deepStrictEqual(
       await licenceDialogOf(fake.editor).showModal('m', 'd', [
         'Accept and Continue',
-        'Cancel',
       ]),
       'Accept and Continue',
+    );
+  });
+
+  it('F-3902 rule 11: resolves nothing for the editor’s Cancel', async () => {
+    const fake = fakeEditor(() => undefined);
+    deepStrictEqual(
+      await licenceDialogOf(fake.editor).showModal('m', 'd', [
+        'Accept and Continue',
+      ]),
+      undefined,
     );
   });
 });

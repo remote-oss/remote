@@ -127,7 +127,7 @@ describe('the activation of Remote Explorer (card explorer-03b)', () => {
     );
   });
 
-  it('F-5001.BR-11: where the other does not run the package clears its key, sets up, then registers each command in table order', async () => {
+  it('F-5001.AC-21, AC-22, F-5901.AC-5: F-5001.BR-11: where the other does not run the package clears its key, sets up, then registers each command in table order', async () => {
     const scenario = scenarioOf({other: false});
     const result = await activateExplorer(scenario.inputs);
     deepStrictEqual(

@@ -415,8 +415,32 @@ The harness host reaches it by `--add-host downloads:host-gateway` and `--add-ho
 update.code.visualstudio.com:host-gateway`; the editor reaches it on `127.0.0.1`. The launches get
 `HARNESS_DOWNLOADS_HTTP`, `HARNESS_DOWNLOADS_HTTPS` and `HARNESS_DOWNLOADS_LICENSED` (the update service's name), the
 bases as the harness host sees them, `HARNESS_DOWNLOADS_LOCAL`, the editor's base, and `HARNESS_DOWNLOADS_LOG`, the
-request log, one line per request: time, method, path and user agent. `startHost({downloads: true})` gives a host of
+request log, one line per request: time, method, path and user agent, and `HARNESS_DOWNLOADS_TLS_LOG`, the file
+`<run>/downloads-tls.log` with one line per TLS handshake that names a server: time and server name. `startHost({downloads: true})` gives a host of
 the server suite the same names, and `server/downloads.test.ts` holds the rows that prove the capability.
+
+## Genuine VS Code launch
+
+The `genuine` launch starts VS Code at the floor of ADR-0007 (`EDITOR_VERSION`, downloaded under `.vscode-test/` on
+first use) instead of the run's VSCodium, with the extensions installed in a folder of its own, `<run>/extensions-genuine`,
+by VS Code's CLI. Two launch fields do it: `client: 'vscode'` names the editor, and `namedOnly: true` keeps the launch
+out of a run that names no launches, so only `--launches genuine` makes it (it is the table's last launch). The launch
+sets `REMOTE_OSS_ACCEPTANCE_SCRIPT` to the empty string, so the extension shows its real dialogs, which the rows read and
+answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settingsEditorOf`); `localServerDownload` is off,
+so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
+executable the launch started, and `editorProduct()` reads the `product.json` beside it.
+
+Nothing reaches Microsoft or GitHub from the rows, in two ways. The host's side is shown by the download host: it
+answers for `update.code.visualstudio.com`, its request log shows what the host asked for, and its TLS log shows which
+names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
+built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
+`update.mode`, `extensions.autoCheckUpdates`, `extensions.autoUpdate`, `workbench.enableExperiments`,
+`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
+to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
+place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
+removes both when it ends. The container's removal at the end of the run is the backstop.
+
+    node tools/acceptance.ts --editor vscodium --launches genuine
 
 ## The host's other accounts (D-85)
 

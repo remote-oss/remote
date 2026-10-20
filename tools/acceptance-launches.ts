@@ -29,6 +29,8 @@ interface LaunchCommon {
   clientListeners?: readonly number[];
   /** Whether the run starts its registry for this launch; its address is HARNESS_REGISTRY. */
   registry?: true;
+  /** Whether the run makes the launch only when `--launches` names it. */
+  namedOnly?: true;
 }
 
 /** One command of a launch's host setup, run on the host container through `docker exec`, in order. */
@@ -65,6 +67,8 @@ export interface RunnerLaunch extends LaunchCommon {
 export interface PlainLaunch extends LaunchCommon {
   kind: 'plain';
   suite: string;
+  /** The editor the launch starts: VS Code at the floor of ADR-0007 instead of the run's VSCodium. */
+  client?: 'vscode';
   /**
    * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
    * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
@@ -142,6 +146,33 @@ const CONTAINERS_LAUNCH = {
     'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
   },
 } as const;
+
+/**
+ * The genuine VS Code launch: VS Code at the floor of ADR-0007 runs the extensions with their real dialogs, which the
+ * rows read and answer in the window. The run makes it only when `--launches` names it, and it is the table's last.
+ */
+const GENUINE_LAUNCH: PlainLaunch = {
+  ...RENDERER_LAUNCH,
+  label: 'genuine',
+  suite: 'genuine',
+  client: 'vscode',
+  namedOnly: true,
+  settings: {
+    ...RENDERER_LAUNCH.settings,
+    'window.dialogStyle': 'custom',
+    'remote.SSH.localServerDownload': 'off',
+    // Genuine VS Code makes its own requests from the runner; none of them is wanted.
+    'telemetry.telemetryLevel': 'off',
+    'update.mode': 'none',
+    'extensions.autoCheckUpdates': false,
+    'extensions.autoUpdate': false,
+    'workbench.enableExperiments': false,
+    'workbench.settings.enableNaturalLanguageSearch': false,
+    'chat.disableAIFeatures': true,
+  },
+  // The empty script makes the extension show its real dialogs.
+  environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+};
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -700,8 +731,21 @@ export function launchesOf(root: string): Launch[] {
         hostSetup: hostSetupOf(hostCase, suite),
       })),
     ),
+    GENUINE_LAUNCH,
   ];
   return launches;
+}
+
+/** The launch with the label `label`; it fails naming the label when there is none. */
+export function launchLabelled(
+  launches: readonly Launch[],
+  label: string,
+): Launch {
+  const found = launches.find(launch => launch.label === label);
+  if (found === undefined) {
+    throw new Error(`no launch is labelled ${label}`);
+  }
+  return found;
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */

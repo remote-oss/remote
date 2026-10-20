@@ -238,7 +238,7 @@ describe('the activation of a window (card explorer-03c)', () => {
     );
   });
 
-  it('F-5001.BR-10: where the other runs, there is no tree, no watching of extensions and no question', async () => {
+  it('F-5901.AC-19: F-5001.BR-10: where the other runs, there is no tree, no watching of extensions and no question', async () => {
     const scenario = await activated({referencePresent: true});
     deepStrictEqual(
       scenario.events.filter(

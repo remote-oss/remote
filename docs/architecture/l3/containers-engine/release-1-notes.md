@@ -5,6 +5,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
+- **"Open Setting" in the dialog that says the server has no download source opens your user settings file at the
+  setting**, not the Settings editor. Nothing is written to the file.
+  - F-3902 AC-9, which the family shares, describes the Settings editor on the User tab. The Settings editor can't
+    open in a window whose remote authority did not resolve (measured on VS Code 1.139.1 and VSCodium); the settings
+    file opens there (athena on #737; spec question on remote-oss/remote-ssh#79).
+
 - **Reopen in Container checks Docker and reads the configuration before the window reloads.** When that takes longer
   than half a second, a "Connecting to Dev Container" notification shows meanwhile.
   - F-0401 5.0 step 2 has the reload "within about 1 s"; the dev container CLI's read of the configuration can't
@@ -28,3 +34,7 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   `.devcontainer/devcontainer.json` file and for the command to be run again. The wizard that adds a configuration
   (F-0801) comes in a later release, and replaces the notice.
   - F-0301 6.2, AC-7 and AC-49 stay deferred (athena on #890, card containers-13 §1).
+
+- **"show log" in the progress notification, and the log commands, open the Dev Containers log in the Output panel.**
+  They do not open a terminal named "Dev Containers". The log terminal (F-0104) comes in a later release.
+  - F-0408 AC-17 and F-0301 AC-53 describe the terminal and stay deferred (athena on #737, ruling 5 as amended).

@@ -28,6 +28,7 @@ interface Seen {
 
 function surroundings(
   choose: (buttons: readonly string[]) => PromiseLike<string | undefined>,
+  applicationName = 'VSCodium',
 ) {
   const seen: Seen = {dialogs: [], calls: []};
   const dialog: FailureDialogPort = {
@@ -56,7 +57,7 @@ function surroundings(
   };
   const presenter = failurePresenterOf(dialog, actions, template => template, {
     alias: () => 'box',
-    applicationName: 'VSCodium',
+    applicationName,
     displayName: 'Remote - SSH',
   });
   return {presenter, seen};
@@ -247,6 +248,18 @@ describe('the failure presenter', () => {
       text: "Remote - SSH knows no download location for the server of VSCodium. Set remote.SSH.serverDownloadUrlTemplate to a URL template for this editor's server builds.",
       buttons: ['Open Setting', 'Cancel'],
     });
+  });
+
+  it('F-3902 rule 8: the application name in the no-source text is the one the client names', async () => {
+    const {presenter, seen} = surroundings(
+      () => Promise.resolve(undefined),
+      'code',
+    );
+    await presenter.present(failedWith({kind: 'noServerSource'}));
+    deepStrictEqual(
+      seen.dialogs[0]?.text,
+      "Remote - SSH knows no download location for the server of code. Set remote.SSH.serverDownloadUrlTemplate to a URL template for this editor's server builds.",
+    );
   });
 
   it('F-3902 rule 8: an invalid template shows the reason in its text', async () => {

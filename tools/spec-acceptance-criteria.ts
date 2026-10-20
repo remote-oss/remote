@@ -131,7 +131,24 @@ export const EXPLORER_SLICE_ONE_SCOPE: CoverageScope = {
     'explorer slice 1: increment 3',
     'D-55: no tunnel rows',
     'F-2503 Q4: the Windows and macOS path form',
+    'D-60: Windows client',
   ],
+};
+
+/** The features of the Extension Pack's first release: its package data, listing, members and identity. */
+export const EXTENSIONPACK_RELEASE_ONE_FEATURES: readonly string[] = [
+  'F-9001',
+  'F-9002',
+  'F-9101',
+  'F-9901',
+];
+
+/** The coverage file of the Extension Pack's first release. */
+export const EXTENSIONPACK_RELEASE_ONE_SCOPE: CoverageScope = {
+  name: 'extensionpack-r1',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-extensionpack-r1.tsv'),
+  features: EXTENSIONPACK_RELEASE_ONE_FEATURES,
+  repository: 'remote-extensionpack',
 };
 
 /** Every coverage file the check reads. */
@@ -139,6 +156,7 @@ export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
   CONTAINERS_RELEASE_ONE_SCOPE,
   EXPLORER_SLICE_ONE_SCOPE,
+  EXTENSIONPACK_RELEASE_ONE_SCOPE,
 ];
 
 /**
