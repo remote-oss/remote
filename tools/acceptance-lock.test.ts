@@ -1,52 +1,42 @@
 import {deepStrictEqual, rejects} from 'node:assert';
 import {
   daemonLock,
+  HOST_LABEL,
   LOCK_NETWORK,
   LOCK_WAIT_MILLISECONDS,
   NO_LOCK,
+  nodeProcessAlive,
 } from './acceptance-lock.ts';
 import type {CommandResult} from './command-runner.ts';
 
-/** The holder's objects on the daemon: by default it is alive, with its run network and a container. */
-const ALIVE = {
-  containers: {status: 0, stdout: 'f00d\n', stderr: ''},
-  networks: {
-    status: 0,
-    stdout: `remote-oss-acceptance-run-b\n${LOCK_NETWORK}\n`,
-    stderr: '',
-  },
-};
+/** The scripted clock's start, in milliseconds. */
+const START = 1_000_000_000_000;
 
 /**
- * A daemon that answers the lock's commands from a script, one answer per call of each kind, with the holder's
- * containers and networks as `holder` gives them, and a clock.
+ * A daemon that answers the lock's commands from a script, one answer per call of each kind, on host `host-a`, where
+ * the processes `dead` have ended, and a clock.
  */
 function scripted(answers: {
   creates: CommandResult[];
   inspects?: CommandResult[];
-  holder?: {containers: CommandResult; networks: CommandResult};
+  dead?: number[];
 }) {
   const calls: string[] = [];
   const lines: string[] = [];
   const sleeps: number[] = [];
-  let now = 1_000_000_000_000;
+  let now = START;
   const creates = [...answers.creates];
   const inspects = [...(answers.inspects ?? [])];
   const lock = daemonLock(
     (program, programArguments) => {
       calls.push([program, ...programArguments].join(' '));
-      const holder = answers.holder ?? ALIVE;
-      const [noun = '', verb = ''] = programArguments;
+      const verb = programArguments[1];
       const next =
         verb === 'create'
           ? creates.shift()
           : verb === 'inspect'
             ? inspects.shift()
-            : noun === 'ps'
-              ? holder.containers
-              : verb === 'ls'
-                ? holder.networks
-                : undefined;
+            : undefined;
       return next ?? {status: 0, stdout: '', stderr: ''};
     },
     'run-a',
@@ -57,6 +47,8 @@ function scripted(answers: {
         now += milliseconds;
         return Promise.resolve();
       },
+      hostName: 'host-a',
+      processAlive: processId => !(answers.dead ?? []).includes(processId),
     },
     line => {
       lines.push(line);
@@ -73,17 +65,11 @@ function scripted(answers: {
   };
 }
 
-const MADE: CommandResult = {status: 0, stdout: 'net-id\n', stderr: ''};
+const MADE: CommandResult = {status: 0, stdout: 'net-a\n', stderr: ''};
 const EXISTS: CommandResult = {
   status: 1,
   stdout: '',
   stderr: `Error response from daemon: network with name ${LOCK_NETWORK} already exists\n`,
-};
-/** The holder `run-b`, whose lock is 300 s old at the scripted clock's start. */
-const HELD_BY_B: CommandResult = {
-  status: 0,
-  stdout: `run-b ${String(1_000_000_000 - 300)}\n`,
-  stderr: '',
 };
 const GONE: CommandResult = {
   status: 1,
@@ -91,8 +77,24 @@ const GONE: CommandResult = {
   stderr: 'Error: No such network\n',
 };
 
+/** The lock as `docker network inspect` shows it: made 300 s before the scripted clock's start. */
+function heldBy(holderRun: string, host: string): CommandResult {
+  return {
+    status: 0,
+    stdout: `net-old ${String(START / 1000 - 300)} ${holderRun} ${host}\n`,
+    stderr: '',
+  };
+}
+
+const HELD_BY_B = heldBy('run-b', 'host-b');
+
+/** The `docker network rm` calls a script made. */
+function removals(calls: readonly string[]): string[] {
+  return calls.filter(call => call.startsWith('docker network rm '));
+}
+
 describe("the Docker daemon's dev container lock", () => {
-  it('a free lock is taken at once by making its network with the run label, and released by removing it', async () => {
+  it('a free lock is taken at once by making its network with the run and host labels, and released by its id', async () => {
     const {lock, calls, lines, sleeps} = scripted({creates: [MADE]});
     await lock.take();
     lock.release();
@@ -100,8 +102,8 @@ describe("the Docker daemon's dev container lock", () => {
       [calls, lines, sleeps],
       [
         [
-          `docker network create --label remote-oss.acceptance.run=run-a ${LOCK_NETWORK}`,
-          `docker network rm ${LOCK_NETWORK}`,
+          `docker network create --label remote-oss.acceptance.run=run-a --label ${HOST_LABEL}=host-a ${LOCK_NETWORK}`,
+          'docker network rm net-a',
         ],
         [],
         [],
@@ -177,68 +179,64 @@ describe("the Docker daemon's dev container lock", () => {
     });
   });
 
-  it('a lock whose run left no container and no other network is removed and taken at once, saying so', async () => {
+  it("the lock of a local run of this host whose process has ended is removed by its network's id and taken at once", async () => {
     const {lock, calls, lines, sleeps} = scripted({
       creates: [EXISTS, MADE],
-      inspects: [HELD_BY_B],
-      holder: {
-        containers: {status: 0, stdout: '', stderr: ''},
-        networks: {status: 0, stdout: `${LOCK_NETWORK}\n`, stderr: ''},
-      },
+      inspects: [heldBy('local-4242', 'host-a')],
+      dead: [4242],
     });
     await lock.take();
     deepStrictEqual(
-      [lines, sleeps, calls.filter(call => call.includes(' rm '))],
+      [lines, sleeps, removals(calls)],
       [
         [
-          "acceptance: the Docker daemon's dev container lock of run run-b is left from a run that is gone; removing it",
+          "acceptance: the Docker daemon's dev container lock of run local-4242 is left from a run that has ended; removing it",
         ],
         [],
-        [`docker network rm ${LOCK_NETWORK}`],
+        ['docker network rm net-old'],
       ],
     );
   });
 
-  it('a holder whose listings fail counts as alive: the launch waits, and the lock stays', async () => {
-    const failed = {status: 1, stdout: '', stderr: 'error\n'};
-    const {lock, calls, sleeps} = scripted({
-      creates: [EXISTS, MADE],
-      inspects: [HELD_BY_B],
-      holder: {containers: failed, networks: failed},
-    });
-    await lock.take();
-    deepStrictEqual(
-      [sleeps, calls.filter(call => call.includes(' rm '))],
-      [[10_000], []],
-    );
-  });
-
-  it('a holder with only its run network left, or only a container, is alive', async () => {
+  it('a local run whose process is alive, or one of another host, keeps its lock: the launch waits', async () => {
     const seen = [];
     for (const holder of [
-      {
-        containers: {status: 0, stdout: '', stderr: ''},
-        networks: ALIVE.networks,
-      },
-      {
-        containers: ALIVE.containers,
-        networks: {status: 0, stdout: `${LOCK_NETWORK}\n`, stderr: ''},
-      },
+      heldBy('local-4242', 'host-a'),
+      heldBy('local-4242', 'host-b'),
     ]) {
-      const {lock, sleeps} = scripted({
+      const {lock, calls, sleeps} = scripted({
         creates: [EXISTS, MADE],
-        inspects: [HELD_BY_B],
-        holder,
+        inspects: [holder],
+        dead: holder.stdout.includes('host-b') ? [4242] : [],
       });
       await lock.take();
-      seen.push(sleeps.length);
+      seen.push([sleeps.length, removals(calls)]);
     }
-    deepStrictEqual(seen, [1, 1]);
+    deepStrictEqual(seen, [
+      [1, []],
+      [1, []],
+    ]);
+  });
+
+  it('a release with no lock taken removes nothing, and a second release removes nothing more', async () => {
+    const {lock, calls} = scripted({creates: [MADE]});
+    lock.release();
+    await lock.take();
+    lock.release();
+    lock.release();
+    deepStrictEqual(removals(calls), ['docker network rm net-a']);
   });
 
   it('the lock of a launch that needs none is taken at once and released with nothing to do', async () => {
     const taken = await NO_LOCK.take().then(() => 'taken');
     NO_LOCK.release();
     deepStrictEqual(taken, 'taken');
+  });
+
+  it('a process of this host is alive while it runs, and one that does not exist is not', () => {
+    deepStrictEqual(
+      [nodeProcessAlive(process.pid), nodeProcessAlive(2 ** 30)],
+      [true, false],
+    );
   });
 });

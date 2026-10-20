@@ -11,7 +11,12 @@
  */
 
 import {stopHelpersUnder} from './acceptance-helper-stop.ts';
-import {daemonLock, type LaunchLock, NO_LOCK} from './acceptance-lock.ts';
+import {
+  daemonLock,
+  type LaunchLock,
+  NO_LOCK,
+  nodeProcessAlive,
+} from './acceptance-lock.ts';
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {
   type RunRegistry,
@@ -30,7 +35,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {tmpdir} from 'node:os';
+import {hostname, tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
 import {
@@ -1106,7 +1111,12 @@ export async function runAcceptance(
         daemonLock(
           dependencies.command,
           variables.HARNESS_RUN_ID,
-          {now: Date.now, sleep: dependencies.sleep},
+          {
+            now: Date.now,
+            sleep: dependencies.sleep,
+            hostName: hostname(),
+            processAlive: nodeProcessAlive,
+          },
           line => {
             console.log(line);
           },

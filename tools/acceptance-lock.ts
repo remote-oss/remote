@@ -3,8 +3,8 @@
  * `vscode` volume, which a launch may remove and make again, so two runs that share a daemon take turns. The lock is a
  * network that the daemon names uniquely, labelled with the run that holds it: a create either makes it or finds it,
  * at once for every process and runner that shares the daemon. A run's own clean-up removes it with the run's
- * other networks; a lock whose run has no container or network left on the daemon is one a killed run left, and the
- * next launch that finds it removes it and takes the lock (a live run keeps its own network from start to end).
+ * other networks; the lock of a local run of this host whose process has ended is removed by the next launch that
+ * finds it.
  */
 
 import {RUN_LABEL} from './acceptance-run.ts';
@@ -34,61 +34,67 @@ export const NO_LOCK: LaunchLock = {
   release: () => undefined,
 };
 
-/** What the wait needs of the world; the run passes the real clock. */
-export interface LockClock {
-  now(): number;
-  sleep(milliseconds: number): Promise<void>;
+/** The label of the lock's host: a holder named `local-<pid>` on this host can be checked by its process. */
+export const HOST_LABEL = 'remote-oss.acceptance.lock-host';
+
+/** The lock's network id, creation time in seconds, holder's run and host, as `docker network inspect` gives them. */
+const HOLDER_FORMAT = `{{.Id}} {{.Created.Unix}} {{index .Labels "${RUN_LABEL}"}} {{index .Labels "${HOST_LABEL}"}}`;
+
+/** A local run's id: `local-<pid>` (CI runs are named by their job). */
+const LOCAL_RUN = /^local-(\d+)$/;
+
+/** Whether process `processId` of this host is alive (one that exists but isn't ours counts). */
+export function nodeProcessAlive(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (caught) {
+    return (caught as NodeJS.ErrnoException).code === 'EPERM';
+  }
 }
 
-/** The holder's run and the lock's creation time in seconds, as `docker network inspect` gives them. */
-const HOLDER_FORMAT = `{{index .Labels "${RUN_LABEL}"}} {{.Created.Unix}}`;
+/** Where the lock runs: the clock, this host's name, and whether a process of this host is alive. */
+export interface LockWorld {
+  now(): number;
+  sleep(milliseconds: number): Promise<void>;
+  hostName: string;
+  processAlive(processId: number): boolean;
+}
 
-/** Whether run `holderRun` still has a container, or a network besides the lock, on the daemon. */
-function holderLives(command: CommandRunner, holderRun: string): boolean {
-  const filter = `label=${RUN_LABEL}=${holderRun}`;
-  const containers = command('docker', [
-    'ps',
-    '--all',
-    '--quiet',
-    '--filter',
-    filter,
-  ]);
-  const networks = command('docker', [
-    'network',
-    'ls',
-    '--format',
-    '{{.Name}}',
-    '--filter',
-    filter,
-  ]);
-  const others = networks.stdout
-    .split('\n')
-    .map(name => name.trim())
-    .filter(name => name !== '' && name !== LOCK_NETWORK);
-  // A listing that fails says nothing: the holder counts as alive, and the launch waits.
+/**
+ * Whether the holder is a local run of this host whose process has ended: a run killed before its clean-up, whose
+ * lock nothing else would remove. A CI run's clean-up step runs even after the job is cancelled.
+ */
+function holderGone(
+  world: LockWorld,
+  holderRun: string,
+  holderHost: string,
+): boolean {
+  const local = LOCAL_RUN.exec(holderRun);
   return (
-    containers.status !== 0 ||
-    networks.status !== 0 ||
-    containers.stdout.trim() !== '' ||
-    others.length > 0
+    local !== null &&
+    holderHost === world.hostName &&
+    !world.processAlive(Number(local[1]))
   );
 }
 
 /**
  * The daemon's dev container lock for run `runId`. `take` makes the lock's network, or waits while another run's
  * exists, saying once a minute which run holds it and for how long, and fails after LOCK_WAIT_MILLISECONDS. A create
- * that fails while no lock exists is the daemon's own failure, not a wait. A lock whose run left nothing else on the
- * daemon is removed and taken. `release` removes the network.
+ * that fails while no lock exists is the daemon's own failure, not a wait. The lock of a local run of this host whose
+ * process has ended is removed, by its network's id, and taken. `release` removes the network this run made, by its id,
+ * so it never removes another run's lock.
  */
 export function daemonLock(
   command: CommandRunner,
   runId: string,
-  clock: LockClock,
+  world: LockWorld,
   report: (line: string) => void,
 ): LaunchLock {
+  let held: string | undefined;
   return {
     async take() {
-      const started = clock.now();
+      const started = world.now();
       let reportedAt: number | undefined;
       for (;;) {
         const created = command('docker', [
@@ -96,9 +102,12 @@ export function daemonLock(
           'create',
           '--label',
           `${RUN_LABEL}=${runId}`,
+          '--label',
+          `${HOST_LABEL}=${world.hostName}`,
           LOCK_NETWORK,
         ]);
         if (created.status === 0) {
+          held = created.stdout.trim();
           return;
         }
         const holder = command('docker', [
@@ -117,36 +126,42 @@ export function daemonLock(
             `docker network create ${LOCK_NETWORK}: ${created.stderr.trim()}`,
           );
         }
-        const [holderRun = '', createdSeconds = '0'] = holder.stdout
-          .trim()
-          .split(' ');
-        if (!holderLives(command, holderRun)) {
+        const [
+          networkId = '',
+          createdSeconds = '0',
+          holderRun = '',
+          holderHost = '',
+        ] = holder.stdout.trim().split(' ');
+        if (holderGone(world, holderRun, holderHost)) {
           report(
-            `acceptance: the Docker daemon's dev container lock of run ${holderRun} is left from a run that is gone; removing it`,
+            `acceptance: the Docker daemon's dev container lock of run ${holderRun} is left from a run that has ended; removing it`,
           );
-          command('docker', ['network', 'rm', LOCK_NETWORK]);
+          command('docker', ['network', 'rm', networkId]);
           continue;
         }
-        const heldFor = `${String(Math.round(clock.now() / 1000 - Number(createdSeconds)))} s`;
-        if (clock.now() - started >= LOCK_WAIT_MILLISECONDS) {
+        const heldFor = `${String(Math.round(world.now() / 1000 - Number(createdSeconds)))} s`;
+        if (world.now() - started >= LOCK_WAIT_MILLISECONDS) {
           throw new Error(
             `the Docker daemon's dev container lock is still held by run ${holderRun} after ${String(LOCK_WAIT_MILLISECONDS / 60_000)} minutes (held for ${heldFor})`,
           );
         }
         if (
           reportedAt === undefined ||
-          clock.now() - reportedAt >= LOCK_REPORT_MILLISECONDS
+          world.now() - reportedAt >= LOCK_REPORT_MILLISECONDS
         ) {
           report(
             `acceptance: waiting for the Docker daemon's dev container lock, held by run ${holderRun} for ${heldFor}`,
           );
-          reportedAt = clock.now();
+          reportedAt = world.now();
         }
-        await clock.sleep(LOCK_RETRY_MILLISECONDS);
+        await world.sleep(LOCK_RETRY_MILLISECONDS);
       }
     },
     release() {
-      command('docker', ['network', 'rm', LOCK_NETWORK]);
+      if (held !== undefined) {
+        command('docker', ['network', 'rm', held]);
+        held = undefined;
+      }
     },
   };
 }
