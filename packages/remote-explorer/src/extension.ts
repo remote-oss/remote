@@ -42,18 +42,22 @@ async function dataFolderName(): Promise<string> {
 /** Called by the editor when the extension activates. */
 export function activate(context: vscode.ExtensionContext): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
-  return activateInWindow(vscode, context, () =>
-    runSetup(
-      familySetupPortsOf(vscode, context, {
-        displayName: manifest.displayName,
-        proposals: enabledApiProposals,
-        viewIds: [views.remoteTargets],
-        templates: SETUP_TEXT_TEMPLATES,
-        translate,
-        dataFolderName,
-        logFailure: () => undefined,
-      }),
-      true,
-    ),
+  return activateInWindow(
+    vscode,
+    context,
+    () =>
+      runSetup(
+        familySetupPortsOf(vscode, context, {
+          displayName: manifest.displayName,
+          proposals: enabledApiProposals,
+          viewIds: [views.remoteTargets],
+          templates: SETUP_TEXT_TEMPLATES,
+          translate,
+          dataFolderName,
+          logFailure: () => undefined,
+        }),
+        true,
+      ),
+    process.platform === 'win32' ? 'windows' : 'other',
   );
 }

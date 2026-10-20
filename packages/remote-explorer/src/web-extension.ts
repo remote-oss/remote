@@ -8,5 +8,5 @@ import {activateInWindow} from './window-activation.ts';
 
 /** Called by the editor when the extension activates. */
 export function activate(context: vscode.ExtensionContext): Promise<void> {
-  return activateInWindow(vscode, context, () => Promise.resolve());
+  return activateInWindow(vscode, context, () => Promise.resolve(), 'other');
 }

@@ -17,9 +17,11 @@ import {activateExplorer, silentHandlers} from './activation.ts';
 import {commands, standDown, views} from './identifiers.generated.ts';
 import {companionCallsOf} from './view/companion-calls.ts';
 import {connectHandlers} from './view/connect.ts';
+import type {ClientPlatform} from './model/ssh-group.ts';
 import {createTargets, type ViewSession} from './view/targets.ts';
 import {
   configFileChangesOf,
+  folderSettingsOf,
   showTargets,
   type TreeEditor,
 } from './view/tree-adapter.ts';
@@ -41,12 +43,13 @@ export type WindowEditor = TreeEditor &
 
 /**
  * Activates the explorer in this window: the stand-down guard, `setup`, then the commands. On `serving` the end of
- * the registration is added to `context.subscriptions`.
+ * the registration is added to `context.subscriptions`. `clientPlatform` is the platform the editor's client runs on.
  */
 export async function activateInWindow(
   editor: WindowEditor,
   context: Pick<vscode.ExtensionContext, 'subscriptions' | 'extension'>,
   setup: () => PromiseLike<unknown>,
+  clientPlatform: ClientPlatform,
 ): Promise<void> {
   let session: ViewSession | undefined = undefined;
   const result = await activateExplorer({
@@ -85,6 +88,8 @@ export async function activateInWindow(
     detector,
     configFileChanges: configFileChangesOf(editor),
     connectedText: editor.l10n.t('connected'),
+    folderSettings: folderSettingsOf(editor),
+    clientPlatform,
   });
   const shown = await showTargets(editor, targets, views.remoteTargets);
   const disposables = [targets, detector];

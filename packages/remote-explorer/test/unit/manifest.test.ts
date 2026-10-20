@@ -44,6 +44,10 @@ const MENUS = (CONTRIBUTES.menus ?? {}) as Record<string, unknown[]>;
 
 const CLAUSE = `viewItem == remote-explorer.tunnelRemoteTarget && ${GATE} || viewItem == remote-explorer.sshRemoteTarget && ${GATE}`;
 
+const FOLDER_CLAUSE = `viewItem == remote-explorer.remoteFolder && ${GATE} || viewItem == remote-explorer.tunnelWsl && ${GATE}`;
+
+const REMOVE_CLAUSE = `viewItem == remote-explorer.remoteFolder && ${GATE}`;
+
 const STRINGS_TABLE = {
   description:
     'Every remote target in one view: SSH hosts, containers and WSL distros, one click away.',
@@ -52,6 +56,19 @@ const STRINGS_TABLE = {
   'commands.connectToRemoteInNewWindow.title': 'Connect in New Window...',
   'commands.connectToRemoteInCurrentWindow.title':
     'Connect in Current Window...',
+  'commands.connectToFolderInNewWindow.title': 'Connect in New Window...',
+  'commands.connectToFolderInCurrentWindow.title':
+    'Connect in Current Window...',
+  'commands.deleteFolderHistoryItem.title': 'Remove from Recent List',
+  'configuration.title': 'Remote Explorer',
+  'settings.foldersSortOrder.description':
+    'Specifies the order in which to display folders under Remote targets in the Remote Explorer.',
+  'settings.foldersSortOrder.mru.description':
+    'Display folders in order of the most recently opened at the top',
+  'settings.foldersSortOrder.alphabetical.description':
+    'Display folders in alphabetical order',
+  'settings.collapseRecentFolders.description':
+    'Collapse the recent folders under Remote targets in the Remote Explorer.',
 };
 
 /** Every `%key%` the manifest uses. */
@@ -174,7 +191,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the three commands, in order, with a title and an icon and no category or enablement', () => {
+  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the six commands, in order, with a title and an icon and no category or enablement', () => {
     deepStrictEqual(CONTRIBUTES.commands, [
       {
         command: 'remote-explorer.refresh',
@@ -191,6 +208,21 @@ describe('the manifest of the Remote Explorer package', () => {
         title: '%commands.connectToRemoteInCurrentWindow.title%',
         icon: '$(arrow-right)',
       },
+      {
+        command: 'remote-explorer.connectToFolderInNewWindow',
+        title: '%commands.connectToFolderInNewWindow.title%',
+        icon: '$(empty-window)',
+      },
+      {
+        command: 'remote-explorer.connectToFolderInCurrentWindow',
+        title: '%commands.connectToFolderInCurrentWindow.title%',
+        icon: '$(arrow-right)',
+      },
+      {
+        command: 'remote-explorer.deleteFolderHistoryItem',
+        title: '%commands.deleteFolderHistoryItem.title%',
+        icon: '$(remove)',
+      },
     ]);
   });
 
@@ -202,6 +234,12 @@ describe('the manifest of the Remote Explorer package', () => {
         command: 'remote-explorer.connectToRemoteInCurrentWindow',
         when: 'false',
       },
+      {command: 'remote-explorer.connectToFolderInNewWindow', when: 'false'},
+      {
+        command: 'remote-explorer.connectToFolderInCurrentWindow',
+        when: 'false',
+      },
+      {command: 'remote-explorer.deleteFolderHistoryItem', when: 'false'},
     ]);
   });
 
@@ -215,7 +253,7 @@ describe('the manifest of the Remote Explorer package', () => {
     ]);
   });
 
-  it('F-5001.AC-24, F-5103.AC-1, AC-8, AC-26: F-5103.3.1: the two connect commands are inline and in the context menu of the host rows', () => {
+  it('F-5001.AC-24, F-5103.AC-1, AC-8, AC-26: F-5103.3.1: the connect commands are inline and in the context menu of the host and folder rows, and the removal is in the menu of the folder rows', () => {
     deepStrictEqual(MENUS['view/item/context'], [
       {
         command: 'remote-explorer.connectToRemoteInCurrentWindow',
@@ -237,6 +275,31 @@ describe('the manifest of the Remote Explorer package', () => {
         group: 'navigation@2',
         when: CLAUSE,
       },
+      {
+        command: 'remote-explorer.connectToFolderInCurrentWindow',
+        group: 'inline@1',
+        when: FOLDER_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.connectToFolderInCurrentWindow',
+        group: 'navigation@1',
+        when: FOLDER_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.connectToFolderInNewWindow',
+        group: 'inline@2',
+        when: FOLDER_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.connectToFolderInNewWindow',
+        group: 'navigation@2',
+        when: FOLDER_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.deleteFolderHistoryItem',
+        group: 'navigation@3',
+        when: REMOVE_CLAUSE,
+      },
     ]);
   });
 
@@ -252,18 +315,43 @@ describe('the manifest of the Remote Explorer package', () => {
             alternative.split(GATE).length === 2,
         ),
       ),
-      [true, true, true, true, true, true, true, true, true],
+      Array.from({length: 18}, () => true),
     );
   });
 
-  it('F-5002.BR-2: the contributions are commands, views and menus, and the menus are three', () => {
+  it('F-5002.BR-2: the contributions are commands, views, menus and configuration, and the menus are three', () => {
     deepStrictEqual(
       [Object.keys(CONTRIBUTES), Object.keys(MENUS)],
       [
-        ['commands', 'views', 'menus'],
+        ['commands', 'views', 'menus', 'configuration'],
         ['commandPalette', 'view/title', 'view/item/context'],
       ],
     );
+  });
+
+  it('F-5104.BR-5, BR-7: the two settings are application-scoped, with the defaults and the sort order choices', () => {
+    deepStrictEqual(CONTRIBUTES.configuration, {
+      title: '%configuration.title%',
+      properties: {
+        'remote-explorer.foldersSortOrder': {
+          type: 'string',
+          default: 'most recently used',
+          scope: 'application',
+          enum: ['most recently used', 'alphabetical'],
+          enumDescriptions: [
+            '%settings.foldersSortOrder.mru.description%',
+            '%settings.foldersSortOrder.alphabetical.description%',
+          ],
+          description: '%settings.foldersSortOrder.description%',
+        },
+        'remote-explorer.collapseRecentFolders': {
+          type: 'boolean',
+          default: false,
+          scope: 'application',
+          description: '%settings.collapseRecentFolders.description%',
+        },
+      },
+    });
   });
 
   it('F-5101.AC-1: F-5101.3.3: the view is remoteTargets, placed in the targets group for tunnel and SSH windows', () => {
@@ -279,7 +367,7 @@ describe('the manifest of the Remote Explorer package', () => {
     });
   });
 
-  it('F-5001.BR-9: the strings table has the five keys, and the manifest uses only those', () => {
+  it('F-5001.BR-9: the strings table has the thirteen keys, and the manifest uses only those', () => {
     deepStrictEqual(
       [jsonOf('package.nls.json'), [...new Set(nlsKeysUsed(MANIFEST))].sort()],
       [STRINGS_TABLE, Object.keys(STRINGS_TABLE).sort()],
@@ -293,7 +381,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5001.AC-16: the runtime strings are the nine texts, in the default bundle and the 14 locales, as English', () => {
+  it('F-5001.AC-16: the runtime strings are the ten texts, in the default bundle and the 14 locales, as English', () => {
     const texts = Object.keys(jsonOf('l10n/bundle.l10n.json'));
     deepStrictEqual(
       [
@@ -301,7 +389,7 @@ describe('the manifest of the Remote Explorer package', () => {
         ...LOCALES.map(locale => jsonOf(`l10n/bundle.l10n.${locale}.json`)),
       ],
       [
-        9,
+        10,
         ...LOCALES.map(() =>
           Object.fromEntries(texts.map(text => [text, text])),
         ),
@@ -346,7 +434,17 @@ describe('the manifest of the Remote Explorer package', () => {
           kind: 'query',
         },
         {
+          id: 'remote-internal.getSshFoldersHistory',
+          role: 'called',
+          kind: 'query',
+        },
+        {
           id: 'remote-internal.openRemoteSshTarget',
+          role: 'called',
+          kind: 'change',
+        },
+        {
+          id: 'remote-internal.deleteSshFolderFromHistory',
           role: 'called',
           kind: 'change',
         },
