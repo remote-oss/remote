@@ -3,6 +3,7 @@ import {readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
+  acceptedKeyLoginTimes,
   appendScript,
   closeWindow,
   connected,
@@ -17,6 +18,7 @@ import {
   openWindow,
   recordLines,
   reloadWindow,
+  userSettings,
   variable,
   waitFor,
   windowEvents,
@@ -604,5 +606,117 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       [],
     );
     await closeAllButLocal();
+  });
+
+  it('F-2411 AC-25 (c43-typed-own): Kill on Host with the typed user@alias of the window’s own host kills its server, keeps the window remote, and core reconnects it', async () => {
+    await closeAllButLocal();
+    await openConnected('x1');
+    const servers = await serverProcesses();
+    const mark = await killWith('x1', [typeHost('harness@harness')]);
+    await serversGoneWithin(servers, 10_000);
+    await waitFor(
+      'x1 to be resolved again by core’s reconnection',
+      () =>
+        linesSince(mark, 'x1').some(
+          line =>
+            line.surface === 'progress' &&
+            line.question === 'Setting up SSH Host harness',
+        ),
+      30_000,
+    );
+    deepStrictEqual(
+      [noticesSince(mark, 'x1'), (await windowState('x1')).remoteName],
+      [[[killed('harness'), ['Open Logs']]], 'ssh-remote'],
+    );
+    await closeAllButLocal();
+  });
+
+  it('F-2411 AC-32 (c43-socket-host): with the server listening on a socket, Kill on Host kills it and says so', async () => {
+    await closeAllButLocal();
+    await userSettings({'remote.SSH.remoteServerListenOnSocket': true});
+    try {
+      await openConnected('x1');
+      const servers = await serverProcesses();
+      const mark = await killWith('local', [pickHost('harness')]);
+      await serversGoneWithin(servers, 10_000);
+      deepStrictEqual(noticesSince(mark, 'local'), [
+        [killed('harness'), ['Open Logs']],
+      ]);
+    } finally {
+      await userSettings({'remote.SSH.remoteServerListenOnSocket': undefined});
+      await closeAllButLocal();
+    }
+  });
+
+  it('F-2411 AC-32 (c43-socket-current): with the server listening on a socket, Kill Current says so and the window stays remote', async () => {
+    await closeAllButLocal();
+    await userSettings({'remote.SSH.remoteServerListenOnSocket': true});
+    try {
+      await openConnected('x1');
+      const mark = recordLines().length;
+      await killCurrent('x1');
+      deepStrictEqual(
+        [noticesSince(mark, 'x1'), (await windowState('x1')).remoteName],
+        [[[killed('harness'), ['Open Logs']]], 'ssh-remote'],
+      );
+    } finally {
+      await userSettings({'remote.SSH.remoteServerListenOnSocket': undefined});
+      await closeAllButLocal();
+    }
+  });
+
+  it('F-2411 AC-33 (c43-one-login): a kill uses one login of its own, ended right after, from a local window and from a window with no local server', async () => {
+    await closeAllButLocal();
+    await openConnected('x1');
+    async function sessions(): Promise<number> {
+      return (
+        await onHost('pgrep', '-u', 'harness', '-f', 'sshd: harness').catch(
+          () => '',
+        )
+      )
+        .split('\n')
+        .filter(line => line !== '').length;
+    }
+    /** The logins that fall between the host pick and the kill's notice. */
+    async function loginsOfKill(
+      since: string,
+      mark: number,
+      window: string,
+    ): Promise<number> {
+      const lines = linesSince(mark, window);
+      const pick = lines.find(line => line.surface === 'hostPick')?.time ?? 0;
+      const notice =
+        lines.find(line => line.surface === 'notice')?.time ?? Infinity;
+      return (await acceptedKeyLoginTimes(since)).filter(
+        time => time >= pick - 1000 && time <= notice + 1000,
+      ).length;
+    }
+    const baseline = await sessions();
+    const sinceLocal = new Date().toISOString();
+    const localMark = await killWith('local', [pickHost('harness')]);
+    const fromLocal = await loginsOfKill(sinceLocal, localMark, 'local');
+    await waitFor(
+      'the kill’s session to end',
+      async () => (await sessions()) <= baseline,
+      5000,
+    );
+    await closeAllButLocal();
+    await perWindowMode(true);
+    try {
+      await openConnected('x2', INSTALL_MILLISECONDS);
+      const withWindow = await sessions();
+      const sinceWindow = new Date().toISOString();
+      const windowMark = await killWith('x2', [pickHost('harness')]);
+      const fromWindow = await loginsOfKill(sinceWindow, windowMark, 'x2');
+      await waitFor(
+        'the kill’s session to end',
+        async () => (await sessions()) <= withWindow,
+        10_000,
+      );
+      deepStrictEqual([fromLocal, fromWindow], [1, 1]);
+    } finally {
+      await closeAllButLocal();
+      await perWindowMode(false);
+    }
   });
 });

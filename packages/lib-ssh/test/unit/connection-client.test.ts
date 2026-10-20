@@ -279,6 +279,7 @@ describe('the window side of the shared connection (S9)', () => {
       failure: {
         kind: 'loginFailed',
         failure: 'authentication',
+        exitStatus: 255,
         reason: {text: 'Permission denied (publickey).'},
         hints: [
           {

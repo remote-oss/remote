@@ -24,6 +24,8 @@ export interface ConfigFiles {
   ): Promise<ReadonlyArray<{name: string; kind: 'file' | 'folder' | 'other'}>>;
   /** The file's bytes, or `unreadable` when it can't be opened (permission denied, gone). */
   read(file: string): Promise<Uint8Array | 'unreadable'>;
+  /** Whether a file or folder exists at the absolute path. */
+  exists(path: string): Promise<boolean>;
 }
 
 const DOTFILE = '.devcontainer.json';

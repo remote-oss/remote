@@ -292,6 +292,18 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     );
   });
 
+  it('connect-64: a failed terminal login keeps its exit code for the log', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write('ssh: connect to host dev port 22: Connection refused\n');
+    terminal.end(255, 'process');
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.sshExitStatus : outcome,
+      255,
+    );
+  });
+
   it('#299: another end is classified in terminal mode', async () => {
     const made = fixture();
     const {result, terminal} = await started(made);

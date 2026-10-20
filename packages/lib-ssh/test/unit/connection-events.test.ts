@@ -71,6 +71,24 @@ describe('connection replies and events (contracts §4 S9)', () => {
     );
   });
 
+  it('connect-64: a loginFailed event with and without the exit status', () => {
+    const failed = {type: 'loginFailed', kind: 'unknown', hints: []};
+    deepStrictEqual(
+      [
+        {...failed, exitStatus: 255},
+        {...failed, exitStatus: null},
+        failed,
+        {...failed, exitStatus: 'x'},
+      ].map(body => readConnectionEvent(body)),
+      [
+        {...failed, exitStatus: 255},
+        {...failed, exitStatus: null},
+        failed,
+        undefined,
+      ],
+    );
+  });
+
   it('reads nothing from a body that is no event', () => {
     deepStrictEqual(
       [

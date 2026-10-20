@@ -30,6 +30,14 @@ async function settled(): Promise<void> {
   }
 }
 
+/** The failure of a login that ended with status 255 and gave nothing the classification knows. */
+const UNKNOWN_AFTER_255 = {
+  type: 'loginFailed',
+  kind: 'unknown',
+  hints: [],
+  exitStatus: 255,
+};
+
 describe('connection handler (contracts §4 S9)', () => {
   let clock: FakeClock;
   let spawner: ScriptedSpawner;
@@ -217,9 +225,30 @@ describe('connection handler (contracts §4 S9)', () => {
               resources: [],
             },
           ],
+          exitStatus: 255,
         },
         {type: 'ownerChanged', owner: 2},
       ]);
+    });
+
+    it("connect-64: a refused login tells the windows ssh's exit status, and no lines", async () => {
+      spawner.started[0]?.error(
+        'ssh: connect to host 127.0.0.1 port 1: Connection refused\r\n',
+      );
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(events[0], UNKNOWN_AFTER_255);
+    });
+
+    it('connect-64: an ssh that ended on a signal has a null exit status', async () => {
+      spawner.started[0]?.exit(undefined);
+      await settled();
+      deepStrictEqual(events[0], {
+        type: 'loginFailed',
+        kind: 'unknown',
+        hints: [],
+        exitStatus: null,
+      });
     });
 
     it('card ssh-38: a login shell that outlasted its bound fails the login as a timeout, and is logged', async () => {
@@ -230,7 +259,7 @@ describe('connection handler (contracts §4 S9)', () => {
         [events, logged],
         [
           [
-            {type: 'loginFailed', kind: 'timeout', hints: []},
+            {type: 'loginFailed', kind: 'timeout', hints: [], exitStatus: 124},
             {type: 'ownerChanged', owner: 2},
           ],
           ['the login shell did not finish its startup within 5 s'],
@@ -246,7 +275,7 @@ describe('connection handler (contracts §4 S9)', () => {
         [events, logged],
         [
           [
-            {type: 'loginFailed', kind: 'unknown', hints: []},
+            {type: 'loginFailed', kind: 'unknown', hints: [], exitStatus: 1},
             {type: 'ownerChanged', owner: 2},
           ],
           [
@@ -297,11 +326,7 @@ describe('connection handler (contracts §4 S9)', () => {
       );
       spawner.started[0]?.exit(255);
       await settled();
-      deepStrictEqual(events[0], {
-        type: 'loginFailed',
-        kind: 'unknown',
-        hints: [],
-      });
+      deepStrictEqual(events[0], UNKNOWN_AFTER_255);
     });
 
     it('reads the last line of ssh when it ended without a line end', async () => {

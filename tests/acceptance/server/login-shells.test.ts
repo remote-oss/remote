@@ -398,7 +398,12 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
           ],
           [
             'failed',
-            {kind: 'loginFailed', failure: 'timeout', hints: []},
+            {
+              kind: 'loginFailed',
+              failure: 'timeout',
+              hints: [],
+              exitStatus: 255,
+            },
             true,
           ],
         );
@@ -414,7 +419,15 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
               line.includes('did not finish its startup'),
             ),
           ],
-          [{kind: 'loginFailed', failure: 'timeout', hints: []}, []],
+          [
+            {
+              kind: 'loginFailed',
+              failure: 'timeout',
+              hints: [],
+              exitStatus: 255,
+            },
+            [],
+          ],
         );
       });
 
@@ -441,7 +454,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
           ],
           [
             'failed',
-            {kind: 'loginFailed', failure: 'unknown', hints: []},
+            {kind: 'loginFailed', failure: 'unknown', hints: [], exitStatus: 1},
             true,
           ],
         );
@@ -548,7 +561,11 @@ describe('F-2206 AC-28, #443: a login shell that does not answer fails the conne
         milliseconds >= CONNECT_WAIT_MILLISECONDS - 500,
         milliseconds < WAIT_AND_MARGIN_MILLISECONDS,
       ],
-      [{kind: 'loginFailed', failure: 'timeout', hints: []}, true, true],
+      [
+        {kind: 'loginFailed', failure: 'timeout', hints: [], exitStatus: 255},
+        true,
+        true,
+      ],
     );
   });
 });
