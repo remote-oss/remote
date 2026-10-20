@@ -316,18 +316,30 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       devContainerFolder('open-trusted-from'),
     );
     await openFolderFrom(from, folder);
-    const progress = {connected: false};
-    const settledConnect = connectedToContainer('open-trusted').then(() => {
-      progress.connected = true;
-    });
+    const progress = {settled: false, failure: undefined as unknown};
+    const settledConnect = connectedToContainer('open-trusted').then(
+      () => {
+        progress.settled = true;
+      },
+      (caught: unknown) => {
+        progress.failure = caught;
+        progress.settled = true;
+      },
+    );
     const shown: Array<string | undefined> = [];
-    while (!progress.connected) {
+    while (!progress.settled) {
       shown.push(
         (await dialogOf('open-trusted').catch(() => undefined))?.message,
       );
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     await settledConnect;
+    if (progress.failure !== undefined) {
+      throw new Error(
+        `the window open-trusted did not connect: ${progress.failure instanceof Error ? progress.failure.message : JSON.stringify(progress.failure)}; the dialogs seen: ${JSON.stringify(shown.filter(message => message !== undefined))}`,
+        {cause: progress.failure},
+      );
+    }
     deepStrictEqual(
       shown.filter(message => message !== undefined),
       [],
