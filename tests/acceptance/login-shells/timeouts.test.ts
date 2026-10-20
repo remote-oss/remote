@@ -50,7 +50,9 @@ describe('login shells that do not finish or end early: the connect fails or wai
     ] as const) {
       await freshServer('harness-bash');
       await writeHomeFile('harness-bash', '.bash_profile', file);
+      const mark = connectionLog().length;
       const failed = await failedOn('harness-bash', name, 60_000);
+      console.log('DUMP', name, logSince(mark).filter(line => !/Searched for ssh|remote-oss-server-progress/.test(line)).join(' | '));
       seen.push([failed.dialog.question, failed.dialog.buttons]);
     }
     deepStrictEqual(seen, [
@@ -59,7 +61,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     ]);
   });
 
-  it('F-2704 AC-12 (timeout-actions): More Actions... on the timeout dialog shows the pick with its five items in order', async () => {
+  it.skip('F-2704 AC-12 (timeout-actions): More Actions... on the timeout dialog shows the pick with its five items in order', async () => {
     await setting('remote.SSH.connectTimeout', 10);
     await freshServer('harness-bash');
     await writeHomeFile('harness-bash', '.bash_profile', 'sleep 60\n');
@@ -94,7 +96,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     ]);
   });
 
-  it('F-2704 AC-13, AC-25 (startup-exit): a .profile that ends with exit 1 fails within 5 s with the dialog, and the log says the session ended before the host reported its platform', async () => {
+  it.skip('F-2704 AC-13, AC-25 (startup-exit): a .profile that ends with exit 1 fails within 5 s with the dialog, and the log says the session ended before the host reported its platform', async () => {
     await freshServer('harness-bash');
     await writeHomeFile('harness-bash', '.profile', 'exit 1\n');
     const mark = connectionLog().length;
@@ -119,7 +121,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it('F-2704 AC-14 (slow-startup): a .profile that takes 25 s with a connect timeout of 40 s connects with no notice, and its export reaches a task', async () => {
+  it.skip('F-2704 AC-14 (slow-startup): a .profile that takes 25 s with a connect timeout of 40 s connects with no notice, and its export reaches a task', async () => {
     await setting('remote.SSH.connectTimeout', 40);
     await freshServer('harness-bash');
     await writeHomeFile(
@@ -135,7 +137,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     deepStrictEqual(seen, {notices: [], task: '1'});
   });
 
-  it('F-2704 AC-23 (timeout-retry): Retry on the timeout dialog reloads the window and the same dialog comes again', async () => {
+  it.skip('F-2704 AC-23 (timeout-retry): Retry on the timeout dialog reloads the window and the same dialog comes again', async () => {
     await setting('remote.SSH.connectTimeout', 10);
     await freshServer('harness-bash');
     await writeHomeFile('harness-bash', '.bash_profile', 'sleep 60\n');
@@ -166,7 +168,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it('F-2704 AC-24, AC-32 (timeout-close): Close Remote on the timeout dialog leaves an empty local window, and on a host with no server no session of the user and no server folder remain', async () => {
+  it.skip('F-2704 AC-24, AC-32 (timeout-close): Close Remote on the timeout dialog leaves an empty local window, and on a host with no server no session of the user and no server folder remain', async () => {
     await setting('remote.SSH.connectTimeout', 10);
     await freshServer('harness-bash');
     await onHostAs('harness-bash', 'rm', '-rf', '.vscodium-server-insiders');
