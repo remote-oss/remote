@@ -65,6 +65,7 @@ describe('more of what ends a window decides when its container stops (card cont
   it('F-0417 AC-17, AC-19 (m17): a container killed from the host leaves the window disconnected with core’s dialog; Cancel keeps it, and once the container is started by hand the close stops it about 11 s later', async () => {
     const connected = await connectedWindow('c69-m17');
     try {
+      await new Promise(resolve => setTimeout(resolve, 5000));
       await execFileAsync('docker', ['kill', connected.containerId]);
       const shown = await waitForDialog(connected.window, 180_000);
       await answerDialog(connected.window, 'Cancel');
@@ -79,6 +80,7 @@ describe('more of what ends a window decides when its container stops (card cont
         `${String(shown.details)} ${JSON.stringify(outcome)}`,
       );
     } finally {
+      await closeWindow(connected.window).catch(() => undefined);
       await removeContainersOf(connected.folder);
     }
   });

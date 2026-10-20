@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {
@@ -104,7 +105,13 @@ export async function removeContainersOf(
   folder: string,
   extra: readonly string[] = [],
 ): Promise<void> {
-  const ids = [...(await devContainersOf(folder)), ...extra];
+  const found = await devContainersOf(folder);
+  const ids = [
+    ...found,
+    ...extra.filter(
+      id => !found.some(one => id.startsWith(one) || one.startsWith(id)),
+    ),
+  ];
   if (ids.length > 0) {
     await execFileAsync('docker', ['rm', '--force', ...ids]);
   }
@@ -187,6 +194,47 @@ export async function helperProcesses(): Promise<string[]> {
       'shutdown-helper[.]js',
     ]);
     return stdout.split('\n').filter(line => line !== '');
+  } catch {
+    return [];
+  }
+}
+
+/** The parent process id of `pid`, read from `/proc`; 0 for none. */
+export function parentOf(pid: string): string {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1] ?? '0';
+  } catch {
+    return '0';
+  }
+}
+
+/** The process ids from `pid` up through its parents to the first process, `pid` first. */
+export function chainOf(pid: string): string[] {
+  const chain: string[] = [];
+  let current = pid;
+  while (current !== '0' && current !== '1' && !chain.includes(current)) {
+    chain.push(current);
+    current = parentOf(current);
+  }
+  return chain;
+}
+
+/** The id of the run's editor's main process: the one on the run's user data folder that is no helper of the editor. */
+export async function editorMainProcess(userData: string): Promise<string[]> {
+  try {
+    const {stdout} = await execFileAsync('pgrep', [
+      '-f',
+      '--',
+      `--user-data-dir=${userData}`,
+    ]);
+    return stdout
+      .split('\n')
+      .filter(line => line !== '')
+      .filter(pid => {
+        const command = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+        return !command.includes('--type=');
+      });
   } catch {
     return [];
   }
