@@ -9,7 +9,7 @@ import {
 } from '../../src/model/ssh-group.ts';
 
 describe('the hostRow model of the SSH group', () => {
-  it('F-5102.BR-7: one hostRow per alias, in the given order, with no folders', () => {
+  it('F-5101.AC-27: F-5102.BR-7: one hostRow per alias, in the given order, with no folders', () => {
     const rows = buildSshRows(['zeta', 'Alpha', 'mid'], new Map(), undefined);
     deepStrictEqual(
       rows.map(hostRow => [hostRow.rowId, hostRow.alias, hostRow.folders]),
@@ -21,7 +21,7 @@ describe('the hostRow model of the SSH group', () => {
     );
   });
 
-  it('F-5102.BR-7: the row id is the alias after the prefix, and nothing else', () => {
+  it('F-5101.AC-10: F-5102.BR-7: the row id is the alias after the prefix, and nothing else', () => {
     deepStrictEqual(hostRowId('Alpha beta'), 'ssh-host:Alpha beta');
   });
 

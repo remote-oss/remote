@@ -3,9 +3,11 @@ import {
   closeWindow,
   type ForwardedTunnel,
   inWindow,
+  nextEmptyWindow,
   onHost,
   openWindow,
   readUserSettings,
+  reloadWindow,
   restoreUserSettings,
   settingDefaultIn,
   settingIn,
@@ -17,6 +19,7 @@ import {
   notificationButtons,
   notificationCentre,
   notifications,
+  statusItem,
 } from '../windows/renderer.ts';
 import {greetingOf} from './greeting.ts';
 
@@ -171,6 +174,122 @@ describe('the port source of an SSH window (card connect-81)', function () {
       } finally {
         await closeWindow('ps4');
       }
+    } finally {
+      restoreUserSettings(saved);
+    }
+  });
+});
+
+/** How long, and how often, the rows of F-2507 6.4 step 5 watch a window for a forward of its own. */
+const OWN_PORTS_MILLISECONDS = 60_000;
+const OWN_PORTS_READ_MILLISECONDS = 5000;
+
+/** What the forwarded-ports status item says while nothing is forwarded or detected ([oss] remoteExplorer.ts). */
+const NO_PORTS = 'No Ports Forwarded';
+
+/** The accessible label of window `name`'s forwarded-ports item, once core has drawn it (up to 15 s after the connect). */
+async function forwardedPortsLabel(name: string): Promise<string> {
+  let label: string | undefined;
+  await waitFor(
+    `window ${name} to draw its forwarded-ports item`,
+    async () => {
+      label = await statusItem(name, 'status.forwardedPorts').then(
+        item => item.ariaLabel,
+        () => undefined,
+      );
+      return label !== undefined;
+    },
+    15_000,
+  );
+  return label ?? '';
+}
+
+/**
+ * What window `name` forwards over the watch: the remote ports of its tunnels at each read, and the status item's
+ * accessible label at the start and the end. A fixed watch, since the rows are about a forward that must not come.
+ */
+async function watchOf(
+  name: string,
+): Promise<{reads: number[][]; status: string[]}> {
+  const status = [await forwardedPortsLabel(name)];
+  const reads: number[][] = [];
+  for (
+    let waited = 0;
+    waited < OWN_PORTS_MILLISECONDS;
+    waited += OWN_PORTS_READ_MILLISECONDS
+  ) {
+    await new Promise(resolve =>
+      setTimeout(resolve, OWN_PORTS_READ_MILLISECONDS),
+    );
+    reads.push(await remotePortsOf(name));
+  }
+  status.push(await forwardedPortsLabel(name));
+  return {reads, status};
+}
+
+/** The watches of a window that connects, reloads, and closes its remote connection and connects again. */
+async function ownPortsOf(
+  folder: string,
+): Promise<Record<string, {reads: number[][]; status: string[]}>> {
+  await openWindow('harness', folder);
+  const connect = await watchOf(folder);
+  await reloadWindow(folder);
+  const reload = await watchOf(folder);
+  const emptied = await nextEmptyWindow(() =>
+    inWindow(folder, 'workbench.action.remote.close'),
+  );
+  // The closed window is a local empty window now; the connection is made again in a window of its own folder.
+  await openWindow('harness', `${folder}r`);
+  try {
+    return {connect, reload, reconnect: await watchOf(`${folder}r`)};
+  } finally {
+    await closeWindow(`${folder}r`);
+    await closeWindow(emptied);
+  }
+}
+
+/** A watch in which nothing was forwarded and the status item said so. */
+const NOTHING_FORWARDED = {
+  reads: Array.from(
+    {length: OWN_PORTS_MILLISECONDS / OWN_PORTS_READ_MILLISECONDS},
+    () => [],
+  ),
+  status: [NO_PORTS, NO_PORTS],
+};
+
+describe('no port of the connection itself is forwarded (card connect-82)', function () {
+  this.timeout(900_000);
+
+  /** The user settings with no default forward, so that only automatic forwards could appear. */
+  async function withoutDefaults(
+    change: Readonly<Record<string, unknown>>,
+  ): Promise<string | undefined> {
+    const saved = readUserSettings();
+    await userSettings({'remote.SSH.defaultForwardedPorts': [], ...change});
+    return saved;
+  }
+
+  it('F-2507 AC-43 (own-ports-output): with the default source, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect', async () => {
+    const saved = await withoutDefaults({});
+    try {
+      deepStrictEqual(await ownPortsOf('po1'), {
+        connect: NOTHING_FORWARDED,
+        reload: NOTHING_FORWARDED,
+        reconnect: NOTHING_FORWARDED,
+      });
+    } finally {
+      restoreUserSettings(saved);
+    }
+  });
+
+  it('F-2507 AC-43 (own-ports-process): with the user value process, nothing is forwarded for 60 s after a connect, a reload, and a close and reconnect', async () => {
+    const saved = await withoutDefaults({[SOURCE_SETTING]: 'process'});
+    try {
+      deepStrictEqual(await ownPortsOf('po2'), {
+        connect: NOTHING_FORWARDED,
+        reload: NOTHING_FORWARDED,
+        reconnect: NOTHING_FORWARDED,
+      });
     } finally {
       restoreUserSettings(saved);
     }

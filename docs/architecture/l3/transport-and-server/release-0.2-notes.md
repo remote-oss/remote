@@ -5,6 +5,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
+- **"Open Setting" in the dialog that says the editor names no server source opens your user settings file at the
+  setting**, not the Settings editor. Nothing is written to the file.
+  - F-3902 AC-9 describes the Settings editor on the User tab, searching for the setting. The Settings editor can't
+    open in a window whose remote authority did not resolve, which is the window this dialog belongs to (measured on
+    VS Code 1.139.1 and VSCodium); the settings file opens there (athena on #737; spec question on
+    remote-oss/remote-ssh#79).
+
 - **A server download that the client makes and that gets an HTTP 404 always says "Server returned 404"**, whether
   or not the answer carries an `Access-Control-Allow-Origin` header.
   - F-2405 AC-29 describes the reference reading "Failed to fetch" for a 404 without that header, as a browser's fetch

@@ -31,7 +31,7 @@ async function outcomeOf(
 describe('the gate row of explorer slice 1 in the explorer-no-proposals launch (card coverage-25b, row 8)', function () {
   this.timeout(180_000);
 
-  it('contracts §3.4: F-3903 §5 rule 4, F-5001: without the proposals the view is dropped, nothing fails, and the family setup notice covers the explorer', async () => {
+  it('F-5101.AC-24: contracts §3.4: F-3903 §5 rule 4, F-5001: without the proposals the view is dropped, nothing fails, and the family setup notice covers the explorer', async () => {
     await outcomeOf('remote-explorer.refresh');
     await outcomeOf('opensshremotes.openEmptyWindow', {host: 'harness'});
     const view = await viewRows(LOCAL, VIEW);

@@ -944,6 +944,7 @@ F-2507.AC-39	todo
 F-2507.AC-40	todo	
 F-2507.AC-41	todo	
 F-2507.AC-42	todo	
+F-2507.AC-43	acceptance	
 F-2508.AC-1	todo	
 F-2508.AC-2	todo	
 F-2508.AC-3	todo	
@@ -1074,21 +1075,21 @@ F-3902.AC-4	unit
 F-3902.AC-5	acceptance	
 F-3902.AC-6	acceptance	
 F-3902.AC-7	acceptance	
-F-3902.AC-8	todo	
+F-3902.AC-8	acceptance	
 F-3902.AC-9	todo	
 F-3902.AC-10	unit	
 F-3902.AC-11	unit	
-F-3902.AC-12	todo	
+F-3902.AC-12	acceptance	
 F-3902.AC-13	unit	
 F-3902.AC-14	acceptance	
-F-3902.AC-15	todo	
+F-3902.AC-15	acceptance	
 F-3902.AC-16	todo	
-F-3902.AC-17	todo	
+F-3902.AC-17	acceptance	
 F-3902.AC-18	acceptance	
 F-3902.AC-19	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-20	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-21	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-22	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-23	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
-F-3902.AC-24	todo	
-F-3902.AC-25	todo	
+F-3902.AC-24	acceptance	
+F-3902.AC-25	acceptance	

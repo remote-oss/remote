@@ -524,15 +524,12 @@ describe('the scripted adapters answer from the script only', () => {
     strictEqual(adapters.unusedEntries(), 0);
   });
 
-  it('constraint 3: the licence modal can only decline: it gives the last button', async () => {
+  it('constraint 3: the licence modal can only decline: it gives nothing, as the editor’s Cancel does', async () => {
     deepStrictEqual(
       await scripted([
         {surface: 'licenceModal', match: '', answer: 'decline'},
-      ]).adapters.licenceDialog.showModal('m', 'd', [
-        'Accept and Continue',
-        'Cancel',
-      ]),
-      'Cancel',
+      ]).adapters.licenceDialog.showModal('m', 'd', ['Accept and Continue']),
+      undefined,
     );
   });
 
@@ -542,7 +539,7 @@ describe('the scripted adapters answer from the script only', () => {
         scripted([{surface: 'licenceModal', match: '', answer: 'decline'}])
           .adapters.licenceDialog,
         template => template,
-        {applicationName: 'Editor', displayName: 'Remote'},
+        {displayName: 'Remote'},
       ).askUser('https://example.invalid/terms', NEVER),
       'cancel',
     );

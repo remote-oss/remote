@@ -220,7 +220,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5902.5.order: the hosts answering first change nothing, and the first render waits for the pull', async () => {
+  it('F-5103.AC-33: F-5902.5.order: the hosts answering first change nothing, and the first render waits for the pull', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     scenario.calls.hosts[0]?.settle(answered(hostsOf('a')));
@@ -234,7 +234,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5102.BR-7: the hosts are listed in the order given, each with its own row item', async () => {
+  it('F-5102.AC-33, F-5103.AC-25: F-5102.BR-7: the hosts are listed in the order given, each with its own row item', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     await scenario.settleAll(
@@ -320,7 +320,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5902.AC-5: a host list that fails leaves the group with no host rows', async () => {
+  it('F-5101.AC-14, F-5902.AC-5: a host list that fails leaves the group with no host rows', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     await scenario.settleAll(answered(pullOf(true, 'a')), UNAVAILABLE);
@@ -336,7 +336,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5101.BR-6: an older build that answers last changes nothing', async () => {
+  it('F-5101.AC-35: F-5101.BR-6: an older build that answers last changes nothing', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     void scenario.targets.rebuild();
@@ -355,7 +355,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5101.BR-6: through the protocol, the build started last decides the hosts and the marker, whichever answers last', async () => {
+  it('F-5101.AC-34, AC-35: F-5101.BR-6: through the protocol, the build started last decides the hosts and the marker, whichever answers last', async () => {
     const fake = createRecordingFake();
     const releases: Array<() => void> = [];
     const answersOf: Array<{pull: unknown; hosts: unknown}> = [
@@ -417,7 +417,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5101.6.5: a change of the configuration file asks the hosts alone, and the marker stays', async () => {
+  it('F-5101.AC-16, F-5102.AC-17: F-5101.6.5: a change of the configuration file asks the hosts alone, and the marker stays', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     await scenario.settleAll(
@@ -459,14 +459,14 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5101.7.E1: without the companion a build makes no call and changes nothing', async () => {
+  it('F-5103.AC-20: F-5101.7.E1: without the companion a build makes no call and changes nothing', async () => {
     const scenario = setup(false);
     await scenario.targets.rebuild();
     await scenario.targets.rebuildHosts();
     deepStrictEqual([scenario.calls.order, scenario.changes.length], [[], 0]);
   });
 
-  it('F-5101.6.6: the arrival of the companion starts a full build, after which the group has its hosts', async () => {
+  it('F-5101.AC-26, AC-34: F-5101.6.6: the arrival of the companion starts a full build, after which the group has its hosts', async () => {
     const scenario = setup(false);
     scenario.detector.present = true;
     scenario.detector.arrive('remote-oss.remote-ssh');

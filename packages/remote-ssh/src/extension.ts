@@ -441,7 +441,7 @@ async function registerConnectOf(
       help: served.help,
       names: {
         alias: () => window.alias(),
-        applicationName: vscode.env.appName,
+        applicationName: (await editorProfile()).applicationName,
         displayName: manifest.displayName,
       },
       acceptanceState: context.globalState,

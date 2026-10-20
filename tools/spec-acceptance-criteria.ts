@@ -131,6 +131,7 @@ export const EXPLORER_SLICE_ONE_SCOPE: CoverageScope = {
     'explorer slice 1: increment 3',
     'D-55: no tunnel rows',
     'F-2503 Q4: the Windows and macOS path form',
+    'D-60: Windows client',
   ],
 };
 

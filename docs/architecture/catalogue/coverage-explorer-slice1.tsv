@@ -1,264 +1,264 @@
 ac	tag	reason
-F-2503.AC-1	todo	
-F-2503.AC-2	todo	
-F-2503.AC-3	todo	
-F-2503.AC-4	todo	
-F-2503.AC-5	todo	
-F-2503.AC-6	todo	
-F-2503.AC-7	todo	
-F-2503.AC-8	todo	
-F-2503.AC-9	todo	
-F-2503.AC-10	todo	
-F-2503.AC-11	todo	
-F-2503.AC-12	todo	
-F-2503.AC-13	todo	
-F-2503.AC-14	todo	
-F-2503.AC-15	todo	
-F-2503.AC-16	todo	
-F-2503.AC-17	todo	
-F-2503.AC-18	todo	
-F-2503.AC-19	todo	
-F-2503.AC-20	todo	
-F-2503.AC-21	todo	
-F-2503.AC-22	todo	
-F-2503.AC-23	todo	
-F-2503.AC-24	todo	
-F-2503.AC-25	todo	
-F-2503.AC-26	todo	
-F-2503.AC-27	todo	
-F-2503.AC-28	todo	
-F-2503.AC-29	todo	
-F-2503.AC-30	todo	
-F-2503.AC-31	todo	
-F-2503.AC-32	todo	
-F-2503.AC-33	todo	
+F-2503.AC-1	deferred	explorer slice 1: increment 2
+F-2503.AC-2	unit	
+F-2503.AC-3	deferred	explorer slice 1: increment 2
+F-2503.AC-4	deferred	explorer slice 1: increment 2
+F-2503.AC-5	deferred	explorer slice 1: increment 2
+F-2503.AC-6	deferred	explorer slice 1: increment 2
+F-2503.AC-7	deferred	explorer slice 1: increment 2
+F-2503.AC-8	deferred	explorer slice 1: increment 2
+F-2503.AC-9	deferred	explorer slice 1: increment 2
+F-2503.AC-10	deferred	explorer slice 1: increment 2
+F-2503.AC-11	deferred	explorer slice 1: increment 2
+F-2503.AC-12	unit	
+F-2503.AC-13	unit	
+F-2503.AC-14	deferred	explorer slice 1: increment 2
+F-2503.AC-15	deferred	explorer slice 1: increment 2
+F-2503.AC-16	deferred	explorer slice 1: increment 2
+F-2503.AC-17	deferred	explorer slice 1: increment 2
+F-2503.AC-18	deferred	explorer slice 1: increment 2
+F-2503.AC-19	deferred	explorer slice 1: increment 2
+F-2503.AC-20	deferred	explorer slice 1: increment 2
+F-2503.AC-21	deferred	explorer slice 1: increment 2
+F-2503.AC-22	deferred	explorer slice 1: increment 2
+F-2503.AC-23	deferred	explorer slice 1: increment 2
+F-2503.AC-24	deferred	explorer slice 1: increment 2
+F-2503.AC-25	deferred	explorer slice 1: increment 2
+F-2503.AC-26	deferred	explorer slice 1: increment 2
+F-2503.AC-27	deferred	explorer slice 1: increment 2
+F-2503.AC-28	unit	
+F-2503.AC-29	deferred	explorer slice 1: increment 2
+F-2503.AC-30	unit	
+F-2503.AC-31	deferred	explorer slice 1: increment 2
+F-2503.AC-32	deferred	explorer slice 1: increment 2
+F-2503.AC-33	deferred	explorer slice 1: increment 2
 F-5001.AC-1	todo	
 F-5001.AC-2	todo	
 F-5001.AC-3	todo	
 F-5001.AC-4	todo	
-F-5001.AC-5	todo	
+F-5001.AC-5	deferred	explorer slice 1: increment 2
 F-5001.AC-6	todo	
 F-5001.AC-7	todo	
 F-5001.AC-8	todo	
 F-5001.AC-9	todo	
 F-5001.AC-10	todo	
-F-5001.AC-11	todo	
-F-5001.AC-12	todo	
+F-5001.AC-11	deferred	explorer slice 1: increment 2
+F-5001.AC-12	deferred	explorer slice 1: increment 2
 F-5001.AC-13	todo	
 F-5001.AC-14	todo	
-F-5001.AC-15	todo	
-F-5001.AC-16	todo	
-F-5001.AC-17	todo	
-F-5001.AC-18	todo	
-F-5001.AC-19	todo	
-F-5001.AC-20	todo	
-F-5001.AC-21	todo	
-F-5001.AC-22	todo	
-F-5001.AC-23	todo	
-F-5001.AC-24	todo	
+F-5001.AC-15	unit	
+F-5001.AC-16	unit	
+F-5001.AC-17	core	core: the display language comes from an installed language pack
+F-5001.AC-18	unit	
+F-5001.AC-19	recorded	
+F-5001.AC-20	unit	
+F-5001.AC-21	unit	
+F-5001.AC-22	unit	
+F-5001.AC-23	core	core: the notification's gear menu and its source label
+F-5001.AC-24	unit	
 F-5001.AC-25	todo	
-F-5001.AC-26	todo	
-F-5002.AC-1	todo	
-F-5002.AC-2	todo	
-F-5002.AC-3	todo	
-F-5002.AC-4	todo	
+F-5001.AC-26	deferred	D-60: Windows client
+F-5002.AC-1	unit	
+F-5002.AC-2	unit	
+F-5002.AC-3	deferred	D-55: no tunnel rows
+F-5002.AC-4	deferred	explorer slice 1: increment 2
 F-5002.AC-5	todo	
-F-5002.AC-6	todo	
-F-5002.AC-7	todo	
-F-5002.AC-8	todo	
-F-5002.AC-9	todo	
-F-5002.AC-10	todo	
-F-5002.AC-11	todo	
-F-5002.AC-12	todo	
-F-5002.AC-13	todo	
-F-5002.AC-14	todo	
-F-5002.AC-15	todo	
-F-5002.AC-16	todo	
-F-5002.AC-17	todo	
-F-5002.AC-18	todo	
-F-5002.AC-19	todo	
-F-5101.AC-1	todo	
+F-5002.AC-6	deferred	explorer slice 1: increment 2
+F-5002.AC-7	deferred	explorer slice 1: increment 2
+F-5002.AC-8	deferred	explorer slice 1: increment 2
+F-5002.AC-9	deferred	explorer slice 1: increment 2
+F-5002.AC-10	deferred	explorer slice 1: increment 2
+F-5002.AC-11	deferred	explorer slice 1: increment 2
+F-5002.AC-12	deferred	explorer slice 1: increment 2
+F-5002.AC-13	deferred	D-55: no tunnel rows
+F-5002.AC-14	deferred	explorer slice 1: increment 2
+F-5002.AC-15	deferred	explorer slice 1: increment 2
+F-5002.AC-16	deferred	explorer slice 1: increment 2
+F-5002.AC-17	deferred	explorer slice 1: increment 2
+F-5002.AC-18	unit	
+F-5002.AC-19	deferred	explorer slice 1: increment 2
+F-5101.AC-1	unit	
 F-5101.AC-2	todo	
 F-5101.AC-3	todo	
-F-5101.AC-4	todo	
-F-5101.AC-7	todo	
-F-5101.AC-8	todo	
-F-5101.AC-9	todo	
-F-5101.AC-10	todo	
+F-5101.AC-4	recorded	
+F-5101.AC-7	unit	
+F-5101.AC-8	unit	
+F-5101.AC-9	recorded	
+F-5101.AC-10	unit	
 F-5101.AC-11	todo	
-F-5101.AC-12	todo	
-F-5101.AC-13	todo	
-F-5101.AC-14	todo	
-F-5101.AC-15	todo	
-F-5101.AC-16	todo	
+F-5101.AC-12	recorded	
+F-5101.AC-13	unit	
+F-5101.AC-14	unit	
+F-5101.AC-15	deferred	explorer slice 1: increment 2
+F-5101.AC-16	unit	
 F-5101.AC-17	todo	
 F-5101.AC-18	todo	
 F-5101.AC-19	todo	
-F-5101.AC-20	todo	
+F-5101.AC-20	core	core: remote.explorerType is written by core for the registered view
 F-5101.AC-21	todo	
 F-5101.AC-22	todo	
 F-5101.AC-23	todo	
-F-5101.AC-24	todo	
-F-5101.AC-25	todo	
-F-5101.AC-26	todo	
-F-5101.AC-27	todo	
+F-5101.AC-24	recorded	
+F-5101.AC-25	unit	
+F-5101.AC-26	unit	
+F-5101.AC-27	unit	
 F-5101.AC-28	todo	
 F-5101.AC-30	todo	
-F-5101.AC-34	todo	
-F-5101.AC-35	todo	
+F-5101.AC-34	unit	
+F-5101.AC-35	unit	
 F-5101.AC-36	todo	
-F-5101.AC-38	todo	
+F-5101.AC-38	unit	
 F-5101.AC-39	todo	
-F-5101.AC-40	todo	
-F-5101.AC-41	todo	
-F-5101.AC-42	todo	
-F-5101.AC-43	todo	
+F-5101.AC-40	core	core: the Switch Remote dropdown
+F-5101.AC-41	unit	
+F-5101.AC-42	unit	
+F-5101.AC-43	unit	
 F-5101.AC-44	todo	
-F-5102.AC-1	todo	
-F-5102.AC-2	todo	
-F-5102.AC-3	todo	
+F-5102.AC-1	deferred	explorer slice 1: increment 2
+F-5102.AC-2	deferred	explorer slice 1: increment 2
+F-5102.AC-3	deferred	explorer slice 1: increment 2
 F-5102.AC-4	todo	
-F-5102.AC-5	todo	
+F-5102.AC-5	recorded	
 F-5102.AC-6	todo	
 F-5102.AC-7	todo	
 F-5102.AC-8	todo	
 F-5102.AC-9	todo	
-F-5102.AC-10	todo	
-F-5102.AC-11	todo	
-F-5102.AC-12	todo	
-F-5102.AC-13	todo	
-F-5102.AC-15	todo	
-F-5102.AC-16	todo	
-F-5102.AC-17	todo	
-F-5102.AC-18	todo	
-F-5102.AC-19	todo	
-F-5102.AC-20	todo	
-F-5102.AC-21	todo	
-F-5102.AC-22	todo	
-F-5102.AC-23	todo	
-F-5102.AC-24	todo	
-F-5102.AC-25	todo	
+F-5102.AC-10	deferred	explorer slice 1: increment 2
+F-5102.AC-11	deferred	explorer slice 1: increment 2
+F-5102.AC-12	deferred	explorer slice 1: increment 2
+F-5102.AC-13	deferred	explorer slice 1: increment 2
+F-5102.AC-15	deferred	explorer slice 1: increment 2
+F-5102.AC-16	deferred	explorer slice 1: increment 2
+F-5102.AC-17	unit	
+F-5102.AC-18	deferred	explorer slice 1: increment 2
+F-5102.AC-19	deferred	explorer slice 1: increment 2
+F-5102.AC-20	deferred	explorer slice 1: increment 2
+F-5102.AC-21	deferred	explorer slice 1: increment 2
+F-5102.AC-22	deferred	explorer slice 1: increment 2
+F-5102.AC-23	deferred	explorer slice 1: increment 2
+F-5102.AC-24	deferred	explorer slice 1: increment 2
+F-5102.AC-25	deferred	explorer slice 1: increment 2
 F-5102.AC-26	todo	
-F-5102.AC-27	todo	
-F-5102.AC-28	todo	
+F-5102.AC-27	deferred	explorer slice 1: increment 2
+F-5102.AC-28	deferred	explorer slice 1: increment 2
 F-5102.AC-29	todo	
-F-5102.AC-30	todo	
+F-5102.AC-30	deferred	explorer slice 1: increment 2
 F-5102.AC-31	todo	
-F-5102.AC-32	todo	
-F-5102.AC-33	todo	
+F-5102.AC-32	deferred	explorer slice 1: increment 2
+F-5102.AC-33	unit	
 F-5102.AC-34	todo	
 F-5102.AC-35	todo	
-F-5102.AC-36	todo	
-F-5102.AC-37	todo	
+F-5102.AC-36	deferred	explorer slice 1: increment 2
+F-5102.AC-37	deferred	explorer slice 1: increment 2
 F-5102.AC-38	todo	
-F-5102.AC-39	todo	
-F-5102.AC-40	todo	
+F-5102.AC-39	unit	
+F-5102.AC-40	unit	
 F-5102.AC-41	todo	
 F-5102.AC-42	todo	
 F-5102.AC-43	todo	
-F-5102.AC-44	todo	
+F-5102.AC-44	deferred	explorer slice 1: increment 2
 F-5102.AC-45	todo	
-F-5102.AC-46	todo	
+F-5102.AC-46	deferred	explorer slice 1: increment 2
 F-5102.AC-47	todo	
 F-5102.AC-48	todo	
 F-5102.AC-49	todo	
-F-5102.AC-50	todo	
-F-5102.AC-51	todo	
-F-5102.AC-52	todo	
-F-5102.AC-53	todo	
-F-5102.AC-54	todo	
-F-5103.AC-1	todo	
-F-5103.AC-2	todo	
-F-5103.AC-3	todo	
+F-5102.AC-50	deferred	explorer slice 1: increment 2
+F-5102.AC-51	deferred	explorer slice 1: increment 2
+F-5102.AC-52	deferred	explorer slice 1: increment 2
+F-5102.AC-53	deferred	explorer slice 1: increment 2
+F-5102.AC-54	deferred	explorer slice 1: increment 2
+F-5103.AC-1	unit	
+F-5103.AC-2	deferred	explorer slice 1: increment 2
+F-5103.AC-3	unit	
 F-5103.AC-4	todo	
 F-5103.AC-5	todo	
 F-5103.AC-6	todo	
-F-5103.AC-7	todo	
-F-5103.AC-8	todo	
-F-5103.AC-9	todo	
-F-5103.AC-10	todo	
-F-5103.AC-11	todo	
+F-5103.AC-7	recorded	
+F-5103.AC-8	unit	
+F-5103.AC-9	core	core: the save confirmation before a reload
+F-5103.AC-10	core	core: the untitled-workspace save confirmation
+F-5103.AC-11	recorded	
 F-5103.AC-12	todo	
 F-5103.AC-13	todo	
 F-5103.AC-14	todo	
-F-5103.AC-15	todo	
-F-5103.AC-16	todo	
+F-5103.AC-15	unit	
+F-5103.AC-16	unit	
 F-5103.AC-17	todo	
 F-5103.AC-18	todo	
-F-5103.AC-19	todo	
-F-5103.AC-20	todo	
+F-5103.AC-19	unit	
+F-5103.AC-20	unit	
 F-5103.AC-21	todo	
-F-5103.AC-22	todo	
-F-5103.AC-23	todo	
-F-5103.AC-24	todo	
-F-5103.AC-25	todo	
-F-5103.AC-26	todo	
-F-5103.AC-27	todo	
-F-5103.AC-28	todo	
-F-5103.AC-29	todo	
-F-5103.AC-30	todo	
-F-5103.AC-31	todo	
-F-5103.AC-32	todo	
-F-5103.AC-33	todo	
-F-5103.AC-34	todo	
-F-5103.AC-35	todo	
-F-5103.AC-36	todo	
+F-5103.AC-22	deferred	explorer slice 1: increment 2
+F-5103.AC-23	unit	
+F-5103.AC-24	unit	
+F-5103.AC-25	unit	
+F-5103.AC-26	unit	
+F-5103.AC-27	deferred	explorer slice 1: increment 2
+F-5103.AC-28	unit	
+F-5103.AC-29	unit	
+F-5103.AC-30	unit	
+F-5103.AC-31	unit	
+F-5103.AC-32	unit	
+F-5103.AC-33	unit	
+F-5103.AC-34	unit	
+F-5103.AC-35	unit	
+F-5103.AC-36	unit	
 F-5103.AC-37	todo	
-F-5103.AC-38	todo	
-F-5103.AC-39	todo	
-F-5103.AC-40	todo	
-F-5901.AC-1	todo	
-F-5901.AC-2	todo	
+F-5103.AC-38	unit	
+F-5103.AC-39	core	core: a new window opens in the running application instance
+F-5103.AC-40	deferred	D-60: Windows client
+F-5901.AC-1	unit	
+F-5901.AC-2	deferred	explorer slice 1: increment 2
 F-5901.AC-3	todo	
-F-5901.AC-4	todo	
-F-5901.AC-5	todo	
+F-5901.AC-4	recorded	
+F-5901.AC-5	unit	
 F-5901.AC-6	todo	
 F-5901.AC-7	todo	
 F-5901.AC-8	todo	
 F-5901.AC-9	todo	
 F-5901.AC-10	todo	
-F-5901.AC-11	todo	
-F-5901.AC-12	todo	
+F-5901.AC-11	unit	
+F-5901.AC-12	unit	
 F-5901.AC-13	todo	
 F-5901.AC-14	todo	
-F-5901.AC-15	todo	
-F-5901.AC-16	todo	
-F-5901.AC-17	todo	
+F-5901.AC-15	deferred	D-55: no tunnel rows
+F-5901.AC-16	core	core: the publisher trust question of a gallery install
+F-5901.AC-17	core	core: the notification's gear menu and its source label
 F-5901.AC-18	todo	
-F-5901.AC-19	todo	
-F-5902.AC-1	todo	
-F-5902.AC-2	todo	
+F-5901.AC-19	unit	
+F-5902.AC-1	unit	
+F-5902.AC-2	recorded	
 F-5902.AC-3	todo	
 F-5902.AC-4	todo	
-F-5902.AC-5	todo	
-F-5902.AC-6	todo	
-F-5902.AC-7	todo	
-F-5902.AC-8	todo	
-F-5902.AC-9	todo	
-F-5902.AC-10	todo	
-F-5902.AC-11	todo	
-F-5902.AC-12	todo	
-F-5902.AC-13	todo	
-F-5902.AC-14	todo	
-F-5902.AC-15	todo	
-F-5902.AC-16	todo	
-F-5902.AC-17	todo	
-F-5902.AC-18	todo	
-F-5902.AC-19	todo	
-F-5902.AC-20	todo	
-F-5902.AC-21	todo	
-F-5902.AC-22	todo	
-F-5902.AC-23	todo	
-F-5902.AC-24	todo	
-F-5902.AC-25	todo	
-F-5902.AC-26	todo	
-F-5902.AC-27	todo	
+F-5902.AC-5	unit	
+F-5902.AC-6	unit	
+F-5902.AC-7	recorded	
+F-5902.AC-8	unit	
+F-5902.AC-9	deferred	explorer slice 1: increment 2
+F-5902.AC-10	deferred	explorer slice 1: increment 2
+F-5902.AC-11	unit	
+F-5902.AC-12	unit	
+F-5902.AC-13	unit	
+F-5902.AC-14	unit	
+F-5902.AC-15	unit	
+F-5902.AC-16	deferred	explorer slice 1: increment 2
+F-5902.AC-17	deferred	explorer slice 1: increment 2
+F-5902.AC-18	deferred	D-55: no tunnel rows
+F-5902.AC-19	deferred	explorer slice 1: increment 2
+F-5902.AC-20	deferred	explorer slice 1: increment 2
+F-5902.AC-21	unit	
+F-5902.AC-22	deferred	explorer slice 1: increment 2
+F-5902.AC-23	unit	
+F-5902.AC-24	deferred	explorer slice 1: increment 2
+F-5902.AC-25	unit	
+F-5902.AC-26	unit	
+F-5902.AC-27	unit	
 F-5902.AC-28	todo	
-F-5902.AC-29	todo	
+F-5902.AC-29	deferred	explorer slice 1: increment 2
 F-5902.AC-30	todo	
 F-5902.AC-31	todo	
-F-5902.AC-32	todo	
-F-5902.AC-33	todo	
-F-5902.AC-34	todo	
-F-5902.AC-35	todo	
-F-5902.AC-36	todo	
+F-5902.AC-32	unit	
+F-5902.AC-33	deferred	D-55: no tunnel rows
+F-5902.AC-34	deferred	D-55: no tunnel rows
+F-5902.AC-35	deferred	D-55: no tunnel rows
+F-5902.AC-36	deferred	explorer slice 1: increment 2

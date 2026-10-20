@@ -21,7 +21,6 @@ function surroundings(answer: () => PromiseLike<string | undefined>) {
     },
   };
   const modal = licenceModalOf(dialog, template => template, {
-    applicationName: 'VSCodium',
     displayName: 'Remote - SSH',
   });
   return {modal, shown};
@@ -97,27 +96,24 @@ describe('the licence modal (F-3902 rule 11)', () => {
     deepStrictEqual([added, removed], [['abort'], ['abort']]);
   });
 
-  it('F-3902 rule 11: the detail names the address of the terms', async () => {
+  it('F-3902 rule 11: the message asks to accept the server’s licence terms', async () => {
+    const {modal, shown} = surroundings(() => Promise.resolve(undefined));
+    await modal.askUser(TERMS, new AbortController().signal);
+    deepStrictEqual(shown[0]?.message, "Accept the server's licence terms?");
+  });
+
+  it('F-3902 rule 11: the detail names the extension and the address of the terms in full', async () => {
     const {modal, shown} = surroundings(() => Promise.resolve(undefined));
     await modal.askUser(TERMS, new AbortController().signal);
     deepStrictEqual(
       shown[0]?.detail,
-      'Read the terms at https://aka.ms/vscode-server-license.',
+      'The server Remote - SSH installs or starts on this host is distributed under licence terms of its own, which Remote - SSH does not accept for you. Read them at https://aka.ms/vscode-server-license before you continue. "Accept and Continue" accepts them for this profile; the choice is remembered for this profile.',
     );
   });
 
-  it('F-3902 rule 11: the message names the extension and the editor', async () => {
+  it('F-3902 rule 11: the one item is Accept and Continue', async () => {
     const {modal, shown} = surroundings(() => Promise.resolve(undefined));
     await modal.askUser(TERMS, new AbortController().signal);
-    deepStrictEqual(
-      shown[0]?.message,
-      'Remote - SSH needs you to accept the license terms of the VSCodium server before installing it.',
-    );
-  });
-
-  it('F-3902 rule 11: the buttons are Accept and Continue, then Cancel', async () => {
-    const {modal, shown} = surroundings(() => Promise.resolve(undefined));
-    await modal.askUser(TERMS, new AbortController().signal);
-    deepStrictEqual(shown[0]?.buttons, ['Accept and Continue', 'Cancel']);
+    deepStrictEqual(shown[0]?.buttons, ['Accept and Continue']);
   });
 });

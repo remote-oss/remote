@@ -69,7 +69,7 @@ function alternativesOf(when: unknown): string[] {
 }
 
 describe('the manifest of the Remote Explorer package', () => {
-  it('F-5901.5.identity: the top-level fields are the card, and no other', () => {
+  it('F-5001.AC-18, F-5901.AC-1: F-5901.5.identity: the top-level fields are the card, and no other', () => {
     deepStrictEqual(
       {
         keys: Object.keys(MANIFEST),
@@ -134,7 +134,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5001.AC-15: the one activation event, the UI kind and untrusted workspaces supported, with no virtual-workspace key', () => {
+  it('F-5001.AC-15, F-5902.AC-1: the one activation event, the UI kind and untrusted workspaces supported, with no virtual-workspace key', () => {
     deepStrictEqual(
       [
         MANIFEST.activationEvents,
@@ -149,7 +149,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5001.AC-15: the entry is the built extension file and the runtime strings are in l10n', () => {
+  it('F-5001.AC-15, F-5901.AC-11: the entry is the built extension file and the runtime strings are in l10n', () => {
     deepStrictEqual(
       [MANIFEST.main, MANIFEST.l10n],
       ['./dist/extension.js', './l10n'],
@@ -160,7 +160,7 @@ describe('the manifest of the Remote Explorer package', () => {
     deepStrictEqual(MANIFEST.browser, './dist/web/extension.js');
   });
 
-  it('F-5101.3.3: the proposals are contribViewsRemote and extensionsAny', () => {
+  it('F-5901.AC-12: F-5101.3.3: the proposals are contribViewsRemote and extensionsAny', () => {
     deepStrictEqual(MANIFEST.enabledApiProposals, [
       'contribViewsRemote',
       'extensionsAny',
@@ -174,7 +174,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5002.3.1: the three commands, in order, with a title and an icon and no category or enablement', () => {
+  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the three commands, in order, with a title and an icon and no category or enablement', () => {
     deepStrictEqual(CONTRIBUTES.commands, [
       {
         command: 'remote-explorer.refresh',
@@ -194,7 +194,7 @@ describe('the manifest of the Remote Explorer package', () => {
     ]);
   });
 
-  it('F-5002.AC-1: no command is in the palette', () => {
+  it('F-5002.AC-1, AC-2, F-5101.AC-8, F-5103.AC-3: no command is in the palette', () => {
     deepStrictEqual(MENUS.commandPalette, [
       {command: 'remote-explorer.refresh', when: 'false'},
       {command: 'remote-explorer.connectToRemoteInNewWindow', when: 'false'},
@@ -205,7 +205,7 @@ describe('the manifest of the Remote Explorer package', () => {
     ]);
   });
 
-  it('F-5101.3.1: Refresh is the one title entry of the view', () => {
+  it('F-5001.AC-24, F-5101.AC-7: F-5101.3.1: Refresh is the one title entry of the view', () => {
     deepStrictEqual(MENUS['view/title'], [
       {
         command: 'remote-explorer.refresh',
@@ -215,7 +215,7 @@ describe('the manifest of the Remote Explorer package', () => {
     ]);
   });
 
-  it('F-5103.3.1: the two connect commands are inline and in the context menu of the host rows', () => {
+  it('F-5001.AC-24, F-5103.AC-1, AC-8, AC-26: F-5103.3.1: the two connect commands are inline and in the context menu of the host rows', () => {
     deepStrictEqual(MENUS['view/item/context'], [
       {
         command: 'remote-explorer.connectToRemoteInCurrentWindow',
@@ -266,7 +266,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5101.3.3: the view is remoteTargets, placed in the targets group for tunnel and SSH windows', () => {
+  it('F-5101.AC-1: F-5101.3.3: the view is remoteTargets, placed in the targets group for tunnel and SSH windows', () => {
     deepStrictEqual(CONTRIBUTES.views, {
       remote: [
         {
@@ -286,7 +286,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5001.AC-16: the 14 locales have the same keys and the English values', () => {
+  it('F-5001.AC-16, F-5901.AC-11: the 14 locales have the same keys and the English values', () => {
     deepStrictEqual(
       LOCALES.map(locale => jsonOf(`package.nls.${locale}.json`)),
       LOCALES.map(() => STRINGS_TABLE),
