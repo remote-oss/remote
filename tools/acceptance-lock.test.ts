@@ -1,13 +1,16 @@
 import {deepStrictEqual, rejects} from 'node:assert';
 import {
   daemonLock,
+  HOLDER_FORMAT,
+  holderOf,
   HOST_LABEL,
   LOCK_NETWORK,
   LOCK_WAIT_MILLISECONDS,
   NO_LOCK,
   nodeProcessAlive,
 } from './acceptance-lock.ts';
-import type {CommandResult} from './command-runner.ts';
+import {RUN_LABEL} from './acceptance-run.ts';
+import {type CommandResult, runCommand} from './command-runner.ts';
 
 /** The scripted clock's start, in milliseconds. */
 const START = 1_000_000_000_000;
@@ -81,7 +84,7 @@ const GONE: CommandResult = {
 function heldBy(holderRun: string, host: string): CommandResult {
   return {
     status: 0,
-    stdout: `net-old ${String(START / 1000 - 300)} ${holderRun} ${host}\n`,
+    stdout: `net-old ${JSON.stringify(new Date(START - 300_000).toISOString())} ${holderRun} ${host}\n`,
     stderr: '',
   };
 }
@@ -216,6 +219,73 @@ describe("the Docker daemon's dev container lock", () => {
       [1, []],
       [1, []],
     ]);
+  });
+
+  it("a lock that exists but can't be read twice in a row fails the take with the inspect's error, never a loop", async () => {
+    const {lock, calls} = scripted({
+      creates: [EXISTS, EXISTS],
+      inspects: [GONE, GONE],
+    });
+    const failure = await lock.take().then(
+      () => 'taken',
+      (error: unknown) => (error as Error).message,
+    );
+    deepStrictEqual(
+      [failure, calls.length],
+      [`docker network inspect ${LOCK_NETWORK}: Error: No such network`, 4],
+    );
+  });
+
+  it('a lock whose creation time reads as no time is waited for, held for an unknown time', async () => {
+    const {lock, lines} = scripted({
+      creates: [EXISTS, MADE],
+      inspects: [
+        {status: 0, stdout: 'net-old "later" run-b host-b\n', stderr: ''},
+      ],
+    });
+    await lock.take();
+    deepStrictEqual(lines, [
+      "acceptance: waiting for the Docker daemon's dev container lock, held by run run-b for an unknown time",
+    ]);
+  });
+
+  it('the holder format is one the daemon formats, and its line reads back as the lock it made', function () {
+    if (runCommand('docker', ['info', '--format', '{{.ID}}']).status !== 0) {
+      this.skip();
+    }
+    const name = `remote-oss-acceptance-holder-format-${String(process.pid)}`;
+    const made = runCommand('docker', [
+      'network',
+      'create',
+      '--label',
+      `${RUN_LABEL}=local-1`,
+      '--label',
+      `${HOST_LABEL}=host-z`,
+      name,
+    ]).stdout.trim();
+    try {
+      const holder = holderOf(
+        runCommand('docker', [
+          'network',
+          'inspect',
+          '--format',
+          HOLDER_FORMAT,
+          name,
+        ]).stdout,
+      );
+      const ageSeconds = Date.now() / 1000 - (holder.createdSeconds ?? 0);
+      deepStrictEqual(
+        [
+          holder.networkId,
+          holder.holderRun,
+          holder.holderHost,
+          ageSeconds >= 0 && ageSeconds < 120,
+        ],
+        [made, 'local-1', 'host-z', true],
+      );
+    } finally {
+      runCommand('docker', ['network', 'rm', name]);
+    }
   });
 
   it('a release with no lock taken removes nothing, and a second release removes nothing more', async () => {
