@@ -211,11 +211,18 @@ export function ofConnection(failure: ConnectionFailure): FailureDetail & {
     case 'loginFailed':
       return {
         kind: failure.failure,
-        ...(failure.reason === undefined ? {} : {reason: failure.reason}),
+        ...(failure.reason === undefined
+          ? failure.failure === 'timeout'
+            ? CONNECT_WAIT_TIMEOUT
+            : {}
+          : {reason: failure.reason}),
         hints: failure.hints,
         ...(failure.exitStatus === undefined
           ? {}
           : {sshExitStatus: failure.exitStatus}),
+        ...(failure.detail === undefined || failure.detail === ''
+          ? {}
+          : {logDetail: failure.detail}),
       };
     case 'spawnFailed':
       return failure.cause === 'clientVanished'

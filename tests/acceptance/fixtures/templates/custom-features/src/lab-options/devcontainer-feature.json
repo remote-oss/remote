@@ -1,0 +1,34 @@
+{
+  "id": "lab-options",
+  "version": "1.0.0",
+  "name": "Lab Options",
+  "description": "The acceptance run's own Feature with every shape of option.",
+  "options": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enabled",
+      "default": true
+    },
+    "verbose": {
+      "type": "boolean",
+      "default": false
+    },
+    "level": {
+      "type": "string",
+      "description": "Level:",
+      "enum": ["low", "high"],
+      "default": "low"
+    },
+    "tone": {
+      "type": "string",
+      "description": "Tone:",
+      "proposals": ["calm", "loud"],
+      "default": "calm"
+    },
+    "installPath": {
+      "type": "string",
+      "description": "Install path:",
+      "default": "/opt/lab"
+    }
+  }
+}

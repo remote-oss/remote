@@ -54,6 +54,9 @@ export const MIRROR_NAMESPACE = 'devcontainers/templates';
 /** The namespace of the run's own templates. */
 export const CUSTOM_NAMESPACE = 'remote-oss-run/custom';
 
+/** The namespace of the run's own Features, which are published; the second owner's are listed only. */
+export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
+
 /** Fetches the layer of a mirrored template; the run's goes to `ghcr.io`, a test's is a fake. */
 export type LayerFetch = (template: MirroredTemplate) => Promise<Uint8Array>;
 
@@ -194,16 +197,17 @@ export function runIndexText(
   return `${JSON.stringify({collections: [...collections, customTemplatesCollection, ...customFeatureCollections]}, undefined, 2)}\n`;
 }
 
-/** The CLI's arguments that publish every template under `sourceFolder` into `namespace` of `registry`. */
+/** The CLI's arguments that publish every template or Feature under `sourceFolder` into `namespace` of `registry`. */
 export function publishArguments(
   bundledCli: string,
+  kind: 'templates' | 'features',
   sourceFolder: string,
   registry: string,
   namespace: string,
 ): string[] {
   return [
     bundledCli,
-    'templates',
+    kind,
     'publish',
     sourceFolder,
     '-r',
@@ -225,7 +229,7 @@ export function servedTemplatesFolder(runFolder: string): string {
 
 /**
  * Prepares the run's templates: the layer of each of `templates` from the cache under `root` (fetched by `fetchLayer` when it is
- * missing) unpacked, the run's own template copied, both published into the registry at `registryAddress` with the
+ * missing) unpacked, the run's own templates and Features copied, all published into the registry at `registryAddress` with the
  * dev container CLI the package bundles, and the run's index written where the download host serves it. Gives the
  * registry as the templates' ids name it.
  */
@@ -266,12 +270,39 @@ export async function prepareRunTemplates(
   checked(
     command,
     process.execPath,
-    publishArguments(bundledCli, mirrorSources, registry, MIRROR_NAMESPACE),
+    publishArguments(
+      bundledCli,
+      'templates',
+      mirrorSources,
+      registry,
+      MIRROR_NAMESPACE,
+    ),
   );
   checked(
     command,
     process.execPath,
-    publishArguments(bundledCli, customSources, registry, CUSTOM_NAMESPACE),
+    publishArguments(
+      bundledCli,
+      'templates',
+      customSources,
+      registry,
+      CUSTOM_NAMESPACE,
+    ),
+  );
+  const featureSources = path.join(work, 'features', 'src');
+  cpSync(path.join(fixtures, 'custom-features', 'src'), featureSources, {
+    recursive: true,
+  });
+  checked(
+    command,
+    process.execPath,
+    publishArguments(
+      bundledCli,
+      'features',
+      featureSources,
+      registry,
+      CUSTOM_FEATURES_NAMESPACE,
+    ),
   );
   const served = servedTemplatesFolder(runFolder);
   mkdirSync(served, {recursive: true});
@@ -289,9 +320,26 @@ export async function prepareRunTemplates(
             path.join(customSources, name, 'devcontainer-template.json'),
           ),
         ),
-      JSON.parse(
-        readFileSync(path.join(fixtures, 'custom-features.json'), 'utf8'),
-      ) as CustomFeatureCollection[],
+      [
+        {
+          namespace: CUSTOM_FEATURES_NAMESPACE,
+          name: "The acceptance run's own Features",
+          repository: 'https://github.com/remote-oss-run/features',
+          features: readdirSync(featureSources)
+            .sort()
+            .map(name =>
+              metadata(
+                path.join(featureSources, name, 'devcontainer-feature.json'),
+              ),
+            ),
+        },
+        JSON.parse(
+          readFileSync(
+            path.join(fixtures, 'custom-community-features.json'),
+            'utf8',
+          ),
+        ) as CustomFeatureCollection,
+      ],
       registry,
     ),
   );

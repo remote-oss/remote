@@ -49,6 +49,10 @@ export interface ReopenPorts {
     dockerPath(): unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir(): unknown;
+    /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
+    defaultFeatures(): unknown;
+    /** The user's value of `dev.containers.lockfile`, `undefined` when unset. */
+    lockfile(): unknown;
   };
   engine: EnginePort;
   /** The dialogs of the first check. */
@@ -57,5 +61,7 @@ export interface ReopenPorts {
   progress: PreReloadProgressPorts;
   bridge: Pick<CliBridge, 'readConfiguration'>;
   opener: OpenerHost;
+  /** Tells the shutdown helper that this window leaves the container it holds, before the window reloads elsewhere. */
+  shutdown: {leave(): Promise<void>};
   logger: Logger;
 }

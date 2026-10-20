@@ -11,11 +11,13 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
+  CUSTOM_FEATURES_NAMESPACE,
   CUSTOM_NAMESPACE,
   type CustomFeatureCollection,
   ghcrLayer,
@@ -339,19 +341,21 @@ describe('the run templates', () => {
   });
 
   describe('publishArguments', () => {
-    it('tooling-57: the CLI publishes a source folder into a namespace of the registry', () => {
+    it('tooling-57: the CLI publishes the templates or the Features of a source folder into a namespace of the registry', () => {
       deepStrictEqual(
-        publishArguments('/cli.js', '/src', 'localhost:1', 'a/b'),
-        [
+        (['templates', 'features'] as const).map(kind =>
+          publishArguments('/cli.js', kind, '/src', 'localhost:1', 'a/b'),
+        ),
+        (['templates', 'features'] as const).map(kind => [
           '/cli.js',
-          'templates',
+          kind,
           'publish',
           '/src',
           '-r',
           'localhost:1',
           '-n',
           'a/b',
-        ],
+        ]),
       );
     });
   });
@@ -420,6 +424,7 @@ describe('the run templates', () => {
               process.execPath,
               ...publishArguments(
                 bundledCli,
+                'templates',
                 path.join(runFolder, 'templates', 'mirror', 'src'),
                 'localhost:49200',
                 MIRROR_NAMESPACE,
@@ -429,9 +434,20 @@ describe('the run templates', () => {
               process.execPath,
               ...publishArguments(
                 bundledCli,
+                'templates',
                 path.join(runFolder, 'templates', 'custom', 'src'),
                 'localhost:49200',
                 CUSTOM_NAMESPACE,
+              ),
+            ],
+            [
+              process.execPath,
+              ...publishArguments(
+                bundledCli,
+                'features',
+                path.join(runFolder, 'templates', 'features', 'src'),
+                'localhost:49200',
+                CUSTOM_FEATURES_NAMESPACE,
               ),
             ],
           ],
@@ -575,34 +591,45 @@ describe('the run templates', () => {
       );
     });
 
-    it("tooling-61: the run's own Features are two collections: the lab's, with every shape of option and none, and a second owner's three, whose labels sort differently without regard to case than by code unit", () => {
-      const collections = JSON.parse(
+    it("tooling-61: the run's own Features are two published folders, each with an install script that writes its environment, and a second owner's three listed, whose labels sort differently without regard to case than by code unit", () => {
+      const fixtures = path.join(REPOSITORY_ROOT, SNAPSHOT_FOLDER);
+      const sources = path.join(fixtures, 'custom-features', 'src');
+      function metadata(name: string) {
+        return JSON.parse(
+          readFileSync(
+            path.join(sources, name, 'devcontainer-feature.json'),
+            'utf8',
+          ),
+        ) as {id: string; name: string; options?: object};
+      }
+      const community = JSON.parse(
         readFileSync(
-          path.join(REPOSITORY_ROOT, SNAPSHOT_FOLDER, 'custom-features.json'),
+          path.join(fixtures, 'custom-community-features.json'),
           'utf8',
         ),
-      ) as CustomFeatureCollection[];
-      const labels = (collections[1]?.features ?? []).map(
-        feature => feature.name as string,
-      );
+      ) as CustomFeatureCollection;
+      const labels = community.features.map(feature => feature.name as string);
       deepStrictEqual(
         [
-          collections.map(collection => collection.namespace),
-          (collections[0]?.features ?? []).map(feature => [
-            feature.id,
-            feature.name,
-            Object.keys((feature.options as object | undefined) ?? {}),
+          readdirSync(sources).sort(),
+          readdirSync(sources).map(name => [
+            metadata(name).id,
+            metadata(name).name,
+            Object.keys(metadata(name).options ?? {}),
           ]),
-          collections
-            .map(collection => collection.features.map(feature => feature.id))
-            .flat().length,
+          readdirSync(sources).map(name =>
+            readFileSync(path.join(sources, name, 'install.sh'), 'utf8'),
+          ),
+          statSync(path.join(sources, 'lab-options', 'install.sh')).mode &
+            0o111,
+          community.namespace,
           [...labels].sort(),
           [...labels].sort((left, right) =>
             left.toLowerCase().localeCompare(right.toLowerCase()),
           ),
         ],
         [
-          ['remote-oss-run/features', 'remote-oss-community/features'],
+          ['lab-options', 'lab-plain'],
           [
             [
               'lab-options',
@@ -611,7 +638,12 @@ describe('the run templates', () => {
             ],
             ['lab-plain', 'Lab Plain', []],
           ],
-          5,
+          ['lab-options', 'lab-plain'].map(
+            featureId =>
+              `#!/bin/sh\nset -e\nmkdir -p /usr/local/share/remote-oss-run\nenv > /usr/local/share/remote-oss-run/${featureId}.env\n`,
+          ),
+          0o111,
+          'remote-oss-community/features',
           ['Add Community Tool', 'Adobe Community Kit', 'add-community'],
           ['Add Community Tool', 'add-community', 'Adobe Community Kit'],
         ],

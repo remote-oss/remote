@@ -203,6 +203,9 @@
       "path": "tests/acceptance/containers-ports"
     },
     {
+      "path": "tests/acceptance/containers-shutdown"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {

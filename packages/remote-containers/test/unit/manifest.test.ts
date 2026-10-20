@@ -162,6 +162,25 @@ const ENGLISH = {
     'Use `#dev.containers.workspaceMountConsistency#` instead.',
   'setting.MountGitWorktreeCommonDir.description':
     'Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`).',
+  'setting.DefaultFeatures.description':
+    'Configures the list of features to always install while creating a container.',
+  'setting.Lockfile.description':
+    'Controls whether a devcontainer-lock.json should be written.',
+};
+
+const FEATURE_SETTINGS = {
+  'dev.containers.defaultFeatures': {
+    type: 'object',
+    default: {},
+    scope: 'application',
+    description: '%setting.DefaultFeatures.description%',
+  },
+  'dev.containers.lockfile': {
+    type: 'boolean',
+    default: true,
+    scope: 'application',
+    description: '%setting.Lockfile.description%',
+  },
 };
 
 const MOUNT_SETTINGS = {
@@ -456,6 +475,7 @@ describe('the manifest', () => {
                 '%setting.Remotecontainersdefaultextensions.markdownDeprecation%',
             },
             ...MOUNT_SETTINGS,
+            ...FEATURE_SETTINGS,
           },
         },
       },
@@ -533,6 +553,26 @@ describe('the manifest', () => {
     deepStrictEqual(
       Object.keys(MOUNT_SETTINGS).map(key => properties[key]),
       Object.values(MOUNT_SETTINGS),
+    );
+  });
+
+  it('F-0414 3.2: the two Feature settings are contributed with their shapes, and their English texts are the reference’s', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, unknown>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      [
+        Object.keys(FEATURE_SETTINGS).map(key => properties[key]),
+        ENGLISH['setting.DefaultFeatures.description'],
+        ENGLISH['setting.Lockfile.description'],
+      ],
+      [
+        Object.values(FEATURE_SETTINGS),
+        'Configures the list of features to always install while creating a container.',
+        'Controls whether a devcontainer-lock.json should be written.',
+      ],
     );
   });
 

@@ -49,9 +49,14 @@ runHelper(
     createShutdownRegistry({runDocker, setTimer: nodeTimer, logLine}),
   ),
   logLine,
-).catch((caught: unknown) => {
-  logLine(
-    `the shutdown helper stopped: ${caught instanceof Error ? caught.message : String(caught)}`,
-  );
-  process.exitCode = 1;
-});
+)
+  .then(() => {
+    // The helper has ended by its policy or a stop; the editor's runtime may still hold handles that keep it up.
+    process.exit(0);
+  })
+  .catch((caught: unknown) => {
+    logLine(
+      `the shutdown helper stopped: ${caught instanceof Error ? caught.message : String(caught)}`,
+    );
+    process.exitCode = 1;
+  });

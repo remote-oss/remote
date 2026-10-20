@@ -312,6 +312,18 @@
           "default": false,
           "scope": "application",
           "description": "%setting.MountGitWorktreeCommonDir.description%"
+        },
+        "dev.containers.defaultFeatures": {
+          "type": "object",
+          "default": {},
+          "scope": "application",
+          "description": "%setting.DefaultFeatures.description%"
+        },
+        "dev.containers.lockfile": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.Lockfile.description%"
         }
       }
     }

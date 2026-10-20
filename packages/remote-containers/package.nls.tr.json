@@ -33,5 +33,7 @@
   "viewsWelcome.targetsContainers.noContainersWithFolder": "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
   "viewsWelcome.targetsContainers.noContainersWithoutFolder": "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
   "commands.explorerDetailsRefresh.title": "Refresh",
-  "views.detailsContainers.name": "Details (Containers)"
+  "views.detailsContainers.name": "Details (Containers)",
+  "setting.DefaultFeatures.description": "Configures the list of features to always install while creating a container.",
+  "setting.Lockfile.description": "Controls whether a devcontainer-lock.json should be written."
 }
