@@ -203,15 +203,19 @@ export const CONNECT_WAIT_TIMEOUT: FailureDetail = {
  * be started is `prerequisiteMissing` when the client vanished after it was found, else unknown; the other cases of the
  * connection are a refused helper, a timeout, a cancel, and a channel that closed.
  */
-export function ofConnection(
-  failure: ConnectionFailure,
-): FailureDetail & {hints?: readonly FailureHint[]} {
+export function ofConnection(failure: ConnectionFailure): FailureDetail & {
+  hints?: readonly FailureHint[];
+  sshExitStatus?: number | null;
+} {
   switch (failure.kind) {
     case 'loginFailed':
       return {
         kind: failure.failure,
         ...(failure.reason === undefined ? {} : {reason: failure.reason}),
         hints: failure.hints,
+        ...(failure.exitStatus === undefined
+          ? {}
+          : {sshExitStatus: failure.exitStatus}),
       };
     case 'spawnFailed':
       return failure.cause === 'clientVanished'

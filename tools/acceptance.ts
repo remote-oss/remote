@@ -254,7 +254,7 @@ function masterAlias(
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
- * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
+ * forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
  * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
@@ -350,6 +350,13 @@ export function harnessSshConfig(
     ...accountAlias(
       'i686',
       'harness-i686',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'harness-fish',
+      'harness-fish',
       port,
       runFolder,
       keyLines(runFolder),

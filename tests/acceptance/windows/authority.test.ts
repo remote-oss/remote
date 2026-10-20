@@ -8,6 +8,7 @@ import {
   closeWindow,
   connected,
   connectedWithin,
+  connectionLog,
   connectionHelpers,
   cutHostNetwork,
   hexOf,
@@ -313,6 +314,19 @@ describe('the ssh-remote authorities of F-2501 (card coverage-19)', function () 
     deepStrictEqual(
       (await failedOn('refused'))?.question,
       'Could not establish connection to "refused".',
+    );
+  });
+
+  it("connect-64: a closed port logs ssh's exit status before the failure line, and the dialog is unchanged", async () => {
+    const dialog = await failedOn('refused');
+    const lines = connectionLog();
+    const failure = lines.lastIndexOf('connect failed: unknown');
+    deepStrictEqual(
+      [dialog?.question, lines[failure - 1]],
+      [
+        'Could not establish connection to "refused".',
+        'ssh exited with status 255',
+      ],
     );
   });
 

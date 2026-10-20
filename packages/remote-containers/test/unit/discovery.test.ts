@@ -15,6 +15,7 @@ function filesOf(tree: Record<string, Array<[string, Kind]>>): ConfigFiles {
         (tree[folder] ?? []).map(([name, kind]) => ({name, kind})),
       ),
     read: () => Promise.resolve('unreadable'),
+    exists: () => Promise.resolve(true),
   };
 }
 

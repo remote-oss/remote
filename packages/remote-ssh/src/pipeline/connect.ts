@@ -185,6 +185,13 @@ export async function connect(
   function failure(step: StepFailure): Failed {
     held.lease?.release();
     const context = contextOf(input, options, step);
+    if (step.sshExitStatus !== undefined) {
+      options.logger.warn(
+        step.sshExitStatus === null
+          ? 'ssh ended on a signal'
+          : `ssh exited with status ${String(step.sshExitStatus)}`,
+      );
+    }
     options.logger.warn(`connect failed: ${step.kind}`);
     if (step.logDetail !== undefined) {
       options.logger.warn(`the ${step.kind} failure: ${step.logDetail}`);

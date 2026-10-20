@@ -89,6 +89,8 @@ export type ConnectionEvent =
       kind: FailureKind;
       reason?: FailureReason;
       hints: FailureHint[];
+      /** `ssh`'s exit status, or `null` when it ended on a signal; absent from a helper of an earlier build. */
+      exitStatus?: number | null;
     }
   | {type: 'spawnFailed'; cause: SpawnFailure; detail: string}
   | {type: 'scriptLine'; runId: number; line: string}
@@ -340,7 +342,15 @@ export function readConnectionEvent(
 }
 
 function readLoginFailed(fields: Fields): ConnectionEvent | undefined {
-  if (typeof fields.kind !== 'string' || !Array.isArray(fields.hints)) {
+  if (
+    typeof fields.kind !== 'string' ||
+    !Array.isArray(fields.hints) ||
+    !(
+      fields.exitStatus === undefined ||
+      fields.exitStatus === null ||
+      typeof fields.exitStatus === 'number'
+    )
+  ) {
     return undefined;
   }
   // The helper of this library wrote the kind, the reason and the hints from S5's classification.
@@ -348,6 +358,7 @@ function readLoginFailed(fields: Fields): ConnectionEvent | undefined {
     type: 'loginFailed',
     kind: fields.kind as FailureKind,
     hints: fields.hints as FailureHint[],
+    ...(fields.exitStatus === undefined ? {} : {exitStatus: fields.exitStatus}),
   } as const;
   return fields.reason === undefined
     ? failed
