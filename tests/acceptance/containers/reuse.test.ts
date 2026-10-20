@@ -1063,7 +1063,9 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       await closeWindow(name);
       deepStrictEqual(
         {
-          containers: containers.map(id => containerId.startsWith(id)),
+          containers: containers.map(shortId =>
+            containerId.startsWith(shortId),
+          ),
           environment: environment.trim(),
           changed: centre.filter(text => /changed|Rebuild/.test(text)),
         },
@@ -1139,7 +1141,9 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       deepStrictEqual(
         {
           dialog: dialogText(dialog),
-          containers: containers.map(id => containerId.startsWith(id)),
+          containers: containers.map(shortId =>
+            containerId.startsWith(shortId),
+          ),
           status,
         },
         {
