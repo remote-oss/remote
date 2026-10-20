@@ -24,7 +24,7 @@ STATE_WHATS = ("title", "dialogs", "notifications", "statusbar", "contextmenu", 
                "sidebar")
 SIMPLE_WHATS = STATE_WHATS + ("quickpick", "notification_center", "windows", "files", "opened_urls")
 DICT_WHATS = ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "suggest", "hovertext", "markers", "tokens", "folds", "outline",
-              "breadcrumbs", "target_files", "user_settings", "notification_order")
+              "breadcrumbs", "target_files", "user_settings", "notification_order", "target_logins")
 TARGET_FILES_INTERVAL = 2   # seconds between the two reads of a target_files observation (the case may say 1 to 30)
 # Editor observations (lab verbs of the same name, remote-ssh-edit 2026-10-02): the payload keys kept from the verb's
 # JSON output. Expectation key: <kind>:<file or "active">[@line[:col]].
@@ -176,6 +176,8 @@ class Session:
         self.exact = False             # cmd matches the exact palette title only (LAB_CMD_EXACT; window: {close})
         self.known_names = set(known_names)
         self.target_files = None   # the run's `sshtarget files` on its per-case target (record sets it), else None
+        self.target_logins = None  # the run's `sshtarget logins` on its per-case target (record sets it), else None
+        self.logins_seen = None    # the target's accepted logins at the case's start, then at the last target_logins
         self.user_settings = None  # the run's reader of its slot profile's settings.json (record sets it), else None
         self.urls_start = 0        # how many URLs the slot's log held when the case began (mark_urls); older ones are not its
         self.window = None
@@ -397,6 +399,8 @@ class Session:
                         {"error": "user_settings needs the run's profile"}
                 elif kind == "target_files":
                     out[f"target_files:{arg['path']}"] = self._observe_target_files(arg)
+                elif kind == "target_logins":
+                    out["target_logins"] = self._observe_target_logins()
                 elif kind == "notification_order":
                     out["notification_order"] = self._observe_order(arg)
                 elif kind in EDITOR_PAYLOAD:
@@ -426,6 +430,18 @@ class Session:
         ia, ib = first(a), first(b)
         result = "A not seen" if ia is None else "B not seen" if ib is None else "held" if ia < ib else "B before A"
         return {"pair": [a, b], "result": result}
+
+    def _observe_target_logins(self):
+        """kit #289, K3: how many logins the case's own target accepted since the case started, or since the previous
+        target_logins, as a delta. Only the count: never a log line, a user or an address."""
+        if not self.target_logins:
+            return {"error": "target_logins needs the case's own SSH target"}
+        now = self.target_logins()
+        if isinstance(now, dict) or not isinstance(self.logins_seen, int):
+            return {"error": (now.get("error") if isinstance(now, dict) else None)
+                    or "target_logins: the count at the case's start is unknown"}
+        accepted, self.logins_seen = now - self.logins_seen, now
+        return {"accepted": accepted}
 
     def _observe_target_files(self, arg):
         """athena on kit #218 (item 3): the per-case target after the connection closed, read twice `interval` seconds
