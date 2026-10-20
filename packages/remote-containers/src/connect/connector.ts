@@ -42,6 +42,7 @@ import {
   effectiveExtensions,
   settingEntries,
 } from '../extensions/extension-list.ts';
+import {portAttributeSettings} from '../ports/port-attributes.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
@@ -868,13 +869,12 @@ export function containerConnectorOf(
       logCliEvent,
       cancellation,
     );
+    const merged =
+      configuration.kind === 'configuration'
+        ? configuration.mergedConfiguration
+        : undefined;
     const defaultExtensions = prepared.created
-      ? newContainerExtensions(
-          configuration.kind === 'configuration'
-            ? configuration.mergedConfiguration
-            : undefined,
-          settings,
-        )
+      ? newContainerExtensions(merged, settings)
       : [];
     let name: string | undefined;
     if (configuration.kind === 'configuration') {
@@ -897,6 +897,7 @@ export function containerConnectorOf(
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         defaultExtensions,
+        machineSettings: portAttributeSettings(merged),
         onPhase: phase => {
           phases.tell({name: phase});
         },
@@ -913,12 +914,8 @@ export function containerConnectorOf(
     if (isAborted(cancellation)) {
       return cancelled();
     }
-    const mergedConfiguration =
-      configuration.kind === 'configuration'
-        ? configuration.mergedConfiguration
-        : undefined;
-    const mode = probeModeOf(mergedConfiguration);
-    const remoteEnvironment = remoteEnvironmentOf(mergedConfiguration);
+    const mode = probeModeOf(merged);
+    const remoteEnvironment = remoteEnvironmentOf(merged);
     for (const name of remoteEnvironment.dropped) {
       logger.warn(`remoteEnv ${name} is neither a string nor null`);
     }
@@ -989,9 +986,9 @@ export function containerConnectorOf(
       identity: {name, context: folder.context},
       connected,
       ports: {
-        forwardPorts: mergedConfiguration?.forwardPorts,
-        portsAttributes: mergedConfiguration?.portsAttributes,
-        otherPortsAttributes: mergedConfiguration?.otherPortsAttributes,
+        forwardPorts: merged?.forwardPorts,
+        portsAttributes: merged?.portsAttributes,
+        otherPortsAttributes: merged?.otherPortsAttributes,
       },
     };
     const connection = held;

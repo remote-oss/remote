@@ -45,6 +45,10 @@ import {
 } from 'lib-server';
 import {installRelayScript, relayScriptPath} from '../exec/relay-script.ts';
 import {
+  type MachineSettings,
+  writeMachineSettings,
+} from '../settings/machine-settings.ts';
+import {
   cancelled,
   noServerSource,
   requirementsNotMet,
@@ -95,6 +99,8 @@ export interface ServerRequest {
   volumeMounted: boolean;
   /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
   defaultExtensions: readonly string[];
+  /** The settings to set in the container's machine settings before the server starts. */
+  machineSettings: MachineSettings;
   onPhase(phase: 'installing' | 'startingServer'): void;
   /** The share of the server archive downloaded so far, from 0 to 100. */
   onDownloadPercent(percent: number): void;
@@ -340,6 +346,17 @@ export async function runServerSteps(
   if (installed.kind === 'failed') {
     logger.info(`the relay script was not installed: ${installed.detail}`);
     return failedWith(serverFailed());
+  }
+  const settingsWrite = await writeMachineSettings(
+    channel,
+    dataFolder,
+    request.machineSettings,
+    cancellation,
+  );
+  if (settingsWrite.kind === 'failed') {
+    logger.info(
+      `the machine settings were not written: ${settingsWrite.detail}`,
+    );
   }
   const policy = containersOverridePolicy();
   const resolution = resolveServerArchive(
