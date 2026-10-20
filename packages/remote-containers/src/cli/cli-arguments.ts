@@ -121,6 +121,18 @@ export interface TemplateRequest {
   omitPaths: readonly string[];
 }
 
+/**
+ * The options as the CLI reads them: every value text. The CLI writes an option into the files as `options[name] || ''`,
+ * so a boolean `false` would come out empty; `'false'` is text and survives.
+ */
+function optionTexts(
+  templateArgs: TemplateRequest['templateArgs'],
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(templateArgs).map(([name, value]) => [name, String(value)]),
+  );
+}
+
 /** Applies a template into the request's folder; the options, Features and omitted paths go as JSON texts. */
 export function applyTemplateArguments(request: TemplateRequest): string[] {
   return [
@@ -131,7 +143,7 @@ export function applyTemplateArguments(request: TemplateRequest): string[] {
     '-t',
     request.templateId,
     '-a',
-    JSON.stringify(request.templateArgs),
+    JSON.stringify(optionTexts(request.templateArgs)),
     '-f',
     JSON.stringify(request.features),
     '--omit-paths',

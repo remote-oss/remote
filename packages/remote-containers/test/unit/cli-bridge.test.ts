@@ -774,7 +774,7 @@ describe('the CLI bridge: templates (card containers-76)', () => {
         '-t',
         'ghcr.io/devcontainers/templates/alpine',
         '-a',
-        '{"imageVariant":"3.22","flag":true}',
+        '{"imageVariant":"3.22","flag":"true"}',
         '-f',
         '[{"id":"ghcr.io/devcontainers/features/git:1","options":{}}]',
         '--omit-paths',
@@ -783,6 +783,19 @@ describe('the CLI bridge: templates (card containers-76)', () => {
         'info',
       ],
     ]);
+  });
+
+  it('F-0802 BR-1: a false option goes to the CLI as the text false, which it does not read as empty', async () => {
+    const {bridge, calls} = setup(ending(APPLIED));
+    await bridge.applyTemplate(
+      {...REQUEST, templateArgs: {enabled: false}},
+      () => undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      calls[0]?.[calls[0].indexOf('-a') + 1],
+      '{"enabled":"false"}',
+    );
   });
 
   it('F-0802 BR-7: metadata runs templates metadata with the id', async () => {
