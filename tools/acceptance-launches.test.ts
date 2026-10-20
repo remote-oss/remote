@@ -6,6 +6,8 @@ import {
   extensionsOf,
   failureCases,
   LABEL_FORM,
+  LAUNCH_GROUPS,
+  launchGroupOf,
   launchesOf,
   needsDevContainerImage,
   HOST_CASE_SUITES,
@@ -35,6 +37,42 @@ function hostLaunchLabels(): string[] {
 }
 
 describe('the launches of the VSCodium run', () => {
+  it('tooling-53: every launch has one group from the table, and every group has a launch', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    function groupOf(label: string): string {
+      const launch = launches.find(each => each.label === label);
+      return launch === undefined ? 'none' : launchGroupOf(launch);
+    }
+    deepStrictEqual(
+      [
+        LAUNCH_GROUPS.filter(
+          group => !launches.some(launch => launchGroupOf(launch) === group),
+        ),
+        [
+          'local',
+          'ports-range',
+          'explorer',
+          'containers-explorer',
+          'containers',
+          'genuine',
+          'ssh-no-proposals',
+        ].map(groupOf),
+      ],
+      [
+        [],
+        [
+          'ssh',
+          'hosts',
+          'explorer',
+          'containers',
+          'containers',
+          'genuine',
+          'genuine',
+        ],
+      ],
+    );
+  });
+
   const launches = launchesOf(REPOSITORY_ROOT);
 
   it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {

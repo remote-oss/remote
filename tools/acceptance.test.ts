@@ -29,6 +29,7 @@ import {
   downloadWithRetry,
   editorChoiceOf,
   chosenLaunches,
+  selectionLine,
   editorExecutableOf,
   runArgumentsOf,
   type CommandResult,
@@ -61,6 +62,7 @@ import type {Started} from './acceptance-plain.ts';
 import {
   failureCases,
   launchesOf,
+  launchGroupOf,
   launchLabelled,
   type Launch,
   type RunnerLaunch,
@@ -378,6 +380,16 @@ const CLIENT_CASE = {
   used: 'path/ssh',
 };
 
+/** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
+function chosenLabels(
+  launches: readonly Launch[],
+  selected: string[] | undefined,
+): string[] {
+  const chosen = chosenLaunches(launches, selected);
+  return typeof chosen === 'string'
+    ? [chosen]
+    : chosen.map(launch => launch.label);
+}
 describe('acceptance', () => {
   let workspace: TemporaryWorkspace;
   let harness: FakeHarness;
@@ -2675,10 +2687,7 @@ describe('acceptance', () => {
     it('tooling-51: no selection leaves the launches that are named only out, a selection that names one keeps it, in table order', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       function labels(selected: string[] | undefined): string[] {
-        const chosen = chosenLaunches(launches, selected);
-        return typeof chosen === 'string'
-          ? [chosen]
-          : chosen.map(launch => launch.label);
+        return chosenLabels(launches, selected);
       }
       deepStrictEqual(
         [
@@ -2725,7 +2734,80 @@ describe('acceptance', () => {
           ],
           ['remote', 'nope'],
         ),
-        'unknown launch label(s): nope; the known ones: local, remote',
+        'unknown launch label(s): nope; the known ones: local, remote; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+      );
+    });
+
+    it('tooling-53: a group names its launches in table order, ! takes out what came before, and all,!genuine is all', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      function labels(selected: string[] | undefined): string[] {
+        return chosenLabels(launches, selected);
+      }
+      function ofGroup(group: string): string[] {
+        return launches
+          .filter(launch => launchGroupOf(launch) === group)
+          .map(launch => launch.label);
+      }
+      deepStrictEqual(
+        [
+          labels(['@containers']),
+          labels(['all', '!genuine']),
+          labels(['@ssh', '!terminal']).includes('terminal'),
+          labels(['@ssh', '!terminal']).length,
+          labels(['@hosts', '@explorer']),
+          labels(['!remote']),
+          labels(['@genuine']),
+          labels(['@containers', '!@containers', 'containers']),
+        ],
+        [
+          ofGroup('containers'),
+          labels(undefined),
+          false,
+          ofGroup('ssh').length - 1,
+          launches
+            .filter(launch =>
+              ['explorer', 'hosts'].includes(launchGroupOf(launch)),
+            )
+            .map(launch => launch.label),
+          [],
+          ['genuine', 'ssh-no-proposals'],
+          ['containers'],
+        ],
+      );
+    });
+
+    it('tooling-53: an unknown group fails like an unknown label, listing the groups', () => {
+      deepStrictEqual(
+        [
+          chosenLaunches(
+            [{label: 'local', runner: 'runner', suite: 'suite-local'}],
+            ['@nope', '!@nada'],
+          ),
+          runArgumentsOf([
+            '--editor',
+            'vscodium',
+            '--launches',
+            'all,!genuine',
+          ]),
+        ],
+        [
+          'unknown launch label(s): @nope, !@nada; the known ones: local; the groups: @ssh, @hosts, @explorer, @containers, @genuine',
+          {editor: 'vscodium', launches: ['all', '!genuine']},
+        ],
+      );
+    });
+
+    it('tooling-53: the selection line names the groups of the launches it makes', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const chosen = chosenLaunches(launches, ['explorer', 'genuine']);
+      deepStrictEqual(
+        [
+          typeof chosen === 'string'
+            ? chosen
+            : selectionLine(launches, chosen).split(':')[0],
+          selectionLine(launches, []).startsWith('no launch reachable'),
+        ],
+        ['launches made (2, groups @explorer, @genuine)', true],
       );
     });
 
