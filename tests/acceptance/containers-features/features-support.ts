@@ -224,3 +224,20 @@ export async function forgetImages(prefix: string): Promise<void> {
     await execFileAsync('docker', ['image', 'rm', '--force', ...imageIds]);
   }
 }
+
+/** Whether the Feature `feature` wrote its environment file in the container, that is, whether it was installed. */
+export async function wasInstalled(
+  containerId: string,
+  feature: string,
+): Promise<boolean> {
+  return execFileAsync('docker', [
+    'exec',
+    containerId,
+    'test',
+    '-e',
+    `/usr/local/share/remote-oss-run/${feature}.env`,
+  ]).then(
+    () => true,
+    () => false,
+  );
+}

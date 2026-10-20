@@ -1,17 +1,29 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {promisify} from 'node:util';
 import {setUserSetting} from '../windows/folder-windows.ts';
+import {
+  containersLog,
+  containersLogSince,
+  variable,
+} from '../windows/harness.ts';
 import {
   environmentOf,
   featureBuilds,
   lockfileOf,
   metadataOf,
   runFeature,
+  wasInstalled,
   writeLocalFeature,
 } from './features-support.ts';
 
 const execFileAsync = promisify(execFile);
+
+/** The local image AC-16 builds, whose `devcontainer.metadata` label is the base image's entry. */
+const BASE_IMAGE = 'remote-oss-run-c93-base-metadata';
 
 /** The ids of the Feature entries of the metadata, in order. */
 function idsOf(entries: ReadonlyArray<Record<string, unknown>>): unknown[] {
@@ -73,31 +85,86 @@ describe('a build with Features (card containers-93)', function () {
     deepStrictEqual(lockfileOf(built.folder), undefined);
   });
 
-  it('F-0414 AC-16, AC-44 (metadata-order): the metadata holds the base image’s entries first, then one entry per installed Feature in install order', async () => {
+  it('F-0414 AC-16 (metadata-order): the metadata holds the base image’s entry first, then one entry per installed Feature, a hard dependency included, in install order', async () => {
+    const context = mkdtempSync(path.join(tmpdir(), 'c93-base-'));
+    writeFileSync(
+      path.join(context, 'Dockerfile'),
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nLABEL devcontainer.metadata='[{"containerEnv":{"C93_BASE":"base"}}]'\n`,
+    );
+    await execFileAsync('docker', ['build', '--tag', BASE_IMAGE, context]);
+    try {
+      const built = await build(
+        'c93-ac16',
+        {
+          image: BASE_IMAGE,
+          features: {
+            './beta': {},
+            './alpha': {},
+            [runFeature('lab-depends-a')]: {},
+          },
+        },
+        folder => {
+          writeLocalFeature(folder, 'alpha');
+          writeLocalFeature(folder, 'beta');
+        },
+      );
+      const entries = await metadataOf(built.containerId);
+      deepStrictEqual(
+        [
+          (entries[0]?.containerEnv as Record<string, string> | undefined)
+            ?.C93_BASE,
+          idsOf(entries),
+        ],
+        [
+          'base',
+          [
+            './alpha',
+            './beta',
+            runFeature('lab-depends-e'),
+            runFeature('lab-depends-a'),
+          ],
+        ],
+      );
+    } finally {
+      rmSync(context, {recursive: true});
+    }
+  });
+
+  it('F-0414 AC-44 (local-order): local Features declared ./beta then ./alpha are installed ./alpha first', async () => {
     const built = await build(
-      'c93-ac16',
+      'c93-ac44',
       {features: {'./beta': {}, './alpha': {}}},
       folder => {
         writeLocalFeature(folder, 'alpha');
         writeLocalFeature(folder, 'beta');
       },
     );
-    const entries = await metadataOf(built.containerId);
-    deepStrictEqual(
-      entries
-        .filter(entry => typeof entry.id === 'string')
-        .map(entry => entry.id),
-      ['./alpha', './beta'],
-    );
+    deepStrictEqual(idsOf(await metadataOf(built.containerId)), [
+      './alpha',
+      './beta',
+    ]);
   });
 
-  it('F-0414 AC-3 (lockfile-off): with dev.containers.lockfile false no lockfile is written', async () => {
+  it('F-0414 AC-3 (lockfile-off): with dev.containers.lockfile false an OCI Feature’s build neither writes a lockfile nor changes the one that is there', async () => {
     await setUserSetting('dev.containers.lockfile', false);
     try {
-      const built = await build('c93-ac3', {
+      const fresh = await build('c93-ac3', {
         features: {[runFeature('lab-plain')]: {}},
       });
-      deepStrictEqual(lockfileOf(built.folder), undefined);
+      const kept = await build(
+        'c93-ac3-kept',
+        {features: {[runFeature('lab-plain')]: {}}},
+        folder => {
+          writeFileSync(
+            path.join(folder, '.devcontainer', 'devcontainer-lock.json'),
+            '{"features":{}}',
+          );
+        },
+      );
+      deepStrictEqual(
+        [lockfileOf(fresh.folder), lockfileOf(kept.folder)],
+        [undefined, {features: {}}],
+      );
     } finally {
       await setUserSetting('dev.containers.lockfile', undefined);
     }
@@ -150,7 +217,13 @@ describe('a build with Features (card containers-93)', function () {
         });
       },
     );
-    deepStrictEqual(idsOf(await metadataOf(built.containerId)), ['./gamma']);
+    deepStrictEqual(
+      [
+        idsOf(await metadataOf(built.containerId)),
+        await wasInstalled(built.containerId, 'lab-plain'),
+      ],
+      [['./gamma'], false],
+    );
   });
 
   it('F-0414 AC-25 (same-id): features and defaultFeatures naming one id install it once, with the options of features', async () => {
@@ -228,7 +301,8 @@ describe('a build with Features (card containers-93)', function () {
     );
   });
 
-  it('F-0414 AC-40 (override-unrequested): an overrideFeatureInstallOrder entry that was not requested is ignored and the others are put first', async () => {
+  it('F-0414 AC-40 (override-unrequested): an overrideFeatureInstallOrder entry that was not requested is ignored without a message and the others are put first', async () => {
+    const mark = containersLog().length;
     const built = await build(
       'c93-ac40',
       {
@@ -240,10 +314,13 @@ describe('a build with Features (card containers-93)', function () {
         writeLocalFeature(folder, 'beta');
       },
     );
-    deepStrictEqual(idsOf(await metadataOf(built.containerId)), [
-      './beta',
-      './alpha',
-    ]);
+    deepStrictEqual(
+      [
+        idsOf(await metadataOf(built.containerId)),
+        containersLogSince(mark).filter(line => line.includes('./nope')),
+      ],
+      [['./beta', './alpha'], []],
+    );
   });
 
   it('F-0414 AC-45 (as-root): a local Feature’s script runs as root on a configuration with another remote user, and sees both users', async () => {
