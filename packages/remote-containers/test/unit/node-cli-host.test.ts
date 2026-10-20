@@ -116,6 +116,7 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
           detached: true,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
+            BUILDKIT_PROGRESS: 'plain',
             HOME: '/home/u',
             ELECTRON_RUN_AS_NODE: '1',
             REMOTE_OSS_EDITOR_MODULES: '/app/node_modules.asar',
@@ -447,6 +448,18 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
       (fake.spawns[0]?.options as {env: Record<string, string>}).env
         .REMOTE_OSS_EDITOR_MODULES,
       PATHS.editorModules,
+    );
+  });
+
+  it('F-0412 AC-11: the spawn asks BuildKit for plain progress, so the log holds one line per step', async () => {
+    const fake = fakeSystem();
+    const running = bareRun(fake);
+    fake.exit(0);
+    await running;
+    deepStrictEqual(
+      (fake.spawns[0]?.options as {env: Record<string, string>}).env
+        .BUILDKIT_PROGRESS,
+      'plain',
     );
   });
 });

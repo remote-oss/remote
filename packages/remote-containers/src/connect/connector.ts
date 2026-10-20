@@ -21,7 +21,7 @@ import {
 } from '../authority/payload.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import type {CliEvent} from '../cli/cli-lines.ts';
+import {type CliEvent, withoutControlSequences} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {executableOf} from '../engine/executable.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
@@ -85,7 +85,9 @@ import type {
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
 
-/** The CLI's level for an error event. */
+/** The CLI's levels for an info, a warning and an error event. */
+const CLI_INFO_LEVEL = 3;
+const CLI_WARNING_LEVEL = 4;
 const CLI_ERROR_LEVEL = 5;
 
 /** How many characters of a container's identifier the log shows. */
@@ -473,12 +475,27 @@ export function containerConnectorOf(
     return outcome.kind === 'exited' && outcome.status === 0;
   }
 
-  /** Writes a CLI event to the log: errors as errors, the rest as debug lines. */
+  /**
+   * Writes a CLI event to the log: Docker's and BuildKit's own output (`raw`) as info lines, one per line of its text
+   * and without control sequences or empty lines; a text by its level (info, warning, error, else debug); progress as debug.
+   */
   function logCliEvent(event: CliEvent): void {
     if (event.kind === 'progress') {
       logger.debug(`${event.name}: ${event.status}`);
+    } else if (event.type === 'raw') {
+      for (const line of withoutControlSequences(event.text).split(
+        /\r?\n|\r/u,
+      )) {
+        if (line.trim() !== '') {
+          logger.info(line);
+        }
+      }
     } else if (event.level >= CLI_ERROR_LEVEL) {
       logger.error(event.text);
+    } else if (event.level >= CLI_WARNING_LEVEL) {
+      logger.warn(event.text);
+    } else if (event.level >= CLI_INFO_LEVEL && event.type === 'text') {
+      logger.info(event.text);
     } else {
       logger.debug(event.text);
     }

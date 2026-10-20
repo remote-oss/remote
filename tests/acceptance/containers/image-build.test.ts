@@ -6,6 +6,8 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
@@ -468,6 +470,60 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       deepStrictEqual(
         [shown.message, shown.details, [...shown.buttons].sort()],
         ['', S034, RECOVERY_BUTTONS],
+      );
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0412 AC-11 (build-error-logged): a build step that fails shows the generic dialog, and the Dev Containers log holds BuildKit’s error for that step and a line saying the build failed to solve', async () => {
+    const folder = devContainerFolder('c62-build-error', {
+      name: 'Build Error',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(
+      folder,
+      `FROM ${base()}\nRUN echo c62-step-output && false\n`,
+    );
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenStarted(name);
+      const shown = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const lines = containersLogSince(mark);
+      await closeWindow(name);
+      deepStrictEqual(
+        [
+          shown.details,
+          lines.some(line =>
+            line.includes('RUN echo c62-step-output && false'),
+          ),
+          lines.some(line => line.includes('failed to solve')),
+        ],
+        [S034, true, true],
+      );
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0412 AC-11 (build-progress-logged): a build that succeeds writes BuildKit’s step lines to the Dev Containers log as it runs', async () => {
+    const folder = devContainerFolder('c62-build-progress', {
+      name: 'Build Progress',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(folder, `FROM ${base()}\nRUN echo c62-progress\n`);
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const lines = containersLogSince(mark);
+      await closeWindow(name);
+      deepStrictEqual(
+        lines.some(line => /^#\d+ \[.*\d+\/\d+\]/.test(line)),
+        true,
       );
     } finally {
       await cleanUp(folder);
