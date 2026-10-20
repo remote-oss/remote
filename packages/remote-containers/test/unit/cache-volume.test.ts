@@ -14,8 +14,12 @@ describe('the vscode volume cache, from the user\u2019s settings', () => {
     deepStrictEqual(cacheVolumeOf(undefined, false), false);
   });
 
-  it('F-0419 BR-8: the current key wins over the deprecated one', () => {
+  it('F-0419 AC-31: the current key wins over the deprecated one when it is true', () => {
     deepStrictEqual(cacheVolumeOf(true, false), true);
+  });
+
+  it('F-0419 AC-31: the current key wins over the deprecated one when it is false', () => {
+    deepStrictEqual(cacheVolumeOf(false, true), false);
   });
 
   it('contracts: a non-boolean counts as unset', () => {

@@ -13,6 +13,7 @@ import {
   CONTAINERS_RELEASE_ONE_SCOPE,
   COVERAGE_SCOPES,
   EXPLORER_SLICE_ONE_SCOPE,
+  EXTENSIONPACK_RELEASE_ONE_SCOPE,
   SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -636,12 +637,12 @@ describe('check-coverage', () => {
       strictEqual(new Set(features).size, features.length);
     });
 
-    it('coverage-25a: the repository check reads all three files, the explorer file last, its total its line count', () => {
+    it('coverage-25a: the repository check reads every coverage file, and the total of the last one is its line count', () => {
       const report = checkCoverage(REPOSITORY_ROOT);
       const counts = report.kind === 'checked' ? report.counts : [];
-      const explorer = counts.at(-1);
+      const last = counts.at(-1);
       const lines = readFileSync(
-        path.join(REPOSITORY_ROOT, EXPLORER_FILE),
+        path.join(REPOSITORY_ROOT, EXTENSIONPACK_RELEASE_ONE_SCOPE.file),
         'utf8',
       )
         .trim()
@@ -652,9 +653,9 @@ describe('check-coverage', () => {
           kind: report.kind,
           files: counts.map(each => each.file),
           totalIsLineCount:
-            explorer === undefined
+            last === undefined
               ? false
-              : Object.values(explorer.counts).reduce(
+              : Object.values(last.counts).reduce(
                   (total, count) => total + count,
                   0,
                 ) === lines,
