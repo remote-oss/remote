@@ -6,6 +6,8 @@ import {
   COVERAGE_SCOPES,
   EXPLORER_SLICE_ONE_FEATURES,
   EXPLORER_SLICE_ONE_SCOPE,
+  EXTENSIONPACK_RELEASE_ONE_FEATURES,
+  EXTENSIONPACK_RELEASE_ONE_SCOPE,
   SLICE_ONE_FEATURES,
   SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
@@ -133,7 +135,7 @@ describe('acceptanceCriteriaOf, the forms of Remote - Containers', () => {
 });
 
 describe('the coverage files', () => {
-  it('coverage-25a: the first slice, containers release 1 and the explorer slice, each with its features and repository', () => {
+  it('coverage-25a: the first slice, containers release 1, the explorer slice and the pack, each with its features and repository', () => {
     deepStrictEqual(
       COVERAGE_SCOPES.map(scope => [
         scope.file,
@@ -151,6 +153,11 @@ describe('the coverage files', () => {
           EXPLORER_SLICE_ONE_SCOPE.file,
           EXPLORER_SLICE_ONE_FEATURES.length,
           'remote-explorer',
+        ],
+        [
+          EXTENSIONPACK_RELEASE_ONE_SCOPE.file,
+          EXTENSIONPACK_RELEASE_ONE_FEATURES.length,
+          'remote-extensionpack',
         ],
       ],
     );

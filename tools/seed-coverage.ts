@@ -3,7 +3,7 @@
  *
  *     node tools/seed-coverage.ts [<name>]
  *
- * `<name>` picks the set, `slice1` (the default), `containers-r1` or `explorer`, and writes the set's file. It reads
+ * `<name>` picks the set, `slice1` (the default), `containers-r1`, `explorer` or `extensionpack-r1`, and writes the set's file. It reads
  * the issue number of each of the set's features from the catalogue, fetches the feature's issue with `gh issue view`
  * in its own repository and takes the criteria from its body. Run it once, commit the output, and tag the lines by
  * hand afterwards; running it again overwrites the tags.
