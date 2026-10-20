@@ -288,6 +288,7 @@ async function runSteps(
   options: Parameters<typeof dependenciesOf>[1] & {
     volume?: boolean;
     defaultExtensions?: readonly string[];
+    machineSettings?: Record<string, unknown>;
     cancellation?: AbortSignal;
     root?: RecordingChannel;
   } = {},
@@ -306,6 +307,7 @@ async function runSteps(
     remoteUser: 'node',
     volumeMounted: options.volume ?? false,
     defaultExtensions: options.defaultExtensions ?? [],
+    machineSettings: options.machineSettings ?? {},
     onPhase: phase => {
       seen.phases.push(phase);
     },
@@ -1102,6 +1104,57 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
     const {result} = await runSteps(channel);
     deepStrictEqual(failureKind(result), 'serverFailed');
+  });
+});
+
+describe('the server steps write the machine settings (card containers-73)', () => {
+  const READ: ScriptAnswer = answer(script => script.includes('base64 <'), []);
+  const WRITE: ScriptAnswer = answer(
+    script => script.includes('Machine/settings.json.part'),
+    [],
+  );
+  const SETTINGS = {'remote.otherPortsAttributes': {label: 'Other'}};
+
+  it('F-1101 BR-23: the file is read and written after the relay script and before the server starts', async () => {
+    const channel = channelOf({extra: [READ, WRITE]});
+    const {result} = await runSteps(channel, {machineSettings: SETTINGS});
+    const scripts = scriptsOf(channel);
+    function positionOf(matches: (script: string) => boolean): number {
+      return scripts.findIndex(matches);
+    }
+    deepStrictEqual(
+      [
+        result.kind,
+        positionOf(isRelay) < positionOf(script => script.includes('base64 <')),
+        positionOf(script => script.includes('Machine/settings.json.part')) <
+          positionOf(isStart),
+      ],
+      ['started', true, true],
+    );
+  });
+
+  it('F-1101 BR-23: a write that fails logs one line and the connect goes on', async () => {
+    const channel = channelOf({
+      extra: [
+        READ,
+        answer(script => script.includes('Machine/settings.json.part'), [], 1),
+      ],
+    });
+    const {result, seen} = await runSteps(channel, {machineSettings: SETTINGS});
+    deepStrictEqual(
+      [
+        result.kind,
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => message.startsWith('the machine settings')),
+      ],
+      [
+        'started',
+        [
+          'the machine settings were not written: settings file not written (exit 1)',
+        ],
+      ],
+    );
   });
 });
 
