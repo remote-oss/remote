@@ -19,6 +19,7 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  chooseQuickPickItem,
   dialogOf,
   focusTerminal,
   notifications,
@@ -26,6 +27,7 @@ import {
   terminalText,
   typeInTerminal,
   waitForDialog,
+  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
   activations,
@@ -815,6 +817,97 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
           status: 'running',
           dialog: undefined,
           containers: [containerId],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-12 (u12b): More Actions... Reload Window starts the same container and shows the dialog again, and Rebuild Container replaces it', async () => {
+    const folder = devContainerFolder('c42-bad-user-pick', {
+      containerUser: 'doesnotexist123',
+    });
+    try {
+      const {name, dialog} = await failedConnect(folder);
+      const [first = ''] = await devContainersOf(folder);
+      const created = (await stateOf(first)).created;
+      const activated = activations(name);
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      await chooseQuickPickItem(name, 'Reload Window');
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > activated,
+        60_000,
+      );
+      const again = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const afterReload = await devContainersOf(folder);
+      const createdAfter = (await stateOf(first)).created;
+      const rebuilding = activations(name);
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      await chooseQuickPickItem(name, 'Rebuild Container');
+      await waitFor(
+        `window ${name} to activate after the rebuild`,
+        () => activations(name) > rebuilding,
+        60_000,
+      );
+      await waitForDialog(name, DIALOG_MILLISECONDS);
+      const afterRebuild = await devContainersOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          dialog: sayingAndButtons(again),
+          reloaded: afterReload,
+          created: createdAfter,
+          replaced: afterRebuild.length === 1 && afterRebuild[0] !== first,
+        },
+        {
+          dialog: sayingAndButtons(dialog),
+          reloaded: [first],
+          created,
+          replaced: true,
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-13 (u13): a containerEnv HOME the user cannot create fails with the dialog, Retry still fails after the override is removed, and Rebuild Container connects', async () => {
+    const folder = devContainerFolder('c42-bad-home', {
+      containerEnv: {HOME: '/proc/c42-home'},
+    });
+    try {
+      const {name, dialog} = await failedConnect(folder);
+      editConfiguration(folder, 'containerEnv', undefined);
+      const activated = activations(name);
+      await answerDialog(name, 'Retry');
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > activated,
+        60_000,
+      );
+      const again = await waitForDialog(name, DIALOG_MILLISECONDS);
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      await chooseQuickPickItem(name, 'Rebuild Container');
+      await connectedToContainer(name, 300_000);
+      const containers = await devContainersOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          first: sayingAndButtons(dialog),
+          retried: sayingAndButtons(again),
+          containers: containers.length,
+        },
+        {
+          first: {details: S034, buttons: RECOVERY_BUTTONS},
+          retried: {details: S034, buttons: RECOVERY_BUTTONS},
+          containers: 1,
         },
       );
     } finally {
