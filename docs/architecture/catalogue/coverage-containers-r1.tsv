@@ -104,7 +104,7 @@ F-0201.AC-33	deferred	containers release 1: later (Compose)
 F-0201.AC-34	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0201.AC-35	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0201.AC-36	unit	
-F-0201.AC-37	todo	
+F-0201.AC-37	deferred	containers release 1: later (remote engines)
 F-0201.AC-38	unit	
 F-0201.AC-39	deferred	containers release 1: later (the Remote Explorer views)
 F-0201.AC-40	deferred	containers release 1: later (the Remote Explorer views)
@@ -122,7 +122,7 @@ F-0201.AC-51	deferred	containers release 1: later (Compose)
 F-0201.AC-52	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0201.AC-53	todo	
 F-0201.AC-54	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
-F-0201.AC-55	todo	
+F-0201.AC-55	acceptance	
 F-0201.AC-56	todo	
 F-0301.AC-1	acceptance	
 F-0301.AC-2	acceptance	

@@ -12,21 +12,27 @@ import {
   extensionPresent,
   inWindow,
   reopenInContainer,
+  startInWindow,
   variable,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  dialogOf,
   notificationCentre,
   notifications,
   statusItem,
   waitForDialog,
+  welcomeText,
   windowTitle,
 } from '../windows/renderer.ts';
+import {VIEW} from '../windows/dev-containers-view.ts';
+import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 import {
   activations,
   openFolderWindow,
+  removeContainers,
   setUserSetting,
 } from '../windows/folder-windows.ts';
 
@@ -303,5 +309,67 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
       },
     );
     await closeWindow(name);
+  });
+
+  it('F-0201 AC-37 (t37): a relative dockerPath, with ./ or without, is the folder’s own file: the wrapper runs the checks and the setup and the window connects with no dialog; in an empty window the same value is not found, with the dialog and the Docker welcome', async () => {
+    const connectedWith: Array<[string, boolean, boolean, string | undefined]> =
+      [];
+    for (const value of ['tools/dk', './tools/dk']) {
+      const calls = path.join(
+        variable('HARNESS_RUN_FOLDER'),
+        `t37-calls-${value.replace(/\W/g, '')}`,
+      );
+      const folder = devContainerFolder(
+        `gate-wrapper-${String(value.length)}`,
+        {
+          name: 'Wrapper',
+        },
+      );
+      folderWrapper(folder, calls);
+      await setUserSetting('dev.containers.dockerPath', value);
+      try {
+        const name = await openFolderWindow(folder);
+        await reopenInContainer(name);
+        const recorded = recordedCalls(calls);
+        connectedWith.push([
+          (await windowState(name)).remoteName ?? '',
+          recorded.some(call => call.startsWith('version')),
+          recorded.some(call => call.startsWith('run ')),
+          (await dialogOf(name))?.message,
+        ]);
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    }
+    await setUserSetting('dev.containers.dockerPath', 'tools/dk');
+    try {
+      await startInWindow('local', 'remote-containers.openFolder');
+      const shown = await waitForDialog('local');
+      await answerDialog('local', 'Cancel');
+      await inWindow('local', 'workbench.view.remote');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      deepStrictEqual(
+        {
+          connectedWith,
+          dialog: [shown.message, shown.details],
+          welcome: await welcomeText('local', VIEW),
+        },
+        {
+          connectedWith: [
+            ['dev-container', true, true, undefined],
+            ['dev-container', true, true, undefined],
+          ],
+          dialog: [
+            'Docker version 17.12.0 or later required.',
+            "Command not found: 'tools/dk'. Check the license for details.",
+          ],
+          welcome:
+            'Get started with containers by installing Docker or by visiting the help view. Refresh after installation and startup.',
+        },
+      );
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
   });
 });

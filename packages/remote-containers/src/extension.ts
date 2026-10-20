@@ -495,6 +495,7 @@ export async function activate(
           ...reopenPorts.window,
           remoteAuthority: () => vscode.env.remoteAuthority,
           homeFolder: () => os.homedir(),
+          isTrusted: () => vscode.workspace.isTrusted,
         },
         pickFolder: async start => {
           const [picked] =
@@ -773,6 +774,7 @@ export async function activate(
     const windowEngine = {
       dockerPath: () =>
         vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+      trusted: () => vscode.workspace.isTrusted,
       folders: () =>
         (vscode.workspace.workspaceFolders ?? []).map(
           folder => folder.uri.fsPath,
@@ -803,6 +805,10 @@ export async function activate(
           if (event.affectsConfiguration(settings.dockerPath.id)) {
             listener();
           }
+        }),
+      onTrustGranted: listener =>
+        vscode.workspace.onDidGrantWorkspaceTrust(() => {
+          listener();
         }),
       translate,
       logger,

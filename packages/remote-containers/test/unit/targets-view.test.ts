@@ -101,6 +101,10 @@ interface Scene {
   docker: Record<string, FakeEngine>;
   pathListeners: Array<() => void>;
   pathSubscriptions: number;
+  /** Whether the workspace is trusted, and who waits for a grant of trust. */
+  trusted: boolean;
+  trustListeners: Array<() => void>;
+  trustSubscriptions: number;
   sink: MemorySink;
 }
 
@@ -129,6 +133,9 @@ function sceneOf(): Scene {
     docker: {},
     pathListeners: [],
     pathSubscriptions: 0,
+    trusted: true,
+    trustListeners: [],
+    trustSubscriptions: 0,
     sink: new MemorySink(),
   };
 }
@@ -207,6 +214,16 @@ function portsOf(scene: Scene): TargetsViewPorts {
     },
     exists: file => Promise.resolve(scene.existing.has(file)),
     now: () => CLOCK,
+    trusted: () => scene.trusted,
+    onTrustGranted: listener => {
+      scene.trustListeners.push(listener);
+      scene.trustSubscriptions += 1;
+      return {
+        dispose: () => {
+          scene.trustSubscriptions -= 1;
+        },
+      };
+    },
     onDockerPathChange: listener => {
       scene.pathListeners.push(listener);
       scene.pathSubscriptions += 1;
@@ -602,6 +619,83 @@ describe('the Dev Containers view (card containers-30)', () => {
         [OWN_ID, OTHER].sort(),
       ],
     );
+  });
+
+  it('F-0201 AC-55, BR-1: untrusted, a relative dockerPath names no program: no engine is made, nothing is listed and the Docker welcome shows', async () => {
+    const scene = sceneOf();
+    scene.dockerPath = 'tools/dk';
+    scene.trusted = false;
+    const {provider} = await shown(scene);
+    deepStrictEqual(
+      [
+        await provider.getChildren(undefined),
+        scene.engineFiles,
+        scene.runs,
+        scene.contexts.slice(-3),
+      ],
+      [
+        [],
+        [],
+        [],
+        [
+          ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:noContainersWithFolder', false],
+          ['remote-containers:noContainersWithoutFolder', false],
+        ],
+      ],
+    );
+  });
+
+  it('F-0201 AC-55, BR-1: untrusted, a bare name and an absolute path still name their programs, and a trusted window resolves a relative one against its folder', async () => {
+    const engines = [];
+    for (const [value, trusted] of [
+      ['docker', false],
+      ['/opt/docker', false],
+      ['tools/dk', true],
+    ] as const) {
+      const scene = sceneOf();
+      scene.dockerPath = value;
+      scene.trusted = trusted;
+      const {provider} = await shown(scene);
+      await provider.getChildren(undefined);
+      engines.push(scene.engineFiles);
+    }
+    deepStrictEqual(engines, [
+      ['docker'],
+      ['/opt/docker'],
+      ['/w/proj/tools/dk'],
+    ]);
+  });
+
+  it('F-0201 AC-55, BR-1: a grant of trust reads the list again with the folder’s file, and a window that holds a connection changes nothing', async () => {
+    const scene = sceneOf();
+    scene.dockerPath = 'tools/dk';
+    scene.trusted = false;
+    scene.containers = [containerOf(OTHER)];
+    const {provider} = await shown(scene);
+    const before = idsOf(await rowsOf(provider));
+    scene.trusted = true;
+    scene.trustListeners[0]?.();
+    await settled();
+    const held = sceneOf();
+    held.held = connectionOf(held, OWN_ID);
+    held.trusted = false;
+    await shown(held);
+    held.runs.length = 0;
+    held.trustListeners[0]?.();
+    await settled();
+    deepStrictEqual(
+      [before, idsOf(await rowsOf(provider)), scene.engineFiles, held.runs],
+      [[], [OTHER], ['/w/proj/tools/dk'], []],
+    );
+  });
+
+  it('F-0201 AC-55: the trust subscription ends with the view', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    const subscribed = scene.trustSubscriptions;
+    view.dispose();
+    deepStrictEqual([subscribed, scene.trustSubscriptions], [1, 0]);
   });
 
   it('F-0901 6.21: the dockerPath subscription ends with the view', async () => {
