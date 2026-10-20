@@ -4,7 +4,7 @@
  */
 
 /** Where a forward goes in the container: a host name the container resolves and a port. */
-export interface ForwardTarget {
+interface ForwardTarget {
   host: string;
   port: number;
 }

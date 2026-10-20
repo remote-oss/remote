@@ -228,28 +228,29 @@ describe('the declared forwardPorts (card containers-72)', function () {
     const window = await connectedWith('c72-ac18', {
       forwardPorts: [443, 8443, other],
     });
-    const bin = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-bin');
-    const log = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-open.log');
-    mkdirSync(bin, {recursive: true});
+    const binFolder = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-bin');
+    const logFile = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-open.log');
+    mkdirSync(binFolder, {recursive: true});
     writeFileSync(
-      path.join(bin, 'xdg-open'),
-      `#!/bin/sh\nprintf '%s\\n' "$1" >> '${log}'\n`,
+      path.join(binFolder, 'xdg-open'),
+      `#!/bin/sh\nprintf '%s\\n' "$1" >> '${logFile}'\n`,
     );
-    chmodSync(path.join(bin, 'xdg-open'), 0o755);
-    rmSync(log, {force: true});
+    chmodSync(path.join(binFolder, 'xdg-open'), 0o755);
+    rmSync(logFile, {force: true});
     await showPorts(window);
     await rowsWhen(window, shown => shown.length > 2);
     for (const port of ['443', '8443', String(other)]) {
       await portRowAction(window, port, 'Open in Browser');
       await waitFor(
         `the browser to be asked for ${port}`,
-        () => readFileSync(log, 'utf8').split('\n').filter(Boolean).length > 0,
+        () =>
+          readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length > 0,
         15_000,
       ).catch(() => undefined);
     }
     await new Promise(resolve => setTimeout(resolve, 2000));
     deepStrictEqual(
-      readFileSync(log, 'utf8')
+      readFileSync(logFile, 'utf8')
         .split('\n')
         .filter(Boolean)
         .map(url => url.slice(0, url.indexOf(':'))),
@@ -337,7 +338,7 @@ describe('the declared forwardPorts (card containers-72)', function () {
       ],
     });
     await showPorts(window);
-    const rows = await rowsWhen(window, shown => shown.length > 3);
+    await rowsWhen(window, shown => shown.length > 3);
     await new Promise(resolve => setTimeout(resolve, 3000));
     deepStrictEqual(
       portsOf(await portsRows(window)).sort(),
@@ -348,7 +349,6 @@ describe('the declared forwardPorts (card containers-72)', function () {
         `side:${String(third)}`,
       ].sort(),
     );
-    void rows;
   });
 
   it('F-1101 AC-32 (forward-quoted-number): a bare string of digits is not forwarded, and the number is', async () => {
@@ -461,17 +461,17 @@ async function siblingListening(
     '-c',
     `nc -lk -p ${String(port)} -e cat`,
   ]);
-  const id = stdout.trim();
+  const containerId = stdout.trim();
   const inspected = await execFileAsync('docker', [
     'inspect',
     '--format',
     '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
-    id,
+    containerId,
   ]);
   return {
     address: inspected.stdout.trim(),
     stop: async () => {
-      await execFileAsync('docker', ['rm', '-f', id]);
+      await execFileAsync('docker', ['rm', '-f', containerId]);
     },
   };
 }

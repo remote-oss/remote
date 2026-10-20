@@ -125,7 +125,10 @@ describe('the forwarder (card containers-72)', () => {
   it('F-1101 BR-16: a refusal that is not an error is logged as its text', async () => {
     const warned: string[] = [];
     const forwarder = forwarderOf({
-      tunnels: {openTunnel: () => Promise.reject('plain' as never)},
+      tunnels: {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a refusal that is not an Error
+        openTunnel: () => Promise.reject('plain'),
+      },
       showError: () => undefined,
       logger: {
         warn: message => {
