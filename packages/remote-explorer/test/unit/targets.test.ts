@@ -875,6 +875,18 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
+  it('F-5104.BR-13: dropping a path under a host the history does not hold changes the rows of no host', async () => {
+    const scenario = setup();
+    await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    scenario.targets.dropFolder('unknown', '/w/x');
+    deepStrictEqual(
+      (await scenario.hosts()).map(node =>
+        node.folders.map(folder => folder.folderRow.path),
+      ),
+      [['/w/x']],
+    );
+  });
+
   it('F-5002.19: folderOf gives the node itself when it is a folder node of the current list, and nothing for any other value', async () => {
     const scenario = setup();
     const [host] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
