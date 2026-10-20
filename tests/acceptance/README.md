@@ -361,7 +361,9 @@ A launch with `registry: true` (today `containers` and `containers-ports`) makes
 launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
 `tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
 (`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
-The registry holds only what a row pushes to it, and nothing public is pushed. It carries the run's label and the dev
+The registry holds only what a row pushes to it, and nothing public is pushed. It also carries the label
+`remote-oss.acceptance.registry=1`, so the rows' clean-up of the run's containers (`clearEarlierRows`) leaves it for the
+rows after them. It carries the run's label and the dev
 container label, so the run's clean-up and the stale sweep remove it with its anonymous volume (`docker rm --force
 --volumes`), also after a killed run.
 

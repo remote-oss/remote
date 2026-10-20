@@ -14,6 +14,9 @@ import {checked, type CommandRunner} from './command-runner.ts';
 export const REGISTRY_IMAGE =
   'registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373';
 
+/** The label that marks the run's registry, so the rows' clean-up of the run's containers leaves it for later rows. */
+export const REGISTRY_LABEL = 'remote-oss.acceptance.registry';
+
 /** How long the run waits for the registry to answer, in milliseconds. */
 const READY_MILLISECONDS = 30_000;
 
@@ -63,6 +66,8 @@ export async function startRunRegistry(
     `${RUN_LABEL}=${runId}`,
     '--label',
     `${DEVCONTAINER_LABEL}=1`,
+    '--label',
+    `${REGISTRY_LABEL}=1`,
     '--publish',
     '127.0.0.1::5000',
     REGISTRY_IMAGE,

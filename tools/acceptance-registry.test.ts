@@ -7,6 +7,7 @@ import {createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 import {
   REGISTRY_IMAGE,
+  REGISTRY_LABEL,
   type RegistryClock,
   SYSTEM_CLOCK,
   startRunRegistry,
@@ -63,7 +64,7 @@ function clockOf(statuses: ReadonlyArray<number | undefined>): {
 }
 
 describe('the run’s registry (card containers-59)', () => {
-  it('starts the pinned image on a loopback port, labelled with the run and as a dev container’s', async () => {
+  it('starts the pinned image on a loopback port, labelled with the run, as a dev container’s and as the registry', async () => {
     const {command, calls} = recording();
     await startRunRegistry(command, clockOf([200]).clock, RUN_ID);
     deepStrictEqual(calls[0], [
@@ -74,6 +75,8 @@ describe('the run’s registry (card containers-59)', () => {
       `${RUN_LABEL}=${RUN_ID}`,
       '--label',
       `${DEVCONTAINER_LABEL}=1`,
+      '--label',
+      `${REGISTRY_LABEL}=1`,
       '--publish',
       '127.0.0.1::5000',
       REGISTRY_IMAGE,
