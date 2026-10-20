@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {chmodSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -11,6 +11,9 @@ import {
   reloadingCommand,
   reloadWindow,
   reopenInContainer,
+  reopenStarted,
+  runLabelArguments,
+  connectedToContainer,
   variable,
   waitFor,
   windowState,
@@ -21,6 +24,8 @@ import {
   type ShownDialog,
   statusItem,
   waitForDialog,
+  windowTitle,
+  notifications,
   waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
@@ -86,6 +91,10 @@ async function containerLeftBy(folder: string): Promise<string> {
 }
 
 /** F-0410's dialog details for a generic failure and for a missing docker, as `failure-strings.ts` has them. */
+/** F-0410's detail for a mount Docker refuses (S018), as `failure-strings.ts` has it. */
+const S018 =
+  'A mount config is invalid. Make sure it has the right format and a source folder that exists on the machine where the Docker daemon is running.';
+
 const S034 = 'An error occurred setting up the container.';
 const S339 =
   "The 'docker' command was not found. Make sure Docker is installed.";
@@ -505,6 +514,305 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         remoteName: null,
         containers: [kept],
       });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0409 AC-7 (p7): a paused container shows F-0410\'s generic dialog after the reload, and no "Container is paused." text', async () => {
+    const folder = devContainerFolder('c46-paused', {name: 'Paused'});
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['pause', containerId]);
+      const name = await openFolderWindow(folder);
+      try {
+        await reopenStarted(name);
+        const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+        deepStrictEqual(
+          {
+            dialog: dialogText(dialog),
+            title: await windowTitle(name),
+            indicator: (await statusItem(name, 'status.host')).text,
+            containers: await devContainersOf(folder),
+            status: (await inspectOf(containerId)).status,
+          },
+          {
+            dialog: ['', S034, RECOVERY_BUTTONS],
+            title: '[c46-paused [Dev Container: Paused]]',
+            indicator: 'Opening Remote...',
+            containers: [containerId],
+            status: 'paused',
+          },
+        );
+        await closeWindow(name);
+      } finally {
+        await execFileAsync('docker', ['unpause', containerId]).catch(
+          () => undefined,
+        );
+      }
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0409 AC-26 (p26): a container made from an older configuration is reused, without the new containerEnv, under the new name', async () => {
+    const folder = devContainerFolder('c46-older', {name: 'Old Name'});
+    try {
+      const containerId = await containerLeftBy(folder);
+      writeFileSync(
+        path.join(folder, '.devcontainer', 'devcontainer.json'),
+        JSON.stringify({
+          image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+          runArgs: runLabelArguments(),
+          name: 'New Name',
+          // eslint-disable-next-line id-length -- the card names the variable C46
+          containerEnv: {C46: 'yes'},
+        }),
+      );
+      await execFileAsync('docker', ['stop', containerId]);
+      const name = await reopened(folder);
+      const {stdout: env} = await execFileAsync('docker', [
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        'echo "C46=$C46"',
+      ]);
+      deepStrictEqual(
+        {
+          containers: await devContainersOf(folder),
+          title: await windowTitle(name),
+          indicator: (await statusItem(name, 'status.host')).text,
+          env,
+        },
+        {
+          containers: [containerId],
+          title: '[c46-older [Dev Container: New Name]]',
+          indicator: 'Dev Container: New Name',
+          env: 'C46=\n',
+        },
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0409 AC-44 (p44): Retry while the bind source is still missing shows the same dialog, and the container stays exited', async () => {
+    const source = path.join(variable('HARNESS_RUN_FOLDER'), 'c46-bind-src');
+    mkdirSync(source, {recursive: true});
+    const folder = devContainerFolder('c46-bind', {
+      name: 'Bind',
+      mounts: [`source=${source},target=/bind,type=bind`],
+    });
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      rmSync(source, {recursive: true, force: true});
+      const name = await openFolderWindow(folder);
+      try {
+        await reopenStarted(name);
+        const first = await waitForDialog(name, DIALOG_MILLISECONDS);
+        await answerDialog(name, 'Retry');
+        const second = await waitForDialog(name, DIALOG_MILLISECONDS);
+        deepStrictEqual(
+          {
+            first: dialogText(first),
+            second: dialogText(second),
+            containers: await devContainersOf(folder),
+            status: (await inspectOf(containerId)).status,
+          },
+          {
+            first: ['', S018, RECOVERY_BUTTONS],
+            second: ['', S018, RECOVERY_BUTTONS],
+            containers: [containerId],
+            status: 'exited',
+          },
+        );
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    } finally {
+      rmSync(source, {recursive: true, force: true});
+    }
+  });
+
+  it('F-0409 AC-35 (p35): with the bind source restored, Retry connects to the same container, with its bind mount', async () => {
+    const source = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c46-bind-back-src',
+    );
+    mkdirSync(source, {recursive: true});
+    const folder = devContainerFolder('c46-bind-back', {
+      name: 'Bind',
+      mounts: [`source=${source},target=/bind,type=bind`],
+    });
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      rmSync(source, {recursive: true, force: true});
+      const name = await openFolderWindow(folder);
+      try {
+        await reopenStarted(name);
+        const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+        const dialogTexts = dialogText(dialog);
+        mkdirSync(source, {recursive: true});
+        await answerDialog(name, 'Retry');
+        await connectedToContainer(name, DIALOG_MILLISECONDS);
+        const {stdout: mounts} = await execFileAsync('docker', [
+          'inspect',
+          '-f',
+          '{{json .Mounts}}',
+          containerId,
+        ]);
+        const mount = (
+          JSON.parse(mounts) as Array<{
+            Type: string;
+            Source: string;
+            Destination: string;
+          }>
+        ).find(each => each.Destination === '/bind');
+        deepStrictEqual(
+          {
+            dialog: dialogTexts,
+            containers: await devContainersOf(folder),
+            status: (await inspectOf(containerId)).status,
+            mount:
+              mount === undefined
+                ? undefined
+                : [mount.Type, mount.Source, mount.Destination],
+          },
+          {
+            dialog: ['', S018, RECOVERY_BUTTONS],
+            containers: [containerId],
+            status: 'running',
+            mount: ['bind', source, '/bind'],
+          },
+        );
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    } finally {
+      rmSync(source, {recursive: true, force: true});
+    }
+  });
+
+  it("F-0409 AC-34 (p34): the dialog half, an exited container whose bind source is gone is started, Docker's refusal shows S018, and no container is made", async () => {
+    const source = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c46-bind-gone-src',
+    );
+    mkdirSync(source, {recursive: true});
+    const folder = devContainerFolder('c46-bind-gone', {
+      name: 'Bind',
+      mounts: [`source=${source},target=/bind,type=bind`],
+    });
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      rmSync(source, {recursive: true, force: true});
+      const name = await openFolderWindow(folder);
+      try {
+        await reopenStarted(name);
+        const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+        deepStrictEqual(
+          {
+            dialog: dialogText(dialog),
+            containers: await devContainersOf(folder),
+          },
+          {dialog: ['', S018, RECOVERY_BUTTONS], containers: [containerId]},
+        );
+        await answerDialog(name, 'More Actions...');
+        const quickPick = await waitForQuickPick(name, 30_000);
+        console.log(
+          `containers-46 p34: the pick's items: ${JSON.stringify(quickPick.items)}`,
+        );
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    } finally {
+      rmSync(source, {recursive: true, force: true});
+    }
+  });
+
+  it('F-0409 AC-45 (p45): reopening an exited container shows no build phase, only the connecting toast and its server stage', async () => {
+    const folder = devContainerFolder('c46-exited');
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      const name = await openFolderWindow(folder);
+      try {
+        const texts: string[] = [];
+        const gate = {done: false};
+        const sampler = (async () => {
+          while (!gate.done) {
+            try {
+              texts.push(...(await notifications(name)));
+            } catch {
+              // The window is reloading.
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        })();
+        await reopenInContainer(name);
+        gate.done = true;
+        await sampler;
+        const connecting = texts.filter(text =>
+          text.startsWith('Connecting to Dev Container'),
+        );
+        deepStrictEqual(
+          {
+            seen: connecting.length > 0,
+            offStage: connecting.filter(
+              text =>
+                ![
+                  'Connecting to Dev Container (show log)',
+                  'Connecting to Dev Container (show log): Starting server',
+                ].includes(text),
+            ),
+            containers: await devContainersOf(folder),
+          },
+          {
+            seen: true,
+            offStage: [],
+            containers: [containerId],
+          },
+        );
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it("F-0409 AC-4 (ruling-13): the labels name the folder and the configuration, and the metadata label is the CLI's", async () => {
+    const folder = devContainerFolder('c46-labels', {name: 'Labels'});
+    try {
+      const containerId = await containerLeftBy(folder);
+      const labels = (await inspectOf(containerId)).labels;
+      deepStrictEqual(
+        {
+          localFolder: labels['devcontainer.local_folder'],
+          configFile: labels['devcontainer.config_file'],
+          metadataIsArray: Array.isArray(
+            JSON.parse(labels['devcontainer.metadata'] ?? 'null'),
+          ),
+          vscodeLabels: Object.keys(labels).filter(key =>
+            key.startsWith('vsch.'),
+          ),
+        },
+        {
+          localFolder: folder,
+          configFile: path.join(folder, '.devcontainer', 'devcontainer.json'),
+          metadataIsArray: true,
+          vscodeLabels: [],
+        },
+      );
     } finally {
       await removeContainers(folder);
     }

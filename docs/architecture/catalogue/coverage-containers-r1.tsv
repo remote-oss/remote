@@ -327,10 +327,10 @@ F-0408.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-1	unit	
 F-0409.AC-2	acceptance	
 F-0409.AC-3	acceptance	
-F-0409.AC-4	todo	
+F-0409.AC-4	acceptance	
 F-0409.AC-5	deferred	containers release 1: increment 2 (shutdown)
 F-0409.AC-6	acceptance	
-F-0409.AC-7	todo	
+F-0409.AC-7	acceptance	
 F-0409.AC-8	todo	
 F-0409.AC-9	todo	
 F-0409.AC-10	todo	
@@ -349,7 +349,7 @@ F-0409.AC-22	todo
 F-0409.AC-23	todo	
 F-0409.AC-24	todo	
 F-0409.AC-25	unit	
-F-0409.AC-26	todo	
+F-0409.AC-26	acceptance	
 F-0409.AC-27	deferred	containers release 1: later (Compose)
 F-0409.AC-28	unit	
 F-0409.AC-30	deferred	containers release 1: later (the Remote Explorer views)
@@ -357,7 +357,7 @@ F-0409.AC-31	todo
 F-0409.AC-32	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-33	todo	
 F-0409.AC-34	todo	
-F-0409.AC-35	todo	
+F-0409.AC-35	acceptance	
 F-0409.AC-36	todo	
 F-0409.AC-37	unit	
 F-0409.AC-38	todo	
@@ -366,8 +366,8 @@ F-0409.AC-40	todo
 F-0409.AC-41	todo	
 F-0409.AC-42	todo	
 F-0409.AC-43	todo	
-F-0409.AC-44	todo	
-F-0409.AC-45	todo	
+F-0409.AC-44	acceptance	
+F-0409.AC-45	acceptance	
 F-0409.AC-46	todo	
 F-0409.AC-47	todo	
 F-0410.AC-1	acceptance	
@@ -495,31 +495,31 @@ F-0412.AC-41	acceptance
 F-0412.AC-42	todo	
 F-0412.AC-43	todo	
 F-0412.AC-44	deferred	containers release 1: core's JSON validation; release 1 contributes no schema (brief ruling 8)
-F-0415.AC-1	todo	
-F-0415.AC-2	todo	
-F-0415.AC-3	todo	
-F-0415.AC-4	todo	
-F-0415.AC-5	todo	
-F-0415.AC-6	todo	
+F-0415.AC-1	acceptance	
+F-0415.AC-2	acceptance	
+F-0415.AC-3	acceptance	
+F-0415.AC-4	acceptance	
+F-0415.AC-5	acceptance	
+F-0415.AC-6	unit	
 F-0415.AC-7	todo	
 F-0415.AC-8	todo	
 F-0415.AC-9	todo	
 F-0415.AC-9b	todo	
-F-0415.AC-10	todo	
+F-0415.AC-10	acceptance	
 F-0415.AC-11	todo	
 F-0415.AC-12	todo	
-F-0415.AC-13	todo	
-F-0415.AC-14	todo	
-F-0415.AC-15	todo	
-F-0415.AC-16	todo	
-F-0415.AC-17	todo	
-F-0415.AC-18	todo	
-F-0415.AC-18b	todo	
-F-0415.AC-19	todo	
-F-0415.AC-20	todo	
-F-0415.AC-21	todo	
+F-0415.AC-13	acceptance	
+F-0415.AC-14	acceptance	
+F-0415.AC-15	acceptance	
+F-0415.AC-16	acceptance	
+F-0415.AC-17	acceptance	
+F-0415.AC-18	acceptance	
+F-0415.AC-18b	acceptance	
+F-0415.AC-19	acceptance	
+F-0415.AC-20	acceptance	
+F-0415.AC-21	acceptance	
 F-0415.AC-22	deferred	containers release 1: later (remote engines)
-F-0415.AC-23	todo	
+F-0415.AC-23	acceptance	
 F-0415.AC-24	todo	
 F-0415.AC-25	deferred	containers release 1: later (attach)
 F-0415.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -527,11 +527,11 @@ F-0415.AC-27	todo
 F-0415.AC-28	todo	
 F-0415.AC-29	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0415.AC-30	todo	
-F-0415.AC-31	todo	
+F-0415.AC-31	acceptance	
 F-0415.AC-32	deferred	containers release 1: later (personalization and relays)
-F-0415.AC-33	todo	
+F-0415.AC-33	unit	
 F-0415.AC-34	todo	
-F-0415.AC-35	todo	
+F-0415.AC-35	unit	
 F-0415.AC-36	acceptance	
 F-0415.AC-37	unit	
 F-0415.AC-38	unit	
@@ -548,7 +548,7 @@ F-0416.AC-7	acceptance
 F-0416.AC-8	acceptance	
 F-0416.AC-9	deferred	containers release 1: later (Compose)
 F-0416.AC-10	deferred	containers release 1: later (Compose)
-F-0416.AC-11	todo	
+F-0416.AC-11	acceptance	
 F-0416.AC-12	todo	
 F-0416.AC-13	todo	
 F-0416.AC-14	todo	
@@ -561,18 +561,18 @@ F-0416.AC-20	acceptance
 F-0416.AC-21	acceptance	
 F-0416.AC-22	todo	
 F-0416.AC-23	todo	
-F-0416.AC-24	todo	
-F-0416.AC-25	todo	
+F-0416.AC-24	acceptance	
+F-0416.AC-25	acceptance	
 F-0416.AC-26	acceptance	
 F-0416.AC-27	todo	
 F-0416.AC-28	todo	
 F-0416.AC-29	todo	
-F-0416.AC-30	todo	
+F-0416.AC-30	acceptance	
 F-0416.AC-31	todo	
 F-0416.AC-32	todo	
 F-0416.AC-33	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0416.AC-34	todo	
-F-0416.AC-35	todo	
+F-0416.AC-34	acceptance	
+F-0416.AC-35	acceptance	
 F-0416.AC-36	acceptance	
 F-0416.AC-37	deferred	containers release 1: later (Compose)
 F-0416.AC-38	deferred	containers release 1: later (Compose)
@@ -702,18 +702,18 @@ F-0502.AC-39	todo
 F-0502.AC-40	todo	
 F-0502.AC-41	todo	
 F-0502.AC-42	todo	
-F-0503.AC-1	todo	
-F-0503.AC-2	todo	
-F-0503.AC-3	todo	
-F-0503.AC-4	todo	
-F-0503.AC-5	todo	
+F-0503.AC-1	acceptance	
+F-0503.AC-2	acceptance	
+F-0503.AC-3	acceptance	
+F-0503.AC-4	acceptance	
+F-0503.AC-5	acceptance	
 F-0503.AC-6	todo	
-F-0503.AC-7	todo	
+F-0503.AC-7	acceptance	
 F-0503.AC-8	deferred	containers release 1: later (Compose)
 F-0503.AC-9	todo	
 F-0503.AC-10	todo	
 F-0503.AC-11	todo	
-F-0503.AC-12	todo	
+F-0503.AC-12	acceptance	
 F-0503.AC-13	todo	
 F-0503.AC-14	todo	
 F-0503.AC-15	todo	
@@ -735,7 +735,7 @@ F-0503.AC-30	todo
 F-0503.AC-31	todo	
 F-0503.AC-32	todo	
 F-0503.AC-33	todo	
-F-0503.AC-34	todo	
+F-0503.AC-34	acceptance	
 F-0503.AC-35	todo	
 F-0503.AC-36	todo	
 F-0503.AC-37	todo	

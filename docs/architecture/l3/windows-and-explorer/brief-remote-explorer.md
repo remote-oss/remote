@@ -30,7 +30,7 @@ the drafts "Identifier tables" and "Stand-down gating".
   - lib-companion (companion-01..05);
   - the proposed-API gate (`contribViewsRemote`) and the stand-down guard.
 - **The interface in slice 1:** three ids only, `remote-internal.getActiveSshRemote`, `getConfiguredHostnames` and `openRemoteSshTarget`. The explorer calls them, and remote-ssh serves them (the slice-1 part of F-2503), each under F-5902 §5's rules (versioned envelope, the 10 s limit, foreign and unknown-major payloads, a companion that is absent).
-- **Increment 2:**
+- **Increment 2** (designed in `brief-explorer-increment-2.md`, 2026-10-19):
   - F-5104 (recent folders, after its review);
   - `getSshFoldersHistory` and `deleteSshFolderFromHistory`;
   - the `setActiveFolders` push and the `sshHostsChanged` change signal, both directions;

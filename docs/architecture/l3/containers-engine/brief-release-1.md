@@ -48,6 +48,32 @@ Two features outside the P0 list are in, because core ACs of the P0 features ass
 - **F-0416, the UID image.** The pinned dev container CLI produces the `-uid` image as part of `up`. The CLI bridge owns
   it, so its coverage has an owner. F-0401 AC-15, F-0403 AC-11/26, F-0405 AC-5/7/8, F-0412 AC-3/7/43 and F-0501
   AC-21 depend on it.
+  - **F-0416's environment half is in release 1 too** (the user, 2026-10-19, relayed by hermes; raised on #1049
+    and #737). This covers `userEnvProbe`, `remoteEnv` and the terminal and task environment (5.0 steps 7–8, BR-9 to
+    BR-11b, 6.10, 7.E5–7.E7). No P0 criterion asserts it, but without it a terminal ignores `remoteEnv` and whatever
+    the user's login files set. Its criteria are built and tagged like any other in release 1. AC-46 and AC-47 are
+    ours: the 10-second limit and "connects with no dialog" belong to our probe (BR-11b), and only AC-47's terminal
+    message is core's. F-0503 AC-45 (`remoteEnv`'s `HOME` doesn't move the server folder) is a release 1 row too.
+  - **The design.** It's ours. The CLI applies both properties only to the lifecycle commands
+    it runs itself, and the server keeps the environment it's started with. C10 builds the environment once per
+    connection, so a reload with a reused server picks up an edit (6.10):
+    1. C3 reads `remoteEnv` and `userEnvProbe` from the CLI's merged configuration with the container id, so image
+       metadata and interpolation (BR-9) come from the CLI.
+    2. Unless `userEnvProbe` is `none`, the probe runs over C11's exec as `remoteUser`: the account's
+       `/etc/passwd` shell in the mode the value names, printing its environment between our whole-line markers
+       (R-111). A probe that fails, can't start or takes longer than 10 s is dropped with its log lines (BR-11b,
+       7.E6), and the connect goes on.
+    3. The result is the merge of BR-11a (container < probe < `remoteEnv`; a `null` entry removes the variable),
+       returned as `Connected.extensionHostEnv`. Core applies that environment to the remote extension host and
+       the processes it starts. The card cites the `[oss]` path that gives it to terminals and tasks, and an
+       acceptance row proves it on a terminal.
+    4. It isn't `environmentSetup`: that is sourced once at the server's start, so a reused server would keep the
+       old environment.
+    5. Core's server resolves a login-shell environment of its own for the extension host and terminals
+       (`buildUserEnvironment`, `getResolvedShellEnv` [oss]). Left on, `userEnvProbe: none` couldn't hide a login-only
+       variable. So every Containers server start passes `--force-disable-user-env` (`forceDisableUserEnv`, the
+       remote-containers row of the transport contracts' §5.0 allow-list; proteus and athena on #737), whatever
+       `userEnvProbe` says, and our probe is the only source. remote-ssh has no probe and keeps core's resolution.
 - **F-0419, the server-cache half of the `vscode` volume.** F-0503's main path (5.0 steps 4–5, BR-1 to BR-4) installs
   into `/vscode/vscode-server/bin/<platform>/<commit>` with a symlink from `~/.vscode-server/bin/<commit>`. F-0201 AC-1
   asserts the volume, and F-0419 is one of the three recorded containers suites. The extension-cache half goes to
@@ -206,7 +232,7 @@ reviewed yet.
     - ADR-0009 hands the CLI the configuration unchanged. Putting the resolved `remoteUser` into the label would
       mean resolving it before `up`, which repeats the CLI's own resolution. So C3 adds no pre-pass.
     - The row asserts the two path labels, that `devcontainer.metadata` is a JSON array, and that there's no
-      `vsch.*` label. It's named `F-0409 AC-4 (ruling 13: the metadata label is the CLI's)` and tagged
+      `vsch.*` label. It's named `F-0409 AC-4 (ruling-13): …`, with the reason in the words after the colon, and tagged
       `acceptance`, like ruling 11's telemetry row.
 14. **"Rebuild Container" is in release 1's More Actions... pick** (F-0410 BR-4, AC-6; F-0409 BR-13, AC-34; ruled
     2026-10-19 on #737). This reverses containers-11 §3.5's deferral: P0 criteria assert the item, and for a
@@ -215,6 +241,24 @@ reviewed yet.
       moment of failure. C7's failure says whether one does.
     - It runs containers-14's `remote-containers.rebuildContainer`.
     - Rulings 12 and 14 are both C8 changes, so one card carries them.
+15. **F-0303's rebuild notification doesn't exist in release 1, so a step that answers it is vacuous** (ruled
+    2026-10-19 on #737).
+    - F-0303 isn't in the cut. F-0416 AC-25, AC-31, AC-34 and AC-35 answer that notification with "Ignore", and
+      with no notification a reload already leaves it alone, as AC-34's own wording allows.
+    - The rows reload and assert the rest of each criterion. Each row keeps its own label and cites the ruling after
+      the colon, as #1069 does, for example `F-0416 AC-25 (u25): by ruling 15, …`.
+    - `release-1-notes.md` says, as interim behaviour, that an edit of the configuration shows no rebuild prompt
+      until F-0303 comes.
+16. **Switching `remoteUser` to another account and reloading connects** (F-0416 6.11, 7.E4, AC-35; ruled
+    2026-10-19 on #737).
+    - 7.E4's failure (S034 after about ten seconds, an exited container) is the reference's own defect: permission
+      errors on `/tmp` files the previous account made. Our server keeps its files per user, so it doesn't arise.
+    - We don't build that failure on purpose (R-60).
+    - AC-35 gets an `acceptance` row that asserts ours: the window connects to the same container as the new
+      account, with no dialog. It's named `F-0416 AC-35 (ruling-16): …`, as ruling 11's telemetry
+      row is.
+    - The deviation goes in `release-1-notes.md`, and a spec question on remote-oss/remote-containers#63 asks
+      whether 7.E4 and AC-35 should describe the failure as a requirement at all.
 
 ## 4. What must exist before the first card
 

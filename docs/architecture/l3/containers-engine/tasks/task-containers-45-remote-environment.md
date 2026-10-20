@@ -39,9 +39,22 @@ Once per connection, after C7 has the container and C3 has read the merged confi
    without a rebuild (6.9, 6.10).
 6. **The log** names the probe's mode, its duration and how many variables it gave, and never a variable's value.
 
-**The editor's side** is core's: the resolver hands `extensionHostEnv` to the remote extension host, and the processes
-it starts inherit it. Find the `[oss]` path that does it (the remote extension host's start parameters and the
-terminal's environment in `src/vs/server/node/`), and cite it in the PR's R1; acceptance row E1 (§3) is the proof.
+7. **Core's own resolution is off** (proteus and athena on #737, 2026-10-19, option 1): every Containers server
+   start passes `--force-disable-user-env`, `userEnvProbe: none` included, so the probe above is the only source of
+   the user's environment. Without it, core's server sources the user's login files for the extension host and
+   terminals whatever `userEnvProbe` says. With it, a dropped probe (BR-11b) leaves the container's own environment
+   plus `remoteEnv`, as F-0416 says.
+
+**The editor's side** is core's. Cite both halves in the PR's R1, from `[oss]`:
+- where `extensionHostEnv` reaches the extension host and terminals:
+  `src/vs/workbench/services/extensions/common/remoteExtensionHost.ts` (the extension host's environment) and
+  `src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts` (the terminal's `resolverEnv`), then
+  `src/vs/server/node/extensionHostConnection.ts` and `remoteTerminalChannel.ts`, `buildUserEnvironment`;
+- the path the flag turns off: `buildUserEnvironment`'s `getResolvedShellEnv`
+  (`src/vs/platform/shell/node/shellEnv.ts`, skipped under `--force-disable-user-env`).
+
+Acceptance rows E1 and E2, and containers-42's rows for F-0416 AC-27, AC-28, AC-29 and AC-31, are the behavioural
+proof. The bootstrap row (§3) proves only that the flag is on the server's command line.
 
 ## 2. The change
 
@@ -81,6 +94,17 @@ steps' channel (when the mode isn't `none`), and put `extensionHostEnvironmentOf
 configuration read that failed gives `remoteEnv` `{}` and the default mode. No other file changes, except the
 fakes the tests need.
 
+**The start option (lib-server).** The contracts edit is #1071 (transport contracts §5.0) and the brief's is #1055
+item 5; this card changes neither document.
+- `policy/record.ts`: `ExtraStartOption` gains `'forceDisableUserEnv'`; `policy/validate.ts`'s list too.
+- `policy/rows.ts`: `CONTAINERS_POLICY.allowedExtraStartOptions` is `['useHostProxy', 'forceDisableUserEnv']`. The SSH
+  rows don't change.
+- `lifecycle/runtime.ts`: `forceDisableUserEnv: startPolicy.allowedExtraStartOptions.includes('forceDisableUserEnv')`,
+  beside `useHostProxy`.
+- `scripts/bootstrap.ts`: `StartParameters` gains `forceDisableUserEnv: boolean`, and `startOptions` adds
+  `--force-disable-user-env` to `optional` after `--use-host-proxy` when it's true. Fixtures that build start
+  parameters gain the field.
+
 ## 3. Rows
 
 **Unit** (`test/unit/remote-environment.test.ts`, new; `test/unit/connector.test.ts` for the wiring):
@@ -95,14 +119,15 @@ fakes the tests need.
 | F-0416 BR-11b | connector: the probe channel fails, exits 1, prints no end marker, never answers (fake timers, 10 s) | the connect succeeds with `remoteEnv` alone, one `dropped` log line each |
 | F-0416 6.10 | connector: two connects of one reused server, the second with another `remoteEnv` | each `Connected` has its own environment |
 | F-0416 BR-11 | connector with `userEnvProbe: none` | no probe run; `extensionHostEnv` is `remoteEnv` |
+| #737 option 1 | lib-server's start options for the containers row and for the SSH row (`bootstrap.test.ts` or the start-options rows beside `--use-host-proxy`'s) | containers: `--force-disable-user-env` after `--use-host-proxy`; SSH: absent; the policy validation accepts the new option and still rejects an unknown one |
 
 **Acceptance** (`tests/acceptance/containers/remote-environment.test.ts`, new, `this.timeout(900_000)`; folders
 `c45-`):
 
 | # | Name | Setup | Assertions |
 |---|---|---|---|
-| E1 | `F-0416 BR-11, BR-11a (e1): a terminal gets the probe's and remoteEnv's variables, remoteEnv winning` | a Dockerfile from the run's image that writes `export C45_PROFILE=profile` and `export C45_BOTH=profile` to `/etc/profile`; `remoteEnv: {C45_REMOTE: 'remote', C45_BOTH: 'remote'}` | after the connect, open a terminal and run `printf '%s|%s|%s\n' "$C45_PROFILE" "$C45_REMOTE" "$C45_BOTH"` with the harness's terminal helpers (`typeInTerminal`, `terminalBuffer`): the buffer has `profile|remote|remote` |
-| E2 | `F-0416 6.10 (e2): editing userEnvProbe to none takes effect on reload, without a rebuild` | E1's folder, then set `userEnvProbe: 'none'` in its configuration and reload the window | the same container id; the terminal's line is `|remote|remote` |
+| E1 | `containers-45 (e1): by F-0416 BR-11 and BR-11a, a terminal gets the probe's and remoteEnv's variables, remoteEnv winning` | a Dockerfile from the run's image that writes `export C45_PROFILE=profile` and `export C45_BOTH=profile` to `/etc/profile`; `remoteEnv: {C45_REMOTE: 'remote', C45_BOTH: 'remote'}` | after the connect, open a terminal and run `printf '%s|%s|%s\n' "$C45_PROFILE" "$C45_REMOTE" "$C45_BOTH"` with the harness's terminal helpers (`typeInTerminal`, `terminalBuffer`): the buffer has `profile|remote|remote` |
+| E2 | `containers-45 (e2): by F-0416 6.10, editing userEnvProbe to none takes effect on reload, without a rebuild` | E1's folder, then set `userEnvProbe: 'none'` in its configuration and reload the window | the same container id; the terminal's line is `|remote|remote` |
 
 Measure both against the branch first; if core gives the terminal another environment than the extension host's,
 that's an open row.
