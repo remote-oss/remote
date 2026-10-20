@@ -5,6 +5,7 @@ import {
   checkingLine,
   configFileLine,
   hostPlatformLine,
+  loginShellLine,
   listeningLine,
   masked,
   maskOf,
@@ -114,6 +115,19 @@ describe('the lines of the client search and the probed platform (card connect-2
       hostPlatformLine({operatingSystem: 'linux', architecture: 'arm64'}),
       'Host platform: linux arm64',
     );
+  });
+});
+
+describe('the login shell in the log (card coverage-49)', () => {
+  it('F-2704 BR-2: the login shell the probe found is named in a line', () => {
+    deepStrictEqual(
+      loginShellLine({loginShell: 'zsh'}),
+      "the host's login shell is zsh",
+    );
+  });
+
+  it('F-2704 BR-2: a host that reported no login shell gives no line', () => {
+    deepStrictEqual(loginShellLine({loginShell: ''}), undefined);
   });
 });
 

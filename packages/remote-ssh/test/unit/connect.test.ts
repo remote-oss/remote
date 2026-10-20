@@ -75,6 +75,38 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
+  it('F-2704 BR-2: the probed login shell is logged once, after the platform', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      logSink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith("the host's login shell")),
+      ["the host's login shell is sh"],
+    );
+  });
+
+  it('F-2704 BR-2: a host that reports no login shell gets no shell line', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        probe: () =>
+          Promise.resolve({
+            kind: 'probed',
+            host: {...HOST, loginShell: ''},
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      logSink.lines.filter(line =>
+        line.message.startsWith("the host's login shell"),
+      ),
+      [],
+    );
+  });
+
   it('F-2206 §9: no platform line is written when the connect ends before the probe', async () => {
     const {recording, options, logSink} = setup();
     await connect(

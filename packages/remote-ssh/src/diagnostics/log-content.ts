@@ -85,6 +85,15 @@ export function hostPlatformLine(
   return `Host platform: ${host.operatingSystem} ${host.architecture}`;
 }
 
+/** The login shell the probe found on the host, by its name; none when the host reported none. */
+export function loginShellLine(
+  host: Pick<ProbedHost, 'loginShell'>,
+): string | undefined {
+  return host.loginShell === ''
+    ? undefined
+    : `the host's login shell is ${host.loginShell}`;
+}
+
 /**
  * The one line a parsed result block gives the log: its status, then the server's port, the host's system and
  * architecture, and the download and install times, each only when the block has it. No other fact is logged, so none
