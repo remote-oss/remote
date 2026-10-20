@@ -15,7 +15,11 @@ import type {DownloadPort, DownloadRequest, DownloadResult} from './ports.ts';
 /** The one HTTP call the download makes: a GET that follows no redirect by itself. */
 export type HttpGet = (
   address: string,
-  init: {redirect: 'manual'; signal: AbortSignal},
+  init: {
+    redirect: 'manual';
+    signal: AbortSignal;
+    headers?: {Authorization: string};
+  },
 ) => Promise<Response>;
 
 const MAXIMUM_REDIRECTS = 10;
@@ -35,9 +39,13 @@ async function finalResponse(
     if (protocol !== firstProtocol && protocol === 'http:') {
       return {refused: `redirected to ${hostname} over http`};
     }
+    const authorization = request.authorizationFor(address);
     const response = await httpGet(address, {
       redirect: 'manual',
       signal: request.cancellation,
+      ...(authorization === undefined
+        ? {}
+        : {headers: {Authorization: authorization}}),
     });
     const next = response.headers.get('location');
     if (response.status < 300 || response.status >= 400 || next === null) {
@@ -47,6 +55,20 @@ async function finalResponse(
     address = new URL(next, address).toString();
   }
   return {refused: 'too many redirects'};
+}
+
+/** The failure of a final response that asked for credentials: no retry can succeed, so the text says what to add. */
+function unauthorizedFailure(
+  status: number,
+  address: string,
+): Extract<DownloadResult, {kind: 'failed'}> {
+  const {hostname} = new URL(address);
+  return {
+    kind: 'failed',
+    detail: `Server returned ${String(status)}: the source at ${hostname} asks for credentials. Add a "machine ${hostname}" entry with a login and a password to your netrc file, or put the token in the address template of the server download setting (?token=...)`,
+    cause: 'unauthorized',
+    status,
+  };
 }
 
 /** The length a response announced, when the header is a plain number; any other text announces nothing. */
@@ -116,6 +138,10 @@ export function downloadPortOf(httpGet: HttpGet): DownloadPort {
           return {kind: 'failed', detail: final.refused};
         }
         const {response} = final;
+        if (response.status === 401 || response.status === 403) {
+          await response.body?.cancel();
+          return unauthorizedFailure(response.status, final.address);
+        }
         if (!response.ok || response.body === null) {
           return {
             kind: 'failed',

@@ -33,6 +33,7 @@ import {
   type Clock,
   CLIENT_DOWNLOAD_BOUNDS,
   DISCARD_DEADLINE_MILLISECONDS,
+  type CredentialsPort,
   type DownloadPort,
   hostLockLoopOf,
   type LicenceModal,
@@ -167,6 +168,7 @@ export interface ConnectMachine {
   files: LocalFiles;
   clientFiles: ClientFilePort;
   download: DownloadPort;
+  credentials: CredentialsPort;
   scheduler: Scheduler;
   clock: Clock;
   local: LocalPort;
@@ -362,6 +364,7 @@ export function wiringPortsOf(
       store: surfaces.acceptances,
       modal: surfaces.licenceModal,
       download: machine.download,
+      credentials: machine.credentials,
       files: machine.clientFiles,
       lockLoop: hostLockLoopOf(
         machine.clock,

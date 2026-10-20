@@ -141,6 +141,7 @@ async function installFrom(
   try {
     const outcome = await transfer(input, {
       channel: host.channel,
+      credentials: {readNetrc: () => Promise.resolve(undefined)},
       download: downloadPortOf((address, init) => fetch(address, init)),
       files: nodeClientFiles,
       lockLoop: lockLoop(),

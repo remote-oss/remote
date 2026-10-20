@@ -596,6 +596,24 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
+  it('server-23: a source that asks for credentials gives S071 with the detail, which starts with the status', () => {
+    const detail =
+      'Server returned 401: the source at files.example.invalid asks for credentials.';
+    deepStrictEqual(
+      ofTransfer({
+        kind: 'localDownload',
+        cause: 'unauthorized',
+        detail,
+        status: 401,
+      }),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S071', values: [detail]},
+        logDetail: detail,
+      },
+    );
+  });
+
   it("F-2405 AC-13: a client file that could not be written gives S071 with the file system's text", () => {
     deepStrictEqual(
       ofTransfer({

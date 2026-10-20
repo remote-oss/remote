@@ -130,6 +130,7 @@ export function dependencies(
     bounds: {downloadSeconds: 60, readySeconds: 20},
     store: storeOf(),
     modal: modalAnswering('accept', []),
+    credentials: {readNetrc: () => Promise.resolve(undefined)},
     download: {
       fetch: () => Promise.reject(new Error('no download in this test')),
     } as unknown as ServerStepDependencies['download'],

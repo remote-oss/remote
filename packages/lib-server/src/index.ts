@@ -112,6 +112,7 @@ export {
 export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
 export type {
   ClientFilePort,
+  CredentialsPort,
   DownloadBounds,
   DownloadFacts,
   DownloadFailureCause,
@@ -159,6 +160,7 @@ export {type CliServeError, parseCliServeError} from './cli-path/cli-output.ts';
 export {downloadPortOf, type HttpGet} from './transfer/http-download.ts';
 export {CLIENT_DOWNLOAD_BOUNDS} from './policy/bounds.ts';
 export {nodeClientFiles, sha256Of} from './transfer/node-files.ts';
+export {nodeCredentialsPort} from './transfer/node-netrc.ts';
 export {hostLockLoopOf} from './transfer/lock-loop.ts';
 export {
   type ByteStream,
