@@ -89,6 +89,18 @@ describe('connection replies and events (contracts §4 S9)', () => {
     );
   });
 
+  it("F-2704 AC-25: a loginFailed event with and without a detail for the window's log", () => {
+    const failed = {type: 'loginFailed', kind: 'unknown', hints: []};
+    deepStrictEqual(
+      [
+        {...failed, detail: 'the session ended'},
+        failed,
+        {...failed, detail: 7},
+      ].map(body => readConnectionEvent(body)),
+      [{...failed, detail: 'the session ended'}, failed, undefined],
+    );
+  });
+
   it('F-2003 BR-6 item 6: an sshLines event holds the lines as text, and nothing else', () => {
     deepStrictEqual(
       [

@@ -346,6 +346,7 @@ export class ConnectionHandler implements MessageHandler {
         kind: 'unknown',
         hints: [],
         exitStatus: status ?? null,
+        detail: bootstrapLogLine(early),
       });
       this.ownership.ownerGaveUp();
       return;
@@ -364,6 +365,7 @@ export class ConnectionHandler implements MessageHandler {
         : {reason: classification.reason}),
       hints: classification.hints,
       exitStatus: status ?? null,
+      ...(early === undefined ? {} : {detail: bootstrapLogLine(early)}),
     });
     this.ownership.ownerGaveUp();
   }
