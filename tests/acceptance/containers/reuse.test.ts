@@ -979,4 +979,38 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       await removeContainers(folder);
     }
   });
+
+  it('F-0409 AC-34 (p34c): the first failure of a container this connect made offers Rebuild Container too', async () => {
+    const folder = devContainerFolder('c47-created-fails', {
+      name: 'Created Fails',
+      containerUser: 'doesnotexist123',
+    });
+    try {
+      const {name, dialog} = await failedWindowOf(folder);
+      const containers = await devContainersOf(folder);
+      await answerDialog(name, 'More Actions...');
+      const pick = await waitForQuickPick(name, 30_000);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          buttons: dialogText(dialog)[2],
+          containers: containers.length,
+          items: pick.items,
+        },
+        {
+          buttons: RECOVERY_BUTTONS,
+          containers: 1,
+          items: [
+            'Reload Window',
+            'Rebuild Container',
+            'Edit devcontainer.json Locally',
+            'Open Recent...',
+            'Open Documentation',
+          ],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
 });

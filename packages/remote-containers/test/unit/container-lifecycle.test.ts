@@ -840,26 +840,68 @@ describe('containerLifecycleOf', () => {
     );
   });
 
-  it('F-0409 AC-34, ruling 14: a failure of up names the container the connect found and kept, and a rebuild names none', async () => {
-    function failing(rebuild?: {buildNoCache: boolean}) {
-      const bridge = fakeBridge();
-      bridge.upResult = {kind: 'buildFailed', message: 'm'};
-      return prepared(
-        scriptedEngine(standardListing('exited')),
-        bridge,
-        new AbortController().signal,
-        rebuild === undefined ? REQUEST : {...REQUEST, rebuild},
-      );
-    }
+  /** An open whose `up` fails with a build failure, over an engine that answers `script` and the request `request`. */
+  function failingUp(
+    script: Record<string, EngineRunOutcome[]>,
+    request: ContainerRequest = REQUEST,
+    during?: (bridge: FakeBridge) => void,
+  ) {
+    const bridge = fakeBridge();
+    bridge.upResult = {kind: 'buildFailed', message: 'm'};
+    during?.(bridge);
+    return prepared(
+      scriptedEngine(script),
+      bridge,
+      new AbortController().signal,
+      request,
+    ).then(result => result.outcome);
+  }
+
+  it('F-0409 AC-34, ruling 14: a failure of up names the container the engine holds afterwards, one the connect kept or one it made, and none when there is none', async () => {
+    const failed = {kind: 'buildFailed', message: 'm'};
+    const made = {
+      [LISTING]: [ran(''), ran(`${NEW}\n`)],
+      [LEGACY_LISTING]: [ran('')],
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'created']]))],
+    };
+    const removed = {
+      ...standardListing('exited'),
+      [LISTING]: [ran(`${OLD}\n`), ran('')],
+    };
+    const unreadable: Record<string, EngineRunOutcome[]> = {
+      [LISTING]: [ran(''), {kind: 'failed', detail: 'spawn dk ENOENT'}],
+      [LEGACY_LISTING]: [ran('')],
+    };
     deepStrictEqual(
       [
-        (await failing()).outcome,
-        (await failing({buildNoCache: false})).outcome,
+        await failingUp(standardListing('exited')),
+        await failingUp(made),
+        await failingUp(removed, {...REQUEST, rebuild: {buildNoCache: false}}),
+        await failingUp(unreadable),
+        await failingUp(EMPTY_LISTING),
       ],
       [
-        {kind: 'buildFailed', message: 'm', foundContainerId: OLD},
-        {kind: 'buildFailed', message: 'm'},
+        {...failed, foundContainerId: OLD},
+        {...failed, foundContainerId: NEW},
+        failed,
+        failed,
+        failed,
       ],
+    );
+  });
+
+  it('F-0409 AC-34: a failure of up in a cancelled connect looks for no container', async () => {
+    const engine = scriptedEngine(standardListing('exited'));
+    const controller = new AbortController();
+    const bridge = fakeBridge();
+    bridge.up = () => {
+      controller.abort();
+      return Promise.resolve({kind: 'cancelled'});
+    };
+    const result = await prepared(engine, bridge, controller.signal);
+    deepStrictEqual(
+      [result.outcome, engine.commands.length],
+      [{kind: 'cancelled'}, 3],
     );
   });
 

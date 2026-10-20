@@ -59,7 +59,7 @@ export type ContainerOutcome =
     }
   | {kind: 'unusable'; containerId: string; status: string}
   | (({kind: 'discoveryFailed'; detail: string} | CliFailure) & {
-      /** The container the connect found and kept, for the failure's pick; absent when it found none. */
+      /** The container the engine holds after the failure, for the failure's pick; absent when it holds none. */
       foundContainerId?: string;
     });
 
@@ -306,6 +306,26 @@ export function containerLifecycleOf(dependencies: {
       });
   }
 
+  /** The container the engine holds for the folder after a failed `up`, found again: one the connect kept, or made. */
+  async function containerAfterFailure(
+    request: ContainerRequest,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    if (isAborted(cancellation)) {
+      return undefined;
+    }
+    const found = await discoverWithRetry(engine, request.folder, cancellation);
+    if (found.kind !== 'found') {
+      return undefined;
+    }
+    const remaining = decide(
+      request.folder,
+      request.configFile,
+      found.containers,
+    );
+    return remaining.kind === 'create' ? undefined : remaining.containerId;
+  }
+
   /** Stops the paused container the user asked to retry; the decision then is to use it as an exited one. */
   async function stoppedForRetry(
     containerId: string,
@@ -464,9 +484,13 @@ export function containerLifecycleOf(dependencies: {
       ) {
         end();
       }
-      return !rebuilding && decision.kind === 'use'
-        ? {...upResult, foundContainerId: decision.containerId}
-        : upResult;
+      const foundContainerId = await containerAfterFailure(
+        request,
+        cancellation,
+      );
+      return foundContainerId === undefined
+        ? upResult
+        : {...upResult, foundContainerId};
     }
     if (
       !rebuilding &&
