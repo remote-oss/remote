@@ -224,7 +224,7 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
     return {helperId, port: Number.parseInt(port.trim(), 10)};
   }
 
-  it('F-0410 AC-12 (r3): a port that is already published shows the port detail, and leaves the created container', async () => {
+  it('F-0410 AC-12, F-0409 AC-31 (r3): a port that is already published shows the port detail, and leaves the created container', async () => {
     const {helperId, port} = await portHolder();
     try {
       const folder = folderOf('recover-port', {appPort: [port]});
@@ -253,7 +253,7 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
     }
   });
 
-  it('F-0410 AC-12b (p12b): after a port conflict leaves a created container, Retry starts that same container', async () => {
+  it('F-0410 AC-12b, F-0409 AC-31 (p12b): after a port conflict leaves a created container, Retry starts that same container', async () => {
     const {helperId, port} = await portHolder();
     try {
       const folder = folderOf('recover-port-retry', {appPort: [port]});
