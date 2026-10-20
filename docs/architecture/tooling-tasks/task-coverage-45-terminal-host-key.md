@@ -1,7 +1,7 @@
 # Task card coverage-45: the fingerprint pick in terminal mode, for both host-key wordings (F-2305 AC-30, AC-43)
 
 Issue: #1124. Release 0.2. Size: S–M. Builder: `task:claude`. Design: athena's ruling on remote-oss/remote-ssh#38,
-option (a), 2026-10-20: F-2305 BR-2's handling of OpenSSH 10.x's wording holds in both modes. In terminal mode the
+option (a), 2026-10-20, with F-2305 republished per it: F-2305 BR-2's handling of OpenSSH 10.x's wording holds in both modes. In terminal mode the
 extension reads ssh's question from its pre-session output and shows the fingerprint pick.
 
 ## 1. What's on main (checked by daedalus, 2026-10-20)
@@ -26,8 +26,15 @@ The runner's client is OpenSSH 10.2 (`ssh -V`), so its question is the 10.x word
   that prints the classic question and then hands over to the real `ssh`. If the fakes can't pass a terminal session
   through, list AC-30 under "harness capability missing" and leave it `todo`.
 
-Tag AC-43 and AC-30 `acceptance` when their rows pass. F-2305 AC-31 and AC-38 become reference-only when the spec
-is republished (the ruling). Until then they stay `todo`, and the PR says so.
+Tag AC-43 and AC-30 `acceptance` when their rows pass.
+
+**F-2305 AC-31 and AC-38 are reference-only** (F-2305 republished on remote-ssh#38). By athena's convention, recorded
+in the register, a criterion the spec marks reference-only isn't a requirement, so **its line leaves the coverage
+file**. It isn't `deferred` ("later") and it isn't `core` ("the editor's"). In this card's PR:
+- delete the two lines `F-2305.AC-31` and `F-2305.AC-38` from `docs/architecture/catalogue/coverage-slice1.tsv`;
+- if `docs/architecture/catalogue.tsv`'s `acCount` for F-2305 counts them, lower it by 2, and say so in the PR.
+
+`check-coverage` doesn't need a line for every criterion.
 
 ## 3. Gates and open rows
 
