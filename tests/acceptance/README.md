@@ -287,10 +287,12 @@ from the table (`launchGroupOf`):
 - `hosts`: the ports, install and platform cases;
 - `ssh`: every other.
 
-An entry that names no label or group fails, listing both. The backstop splits across three runners this way:
+An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
+the longest launch, `containers`, alone:
 
     node tools/acceptance.ts --editor vscodium --launches @ssh
-    node tools/acceptance.ts --editor vscodium --launches @containers
+    node tools/acceptance.ts --editor vscodium --launches containers
+    node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
 
 `@ssh,!terminal` is the ssh group without one launch.
