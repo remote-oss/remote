@@ -48,7 +48,7 @@ F-5001.AC-13	todo
 F-5001.AC-14	todo	
 F-5001.AC-15	unit	
 F-5001.AC-16	unit	
-F-5001.AC-17	todo	
+F-5001.AC-17	core	core: the display language comes from an installed language pack
 F-5001.AC-18	unit	
 F-5001.AC-19	recorded	
 F-5001.AC-20	unit	
@@ -57,7 +57,7 @@ F-5001.AC-22	unit
 F-5001.AC-23	core	core: the notification's gear menu and its source label
 F-5001.AC-24	unit	
 F-5001.AC-25	todo	
-F-5001.AC-26	todo	
+F-5001.AC-26	deferred	D-60: Windows client
 F-5002.AC-1	unit	
 F-5002.AC-2	unit	
 F-5002.AC-3	deferred	D-55: no tunnel rows
@@ -85,7 +85,7 @@ F-5101.AC-7	unit
 F-5101.AC-8	unit	
 F-5101.AC-9	recorded	
 F-5101.AC-10	unit	
-F-5101.AC-11	core	core: a row keeps its collapsed state across a refresh of the same id
+F-5101.AC-11	todo	
 F-5101.AC-12	recorded	
 F-5101.AC-13	unit	
 F-5101.AC-14	unit	
@@ -206,7 +206,7 @@ F-5103.AC-36	unit
 F-5103.AC-37	todo	
 F-5103.AC-38	unit	
 F-5103.AC-39	core	core: a new window opens in the running application instance
-F-5103.AC-40	todo	
+F-5103.AC-40	deferred	D-60: Windows client
 F-5901.AC-1	unit	
 F-5901.AC-2	deferred	explorer slice 1: increment 2
 F-5901.AC-3	todo	
