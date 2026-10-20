@@ -18,7 +18,9 @@ import {
   isSpecificationTemplate,
 } from './curated-templates.ts';
 import type {WalkFiles} from './folder-facts.ts';
+import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
+import {templateOptionsStage} from './template-options.ts';
 import type {WriteOutcome, WriteRequest} from './write.ts';
 
 /** Where the configuration is written: the workspace folder, or a slot of the extension's own store. */
@@ -92,6 +94,8 @@ export interface WizardPorts {
   dialogs: CatalogueDialogs;
   /** The quick pick and its surroundings; the wizard adds the curated prefix and the verified test. */
   pick: Omit<TemplatePickPorts, 'curatedPrefix' | 'isVerified'>;
+  /** The quick input of the option screens; the wizard adds the translation. */
+  options: Omit<QuickInputPorts, 'translate'>;
   /** Writes the template with what the stages chose. */
   write(
     request: WriteRequest,
@@ -140,21 +144,7 @@ function customTemplateOf(
 /** The template of a state before one is chosen. */
 export const NO_TEMPLATE: CatalogueTemplate = customTemplateOf('', undefined);
 
-/** The defaults of a template's options, each as the CLI's `-a` takes it. */
-function defaultsOf(template: CatalogueTemplate): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(template.options).flatMap(([name, option]) => {
-      const fallback = recordOf(option).default;
-      return typeof fallback === 'string' ||
-        typeof fallback === 'number' ||
-        typeof fallback === 'boolean'
-        ? [[name, String(fallback)]]
-        : [];
-    }),
-  );
-}
-
-/** The state after the template is chosen: its defaults, and every optional path left out. */
+/** The state after the template is chosen: no option value yet, and every optional path left out. */
 function withTemplate(
   state: WizardState,
   template: CatalogueTemplate,
@@ -163,7 +153,7 @@ function withTemplate(
   return {
     ...state,
     template,
-    templateArgs: defaultsOf(template),
+    templateArgs: {},
     omitPaths: template.optionalPaths,
     ...(reuseEntry === undefined ? {} : {reuseEntry}),
   };
@@ -234,5 +224,8 @@ export function stagesOf(
   catalogue: CatalogueResult & {kind: 'catalogue'},
   ports: StagePorts,
 ): readonly WizardStage[] {
-  return [templatePickStage(catalogue.templates, ports)];
+  return [
+    templatePickStage(catalogue.templates, ports),
+    templateOptionsStage(ports),
+  ];
 }

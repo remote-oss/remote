@@ -39,6 +39,7 @@ import {
   addConfiguration,
   createDevContainerFile,
 } from './authoring/create-file.ts';
+import type {OptionRow} from './authoring/option-screens.ts';
 import type {PickRow} from './authoring/template-pick.ts';
 import type {WizardPorts} from './authoring/wizard-stages.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
@@ -570,6 +571,11 @@ export async function activate(
           templateMetadata: (templateId, cancellation) =>
             bridge.templateMetadata(templateId, cancellation),
           translate,
+        },
+        options: {
+          createQuickPick: () =>
+            vscode.window.createQuickPick<OptionRow & vscode.QuickPickItem>(),
+          backButton: vscode.QuickInputButtons.Back,
         },
         write: (request, cancellation) =>
           writeTemplate(
