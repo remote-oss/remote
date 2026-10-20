@@ -1626,6 +1626,60 @@ export async function chooseQuickPickItem(
   await pressKey(await pageOf(name), name, 'Enter');
 }
 
+/**
+ * Chooses the row labelled `label` of the quick pick open in window `name` by the keys a user presses: the arrow keys
+ * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays.
+ */
+export async function chooseQuickPickRow(
+  name: string,
+  label: string,
+): Promise<void> {
+  await waitForQuickPick(name, 30_000);
+  const address = await pageOf(name);
+  for (let presses = 0; presses < 100; presses += 1) {
+    const rows = await quickPickRows(name);
+    const target = rows.findIndex(row => row.label === label);
+    if (target === -1) {
+      throw new Error(
+        `window ${name}: no row ${JSON.stringify(label)} among ${JSON.stringify(rows.map(row => row.label))}`,
+      );
+    }
+    const focused = rows.findIndex(row => row.focused);
+    if (focused === target) {
+      await pressKey(address, name, 'Enter');
+      return;
+    }
+    await pressKey(address, name, focused < target ? 'ArrowDown' : 'ArrowUp');
+  }
+  throw new Error(
+    `window ${name}: the row ${JSON.stringify(label)} never got the focus`,
+  );
+}
+
+/** Types `text` into the input of the quick pick open in window `name`, replacing what is there, and leaves it open. */
+export async function typeInQuickPick(
+  name: string,
+  text: string,
+): Promise<void> {
+  await waitForQuickPick(name, 30_000);
+  await evaluate<null>(
+    name,
+    `(() => {
+      const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
+      input.focus();
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, ${JSON.stringify(text)});
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      return null;
+    })()`,
+  );
+}
+
+/** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
+export async function acceptQuickPick(name: string): Promise<void> {
+  await pressKey(await pageOf(name), name, 'Enter');
+}
+
 /** One editor tab: its label, whether it is the active one, and whether it is a preview (shown in italics until kept). */
 export interface EditorTab {
   label: string;
@@ -1781,9 +1835,11 @@ async function pressStroke(
 
 /** The protocol virtual key codes of the keys the helpers press. */
 const VIRTUAL_KEY_CODES: Record<
-  'Enter' | 'Escape' | 'Backspace' | 'Delete',
+  'Enter' | 'Escape' | 'Backspace' | 'Delete' | 'ArrowUp' | 'ArrowDown',
   number
 > = {
+  ArrowUp: 38,
+  ArrowDown: 40,
   Enter: 13,
   Escape: 27,
   Backspace: 8,
