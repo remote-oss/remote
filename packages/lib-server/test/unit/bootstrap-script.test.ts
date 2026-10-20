@@ -1578,6 +1578,17 @@ describe('the POSIX bootstrap script', () => {
         deepStrictEqual(block === 'none' ? block : block.status, 'Ok');
       });
 
+      it('F-0503 (ruling-253-unrunnable): a helper that cannot run, exit 126 or 127, launches the server', () => {
+        installHelper();
+        deepStrictEqual(
+          ['126', '127'].map(code => {
+            const block = startWith(withHelper(), 'cannot run\\n', code);
+            return block === 'none' ? block : block.status;
+          }),
+          ['Ok', 'Ok'],
+        );
+      });
+
       it('F-0503: no helper means no check, and a fact says so', () => {
         const block = blockOf(host, single('start'), withHelper());
         deepStrictEqual(
@@ -1662,12 +1673,14 @@ describe('the POSIX bootstrap script', () => {
       });
     });
 
-    it('F-2703.7.E2: a server that exits with 207 is LinuxPrereqs', () => {
+    it('F-2703.7.E2 (ruling-253-exit): a server that exits with 207 after launch is ServerFailedToStart at the end of the wait, like any other early exit', () => {
+      const parameters = parametersFor();
+      parameters.start.readySeconds = 1;
       deepStrictEqual(
-        statusOf(host, single('start'), parametersFor(), {
+        statusOf(host, single('start'), parameters, {
           environment: {SERVER_EXIT: '207'},
         }),
-        'LinuxPrereqs',
+        'ServerFailedToStart',
       );
     });
 

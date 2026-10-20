@@ -442,6 +442,13 @@ async function runSteps(
       ofStart(started.failure, {useExecServer: options.useExecServer}),
     );
   }
+  if (
+    started.notices.some(notice => notice.kind === 'requirementsHelperMissing')
+  ) {
+    options.logger.warn(
+      "the server has no requirements helper; the host's requirements weren't checked",
+    );
+  }
   if (started.server.reused) {
     await quietly('the default extensions', () =>
       steps.installExtensions(input, lease, cancellation),
