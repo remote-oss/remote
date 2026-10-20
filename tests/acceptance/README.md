@@ -108,7 +108,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the run's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
 
-- `default-ports`: a plain launch like `windows` whose settings forward one default port; `default-ports/*.test.ts` opens a window and reads the local end of the port.
+- `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
 - `no-proposals`: the same without the proposed API.
 

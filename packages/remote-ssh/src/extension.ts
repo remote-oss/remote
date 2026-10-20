@@ -469,6 +469,7 @@ async function registerConnectOf(
       resolverEditor: acceptanceResolverEditorOf(
         resolverEditorOf(vscode, {
           detailsCommand: runtimeCommands.showDetails,
+          candidatePortSource: 'output',
         }),
         windowName,
       ),

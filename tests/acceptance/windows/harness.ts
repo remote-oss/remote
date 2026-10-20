@@ -45,7 +45,8 @@ export interface AgentEvent {
     | 'forwarded'
     | 'commands'
     | 'extension'
-    | 'terminalBuffer';
+    | 'terminalBuffer'
+    | 'tunnels';
   time: number;
   id?: string;
   message?: string;
@@ -58,9 +59,10 @@ export interface AgentEvent {
   trusted?: boolean;
   /** Whether the remote-ssh extension has activated in the window, as `state` reports it. */
   remoteSshActive?: boolean;
-  /** The setting a `setting` event reports, and its value. */
+  /** The setting a `setting` event reports, its value, and its default in the window. */
   settingId?: string;
   value?: unknown;
+  defaultValue?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -78,6 +80,14 @@ export interface AgentEvent {
   activeEditor?: string | null;
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
   text?: string;
+  /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
+  tunnels?: ForwardedTunnel[];
+}
+
+/** One forwarded port of a window: its port on the host, and where it is reachable on this machine. */
+export interface ForwardedTunnel {
+  remotePort: number;
+  localAddress: string;
 }
 
 /** One line of the record the extensions append to. */
@@ -1018,16 +1028,9 @@ export async function userSettings(
  * all of it and copies it, and reports the clipboard's text.
  */
 export async function terminalBuffer(name: string): Promise<string> {
-  const before = countOf(name, 'terminalBuffer');
-  await inWindow(name, 'acceptance.agent.terminalBuffer');
-  await waitUntil(
-    `window ${name} to report its terminal buffer`,
-    () => countOf(name, 'terminalBuffer') > before,
-  );
   return (
-    windowEvents(name)
-      .filter(each => each.event === 'terminalBuffer')
-      .at(-1)?.text ?? ''
+    (await reported(name, 'terminalBuffer', 'acceptance.agent.terminalBuffer'))
+      ?.text ?? ''
   );
 }
 
@@ -1036,15 +1039,26 @@ export async function settingIn(
   name: string,
   settingId: string,
 ): Promise<unknown> {
-  const before = countOf(name, 'setting');
-  await inWindow(name, 'acceptance.agent.setting', settingId);
-  await waitUntil(
-    `window ${name} to report ${settingId}`,
-    () => countOf(name, 'setting') > before,
+  return (
+    await reported(name, 'setting', 'acceptance.agent.setting', settingId)
+  )?.value;
+}
+
+/** The default window `name` has for the setting `settingId`, the one its Settings editor shows, or null for none. */
+export async function settingDefaultIn(
+  name: string,
+  settingId: string,
+): Promise<unknown> {
+  return (
+    await reported(name, 'setting', 'acceptance.agent.setting', settingId)
+  )?.defaultValue;
+}
+
+/** The ports window `name` forwards, as the editor lists them; a forward of the SSH configuration is not among them. */
+export async function tunnelsOf(name: string): Promise<ForwardedTunnel[]> {
+  return (
+    (await reported(name, 'tunnels', 'acceptance.agent.tunnels'))?.tunnels ?? []
   );
-  return windowEvents(name)
-    .filter(each => each.event === 'setting' && each.settingId === settingId)
-    .at(-1)?.value;
 }
 
 /** The surfaces of the record that are messages to the user. */

@@ -207,10 +207,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'acceptance.agent.setting',
       (settingId: string) => {
+        const configuration = vscode.workspace.getConfiguration();
         report(agentFolder, name, {
           event: 'setting',
           settingId,
-          value: vscode.workspace.getConfiguration().get(settingId) ?? null,
+          value: configuration.get(settingId) ?? null,
+          defaultValue: configuration.inspect(settingId)?.defaultValue ?? null,
         });
       },
     ),
@@ -264,6 +266,27 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand('acceptance.agent.tunnels', async () => {
+      // The tunnels are a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
+      const workspace = vscode.workspace as unknown as {
+        tunnels: PromiseLike<
+          Array<{
+            remoteAddress: {host: string; port: number};
+            localAddress: string | {host: string; port: number};
+          }>
+        >;
+      };
+      report(agentFolder, name, {
+        event: 'tunnels',
+        tunnels: (await workspace.tunnels).map(tunnel => ({
+          remotePort: tunnel.remoteAddress.port,
+          localAddress:
+            typeof tunnel.localAddress === 'string'
+              ? tunnel.localAddress
+              : `${tunnel.localAddress.host}:${String(tunnel.localAddress.port)}`,
+        })),
+      });
+    }),
     vscode.commands.registerCommand(
       'acceptance.agent.writeFile',
       async (writeName: string, text: string) => {
