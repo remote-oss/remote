@@ -278,6 +278,7 @@ export function parametersFor(): ScriptParameters {
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
       useHostProxy: false,
+      forceDisableUserEnv: false,
       requirementsHelper: false,
       readySeconds: 3,
       socketMode: false,

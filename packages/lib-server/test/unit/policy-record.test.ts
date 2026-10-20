@@ -277,6 +277,7 @@ describe('policy record (card server-01 table)', () => {
   for (const [options, problems] of [
     [['useHostProxy'], []],
     [['fileWatcherPolling', 'useHostProxy'], []],
+    [['forceDisableUserEnv'], []],
     [
       ['other'],
       [{path: 'allowedExtraStartOptions[0]', problem: 'invalid value'}],

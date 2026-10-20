@@ -49,6 +49,14 @@ import {
 } from '../trust/trust-gate.ts';
 import {withContext} from './context-engine.ts';
 import {
+  extensionHostEnvironmentOf,
+  type ProbeMode,
+  probedEnvironmentOf,
+  probeModeOf,
+  probeScriptOf,
+  remoteEnvironmentOf,
+} from './remote-environment.ts';
+import {
   cancelled,
   containerGone,
   containerSetupFailed,
@@ -285,6 +293,58 @@ function shortId(containerId: string): string {
 /** Whether a signal has aborted; read again after each wait, since it can change while one waits. */
 function isAborted(signal: AbortSignal): boolean {
   return signal.aborted;
+}
+
+/** How long the environment probe may run. */
+const PROBE_TIMEOUT_MS = 10_000;
+
+/** Logs why the probe was dropped. */
+function logDroppedProbe(logger: Logger, reason: string): void {
+  logger.info(`the environment probe was dropped: ${reason}`);
+}
+
+/** The environment the remote user's shell exports, or undefined after a log line saying why the probe was dropped. */
+async function probedEnvironment(
+  channel: HostChannel,
+  mode: Exclude<ProbeMode, 'none'>,
+  cancellation: AbortSignal,
+  logger: Logger,
+  clock: () => number,
+): Promise<Readonly<Record<string, string>> | undefined> {
+  const started = clock();
+  const lines: string[] = [];
+  const outcome = await channel.runScript(
+    {
+      script: probeScriptOf(mode),
+      interpreter: 'posixShell',
+      environment: {},
+      input: {kind: 'text', text: ''},
+      cancellation: AbortSignal.any([
+        cancellation,
+        AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      ]),
+    },
+    line => {
+      lines.push(line);
+    },
+  );
+  if (outcome.kind === 'failed') {
+    logDroppedProbe(logger, outcome.failure.kind);
+    return undefined;
+  }
+  if (outcome.status !== 0) {
+    logDroppedProbe(logger, `exit status ${String(outcome.status)}`);
+    return undefined;
+  }
+  const environment = probedEnvironmentOf(lines.join('\n'));
+  if (environment === undefined) {
+    logDroppedProbe(logger, 'no end marker');
+    return undefined;
+  }
+  logger.info(
+    `the environment probe (${mode}) took ${String(clock() - started)} ms and gave ${String(Object.keys(environment).length)} variables`,
+  );
+  return environment;
 }
 
 /** The connector of Dev Containers. */
@@ -763,6 +823,28 @@ export function containerConnectorOf(
     if (isAborted(cancellation)) {
       return cancelled();
     }
+    const mergedConfiguration =
+      configuration.kind === 'configuration'
+        ? configuration.mergedConfiguration
+        : undefined;
+    const mode = probeModeOf(mergedConfiguration);
+    const remoteEnvironment = remoteEnvironmentOf(mergedConfiguration);
+    for (const name of remoteEnvironment.dropped) {
+      logger.warn(`remoteEnv ${name} is neither a string nor null`);
+    }
+    const probed =
+      mode === 'none'
+        ? undefined
+        : await probedEnvironment(
+            channel,
+            mode,
+            cancellation,
+            logger,
+            dependencies.clock,
+          );
+    if (isAborted(cancellation)) {
+      return cancelled();
+    }
     const owner: {connection?: Held} = {};
     const relay = await dependencies.openRelay({
       engine,
@@ -794,7 +876,10 @@ export function containerConnectorOf(
     const connected: Connected = {
       address: {host: '127.0.0.1', port: relay.hostPort},
       connectionToken: server.connectionToken,
-      extensionHostEnv: {},
+      extensionHostEnv: extensionHostEnvironmentOf(
+        probed,
+        remoteEnvironment.entries,
+      ),
       environmentTunnels: [],
       trusted: false,
     };

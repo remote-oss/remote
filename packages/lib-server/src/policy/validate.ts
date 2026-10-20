@@ -26,6 +26,7 @@ const KNOWN_PLACEMENT_MODES = new Set<string>(['auto', 'always', 'off']);
 const KNOWN_EXTRA_START_OPTIONS = new Set<string>([
   'fileWatcherPolling',
   'useHostProxy',
+  'forceDisableUserEnv',
 ]);
 
 const KNOWN_EXTENSION_ENTRIES = new Set<string>([

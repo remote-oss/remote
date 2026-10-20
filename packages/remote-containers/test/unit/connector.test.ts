@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {mock} from 'node:test';
 import type {ConnectPhase, Connected, Failed} from 'lib-authority';
 import {
   devContainerPayloadOf,
@@ -152,7 +153,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(reasons, [{id: 'S018'}, {id: 'S019'}, {id: 'S034'}]);
   });
 
-  it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with no environment and no tunnels, and the phases in order', async () => {
+  it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with the probed environment and no tunnels, and the phases in order', async () => {
     const scene = sceneOf();
     const phases: ConnectPhase[] = [];
     scene.connector.onPhase(phase => phases.push(phase));
@@ -163,7 +164,7 @@ describe('the container connector: the connect (card containers-08)', () => {
         {
           address: {host: '127.0.0.1', port: 41000},
           connectionToken: SECRET_TOKEN,
-          extensionHostEnv: {},
+          extensionHostEnv: {ALPHA: 'probe', BRAVO: 'probe'},
           environmentTunnels: [],
           trusted: false,
         },
@@ -713,7 +714,8 @@ describe('the container connector: the connect (card containers-08)', () => {
       'containerReady',
       'container c1c1c1c1c1c1 was newly started',
       'no extensions to install',
-      'Resolving Remote: 50 ms',
+      'the environment probe (loginInteractiveShell) took 25 ms and gave 2 variables',
+      'Resolving Remote: 100 ms',
     ]);
   });
 
@@ -1062,9 +1064,9 @@ describe('the container connector: cancelling (card containers-08)', () => {
         release = resolve;
       });
     const connecting = scene.connector.connect(inputOf(PAYLOAD));
-    await tick();
-    await tick();
-    await tick();
+    for (let ticks = 0; ticks < 8; ticks += 1) {
+      await tick();
+    }
     scene.connector.cancel();
     release?.();
     const result = await connecting;
@@ -1547,6 +1549,142 @@ describe('the container connector: the canonical path (card containers-22)', () 
           'the canonical path of /srv/app/x is /work/proj/x (from the connection)',
         ],
       ],
+    );
+  });
+});
+
+describe('the container connector: the remote environment (card containers-45)', () => {
+  const MERGED = {remoteEnv: {ALPHA: 'remote', CHARLIE: null, DELTA: 7}};
+
+  function withMergedConfiguration(
+    mergedConfiguration: Record<string, unknown>,
+  ): Scene['configuration'] {
+    return {
+      kind: 'configuration',
+      configuration: {name: 'Proj'},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration,
+    };
+  }
+
+  function dropLines(scene: Scene): string[] {
+    return messages(scene).filter(message =>
+      message.startsWith('the environment probe was dropped'),
+    );
+  }
+
+  it('F-0416 BR-11a: the probe and remoteEnv merge, remoteEnv winning, null kept, and a bad value named in the log without its value', async () => {
+    const scene = sceneOf();
+    scene.configuration = withMergedConfiguration(MERGED);
+    const result = await connected(scene);
+    deepStrictEqual(
+      [
+        result.extensionHostEnv,
+        scene.sink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+      ],
+      [
+        {ALPHA: 'remote', BRAVO: 'probe', CHARLIE: null},
+        ['remoteEnv DELTA is neither a string nor null'],
+      ],
+    );
+  });
+
+  it('F-0416 BR-11b: a probe that fails, exits 1, prints no end marker or never answers is dropped, once each, and the connect goes on', async () => {
+    const results: unknown[] = [];
+    const probes: Array<Scene['probe']> = [
+      process => {
+        process.exit(undefined);
+      },
+      process => {
+        process.print('motd\n');
+        process.exit(1);
+      },
+      process => {
+        process.print('remote-oss-env-probe-begin\nA=probe\0');
+        process.exit(0);
+      },
+      () => undefined,
+    ];
+    for (const probe of probes) {
+      const scene = sceneOf();
+      scene.configuration = withMergedConfiguration(MERGED);
+      scene.probe = probe;
+      const timeout = mock.method(AbortSignal, 'timeout', () =>
+        AbortSignal.abort(),
+      );
+      const result = await connected(scene);
+      timeout.mock.restore();
+      results.push([result.extensionHostEnv, dropLines(scene).length]);
+    }
+    deepStrictEqual(results, [
+      [{ALPHA: 'remote', CHARLIE: null}, 1],
+      [{ALPHA: 'remote', CHARLIE: null}, 1],
+      [{ALPHA: 'remote', CHARLIE: null}, 1],
+      [{ALPHA: 'remote', CHARLIE: null}, 1],
+    ]);
+  });
+
+  it('F-0416 BR-11b: the probe is given ten seconds', async () => {
+    const scene = sceneOf();
+    const timeout = mock.method(AbortSignal, 'timeout');
+    await connected(scene);
+    timeout.mock.restore();
+    deepStrictEqual(
+      timeout.mock.calls.map(call => call.arguments),
+      [[10_000]],
+    );
+  });
+
+  it('F-0416 6.10: two connects of one reused server each build their own environment', async () => {
+    const scene = sceneOf();
+    scene.configuration = withMergedConfiguration({remoteEnv: {ALPHA: 'one'}});
+    const first = await connected(scene);
+    scene.configuration = withMergedConfiguration({remoteEnv: {ALPHA: 'two'}});
+    const second = await connected(scene);
+    deepStrictEqual(
+      [first.extensionHostEnv, second.extensionHostEnv],
+      [
+        {ALPHA: 'one', BRAVO: 'probe'},
+        {ALPHA: 'two', BRAVO: 'probe'},
+      ],
+    );
+  });
+
+  it('F-0416 BR-11: userEnvProbe none runs no probe, and the environment is remoteEnv', async () => {
+    const scene = sceneOf();
+    scene.configuration = withMergedConfiguration({
+      userEnvProbe: 'none',
+      remoteEnv: {ALPHA: 'remote'},
+    });
+    const result = await connected(scene);
+    deepStrictEqual(
+      [result.extensionHostEnv, scene.probeScripts.length],
+      [{ALPHA: 'remote'}, 0],
+    );
+  });
+
+  it('F-0416 BR-11: a configuration that could not be read gives the default mode and an empty remoteEnv', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    const result = await connected(scene);
+    deepStrictEqual(
+      [result.extensionHostEnv, scene.probeScripts.length],
+      [{ALPHA: 'probe', BRAVO: 'probe'}, 1],
+    );
+  });
+
+  it('F-0416 BR-11: the mode reaches the script', async () => {
+    const scene = sceneOf();
+    scene.configuration = withMergedConfiguration({
+      userEnvProbe: 'interactiveShell',
+    });
+    await connected(scene);
+    deepStrictEqual(
+      scene.probeScripts.map(script => script.includes(' -i -c ')),
+      [true],
     );
   });
 });

@@ -31,6 +31,7 @@ const PARAMETERS: ScriptParameters = {
     extensions: [],
     fileWatcherPollingMilliseconds: 0,
     useHostProxy: false,
+    forceDisableUserEnv: false,
     requirementsHelper: false,
     readySeconds: 10,
     socketMode: false,

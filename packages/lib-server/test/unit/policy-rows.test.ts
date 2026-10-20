@@ -113,7 +113,7 @@ describe('the SSH policy of a download mode (card connect-38)', () => {
     ['verification', ['none']],
     ['environmentSetup', undefined],
     ['requirementsCheck', 'bundledHelper'],
-    ['allowedExtraStartOptions', ['useHostProxy']],
+    ['allowedExtraStartOptions', ['useHostProxy', 'forceDisableUserEnv']],
     ['extensionEntries', 'asWritten'],
     ['installUmask', '022'],
     ['cleanup', {kind: 'onlyCurrentKeepLeftovers'}],
