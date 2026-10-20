@@ -162,6 +162,7 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         },
         read: file =>
           Promise.resolve(Buffer.from(state.contents[file] ?? '{"image":"i"}')),
+        exists: () => Promise.resolve(true),
       },
       surfaces: {
         pick: rows => {

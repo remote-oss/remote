@@ -3,6 +3,7 @@
  * read of its JSON-with-comments, the label of its row and whether it names a container source.
  */
 
+import path from 'node:path';
 import {parse} from 'jsonc-parser';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
@@ -87,4 +88,24 @@ export function hasContainerSource(parsed: Record<string, unknown>): boolean {
       !Array.isArray(build) &&
       'dockerfile' in build)
   );
+}
+
+/**
+ * The absolute path of the Dockerfile the configuration names: `build.dockerfile`, else the legacy `dockerFile`, read
+ * against the folder of the configuration file. None when it names no Dockerfile, or when its text holds a variable
+ * (`${`) that only the CLI can substitute.
+ */
+export function dockerfileOf(
+  parsed: Record<string, unknown>,
+  configFile: string,
+): string | undefined {
+  const {build} = parsed;
+  const named =
+    typeof build === 'object' && build !== null && !Array.isArray(build)
+      ? (build as Record<string, unknown>).dockerfile
+      : undefined;
+  const value = typeof named === 'string' ? named : parsed.dockerFile;
+  return typeof value === 'string' && !value.includes('${')
+    ? path.resolve(path.dirname(configFile), value)
+    : undefined;
 }
