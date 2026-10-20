@@ -107,6 +107,7 @@ jobs:
       - run: pnpm identifiers # the git-ignored tables every later step reads
       - run: pnpm check-layout
       - run: pnpm check-ci-gate # every job is one ci-gate needs (athena on #1076)
+      - run: pnpm check-workflow-tokens # no write token on an event someone without write access can start
       - run: pnpm check-identifiers
       - run: pnpm check-consumed
         if: github.ref_type != 'tag'

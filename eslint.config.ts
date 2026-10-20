@@ -53,6 +53,9 @@ const SHORT_NAME_EXCEPTIONS = [
 
 // Property keys shorter than four characters that a third-party API imposes, each with the API.
 const IMPOSED_PROPERTY_KEYS = [
+  // GitHub Actions workflow syntax: a workflow's `on` and a job's `if` (check-workflow-tokens reads them).
+  'on',
+  'if',
   // ESLint: the `loc` of a report descriptor, the `end` of a source location, the `min` of id-length.
   'loc',
   'end',
