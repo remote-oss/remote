@@ -76,7 +76,7 @@ F-0201.AC-4	deferred	containers release 1: increment 2 (Podman)
 F-0201.AC-5	deferred	containers release 1: later (Compose)
 F-0201.AC-6	deferred	containers release 1: later (Compose)
 F-0201.AC-7	unit	
-F-0201.AC-8	todo	
+F-0201.AC-8	unit	
 F-0201.AC-9	deferred	containers release 1: later (Compose)
 F-0201.AC-10	todo	
 F-0201.AC-11	deferred	containers release 1: later (Compose)
@@ -87,9 +87,9 @@ F-0201.AC-15	unit
 F-0201.AC-16	unit	
 F-0201.AC-17	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0201.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0201.AC-20	todo	
-F-0201.AC-21	todo	
-F-0201.AC-22	todo	
+F-0201.AC-20	unit	
+F-0201.AC-21	unit	
+F-0201.AC-22	unit	
 F-0201.AC-23	todo	
 F-0201.AC-24	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0201.AC-25	unit	
@@ -98,7 +98,7 @@ F-0201.AC-27	deferred	containers release 1: later (attach)
 F-0201.AC-28	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0201.AC-29	deferred	containers release 1: later (Compose)
 F-0201.AC-30	deferred	containers release 1: later (Compose)
-F-0201.AC-31	todo	
+F-0201.AC-31	unit	
 F-0201.AC-32	unit	
 F-0201.AC-33	deferred	containers release 1: later (Compose)
 F-0201.AC-34	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -113,9 +113,9 @@ F-0201.AC-42	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0201.AC-43	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0201.AC-44	deferred	containers release 1: later (Compose)
 F-0201.AC-45	deferred	containers release 1: later (Compose)
-F-0201.AC-46	todo	
+F-0201.AC-46	unit	
 F-0201.AC-47	unit	
-F-0201.AC-48	todo	
+F-0201.AC-48	unit	
 F-0201.AC-49	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0201.AC-50	acceptance	
 F-0201.AC-51	deferred	containers release 1: later (Compose)
@@ -204,7 +204,7 @@ F-0401.AC-7	todo
 F-0401.AC-8	deferred	containers release 1: increment 2 (authoring)
 F-0401.AC-9	todo	
 F-0401.AC-10	todo	
-F-0401.AC-11	todo	
+F-0401.AC-11	acceptance	
 F-0401.AC-12	todo	
 F-0401.AC-13	acceptance	
 F-0401.AC-14	deferred	containers release 1: later (the recovery container)
@@ -213,7 +213,7 @@ F-0401.AC-16	deferred	containers release 1: later (remote engines)
 F-0401.AC-17	todo	
 F-0401.AC-18	unit	
 F-0401.AC-19	deferred	containers release 1: later (remote engines)
-F-0401.AC-20	todo	
+F-0401.AC-20	acceptance	
 F-0401.AC-21	acceptance	
 F-0401.AC-22	deferred	containers release 1: later (remote engines)
 F-0401.AC-23	unit	
@@ -272,14 +272,14 @@ F-0405.AC-8	acceptance
 F-0405.AC-9	deferred	containers release 1: F-0303's notification is increment 2
 F-0405.AC-10	todo	
 F-0405.AC-11	todo	
-F-0405.AC-12	todo	
+F-0405.AC-12	acceptance	
 F-0405.AC-13	deferred	containers release 1: increment 2 (authoring)
 F-0405.AC-14	deferred	containers release 1: later (remote engines)
 F-0405.AC-15	deferred	containers release 1: later (remote engines)
 F-0405.AC-16	todo	
-F-0405.AC-17	todo	
+F-0405.AC-17	acceptance	
 F-0405.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0405.AC-19	todo	
+F-0405.AC-19	acceptance	
 F-0405.AC-20	deferred	containers release 1: later (multi-root workspaces)
 F-0405.AC-21	deferred	containers release 1: later (Compose)
 F-0405.AC-22	deferred	containers release 1: later (attach)
@@ -291,8 +291,8 @@ F-0405.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-28	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-29	unit	
 F-0405.AC-30	unit	
-F-0405.AC-31	todo	
-F-0405.AC-32	todo	
+F-0405.AC-31	acceptance	
+F-0405.AC-32	deferred	containers release 1: increment 2 (authoring)
 F-0405.AC-33	todo	
 F-0405.AC-34	todo	
 F-0405.AC-35	todo	
@@ -373,7 +373,7 @@ F-0409.AC-47	todo
 F-0410.AC-1	acceptance	
 F-0410.AC-2	acceptance	
 F-0410.AC-3	acceptance	
-F-0410.AC-4	todo	
+F-0410.AC-4	acceptance	
 F-0410.AC-5	acceptance	
 F-0410.AC-6	acceptance	
 F-0410.AC-7	unit	
@@ -633,14 +633,14 @@ F-0419.AC-40	acceptance
 F-0419.AC-41	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
 F-0419.AC-42	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
 F-0501.AC-1	todo	
-F-0501.AC-2	todo	
+F-0501.AC-2	acceptance	
 F-0501.AC-3	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-4	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-5	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-6	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-7	todo	
 F-0501.AC-8	todo	
-F-0501.AC-9	todo	
+F-0501.AC-9	core	core: an authority nothing resolves opens a local empty window
 F-0501.AC-10	core	core: a single-colon vscode-remote argument read as a local path
 F-0501.AC-11	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
 F-0501.AC-12	deferred	containers release 1: increment 2 (shutdown)
@@ -758,7 +758,7 @@ F-0503.AC-53	unit
 F-0503.AC-54	unit	
 F-0504.AC-1	acceptance	
 F-0504.AC-2	todo	
-F-0504.AC-3	todo	
+F-0504.AC-3	unit	
 F-0504.AC-4	deferred	containers release 1: the full contribution set comes with later increments
 F-0504.AC-5	deferred	containers release 1: the full contribution set comes with later increments
 F-0504.AC-6	deferred	containers release 1: the full contribution set comes with later increments
@@ -770,9 +770,9 @@ F-0504.AC-11	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0504.AC-12	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0504.AC-13	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0504.AC-14	deferred	containers release 1: later (the recovery container)
-F-0504.AC-15	todo	
+F-0504.AC-15	acceptance	
 F-0504.AC-16	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0504.AC-17	todo	
+F-0504.AC-17	core	core: the status bar truncates the label and its aria-label
 F-0504.AC-18	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0504.AC-19	deferred	containers release 1: later (remote engines)
 F-0504.AC-20	deferred	containers release 1: later (remote engines)
@@ -786,7 +786,7 @@ F-0504.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0504.AC-28	todo	
 F-0504.AC-29	unit	
 F-0504.AC-30	unit	
-F-0504.AC-31	todo	
+F-0504.AC-31	unit	
 F-0504.AC-32	todo	
 F-0505.AC-1	acceptance	
 F-0505.AC-2	todo	
@@ -998,7 +998,7 @@ F-0906.AC-21	deferred	containers 0.4: Windows, WSL and macOS later
 F-0906.AC-22	deferred	containers 0.4: F-0904 later
 F-0906.AC-23	core	core: the remote indicator menu's recommendation row
 F-1402.AC-1	todo	
-F-1402.AC-2	todo	
+F-1402.AC-2	unit	
 F-1402.AC-3	todo	
-F-1402.AC-4	todo	
+F-1402.AC-4	unit	
 F-1402.AC-5	todo	

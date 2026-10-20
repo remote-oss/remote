@@ -169,6 +169,21 @@ describe('the classification of the second check', () => {
   }
 });
 
+describe('the second check, a permission denied (F-0201 AC-46)', () => {
+  it('F-0201 AC-46: a full version query that exits non-zero with permission denied gives S104, not the unreachable-engine dialog', () => {
+    deepStrictEqual(
+      secondCheckOutcomeOf(
+        SPAWN,
+        exited(
+          1,
+          'permission denied while trying to connect to the docker API at unix:///var/run/docker.sock',
+        ),
+      ),
+      {kind: 'failed', detail: 'S104'},
+    );
+  });
+});
+
 /** The stderr forms of card containers-10 §2, as the pinned Docker 29.9.0 wrote them. */
 const FORM_3 =
   'failed to connect to the docker API at unix:///nonexistent.sock; check if the path is correct and if the daemon is running: dial unix /nonexistent.sock: connect: no such file or directory';
