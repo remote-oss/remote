@@ -257,6 +257,12 @@ export async function pageOf(
         }
         return page?.webSocketDebuggerUrl;
       }
+      const remembered = found.find(
+        page => page.id === REMEMBERED_PAGES.get(name),
+      );
+      if (remembered !== undefined && isOpen(name)) {
+        return remembered.webSocketDebuggerUrl;
+      }
       const state = await stateForPage(
         name,
         milliseconds - (Date.now() - started),
@@ -1538,6 +1544,10 @@ export async function quickPickOf(
 export interface QuickPickRow {
   label: string;
   description: string;
+  /** The second line of the row, the hover text the pick shows beside the label. */
+  detail: string;
+  /** The codicon classes the row carries, such as `codicon-verified`. */
+  icons: string[];
   buttons: string[];
   focused: boolean;
 }
@@ -1549,6 +1559,8 @@ export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
     `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
       label: row.querySelector('.label-name')?.textContent ?? '',
       description: row.querySelector('.label-description')?.textContent ?? '',
+      detail: row.querySelector('.quick-input-list-label-meta')?.textContent ?? '',
+      icons: [...row.querySelectorAll('.codicon')].flatMap(each => [...each.classList].filter(name => name.startsWith('codicon-'))),
       buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
       focused: row.classList.contains('focused'),
     }))`,
@@ -1654,6 +1666,22 @@ export async function chooseQuickPickRow(
   throw new Error(
     `window ${name}: the row ${JSON.stringify(label)} never got the focus`,
   );
+}
+
+/** What the input of the quick pick open in window `name` holds. */
+export async function quickPickValue(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `document.querySelector('${QUICK_WIDGET} .quick-input-box input')?.value ?? ''`,
+  );
+}
+
+/** Presses the arrow key `key` in window `name`, which moves the focus of the quick pick that is open. */
+export async function moveQuickPickFocus(
+  name: string,
+  key: 'ArrowUp' | 'ArrowDown',
+): Promise<void> {
+  await pressKey(await pageOf(name), name, key);
 }
 
 /** Types `text` into the input of the quick pick open in window `name`, replacing what is there, and leaves it open. */

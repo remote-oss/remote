@@ -564,7 +564,7 @@ export async function activate(
         pick: {
           createQuickPick: () =>
             vscode.window.createQuickPick<PickRow & vscode.QuickPickItem>(),
-          verifiedIcon: new vscode.ThemeIcon('verified-filled'),
+          verifiedIcon: new vscode.ThemeIcon('verified'),
           openExternal: address =>
             vscode.env.openExternal(vscode.Uri.parse(address)),
           templateMetadata: (templateId, cancellation) =>
@@ -832,9 +832,9 @@ export async function activate(
             ...continuation,
             window: {folders: windowFolders},
             showModal: (message, buttons) =>
-              vscode.window.showWarningMessage(
-                message,
-                {modal: true},
+              vscode.window.showInformationMessage(
+                '',
+                {modal: true, detail: message},
                 ...buttons,
               ),
             openFolder: () =>
