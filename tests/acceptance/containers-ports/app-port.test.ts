@@ -3,6 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {
   devContainersOf,
+  inWindow,
   listenIn,
   reopenInContainer,
 } from '../windows/harness.ts';
@@ -159,11 +160,22 @@ describe('the appPort rows (card containers-74)', function () {
       appPort: [number, `${String(host)}:${String(container)}`],
     });
     const [containerId = ''] = await devContainersOf(folderOf('c74-ac40'));
-    const stop = await listenIn(containerId, container);
+    // Core's detection takes the processes that a terminal of the window started, so the listener starts in one.
+    await inWindow(window, 'workbench.action.terminal.new');
+    await inWindow(window, 'workbench.action.terminal.sendSequence', {
+      text: `nc -lk -p ${String(container)} -e cat &\n`,
+    });
     await showPorts(window);
+    // Detection shows a new listener within seconds; the rows are read after it had its time.
+    await new Promise(resolve => setTimeout(resolve, 15_000));
     const rows = await rowsWhen(window, shown => shown.length > 1);
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    await stop();
+    await execFileAsync('docker', [
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `pkill -f '[n]c -lk -p ${String(container)} ' || true`,
+    ]);
     const shown = rows.find(each => each.port === String(container));
     deepStrictEqual(
       {
