@@ -860,7 +860,9 @@ const QUICK_PICK_EXPRESSION = `(() => {
 })()`;
 
 /** The quick pick open in window `name`, or `undefined` when none is. */
-async function quickPickOf(name: string): Promise<ShownQuickPick | undefined> {
+export async function quickPickOf(
+  name: string,
+): Promise<ShownQuickPick | undefined> {
   return (
     (await evaluate<ShownQuickPick | null>(name, QUICK_PICK_EXPRESSION)) ??
     undefined
