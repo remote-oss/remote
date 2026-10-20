@@ -462,7 +462,7 @@ F-0412.AC-8	todo
 F-0412.AC-9	todo	
 F-0412.AC-10	acceptance	
 F-0412.AC-11	todo	
-F-0412.AC-12	todo	
+F-0412.AC-12	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
 F-0412.AC-13	todo	
 F-0412.AC-14	todo	
 F-0412.AC-15	todo	
@@ -485,7 +485,7 @@ F-0412.AC-31	todo
 F-0412.AC-32	acceptance	
 F-0412.AC-33	todo	
 F-0412.AC-34	acceptance	
-F-0412.AC-35	acceptance	
+F-0412.AC-35	deferred	containers release 1: later (remote engines)
 F-0412.AC-36	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-38	deferred	containers release 1: later (Windows, WSL and macOS)
