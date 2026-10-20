@@ -48,16 +48,37 @@ function remoteSideOf(lines: readonly string[]): {
 describe('the remote install and start output in the log (card connect-67)', function () {
   this.timeout(600_000);
 
-  it('F-2003 AC-11 (remote-output): a fresh install logs the remote output and its progress (BR-6 item 8)', async () => {
+  it('F-2003 AC-11 (remote-output): a fresh install logs the remote output and its progress, and never the server\u2019s token (BR-6 item 8, BR-14)', async () => {
     await freshHost();
     const mark = connectionLog().length;
     await openConnected('rl1', INSTALL_MILLISECONDS);
     try {
-      deepStrictEqual(remoteSideOf(connectionLog().slice(mark)), {
-        remoteOutput: true,
-        installing: true,
-        unpackProgress: true,
-      });
+      const lines = connectionLog().slice(mark);
+      const tokens = (
+        await onHost(
+          'sh',
+          '-c',
+          `find '${DATA_FOLDER}' -maxdepth 3 -name '*.token' -exec cat {} +`,
+        )
+      )
+        .split('\n')
+        .filter(token => token !== '');
+      deepStrictEqual(
+        {
+          ...remoteSideOf(lines),
+          tokenRead: tokens.length > 0,
+          tokenLogged: lines.some(line =>
+            tokens.some(token => line.includes(token)),
+          ),
+        },
+        {
+          remoteOutput: true,
+          installing: true,
+          unpackProgress: true,
+          tokenRead: true,
+          tokenLogged: false,
+        },
+      );
     } finally {
       await closeWindow('rl1');
     }

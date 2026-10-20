@@ -37,10 +37,12 @@ function scrubbed(
   environment: Readonly<Record<string, string>>,
 ): string {
   let text = masked(line, token).replace(ADDRESS, addressShown);
-  for (const [variable, value] of Object.entries(environment)) {
-    if (value.length >= SECRET_LENGTH) {
-      text = text.replaceAll(value, () => `\${${variable}}`);
-    }
+  // The longest value goes first, so a shorter value inside it can't leave the rest of it in clear.
+  const secrets = Object.entries(environment)
+    .filter(([, value]) => value.length >= SECRET_LENGTH)
+    .sort(([, first], [, second]) => second.length - first.length);
+  for (const [variable, value] of secrets) {
+    text = text.replaceAll(value, () => `\${${variable}}`);
   }
   return text;
 }

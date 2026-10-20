@@ -99,6 +99,72 @@ describe('the remote output in the log (card connect-67)', () => {
     ]);
   });
 
+  it('F-2003 BR-14: a value inside a longer one is named only as part of the longer one, whatever their order', async () => {
+    const {written} = await runsOf(
+      channelPrinting([
+        'x abcdefgh-SECRETTAIL y',
+        'GET https-free t=secretvalue1&u=PRIVATE99',
+      ]),
+      requestWith({
+        SHORT_VALUE: 'abcdefgh',
+        LONG_VALUE: 'abcdefgh-SECRETTAIL',
+        INNER_VALUE: 'secretvalue1',
+        OUTER_VALUE: 't=secretvalue1&u=PRIVATE99',
+      }),
+    );
+    deepStrictEqual(written, [
+      '[remote] x ${LONG_VALUE} y',
+      '[remote] GET https-free ${OUTER_VALUE}',
+    ]);
+  });
+
+  it('F-2003 BR-14: a value of exactly 8 characters is named', async () => {
+    const {written} = await runsOf(
+      channelPrinting(['agent abcdefgh']),
+      requestWith({EIGHT_LONG: 'abcdefgh'}),
+    );
+    deepStrictEqual(written, ['[remote] agent ${EIGHT_LONG}']);
+  });
+
+  it('F-2003 BR-14: a later block with no token keeps the token learned before', async () => {
+    const {written} = await runsOf(
+      channelPrinting(block(`server.token=${TOKEN}`), [
+        ...block(),
+        `still ${TOKEN}`,
+      ]),
+      requestWith(),
+      requestWith(),
+    );
+    deepStrictEqual(written, [
+      'Server result: Ok',
+      'Server result: Ok',
+      '[remote] still aaa1aaaaaa11',
+    ]);
+  });
+
+  it('F-2003 BR-6 item 8: the summary names a failed status as it is', async () => {
+    const {written} = await runsOf(
+      channelPrinting([
+        'remote-oss-server-result-begin',
+        'status=LinuxPrereqs',
+        'remote-oss-server-result-end',
+      ]),
+      requestWith(),
+    );
+    deepStrictEqual(written, ['Server result: LinuxPrereqs']);
+  });
+
+  it('ADR-0010 rule 1: a line that only contains a marker is remote output, not a block', async () => {
+    const {written} = await runsOf(
+      channelPrinting(['say remote-oss-server-result-begin here', 'after']),
+      requestWith(),
+    );
+    deepStrictEqual(written, [
+      '[remote] say remote-oss-server-result-begin here',
+      '[remote] after',
+    ]);
+  });
+
   it('ADR-0010 rule 1: a remote line that looks like ours changes nothing', async () => {
     const lines = [
       'remote-oss-server-result-begin',
@@ -152,17 +218,17 @@ describe('the remote output in the log (card connect-67)', () => {
     deepStrictEqual(written, []);
   });
 
-  it('F-2003 BR-6 item 8: a carriage return ends a line as a newline does', async () => {
-    const {written} = await runsOf(
-      channelPrinting([
-        'a\r',
-        'remote-oss-server-result-begin\r',
-        'status=Ok\r',
-        'remote-oss-server-result-end\r',
-      ]),
-      requestWith(),
-    );
-    deepStrictEqual(written, ['[remote] a', 'Server result: Ok']);
+  it('F-2003 BR-6 item 8: a carriage return ends a line as a newline does, and the reader still gets it', async () => {
+    const lines = [
+      'a\r',
+      'remote-oss-server-result-begin\r',
+      'status=Ok\r',
+      'remote-oss-server-result-end\r',
+    ];
+    deepStrictEqual(await runsOf(channelPrinting(lines), requestWith()), {
+      written: ['[remote] a', 'Server result: Ok'],
+      read: [lines],
+    });
   });
 
   it('F-2003 BR-6 item 8: the channel’s other operations are its own', async () => {
