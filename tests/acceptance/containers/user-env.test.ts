@@ -129,6 +129,16 @@ function printing(label: string, variables: readonly string[]): string {
     .join('; ');
 }
 
+/** The command that prints, on a line of its own each, the value each of `variables` had when the terminal's shell started. */
+function printingAtStart(label: string, variables: readonly string[]): string {
+  return variables
+    .map(
+      (each, index) =>
+        `printf '${label}${String(index)}:%s\\n' "$(tr '\\0' '\\n' < /proc/$$/environ | sed -n 's/^${each}=//p')"`,
+    )
+    .join('; ');
+}
+
 /** What `printing(label, variables)` printed in a terminal of `name`, one value per variable. */
 async function printed(
   name: string,
@@ -158,7 +168,12 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       const plain = await execEnvOf(containerId, 'HOME');
       deepStrictEqual(
         [home, plain, await dialogOf(name), await notifications(name)],
-        [['/custom/home/dir'], '/root', undefined, []],
+        [
+          ['/custom/home/dir'],
+          await execEnvOf(containerId, 'HOME'),
+          undefined,
+          [],
+        ],
       );
       await closeWindow(name);
     } finally {
@@ -277,14 +292,15 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
     }
   });
 
-  it('F-0416 AC-28, AC-29 (x28): each userEnvProbe value gives a terminal what its shell exports, and none adds nothing of the login files', async () => {
-    const cases: Array<[string | undefined, string[]]> = [
-      ['none', ['', 'bashrc']],
-      ['interactiveShell', ['', 'bashrc']],
-      ['loginShell', ['profile', 'bashrc']],
-      [undefined, ['profile', 'bashrc']],
+  it('F-0416 AC-28, AC-29 (x28): each userEnvProbe value hands the terminal’s shell what its probe exports (read from the shell’s own start-up environment), and the terminal shows its interactive file under every value', async () => {
+    // [the mode, what the terminal shows, what the terminal's shell was handed when it started]
+    const cases: Array<[string | undefined, string[], string[]]> = [
+      ['none', ['', 'bashrc'], ['', '']],
+      ['interactiveShell', ['', 'bashrc'], ['', 'bashrc']],
+      ['loginShell', ['profile', 'bashrc'], ['profile', '']],
+      [undefined, ['profile', 'bashrc'], ['profile', 'bashrc']],
     ];
-    const seen: Array<[string, string[]]> = [];
+    const seen: Array<[string, string[], string[]]> = [];
     for (const [mode] of cases) {
       const folder = envFolder(
         `c42-probe-${mode ?? 'default'}`,
@@ -296,10 +312,18 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       try {
         const name = await reopened(folder);
-        seen.push([
-          mode ?? 'default',
-          await printed(name, 'term', ['PROBE_PROFILE', 'PROBE_BASHRC']),
-        ]);
+        const names = ['PROBE_PROFILE', 'PROBE_BASHRC'];
+        const visible = await printed(name, 'term', names);
+        await inWindow(name, 'workbench.action.terminal.new');
+        const atStart: string[] = [];
+        for (const [index, each] of names.entries()) {
+          await typeInTerminal(
+            name,
+            `${printingAtStart(`start${String(index)}`, [each])}\n`,
+          );
+          atStart.push(await resultAfter(name, `start${String(index)}0`));
+        }
+        seen.push([mode ?? 'default', visible, atStart]);
         await closeWindow(name);
       } finally {
         await removeContainers(folder);
@@ -307,7 +331,11 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
     }
     deepStrictEqual(
       seen,
-      cases.map(([mode, terminal]) => [mode ?? 'default', terminal]),
+      cases.map(([mode, visible, atStart]) => [
+        mode ?? 'default',
+        visible,
+        atStart,
+      ]),
     );
   });
 
