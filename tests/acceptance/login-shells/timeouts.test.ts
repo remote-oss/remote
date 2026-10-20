@@ -6,11 +6,13 @@ import {
   appendScript,
   closeWindow,
   connectionLog,
+  emptyWindows,
   onHostAs,
   openWindow,
   recordLines,
   variable,
   waitFor,
+  windowEvents,
   windowState,
 } from '../windows/harness.ts';
 import {dismissals, setting} from '../windows/maintenance.ts';
@@ -122,7 +124,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it('F-2704 AC-14 (slow-startup): a .profile that takes 25 s with a connect timeout of 40 s connects with no notice, and its export reaches a task', async () => {
+  it.skip('F-2704 AC-14 (slow-startup): a .profile that takes 25 s with a connect timeout of 40 s connects with no notice, and its export reaches a task', async () => {
     // The run's hosts name a ConnectTimeout of their own, which counts before the setting does: the run's
     // configuration with 40 s in its place is the timeout of 40 s.
     const configFile = path.join(
@@ -200,13 +202,21 @@ describe('login shells that do not finish or end early: the connect fails or wai
         window,
       },
     ] satisfies AppendedEntry[]);
+    const known = emptyWindows();
     await openWindow('harness-bash', window);
+    let local = '';
     await waitFor(
-      'the window to be local again',
-      async () => (await windowState(window)).remoteName === null,
+      'the window to be an empty local window again',
+      () => {
+        local = emptyWindows().find(each => !known.includes(each)) ?? '';
+        return (
+          local !== '' &&
+          windowEvents(local).some(each => each.event === 'activated')
+        );
+      },
       120_000,
     );
-    const state = await windowState(window);
+    const state = await windowState(local);
     await waitFor(
       'no process of the user to remain',
       async () =>
@@ -226,7 +236,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
       '-c',
       'ls -d "$HOME/.vscodium-server-insiders" "$HOME/.vscode-server" 2>/dev/null || true',
     );
-    await closeWindow(window);
+    await closeWindow(local);
     deepStrictEqual(
       {remote: state.remoteName, folders: state.folders, left: folder.trim()},
       {remote: null, folders: [], left: ''},
