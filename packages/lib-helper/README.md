@@ -18,6 +18,15 @@ lease. Every change of the live leases reaches every lease. A closed connection 
 by its end policy, after the policy's action where it names one, or when a client sends stop. Messages are one JSON
 object per line. The Windows named pipe is not available yet: on Windows, listening and connecting are refused.
 
+## Registries and starts
+
+A registry folder is per profile, per user, or per editor instance. `{instanceOf: <global storage folder>}` names the
+instance's folder, which every profile of the instance shares and no other instance does. When that folder can't be
+found, acquiring fails as `registryUnresolved` before anything is read or written. A helper that must outlive the
+starter's whole process tree starts through a launcher. The consumer bundles a program that calls
+`runTreeLeavingLauncher`, and passes it as `launcherScript` with `leaveStarterTree`. The launcher starts the helper
+detached and exits, so the helper has no parent in the starter's tree.
+
 ## For maintainers
 
 | | |

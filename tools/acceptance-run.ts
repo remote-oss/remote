@@ -11,7 +11,9 @@
 
 import {randomInt} from 'node:crypto';
 import {readFileSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {stopRunHelpers} from './acceptance-helper-stop.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {isMainModule, messageOf} from './repository.ts';
 
@@ -452,8 +454,11 @@ export function cleanRun(command: CommandRunner, runId: string): void {
 }
 
 if (isMainModule(import.meta.url)) {
+  const runId = acceptanceRunId(process.env, process.pid);
   try {
-    cleanRun(runCommand, acceptanceRunId(process.env, process.pid));
+    // A helper that left a killed run's editor still runs: it is stopped before the editors and containers go.
+    stopRunHelpers(tmpdir(), runId);
+    cleanRun(runCommand, runId);
   } catch (error) {
     console.error(`acceptance: ${messageOf(error)}`);
     process.exitCode = 1;

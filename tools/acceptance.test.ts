@@ -68,6 +68,7 @@ import {
   type RunnerLaunch,
 } from './acceptance-launches.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
+import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -1360,6 +1361,50 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    it("each launch runs the helper stop program on the run's user-data folder once it has run, when it holds records", async () => {
+      const userData = path.join(workspace.root, 'user-data');
+      const namespaceFolder = path.join(
+        userData,
+        'User',
+        'globalStorage',
+        'ext.a',
+        'registry',
+        'watch',
+      );
+      mkdirSync(namespaceFolder, {recursive: true});
+      writeFileSync(
+        path.join(
+          namespaceFolder,
+          `${createHash('sha256').update('one').digest('hex').slice(0, 32)}.json`,
+        ),
+        JSON.stringify({
+          namespace: 'watch',
+          recordKey: 'one',
+          nonce: 'n1',
+          endpoint: '/run/one.sock',
+        }),
+      );
+      const {calls, command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL, REMOTE],
+        command,
+        '',
+        sleep,
+        launch => {
+          calls.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+      );
+      const stopLine = [process.execPath, STOP_PROGRAM, userData].join(' ');
+      deepStrictEqual(
+        calls.filter(call => call.startsWith('ran ') || call === stopLine),
+        ['ran terminal', stopLine, 'ran remote', stopLine],
+      );
     });
 
     it('D-85: a launch with settings finds them over the base settings', async () => {

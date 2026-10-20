@@ -10,6 +10,7 @@
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
+import {stopHelpersUnder} from './acceptance-helper-stop.ts';
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {
   type RunRegistry,
@@ -942,6 +943,8 @@ export async function runLaunches(
           return await runLaunch(launch);
         } finally {
           await held.release();
+          // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
+          stopHelpersUnder(path.join(runFolder, 'user-data'), command);
         }
       }, report),
     );
