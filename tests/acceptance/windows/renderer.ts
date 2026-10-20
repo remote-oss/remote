@@ -676,6 +676,58 @@ export async function rowContextMenu(
   return menu;
 }
 
+/** One section of the Extensions view: its title and the display names of its entries. */
+export interface ExtensionsSection {
+  title: string;
+  entries: string[];
+}
+
+/** The sections of the Extensions view of window `name`, in order, with the entries each lists. */
+export async function extensionsViewSections(
+  name: string,
+): Promise<ExtensionsSection[]> {
+  return evaluate<ExtensionsSection[]>(
+    name,
+    `[...document.querySelectorAll('.extensions-viewlet .split-view-view')].map(pane => ({
+      title: pane.querySelector('.pane-header .title')?.textContent ?? '',
+      entries: [...pane.querySelectorAll('.extension-list-item .name')].map(entry => entry.textContent ?? ''),
+    }))`,
+  );
+}
+
+/**
+ * The labels of the context menu that a right click on the entry `displayName` of the Extensions view in window `name`
+ * opens, in order. The menu is closed again. It fails naming the entry when the view lists it not once.
+ */
+export async function extensionContextMenu(
+  name: string,
+  displayName: string,
+): Promise<string[]> {
+  const menu = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+      for (const type of ['keydown', 'keyup']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      return labels;
+    })()`,
+  );
+  if (menu === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return menu;
+}
+
 /** One row of core's Ports view. */
 export interface PortsRow {
   /** The Port column as shown: `<label> (<port or key>)`, or the port or key alone. */

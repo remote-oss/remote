@@ -24,6 +24,8 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {
+  extensionContextMenu,
+  extensionsViewSections,
   rememberPage,
   rowAction,
   rowDetails,
@@ -40,6 +42,9 @@ import {
 const IN_NEW = 'Connect in New Window...';
 const CURRENT = 'Connect in Current Window...';
 const SHOW_REMOTE_EXPLORER = 'workbench.view.remote';
+
+/** The display name of the explorer in the Extensions view. */
+const EXPLORER_NAME = 'Remote Explorer';
 
 /** The hosts of the run's ssh_config. */
 const HOSTS = hostAliases();
@@ -98,6 +103,47 @@ describe('the view in SSH windows and its connect actions (card coverage-25c, pa
         `ls ${SERVER_EXTENSIONS} 2>/dev/null || true`,
       );
       deepStrictEqual(serverExtensions.includes('remote-explorer'), false);
+    } finally {
+      await closeWindow(name);
+    }
+  });
+
+  it("F-5001 AC-6 (not-installed-remotely): in an SSH window the Extensions view lists the explorer under Local - Installed only, its menu has no Install in SSH item, and the server's extensions folder holds nothing of it", async () => {
+    const name = 'xp-ssh-extensions';
+    await openWindow('harness', name);
+    try {
+      await connectedTo(name, 'harness');
+      await inWindow(name, 'workbench.view.extensions');
+      await inWindow(
+        name,
+        'workbench.extensions.action.clearExtensionsSearchResults',
+      );
+      await waitFor(
+        'the Extensions view to list the explorer',
+        async () =>
+          (await extensionsViewSections(name)).some(section =>
+            section.entries.includes(EXPLORER_NAME),
+          ),
+        30_000,
+      );
+      const sections = await extensionsViewSections(name);
+      const serverExtensions = await onHost(
+        'sh',
+        '-c',
+        `ls ${SERVER_EXTENSIONS} 2>/dev/null || true`,
+      );
+      deepStrictEqual(
+        [
+          sections
+            .filter(section => section.entries.includes(EXPLORER_NAME))
+            .map(section => section.title),
+          (await extensionContextMenu(name, EXPLORER_NAME)).filter(label =>
+            label.startsWith('Install in SSH'),
+          ),
+          serverExtensions.includes('remote-explorer'),
+        ],
+        [['Local - Installed'], [], false],
+      );
     } finally {
       await closeWindow(name);
     }
