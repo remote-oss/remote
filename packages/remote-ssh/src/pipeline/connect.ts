@@ -12,6 +12,7 @@ import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
 import type {StartedServer, TransferPhase} from 'lib-server';
 import {
+  CONNECT_WAIT_TIMEOUT,
   type FailureContext,
   type FailureDetail,
   failedWith,
@@ -345,7 +346,7 @@ async function runSteps(
     return failure(
       probed.interrupted === 'cancelled'
         ? {kind: 'cancelled'}
-        : {kind: 'timeout'},
+        : CONNECT_WAIT_TIMEOUT,
     );
   }
   if (probed.value.kind === 'failed') {
