@@ -8,11 +8,13 @@ const TOKEN = 'tok3nValue42';
 /** A run request with `environment`. */
 function requestWith(
   environment: Readonly<Record<string, string>> = {},
+  secretVariables?: readonly string[],
 ): ScriptRequest {
   return {
     script: 'install',
     interpreter: 'posixShell',
     environment,
+    ...(secretVariables === undefined ? {} : {secretVariables}),
     input: {kind: 'text', text: ''},
     cancellation: new AbortController().signal,
   };
@@ -163,6 +165,30 @@ describe('the remote output in the log (card connect-67)', () => {
       '[remote] say remote-oss-server-result-begin here',
       '[remote] after',
     ]);
+  });
+
+  it('F-2003 BR-14 (ruling-253-mark): a value marked secret is named at any length, and an unmarked short one is not', async () => {
+    const {written} = await runsOf(
+      channelPrinting(['a abc and xyz']),
+      requestWith({MARKED: 'abc', UNMARKED: 'xyz'}, ['MARKED']),
+    );
+    deepStrictEqual(written, ['[remote] a ${MARKED} and xyz']);
+  });
+
+  it('F-2003 BR-14: a marked empty value names nothing', async () => {
+    const {written} = await runsOf(
+      channelPrinting(['line stays']),
+      requestWith({EMPTY: ''}, ['EMPTY']),
+    );
+    deepStrictEqual(written, ['[remote] line stays']);
+  });
+
+  it('F-2003 BR-14: a marked short value inside an unmarked long one leaves nothing of the long one', async () => {
+    const {written} = await runsOf(
+      channelPrinting(['got abcdefghijkl']),
+      requestWith({SHORT: 'efg', LONG: 'abcdefghijkl'}, ['SHORT']),
+    );
+    deepStrictEqual(written, ['[remote] got ${LONG}']);
   });
 
   it('ADR-0010 rule 1: a remote line that looks like ours changes nothing', async () => {

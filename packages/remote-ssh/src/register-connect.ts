@@ -76,6 +76,8 @@ export interface ConnectRegistration {
    * before the first resolve starts or without a resolver.
    */
   activeConnection(): {hostKey: string; lastResolve: LastResolve} | undefined;
+  /** Calls the listener when the session's first resolve settles; it never does without a resolver. */
+  onFirstResolveSettled(listener: () => void): void;
   dispose(): void;
 }
 
@@ -191,6 +193,9 @@ export async function registerConnect(
             hostKey: current.decodedTarget.rawHostString,
             lastResolve: resolver.lastResolve(),
           };
+    },
+    onFirstResolveSettled: listener => {
+      resolver?.onFirstResolveSettled(listener);
     },
     dispose: () => {
       details.dispose();

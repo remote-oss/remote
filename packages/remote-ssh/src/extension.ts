@@ -21,7 +21,12 @@ import {
   type ResolverEditor,
   resolverEditorOf,
 } from 'lib-authority';
-import {commandBus, createProtocol, systemTimers} from 'lib-companion';
+import {
+  commandBus,
+  createProtocol,
+  EXPLORER_INBOX,
+  systemTimers,
+} from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
 import {listHosts} from 'lib-ssh';
 import type {Logger} from 'lib-log';
@@ -47,6 +52,13 @@ import {
   mismatchLine,
   serveSliceEndpoints,
 } from './companion/slice-endpoints.ts';
+import {pushActiveFolders} from './companion/active-folders.ts';
+import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
+import {signalHostsChanged} from './companion/hosts-changed.ts';
+import {
+  recordOnFirstResolve,
+  type WindowWorkspace,
+} from './companion/history-recorder.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
@@ -221,6 +233,11 @@ export async function activate(
         extensionId,
       }),
   };
+  // The commands that signal a change of the hosts are made before the protocol is; the signal is bound once it is.
+  const hostsSignal = {send: (): void => undefined};
+  function hostsChanged(): void {
+    hostsSignal.send();
+  }
   const result = await activateRemoteSsh({
     table: {commands, settings, standDown},
     extension,
@@ -249,6 +266,7 @@ export async function activate(
       () => textOf(host, 'configFile'),
       extension,
       translate,
+      hostsChanged,
     ),
     channels: channelPortFor(process.env, vscode.window, ACCEPTANCE_FILES),
     clock: Date.now,
@@ -284,6 +302,7 @@ export async function activate(
       help: helpHandlers(help, helpLinksOf(manifest), extension),
       resolversGranted: result.proposals.granted.includes('resolvers'),
       configPlaces,
+      hostsChanged,
     },
     adapters,
   );
@@ -300,6 +319,27 @@ export async function activate(
       result.logger.warn(mismatchLine(mismatch));
     },
   });
+  hostsSignal.send = () => {
+    signalHostsChanged(companion);
+  };
+  const history = serveHistoryEndpoints(companion, context.globalState);
+  const firstResolve = {
+    onFirstResolveSettled: (listener: () => void) => {
+      connect.onFirstResolveSettled(listener);
+    },
+    lastResolve: () => connect.activeConnection()?.lastResolve ?? 'none',
+  } as const;
+  recordOnFirstResolve(firstResolve, workspaceOf(vscode), context.globalState);
+  pushActiveFolders({
+    hasWorkspace: () =>
+      vscode.workspace.workspaceFile !== undefined ||
+      (vscode.workspace.workspaceFolders?.length ?? 0) > 0,
+    remoteAuthority: () => vscode.env.remoteAuthority,
+    resolve: firstResolve,
+    send: push => {
+      companion.fireAndForget(EXPLORER_INBOX.setActiveFolders.commandId, push);
+    },
+  });
   const endpoints = serveSliceEndpoints(companion, {
     listHosts: () => configuredHosts(host),
     activeConnection: () => connect.activeConnection(),
@@ -309,8 +349,18 @@ export async function activate(
   context.subscriptions.push({
     dispose: () => {
       endpoints.dispose();
+      history.dispose();
     },
   });
+}
+
+/** What the history recorder reads of the window: its workspace file and its folders. */
+function workspaceOf(editor: typeof vscode): WindowWorkspace {
+  return {
+    workspaceFile: () => editor.workspace.workspaceFile,
+    workspaceFolders: () =>
+      (editor.workspace.workspaceFolders ?? []).map(folder => folder.uri),
+  };
 }
 
 /** The hosts of the files in effect, read at each call: the host pick's and the companion commands' one reading. */
@@ -365,6 +415,8 @@ interface ServedActivation {
   resolversGranted: boolean;
   /** The client's configuration files, which the command that adds a host writes to. */
   configPlaces: ConfigFilePlaces;
+  /** Tells Remote Explorer that the configured hosts may have changed. */
+  hostsChanged: () => void;
 }
 
 /** The connect over the editor and this machine: its surfaces, its assembly and its registration. */
@@ -443,6 +495,7 @@ async function registerConnectOf(
         files: nodeHostFiles,
         places: served.configPlaces,
         configFile: () => textOf(host, 'configFile'),
+        hostsChanged: served.hostsChanged,
       },
     },
     connectAssemblyOf(surfaces, machine, served.logger),

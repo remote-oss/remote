@@ -7,13 +7,18 @@ import {volumeServerFolder} from 'lib-product';
 import {
   closeWindow,
   devContainerFolder,
+  connectedToContainer,
   devContainersOf,
   editorProduct,
   reopenInContainer,
   reopenStarted,
   variable,
 } from '../windows/harness.ts';
-import {notifications, waitForDialog} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  notifications,
+  waitForDialog,
+} from '../windows/renderer.ts';
 import {
   openFolderWindow,
   removeContainers,
@@ -26,6 +31,9 @@ const execFileAsync = promisify(execFile);
 const INSTALLING = 'Installing server';
 
 const STARTING = 'Starting server';
+
+/** The notice text of S157, which no dialog or notification of a failed download may show. */
+const S157 = 'Waiting for other windows to connect';
 
 /** The generic failure dialog's detail (S034). */
 const S034 = 'An error occurred setting up the container.';
@@ -64,6 +72,20 @@ async function treeOfImage(): Promise<string> {
 /** Removes the tree of this commit and the run's image's platform from the volume, and only that: other rows share the volume. */
 async function removeTree(): Promise<void> {
   await inVolume(`rm -rf ${await treeOfImage()}`);
+}
+
+/** Removes the images the dev container CLI built for the folder named `folderName`, which carry its name. */
+async function removeImagesOf(folderName: string): Promise<void> {
+  const {stdout} = await execFileAsync('docker', [
+    'images',
+    '--quiet',
+    '--filter',
+    `reference=vsc-${folderName}-*`,
+  ]);
+  const images = [...new Set(stdout.split('\n').filter(line => line !== ''))];
+  if (images.length > 0) {
+    await execFileAsync('docker', ['rmi', '--force', ...images]);
+  }
 }
 
 /** What `script` prints when run as the remote user in container `containerId`. */
@@ -377,6 +399,156 @@ describe('F-0503 server install (card containers-41)', function () {
     } finally {
       await removeContainers(folder);
       await execFileAsync('docker', ['volume', 'rm', '--force', volume]);
+      await removeImagesOf('c41-mount-user');
+    }
+  });
+
+  /** The failing source of the run's download host: its `missing` segment answers 404. */
+  const failingSource = `${variable('HARNESS_DOWNLOADS_LOCAL')}/missing`;
+
+  const workingSource = `${variable('HARNESS_DOWNLOADS_LOCAL')}/ok`;
+
+  /**
+   * Runs `body` with an empty volume tree, an empty download folder of its own and the failing source set, and puts the
+   * launch's settings back after.
+   */
+  async function withFailingSource(
+    body: (folder: string, downloads: string) => Promise<void>,
+  ): Promise<void> {
+    await removeTree();
+    const downloads = path.join(variable('HARNESS_RUN_FOLDER'), 'c41-failing');
+    mkdirSync(downloads, {recursive: true});
+    await setUserSetting('remote.serverDownloadFolder', downloads);
+    await setUserSetting('remote.serverDownloadBaseUrl', failingSource);
+    try {
+      await body(folderOf('c41-failing'), downloads);
+    } finally {
+      await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
+      await setUserSetting('remote.serverDownloadFolder', downloadFolder);
+    }
+  }
+
+  /** The text of the failure dialog, as `message`, `details` and `buttons`. */
+  async function failureDialog(name: string): Promise<{
+    message: string;
+    details: string;
+    buttons: string[];
+  }> {
+    const dialog = await waitForDialog(name, 180_000);
+    return {
+      message: dialog.message,
+      details: dialog.details,
+      buttons: [...dialog.buttons],
+    };
+  }
+
+  const FAILED_SETUP = {
+    message: '',
+    details: S034,
+    buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+  };
+
+  it('F-0503 AC-19 (s9): a source that answers 404 shows the generic dialog with Retry, no S157 notification, and leaves the container running', async () => {
+    await withFailingSource(async folder => {
+      const name = await openFolderWindow(folder);
+      opened.push(name);
+      const shown = new Set<string>();
+      const watch = {done: false};
+      const polling = (async () => {
+        while (!watch.done) {
+          for (const text of await notifications(name).catch(() => [])) {
+            shown.add(text);
+          }
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+      })();
+      const before = requestCount();
+      await reopenStarted(name);
+      const dialog = await failureDialog(name);
+      watch.done = true;
+      await polling;
+      const containerIds = await devContainersOf(folder);
+      const {stdout} = await execFileAsync('docker', [
+        'inspect',
+        '-f',
+        '{{.State.Status}}',
+        containerIds[0] ?? '',
+      ]);
+      deepStrictEqual(
+        {
+          dialog,
+          waiting: [...shown].some(text => text.includes(S157)),
+          containers: containerIds.length,
+          status: stdout.trim(),
+          requests: requestsSince(before).every(request =>
+            request.startsWith('GET /missing/'),
+          ),
+        },
+        {
+          dialog: FAILED_SETUP,
+          waiting: false,
+          containers: 1,
+          status: 'running',
+          requests: true,
+        },
+      );
+    });
+  });
+
+  it('F-0503 AC-20 (s10): Retry with the cause unchanged ends in the same dialog on the same container, and Retry after the source is fixed connects it', async () => {
+    await withFailingSource(async folder => {
+      const name = await openFolderWindow(folder);
+      opened.push(name);
+      await reopenStarted(name);
+      await failureDialog(name);
+      const first = await devContainersOf(folder);
+      await answerDialog(name, 'Retry');
+      const again = await failureDialog(name);
+      await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
+      await answerDialog(name, 'Retry');
+      await connectedToContainer(name);
+      deepStrictEqual(
+        {
+          again,
+          sameContainer: [first, await devContainersOf(folder)],
+        },
+        {again: FAILED_SETUP, sameContainer: [first, first]},
+      );
+    });
+  });
+
+  it('F-0503 AC-43 (s11): the editor’s own server folder holds the install, no other server folder is made, and the download is of the editor’s quality', async () => {
+    await removeTree();
+    const downloads = path.join(variable('HARNESS_RUN_FOLDER'), 'c41-names');
+    mkdirSync(downloads, {recursive: true});
+    await setUserSetting('remote.serverDownloadFolder', downloads);
+    try {
+      const before = requestCount();
+      const first = await connect(folderOf('c41-names'));
+      const tree = await treeOfImage();
+      const product = editorProduct();
+      deepStrictEqual(
+        {
+          serverFolders: (await inContainer(first.containerId, 'ls -A ~'))
+            .split('\n')
+            .filter(entry => entry.startsWith('.vscod')),
+          link: (await installedIn(first.containerId, tree)).link,
+          request: requestsSince(before),
+          archive: filesUnder(downloads).filter(file =>
+            file.endsWith(`-${product.quality}.tar.gz`),
+          ).length,
+        },
+        {
+          serverFolders: [product.serverDataFolderName],
+          link: tree,
+          request: [
+            `GET /ok/commit:${product.commit}/server-${updateServicePlatform(tree)}/${product.quality}`,
+          ],
+          archive: 1,
+        },
+      );
+    } finally {
+      await setUserSetting('remote.serverDownloadFolder', downloadFolder);
     }
   });
 });

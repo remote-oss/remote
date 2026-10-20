@@ -59,8 +59,35 @@ function fakeEditor() {
   const picks: FakeQuickPick[] = [];
   const shownDocuments: Array<{uri: {fsPath: string}; options: unknown}> = [];
   const editors: FakeTextEditor[] = [];
+  const saveListeners = new Set<(document: {uri: {fsPath: string}}) => void>();
+  const tabListeners = new Set<() => void>();
+  const tabState = {openFiles: [] as string[]};
   const editor = {
+    workspace: {
+      onDidSaveTextDocument: (
+        listener: (document: {uri: {fsPath: string}}) => void,
+      ) => {
+        saveListeners.add(listener);
+        return {dispose: () => saveListeners.delete(listener)};
+      },
+    },
     window: {
+      tabGroups: {
+        get all() {
+          return [
+            {
+              tabs: tabState.openFiles.map(file => ({
+                input: {uri: {fsPath: file}},
+              })),
+            },
+            {tabs: [{input: 'not a text input'}]},
+          ];
+        },
+        onDidChangeTabs: (listener: () => void) => {
+          tabListeners.add(listener);
+          return {dispose: () => tabListeners.delete(listener)};
+        },
+      },
       createQuickPick: () => {
         const pick = new FakeQuickPick();
         picks.push(pick);
@@ -85,7 +112,26 @@ function fakeEditor() {
     },
     SnippetString: FakeSnippet,
   } as unknown as Editor;
-  return {editor, picks, shownDocuments, editors};
+  return {
+    editor,
+    picks,
+    shownDocuments,
+    editors,
+    /** Saves the document of `file`, as the editor tells the listeners. */
+    save: (file: string) => {
+      for (const listener of [...saveListeners]) {
+        listener({uri: {fsPath: file}});
+      }
+    },
+    /** Changes the open tabs to those of `files`, as the editor tells the listeners. */
+    changeTabs: (files: string[]) => {
+      tabState.openFiles = files;
+      for (const listener of [...tabListeners]) {
+        listener();
+      }
+    },
+    listeners: () => [saveListeners.size, tabListeners.size],
+  };
 }
 
 function textEditorFor(file: string): FakeTextEditor {
@@ -187,6 +233,73 @@ describe('the editor adapter of the Open SSH Configuration File command (card re
     deepStrictEqual(fake.shownDocuments, [
       {uri: {fsPath: '/h/.ssh/config'}, options: {preview: true}},
     ]);
+  });
+
+  /** The adapter, with the file opened and its saves watched, counting the signals. */
+  async function watched(fake: ReturnType<typeof fakeEditor>, file: string) {
+    const signals: string[] = [];
+    const adapter = configFileEditorOf(
+      fake.editor,
+      filePickPortOf(fake.editor, translated),
+    );
+    fake.changeTabs([file]);
+    adapter.watchSaves(await adapter.open(file), () => {
+      signals.push('signal');
+    });
+    return {adapter, signals};
+  }
+
+  it('F-2203 BR-9, F-5902 AC-9: each save of the opened document signals, while its tab stays open', async () => {
+    const fake = fakeEditor();
+    const {signals} = await watched(fake, '/h/.ssh/config');
+    fake.save('/h/.ssh/config');
+    fake.save('/h/.ssh/config');
+    deepStrictEqual(signals, ['signal', 'signal']);
+  });
+
+  it('brief §7 row 6: a save of another document signals nothing', async () => {
+    const fake = fakeEditor();
+    const {signals} = await watched(fake, '/h/.ssh/config');
+    fake.save('/h/.ssh/other');
+    deepStrictEqual(signals, []);
+  });
+
+  it('F-5902 AC-29: once the last tab of the file is closed a save signals nothing, and nothing stays subscribed', async () => {
+    const fake = fakeEditor();
+    const {signals} = await watched(fake, '/h/.ssh/config');
+    fake.changeTabs(['/h/.ssh/other']);
+    fake.save('/h/.ssh/config');
+    deepStrictEqual([signals, fake.listeners()], [[], [0, 0]]);
+  });
+
+  it('F-2203 BR-9: a change of tabs that leaves the file open keeps the watch', async () => {
+    const fake = fakeEditor();
+    const {signals} = await watched(fake, '/h/.ssh/config');
+    fake.changeTabs(['/h/.ssh/config', '/h/.ssh/other']);
+    fake.save('/h/.ssh/config');
+    deepStrictEqual(signals, ['signal']);
+  });
+
+  it('F-2203 BR-9: running the command again on a file already watched adds no second signal per save', async () => {
+    const fake = fakeEditor();
+    const {adapter, signals} = await watched(fake, '/h/.ssh/config');
+    adapter.watchSaves(await adapter.open('/h/.ssh/config'), () => {
+      signals.push('second');
+    });
+    fake.save('/h/.ssh/config');
+    deepStrictEqual(signals, ['signal']);
+  });
+
+  it('F-2203 BR-9: after the tab was closed, opening the file again watches it again', async () => {
+    const fake = fakeEditor();
+    const {adapter, signals} = await watched(fake, '/h/.ssh/config');
+    fake.changeTabs([]);
+    fake.changeTabs(['/h/.ssh/config']);
+    adapter.watchSaves(await adapter.open('/h/.ssh/config'), () => {
+      signals.push('again');
+    });
+    fake.save('/h/.ssh/config');
+    deepStrictEqual(signals, ['again']);
   });
 
   it('#408 (2): open gives back the editor showTextDocument showed', async () => {

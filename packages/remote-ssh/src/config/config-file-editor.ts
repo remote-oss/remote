@@ -21,7 +21,7 @@ import {snippetPartsOf} from './snippet-parts.ts';
 
 type Editor = Pick<
   typeof vscode,
-  'window' | 'Uri' | 'SnippetString' | 'Position'
+  'window' | 'workspace' | 'Uri' | 'SnippetString' | 'Position'
 >;
 
 /** The opened editor as this adapter makes it: the port's view plus the editor it showed. */
@@ -35,6 +35,16 @@ export function configFileEditorOf(
   editor: Editor,
   filePick: FilePickPort,
 ): ConfigFileEditor {
+  /** The files whose saves are watched now, so that opening one again watches it once. */
+  const watched = new Set<string>();
+  /** Whether a tab of `file` is open in any group. */
+  function isOpen(file: string): boolean {
+    return editor.window.tabGroups.all.some(group =>
+      group.tabs.some(
+        entry => (entry.input as {uri?: {fsPath: string}}).uri?.fsPath === file,
+      ),
+    );
+  }
   return {
     pickFile: (choice: FileChoice) => filePick.pick(choice),
     open: async (file): Promise<Opened> => {
@@ -43,6 +53,25 @@ export function configFileEditorOf(
         {preview: true},
       );
       return {file, editor: shown};
+    },
+    watchSaves: (opened, onSave) => {
+      const {file} = opened;
+      if (watched.has(file)) {
+        return;
+      }
+      watched.add(file);
+      const saves = editor.workspace.onDidSaveTextDocument(document => {
+        if (document.uri.fsPath === file) {
+          onSave();
+        }
+      });
+      const tabs = editor.window.tabGroups.onDidChangeTabs(() => {
+        if (!isOpen(file)) {
+          saves.dispose();
+          tabs.dispose();
+          watched.delete(file);
+        }
+      });
     },
     insertTemplate: async (opened, template) => {
       // `open` made this editor this run; the command hands it back.
