@@ -194,6 +194,9 @@
       "path": "tests/acceptance/containers-ports"
     },
     {
+      "path": "tests/acceptance/containers-features"
+    },
+    {
       "path": "tests/acceptance/containers-shutdown"
     },
     {
