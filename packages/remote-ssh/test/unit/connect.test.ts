@@ -586,7 +586,7 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
-  it('a probe that never answers fails at its limit as a timeout', async () => {
+  it('F-2704 AC-11: a probe that never answers fails at its limit as a timeout, with the reason the dialog shows', async () => {
     const {recording, options} = setup();
     const result = await connect(
       INPUT,
@@ -596,22 +596,13 @@ describe('the connect pipeline, when a step fails', () => {
       }),
       options,
     );
-    deepStrictEqual('kind' in result ? result.kind : result, 'timeout');
-  });
-
-  it('F-2704 AC-11: a probe that never answers fails with the reason of the connect wait, so the dialog says the connection timed out', async () => {
-    const {recording, options} = setup();
-    const result = await connect(
-      INPUT,
-      steps(recording, {
-        locateClient: waitsOf({...WAITS, probeMilliseconds: 20}),
-        probe: () => never(),
-      }),
-      options,
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        'reason' in result ? result.reason : result,
+      ],
+      ['timeout', {id: 'sshTimedOut'}],
     );
-    deepStrictEqual('reason' in result ? result.reason : result, {
-      id: 'sshTimedOut',
-    });
   });
 
   it('a plan that has no source fails as no server source, before the licence is asked', async () => {
