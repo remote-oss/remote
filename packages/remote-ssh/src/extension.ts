@@ -18,6 +18,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
+  PORTS_VIEW_KEY,
   type ResolverEditor,
   resolverEditorOf,
 } from 'lib-authority';
@@ -97,7 +98,6 @@ import {
   progressFor,
   windowNameFor,
 } from './surfaces/scripted-adapters.ts';
-import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 import {
   linkTerminalsOf,

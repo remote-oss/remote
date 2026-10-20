@@ -7,6 +7,8 @@
 
 import {
   type LabelFormatterHost,
+  enablePortsViewWhenConnected,
+  type PortsViewHost,
   type Registration,
   registerAuthorityLabel,
   registerResolver,
@@ -34,6 +36,8 @@ import {workspaceSuffixOf} from './window-identity.ts';
 export interface ConnectorRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
+  /** Core's Ports view, which the connected window enables. */
+  portsView: PortsViewHost;
   commands: CommandHost;
   presenter: Omit<RecoveryPorts, 'disconnected'>;
   /** The Open Recent entry of the window, which gets its label once the window first connects. */
@@ -127,6 +131,7 @@ export async function registerContainerResolver(
   if (registration.kind === 'registered') {
     const {resolver} = registration;
     handle = resolver;
+    enablePortsViewWhenConnected(resolver, host.portsView, served.logger);
     resolver.onResolveSettled(() => {
       const connection = resolver.currentConnection();
       if (connection === undefined || disposed) {
