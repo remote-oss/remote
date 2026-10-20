@@ -136,3 +136,19 @@ export async function waitForContainer(folder: string): Promise<string> {
   );
   return containerOf(folder);
 }
+
+/**
+ * The connect's state in window `name` once the Configuring text shows, or after ten seconds without it: the text
+ * comes a moment after the window connects.
+ */
+export async function connectedState(
+  name: string,
+): Promise<{indicator: string; configuring: boolean}> {
+  let state = await stateOf(name);
+  const deadline = Date.now() + 10_000;
+  while (!state.configuring && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    state = await stateOf(name);
+  }
+  return state;
+}

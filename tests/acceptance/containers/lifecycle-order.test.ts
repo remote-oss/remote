@@ -17,6 +17,7 @@ import {
   labelsOf,
   mark,
   signal,
+  connectedState,
   stateOf,
   timeOf,
   untilLabels,
@@ -132,7 +133,7 @@ describe('F-0415 the order of the commands and waitFor (card containers-44)', fu
       sampling.done = true;
       await sampler;
       const containerId = await containerOf(folder);
-      const connected = await stateOf(name);
+      const connected = await connectedState(name);
       const labelsBefore = await labelsOf(containerId, folder);
       const toasts = (await notifications(name)).filter(text =>
         text.startsWith('Connecting'),
@@ -181,7 +182,7 @@ describe('F-0415 the order of the commands and waitFor (card containers-44)', fu
       const name = await openFolderWindow(folder);
       await reopenInContainer(name);
       const containerId = await containerOf(folder);
-      const connected = await stateOf(name);
+      const connected = await connectedState(name);
       const labelsBefore = await labelsOf(containerId, folder);
       await signal(containerId, folder, 'go');
       await untilLabels(containerId, folder, ['postCreate']);
@@ -214,7 +215,7 @@ describe('F-0415 the order of the commands and waitFor (card containers-44)', fu
       const name = await openFolderWindow(folder);
       await reopenInContainer(name);
       const containerId = await containerOf(folder);
-      const connected = await stateOf(name);
+      const connected = await connectedState(name);
       const labelsBefore = await labelsOf(containerId, folder);
       await signal(containerId, folder, 'go');
       await untilLabels(containerId, folder, ['updateContent']);

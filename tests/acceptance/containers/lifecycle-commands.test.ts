@@ -404,33 +404,43 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
     }
   });
 
-  it('F-0415 AC-30 (c30): an array entry and an entry with spaces in its name run, and empty commands cause no error while later commands still run', async () => {
+  it('F-0415 AC-30 (c30): an array entry and an entry with spaces in its name run, with remoteEnv present, and empty commands cause no error while later commands still run', async () => {
     const folder = devContainerFolder('c44-odd-forms', {
       name: 'Odd Forms',
+      remoteEnv: {C44_REMOTE_VAR: 'remote-value'},
       updateContentCommand: {
         'spaced entry': mark('spaced'),
-        listed: ['sh', '-c', 'pwd > .c44-listed-pwd'],
+        listed: [
+          'sh',
+          '-c',
+          'pwd > .c44-listed-pwd; echo $C44_REMOTE_VAR > .c44-listed-env',
+        ],
       },
       postCreateCommand: '',
-      postStartCommand: [],
-      postAttachCommand: mark('postAttach'),
+      postStartCommand: {},
+      postAttachCommand: [],
+      onCreateCommand: mark('onCreate'),
     });
     try {
       const name = await openFolderWindow(folder);
       await reopenInContainer(name);
       const containerId = await containerOf(folder);
-      await untilLabels(containerId, folder, ['postAttach']);
+      await untilLabels(containerId, folder, ['spaced']);
       const labels = await labelsOf(containerId, folder);
       const listedIn = (
         await inWorkspace(containerId, folder, 'cat .c44-listed-pwd')
       ).trim();
+      const listedEnv = (
+        await inWorkspace(containerId, folder, 'cat .c44-listed-env')
+      ).trim();
       const dialog = await dialogOf(name);
       await closeWindow(name);
       deepStrictEqual(
-        {labels, listedIn, dialog},
+        {labels, listedIn, listedEnv, dialog},
         {
-          labels: ['spaced', 'postAttach'],
+          labels: ['onCreate', 'spaced'],
           listedIn: workspaceOf(folder),
+          listedEnv: 'remote-value',
           dialog: undefined,
         },
       );
