@@ -557,7 +557,7 @@ so. `genuine` before it clears the flag, because its probe passes:
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has three users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has thirteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -570,6 +570,12 @@ Besides `harness`, the host image has three users, and the run's `ssh_config` ha
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |
 | `harness-fish` | `harness-fish` | the run's key; its login shell is `/usr/bin/fish` |
+| `harness-bash` | `harness-bash` | the run's key; its login shell is `/bin/bash` |
+| `harness-zsh` | `harness-zsh` | the run's key; its login shell is `/bin/zsh` |
+| `harness-dash` | `harness-dash` | the run's key; its login shell is `/usr/local/bin/sh`, a link to dash |
+| `harness-ksh` | `harness-ksh` | the run's key; its login shell is `/bin/ksh` |
+| `harness-csh` | `harness-csh` | the run's key; its login shell is `/bin/csh` |
+| `harness-tcsh` | `harness-tcsh` | the run's key; its login shell is `/bin/tcsh` |
 | `master` | `harness-pw` | `password`, behind `ControlMaster auto` (socket `cm-%C` in the run's folder, `ControlPersist 600`) |
 | `master-ask` | `harness-pw` | `password`, behind `ControlMaster ask` (socket `cm-ask-%C`) |
 | `master-yes` | `harness-pw` | `password`, behind `ControlMaster yes` (socket `cm-yes-%C`) |

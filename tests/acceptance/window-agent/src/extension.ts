@@ -375,6 +375,34 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.runProcessTask',
+      async (command: string, programArguments: string[]) => {
+        const task = new vscode.Task(
+          {type: 'acceptance'},
+          vscode.TaskScope.Workspace,
+          'acceptance',
+          'acceptance',
+          new vscode.ProcessExecution(command, programArguments),
+        );
+        const execution = await vscode.tasks.executeTask(task);
+        const exitCode = await new Promise<number | null>(resolve => {
+          const end = vscode.tasks.onDidEndTaskProcess(event => {
+            if (event.execution === execution) {
+              end.dispose();
+              resolve(event.exitCode ?? null);
+            }
+          });
+        });
+        report(agentFolder, name, {event: 'taskEnded', exitCode});
+      },
+    ),
+    vscode.commands.registerCommand('acceptance.agent.terminalNames', () => {
+      report(agentFolder, name, {
+        event: 'terminalNames',
+        names: vscode.window.terminals.map(each => each.name),
+      });
+    }),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {

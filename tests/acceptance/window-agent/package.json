@@ -14,6 +14,13 @@
       "supported": true
     }
   },
+  "contributes": {
+    "taskDefinitions": [
+      {
+        "type": "acceptance"
+      }
+    ]
+  },
   "extensionKind": [
     "ui"
   ],
