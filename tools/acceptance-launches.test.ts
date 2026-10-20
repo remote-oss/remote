@@ -55,6 +55,9 @@ function labelsFromExplorer(): string[] {
     'containers-explorer',
     'containers-ports',
     'containers-shutdown',
+    'containers-killed-23',
+    'containers-killed-35',
+    'containers-killed-43',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
@@ -257,6 +260,24 @@ describe('the launches of the VSCodium run', () => {
           true,
           ['ms-vscode-remote.remote-containers'],
         ],
+        [
+          'containers-killed-23',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-killed-35',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-killed-43',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ['genuine', undefined, true, undefined],
         ['ssh-no-proposals', undefined, true, undefined],
       ],
@@ -337,6 +358,27 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
+        [
+          'containers-killed-23',
+          'containers-killed',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-killed-35',
+          'containers-killed',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-killed-43',
+          'containers-killed',
+          shared,
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -364,6 +406,9 @@ describe('the launches of the VSCodium run', () => {
         'containers-explorer',
         'containers-ports',
         'containers-shutdown',
+        'containers-killed-23',
+        'containers-killed-35',
+        'containers-killed-43',
       ],
     );
   });
@@ -1188,7 +1233,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, and no other containers launch does', () => {
+  it('containers-72, containers-70: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, the three killed launches name their cases, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1197,7 +1242,12 @@ describe('the platform cases (card coverage-12)', () => {
           launch.kind === 'plain' ? launch.environment : undefined,
         ])
         .filter(([, environment]) => environment !== undefined),
-      [['containers-ports', {PATH: '<run>/xdg-bin:<path>'}]],
+      [
+        ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
+        ['containers-killed-23', {HARNESS_KILLED_CASE: '23'}],
+        ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
+        ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],
+      ],
     );
   });
 
