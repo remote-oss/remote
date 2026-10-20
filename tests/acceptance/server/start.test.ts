@@ -8,7 +8,11 @@ import {
   startOrReuse,
 } from 'lib-server';
 import {startHost, type RunningHost} from './host-fixture.ts';
-import {OPTION_LINE_PREFIX, type StandInBehaviour} from './stand-in-server.ts';
+import {
+  OPTION_LINE_PREFIX,
+  REQUIREMENTS_LINES,
+  type StandInBehaviour,
+} from './stand-in-server.ts';
 import {
   dataFolderOf,
   hostArchiveOf,
@@ -48,7 +52,8 @@ describe('F-2409 the start of the server', function () {
     placeStandInArchive(host);
     placeStandInArchive(host, 'listening');
     placeStandInArchive(host, 'crashing');
-    placeStandInArchive(host, 'missingLibraries');
+    placeStandInArchive(host, 'requirementsUnmet');
+    placeStandInArchive(host, 'helperUnrunnable');
     placeStandInArchive(host, 'silent');
     placeStandInArchive(host, 'readyThenExit');
     placeStandInArchive(host, 'noFreePort');
@@ -78,7 +83,7 @@ describe('F-2409 the start of the server', function () {
       {
         allowedExtraStartOptions: [],
         extensionEntries: 'identifiersOnly',
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'bundledHelper',
       },
       {lockLoop: lockLoop(), logger: SILENT},
       new AbortController().signal,
@@ -217,8 +222,8 @@ describe('F-2409 the start of the server', function () {
     deepStrictEqual(Date.now() - began >= 2000, true);
   });
 
-  it('contracts V7: F-2401, a server that exits with 207 fails at once', async () => {
-    const parameters = await installed('missingLibraries');
+  it('contracts V7, F-2401 (ruling-253-helper): a host the helper refuses fails at once, before any wait', async () => {
+    const parameters = await installed('requirementsUnmet');
     const began = Date.now();
     await start(parameters, {readySeconds: 10});
     deepStrictEqual(Date.now() - began < 1000, true);
@@ -260,11 +265,21 @@ describe('F-2409 the start of the server', function () {
     );
   });
 
-  it('contracts V7: reports a server that lacks libraries on the host as missing prerequisites', async () => {
-    deepStrictEqual(await start(await installed('missingLibraries')), {
+  it('contracts V7 (ruling-253-helper): reports the helper’s refusal as missing prerequisites, with its lines', async () => {
+    deepStrictEqual(await start(await installed('requirementsUnmet')), {
       kind: 'failed',
-      failure: {kind: 'prerequisitesMissing', detail: ''},
+      failure: {
+        kind: 'prerequisitesMissing',
+        detail: REQUIREMENTS_LINES.join('\n'),
+      },
     });
+  });
+
+  it('contracts V7 (ruling-253-helper): a helper that cannot run does not stop the server from starting', async () => {
+    deepStrictEqual(
+      (await start(await installed('helperUnrunnable'))).kind,
+      'started',
+    );
   });
 
   it('contracts V7: gives up on a server that never reports a port, after the time it was given', async () => {

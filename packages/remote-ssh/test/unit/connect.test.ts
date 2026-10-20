@@ -1258,6 +1258,35 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     );
   });
 
+  it('F-2401 (ruling-253-helper): a start that found no requirements helper warns once, and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        start: () =>
+          Promise.resolve({
+            ...STARTED,
+            notices: [{kind: 'requirementsHelperMissing'}],
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+      ],
+      [
+        true,
+        [
+          "the server has no requirements helper; the host's requirements weren't checked",
+        ],
+      ],
+    );
+  });
+
   it('goes on when the shared record cannot be stored', async () => {
     const {recording, options} = setup();
     const result = await connect(
