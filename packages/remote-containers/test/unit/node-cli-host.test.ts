@@ -462,4 +462,20 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
       'plain',
     );
   });
+
+  it('F-0412 AC-11: a BUILDKIT_PROGRESS of the editor’s own environment wins over the plain one', async () => {
+    const fake = fakeSystem();
+    const running = nodeCliHost(
+      PATHS,
+      {BUILDKIT_PROGRESS: 'tty'},
+      fake.ports,
+    ).run([], () => undefined, new AbortController().signal);
+    fake.exit(0);
+    await running;
+    deepStrictEqual(
+      (fake.spawns[0]?.options as {env: Record<string, string>}).env
+        .BUILDKIT_PROGRESS,
+      'tty',
+    );
+  });
 });

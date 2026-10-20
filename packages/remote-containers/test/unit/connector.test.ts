@@ -819,10 +819,10 @@ describe('the container connector: the connect (card containers-08)', () => {
           cliLog(
             2,
             'raw',
-            '#5 [2/3] RUN false\r\n\u001b[31mfailed to solve\u001b[0m: exit code 1\n\n',
+            '#5 [2/3] RUN false\r\n\n  \r\n\u001b[31mfailed to solve\u001b[0m: exit code 1\n\n',
           ),
         ],
-        ['#5 [2/3] RUN false', 'failed to solve: exit code 1'],
+        ['#5 [2/3] RUN false', 'failed to solve: exit code 1', '', '  '],
       ),
       [
         ['info', '#5 [2/3] RUN false'],
