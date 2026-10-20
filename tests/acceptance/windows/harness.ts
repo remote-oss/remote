@@ -92,7 +92,11 @@ export interface AgentEvent {
   /** The uris of the window's documents with unsaved changes, untitled ones included, as a `state` event saw them. */
   dirtyDocuments?: string[];
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
-  text?: string;
+  text?: string | null;
+  /** The name of the window's active terminal, or null for none, as a `terminalBuffer` event saw it. */
+  active?: string | null;
+  /** The editor command or read of a `terminalBuffer` event that did not finish in 10 s, when one did not; its `text` is then null. */
+  stuck?: string;
   /** The folders and workspaces of the editor's Open Recent list, as a `recentlyOpened` event read them. */
   recent?: RecentEntry[];
   /** The exit code a `taskEnded` event reports, or null when the process gave none. */
@@ -1212,15 +1216,40 @@ export async function userSettings(
   await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
+/** What window `name` found of its terminals when asked for the active one's buffer. */
+export interface TerminalFacts {
+  /** The buffer of the active terminal; empty for none, and null when a step did not finish. */
+  text: string | null;
+  /** The names of the window's terminals. */
+  terminals: string[];
+  /** The name of the active terminal, or null for none. */
+  active: string | null;
+  /** The step that did not finish in 10 s, when one did not. */
+  stuck: string | undefined;
+}
+
 /**
- * The whole buffer of window `name`'s active terminal, scrollback included: the agent focuses the terminal, selects
- * all of it and copies it, and reports the clipboard's text.
+ * The names of window `name`'s terminals and the active one's, and the active one's whole buffer, scrollback included:
+ * the agent focuses the terminal, selects all of it and copies it, and reports the clipboard's text. A window with no
+ * active terminal answers at once with no text, and a step that does not finish in 10 s is named.
  */
-export async function terminalBuffer(name: string): Promise<string> {
-  return (
-    (await reported(name, 'terminalBuffer', 'acceptance.agent.terminalBuffer'))
-      ?.text ?? ''
+export async function terminalFacts(name: string): Promise<TerminalFacts> {
+  const event = await reported(
+    name,
+    'terminalBuffer',
+    'acceptance.agent.terminalBuffer',
   );
+  return {
+    text: event?.text ?? null,
+    terminals: event?.terminals ?? [],
+    active: event?.active ?? null,
+    stuck: event?.stuck,
+  };
+}
+
+/** The whole buffer of window `name`'s active terminal, scrollback included; empty when it has none. */
+export async function terminalBuffer(name: string): Promise<string> {
+  return (await terminalFacts(name)).text ?? '';
 }
 
 /** The folders and workspaces of the editor's Open Recent list, as window `name` reads them from the main process. */

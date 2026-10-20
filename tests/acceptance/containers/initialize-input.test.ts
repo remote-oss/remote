@@ -8,6 +8,7 @@ import {
   devContainerFolder,
   inWindow,
   terminalBuffer,
+  terminalFacts,
   variable,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
@@ -15,6 +16,7 @@ import {
   answerFolderDialog,
   focusTerminal,
   pressControlC,
+  terminalPageFacts,
   terminalText,
   typeInTerminal,
 } from '../windows/renderer.ts';
@@ -50,8 +52,13 @@ async function untilText(
       return;
     }
     if (Date.now() > deadline) {
+      const facts = await terminalFacts(name);
       throw new Error(
-        `timed out waiting for the terminal of ${name} to hold ${needle}; the last read was ${JSON.stringify(text)} and the terminal's buffer ends ${JSON.stringify((await terminalBuffer(name)).slice(-600))}`,
+        `timed out waiting for the terminal of ${name} to hold ${needle}; the last read was ${JSON.stringify(text)}; ` +
+          `the terminals are ${JSON.stringify(facts.terminals)}, the active one ${JSON.stringify(facts.active)}` +
+          `${facts.stuck === undefined ? '' : `, and the step ${facts.stuck} did not finish in 10 s`}; ` +
+          `the page holds ${JSON.stringify(await terminalPageFacts(name))}; ` +
+          `the active terminal's buffer ends ${JSON.stringify((facts.text ?? '').slice(-600))}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));
