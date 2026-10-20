@@ -18,6 +18,8 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  dialogOf,
+  notifications,
   pageText,
   statusItem,
   type ShownDialog,
@@ -167,7 +169,7 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
     }
   });
 
-  it('F-0409 AC-33 (r33): a window reloaded while its devcontainer.json is gone shows the generic dialog soon, the container untouched, and Edit devcontainer.json Locally reopens the folder locally without creating the file', async () => {
+  it('F-0409 AC-33 (r33): a window reloaded while its devcontainer.json is gone shows the generic dialog soon, the container untouched; Retry shows it again while the file is gone, and connects to the same container with no message once the file is back', async () => {
     const folder = devContainerFolder('c52-config-gone', {name: 'Config Gone'});
     const configuration = path.join(
       folder,
@@ -191,18 +193,30 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
         title: await windowTitle(name),
         started: (await startedAt(containerId)) === started,
       };
-      const activated = activations(name);
-      await answerDialog(name, 'Edit devcontainer.json Locally');
+      const missing = activations(name);
+      await answerDialog(name, 'Retry');
       await waitFor(
-        `window ${name} to activate in its local folder`,
-        () => activations(name) > activated,
-        30_000,
+        `window ${name} to activate again`,
+        () => activations(name) > missing,
+        60_000,
       );
+      const again = await waitForDialog(name, 60_000);
+      renameSync(`${configuration}.away`, configuration);
+      const restored = activations(name);
+      await answerDialog(name, 'Retry');
+      await waitFor(
+        `window ${name} to activate once more`,
+        () => activations(name) > restored,
+        60_000,
+      );
+      await connectedToContainer(name, DIALOG_MILLISECONDS);
       deepStrictEqual(
         [
           shown,
-          existsSync(configuration),
-          (await windowState(name)).remoteName,
+          sayingOf(again),
+          await devContainersOf(folder),
+          await dialogOf(name),
+          await notifications(name),
         ],
         [
           {
@@ -212,9 +226,43 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
             title: '[c52-config-gone [Dev Container: Config Gone]]',
             started: true,
           },
-          false,
-          null,
+          {message: '', details: S034, buttons: RECOVERY_BUTTONS},
+          [containerId],
+          undefined,
+          [],
         ],
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0409 AC-43 (r43): Edit devcontainer.json Locally on that dialog reopens the folder locally and creates no file', async () => {
+    const folder = devContainerFolder('c52-config-gone-edit', {
+      name: 'Config Gone Edit',
+    });
+    const configuration = path.join(
+      folder,
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    try {
+      const name = await reopened(folder);
+      await settled(name);
+      renameSync(configuration, `${configuration}.away`);
+      await reloadWindow(name);
+      await waitForDialog(name, 60_000);
+      const activated = activations(name);
+      await answerDialog(name, 'Edit devcontainer.json Locally');
+      await waitFor(
+        `window ${name} to activate in its local folder`,
+        () => activations(name) > activated,
+        30_000,
+      );
+      deepStrictEqual(
+        [existsSync(configuration), (await windowState(name)).remoteName],
+        [false, null],
       );
       await closeWindow(name);
     } finally {
@@ -224,11 +272,12 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
 
   it('F-0409 AC-40, AC-46 (r40): a matching container whose main process exits at once, exited or restarting, is the one chosen again, with the generic dialog and no replacement', async () => {
     const seen: Array<[string, number, string[]]> = [];
-    for (const [folderName, extra] of [
-      ['c52-exits-at-once', {}],
+    for (const [folderName, extra, expectedState] of [
+      ['c52-exits-at-once', {}, 'exited'],
       [
         'c52-restarting',
         {runArgs: [...runLabelArguments(), '--restart', 'always']},
+        'restarting',
       ],
     ] as const) {
       const folder = devContainerFolder(folderName, {
@@ -248,6 +297,17 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
         await reopenStarted(name);
         const first = await waitForDialog(name, DIALOG_MILLISECONDS);
         const [containerId = ''] = await devContainersOf(folder);
+        await waitFor(
+          `container ${containerId} to be ${expectedState}`,
+          async () =>
+            (await docker(
+              'inspect',
+              '-f',
+              '{{.State.Status}}',
+              containerId,
+            )) === expectedState,
+          30_000,
+        );
         const activated = activations(name);
         await answerDialog(name, 'Retry');
         await waitFor(
