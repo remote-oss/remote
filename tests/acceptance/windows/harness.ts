@@ -702,6 +702,45 @@ export function devContainerFolder(
   return folder;
 }
 
+/**
+ * Starts a listener on `port` in container `containerId`, which echoes what it is sent, waits until the container
+ * lists the port, and gives the function that ends it.
+ */
+export async function listenIn(
+  containerId: string,
+  port: number,
+): Promise<() => Promise<void>> {
+  await execFileAsync('docker', [
+    'exec',
+    '-d',
+    containerId,
+    'nc',
+    '-lk',
+    '-p',
+    String(port),
+    '-e',
+    'cat',
+  ]);
+  await waitFor(
+    `the container to listen on ${String(port)}`,
+    async () =>
+      (
+        await execFileAsync('docker', ['exec', containerId, 'netstat', '-ltn'])
+      ).stdout.includes(`:${String(port)} `),
+    10_000,
+  );
+  return async () => {
+    // The bracket keeps pkill's pattern from matching its own shell's command line.
+    await execFileAsync('docker', [
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `pkill -f '[n]c -lk -p ${String(port)} ' || true`,
+    ]);
+  };
+}
+
 /** The ids of the run's containers made for `folder`, by the label the dev container CLI gives them. */
 export async function devContainersOf(folder: string): Promise<string[]> {
   const {stdout} = await execFileAsync('docker', [

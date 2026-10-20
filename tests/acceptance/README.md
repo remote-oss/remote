@@ -118,7 +118,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust` and `containers-explorer`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, and `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer` and `containers-ports`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -251,6 +251,26 @@ failure that comes in about the first second after the window connects, whatever
 card containers-61: the dialog came in 0 to 3 of 5 stops made at once, and in 12 of 12 made from two seconds on, while
 the extension's answer was the same in all of them).
 
+Two facts about the dev container CLI (version 0.89.0, Docker 29.9.1) that the ports rows rely on, measured in card
+tooling-56:
+- `devcontainer up` with `"appPort": [18741, "18742:8742"]` publishes `18741/tcp` on `127.0.0.1:18741` and `8742/tcp`
+  on `:18742`, on all interfaces. The CLI already applies the rule for `appPort`, so no `--override-config` pre-pass is
+  needed.
+- After `forwardPorts` is edited from `[3000]` to `[4000]` on a running container, `read-configuration --container-id
+  <id> --include-merged-configuration` gives `mergedConfiguration.forwardPorts` `[3000]`, the container's
+  `devcontainer.metadata` label, while the configuration says `[4000]`. The merged configuration is the list as it was
+  when the container was built.
+
+**The Ports view.** `windows/renderer.ts` reads core's Ports view, a table: `portsRows` gives each row's Port column,
+forwarded address, running process, origin, icon (the row icon's codicon class) and hover, and `portRowActions` the
+titles of a row's inline actions and of its context menu's items. A table that overflows is read from its top, a
+viewport at a time, by wheel steps dispatched on a row (the table scrolls by its own scrollable element, not by the
+DOM's `scrollTop`). Show the view first with `~remote.forwardedPorts.focus`, which core registers only once the view
+exists, so wait for it in `commandsOf`. The forwarded-ports status item reads with `statusItem(name,
+'status.forwardedPorts')`. `listenIn(containerId, port)` starts a listener in a container, with busybox's `nc`, and
+gives the function that ends it. "Forward a Port" is `remote.tunnel.forwardCommandPalette`, answered in its input box
+with `answerInputBox`.
+
 **Choosing launches.** `--launches` takes `all` (every launch that isn't named only), `none`, or a comma list of
 entries, applied in turn:
 - a label;
@@ -337,7 +357,7 @@ listening on port" line yet.
 
 ## The run's registry
 
-A launch with `registry: true` (today only `containers`) makes the run start a registry of its own before its
+A launch with `registry: true` (today `containers` and `containers-ports`) makes the run start a registry of its own before its
 launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
 `tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
 (`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
