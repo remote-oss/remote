@@ -28,8 +28,8 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 - **Proposals:** all nine proposal declaration files are byte-identical at the two tags.
 - **Types:** the whole repository typechecks against `@types/vscode` 1.125.0 (`tsc --build`, 33 projects, no
   error), so no code uses a stable API newer than 1.125.
-- **Node:** 1.125.0 builds on Electron 42.3.0, which ships Node.js 24.15.0, with its server on Node.js 24.15.0
-  (`.npmrc`, `remote/.npmrc`; Electron's `DEPS`).
+- **Node:** 1.125.0's tag names Electron 42.3.0 (`.npmrc`), and the released build reports Electron 42.2.0
+  (proteus, 2026-10-20). Both ship Node.js 24.15.0, and so does its server (`remote/.npmrc`; Electron's `DEPS`).
 - **Core differences** in what the extensions touch (all in [oss] `src/vs/workbench/contrib/remote/browser/`):
   - the Forwarded Ports status item focuses the Ports view on 1.125 and toggles it on 1.139 (`remoteExplorer.ts`);
   - automatic forwarding lacks the filter for a remapped tunnel's local end (`isCandidateRemappedTunnelLocalEndpoint`,
@@ -56,12 +56,21 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 3. **The recorded version stays 1.139.1:** the specs' observations, the conformance profiles, the recorded gate
    and the acceptance launches (`EDITOR_VERSION`). A `core` tag in the coverage catalogue describes core on the
    recorded version.
-4. **A floor run proves the floor.** A scheduled job runs a smoke subset of the acceptance suite on genuine VS Code
-   1.125.0 (D-97 allows genuine VS Code in CI; VSCodium has no 1.125 release: its stable tags go from 1.121 to
-   1.126). The subset covers install and activation, an SSH connect and open, a dev container open, the Ports view
-   enabled once connected, and the Remote Explorer's rows. Rows asserting core's own rendering stay on the recorded
-   version, and the three core differences above aren't failures of ours. A row that asserts one of those surfaces
-   names the version it describes.
+4. **A floor run proves what it can of the floor.** The daily genuine job runs over the versions [1.139.1, 1.125.0],
+   with the editor version taken from the job and limited to those two (D-97 allows genuine VS Code in CI). VSCodium
+   has no 1.125 release: its stable tags go from 1.121 to 1.126.
+   - **On 1.125.0 it covers:** install at `^1.125.0`, activation with and without the proposals, the Remote
+     Explorer's rows without a connect, and a connect up to the declined licence. Those are the genuine and the
+     `ssh-no-proposals` launches.
+   - **It doesn't cover a connect, a container open or the Ports view.** Those need the server of genuine 1.125.0's
+     own commit, which is Microsoft's server under its licence. The genuine job runs on the opposite terms: nothing
+     accepts that licence for the user, and no server comes from the publisher. VSCodium's server doesn't match a
+     1.125.0 client.
+   - **Connect coverage on the floor** would need a Code - OSS 1.125.0 build (the client and its server, built from
+     the MIT tag). That's a card of its own and the user's call.
+
+   Rows asserting core's own rendering stay on the recorded version, and the three core differences above aren't
+   failures of ours. A row that asserts one of those surfaces names the version it describes.
 5. **The floor moves only by an amendment** like this one, raising or lowering it, together with the pinned
    declarations, the floor run on the new floor, and the measurements above taken again.
 6. **A package that needs an API newer than the floor** doesn't move the floor on its own. It waits for the
@@ -72,14 +81,14 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 | Option | For | Against |
 |---|---|---|
 | Floor = the recorded version, 1.139 (chosen 2026-10-06) | Matches the suite and the specs' observations; the proposals are known to exist in that shape | Users on older editors can't install |
-| Floor 1.125, recorded version 1.139.1, a floor run (the user's, 2026-10-20) | Wider reach; the proposals, the types and the Node target are measured equal | Core behaviour between 1.125 and 1.139 isn't observed by the specs; the floor run covers only the smoke subset |
+| Floor 1.125, recorded version 1.139.1, a floor run (the user's, 2026-10-20) | Wider reach; the proposals, the types and the Node target are measured equal | Core behaviour between 1.125 and 1.139 isn't observed by the specs; the floor run reaches no connect without a Code - OSS 1.125.0 build |
 | The reference's own floors (older) | Wider reach on paper | Unobserved behaviour; proposals differ between versions; F-4003 BR-9 quotes a reference floor that no case checks |
 | Latest stable at release time | Newest API | Moving target; breaks the recorded suite |
 
 ## Consequences
 
 - **The esbuild target of ADR-0002** (`NODE_TARGET`) is the Node.js version the floor ships, `node24`, recorded in
-  `tools/editor-floor.ts`. Both 1.125.0 (Electron 42.3.0, Node.js 24.15.0) and 1.139.1 (Electron 43.6.0, Node.js
+  `tools/editor-floor.ts`. Both 1.125.0 (Electron 42, Node.js 24.15.0) and 1.139.1 (Electron 43.6.0, Node.js
   24.20.0) ship Node.js 24, so the target is unchanged.
 - **The browser bundles** of the Explorer and the server target the floor's web runtime. Their `es2022` target
   (`tools/build.ts`) is below what Electron 42 supports, so it's unchanged.
@@ -92,4 +101,4 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 - **The constant:** `tools/check-layout` verifies that every extension manifest's `engines.vscode` equals the root
   constant, and that a package declaring `enabledApiProposals` carries the pinned declaration files.
 - **The recorded suite** runs on 1.139.1.
-- **The floor run** (decision 4) runs the smoke subset on 1.125.0.
+- **The floor run** (decision 4) runs the genuine and `ssh-no-proposals` launches on 1.125.0.
