@@ -507,7 +507,7 @@ F-0415.AC-9	todo
 F-0415.AC-9b	todo	
 F-0415.AC-10	acceptance	
 F-0415.AC-11	todo	
-F-0415.AC-12	todo	
+F-0415.AC-12	acceptance	
 F-0415.AC-13	acceptance	
 F-0415.AC-14	acceptance	
 F-0415.AC-15	acceptance	
@@ -520,7 +520,7 @@ F-0415.AC-20	acceptance
 F-0415.AC-21	acceptance	
 F-0415.AC-22	deferred	containers release 1: later (remote engines)
 F-0415.AC-23	acceptance	
-F-0415.AC-24	todo	
+F-0415.AC-24	acceptance	
 F-0415.AC-25	deferred	containers release 1: later (attach)
 F-0415.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0415.AC-27	todo	
@@ -530,13 +530,13 @@ F-0415.AC-30	todo
 F-0415.AC-31	acceptance	
 F-0415.AC-32	deferred	containers release 1: later (personalization and relays)
 F-0415.AC-33	unit	
-F-0415.AC-34	todo	
+F-0415.AC-34	acceptance	
 F-0415.AC-35	unit	
 F-0415.AC-36	acceptance	
 F-0415.AC-37	unit	
 F-0415.AC-38	unit	
 F-0415.AC-39	deferred	containers release 1: increment 2 (shutdown)
-F-0415.AC-40	todo	
+F-0415.AC-40	deferred	containers 0.4: F-0407 later
 F-0415.AC-41	unit	
 F-0416.AC-1	acceptance	
 F-0416.AC-2	acceptance	
