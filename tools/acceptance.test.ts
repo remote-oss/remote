@@ -1321,6 +1321,37 @@ describe('acceptance', () => {
       return seen;
     }
 
+    it('qa-01: each launch is announced with its label before it runs, so a log splits at it', async () => {
+      const reported: string[] = [];
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL, REMOTE, undefined],
+        command,
+        '',
+        sleep,
+        launch => {
+          reported.push(`ran ${launch?.label ?? 'the one configuration'}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+        () => Promise.resolve(),
+        {},
+        () => Promise.resolve({release: () => Promise.resolve()}),
+        line => {
+          reported.push(line);
+        },
+      );
+      deepStrictEqual(reported, [
+        'acceptance: launch terminal',
+        'ran terminal',
+        'acceptance: launch remote',
+        'ran remote',
+        'ran the one configuration',
+      ]);
+    });
+
     it('D-85: a launch with settings finds them over the base settings', async () => {
       deepStrictEqual((await settingsSeen(TERMINAL, REMOTE)).get('terminal'), {
         ...BASE,
