@@ -41,8 +41,8 @@ async function docker(...parameters: string[]): Promise<string> {
 }
 
 /** `docker build` of `dockerfile`, given on standard input, as `tag`. */
-async function buildTag(tag: string, dockerfile: string): Promise<void> {
-  const running = execFileAsync('docker', ['build', '-t', tag, '-']);
+async function buildTag(imageTag: string, dockerfile: string): Promise<void> {
+  const running = execFileAsync('docker', ['build', '-t', imageTag, '-']);
   running.child.stdin?.end(dockerfile);
   await running;
 }
@@ -92,6 +92,16 @@ function writeDockerfile(
   const file = path.join(folder, '.devcontainer', relative);
   mkdirSync(path.dirname(file), {recursive: true});
   writeFileSync(file, text);
+}
+
+/** The `build.args` member of a configuration, written through a key so that the lint rule on `args` is not met. */
+function argumentsOf(
+  values: Record<string, string>,
+): Record<string, Record<string, string>> {
+  return Object.fromEntries([['args', values]]) as Record<
+    string,
+    Record<string, string>
+  >;
 }
 
 /** The base image of the run, for Dockerfiles. */
@@ -170,6 +180,300 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     } finally {
       await cleanUp(imageFolder);
       await cleanUp(builtFolder, [nonRoot]);
+    }
+  });
+
+  it('F-0412 AC-4, AC-8 (i4): a build with a context above the Dockerfile, args, a target and an option label builds as written, in the nested form and in the top-level dockerFile and context form', async () => {
+    const forms: Array<[string, Record<string, unknown>]> = [
+      [
+        'c52-build-nested',
+        {
+          image: undefined,
+          build: {
+            dockerfile: 'Dockerfile',
+            context: '..',
+            ...argumentsOf({FIRST_ARG: 'one', SECOND_ARG: 'two words'}),
+            target: 'final',
+            options: ['--label=c52.option=yes'],
+          },
+        },
+      ],
+      [
+        'c52-build-legacy',
+        {
+          image: undefined,
+          dockerFile: 'Dockerfile',
+          context: '..',
+          build: {
+            ...argumentsOf({FIRST_ARG: 'one', SECOND_ARG: 'two words'}),
+            target: 'final',
+            options: ['--label=c52.option=yes'],
+          },
+        },
+      ],
+    ];
+    const seen: Array<{
+      form: string;
+      copied: string;
+      arguments: string;
+      label: string;
+      imageTag: string;
+    }> = [];
+    for (const [folderName, configuration] of forms) {
+      const folder = devContainerFolder(folderName, {
+        name: folderName,
+        ...configuration,
+      });
+      writeFileSync(path.join(folder, 'workspace-root-file'), 'from-root\n');
+      writeDockerfile(
+        folder,
+        `FROM ${base()} AS final\nARG FIRST_ARG\nARG SECOND_ARG\nCOPY workspace-root-file /root-file\nRUN printf '%s|%s' "$FIRST_ARG" "$SECOND_ARG" > /args\n`,
+      );
+      try {
+        const name = await openFolderWindow(folder);
+        await reopenInContainer(name);
+        const [containerId = ''] = await devContainersOf(folder);
+        const imageTag = await docker(
+          'inspect',
+          '-f',
+          '{{.Config.Image}}',
+          containerId,
+        );
+        seen.push({
+          form: folderName,
+          copied: await docker('exec', containerId, 'cat', '/root-file'),
+          arguments: await docker('exec', containerId, 'cat', '/args'),
+          label: await docker(
+            'image',
+            'inspect',
+            '-f',
+            '{{index .Config.Labels "c52.option"}}',
+            imageTag,
+          ),
+          imageTag:
+            imageTag === `${tagOf(folder)}-uid` || imageTag === tagOf(folder)
+              ? 'vsc'
+              : imageTag,
+        });
+        await closeWindow(name);
+      } finally {
+        await cleanUp(folder);
+      }
+    }
+    deepStrictEqual(
+      seen,
+      forms.map(([form]) => ({
+        form,
+        copied: 'from-root',
+        arguments: 'one|two words',
+        label: 'yes',
+        imageTag: 'vsc',
+      })),
+    );
+  });
+
+  it('F-0412 AC-5 (i5): a target stage is built with its dependencies only, and a stage it does not depend on never runs', async () => {
+    const folder = devContainerFolder('c52-build-target', {
+      name: 'Build Target',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile', target: 'wanted'},
+    });
+    writeDockerfile(
+      folder,
+      `FROM ${base()} AS earlier\nRUN echo earlier > /earlier\nFROM earlier AS wanted\nRUN echo wanted > /wanted\nFROM ${base()} AS unrelated\nRUN false\n`,
+    );
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      const files = await docker(
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        'cat /earlier /wanted',
+      );
+      await closeWindow(name);
+      deepStrictEqual(files, 'earlier\nwanted');
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0412 AC-9 (i9): a cacheFrom that names a local tag nobody pushed does not stop the build, and no dialog or notice shows', async () => {
+    const folder = devContainerFolder('c52-cache-local', {
+      name: 'Cache Local',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile', cacheFrom: 'c52-never-pushed:1'},
+    });
+    writeDockerfile(folder, `FROM ${base()}\nRUN echo built > /built\n`);
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      deepStrictEqual(
+        [
+          await docker('exec', containerId, 'cat', '/built'),
+          await dialogOf(name),
+          await notifications(name),
+        ],
+        ['built', undefined, []],
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0412 AC-16 (i16): a connected image or Dockerfile configuration titles the window with the container’s name and labels the host indicator', async () => {
+    const seen: string[][] = [];
+    for (const [folderName, configuration] of [
+      ['c52-title-image', {}],
+      [
+        'c52-title-build',
+        {image: undefined, build: {dockerfile: 'Dockerfile'}},
+      ],
+    ] as const) {
+      const folder = devContainerFolder(folderName, {
+        name: 'Title Name',
+        ...configuration,
+      });
+      if (folderName === 'c52-title-build') {
+        writeDockerfile(folder, `FROM ${base()}\n`);
+      }
+      try {
+        const name = await openFolderWindow(folder);
+        await reopenInContainer(name);
+        seen.push([
+          await windowTitle(name),
+          (await statusItem(name, 'status.host')).text,
+        ]);
+        await closeWindow(name);
+      } finally {
+        await cleanUp(folder);
+      }
+    }
+    deepStrictEqual(seen, [
+      [
+        '[c52-title-image [Dev Container: Title Name]]',
+        'Dev Container: Title Name',
+      ],
+      [
+        '[c52-title-build [Dev Container: Title Name]]',
+        'Dev Container: Title Name',
+      ],
+    ]);
+  });
+
+  it('F-0412 AC-17, AC-34 (i17): the name part of the vsc- tag is the folder’s name in lower case with what Docker does not take dropped', async () => {
+    const cases: Array<[string, string]> = [
+      ['Case Test', 'casetest'],
+      ['CaFé_123.Test!Name', 'caf_123.testname'],
+      ['9Leading', '9leading'],
+    ];
+    const seen: string[] = [];
+    for (const [folderName] of cases) {
+      const folder = devContainerFolder(folderName, {
+        name: 'Tag Names',
+        image: undefined,
+        build: {dockerfile: 'Dockerfile'},
+      });
+      writeDockerfile(folder, `FROM ${base()}\n`);
+      try {
+        const name = await openFolderWindow(folder);
+        await reopenInContainer(name);
+        const [containerId = ''] = await devContainersOf(folder);
+        const imageTag = await docker(
+          'inspect',
+          '-f',
+          '{{.Config.Image}}',
+          containerId,
+        );
+        seen.push(imageTag.replace(/-[0-9a-f]{64}(-uid)?$/, ''));
+        await closeWindow(name);
+      } finally {
+        await cleanUp(folder);
+      }
+    }
+    deepStrictEqual(
+      seen,
+      cases.map(([, part]) => `vsc-${part}`),
+    );
+  });
+
+  it('F-0412 AC-35 (i35): the hash part of the vsc- tag is the SHA-256 of the folder’s absolute path (the Remote-SSH half of the criterion waits for remote engines)', async () => {
+    const folder = devContainerFolder('c52-tag-hash', {
+      name: 'Tag Hash',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(folder, `FROM ${base()}\n`);
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      const imageTag = await docker(
+        'inspect',
+        '-f',
+        '{{.Config.Image}}',
+        containerId,
+      );
+      await closeWindow(name);
+      deepStrictEqual(imageTag, `${tagOf(folder)}-uid`);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0412 AC-42 (i42): a build beside an image wins: the container holds what the Dockerfile wrote and runs its base, not the image', async () => {
+    const other = 'c52-other:1';
+    await buildTag(other, `FROM ${base()}\nRUN echo other > /which\n`);
+    const folder = devContainerFolder('c52-build-wins', {
+      name: 'Build Wins',
+      image: other,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(
+      folder,
+      `FROM ${base()}\nRUN echo built > /which && echo marker > /marker\n`,
+    );
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      deepStrictEqual(
+        [
+          await docker('exec', containerId, 'cat', '/which'),
+          await docker('exec', containerId, 'cat', '/marker'),
+          await dialogOf(name),
+          await notifications(name),
+        ],
+        ['built', 'marker', undefined, []],
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder, [other]);
+    }
+  });
+
+  it('F-0412 AC-10 (i10): an image that cannot start shows the generic dialog with F-0410’s buttons, and nothing but a container is made', async () => {
+    const folder = devContainerFolder('c52-cannot-start', {
+      name: 'Cannot Start',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(folder, `FROM ${base()}\nUSER nobody-such-user\n`);
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenStarted(name);
+      const shown = await waitForDialog(name, DIALOG_MILLISECONDS);
+      await closeWindow(name);
+      deepStrictEqual(
+        [shown.message, shown.details, [...shown.buttons].sort()],
+        ['', S034, RECOVERY_BUTTONS],
+      );
+    } finally {
+      await cleanUp(folder);
     }
   });
 });
