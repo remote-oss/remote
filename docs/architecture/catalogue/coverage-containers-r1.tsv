@@ -69,7 +69,7 @@ F-0106.AC-41	acceptance
 F-0106.AC-42	acceptance	
 F-0106.AC-43	deferred	containers release 1: later (attach)
 F-0106.AC-44	deferred	containers release 1: increment 2 (authoring)
-F-0201.AC-1	todo	
+F-0201.AC-1	acceptance	
 F-0201.AC-2	acceptance	
 F-0201.AC-3	unit	
 F-0201.AC-4	deferred	containers release 1: increment 2 (Podman)
@@ -200,7 +200,7 @@ F-0401.AC-3	acceptance
 F-0401.AC-4	unit	
 F-0401.AC-5	unit	
 F-0401.AC-6	unit	
-F-0401.AC-7	todo	
+F-0401.AC-7	acceptance	
 F-0401.AC-8	deferred	containers release 1: increment 2 (authoring)
 F-0401.AC-9	todo	
 F-0401.AC-10	todo	
@@ -652,13 +652,13 @@ F-0501.AC-17	deferred	containers release 1: the full contribution set comes with
 F-0501.AC-18	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-19	deferred	containers release 1: the full contribution set comes with later increments
 F-0501.AC-20	deferred	containers release 1: the full contribution set comes with later increments
-F-0501.AC-21	todo	
+F-0501.AC-21	acceptance	
 F-0501.AC-22	todo	
 F-0501.AC-23	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-24	deferred	containers release 1: later (the recovery container)
 F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-26	todo	
-F-0501.AC-27	todo	
+F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
 F-0502.AC-1	todo	
 F-0502.AC-2	todo	

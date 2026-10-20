@@ -71,14 +71,26 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
   });
 
   /** Waits until window `window` shows the configuration picker, which follows the folder dialog's own quick pick. */
-  function pickerShown(window: string): Promise<void> {
-    return waitFor(
-      `the configuration picker in window ${window}`,
-      async () =>
-        (await quickPickOf(window))?.placeholder ===
-        'Select a devcontainer.json file.',
-      60_000,
-    );
+  async function pickerShown(window: string): Promise<void> {
+    try {
+      await waitFor(
+        `the configuration picker in window ${window}`,
+        async () =>
+          (await quickPickOf(window))?.placeholder ===
+          'Select a devcontainer.json file.',
+        60_000,
+      );
+    } catch (error) {
+      const onScreen = {
+        quickPick: await quickPickOf(window).catch(() => 'unreadable'),
+        dialog: await dialogOf(window).catch(() => 'unreadable'),
+        title: await windowTitle(window).catch(() => 'unreadable'),
+      };
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; on screen: ${JSON.stringify(onScreen)}`,
+        {cause: error},
+      );
+    }
   }
 
   /** Runs Open Folder in Container in window `name` without waiting for it, which a reload would end unanswered. */
@@ -214,7 +226,7 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
       '.devcontainer/b/devcontainer.json': {name: 'OF-B'},
     });
     const pagesBeforeFile = await pageCount();
-    void startOpenFolder(start);
+    const firstRun = startOpenFolder(start);
     await answerFolderDialog(start, target);
     await pickerShown(start);
     const titleAtPick = await windowTitle(start);
@@ -230,6 +242,10 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
       preview: (await editorTabs(start)).map(entry => entry.preview),
       pages: (await pageCount()) - pagesBeforeFile,
     };
+    if ((await quickPickOf(start)) !== undefined) {
+      await pressEscape(start);
+    }
+    await firstRun;
     const pagesBeforeChoice = await pageCount();
     void startOpenFolder(start);
     await answerFolderDialog(start, target);

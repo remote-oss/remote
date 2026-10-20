@@ -471,7 +471,7 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
     }
   });
 
-  it('F-0416 AC-26 (u26): rebuilds, also after the Dockerfile changed, leave exactly one -uid image, named by the folder’s path', async () => {
+  it('F-0416 AC-26, F-0501 AC-21 (u26): rebuilds, also after the Dockerfile changed, leave exactly one -uid image, named by the folder’s path', async () => {
     const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}`;
     const folder = dockerfileFolder('c42-rebuilds', lines, {
       remoteUser: 'tester',

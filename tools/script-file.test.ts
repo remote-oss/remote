@@ -57,6 +57,27 @@ describe('script-file (card tooling-26)', () => {
       });
     });
 
+    it('keeps a hostPick entry unchanged, whether it answers a label, a typed text or a dismissal', () => {
+      const script = path.join(workspace, 'script.json');
+      const entries: AppendedEntry[] = [
+        {surface: 'hostPick', match: 'host', answer: {label: 'harness'}},
+        {surface: 'hostPick', match: 'host', answer: {typed: 'ssh@host'}},
+        {surface: 'hostPick', match: 'host', answer: 'dismiss'},
+      ];
+      appendScriptTo(script, entries);
+      deepStrictEqual(JSON.parse(readFileSync(script, 'utf8')), {entries});
+    });
+
+    it('keeps a filePick entry unchanged, whether it answers a label or a dismissal', () => {
+      const script = path.join(workspace, 'script.json');
+      const entries: AppendedEntry[] = [
+        {surface: 'filePick', match: 'file', answer: {label: '/run/config'}},
+        {surface: 'filePick', match: 'file', answer: 'dismiss'},
+      ];
+      appendScriptTo(script, entries);
+      deepStrictEqual(JSON.parse(readFileSync(script, 'utf8')), {entries});
+    });
+
     it('leaves no partial file: a reader during the append sees the old or the new list', async function () {
       this.timeout(30_000);
       const script = path.join(workspace, 'script.json');
