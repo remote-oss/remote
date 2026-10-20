@@ -152,10 +152,16 @@
       "path": "tests/acceptance/explorer-no-proposals"
     },
     {
+      "path": "tests/acceptance/explorer-standdown"
+    },
+    {
       "path": "tests/acceptance/trust"
     },
     {
       "path": "tests/acceptance/trust-terminal"
+    },
+    {
+      "path": "tests/acceptance/genuine"
     },
     {
       "path": "tests/acceptance/containers"

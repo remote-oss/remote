@@ -68,7 +68,7 @@ describe('the endpoint ids', () => {
     );
   });
 
-  it('F-5902.5.contract: the family companions are the ssh one, frozen', () => {
+  it('F-5902.AC-12: F-5902.5.contract: the family companions are the ssh one, frozen', () => {
     deepStrictEqual(
       [
         SSH_COMPANION_ID,

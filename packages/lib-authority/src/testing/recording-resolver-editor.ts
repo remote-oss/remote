@@ -47,8 +47,11 @@ export function recordingResolverEditor(
         cancel = request.onCancel;
         running += 1;
         try {
-          return await task((text, details) => {
-            events.push(details ? `phase ${text} (details)` : `phase ${text}`);
+          return await task((text, details, increment) => {
+            events.push(
+              (details ? `phase ${text} (details)` : `phase ${text}`) +
+                (increment === undefined ? '' : ` +${String(increment)}`),
+            );
           });
         } finally {
           cancel = undefined;

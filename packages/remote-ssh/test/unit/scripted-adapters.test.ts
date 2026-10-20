@@ -1,6 +1,7 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
+import {NotingChannels} from 'lib-log/testing/noting-channels';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   buildFileChoice,
@@ -16,7 +17,6 @@ import type {
   ResolvedConnection,
   ResolverEditor,
 } from 'lib-authority';
-import type {ChannelPort, RevealableChannel} from '../../src/log-channel.ts';
 import {
   adaptersFor,
   authorityReportingResolverEditorOf,
@@ -524,15 +524,12 @@ describe('the scripted adapters answer from the script only', () => {
     strictEqual(adapters.unusedEntries(), 0);
   });
 
-  it('constraint 3: the licence modal can only decline: it gives the last button', async () => {
+  it('constraint 3: the licence modal can only decline: it gives nothing, as the editor’s Cancel does', async () => {
     deepStrictEqual(
       await scripted([
         {surface: 'licenceModal', match: '', answer: 'decline'},
-      ]).adapters.licenceDialog.showModal('m', 'd', [
-        'Accept and Continue',
-        'Cancel',
-      ]),
-      'Cancel',
+      ]).adapters.licenceDialog.showModal('m', 'd', ['Accept and Continue']),
+      undefined,
     );
   });
 
@@ -542,7 +539,7 @@ describe('the scripted adapters answer from the script only', () => {
         scripted([{surface: 'licenceModal', match: '', answer: 'decline'}])
           .adapters.licenceDialog,
         template => template,
-        {applicationName: 'Editor', displayName: 'Remote'},
+        {displayName: 'Remote'},
       ).askUser('https://example.invalid/terms', NEVER),
       'cancel',
     );
@@ -1427,40 +1424,22 @@ describe('progressFor (card tooling-18)', () => {
   });
 });
 
-/** A real channel that notes what it is given. */
-class NotingChannel implements RevealableChannel {
-  readonly lines: string[] = [];
-
-  readonly shown: Array<boolean | undefined> = [];
-
-  disposed = 0;
-
-  appendLine(text: string): void {
-    this.lines.push(text);
-  }
-
-  show(preserveFocus?: boolean): void {
-    this.shown.push(preserveFocus);
-  }
-
-  dispose(): void {
-    this.disposed += 1;
-  }
-}
-
-/** A real channel port that hands out one noting channel and remembers its name. */
-class NotingChannels implements ChannelPort {
-  readonly channel = new NotingChannel();
-
-  readonly names: string[] = [];
-
-  createOutputChannel(name: string): RevealableChannel {
-    this.names.push(name);
-    return this.channel;
-  }
-}
-
 describe('channelPortFor (card tooling-18)', () => {
+  it('D-85: with the switch on, the lines go to the file REMOTE_OSS_ACCEPTANCE_LOG names, and to the real channel', () => {
+    const files = new AppendedFiles();
+    const real = new NotingChannels();
+    const channel = channelPortFor(
+      SWITCHED_ON,
+      real,
+      files,
+    ).createOutputChannel('Remote - SSH');
+    channel.appendLine('first');
+    deepStrictEqual(
+      [files.appended.get(LOG_FILE), real.channel.lines],
+      ['first\n', ['first']],
+    );
+  });
+
   it('D-85: with the switch off it is the real port itself', () => {
     const real = new NotingChannels();
     strictEqual(
@@ -1471,82 +1450,6 @@ describe('channelPortFor (card tooling-18)', () => {
       ),
       real,
     );
-  });
-
-  it('D-85: with the switch at any value but 1 it is the real port itself', () => {
-    const real = new NotingChannels();
-    strictEqual(
-      channelPortFor(
-        {REMOTE_OSS_ACCEPTANCE: 'yes', REMOTE_OSS_ACCEPTANCE_LOG: LOG_FILE},
-        real,
-        new AppendedFiles(),
-      ),
-      real,
-    );
-  });
-
-  it('D-85: with the switch on and an empty log variable it is the real port itself', () => {
-    const real = new NotingChannels();
-    strictEqual(
-      channelPortFor(
-        {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_LOG: ''},
-        real,
-        new AppendedFiles(),
-      ),
-      real,
-    );
-  });
-
-  it('D-85: with the switch on and no log variable it is the real port itself', () => {
-    const real = new NotingChannels();
-    strictEqual(
-      channelPortFor({REMOTE_OSS_ACCEPTANCE: '1'}, real, new AppendedFiles()),
-      real,
-    );
-  });
-
-  it('D-85: the file holds both lines, in order, each ending in a newline', () => {
-    const files = new AppendedFiles();
-    const channel = channelPortFor(
-      SWITCHED_ON,
-      new NotingChannels(),
-      files,
-    ).createOutputChannel('Remote - SSH');
-    channel.appendLine('first');
-    channel.appendLine('second');
-    strictEqual(files.appended.get(LOG_FILE), 'first\nsecond\n');
-  });
-
-  it('D-85: the real channel gets both lines too', () => {
-    const real = new NotingChannels();
-    const channel = channelPortFor(
-      SWITCHED_ON,
-      real,
-      new AppendedFiles(),
-    ).createOutputChannel('Remote - SSH');
-    channel.appendLine('first');
-    channel.appendLine('second');
-    deepStrictEqual(real.channel.lines, ['first', 'second']);
-  });
-
-  it('D-85: the real channel is opened under the name asked for', () => {
-    const real = new NotingChannels();
-    channelPortFor(SWITCHED_ON, real, new AppendedFiles()).createOutputChannel(
-      'Remote - SSH',
-    );
-    deepStrictEqual(real.names, ['Remote - SSH']);
-  });
-
-  it('D-85: show and dispose reach the real channel', () => {
-    const real = new NotingChannels();
-    const channel = channelPortFor(
-      SWITCHED_ON,
-      real,
-      new AppendedFiles(),
-    ).createOutputChannel('Remote - SSH');
-    channel.show(false);
-    channel.dispose();
-    deepStrictEqual([real.channel.shown, real.channel.disposed], [[false], 1]);
   });
 });
 

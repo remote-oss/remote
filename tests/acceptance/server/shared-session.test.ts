@@ -53,7 +53,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
       {
         allowedExtraStartOptions: [],
         extensionEntries: 'identifiersOnly',
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'none',
       },
       {
         lockLoop: lockLoop(),

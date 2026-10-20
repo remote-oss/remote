@@ -203,7 +203,7 @@ describe('the tree of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5101.16: with the focus command the tree view is created once with Collapse All', async () => {
+  it('F-5101.AC-1, AC-7, F-5103.AC-38: F-5101.16: with the focus command the tree view is created once with Collapse All', async () => {
     const scenario = setup(FOCUS);
     await showTargets(scenario.editor, scenario.targets, 'remoteTargets');
     deepStrictEqual(
@@ -212,7 +212,7 @@ describe('the tree of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5102.3.3: the group is an expanded item without icon or description', async () => {
+  it('F-5101.AC-41, F-5102.AC-33, AC-39, AC-40: F-5102.3.3: the group is an expanded item without icon or description', async () => {
     const scenario = setup(FOCUS);
     await showTargets(scenario.editor, scenario.targets, 'remoteTargets');
     const item = (await providerOf(scenario).getTreeItem(
@@ -230,7 +230,7 @@ describe('the tree of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5102.3.3: an unconnected host is a leaf with the vm icon', async () => {
+  it('F-5103.AC-16: F-5102.3.3: an unconnected host is a leaf with the vm icon', async () => {
     const scenario = setup(FOCUS);
     await showTargets(scenario.editor, scenario.targets, 'remoteTargets');
     const item = (await providerOf(scenario).getTreeItem(
@@ -267,7 +267,7 @@ describe('the tree of the Remotes view (card explorer-04)', () => {
     deepStrictEqual(await providerOf(scenario).getChildren(undefined), [GROUP]);
   });
 
-  it('F-5101.BR-4: a change of the targets fires the emitter once with undefined', async () => {
+  it('F-5101.AC-10: F-5101.BR-4: a change of the targets fires the emitter once with undefined', async () => {
     const scenario = setup(FOCUS);
     await showTargets(scenario.editor, scenario.targets, 'remoteTargets');
     scenario.fireChange();
@@ -293,7 +293,7 @@ describe('the tree of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5101.6.5: only a change affecting the configuration file runs the listener', () => {
+  it('F-5101.AC-16, F-5102.AC-17: F-5101.6.5: only a change affecting the configuration file runs the listener', () => {
     const scenario = setup(FOCUS);
     let invocations = 0;
     configFileChangesOf(scenario.editor)(() => {

@@ -111,7 +111,7 @@ export interface ProgressPort {
   withProgress<Result>(
     request: ProgressRequest,
     task: (
-      update: (title: string, details: boolean) => void,
+      update: (title: string, details: boolean, increment?: number) => void,
     ) => Promise<Result>,
   ): Promise<Result>;
 }
@@ -144,6 +144,11 @@ export interface ResolverOptions {
   cancellable: boolean;
   /** Whether a connection the connector calls trusted is passed to the editor as trusted. */
   allowsTrust: boolean;
+  /**
+   * Whether the progress is determinate while it shows a stage: the reports of a stage then carry an `increment`, the
+   * share downloaded during the server download and 0 otherwise. A family that leaves it off reports no increment.
+   */
+  determinateStages?: boolean;
   /** The text of a stage, in the display language and the extension's wording. */
   titleOf(phase: ConnectPhase, target: DecodedTarget): string;
   /** The title the progress starts with. */
@@ -326,8 +331,21 @@ export async function registerResolver(
     decoded: DecodedTarget,
     input: ConnectInput,
   ): Promise<Connected | Failed> {
-    let shown: {title: string; details: boolean} | undefined;
-    let report: ((title: string, details: boolean) => void) | undefined;
+    let shown: {title: string; details: boolean; staged: boolean} | undefined;
+    let report:
+      | ((title: string, details: boolean, increment?: number) => void)
+      | undefined;
+    // The share of the bar added since the last report, and the download percent already counted.
+    let unreported = 0;
+    let downloaded = 0;
+    function incrementOf(): number | undefined {
+      if (!options.determinateStages || shown?.staged !== true) {
+        return undefined;
+      }
+      const increment = unreported;
+      unreported = 0;
+      return increment;
+    }
     let opened = false;
     const releases: Array<() => void> = [];
     const settled = new Promise<void>(resolve => {
@@ -353,7 +371,7 @@ export async function registerResolver(
         async update => {
           report = update;
           if (shown !== undefined) {
-            update(shown.title, shown.details);
+            update(shown.title, shown.details, incrementOf());
           }
           await settled;
         },
@@ -361,12 +379,15 @@ export async function registerResolver(
     }
     const stopTimer = editor.startTimer(PROGRESS_FALLBACK_MILLISECONDS, open);
     const stop = connector.onPhase(phase => {
-      shown = {
-        title: options.titleOf(phase, decoded),
-        details: phase.details === true,
-      };
+      const title = options.titleOf(phase, decoded);
+      shown = {title, details: phase.details === true, staged: title !== ''};
+      if (phase.name === 'serverDownloadPercent') {
+        const percent = phase.percent ?? 0;
+        unreported += Math.max(0, percent - downloaded);
+        downloaded = Math.max(downloaded, percent);
+      }
       if (report !== undefined) {
-        report(shown.title, shown.details);
+        report(shown.title, shown.details, incrementOf());
       } else if (phase.quiet !== true) {
         open();
       }

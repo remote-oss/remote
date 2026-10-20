@@ -9,6 +9,7 @@
 
 import path from 'node:path';
 import type {ProgressPort, ResolverEditor} from 'lib-authority';
+import {acceptanceChannelPortFor, type ChannelPort} from 'lib-log';
 import {
   fileChoiceLabelOf,
   fileChoiceTextOf,
@@ -17,7 +18,6 @@ import {
 import {labelOf} from '../connect/connect-editor.ts';
 import type {PickerItem, PickerModel} from '../connect/picker-model.ts';
 import type {EditorAdapters} from '../editor-surfaces.ts';
-import type {ChannelPort} from '../log-channel.ts';
 import {textOfId} from './failure-strings.ts';
 import type {FailureStringId} from './failure-strings.ts';
 import type {MitigationAction} from './mitigation-picker.ts';
@@ -561,12 +561,12 @@ export function scriptedAdapters(
         ),
     },
     licenceDialog: {
-      showModal: (message, detail, buttons) =>
+      showModal: (message, detail) =>
         answerFrom(
           'licenceModal',
           message,
           entry => ({
-            value: entry.answer === 'decline' ? buttons.at(-1) : undefined,
+            value: undefined,
             recorded: entry.answer,
           }),
           undefined,
@@ -714,34 +714,20 @@ export function progressFor(
 }
 
 /**
- * The channel port the extension opens its log over: the real one, whose every line the named file also gets, when
- * the harness's switch is on and `REMOTE_OSS_ACCEPTANCE_LOG` names a file; the real one itself in every other case.
- * The lines are the ones the logger writes, after its masking of secrets.
+ * The channel port the extension opens its log over: the real one, whose every line the file `REMOTE_OSS_ACCEPTANCE_LOG`
+ * names also gets, when the harness's switch is on; the real one itself in every other case.
  */
 export function channelPortFor(
   environment: Readonly<Record<string, string | undefined>>,
   real: ChannelPort,
   files: AdapterFiles,
 ): ChannelPort {
-  const logFile = namedBy(environment, LOG_FILE_VARIABLE);
-  if (!switchedOn(environment) || logFile === undefined) {
-    return real;
-  }
-  return {
-    createOutputChannel: name => {
-      const channel = real.createOutputChannel(name);
-      return {
-        appendLine: text => {
-          files.append(logFile, `${text}\n`);
-          channel.appendLine(text);
-        },
-        show: preserveFocus => {
-          channel.show(preserveFocus);
-        },
-        dispose: () => {
-          channel.dispose();
-        },
-      };
+  return acceptanceChannelPortFor(
+    environment,
+    LOG_FILE_VARIABLE,
+    real,
+    (file, text) => {
+      files.append(file, text);
     },
-  };
+  );
 }

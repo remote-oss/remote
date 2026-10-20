@@ -1,11 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import type {Level} from 'lib-log';
+import type {ChannelPort, Level, RevealableChannel} from 'lib-log';
 import {
-  type ChannelPort,
   levelOfSetting,
   type LogEnvironment,
   openLogChannel,
-  type RevealableChannel,
 } from '../../src/log-channel.ts';
 
 const ENVIRONMENT: LogEnvironment = {

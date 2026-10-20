@@ -193,6 +193,7 @@ interface Seen {
   renames: Array<[string, string]>;
   asked: string[];
   phases: string[];
+  percents: number[];
   sink: MemorySink;
 }
 
@@ -204,12 +205,17 @@ function dependenciesOf(
     downloadFolder?: unknown;
     downloads?: DownloadResult[];
     modal?: LicenceModal;
+    /** The percents the download reports while the body arrives. */
+    percents?: number[];
   } = {},
 ): ServerStepDependencies {
   const downloads = [...(options.downloads ?? [])];
   const download: DownloadPort = {
     download: request => {
       seen.downloads.push(request);
+      for (const percent of options.percents ?? []) {
+        request.onPercent(percent);
+      }
       return Promise.resolve(
         downloads.shift() ?? {
           kind: 'downloaded',
@@ -291,6 +297,7 @@ async function runSteps(
     renames: [],
     asked: [],
     phases: [],
+    percents: [],
     sink: new MemorySink(),
   };
   const request: ServerRequest = {
@@ -301,6 +308,9 @@ async function runSteps(
     defaultExtensions: options.defaultExtensions ?? [],
     onPhase: phase => {
       seen.phases.push(phase);
+    },
+    onDownloadPercent: percent => {
+      seen.percents.push(percent);
     },
     cancellation: options.cancellation ?? NEVER,
   };
@@ -523,6 +533,73 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
+  /** The log lines that echo a server-download setting, for a run with `options`. */
+  async function settingLines(
+    options: Parameters<typeof runSteps>[1],
+    channel = channelOf(),
+  ): Promise<string[]> {
+    const {seen} = await runSteps(channel, options);
+    return seen.sink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith('remote.serverDownload'));
+  }
+
+  it('F-0503 AC-26: with neither setting set, no line echoes a setting', async () => {
+    deepStrictEqual(
+      await settingLines({override: undefined, downloadFolder: ''}),
+      [],
+    );
+  });
+
+  it('F-0503 AC-26: each setting with a value gets its own line, the base URL as scheme, host and path', async () => {
+    deepStrictEqual(
+      await settingLines({
+        override: {
+          value: 'https://downloads.example.invalid/server/base',
+          layer: 'defaultProfileUser',
+        },
+        downloadFolder: '/var/cache/servers',
+      }),
+      [
+        'remote.serverDownloadBaseUrl = https://downloads.example.invalid/server/base',
+        'remote.serverDownloadFolder = /var/cache/servers',
+      ],
+    );
+  });
+
+  it('F-0503 AC-26: a base URL with a user, a password, a query and a fragment is logged without them', async () => {
+    deepStrictEqual(
+      await settingLines({
+        override: {
+          value:
+            'https://user:secret@downloads.example.invalid/base?token=x#top',
+          layer: 'defaultProfileUser',
+        },
+      }),
+      ['remote.serverDownloadBaseUrl = https://downloads.example.invalid/base'],
+    );
+  });
+
+  it('F-0503 AC-26: the lines come on a connect that reuses the server as well', async () => {
+    deepStrictEqual(
+      await settingLines(
+        {
+          volume: true,
+          override: {
+            value: 'https://downloads.example.invalid/server/base',
+            layer: 'defaultProfileUser',
+          },
+          downloadFolder: '/var/cache/servers',
+        },
+        channelOf({volume: true, treeComplete: true}),
+      ),
+      [
+        'remote.serverDownloadBaseUrl = https://downloads.example.invalid/server/base',
+        'remote.serverDownloadFolder = /var/cache/servers',
+      ],
+    );
+  });
+
   it('F-0503 AC-1: a complete tree is reused: no installing phase, no download, no install', async () => {
     const channel = channelOf({volume: true, treeComplete: true});
     const {result, seen} = await runSteps(channel, {volume: true});
@@ -642,7 +719,12 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
     const {result, seen} = await runSteps(channel);
     deepStrictEqual(
-      [failureKind(result), seen.sink.lines.map(line => line.message)],
+      [
+        failureKind(result),
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => !message.startsWith('remote.serverDownload')),
+      ],
       [
         'serverFailed',
         ['the probe failed: prerequisiteMissing', 'the container lacks: tar'],
@@ -877,6 +959,16 @@ describe('the server steps of a connect (card containers-08)', () => {
       ],
     });
     deepStrictEqual(seen.downloads.length, 2);
+  });
+
+  it('containers-55: the percents of the server download reach the request as they come, and nothing else of the transfer does', async () => {
+    const {seen} = await runSteps(channelOf(), {percents: [0, 40, 100]});
+    deepStrictEqual(seen.percents, [0, 40, 100]);
+  });
+
+  it('containers-55: a connect that downloads nothing reports no percent', async () => {
+    const {seen} = await runSteps(channelOf(), {downloads: []});
+    deepStrictEqual(seen.percents, []);
   });
 
   it('F-0503 7.E2: a download that fails twice is serverFailed, after exactly two tries', async () => {

@@ -37,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the genuine launch last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -62,6 +62,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        'explorer-standdown',
         'trust',
         'trust-terminal',
         'containers',
@@ -71,6 +72,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         ...hostLaunchLabels(),
+        'genuine',
       ],
     );
   });
@@ -123,7 +125,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09: only the explorer launches install the explorer and the containers launches Dev Containers, they and the trust launches open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -141,6 +143,7 @@ describe('the launches of the VSCodium run', () => {
           : [],
       ),
       [
+        ['default-ports', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',
@@ -154,6 +157,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
         [
@@ -187,6 +191,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['genuine', undefined, true, undefined],
       ],
     );
   });
@@ -252,6 +257,17 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
       ],
+    );
+  });
+
+  it('coverage-25b: the explorer-standdown launch installs Remote Explorer and carries the reference explorer’s stand-in', () => {
+    deepStrictEqual(
+      launches.flatMap(launch =>
+        launch.label === 'explorer-standdown' && launch.kind === 'plain'
+          ? [[launch.withExtensions, launch.standIns]]
+          : [],
+      ),
+      [[['remote-oss.remote-explorer'], ['ms-vscode.remote-explorer']]],
     );
   });
 
@@ -336,6 +352,52 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('tooling-51: the genuine launch starts VS Code, is made only when named, shows the real dialogs and keeps the download on the run’s host', () => {
+    const genuine = launches.find(launch => launch.label === 'genuine');
+    deepStrictEqual(
+      [
+        genuine?.kind,
+        genuine?.kind === 'plain' ? genuine.client : undefined,
+        genuine?.namedOnly,
+        genuine?.environment,
+        genuine?.settings,
+        genuine?.kind === 'plain' ? genuine.withExtensions : undefined,
+      ],
+      [
+        'plain',
+        'vscode',
+        true,
+        {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+        {
+          'window.title': '[${rootName}]',
+          'window.dialogStyle': 'custom',
+          'remote.SSH.localServerDownload': 'off',
+          'telemetry.telemetryLevel': 'off',
+          'update.mode': 'none',
+          'extensions.autoCheckUpdates': false,
+          'extensions.autoUpdate': false,
+          'workbench.enableExperiments': false,
+          'workbench.settings.enableNaturalLanguageSearch': false,
+          'chat.disableAIFeatures': true,
+        },
+        undefined,
+      ],
+    );
+  });
+
+  it('tooling-51: no other launch is named only or starts VS Code', () => {
+    deepStrictEqual(
+      launches
+        .filter(
+          launch =>
+            launch.namedOnly !== undefined ||
+            (launch.kind === 'plain' && launch.client !== undefined),
+        )
+        .map(launch => launch.label),
+      ['genuine'],
+    );
+  });
+
   it('D-85: no launch outside the list sets remote.SSH.configFile', () => {
     deepStrictEqual(
       launches
@@ -368,6 +430,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        'explorer-standdown',
         'trust',
         'trust-terminal',
         'containers',
@@ -377,6 +440,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         ...hostLaunchLabels(),
+        'genuine',
       ],
     );
   });
@@ -386,7 +450,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 3}, () => ({
+      Array.from({length: 4}, () => ({
         'window.title': '[${rootName}]${remoteName}',
       })),
     );

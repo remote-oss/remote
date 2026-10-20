@@ -1,7 +1,7 @@
 /**
  * @fileoverview The question the user is asked before a server that comes under licence terms is installed: a modal
- * with the extension's own wording, the address of the terms, and the buttons Accept and Continue and Cancel. Only
- * the first button accepts; everything else, including closing the modal, cancels.
+ * information message with the extension's own wording and the address of the terms, and one button, Accept and
+ * Continue. Only that button accepts; everything else, including the editor's Cancel and closing the modal, cancels.
  */
 
 import type {LicenceModal, ModalAnswer} from 'lib-server';
@@ -9,7 +9,7 @@ import {filled, type Translate} from './strings.ts';
 
 /** What the editor shows. */
 export interface LicenceDialogPort {
-  /** A modal warning with the detail and the buttons; resolves with the chosen button, or nothing for Escape or X. */
+  /** A modal information message with the detail and the extension's one item; resolves with the item, or nothing for the editor's Cancel, Escape or X. */
   showModal(
     message: string,
     detail: string,
@@ -17,21 +17,18 @@ export interface LicenceDialogPort {
   ): PromiseLike<string | undefined>;
 }
 
-/** The names the modal's message uses. */
+/** The names the modal's texts use. */
 export interface LicenceNames {
-  /** The client's application name. */
-  applicationName: string;
   /** The extension's display name. */
   displayName: string;
 }
 
-/** The texts of the modal; those with no string id yet are provisional. */
+/** The texts of the modal. */
 const LICENCE_TEMPLATES = {
-  cancel: 'Cancel',
-  message:
-    '{0} needs you to accept the license terms of the {1} server before installing it.',
-  detail: 'Read the terms at {0}.',
-  accept: 'Accept and Continue',
+  serverLicenseMessage: "Accept the server's licence terms?",
+  serverLicenseDetail:
+    'The server {0} installs or starts on this host is distributed under licence terms of its own, which {0} does not accept for you. Read them at {1} before you continue. "Accept and Continue" accepts them for this profile; the choice is remembered for this profile.',
+  acceptAndContinue: 'Accept and Continue',
 } as const;
 
 /** The modal over `dialog`, with the texts in the display language. */
@@ -40,7 +37,7 @@ export function licenceModalOf(
   translate: Translate,
   names: LicenceNames,
 ): LicenceModal {
-  const accept = filled(translate, LICENCE_TEMPLATES.accept);
+  const accept = filled(translate, LICENCE_TEMPLATES.acceptAndContinue);
   return {
     askUser: async (termsUrl, cancellation): Promise<ModalAnswer> => {
       if (cancellation.aborted) {
@@ -48,12 +45,12 @@ export function licenceModalOf(
       }
       const answered = Promise.resolve(
         dialog.showModal(
-          filled(translate, LICENCE_TEMPLATES.message, [
+          filled(translate, LICENCE_TEMPLATES.serverLicenseMessage),
+          filled(translate, LICENCE_TEMPLATES.serverLicenseDetail, [
             names.displayName,
-            names.applicationName,
+            termsUrl,
           ]),
-          filled(translate, LICENCE_TEMPLATES.detail, [termsUrl]),
-          [accept, filled(translate, LICENCE_TEMPLATES.cancel)],
+          [accept],
         ),
       ).then(
         (chosen): ModalAnswer => (chosen === accept ? 'accept' : 'cancel'),

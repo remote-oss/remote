@@ -371,7 +371,7 @@ export function ofStart(
     case 'unreadableServerFacts':
       return {kind: 'serverStart'};
     case 'prerequisitesMissing':
-      return {kind: 'prerequisiteMissing'};
+      return logged('prerequisiteMissing', failure.detail);
     case 'retriesExhausted':
       return ofExhausted(failure);
     case 'scriptFailed':

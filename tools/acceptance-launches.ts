@@ -27,6 +27,8 @@ interface LaunchCommon {
   hostSetup?: readonly HostSetupEntry[];
   /** Ports of the client's loopback the run listens on while each attempt of the launch runs, to make a configured range busy. */
   clientListeners?: readonly number[];
+  /** Whether the run makes the launch only when `--launches` names it. */
+  namedOnly?: true;
 }
 
 /** One command of a launch's host setup, run on the host container through `docker exec`, in order. */
@@ -63,6 +65,8 @@ export interface RunnerLaunch extends LaunchCommon {
 export interface PlainLaunch extends LaunchCommon {
   kind: 'plain';
   suite: string;
+  /** The editor the launch starts: VS Code at the floor of ADR-0007 instead of the run's VSCodium. */
+  client?: 'vscode';
   /**
    * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
    * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
@@ -140,6 +144,33 @@ const CONTAINERS_LAUNCH = {
     'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
   },
 } as const;
+
+/**
+ * The genuine VS Code launch: VS Code at the floor of ADR-0007 runs the extensions with their real dialogs, which the
+ * rows read and answer in the window. The run makes it only when `--launches` names it, and it is the table's last.
+ */
+const GENUINE_LAUNCH: PlainLaunch = {
+  ...RENDERER_LAUNCH,
+  label: 'genuine',
+  suite: 'genuine',
+  client: 'vscode',
+  namedOnly: true,
+  settings: {
+    ...RENDERER_LAUNCH.settings,
+    'window.dialogStyle': 'custom',
+    'remote.SSH.localServerDownload': 'off',
+    // Genuine VS Code makes its own requests from the runner; none of them is wanted.
+    'telemetry.telemetryLevel': 'off',
+    'update.mode': 'none',
+    'extensions.autoCheckUpdates': false,
+    'extensions.autoUpdate': false,
+    'workbench.enableExperiments': false,
+    'workbench.settings.enableNaturalLanguageSearch': false,
+    'chat.disableAIFeatures': true,
+  },
+  // The empty script makes the extension show its real dialogs.
+  environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+};
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -464,9 +495,10 @@ function forwardingLaunch(
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
- * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
- * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
- * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
+ * same without enabling the proposed API; `explorer`, `explorer-alone`, `explorer-no-proposals` and
+ * `explorer-standdown` do the same with Remote Explorer installed and a debugging port, the second with Remote -
+ * SSH disabled, the third without the proposed API, and the fourth with a stand-in carrying the other Remote
+ * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume` and
  * `containers-explorer` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
@@ -579,10 +611,11 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      ...RENDERER_LAUNCH,
       label: 'default-ports',
-      kind: 'plain',
       suite: 'default-ports',
       settings: {
+        ...RENDERER_LAUNCH.settings,
         'remote.SSH.defaultForwardedPorts': [
           {name: 'web', remotePort: 8632, localPort: 18632},
         ],
@@ -606,6 +639,12 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-standdown',
+      suite: 'explorer-standdown',
+      standIns: ['ms-vscode.remote-explorer'],
     },
     {
       ...TRUST_LAUNCH,
@@ -689,8 +728,21 @@ export function launchesOf(root: string): Launch[] {
         hostSetup: hostSetupOf(hostCase, suite),
       })),
     ),
+    GENUINE_LAUNCH,
   ];
   return launches;
+}
+
+/** The launch with the label `label`; it fails naming the label when there is none. */
+export function launchLabelled(
+  launches: readonly Launch[],
+  label: string,
+): Launch {
+  const found = launches.find(launch => launch.label === label);
+  if (found === undefined) {
+    throw new Error(`no launch is labelled ${label}`);
+  }
+  return found;
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */

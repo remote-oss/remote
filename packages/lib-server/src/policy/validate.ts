@@ -34,6 +34,12 @@ const KNOWN_EXTENSION_ENTRIES = new Set<string>([
   'asWritten',
 ]);
 
+const KNOWN_REQUIREMENTS_CHECKS = new Set<string>([
+  'none',
+  'bundledHelper',
+  'bundledHelperPlusAlpineProbe',
+]);
+
 const KNOWN_INSTALL_UMASKS = new Set<string>(['inherit', '022']);
 
 const KNOWN_VERIFICATIONS = new Set<string>([
@@ -69,6 +75,7 @@ export function validatePolicyRecord(
     allowedExtraStartOptions: readonly string[];
     extensionEntries: string;
     installUmask: string;
+    requirementsCheck: string;
     cleanup: {kind: string; count: number};
     prefetch: {
       kind: string;
@@ -128,6 +135,9 @@ export function validatePolicyRecord(
   });
   if (!KNOWN_EXTENSION_ENTRIES.has(asData.extensionEntries)) {
     problem('extensionEntries', 'invalid value');
+  }
+  if (!KNOWN_REQUIREMENTS_CHECKS.has(asData.requirementsCheck)) {
+    problem('requirementsCheck', 'invalid value');
   }
   if (!KNOWN_INSTALL_UMASKS.has(asData.installUmask)) {
     problem('installUmask', 'invalid value');

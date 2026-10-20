@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import {request as httpRequest} from 'node:http';
 import {request as httpsRequest} from 'node:https';
-import {createSecureContext} from 'node:tls';
+import {connect, createSecureContext} from 'node:tls';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
@@ -108,6 +108,7 @@ describe('the download host', function () {
   let folder = '';
   let archive: Buffer;
   let logFile = '';
+  let tlsLogFile = '';
   let host: DownloadHost;
 
   before(async () => {
@@ -115,18 +116,74 @@ describe('the download host', function () {
     archive = Buffer.alloc(2 * 1024 * 1024 + 7, 'a');
     writeFileSync(path.join(folder, 'archive.tar.gz'), archive);
     logFile = path.join(folder, 'requests.log');
+    tlsLogFile = path.join(folder, 'tls.log');
+    writeFileSync(logFile, '');
+    writeFileSync(tlsLogFile, '');
     const certificate = makeCertificate(folder);
     host = await startDownloadHost({
       addresses: ['127.0.0.1'],
       archiveFile: path.join(folder, 'archive.tar.gz'),
       ...certificate,
       logFile,
+      tlsLogFile,
     });
   });
 
   after(async () => {
     await host.stop();
     rmSync(folder, {recursive: true, force: true});
+  });
+
+  /** Connects to the HTTPS port asking for `servername`, trusting no certificate check unless `trusting` is false, and ends the connection. */
+  function handshake(servername: string, trusting: boolean): Promise<void> {
+    return new Promise(resolve => {
+      const socket = connect(
+        {
+          host: '127.0.0.1',
+          port: host.httpsPort,
+          servername,
+          rejectUnauthorized: !trusting,
+        },
+        () => {
+          socket.end();
+        },
+      );
+      socket.on('error', () => undefined);
+      socket.on('close', () => {
+        resolve();
+      });
+    });
+  }
+
+  it('tooling-51: a TLS handshake asking for github.com is logged with that name, and the request log is unchanged', async () => {
+    const before = [
+      readFileSync(tlsLogFile, 'utf8').split('\n').filter(Boolean).length,
+      readFileSync(logFile, 'utf8'),
+    ];
+    await handshake('github.com', true);
+    const lines = readFileSync(tlsLogFile, 'utf8').split('\n').filter(Boolean);
+    deepStrictEqual(
+      [
+        lines.length - Number(before[0]),
+        lines.at(-1)?.endsWith(' github.com'),
+        readFileSync(logFile, 'utf8'),
+      ],
+      [1, true, before[1]],
+    );
+  });
+
+  it('tooling-51: a handshake that the client refuses is logged too, and no request is logged for it', async () => {
+    const before = readFileSync(logFile, 'utf8');
+    await handshake('update.code.visualstudio.com', false);
+    deepStrictEqual(
+      [
+        readFileSync(tlsLogFile, 'utf8').includes(
+          ' update.code.visualstudio.com\n',
+        ),
+        readFileSync(logFile, 'utf8'),
+      ],
+      [true, before],
+    );
   });
 
   it('tooling-27: ok gives the archive with its length', async () => {
@@ -260,6 +317,7 @@ describe('startDownloadHost', () => {
           archiveFile: path.join(folder, 'none'),
           ...certificate,
           logFile: path.join(folder, 'log'),
+          tlsLogFile: path.join(folder, 'tls-log'),
         }),
       );
     } finally {
@@ -428,13 +486,18 @@ describe('the download host in the run', () => {
 
   it('tooling-27: the harness variables are the bases as the host and the editor reach them, and the log', () => {
     deepStrictEqual(
-      downloadVariables({httpPort: 8080, httpsPort: 8443}, '/run/requests.log'),
+      downloadVariables(
+        {httpPort: 8080, httpsPort: 8443},
+        '/run/requests.log',
+        '/run/downloads-tls.log',
+      ),
       {
         HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080',
         HARNESS_DOWNLOADS_HTTPS: 'https://downloads:8443',
         HARNESS_DOWNLOADS_LICENSED: 'https://update.code.visualstudio.com:8443',
         HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
         HARNESS_DOWNLOADS_LOG: '/run/requests.log',
+        HARNESS_DOWNLOADS_TLS_LOG: '/run/downloads-tls.log',
       },
     );
   });

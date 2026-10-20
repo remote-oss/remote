@@ -12,6 +12,7 @@ import {
   rangeProblem,
   RESULT_BEGIN,
   RESULT_END,
+  type RequirementsCheck,
   type RuntimeOptions,
   serverPort,
   startOrReuse,
@@ -101,7 +102,7 @@ async function start(
     'fileWatcherPolling' | 'useHostProxy' | 'forceDisableUserEnv'
   > = [],
   loop?: HostLockLoop,
-  requirementsCheck: 'serverBundled' | 'bundledHelper' = 'serverBundled',
+  requirementsCheck: RequirementsCheck = 'none',
   extensionEntries: 'identifiersOnly' | 'asWritten' = 'identifiersOnly',
 ): Promise<StartOutcome> {
   return startOrReuse(
@@ -738,7 +739,7 @@ describe('startOrReuse (V7), what is asked of the host', () => {
       {defaultExtensions: ['x.y@3.0.1', 'c.three@prerelease', 'not-an-id']},
       [],
       undefined,
-      'serverBundled',
+      'none',
       'asWritten',
     );
     const script = scriptOf(channel);
@@ -781,7 +782,7 @@ describe('startOrReuse (V7), what is asked of the host', () => {
       {
         allowedExtraStartOptions: [],
         extensionEntries,
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'none',
       },
       {
         lockLoop: runOnce,
@@ -823,7 +824,7 @@ describe('startOrReuse (V7), what is asked of the host', () => {
       {
         allowedExtraStartOptions: [],
         extensionEntries: 'identifiersOnly',
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'none',
       },
       {
         lockLoop: remembering,
@@ -932,7 +933,7 @@ describe('startOrReuse (V7) over a real shell', () => {
       {
         allowedExtraStartOptions: [],
         extensionEntries: 'identifiersOnly',
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'none',
       },
       dependencies(),
       NEVER_CANCELLED,
@@ -951,7 +952,7 @@ describe('startOrReuse (V7) over a real shell', () => {
       {
         allowedExtraStartOptions: [],
         extensionEntries: 'identifiersOnly',
-        requirementsCheck: 'serverBundled',
+        requirementsCheck: 'none',
       },
       dependencies(),
       NEVER_CANCELLED,
@@ -972,7 +973,7 @@ describe('startOrReuse (V7) over a real shell', () => {
         {
           allowedExtraStartOptions: [],
           extensionEntries: 'identifiersOnly',
-          requirementsCheck: 'serverBundled',
+          requirementsCheck: 'none',
         },
         dependencies(),
         NEVER_CANCELLED,
@@ -1021,16 +1022,18 @@ describe('startOrReuse (V7) over a real shell', () => {
     deepStrictEqual(scriptOf(channel).includes('--use-host-proxy'), false);
   });
 
-  it('contracts 5.0: the requirements helper runs before a launch only under the bundledHelper policy', async () => {
+  it('contracts 5.0: the requirements helper runs before a launch under the two helper policies, and under none it does not', async () => {
     const bundled = recording(STARTED);
+    const withProbe = recording(STARTED);
     const own = recording(STARTED);
     await start(bundled, {}, [], undefined, 'bundledHelper');
+    await start(withProbe, {}, [], undefined, 'bundledHelperPlusAlpineProbe');
     await start(own);
     deepStrictEqual(
-      [bundled, own].map(channel =>
+      [bundled, withProbe, own].map(channel =>
         scriptOf(channel).includes("REQUIREMENTS_HELPER='yes'"),
       ),
-      [true, false],
+      [true, true, false],
     );
   });
 

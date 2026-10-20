@@ -390,6 +390,22 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(phases, ['initializing', 'startingServer']);
   });
 
+  it('containers-55: the percents of the server download reach the listeners as serverDownloadPercent phases', async () => {
+    const scene = sceneOf();
+    scene.phasesOfServer = ['installing'];
+    scene.percentsOfServer = [0, 40, 100];
+    const phases: ConnectPhase[] = [];
+    scene.connector.onPhase(phase => phases.push(phase));
+    await connected(scene);
+    deepStrictEqual(phases, [
+      {name: 'initializing'},
+      {name: 'installing'},
+      {name: 'serverDownloadPercent', percent: 0},
+      {name: 'serverDownloadPercent', percent: 40},
+      {name: 'serverDownloadPercent', percent: 100},
+    ]);
+  });
+
   it('F-0502 BR-21: a target with a context gives every engine call DOCKER_CONTEXT, gives the CLI the same, and leaves it out of every argument', async () => {
     const scene = sceneOf();
     const folder: DevContainerFolder = {...FOLDER, context: 'ctx1'};
@@ -963,6 +979,7 @@ describe('the container connector: the folder trust (card containers-17)', () =>
         'retryable' in result && result.retryable,
         scene.prepared,
         scene.engineCalls,
+        scene.timers.length,
       ],
       [
         [
@@ -974,7 +991,50 @@ describe('the container connector: the folder trust (card containers-17)', () =>
         false,
         [],
         [],
+        0,
       ],
+    );
+  });
+
+  it('F-0301 AC-68: with the decline’s modal left open, the folder reopens locally when its 5 s are up, not before', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    scene.declinedHeld = true;
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    await new Promise(resolve => setImmediate(resolve));
+    const waiting = [
+      scene.trustCalls.slice(2).map(call => call.split(' ')[0]),
+      scene.timerDelays.at(-1),
+      scene.timers.length,
+    ];
+    scene.timers[0]?.();
+    const result = await connecting;
+    deepStrictEqual(
+      [
+        waiting,
+        failedKind(result),
+        'silent' in result && result.silent,
+        scene.trustCalls.at(-1),
+      ],
+      [
+        [['showDeclined'], 5000, 1],
+        'trustDeclined',
+        true,
+        'reopenLocally /work/proj',
+      ],
+    );
+  });
+
+  it('F-0301 AC-68: a modal that fails still reopens the folder locally, with no timer left', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    scene.declinedFails = true;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [failedKind(result), scene.trustCalls.at(-1), scene.timers.length],
+      ['trustDeclined', 'reopenLocally /work/proj', 0],
     );
   });
 

@@ -60,7 +60,9 @@ export function recoveryPortsOf<Address>(
       editor.commands.executeCommand('workbench.action.openRecent'),
     openExternal: address => editor.env.openExternal(editor.Uri.parse(address)),
     openSetting: setting =>
-      editor.commands.executeCommand('workbench.action.openSettings', setting),
+      editor.commands.executeCommand('workbench.action.openSettingsJson', {
+        revealSetting: {key: setting},
+      }),
     later: task => {
       setTimeout(task, 0);
     },

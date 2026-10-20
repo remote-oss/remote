@@ -108,13 +108,13 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the run's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
 
-- `default-ports`: a plain launch like `windows` whose settings forward one default port; `default-ports/*.test.ts` opens a window and reads the local end of the port.
+- `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
 - `no-proposals`: the same without the proposed API.
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
 
-- `explorer`, `explorer-alone` and `explorer-no-proposals`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, and `explorer-no-proposals` without the proposed API.
+- `explorer`, `explorer-alone`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
@@ -133,7 +133,10 @@ happen: a `progress` line with the title of each progress message (no `details`)
 message, with `details` true or false as the message carried the details link. `recordLines(surface?)` of
 `suite/harness.ts` reads them. `REMOTE_OSS_ACCEPTANCE_LOG` names a file the log channel's lines are appended to, after the
 logger's secret masking: `<run folder>/<label>-log.txt` for each VSCodium launch and `<run folder>/log.txt` for the
-VS Code run. `connectionLog()` reads it, without the time stamps. Nothing of this exists when the switch is unset.
+VS Code run. `connectionLog()` reads it, without the time stamps. `REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG` names the same
+for Dev Containers' log, `<run folder>/<label>-containers-log.txt`, for each launch that installs it; `containersLog()`
+reads it and `containersLogSince(mark)` reads the lines after a count taken earlier. Nothing of this exists when the
+switch is unset.
 
 ### Several windows
 
@@ -402,8 +405,32 @@ The harness host reaches it by `--add-host downloads:host-gateway` and `--add-ho
 update.code.visualstudio.com:host-gateway`; the editor reaches it on `127.0.0.1`. The launches get
 `HARNESS_DOWNLOADS_HTTP`, `HARNESS_DOWNLOADS_HTTPS` and `HARNESS_DOWNLOADS_LICENSED` (the update service's name), the
 bases as the harness host sees them, `HARNESS_DOWNLOADS_LOCAL`, the editor's base, and `HARNESS_DOWNLOADS_LOG`, the
-request log, one line per request: time, method, path and user agent. `startHost({downloads: true})` gives a host of
+request log, one line per request: time, method, path and user agent, and `HARNESS_DOWNLOADS_TLS_LOG`, the file
+`<run>/downloads-tls.log` with one line per TLS handshake that names a server: time and server name. `startHost({downloads: true})` gives a host of
 the server suite the same names, and `server/downloads.test.ts` holds the rows that prove the capability.
+
+## Genuine VS Code launch
+
+The `genuine` launch starts VS Code at the floor of ADR-0007 (`EDITOR_VERSION`, downloaded under `.vscode-test/` on
+first use) instead of the run's VSCodium, with the extensions installed in a folder of its own, `<run>/extensions-genuine`,
+by VS Code's CLI. Two launch fields do it: `client: 'vscode'` names the editor, and `namedOnly: true` keeps the launch
+out of a run that names no launches, so only `--launches genuine` makes it (it is the table's last launch). The launch
+sets `REMOTE_OSS_ACCEPTANCE_SCRIPT` to the empty string, so the extension shows its real dialogs, which the rows read and
+answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settingsEditorOf`); `localServerDownload` is off,
+so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
+executable the launch started, and `editorProduct()` reads the `product.json` beside it.
+
+Nothing reaches Microsoft or GitHub from the rows, in two ways. The host's side is shown by the download host: it
+answers for `update.code.visualstudio.com`, its request log shows what the host asked for, and its TLS log shows which
+names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
+built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
+`update.mode`, `extensions.autoCheckUpdates`, `extensions.autoUpdate`, `workbench.enableExperiments`,
+`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
+to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
+place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
+removes both when it ends. The container's removal at the end of the run is the backstop.
+
+    node tools/acceptance.ts --editor vscodium --launches genuine
 
 ## The host's other accounts (D-85)
 

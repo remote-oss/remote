@@ -179,6 +179,20 @@ describe('policy record (card server-01 table)', () => {
     deepStrictEqual(validatePolicyRecord(candidate), {record: candidate});
   });
 
+  it('requirementsCheck: the retired "serverBundled" -> problem path requirementsCheck', () => {
+    deepStrictEqual(
+      validatePolicyRecord(recordWith({requirementsCheck: 'serverBundled'})),
+      {problems: [{path: 'requirementsCheck', problem: 'invalid value'}]},
+    );
+  });
+
+  it('requirementsCheck: bundledHelperPlusAlpineProbe -> {record}', () => {
+    const candidate = recordWith({
+      requirementsCheck: 'bundledHelperPlusAlpineProbe',
+    });
+    deepStrictEqual(validatePolicyRecord(candidate), {record: candidate});
+  });
+
   it('installUmask: "077" -> problem path installUmask', () => {
     deepStrictEqual(validatePolicyRecord(recordWith({installUmask: '077'})), {
       problems: [{path: 'installUmask', problem: 'invalid value'}],

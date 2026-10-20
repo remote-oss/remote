@@ -29,6 +29,7 @@ import {
   downloadWithRetry,
   editorChoiceOf,
   chosenLaunches,
+  editorExecutableOf,
   runArgumentsOf,
   type CommandResult,
   failureText,
@@ -60,6 +61,7 @@ import type {Started} from './acceptance-plain.ts';
 import {
   failureCases,
   launchesOf,
+  launchLabelled,
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
@@ -235,6 +237,11 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('codium-insiders');
   };
 
+  readonly vscodeExecutable = (): Promise<string> => {
+    this.calls.push('vscode executable');
+    return Promise.resolve('/vscode/code');
+  };
+
   readonly runTests = (
     root: string,
     variables: HarnessVariables,
@@ -349,6 +356,7 @@ const LAUNCH_ORDER = [
   'explorer',
   'explorer-alone',
   'explorer-no-proposals',
+  'explorer-standdown',
   'trust',
   'trust-terminal',
   'containers',
@@ -379,6 +387,10 @@ describe('acceptance', () => {
     harness = new FakeHarness();
     workspace.write(
       'packages/remote-containers/package.json',
+      JSON.stringify({engines: {vscode: '^1.139.0'}}),
+    );
+    workspace.write(
+      'packages/remote-explorer/package.json',
       JSON.stringify({engines: {vscode: '^1.139.0'}}),
     );
     workspace.write(
@@ -899,17 +911,22 @@ describe('acceptance', () => {
           {
             folder: path.join('/run', 'extensions'),
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+            client: 'vscodium',
           },
-          ...['explorer', 'explorer-alone', 'explorer-no-proposals'].map(
-            label => ({
-              folder: path.join('/run', `extensions-${label}`),
-              files: [
-                '/dist/remote-ssh.vsix',
-                '/run/window-agent.vsix',
-                path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
-              ],
-            }),
-          ),
+          ...[
+            'explorer',
+            'explorer-alone',
+            'explorer-no-proposals',
+            'explorer-standdown',
+          ].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
+            client: 'vscodium',
+          })),
           ...[
             'containers',
             'containers-standdown',
@@ -923,6 +940,7 @@ describe('acceptance', () => {
               '/run/window-agent.vsix',
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
             ],
+            client: 'vscodium',
           })),
           {
             folder: path.join('/run', 'extensions-containers-explorer'),
@@ -932,6 +950,12 @@ describe('acceptance', () => {
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
               path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
             ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-genuine'),
+            files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+            client: 'vscode',
           },
         ],
       );
@@ -967,6 +991,43 @@ describe('acceptance', () => {
         'local',
       ]);
       deepStrictEqual(harness.launched, ['local', 'remote']);
+    });
+
+    it('tooling-51: a run given the genuine label makes it, with VS Code downloaded once and its folder installed with VS Code’s CLI', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['genuine']);
+      deepStrictEqual(
+        [
+          harness.launched,
+          harness.calls.filter(call => call === 'vscode executable').length,
+          harness.calls.filter(
+            call =>
+              call.startsWith('/vscode/bin/code ') &&
+              call.includes(
+                `--extensions-dir=${path.join(harness.runFolder, 'extensions-genuine')}`,
+              ),
+          ).length,
+          harness.variables?.HARNESS_VSCODE_EXECUTABLE,
+        ],
+        [['genuine'], 1, 1, '/vscode/code'],
+      );
+    });
+
+    it('tooling-51: a run that does not name the genuine label never downloads VS Code, installs for it or makes it', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
+      deepStrictEqual(
+        [
+          harness.launched,
+          harness.calls.filter(call => call === 'vscode executable'),
+          harness.calls.filter(call => call.includes('extensions-genuine')),
+          harness.variables?.HARNESS_VSCODE_EXECUTABLE,
+        ],
+        [['local'], [], [], undefined],
+      );
+    });
+
+    it('tooling-51: a run with no labels leaves the genuine launch out', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(harness.launched.includes('genuine'), false);
     });
 
     it('tooling-50: an unknown label fails with 2 before anything starts', async () => {
@@ -2608,6 +2669,45 @@ describe('acceptance', () => {
           undefined,
           {editor: 'vscodium'},
         ],
+      );
+    });
+
+    it('tooling-51: no selection leaves the launches that are named only out, a selection that names one keeps it, in table order', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      function labels(selected: string[] | undefined): string[] {
+        const chosen = chosenLaunches(launches, selected);
+        return typeof chosen === 'string'
+          ? [chosen]
+          : chosen.map(launch => launch.label);
+      }
+      deepStrictEqual(
+        [
+          labels(undefined).includes('genuine'),
+          labels(['genuine']),
+          labels(['genuine', 'remote']),
+        ],
+        [false, ['genuine'], ['remote', 'genuine']],
+      );
+    });
+
+    it('tooling-51: the genuine launch is the last of the table', () => {
+      strictEqual(launchesOf(REPOSITORY_ROOT).at(-1)?.label, 'genuine');
+    });
+
+    it('tooling-51: the executable of a launch is VS Code’s for a launch of that client and VSCodium’s for any other', () => {
+      const variables: Partial<HarnessVariables> = {
+        HARNESS_VSCODE_EXECUTABLE: '/vscode/code',
+        HARNESS_VSCODIUM_EXECUTABLE: '/vscodium/codium',
+      };
+      const launches = launchesOf(REPOSITORY_ROOT);
+      deepStrictEqual(
+        ['genuine', 'windows', 'local'].map(label =>
+          editorExecutableOf(
+            variables as HarnessVariables,
+            launchLabelled(launches, label),
+          ),
+        ),
+        ['/vscode/code', '/vscodium/codium', '/vscodium/codium'],
       );
     });
 

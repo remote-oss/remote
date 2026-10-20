@@ -132,6 +132,8 @@ export interface Scene {
   timers: Array<() => void>;
   server: ServerResult | (() => Promise<ServerResult>);
   phasesOfServer: Array<'installing' | 'startingServer'>;
+  /** The percents of the server download the server step reports. */
+  percentsOfServer: number[];
   relayOutcome: 'open' | Failed;
   dockerPath: unknown;
   /** What the settings' `inspect` answers for the two `cacheVolume` settings; nothing, when the scene leaves it absent. */
@@ -158,6 +160,10 @@ export interface Scene {
   trustAnswer: boolean | Error | (() => Promise<boolean>);
   /** What the connect asked of the trust port, of the modal and of the window, in order. */
   trustCalls: string[];
+  /** Whether the decline's modal stays open until the test ends it. */
+  declinedHeld: boolean;
+  /** Whether the decline's modal fails instead of ending with its OK. */
+  declinedFails: boolean;
   /** The `setupAgain` calls the trust check made. */
   setupAgains: number;
   /** How many reads of the configuration had run, and how many engine calls had been made, when trust was read. */
@@ -232,6 +238,7 @@ export function sceneOf(
     },
     server: STARTED_SERVER,
     phasesOfServer: ['installing', 'startingServer'],
+    percentsOfServer: [],
     relayOutcome: 'open',
     dockerPath: 'docker',
     cacheVolumeInspect: undefined,
@@ -251,6 +258,8 @@ export function sceneOf(
     trusted: true,
     trustAnswer: true,
     trustCalls: [],
+    declinedHeld: false,
+    declinedFails: false,
     setupAgains: 0,
     atTrust: undefined,
     timerDelays: [],
@@ -452,7 +461,12 @@ export function sceneOf(
     },
     showDeclined: (message, detail) => {
       scene.trustCalls.push(`showDeclined ${message} | ${detail}`);
-      return Promise.resolve();
+      if (scene.declinedHeld) {
+        return new Promise<void>(() => undefined);
+      }
+      return scene.declinedFails
+        ? Promise.reject(new Error('the modal failed'))
+        : Promise.resolve();
     },
     reopenLocally: hostPath => {
       scene.trustCalls.push(`reopenLocally ${hostPath}`);
@@ -462,6 +476,9 @@ export function sceneOf(
       scene.serverRequests.push(request);
       for (const phase of scene.phasesOfServer) {
         request.onPhase(phase);
+      }
+      for (const percent of scene.percentsOfServer) {
+        request.onDownloadPercent(percent);
       }
       return typeof scene.server === 'function' ? scene.server() : scene.server;
     },

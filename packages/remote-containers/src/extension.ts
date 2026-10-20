@@ -3,6 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
+import {appendFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,10 +12,11 @@ import {familySetupPortsOf, resolverEditorOf} from 'lib-authority';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
 import {nodeTimer} from 'lib-helper';
 import {identifierHost} from 'lib-identifiers';
-import type {Logger} from 'lib-log';
+import type {Logger, RevealableChannel} from 'lib-log';
 import {profileOf} from 'lib-product';
 import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
+import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
@@ -261,7 +263,14 @@ export async function activate(
   const profile = profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
-  let logChannel: vscode.OutputChannel | undefined;
+  let logChannel: RevealableChannel | undefined;
+  const channelPort = containersChannelPortFor(
+    process.env,
+    vscode.window,
+    (file, text) => {
+      appendFileSync(file, text);
+    },
+  );
   const configFiles = configFilesOf(
     {
       readDirectory: folder =>
@@ -303,7 +312,7 @@ export async function activate(
     commands: identifierHost(vscode, manifest),
     channels: {
       createOutputChannel: name => {
-        logChannel = vscode.window.createOutputChannel(name);
+        logChannel = channelPort.createOutputChannel(name);
         return logChannel;
       },
     },

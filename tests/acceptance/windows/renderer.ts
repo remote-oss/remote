@@ -160,6 +160,11 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
+/** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
+export async function pageCount(): Promise<number> {
+  return (await pages()).length;
+}
+
 /**
  * The one title among `titles` that window `name`'s folder name gives, `[<name>]` or `[<name> [...`, `[]` for `local`;
  * none when no title or more than one fits. It needs nothing from the window's agent, so it finds the page of a window
@@ -293,27 +298,113 @@ function paneExpression(viewName: string): string {
   return `[...document.querySelectorAll('.pane')].find(pane => pane.querySelector('.pane-header .title')?.textContent === ${JSON.stringify(viewName)})`;
 }
 
-/** The rows of view `viewName` in window `name`, in the order shown; `undefined` when the window has no such view. */
+/**
+ * The rows of view `viewName` in window `name`, in the order shown; `undefined` when the window has no such view. A
+ * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read by
+ * wheel-scrolling the container in steps and collecting every row it shows, then wheeling it back to where it was for
+ * the next user action. The wheel's sign that scrolls the list down varies with the build, so it is probed, and a list
+ * that overflows moves for exactly one of the two.
+ */
 export async function viewRows(
   name: string,
   viewName: string,
 ): Promise<ViewRow[] | undefined> {
-  const rows = await evaluate<ViewRow[] | null>(
+  const rows = await evaluate<Array<
+    Omit<ViewRow, 'expanded'> & {expanded: boolean | null}
+  > | null>(
     name,
-    `(() => {
+    `(async () => {
       const pane = ${paneExpression(viewName)};
       if (pane === undefined) {
         return null;
       }
-      return [...pane.querySelectorAll('[role="treeitem"]')].map(row => ({
-        label: row.querySelector('.label-name')?.textContent ?? '',
-        description: row.querySelector('.label-description')?.textContent ?? '',
-        level: Number(row.getAttribute('aria-level')),
-        expanded: row.hasAttribute('aria-expanded') ? row.getAttribute('aria-expanded') === 'true' : undefined,
-      }));
+      const read = () =>
+        [...pane.querySelectorAll('[role="treeitem"]')]
+          .filter(row => row.getAttribute('aria-level') !== null)
+          .map(row => ({
+            label: row.querySelector('.label-name')?.textContent ?? '',
+            description: row.querySelector('.label-description')?.textContent ?? '',
+            level: Number(row.getAttribute('aria-level')),
+            // null across the protocol: a row without the attribute is not expanded.
+            expanded: row.hasAttribute('aria-expanded') ? row.getAttribute('aria-expanded') === 'true' : null,
+          }));
+      const overflow = [...pane.querySelectorAll('*')].filter(el =>
+        el.scrollHeight > el.clientHeight + 1 &&
+        el.querySelector('[role="treeitem"]') !== null
+      );
+      const list = overflow.find(el =>
+        overflow.every(other => other === el || !other.contains(el))
+      );
+      if (list === undefined) {
+        return read();
+      }
+      const seen = new Map();
+      const order = [];
+      const collect = () => {
+        for (const row of read()) {
+          const key = String(row.level) + ':' + row.label;
+          // The first reading wins: the read starts at the list's top, so a header the scrolled view
+          // pins again keeps the values of its first reading.
+          if (!seen.has(key)) {
+            order.push(key);
+            seen.set(key, row);
+          }
+        }
+      };
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const first = () => {
+        const row = pane.querySelector('[role="treeitem"]');
+        return row ? row.querySelector('.label-name')?.textContent ?? '' : '';
+      };
+      // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
+      const move = async delta => {
+        const before = first();
+        list.dispatchEvent(
+          new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            deltaY: delta,
+            deltaMode: 0,
+          })
+        );
+        await wait(600);
+        return first() !== before;
+      };
+      const topFirst = first();
+      collect();
+      let down = 0;
+      if (await move(-400)) {
+        down = -400;
+      } else if (await move(400)) {
+        down = 400;
+      }
+      let steps = 0;
+      while (down !== 0 && steps < 200) {
+        if (!(await move(down))) {
+          break;
+        }
+        collect();
+        steps += 1;
+      }
+      while (down !== 0 && steps < 200) {
+        await move(-down);
+        if (first() === topFirst) {
+          break;
+        }
+        steps += 1;
+      }
+      await wait(200);
+      collect();
+      return order.map(key => seen.get(key));
     })()`,
   );
-  return rows ?? undefined;
+  // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
+  return (
+    rows?.map(each => ({
+      ...each,
+      expanded: each.expanded ?? undefined,
+    })) ?? undefined
+  );
 }
 
 /**
@@ -554,6 +645,94 @@ export async function notifications(name: string): Promise<string[]> {
   );
 }
 
+/** The state of a toast's progress bar, read in the page: core draws `infinite` on an indeterminate bar's `.monaco-progress-container` ([oss] `src/vs/base/browser/ui/progressbar/progressbar.ts`). */
+const TOAST_PROGRESS = `(() => {
+    const bar = item.parentElement?.querySelector('.monaco-progress-container') ?? null;
+    const shown = bar !== null && bar.classList.contains('active') && !bar.classList.contains('done');
+    return !shown ? 'none' : bar.classList.contains('infinite') ? 'infinite' : 'discrete';
+  })()`;
+
+/** The state of a toast's progress bar: `infinite` or `discrete`, or `none` when it shows no progress. */
+type ToastProgress = 'infinite' | 'discrete' | 'none';
+
+/** The connecting toast of a window: its message and its bar. */
+export interface ConnectingToast {
+  message: string;
+  progress: ToastProgress;
+}
+
+/** The toast of window `name` whose message starts with `messageStart`, with the state of its progress bar, or nothing when there is none. */
+export async function notificationProgress(
+  name: string,
+  messageStart: string,
+): Promise<ConnectingToast | undefined> {
+  return evaluate<ConnectingToast | null>(
+    name,
+    `(() => {
+  const item = [...document.querySelectorAll('.notifications-toasts .notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  if (item === undefined) {
+    return null;
+  }
+  return {
+    message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+    progress: ${TOAST_PROGRESS},
+  };
+})()`,
+  ).then(found => found ?? undefined);
+}
+
+/** Puts the keyboard focus on the toast list of window `name`, as "Notifications: Focus Notification Toast" does; false when no toast is shown. */
+export async function focusToasts(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(() => {
+  const list = document.querySelector('.notifications-toasts .monaco-list');
+  list?.focus();
+  return list !== null;
+})()`,
+  );
+}
+
+/** Presses Delete in window `name` wherever its page has the focus, as the keyboard does. */
+export async function pressDelete(name: string): Promise<void> {
+  await pressKey(await pageOf(name), name, 'Delete');
+}
+
+/** The text of the status bar item `itemId` of window `name`, read at once with no hover; empty when there is none. */
+export async function statusBarText(
+  name: string,
+  itemId: string,
+): Promise<string> {
+  return evaluate<string>(
+    name,
+    `(document.getElementById(${JSON.stringify(itemId)})?.textContent ?? '').trim()`,
+  );
+}
+
+/** One notification toast as the window shows it: its text, links, buttons, toolbar actions and progress bar. */
+export interface ToastDetails extends ConnectingToast {
+  /** The words and the address of each link in the message. */
+  links: NotificationLink[];
+  /** The labels of the buttons. */
+  buttons: string[];
+  /** The accessible names of the toolbar's actions. */
+  toolbar: string[];
+}
+
+/** The toasts on screen of window `name` in the order shown, each with what a user sees and can click on it. */
+export async function toastDetails(name: string): Promise<ToastDetails[]> {
+  return evaluate<ToastDetails[]>(
+    name,
+    `[...document.querySelectorAll('.notifications-toasts .notification-list-item')].map(item => ({
+  message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+  links: [...item.querySelectorAll('.notification-list-item-message a')].map(each => ({text: each.textContent ?? '', href: each.getAttribute('href') ?? each.getAttribute('data-href') ?? ''})),
+  buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => each.textContent ?? ''),
+  toolbar: [...item.querySelectorAll('.notification-list-item-toolbar-container .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+  progress: ${TOAST_PROGRESS},
+}))`,
+  );
+}
+
 /** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */
 const OPEN_CENTRE = '.notifications-center.visible';
 
@@ -730,6 +909,25 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** The kind of the open dialog, as its icon says ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`): the icon element carries `codicon-dialog-<kind>`. */
+export type DialogKind = 'info' | 'warning' | 'error';
+
+/** The kind of the dialog open in window `name`, or `undefined` when none is open or its icon names no kind. */
+export async function dialogKindOf(
+  name: string,
+): Promise<DialogKind | undefined> {
+  return (
+    (await evaluate<DialogKind | null>(
+      name,
+      `(() => {
+  const icon = document.querySelector('${DIALOG_BOX} .dialog-icon');
+  const kind = /codicon-dialog-(info|warning|error)/.exec(icon?.className ?? '');
+  return kind === null ? null : kind[1];
+})()`,
+    )) ?? undefined
+  );
+}
+
 /** The whole text of the dialog open in window `name`, the markdown details included, or `undefined` when none is. */
 export async function dialogText(name: string): Promise<string | undefined> {
   return (
@@ -872,6 +1070,53 @@ export async function quickPickOf(
   );
 }
 
+/** One row of a quick pick: its label, its description, the buttons beside it, and whether the list has it focused. */
+export interface QuickPickRow {
+  label: string;
+  description: string;
+  buttons: string[];
+  focused: boolean;
+}
+
+/** The rows of the quick pick open in window `name`, with what each shows; none when no quick pick is open. */
+export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
+  return evaluate<QuickPickRow[]>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      description: row.querySelector('.label-description')?.textContent ?? '',
+      buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+      focused: row.classList.contains('focused'),
+    }))`,
+  );
+}
+
+/** Presses the button `button` beside the row labelled `label` of the quick pick open in window `name`. */
+export async function pressQuickPickRowButton(
+  name: string,
+  label: string,
+  button: string,
+): Promise<void> {
+  const pressed = await evaluate<boolean>(
+    name,
+    `(() => {
+      const rows = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')];
+      const row = rows.find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
+      const target = [...(row?.querySelectorAll('.quick-input-list-entry .action-label') ?? [])].find(each => (each.getAttribute('aria-label') ?? each.getAttribute('title')) === ${JSON.stringify(button)});
+      if (target === undefined) {
+        return false;
+      }
+      target.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+      return true;
+    })()`,
+  );
+  if (!pressed) {
+    throw new Error(
+      `window ${name}: no button ${JSON.stringify(button)} on the row ${JSON.stringify(label)}`,
+    );
+  }
+}
+
 /** Waits until window `name` shows a quick pick and returns it. */
 export async function waitForQuickPick(
   name: string,
@@ -915,6 +1160,25 @@ export async function chooseQuickPickItem(
     })()`,
   );
   await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** One editor tab: its label, whether it is the active one, and whether it is a preview (shown in italics until kept). */
+export interface EditorTab {
+  label: string;
+  active: boolean;
+  preview: boolean;
+}
+
+/** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
+export async function editorTabs(name: string): Promise<EditorTab[]> {
+  return evaluate<EditorTab[]>(
+    name,
+    `[...document.querySelectorAll('.editor-group-container .tabs-container .tab')].map(tab => ({
+      label: tab.querySelector('.label-name')?.textContent ?? '',
+      active: tab.classList.contains('active'),
+      preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
+    }))`,
+  );
 }
 
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */

@@ -17,6 +17,8 @@ import {phaseMessage} from './progress-message.ts';
 export interface ResolverEditorOptions {
   /** The command the progress's "(details)" link runs; registered by the extension, never contributed. */
   detailsCommand: string;
+  /** The source of the window's candidate ports that the resolver declares to the editor; none keeps the editor's default. */
+  candidatePortSource?: 'output';
 }
 
 /** The editor's result for a resolved connection: its address, with the options and tunnel facts set on it. */
@@ -46,16 +48,21 @@ function resultOf(
 /**
  * The resolver the editor calls: each resolve through the host. It gives the editor no tunnel factory and no tunnel
  * features: core then builds the window's forwards itself, through the server connection, with its own defaults
- * (the host-side connection of a forwarded port is the server's).
+ * (the host-side connection of a forwarded port is the server's). When the extension declares one, it also gives the
+ * source of the window's candidate ports.
  */
 function editorResolverOf(
   editor: typeof vscode,
   resolver: EditorResolver,
+  options: ResolverEditorOptions,
 ): vscode.RemoteAuthorityResolver {
   const editorResolver: vscode.RemoteAuthorityResolver = {
     resolve: async (authority, context) =>
       resultOf(editor, await resolver.resolve(authority, context)),
   };
+  if (options.candidatePortSource === 'output') {
+    editorResolver.candidatePortSource = editor.CandidatePortSource.Output;
+  }
   const {canonicalPath} = resolver;
   if (canonicalPath !== undefined) {
     editorResolver.getCanonicalURI = async uri => {
@@ -89,9 +96,10 @@ function progressOf(
               request.onCancel();
             });
             try {
-              return await task((text, details) => {
+              return await task((text, details, increment) => {
                 progress.report({
                   message: phaseMessage(text, details, options.detailsCommand),
+                  ...(increment === undefined ? {} : {increment}),
                 });
               });
             } finally {
@@ -120,7 +128,7 @@ export function resolverEditorOf(
     registerRemoteAuthorityResolver: (authorityPrefix, resolver) =>
       editor.workspace.registerRemoteAuthorityResolver(
         authorityPrefix,
-        editorResolverOf(editor, resolver),
+        editorResolverOf(editor, resolver, options),
       ),
     progress: progressOf(editor, options),
     startTimer: (milliseconds, callback) => {

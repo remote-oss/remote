@@ -186,15 +186,15 @@ export function failureDialogOf(editor: Editor): FailureDialogPort {
   };
 }
 
-/** The licence modal: a modal warning with the detail, whose last button is the cancel. */
+/** The licence modal: a modal information message with the detail and the extension's items; the editor adds its Cancel. */
 export function licenceDialogOf(editor: Editor): LicenceDialogPort {
   return {
     showModal: async (message, detail, buttons) =>
       (
-        await editor.window.showWarningMessage(
+        await editor.window.showInformationMessage(
           message,
           {modal: true, detail},
-          ...modalItems(buttons),
+          ...buttons.map(title => ({title})),
         )
       )?.title,
   };

@@ -124,22 +124,22 @@ F-0201.AC-53	todo
 F-0201.AC-54	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0201.AC-55	todo	
 F-0201.AC-56	todo	
-F-0301.AC-1	todo	
-F-0301.AC-2	todo	
-F-0301.AC-3	todo	
+F-0301.AC-1	acceptance	
+F-0301.AC-2	acceptance	
+F-0301.AC-3	acceptance	
 F-0301.AC-4	unit	
 F-0301.AC-5	unit	
-F-0301.AC-6	todo	
+F-0301.AC-6	acceptance	
 F-0301.AC-7	deferred	containers release 1: increment 2 (authoring)
-F-0301.AC-8	todo	
-F-0301.AC-9	todo	
-F-0301.AC-10	todo	
+F-0301.AC-8	acceptance	
+F-0301.AC-9	acceptance	
+F-0301.AC-10	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-11	todo	
 F-0301.AC-12	deferred	containers release 1: later (Compose)
-F-0301.AC-13	todo	
-F-0301.AC-14	todo	
+F-0301.AC-13	acceptance	
+F-0301.AC-14	acceptance	
 F-0301.AC-15	unit	
-F-0301.AC-16	todo	
+F-0301.AC-16	acceptance	
 F-0301.AC-17	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-18	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-19	deferred	containers release 1: later (Open Container Configuration File, F-0812)
@@ -148,10 +148,10 @@ F-0301.AC-21	deferred	containers release 1: increment 2 (the reopen notification
 F-0301.AC-22	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-23	deferred	containers release 1: later (multi-root)
 F-0301.AC-24	deferred	containers release 1: later (multi-root)
-F-0301.AC-25	todo	
+F-0301.AC-25	acceptance	
 F-0301.AC-26	unit	
 F-0301.AC-27	deferred	containers release 1: later (virtual workspaces)
-F-0301.AC-28	todo	
+F-0301.AC-28	deferred	containers release 1: later (Open Container Configuration File, F-0812)
 F-0301.AC-29	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-30	unit	
 F-0301.AC-31	unit	
@@ -164,35 +164,35 @@ F-0301.AC-39	unit
 F-0301.AC-40	unit	
 F-0301.AC-42	unit	
 F-0301.AC-43	unit	
-F-0301.AC-44	todo	
-F-0301.AC-47	todo	
+F-0301.AC-44	acceptance	
+F-0301.AC-47	acceptance	
 F-0301.AC-48	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-49	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-50	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-51	deferred	containers release 1: later (multi-root)
 F-0301.AC-52	deferred	containers release 1: later (multi-root)
 F-0301.AC-53	todo	
-F-0301.AC-54	todo	
-F-0301.AC-55	todo	
-F-0301.AC-56	todo	
+F-0301.AC-54	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-55	acceptance	
+F-0301.AC-56	acceptance	
 F-0301.AC-57	deferred	containers release 1: later (Open Container Configuration File, F-0812)
-F-0301.AC-59	todo	
-F-0301.AC-60	todo	
+F-0301.AC-59	acceptance	
+F-0301.AC-60	acceptance	
 F-0301.AC-61	deferred	containers release 1: later (multi-root)
-F-0301.AC-62	todo	
+F-0301.AC-62	acceptance	
 F-0301.AC-63	deferred	containers release 1: later (Compose)
 F-0301.AC-64	deferred	containers release 1: later (Compose)
 F-0301.AC-65	deferred	containers release 1: later (Open Container Configuration File, F-0812)
-F-0301.AC-66	todo	
+F-0301.AC-66	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-67	deferred	containers release 1: later (multi-root)
-F-0301.AC-68	todo	
-F-0301.AC-69	todo	
-F-0301.AC-70	todo	
+F-0301.AC-68	acceptance	
+F-0301.AC-69	acceptance	
+F-0301.AC-70	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-71	deferred	containers release 1: later (multi-root)
-F-0301.AC-72	todo	
-F-0301.AC-73	todo	
+F-0301.AC-72	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-73	deferred	containers release 1: later (virtual workspaces)
 F-0301.AC-74	unit	
-F-0301.AC-75	todo	
+F-0301.AC-75	acceptance	
 F-0301.AC-76	unit	
 F-0401.AC-1	acceptance	
 F-0401.AC-2	acceptance	
@@ -297,31 +297,31 @@ F-0405.AC-33	todo
 F-0405.AC-34	todo	
 F-0405.AC-35	todo	
 F-0405.AC-36	todo	
-F-0408.AC-1	todo	
-F-0408.AC-2	todo	
-F-0408.AC-3	todo	
+F-0408.AC-1	acceptance	
+F-0408.AC-2	acceptance	
+F-0408.AC-3	acceptance	
 F-0408.AC-4	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0408.AC-5	todo	
+F-0408.AC-5	acceptance	
 F-0408.AC-6	todo	
 F-0408.AC-7	todo	
 F-0408.AC-8	todo	
 F-0408.AC-9	todo	
-F-0408.AC-10	todo	
-F-0408.AC-11	todo	
+F-0408.AC-10	acceptance	
+F-0408.AC-11	acceptance	
 F-0408.AC-12	todo	
 F-0408.AC-13	todo	
 F-0408.AC-14	todo	
 F-0408.AC-15	todo	
 F-0408.AC-16	deferred	containers release 1: later (Compose)
 F-0408.AC-17	todo	
-F-0408.AC-18	todo	
-F-0408.AC-19	todo	
-F-0408.AC-20	todo	
+F-0408.AC-18	acceptance	
+F-0408.AC-19	acceptance	
+F-0408.AC-20	acceptance	
 F-0408.AC-21	todo	
 F-0408.AC-22	deferred	containers release 1: later (remote engines)
-F-0408.AC-23	todo	
+F-0408.AC-23	acceptance	
 F-0408.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0408.AC-25	todo	
+F-0408.AC-25	unit	
 F-0408.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0408.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-1	unit	
@@ -451,23 +451,23 @@ F-0411.AC-39	deferred	containers release 1: later (Compose)
 F-0411.AC-40	acceptance	
 F-0411.AC-41	acceptance	
 F-0411.AC-42	acceptance	
-F-0412.AC-1	todo	
-F-0412.AC-2	todo	
-F-0412.AC-3	todo	
+F-0412.AC-1	acceptance	
+F-0412.AC-2	acceptance	
+F-0412.AC-3	acceptance	
 F-0412.AC-4	todo	
 F-0412.AC-5	todo	
 F-0412.AC-6	acceptance	
-F-0412.AC-7	todo	
+F-0412.AC-7	acceptance	
 F-0412.AC-8	todo	
 F-0412.AC-9	todo	
-F-0412.AC-10	todo	
+F-0412.AC-10	acceptance	
 F-0412.AC-11	todo	
-F-0412.AC-12	todo	
+F-0412.AC-12	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
 F-0412.AC-13	todo	
 F-0412.AC-14	todo	
 F-0412.AC-15	todo	
-F-0412.AC-16	todo	
-F-0412.AC-17	todo	
+F-0412.AC-16	acceptance	
+F-0412.AC-17	acceptance	
 F-0412.AC-18	acceptance	
 F-0412.AC-19	todo	
 F-0412.AC-20	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
@@ -484,15 +484,15 @@ F-0412.AC-30	deferred	containers release 1: S343 needs apt's text matched in the
 F-0412.AC-31	todo	
 F-0412.AC-32	acceptance	
 F-0412.AC-33	todo	
-F-0412.AC-34	todo	
-F-0412.AC-35	todo	
+F-0412.AC-34	acceptance	
+F-0412.AC-35	deferred	containers release 1: later (remote engines)
 F-0412.AC-36	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-38	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-39	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-40	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-41	acceptance	
-F-0412.AC-42	todo	
+F-0412.AC-42	acceptance	
 F-0412.AC-43	acceptance	
 F-0412.AC-44	deferred	containers release 1: core's JSON validation; release 1 contributes no schema (brief ruling 8)
 F-0415.AC-1	acceptance	
@@ -549,27 +549,27 @@ F-0416.AC-8	acceptance
 F-0416.AC-9	deferred	containers release 1: later (Compose)
 F-0416.AC-10	deferred	containers release 1: later (Compose)
 F-0416.AC-11	acceptance	
-F-0416.AC-12	todo	
-F-0416.AC-13	todo	
-F-0416.AC-14	todo	
-F-0416.AC-15	todo	
-F-0416.AC-16	todo	
+F-0416.AC-12	acceptance	
+F-0416.AC-13	acceptance	
+F-0416.AC-14	acceptance	
+F-0416.AC-15	acceptance	
+F-0416.AC-16	acceptance	
 F-0416.AC-17	todo	
-F-0416.AC-18	todo	
+F-0416.AC-18	acceptance	
 F-0416.AC-19	deferred	containers release 1: later (remote engines)
 F-0416.AC-20	acceptance	
 F-0416.AC-21	acceptance	
-F-0416.AC-22	todo	
-F-0416.AC-23	todo	
+F-0416.AC-22	acceptance	
+F-0416.AC-23	acceptance	
 F-0416.AC-24	acceptance	
 F-0416.AC-25	acceptance	
 F-0416.AC-26	acceptance	
 F-0416.AC-27	todo	
-F-0416.AC-28	todo	
-F-0416.AC-29	todo	
+F-0416.AC-28	acceptance	
+F-0416.AC-29	acceptance	
 F-0416.AC-30	acceptance	
-F-0416.AC-31	todo	
-F-0416.AC-32	todo	
+F-0416.AC-31	acceptance	
+F-0416.AC-32	acceptance	
 F-0416.AC-33	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-34	acceptance	
 F-0416.AC-35	acceptance	
@@ -580,10 +580,10 @@ F-0416.AC-39	deferred	containers release 1: later (Compose)
 F-0416.AC-40	acceptance	
 F-0416.AC-41	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0416.AC-42	todo	
-F-0416.AC-43	todo	
+F-0416.AC-43	acceptance	
 F-0416.AC-44	todo	
-F-0416.AC-45	todo	
-F-0416.AC-46	todo	
+F-0416.AC-45	acceptance	
+F-0416.AC-46	acceptance	
 F-0416.AC-47	todo	
 F-0416.AC-48	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-49	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -727,7 +727,7 @@ F-0503.AC-22	deferred	containers release 1: later (attach)
 F-0503.AC-23	todo	
 F-0503.AC-24	deferred	containers release 1: later (attach)
 F-0503.AC-25	unit	
-F-0503.AC-26	todo	
+F-0503.AC-26	unit	
 F-0503.AC-27	unit	
 F-0503.AC-28	core	core: the Settings UI's inline URL error from the setting's pattern
 F-0503.AC-29	acceptance	

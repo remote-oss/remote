@@ -45,7 +45,8 @@ export interface AgentEvent {
     | 'forwarded'
     | 'commands'
     | 'extension'
-    | 'terminalBuffer';
+    | 'terminalBuffer'
+    | 'tunnels';
   time: number;
   id?: string;
   message?: string;
@@ -58,9 +59,10 @@ export interface AgentEvent {
   trusted?: boolean;
   /** Whether the remote-ssh extension has activated in the window, as `state` reports it. */
   remoteSshActive?: boolean;
-  /** The setting a `setting` event reports, and its value. */
+  /** The setting a `setting` event reports, its value, and its default in the window. */
   settingId?: string;
   value?: unknown;
+  defaultValue?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -78,6 +80,14 @@ export interface AgentEvent {
   activeEditor?: string | null;
   /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
   text?: string;
+  /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
+  tunnels?: ForwardedTunnel[];
+}
+
+/** One forwarded port of a window: its port on the host, and where it is reachable on this machine. */
+export interface ForwardedTunnel {
+  remotePort: number;
+  localAddress: string;
 }
 
 /** One line of the record the extensions append to. */
@@ -171,9 +181,9 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
   );
 }
 
-/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
-export function connectionLog(): string[] {
-  const file = variable('REMOTE_OSS_ACCEPTANCE_LOG');
+/** The lines of the log file named by `variableName`, without their time stamps; none before the first is written. */
+function logLinesOf(variableName: string): string[] {
+  const file = variable(variableName);
   if (!existsSync(file)) {
     return [];
   }
@@ -181,6 +191,21 @@ export function connectionLog(): string[] {
     .split('\n')
     .filter(line => line !== '')
     .map(line => line.slice(line.indexOf('] ') + 2));
+}
+
+/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
+export function connectionLog(): string[] {
+  return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+}
+
+/** The lines of the Dev Containers log, without their time stamps; none before the first is written. */
+export function containersLog(): string[] {
+  return logLinesOf('REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG');
+}
+
+/** The lines of the Dev Containers log after the first `mark` of them, `mark` being a count taken earlier. */
+export function containersLogSince(mark: number): string[] {
+  return containersLog().slice(mark);
 }
 
 /** The waiting lines of the record, optionally of one window: a held entry's line while it waits for its signal. */
@@ -642,31 +667,30 @@ export async function devContainersOf(folder: string): Promise<string[]> {
 export const OLD_GLIBC_IMAGE =
   'ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98';
 
-/** The facts of the run's editor that the server's names and paths come from, read from its product.json. */
-export function editorProduct(): {
+/** The facts of the launch's editor that the server's names, paths and licence come from. */
+export interface EditorProduct {
   applicationName: string;
   commit: string;
+  nameLong: string;
   quality: string;
   serverApplicationName: string;
   serverDataFolderName: string;
-} {
+  serverLicenseUrl: string;
+}
+
+/** The facts of the launch's editor, read from its product.json. */
+export function editorProduct(): EditorProduct {
   return JSON.parse(
     readFileSync(
       path.join(
-        path.dirname(variable('HARNESS_VSCODIUM_EXECUTABLE')),
+        path.dirname(variable('HARNESS_EDITOR_EXECUTABLE')),
         'resources',
         'app',
         'product.json',
       ),
       'utf8',
     ),
-  ) as {
-    applicationName: string;
-    commit: string;
-    quality: string;
-    serverApplicationName: string;
-    serverDataFolderName: string;
-  };
+  ) as EditorProduct;
 }
 
 /** The names of the engine's volumes, sorted. */
@@ -979,7 +1003,8 @@ export function kill(name: string): Promise<void> {
 }
 
 /** The run's user settings file. */
-function userSettingsFile(): string {
+/** The run's user settings file, the one the editor reads. */
+export function userSettingsFile(): string {
   return path.join(
     variable('HARNESS_RUN_FOLDER'),
     'user-data/User/settings.json',
@@ -1018,16 +1043,9 @@ export async function userSettings(
  * all of it and copies it, and reports the clipboard's text.
  */
 export async function terminalBuffer(name: string): Promise<string> {
-  const before = countOf(name, 'terminalBuffer');
-  await inWindow(name, 'acceptance.agent.terminalBuffer');
-  await waitUntil(
-    `window ${name} to report its terminal buffer`,
-    () => countOf(name, 'terminalBuffer') > before,
-  );
   return (
-    windowEvents(name)
-      .filter(each => each.event === 'terminalBuffer')
-      .at(-1)?.text ?? ''
+    (await reported(name, 'terminalBuffer', 'acceptance.agent.terminalBuffer'))
+      ?.text ?? ''
   );
 }
 
@@ -1036,15 +1054,26 @@ export async function settingIn(
   name: string,
   settingId: string,
 ): Promise<unknown> {
-  const before = countOf(name, 'setting');
-  await inWindow(name, 'acceptance.agent.setting', settingId);
-  await waitUntil(
-    `window ${name} to report ${settingId}`,
-    () => countOf(name, 'setting') > before,
+  return (
+    await reported(name, 'setting', 'acceptance.agent.setting', settingId)
+  )?.value;
+}
+
+/** The default window `name` has for the setting `settingId`, the one its Settings editor shows, or null for none. */
+export async function settingDefaultIn(
+  name: string,
+  settingId: string,
+): Promise<unknown> {
+  return (
+    await reported(name, 'setting', 'acceptance.agent.setting', settingId)
+  )?.defaultValue;
+}
+
+/** The ports window `name` forwards, as the editor lists them; a forward of the SSH configuration is not among them. */
+export async function tunnelsOf(name: string): Promise<ForwardedTunnel[]> {
+  return (
+    (await reported(name, 'tunnels', 'acceptance.agent.tunnels'))?.tunnels ?? []
   );
-  return windowEvents(name)
-    .filter(each => each.event === 'setting' && each.settingId === settingId)
-    .at(-1)?.value;
 }
 
 /** The surfaces of the record that are messages to the user. */

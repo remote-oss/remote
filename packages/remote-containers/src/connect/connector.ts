@@ -90,6 +90,9 @@ const IDENTIFIER_LENGTH = 12;
 /** How long a canonical request waits for the configuration read, in milliseconds (windows contracts §3.2). */
 const CANONICAL_READ_MILLISECONDS = 30_000;
 
+/** How long the decline's modal waits for its OK before the folder reopens locally, in milliseconds. */
+const DECLINED_MODAL_MILLISECONDS = 5000;
+
 /** The authority prefix of a dev container window. */
 const AUTHORITY_PREFIX = 'dev-container+';
 
@@ -679,9 +682,33 @@ export function containerConnectorOf(
     return local;
   }
 
+  /** Shows the decline's modal and waits for its end, or for `DECLINED_MODAL_MILLISECONDS`, whichever comes first. */
+  function declinedModalWait(): Promise<void> {
+    const {trustNeeds} = dependencies;
+    return new Promise(resolve => {
+      const stop = dependencies.preflight.setTimer(
+        DECLINED_MODAL_MILLISECONDS,
+        () => {
+          resolve();
+        },
+      );
+      function ended(): void {
+        stop();
+        resolve();
+      }
+      void dependencies
+        .showDeclined(
+          trustNeeds.translate(TRUST_TEMPLATES.S360),
+          trustNeeds.translate(TRUST_TEMPLATES.S377),
+        )
+        .then(ended, ended);
+    });
+  }
+
   /**
    * Whether the folder is trusted, asking the editor when it isn't yet. A folder that stays untrusted is opened as a
-   * local folder in this window, with the modal that says why when the user declined.
+   * local folder in this window, with the modal that says why when the user declined, for as long as its OK or five
+   * seconds take.
    */
   async function trustedFolder(
     folder: DevContainerFolder,
@@ -697,10 +724,7 @@ export function containerConnectorOf(
     }
     if (!isAborted(cancellation)) {
       if (outcome === 'declined') {
-        await dependencies.showDeclined(
-          trustNeeds.translate(TRUST_TEMPLATES.S360),
-          trustNeeds.translate(TRUST_TEMPLATES.S377),
-        );
+        await declinedModalWait();
       }
       await dependencies.reopenLocally(folder.hostPath);
     }
@@ -812,6 +836,9 @@ export function containerConnectorOf(
         defaultExtensions,
         onPhase: phase => {
           phases.tell({name: phase});
+        },
+        onDownloadPercent: percent => {
+          phases.tell({name: 'serverDownloadPercent', percent});
         },
         cancellation,
       },

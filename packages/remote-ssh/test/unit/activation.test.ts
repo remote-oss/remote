@@ -7,13 +7,13 @@ import {
 } from '../../src/identifiers.generated.ts';
 import type {ProposalName} from 'lib-authority';
 import {recordingSetupPorts} from 'lib-authority/testing/recording-setup-ports';
+import type {RevealableChannel} from 'lib-log';
 import type {StandDownHost} from 'lib-standdown';
 import {
   type ActivationInputs,
   type ActivationTable,
   activateRemoteSsh,
 } from '../../src/activation.ts';
-import type {RevealableChannel} from '../../src/log-channel.ts';
 
 function command(name: string): CommandEntry {
   return {

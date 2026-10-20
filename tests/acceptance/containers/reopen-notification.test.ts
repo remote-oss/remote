@@ -12,6 +12,7 @@ import {
 } from '../windows/harness.ts';
 import {
   answerNotification,
+  dialogOf,
   notificationButtons,
   notificationCentre,
   notificationLinks,
@@ -121,13 +122,15 @@ describe('the reopen notification (card containers-23, F-0402)', function () {
     deepStrictEqual([againShown, otherShown], [false, true]);
   });
 
-  it('F-0402 AC-9 (n5): a folder with no configuration shows no notification', async () => {
+  it('F-0402 AC-9, F-0301 AC-6 (n5): a folder with no configuration shows no notification and no error', async () => {
     const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'notice-none');
     mkdirSync(folder, {recursive: true});
     const name = await openFolderWindow(folder);
     const shown = await showsNotice(name);
+    const dialog = await dialogOf(name);
+    const centre = await notificationCentre(name);
     await closeWindow(name);
-    deepStrictEqual(shown, false);
+    deepStrictEqual([shown, dialog, centre], [false, undefined, []]);
   });
 
   it('F-0402 AC-5, AC-8 (n6): Any Folder keeps it away from every folder, and the reset command brings it back', async () => {

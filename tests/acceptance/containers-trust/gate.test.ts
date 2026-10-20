@@ -388,4 +388,38 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     );
     await closeWindow('open-decline');
   });
+
+  it('F-0301 AC-68 (o7): declining shows S360, and with no OK pressed the window is the local folder within 10 s, restricted, with no container', async () => {
+    const folder = devContainerFolder('open-wait', {name: 'Open Wait'});
+    const from = await openFolderWindow(devContainerFolder('open-wait-from'));
+    await openFolderFrom(from, folder);
+    await waitForDialog('open-wait');
+    await answerDialog('open-wait', 'Cancel');
+    const declined = await waitForDialog('open-wait');
+    const declinedText = await dialogText('open-wait');
+    await waitFor(
+      'the window to be the local folder again, with no OK pressed',
+      async () => (await windowState('open-wait')).remoteName === null,
+      10_000,
+    );
+    deepStrictEqual(
+      {
+        declined: [
+          declined.message,
+          declinedText?.includes(S377),
+          declined.buttons,
+        ],
+        trusted: await trustSettled('open-wait', false),
+        containers: await devContainersOf(folder),
+        dialog: await dialogOf('open-wait'),
+      },
+      {
+        declined: [S360, true, ['OK']],
+        trusted: false,
+        containers: [],
+        dialog: undefined,
+      },
+    );
+    await closeWindow('open-wait');
+  });
 });

@@ -87,7 +87,7 @@ describe('standDownIfPresent', () => {
       strictEqual(await standDownIfPresent(host, REQUEST), 'standing');
     });
 
-    it("opens the Extensions view on the other extension when the user chooses the warning's button (F-5901 §5 step 4)", async () => {
+    it("F-5001.AC-20: opens the Extensions view on the other extension when the user chooses the warning's button (F-5901 §5 step 4)", async () => {
       const host = new RecordingHost(true);
       await standDownIfPresent(host, REQUEST);
       host.answer('Show Extension');
@@ -95,7 +95,7 @@ describe('standDownIfPresent', () => {
       strictEqual(host.calls.at(-1), 'reveal publisher.other-extension');
     });
 
-    it('opens nothing when the user dismisses the warning', async () => {
+    it('F-5001.AC-20: opens nothing when the user dismisses the warning', async () => {
       const host = new RecordingHost(true);
       await standDownIfPresent(host, REQUEST);
       host.answer(undefined);

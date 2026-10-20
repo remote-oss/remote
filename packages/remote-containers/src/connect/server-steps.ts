@@ -19,6 +19,7 @@ import {
 } from 'lib-product';
 import {
   type AcceptanceStore,
+  addressForLog,
   archiveKeyOf,
   cacheFolders,
   CLIENT_DOWNLOAD_BOUNDS,
@@ -95,6 +96,8 @@ export interface ServerRequest {
   /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
   defaultExtensions: readonly string[];
   onPhase(phase: 'installing' | 'startingServer'): void;
+  /** The share of the server archive downloaded so far, from 0 to 100. */
+  onDownloadPercent(percent: number): void;
   cancellation: AbortSignal;
 }
 
@@ -276,12 +279,29 @@ function retryLine(
   return `the server download failed (${address}, ${cachePath}): ${failure.detail}; retrying once`;
 }
 
+/**
+ * Logs each server-download setting that has a value, at every connect: the base URL as its scheme, host and path, and
+ * the download folder as written.
+ */
+function logDownloadSettings(dependencies: ServerStepDependencies): void {
+  const {override, downloadFolder, logger} = dependencies;
+  if (override !== undefined) {
+    logger.info(
+      `remote.serverDownloadBaseUrl = ${addressForLog(override.value)}`,
+    );
+  }
+  if (typeof downloadFolder === 'string' && downloadFolder !== '') {
+    logger.info(`remote.serverDownloadFolder = ${downloadFolder}`);
+  }
+}
+
 /** Runs the steps of one connect. */
 export async function runServerSteps(
   dependencies: ServerStepDependencies,
   request: ServerRequest,
 ): Promise<ServerResult> {
   const {profile, logger} = dependencies;
+  logDownloadSettings(dependencies);
   const {channel, cancellation} = request;
   const discovered = await probe(
     channel,
@@ -423,7 +443,11 @@ export async function runServerSteps(
             LOCK_INTERVAL_MILLISECONDS,
           ),
           logger,
-          onPhase: () => undefined,
+          onPhase: phase => {
+            if (phase.kind === 'progress' && phase.step === 'download') {
+              request.onDownloadPercent(phase.percent);
+            }
+          },
         },
       );
     }
