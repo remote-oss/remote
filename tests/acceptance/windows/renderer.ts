@@ -352,9 +352,12 @@ export async function viewRows(
         }
       };
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
+      // first stays, so the first alone does not tell that the list moved.
       const first = () => {
-        const row = pane.querySelector('[role="treeitem"]');
-        return row ? row.querySelector('.label-name')?.textContent ?? '' : '';
+        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
+        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+        return label(rows[0]) + '\u0000' + label(rows.at(-1));
       };
       // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
       const move = async delta => {
@@ -375,8 +378,10 @@ export async function viewRows(
       let down = 0;
       if (await move(-400)) {
         down = -400;
+        collect();
       } else if (await move(400)) {
         down = 400;
+        collect();
       }
       let steps = 0;
       while (down !== 0 && steps < 200) {
