@@ -37,8 +37,8 @@ describe('the Remote Explorer beside Dev Containers (card coverage-25c, part b)'
   this.timeout(600_000);
 
   // This row must run before any row that selects an option of the Switch Remote dropdown: a selection stores
-  // `remote.explorerType` in the run's profile, and with a stored type the explorer follows it. This file sorts before
-  // gate.test.ts, and its own rows that select options come after this one.
+  // `remote.explorerType` in the launch's profile, and with a stored type the explorer follows it. This file sorts
+  // before gate.test.ts, and its own rows that select options come after this one.
   it('F-5101 AC-2 (sections-first): with no target type stored, the sections of the Remote Explorer start with Remotes (Tunnels/SSH), before Dev Containers and Help and feedback', async () => {
     const folder = devContainerFolder('x09-sections', {name: 'Sections'});
     const name = await openFolderWindow(folder);

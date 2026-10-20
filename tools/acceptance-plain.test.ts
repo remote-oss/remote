@@ -13,6 +13,7 @@ import {
   type Program,
   runPlainLaunch,
   startDetached,
+  userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
 import {
@@ -20,6 +21,7 @@ import {
   launchLabelled,
   type PlainLaunch,
 } from './acceptance-launches.ts';
+import {acceptanceRunId} from './acceptance-run.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -196,10 +198,64 @@ describe('the explorer and trust launches (cards tooling-30, tooling-33)', () =>
     );
   });
 
-  it('tooling-30: the port file is the user-data folder’s DevToolsActivePort', () => {
+  it('tooling-30, tooling-66: the port file is the DevToolsActivePort of the launch’s own user-data folder', () => {
     strictEqual(
-      debuggingPortFile('/run'),
-      path.join('/run', 'user-data', 'DevToolsActivePort'),
+      debuggingPortFile('/run', LAUNCH),
+      path.join('/run', 'user-data-windows', 'DevToolsActivePort'),
+    );
+  });
+});
+
+describe('the user-data folder of a launch', () => {
+  it('tooling-66: a plain launch has one of its own, named by its label; a runner launch and the installs have the run’s', () => {
+    deepStrictEqual(
+      [
+        userDataFolderOf('/run', LAUNCH),
+        userDataFolderOf('/run', {
+          label: 'remote',
+          runner: 'runner-remote',
+          suite: 'suite-remote',
+        }),
+        userDataFolderOf('/run'),
+      ],
+      ['/run/user-data-windows', '/run/user-data', '/run/user-data'],
+    );
+  });
+
+  it('tooling-66: every plain launch’s editor starts on a user-data folder no other launch has, and every runner launch’s on the run’s', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    const plainCount = launches.filter(
+      launch => launch.kind === 'plain',
+    ).length;
+    const folders = new Set(
+      launches.map(launch =>
+        editorArguments('/run', true, launch).find(argument =>
+          argument.startsWith('--user-data-dir='),
+        ),
+      ),
+    );
+    deepStrictEqual(
+      [folders.size, folders.has('--user-data-dir=/run/user-data')],
+      [plainCount + 1, true],
+    );
+  });
+
+  it('tooling-66: on a run folder shaped as on the CI runners, every launch’s editor socket path stays under the 107 characters at which the editor warns', () => {
+    // With no XDG_RUNTIME_DIR the editor binds its main socket in its user-data folder, named by the first four
+    // characters of its version. The run id is one digit longer than the runners' ids are now.
+    const runFolder = path.join(
+      '/tmp',
+      `acceptance-${acceptanceRunId({GITHUB_RUN_ID: '123456789012', GITHUB_RUN_ATTEMPT: '1', GITHUB_JOB: 'acceptance-vscodium'}, 0)}-Ab12Cd`,
+    );
+    deepStrictEqual(
+      launchesOf(REPOSITORY_ROOT)
+        .filter(
+          launch =>
+            path.join(userDataFolderOf(runFolder, launch), '1.13-main.sock')
+              .length >= 107,
+        )
+        .map(launch => launch.label),
+      [],
     );
   });
 });
@@ -288,7 +344,7 @@ describe('the plain editor of a launch', () => {
     );
   });
 
-  it("F-3903 §5 rule 4: a launch with proposedApi false keeps the run's folders", () => {
+  it('F-3903 §5 rule 4: a launch with proposedApi false keeps its folders', () => {
     deepStrictEqual(
       plainEditorOf(
         '/editor',
@@ -297,7 +353,7 @@ describe('the plain editor of a launch', () => {
         {},
       ).programArguments.slice(0, 3),
       [
-        '--user-data-dir=/run/user-data',
+        '--user-data-dir=/run/user-data-windows',
         '--shared-data-dir=/run/shared-data',
         '--extensions-dir=/run/extensions',
       ],
@@ -378,10 +434,22 @@ describe('runPlainLaunch', () => {
     deepStrictEqual(happened, ['start', 'tests', 'stop']);
   });
 
-  it('tooling-30: it removes a port file an earlier launch left before it starts the editor', async () => {
+  it("tooling-66: the launch's editor and tests are given its own user-data folder", async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    deepStrictEqual(
+      programs.map(program => program.environment.HARNESS_USER_DATA),
+      ['/run/user-data-windows', '/run/user-data-windows'],
+    );
+  });
+
+  it('tooling-30: it removes a port file an earlier attempt left before it starts the editor', async () => {
     const workspace = new TemporaryWorkspace('acceptance-port');
     try {
-      workspace.write('user-data/DevToolsActivePort', '9222\n/devtools');
+      workspace.write(
+        'user-data-windows/DevToolsActivePort',
+        '9222\n/devtools',
+      );
       const {steps} = recordingSteps('pass');
       const seen: boolean[] = [];
       await runPlainLaunch(
@@ -391,7 +459,7 @@ describe('runPlainLaunch', () => {
         {
           ...steps,
           start: program => {
-            seen.push(existsSync(debuggingPortFile(workspace.root)));
+            seen.push(existsSync(debuggingPortFile(workspace.root, LAUNCH)));
             return steps.start(program);
           },
         },

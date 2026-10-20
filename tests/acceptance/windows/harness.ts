@@ -1195,22 +1195,18 @@ export function kill(name: string): Promise<void> {
   return inWindow(name, 'opensshremotes.cleanLocalServer');
 }
 
-/** The run's user settings file. */
-/** The run's user settings file, the one the editor reads. */
+/** The launch's user settings file, the one the editor reads. */
 export function userSettingsFile(): string {
-  return path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data/User/settings.json',
-  );
+  return path.join(variable('HARNESS_USER_DATA'), 'User/settings.json');
 }
 
-/** The bytes of the run's user settings file, or nothing when it has none. */
+/** The bytes of the launch's user settings file, or nothing when it has none. */
 export function readUserSettings(): string | undefined {
   const file = userSettingsFile();
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
-/** Puts the run's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
+/** Puts the launch's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
 export function restoreUserSettings(bytes: string | undefined): void {
   if (bytes === undefined) {
     rmSync(userSettingsFile(), {force: true});
@@ -1219,7 +1215,7 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** Rewrites the run's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+/** Rewrites the launch's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
 ): Promise<void> {

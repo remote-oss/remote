@@ -162,7 +162,7 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
   });
 
   it('F-5001 AC-13, F-5101 AC-23, F-5102 AC-29, F-5103 AC-21, F-5901 AC-18 (nothing-left): after the view was shown, refreshed and its connects used, the profile holds no folder, log folder, state key or output channel of the explorer', async () => {
-    const userData = path.join(variable('HARNESS_RUN_FOLDER'), 'user-data');
+    const userData = variable('HARNESS_USER_DATA');
     const name = await folderWindow('activation-traces');
     try {
       await inWindow(name, SHOW_REMOTE_EXPLORER);

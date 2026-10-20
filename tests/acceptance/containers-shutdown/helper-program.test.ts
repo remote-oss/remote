@@ -16,7 +16,7 @@ describe('the shutdown helper program (card containers-69)', function () {
   this.timeout(600_000);
 
   it('#1226: the shutdown helper program starts with the first dev container window, outside the editor’s process tree, and ends after the last window closed and its check ran', async () => {
-    const userData = path.join(variable('HARNESS_RUN_FOLDER'), 'user-data');
+    const userData = variable('HARNESS_USER_DATA');
     await waitFor(
       'no shutdown helper to be left from the rows before',
       async () => (await helperProcesses()).length === 0,
