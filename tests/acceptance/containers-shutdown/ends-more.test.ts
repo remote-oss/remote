@@ -224,6 +224,7 @@ describe('more of what ends a window decides when its container stops (card cont
           JSON.stringify(during),
         );
       } finally {
+        await closeWindow(connected.window).catch(() => undefined);
         await removeContainersOf(connected.folder);
       }
     } finally {
