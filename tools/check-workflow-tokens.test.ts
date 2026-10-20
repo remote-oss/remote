@@ -60,6 +60,25 @@ describe('check-workflow-tokens', () => {
     );
   });
 
+  it('the fork guard counts as the whole if or one operand of its top-level &&, never negated or OR-ed', () => {
+    deepStrictEqual(
+      [
+        `\${{ ${GUARD} }}`,
+        `!cancelled() && (${GUARD}) && github.actor != 'x'`,
+        `!(${GUARD})`,
+        `${GUARD} || github.event_name == 'push'`,
+        `(github.event_name == 'push' || ${GUARD}) && always()`,
+      ].map(
+        condition =>
+          workflowTokenProblems(
+            'w.yml',
+            workflow('pull_request', WRITE, '', JSON.stringify(condition)),
+          ).length,
+      ),
+      [0, 0, 1, 1, 1],
+    );
+  });
+
   it('a read-only token passes on any event, and a job keeps its own permissions over the workflow’s', () => {
     deepStrictEqual(
       [

@@ -48,6 +48,38 @@ function eventsOf(on: unknown): string[] {
   return typeof on === 'object' && on !== null ? Object.keys(on) : [];
 }
 
+/** The operands of the top-level `&&` of an expression, each trimmed of spaces and of `${{ }}` around the whole. */
+function conjunctsOf(expression: string): string[] {
+  const text = expression
+    .trim()
+    .replace(/^\$\{\{([\s\S]*)\}\}$/, '$1')
+    .trim();
+  const operands: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    depth += character === '(' ? 1 : character === ')' ? -1 : 0;
+    if (depth === 0 && text.startsWith('&&', index)) {
+      operands.push(text.slice(start, index).trim());
+      start = index + 2;
+      index += 1;
+    }
+  }
+  operands.push(text.slice(start).trim());
+  return operands;
+}
+
+/** Whether a job's `if` holds the fork guard as the whole condition or as one operand of its top-level `&&`. */
+function forkGuarded(condition: unknown): boolean {
+  return (
+    typeof condition === 'string' &&
+    conjunctsOf(condition).some(
+      operand => operand === FORK_GUARD || operand === `(${FORK_GUARD})`,
+    )
+  );
+}
+
 /** Whether `permissions` lets the token write anything. */
 function writes(permissions: Permissions): boolean {
   if (typeof permissions === 'string') {
@@ -77,9 +109,7 @@ export function workflowTokenProblems(file: string, text: string): string[] {
         );
       }
     }
-    const guarded =
-      typeof definition.if === 'string' && definition.if.includes(FORK_GUARD);
-    if (events.includes('pull_request') && !guarded) {
+    if (events.includes('pull_request') && !forkGuarded(definition.if)) {
       problems.push(
         `${file}: job ${name} holds a write permission on pull_request without the guard that skips a fork's pull request`,
       );
