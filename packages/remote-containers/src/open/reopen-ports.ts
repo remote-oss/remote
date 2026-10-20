@@ -49,6 +49,10 @@ export interface ReopenPorts {
     dockerPath(): unknown;
     /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
     mountGitWorktreeCommonDir(): unknown;
+    /** The user's value of `dev.containers.defaultFeatures`, `undefined` when unset. */
+    defaultFeatures(): unknown;
+    /** The user's value of `dev.containers.lockfile`, `undefined` when unset. */
+    lockfile(): unknown;
   };
   engine: EnginePort;
   /** The dialogs of the first check. */

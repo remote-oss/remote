@@ -153,6 +153,7 @@ const REQUEST = {
   folder: FOLDER,
   dockerPath: '/usr/bin/docker',
   mountGitWorktreeCommonDir: false,
+  features: {defaultFeatures: {}, lockfile: true},
   cancellation: new AbortController().signal,
 };
 
