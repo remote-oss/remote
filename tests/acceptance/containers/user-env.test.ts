@@ -392,72 +392,72 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
     } finally {
       await removeContainers(folder);
     }
+  });
 
-    it('F-0416 AC-22 (x22): an Alpine remoteUser account made with adduser -D (shell /bin/sh) gets a plain $ prompt in the terminal', async () => {
-      const folder = envFolder('c42-alpine-user', 'RUN adduser -D tester\n', {
-        remoteUser: 'tester',
+  it('F-0416 AC-22 (x22): an Alpine remoteUser account made with adduser -D (shell /bin/sh) gets a plain $ prompt in the terminal', async () => {
+    const folder = envFolder('c42-alpine-user', 'RUN adduser -D tester\n', {
+      remoteUser: 'tester',
+    });
+    try {
+      const name = await reopened(folder);
+      await inWindow(name, 'workbench.action.terminal.new');
+      let prompt = '';
+      await waitFor(
+        'the terminal to show a prompt',
+        async () => {
+          prompt =
+            (await terminalText(name))
+              .split('\n')
+              .map(line => line.trim())
+              .findLast(line => line !== '') ?? '';
+          return prompt.endsWith('$');
+        },
+        60_000,
+      ).catch((caught: unknown) => {
+        throw new Error(
+          `${String(caught)}; the last line is ${JSON.stringify(prompt)}`,
+          {cause: caught},
+        );
       });
-      try {
-        const name = await reopened(folder);
-        await inWindow(name, 'workbench.action.terminal.new');
-        let prompt = '';
-        await waitFor(
-          'the terminal to show a prompt',
-          async () => {
-            prompt =
-              (await terminalText(name))
-                .split('\n')
-                .map(line => line.trim())
-                .findLast(line => line !== '') ?? '';
-            return prompt.endsWith('$');
-          },
-          60_000,
-        ).catch((caught: unknown) => {
-          throw new Error(
-            `${String(caught)}; the last line is ${JSON.stringify(prompt)}`,
-            {cause: caught},
-          );
-        });
-        await closeWindow(name);
-      } finally {
-        await removeContainers(folder);
-      }
-    });
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
 
-    it('F-0416 AC-31 (x31): editing only userEnvProbe to none and reloading takes the login file’s variable out of a new terminal, with no new container or image', async () => {
-      const folder = envFolder(
-        'c42-probe-edit',
-        profileLines('export PROBE_PROFILE=profile\\n'),
+  it('F-0416 AC-31 (x31): editing only userEnvProbe to none and reloading takes the login file’s variable out of a new terminal, with no new container or image', async () => {
+    const folder = envFolder(
+      'c42-probe-edit',
+      profileLines('export PROBE_PROFILE=profile\\n'),
+    );
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const imagesBefore = await docker('images', '--format', '{{.ID}}');
+      const before = await printed(name, 'before', ['PROBE_PROFILE']);
+      const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+      const configuration = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        unknown
+      >;
+      writeFileSync(
+        file,
+        JSON.stringify({...configuration, userEnvProbe: 'none'}),
       );
-      try {
-        const name = await reopened(folder);
-        const containerId = await containerOf(folder);
-        const imagesBefore = await docker('images', '--format', '{{.ID}}');
-        const before = await printed(name, 'before', ['PROBE_PROFILE']);
-        const file = path.join(folder, '.devcontainer', 'devcontainer.json');
-        const configuration = JSON.parse(readFileSync(file, 'utf8')) as Record<
-          string,
-          unknown
-        >;
-        writeFileSync(
-          file,
-          JSON.stringify({...configuration, userEnvProbe: 'none'}),
-        );
-        await reloadWindow(name);
-        await connectedToContainer(name);
-        deepStrictEqual(
-          [
-            before,
-            await printed(name, 'after', ['PROBE_PROFILE']),
-            await containerOf(folder),
-            await docker('images', '--format', '{{.ID}}'),
-          ],
-          [['profile'], [''], containerId, imagesBefore],
-        );
-        await closeWindow(name);
-      } finally {
-        await removeContainers(folder);
-      }
-    });
+      await reloadWindow(name);
+      await connectedToContainer(name);
+      deepStrictEqual(
+        [
+          before,
+          await printed(name, 'after', ['PROBE_PROFILE']),
+          await containerOf(folder),
+          await docker('images', '--format', '{{.ID}}'),
+        ],
+        [['profile'], [''], containerId, imagesBefore],
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
   });
 });
