@@ -267,6 +267,19 @@ export async function sshdLog(since: string): Promise<string[]> {
   return `${stdout}\n${stderr}`.split('\n').filter(line => line !== '');
 }
 
+/** The times, in milliseconds, of the key logins of the user harness that the host's sshd logged since `since`. */
+export async function acceptedKeyLoginTimes(since: string): Promise<number[]> {
+  const {stdout, stderr} = await execFileAsync(
+    'docker',
+    ['logs', '--timestamps', '--since', since, variable('HARNESS_CONTAINER')],
+    {encoding: 'utf8'},
+  );
+  return `${stdout}\n${stderr}`
+    .split('\n')
+    .filter(line => line.includes('Accepted publickey for harness'))
+    .map(line => Date.parse(line.slice(0, line.indexOf(' '))));
+}
+
 /** The number of logins by key the host's sshd counted for the user harness since `since`. */
 export async function acceptedKeyLogins(since: string): Promise<number> {
   return (await sshdLog(since)).filter(line =>
