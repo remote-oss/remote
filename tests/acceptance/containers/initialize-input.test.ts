@@ -45,12 +45,13 @@ async function untilText(
 ): Promise<void> {
   const deadline = Date.now() + milliseconds;
   for (;;) {
-    if ((await terminalText(name)).includes(needle)) {
+    const text = await terminalText(name);
+    if (text.includes(needle)) {
       return;
     }
     if (Date.now() > deadline) {
       throw new Error(
-        `timed out waiting for the terminal of ${name} to hold ${needle}`,
+        `timed out waiting for the terminal of ${name} to hold ${needle}; the last read was ${JSON.stringify(text)} and the terminal's buffer ends ${JSON.stringify((await terminalBuffer(name)).slice(-600))}`,
       );
     }
     await new Promise(resolve => setTimeout(resolve, 500));
