@@ -90,6 +90,7 @@ import {
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
+import {loggedChannel} from './pipeline/remote-log.ts';
 import type {PortChoice} from './pipeline/port-choice.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
 import {
@@ -315,36 +316,40 @@ export function wiringPortsOf(
       ),
     requestEnvironment,
     channelFor: (session, channelRun) =>
-      new SharedSessionChannel({
-        session,
-        direct: new SshHostChannel({
-          hostString: channelRun.hostString,
-          platform: channelRun.terms.platform,
-          base: channelRun.base,
-          spawner: machine.spawner,
-          editorEnvironment: machine.processEnvironment,
-          // The copy runs in a login terminal of its own, so no run of this channel asks through askpass.
-          askpassEnvironment: {},
-          files: machine.files,
-          scheduler: machine.scheduler,
-          copier: terminalCopierOf({
-            terminals: surfaces.terminals,
+      loggedChannel(
+        new SharedSessionChannel({
+          session,
+          direct: new SshHostChannel({
+            hostString: channelRun.hostString,
+            platform: channelRun.terms.platform,
+            base: channelRun.base,
+            spawner: machine.spawner,
+            editorEnvironment: machine.processEnvironment,
+            // The copy runs in a login terminal of its own, so no run of this channel asks through askpass.
+            askpassEnvironment: {},
+            files: machine.files,
             scheduler: machine.scheduler,
-            invocationFor: copy =>
-              buildInvocation({...channelRun.base, purpose: 'copy', copy}),
-            connectWait: () => channelRun.connectWait,
-            attachQuestions: login =>
-              attachTerminalQuestions(
-                login,
-                surfaces.prompts,
-                channelRun.displayHost,
-              ),
-            revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
+            copier: terminalCopierOf({
+              terminals: surfaces.terminals,
+              scheduler: machine.scheduler,
+              invocationFor: copy =>
+                buildInvocation({...channelRun.base, purpose: 'copy', copy}),
+              connectWait: () => channelRun.connectWait,
+              attachQuestions: login =>
+                attachTerminalQuestions(
+                  login,
+                  surfaces.prompts,
+                  channelRun.displayHost,
+                ),
+              revealLoginTerminals: () =>
+                switchOf(settings, 'showLoginTerminal'),
+            }),
           }),
+          files: machine.files,
+          ...SESSION_RUN_LIMITS,
         }),
-        files: machine.files,
-        ...SESSION_RUN_LIMITS,
-      }),
+        logger,
+      ),
     attachLogin: (login, alias) =>
       attachPromptSurface(login, surfaces.prompts, {displayHost: alias}),
     terminal: {

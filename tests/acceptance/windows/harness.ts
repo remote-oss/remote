@@ -171,9 +171,13 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
   );
 }
 
-/** The lines of the log the launch's extensions write, without their time stamps. */
+/** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
 export function connectionLog(): string[] {
-  return readFileSync(variable('REMOTE_OSS_ACCEPTANCE_LOG'), 'utf8')
+  const file = variable('REMOTE_OSS_ACCEPTANCE_LOG');
+  if (!existsSync(file)) {
+    return [];
+  }
+  return readFileSync(file, 'utf8')
     .split('\n')
     .filter(line => line !== '')
     .map(line => line.slice(line.indexOf('] ') + 2));

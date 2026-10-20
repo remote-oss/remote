@@ -340,11 +340,15 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(heard, []);
   });
 
-  /** The phases heard for a connect whose connection step reports `events`. */
-  async function phasesHeardAfter(
-    ...events: PhaseEvent[]
-  ): Promise<ConnectPhase[]> {
-    const {recording, options} = setup();
+  /**
+   * A connector whose connection step reports `events`, with the sink its log writes to; the phases it tells and the
+   * lines it logs are what the rows below read.
+   */
+  function connectorReporting(...events: PhaseEvent[]): {
+    connector: SshConnector;
+    logSink: ReturnType<typeof setup>['logSink'];
+  } {
+    const {recording, options, logSink} = setup();
     const connector = connectorOf({
       stepsFor: onPhase =>
         steps(recording, {
@@ -358,6 +362,14 @@ describe('the connector over the connect pipeline', () => {
       revealLog: () => undefined,
       applyTerminalEnvironment: () => undefined,
     });
+    return {connector, logSink};
+  }
+
+  /** The phases heard for a connect whose connection step reports `events`. */
+  async function phasesHeardAfter(
+    ...events: PhaseEvent[]
+  ): Promise<ConnectPhase[]> {
+    const {connector} = connectorReporting(...events);
     const heard: ConnectPhase[] = [];
     connector.onPhase(given => {
       heard.push(given);
@@ -365,6 +377,48 @@ describe('the connector over the connect pipeline', () => {
     await connector.connect(HOST_INPUT);
     return heard;
   }
+
+  /** The progress lines a connect whose connection step reports `events` writes to the log. */
+  async function progressLogged(...events: PhaseEvent[]): Promise<string[]> {
+    const {connector, logSink} = connectorReporting(...events);
+    await connector.connect(HOST_INPUT);
+    return logSink.lines
+      .map(line => line.message)
+      .filter(
+        message =>
+          message.startsWith('Progress:') ||
+          message.startsWith('Downloading VS Code Server:'),
+      );
+  }
+
+  it('F-2003 BR-6 item 8: the steps and percents the notification shows are logged', async () => {
+    deepStrictEqual(
+      await progressLogged(
+        {kind: 'installing'},
+        {kind: 'serverDownloadPercent', percent: 0},
+        {kind: 'serverDownloadPercent', percent: 50},
+        {kind: 'serverDownloadPercent', percent: 100},
+      ),
+      [
+        'Progress: installing',
+        'Downloading VS Code Server: 0%',
+        'Downloading VS Code Server: 50%',
+        'Downloading VS Code Server: 100%',
+        'Progress: settingUpTunnel',
+      ],
+    );
+  });
+
+  it('F-2003 BR-6 item 8: a quiet step and a shown prompt, which change no step of the notification, log no progress', async () => {
+    deepStrictEqual(
+      await progressLogged(
+        {kind: 'initializing', quiet: true},
+        {kind: 'promptShown'},
+        {kind: 'initializing'},
+      ),
+      ['Progress: initializing', 'Progress: settingUpTunnel'],
+    );
+  });
 
   it('contracts: a stage a step reports through the listener it was given reaches the phase listeners', async () => {
     deepStrictEqual(
