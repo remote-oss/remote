@@ -1123,17 +1123,17 @@ F-1102.AC-12	todo
 F-1102.AC-13	todo	
 F-1102.AC-14	todo	
 F-1102.AC-15	todo	
-F-1102.AC-16	todo	
+F-1102.AC-16	acceptance	
 F-1102.AC-17	todo	
 F-1102.AC-18	todo	
-F-1102.AC-19	todo	
+F-1102.AC-19	acceptance	
 F-1102.AC-20	todo	
 F-1102.AC-21	todo	
 F-1102.AC-22	todo	
-F-1102.AC-23	todo	
+F-1102.AC-23	core	core: the Cannot reconnect dialog's Cancel
 F-1102.AC-24	todo	
-F-1102.AC-25	todo	
-F-1102.AC-26	todo	
+F-1102.AC-25	deferred	containers release 1: later (Windows, WSL and macOS)
+F-1102.AC-26	deferred	containers release 1: later (Compose)
 F-1102.AC-27	todo	
 F-1102.AC-28	todo	
 F-1102.AC-29	todo	
