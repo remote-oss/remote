@@ -1,4 +1,9 @@
-import {deepStrictEqual, notStrictEqual, strictEqual} from 'node:assert';
+import {
+  deepStrictEqual,
+  notStrictEqual,
+  strictEqual,
+  throws,
+} from 'node:assert';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -10,6 +15,8 @@ import {
   measureUnit,
   nextRatchet,
   runCoverage,
+  shardArgument,
+  shardOf,
 } from './coverage.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -267,6 +274,40 @@ describe('coverage', () => {
         ),
         false,
       );
+    });
+  });
+
+  describe('shards', () => {
+    it('hold each unit once between them, every count-th from the index-th', () => {
+      const units = ['tools', 'lib-a', 'lib-b', 'remote-a', 'remote-b'];
+      deepStrictEqual(
+        [1, 2, 3].map(index => shardOf(units, {index, count: 3})),
+        [['tools', 'remote-a'], ['lib-a', 'remote-b'], ['lib-b']],
+      );
+    });
+
+    it('are every unit without the option', () => {
+      deepStrictEqual(shardOf(['tools', 'lib-a']), ['tools', 'lib-a']);
+    });
+
+    it('come from --shard index/count, and nothing without it', () => {
+      deepStrictEqual(
+        [
+          shardArgument(['node', 'coverage.ts', '--shard', '2/4']),
+          shardArgument(['node', 'coverage.ts']),
+        ],
+        [{index: 2, count: 4}, undefined],
+      );
+    });
+
+    it('refuse a malformed option', () => {
+      for (const value of ['0/4', '5/4', '2/0', 'two', undefined]) {
+        throws(
+          () =>
+            shardArgument(['--shard', ...(value === undefined ? [] : [value])]),
+          /--shard takes <index>\/<count>/,
+        );
+      }
     });
   });
 });
