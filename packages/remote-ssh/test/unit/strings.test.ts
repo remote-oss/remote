@@ -98,6 +98,22 @@ const LICENCE_TEXTS = [
   'Accept and Continue',
 ];
 
+/** The texts of the pre-connection script's dialog, its progress and its failure reason. */
+const PRECONNECT_TEXTS = [
+  'Running pre-connection script ({0})',
+  'The value of remote.SSH.preconnect for "{0}" is {1}, not the path of a script.',
+  'a boolean',
+  'a list',
+  'a number',
+  'an object',
+  'Execute pre-connection script?',
+  'Pre-connection script has changed since last confirmation',
+  "'{0}' will be executed on your local machine.",
+  'Allow',
+  "Allow and Don't Ask Again",
+  'Skip',
+];
+
 /** The notices of the server maintenance commands and their button. */
 const MAINTENANCE_TEXTS = [
   'Killed VS Code Server on {0}.',
@@ -161,6 +177,7 @@ describe('the runtime strings of the extension', () => {
           ...SETUP_TEXTS,
           ...FAILURE_TEXTS,
           ...LICENCE_TEXTS,
+          ...PRECONNECT_TEXTS,
           ...PICKER_TEXTS,
           ...CONNECT_TEXTS,
           ...MITIGATION_TEXTS,

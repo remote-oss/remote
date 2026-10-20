@@ -20,6 +20,7 @@ export type FailureStringId =
   | 'S031'
   | 'S032'
   | 'S041'
+  | 'S118'
   | 'S043'
   | 'S044'
   | 'S045'
@@ -70,6 +71,11 @@ export type FailureStringId =
   | 'sshTimedOut'
   | 'templateNotHttp'
   | 'templateUnknownPlaceholder'
+  | 'preconnectNotAPath'
+  | 'preconnectValueBoolean'
+  | 'preconnectValueList'
+  | 'preconnectValueNumber'
+  | 'preconnectValueObject'
   | 'trustRefused';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
@@ -97,6 +103,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S079: 'Hostname contains invalid characters',
   S082: 'Initializing VS Code Server',
   S084: 'Installing VS Code Server',
+  S118: 'Running pre-connection script ({0})',
   S089: 'Max wait time exhausted',
   S092: 'More Actions...',
   S094: 'Network is unreachable',
@@ -133,6 +140,12 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   installPathProvided: 'Provided: "{0}"',
   // The fixed text of this dialog reason; its misspelling is kept on purpose.
   reversedPortRange: 'Invaid port range set',
+  preconnectNotAPath:
+    'The value of remote.SSH.preconnect for "{0}" is {1}, not the path of a script.',
+  preconnectValueBoolean: 'a boolean',
+  preconnectValueList: 'a list',
+  preconnectValueNumber: 'a number',
+  preconnectValueObject: 'an object',
   sshTimedOut: 'Connecting with SSH timed out',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',

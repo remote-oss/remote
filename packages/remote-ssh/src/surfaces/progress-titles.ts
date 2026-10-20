@@ -4,8 +4,12 @@
  */
 
 import type {ConnectPhase, PhaseName} from 'lib-authority';
+import {commands} from '../identifiers.generated.ts';
 import type {StringRef} from '../connect/picker-model.ts';
 import type {FailureStringId} from './failure-strings.ts';
+
+/** The link the script's stage carries in place of the details link; neither word of it is translated. */
+const SHOW_LOG_LINK = `[show log](command:${commands.showLog.id} "Show log")`;
 
 /** The string id of each stage's message; the share downloaded has none, so it keeps the stage before it. */
 const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
@@ -18,6 +22,7 @@ const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
   settingUpTunnel: 'S130',
   waitingForForwarding: 'S158',
   startingServer: undefined,
+  runningPreconnectScript: 'S118',
   serverDownloadPercent: undefined,
 };
 
@@ -29,5 +34,11 @@ export function startTitleOf(alias: string): StringRef {
 /** The message of the stage, or nothing when the stage has none and the last message stays. */
 export function phaseTitleOf(phase: ConnectPhase): StringRef | undefined {
   const stringId = PHASE_IDS[phase.name];
-  return stringId === undefined ? undefined : {id: stringId, values: []};
+  if (stringId === undefined) {
+    return undefined;
+  }
+  return {
+    id: stringId,
+    values: phase.name === 'runningPreconnectScript' ? [SHOW_LOG_LINK] : [],
+  };
 }

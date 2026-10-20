@@ -110,6 +110,7 @@ const REAL: EditorAdapters = {
   linkTerminals: {runProgram: () => Promise.resolve()},
   failureDialog: {showError: () => Promise.resolve('real')},
   licenceDialog: {showModal: () => Promise.resolve('real')},
+  preconnectDialog: {showModal: () => Promise.resolve('real')},
   platformPick: {pick: () => Promise.resolve('linux')},
   mitigationPick: {pick: () => Promise.resolve('reloadWindow')},
   downloadProgress: {
@@ -2025,5 +2026,60 @@ describe('the script read per question, the cursor from the record and the held 
     const dismissed = adapters.prompts.maskedInput(PASSWORD, NEVER);
     const outcome = [await dismissed, files.lines(), adapters.unusedEntries()];
     deepStrictEqual(outcome, [undefined, [dismissedLine()], 1]);
+  });
+});
+
+describe('the pre-connection dialog of the scripted adapters (card connect-87)', () => {
+  const BUTTONS = ['Allow', "Allow and Don't Ask Again", 'Skip'];
+
+  it('F-2108 AC-4: the dialog gets the scripted button when it is offered, and the record line carries the detail and the buttons', async () => {
+    const {adapters, files} = scripted([
+      {
+        surface: 'preconnectDialog',
+        match: 'Execute pre-connection script',
+        answer: {button: 'Allow'},
+      },
+    ]);
+    const chosen = await adapters.preconnectDialog.showModal(
+      'Execute pre-connection script?',
+      "'/x.sh' will be executed on your local machine.",
+      BUTTONS,
+    );
+    deepStrictEqual(
+      [
+        chosen,
+        files
+          .lines()
+          .map(line => [line.surface, line.answer, line.detail, line.buttons]),
+      ],
+      [
+        'Allow',
+        [
+          [
+            'preconnectDialog',
+            'Allow',
+            "'/x.sh' will be executed on your local machine.",
+            BUTTONS,
+          ],
+        ],
+      ],
+    );
+  });
+
+  it('F-2108 AC-10: an entry that dismisses gives nothing, and one naming a button that is not offered gives nothing and stays unused', async () => {
+    const dismissed = scripted([
+      {surface: 'preconnectDialog', match: '', answer: 'dismiss'},
+    ]);
+    const missing = scripted([
+      {surface: 'preconnectDialog', match: '', answer: {button: 'Other'}},
+    ]);
+    deepStrictEqual(
+      [
+        await dismissed.adapters.preconnectDialog.showModal('m', 'd', BUTTONS),
+        await missing.adapters.preconnectDialog.showModal('m', 'd', BUTTONS),
+        missing.adapters.unusedEntries(),
+      ],
+      [undefined, undefined, 1],
+    );
   });
 });
