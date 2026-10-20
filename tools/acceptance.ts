@@ -11,6 +11,7 @@
  */
 
 import {stopHelpersUnder} from './acceptance-helper-stop.ts';
+import {daemonLock, type LaunchLock, NO_LOCK} from './acceptance-lock.ts';
 import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {
   type RunRegistry,
@@ -906,6 +907,7 @@ export async function runLaunches(
   report: (line: string) => void = line => {
     console.log(line);
   },
+  lock: LaunchLock = NO_LOCK,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -918,38 +920,53 @@ export async function runLaunches(
       // reused by this resolve without any check, so the run waits the grace out.
       await sleep(FRESH_RESOLVE_WAIT_MILLISECONDS);
     }
-    exitCodes.push(
-      await runWithRetry(async () => {
-        // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
-        if (launch !== undefined) {
-          if (launch.hostSetup !== undefined) {
-            runHostSetup(command, container, launch.hostSetup);
-          }
-          writeUserSettings(
-            runFolder,
-            configFile,
-            withRunTokens(
-              withHarnessBases(launch.settings, bases),
-              runFolder,
-              process.env.PATH ?? '',
-            ),
-            launch.label,
-            launch.settingsTail,
-          );
-          await beforeAttempt(launch);
-        }
-        const held = await holdPorts(launch?.clientListeners ?? []);
-        try {
-          return await runLaunch(launch);
-        } finally {
-          await held.release();
-          // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
-          stopHelpersUnder(path.join(runFolder, 'user-data'), command);
-        }
-      }, report),
-    );
+    // A launch of dev containers holds the daemon's lock through all its attempts: see acceptance-lock.ts.
+    const locked =
+      launch !== undefined && launchGroupOf(launch) === 'containers';
+    if (locked) {
+      await lock.take();
+    }
+    try {
+      exitCodes.push(await runAttempts(launch));
+    } finally {
+      if (locked) {
+        lock.release();
+      }
+    }
   }
   return exitCodes;
+
+  /** The launch's attempts (one, or two after a hung window). */
+  function runAttempts(launch: Launch | undefined): Promise<number> {
+    return runWithRetry(async () => {
+      // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
+      if (launch !== undefined) {
+        if (launch.hostSetup !== undefined) {
+          runHostSetup(command, container, launch.hostSetup);
+        }
+        writeUserSettings(
+          runFolder,
+          configFile,
+          withRunTokens(
+            withHarnessBases(launch.settings, bases),
+            runFolder,
+            process.env.PATH ?? '',
+          ),
+          launch.label,
+          launch.settingsTail,
+        );
+        await beforeAttempt(launch);
+      }
+      const held = await holdPorts(launch?.clientListeners ?? []);
+      try {
+        return await runLaunch(launch);
+      } finally {
+        await held.release();
+        // A helper that left the editor's process tree outlives the editor: the attempt stops what it started.
+        stopHelpersUnder(path.join(runFolder, 'user-data'), command);
+      }
+    }, report);
+  }
 }
 
 /**
@@ -1084,6 +1101,16 @@ export async function runAcceptance(
           markDownloadRequests(runFolder, launch.label, variables);
         },
         {...variables},
+        undefined,
+        undefined,
+        daemonLock(
+          dependencies.command,
+          variables.HARNESS_RUN_ID,
+          {now: Date.now, sleep: dependencies.sleep},
+          line => {
+            console.log(line);
+          },
+        ),
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
