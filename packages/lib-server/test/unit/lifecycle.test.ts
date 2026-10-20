@@ -126,6 +126,80 @@ describe('runStep (a step over the host channel)', () => {
     deepStrictEqual(result.kind, 'noResultBlock');
   });
 
+  it('F-2003 BR-14 (ruling-253-mark): a run variable that looks secret must be marked, and one that does not need not be', async () => {
+    const outcomes = await Promise.all(
+      [
+        {environment: {MY_TOKEN: 'x'}},
+        {environment: {MY_TOKEN: 'x'}, secretVariables: ['MY_TOKEN']},
+        {environment: {PLAIN: 'x'}},
+      ].map(options =>
+        runStep(recording(block('Ok')), single('probe'), parametersFor(), {
+          cancellation: NEVER_CANCELLED,
+          ...options,
+        }).then(
+          result => result.kind,
+          (error: unknown) => String(error),
+        ),
+      ),
+    );
+    deepStrictEqual(outcomes, [
+      'Error: the run variable MY_TOKEN looks secret and is not marked',
+      'result',
+      'result',
+    ]);
+  });
+
+  it('F-2003 BR-14: every word of the guard counts, in any case', async () => {
+    const names = [
+      'A_SECRET',
+      'password1',
+      'MY_PASSPHRASE',
+      'SSH_KEY',
+      'GIT_CREDENTIALS',
+      'SSH_AUTH_SOCK',
+      'cookie',
+      'PRIVATE_FILE',
+    ];
+    const refused = await Promise.all(
+      names.map(name =>
+        runStep(recording(block('Ok')), single('probe'), parametersFor(), {
+          cancellation: NEVER_CANCELLED,
+          environment: {[name]: 'x'},
+        }).then(
+          () => false,
+          () => true,
+        ),
+      ),
+    );
+    deepStrictEqual(
+      refused,
+      names.map(() => true),
+    );
+  });
+
+  it('F-2003 BR-14: the marks reach the channel with the request, and a run with none carries none', async () => {
+    const marked = recording(block('Ok'));
+    const plain = recording(block('Ok'));
+    await runStep(marked, single('probe'), parametersFor(), {
+      cancellation: NEVER_CANCELLED,
+      environment: {MY_TOKEN: 'x'},
+      secretVariables: ['MY_TOKEN'],
+    });
+    await runStep(plain, single('probe'), parametersFor(), {
+      cancellation: NEVER_CANCELLED,
+    });
+    deepStrictEqual(
+      [marked, plain].map(channel =>
+        channel.calls.map(call =>
+          call.operation === 'runScript'
+            ? call.request.secretVariables
+            : undefined,
+        ),
+      ),
+      [[['MY_TOKEN']], [undefined]],
+    );
+  });
+
   it('H1: a channel failure is a value', async () => {
     const channel = failing('channelClosed');
     const result = await runStep(channel, single('probe'), parametersFor(), {

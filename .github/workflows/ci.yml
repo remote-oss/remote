@@ -14,6 +14,13 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
+      runner-arch:
+        description: >-
+          The self-hosted runners' architecture for the acceptance jobs. X64 always on a pull request; ARM64 (the
+          Mac mini runners) only on a dispatch, until a dispatch shows the acceptance jobs pass there
+        type: choice
+        options: [X64, ARM64]
+        default: X64
       real-server:
         description: Also install and start the real VSCodium server (about 125 MB, up to 20 minutes)
         type: boolean
@@ -162,6 +169,9 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
 
+  # The acceptance jobs run on the X64 self-hosted runners (ci-1 to ci-8): the arm64 Mac mini runners carry the
+  # runners' shared label too (2026-10-20), and these jobs haven't been shown to pass there yet. A dispatch with runner-arch
+  # ARM64 is how they are; until then a pull request never lands on arm64.
   # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
@@ -171,7 +181,7 @@ jobs:
       !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -210,7 +220,7 @@ jobs:
       !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -231,7 +241,7 @@ jobs:
   acceptance-host-variants:
     name: acceptance (host variants)
     if: inputs.variants || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -255,7 +265,7 @@ jobs:
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -282,7 +292,7 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     # the whole VSCodium suite outgrew 30 minutes in October 2026: main's backstop was cut at 30 every time, so it never
     # reported (050079f: started 23:38:16, cancelled 00:08:41)
     timeout-minutes: 60

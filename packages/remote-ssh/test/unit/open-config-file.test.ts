@@ -36,7 +36,8 @@ type Call =
   | {call: 'folder'; path: string; mode: number}
   | {call: 'file'; path: string; mode: number}
   | {call: 'settings'; query: string}
-  | {call: 'help'};
+  | {call: 'help'}
+  | {call: 'signal'};
 
 interface World {
   calls: Call[];
@@ -45,6 +46,10 @@ interface World {
   take: (choice: FileChoice) => FileChoiceItem | undefined;
   fileFailure: Error | undefined;
   configFile: string;
+  /** The save callbacks the command gave the editor to watch with. */
+  saves: Array<() => void>;
+  /** Each watch: the editor it was given and how many calls had been made before it. */
+  watches: Array<{opened: OpenedEditor; callsBefore: number}>;
 }
 
 function worldWith(changes: Partial<World> = {}): World {
@@ -54,6 +59,8 @@ function worldWith(changes: Partial<World> = {}): World {
     take: () => undefined,
     fileFailure: undefined,
     configFile: '',
+    saves: [],
+    watches: [],
     ...changes,
   };
 }
@@ -72,6 +79,10 @@ function handlerOf(world: World) {
     insertTemplate: (opened, template) => {
       world.calls.push({call: 'insert', opened, template});
       return Promise.resolve();
+    },
+    watchSaves: (opened, onSave) => {
+      world.watches.push({opened, callsBefore: world.calls.length});
+      world.saves.push(onSave);
     },
   };
   const files: ConfigFiles = {
@@ -121,6 +132,9 @@ function handlerOf(world: World) {
     () => world.configFile,
     EXTENSION,
     template => template,
+    () => {
+      world.calls.push({call: 'signal'});
+    },
   );
 }
 
@@ -190,6 +204,46 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
       ),
       ['/x/one', '/x/two'],
     );
+  });
+
+  it('F-2203 BR-9, F-5902 AC-9: the opened document is watched after it is opened, and each save signals', async () => {
+    const world = worldWith({
+      take: choice => rowOf(choice, `${HOME}/.ssh/config`),
+    });
+    world.existing.add(`${HOME}/.ssh/config`);
+    await handlerOf(world).execute();
+    const callsAfterRun = world.calls.length;
+    world.saves[0]?.();
+    world.saves[0]?.();
+    deepStrictEqual(
+      [
+        world.watches,
+        world.calls.slice(callsAfterRun).map(each => each.call),
+        world.calls[callsAfterRun - 1]?.call,
+      ],
+      [
+        [{opened: {file: `${HOME}/.ssh/config`}, callsBefore: callsAfterRun}],
+        ['signal', 'signal'],
+        'open',
+      ],
+    );
+  });
+
+  it('F-2203 BR-9: a new file is watched after its template is inserted', async () => {
+    const world = worldWith({
+      take: choice => rowOf(choice, `${HOME}/.ssh/config`),
+    });
+    await handlerOf(world).execute();
+    deepStrictEqual(
+      [world.calls.at(-1)?.call, world.watches.map(each => each.callsBefore)],
+      ['insert', [world.calls.length]],
+    );
+  });
+
+  it('F-2203 BR-9: dismissing the pick watches nothing', async () => {
+    const world = worldWith();
+    await handlerOf(world).execute();
+    deepStrictEqual(world.watches, []);
   });
 
   it('F-2203 AC-16: dismissing the pick creates and opens nothing', async () => {
