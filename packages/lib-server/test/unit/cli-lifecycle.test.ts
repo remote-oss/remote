@@ -108,6 +108,16 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       ]);
     });
 
+    it('F-2003 BR-14: the run marks the token variable as secret', async () => {
+      const {channel} = await started(STARTED);
+      deepStrictEqual(
+        channel.calls.flatMap(call =>
+          call.operation === 'runScript' ? [call.request.secretVariables] : [],
+        ),
+        [['VSCODE_CLI_REQUIRE_TOKEN']],
+      );
+    });
+
     it('§S10: the text of the script does not hold the token', async () => {
       const {channel} = await started(STARTED);
       deepStrictEqual(
