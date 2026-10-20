@@ -334,7 +334,12 @@ export class ConnectionHandler implements MessageHandler {
     if (early?.kind === 'exited') {
       // The login shell's own startup ended the session: no reason of ssh's, only the log line already written.
       this.state = 'idle';
-      this.tell({type: 'loginFailed', kind: 'unknown', hints: []});
+      this.tell({
+        type: 'loginFailed',
+        kind: 'unknown',
+        hints: [],
+        exitStatus: status ?? null,
+      });
       this.ownership.ownerGaveUp();
       return;
     }
@@ -351,6 +356,7 @@ export class ConnectionHandler implements MessageHandler {
         ? {}
         : {reason: classification.reason}),
       hints: classification.hints,
+      exitStatus: status ?? null,
     });
     this.ownership.ownerGaveUp();
   }

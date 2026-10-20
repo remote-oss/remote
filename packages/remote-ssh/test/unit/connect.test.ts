@@ -13,6 +13,7 @@ import {
 } from '../../src/pipeline/connect.ts';
 import type {
   ConnectSteps,
+  StepFailure,
   StepResult,
   TunnelOpening,
 } from '../../src/pipeline/steps.ts';
@@ -618,6 +619,44 @@ describe('the connect pipeline, when a step fails', () => {
         line => line.message === 'the serverDownload failure: downloadFailed',
       ),
       true,
+    );
+  });
+
+  /** The log lines of a connect whose connection step fails with `failure`, at warn and above, as `level: message`. */
+  async function loggedWhenConnectionFails(
+    failure: StepFailure,
+  ): Promise<string[]> {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () => Promise.resolve({kind: 'failed', failure}),
+      }),
+      options,
+    );
+    return logSink.lines
+      .filter(line => line.level === 'warn')
+      .map(line => `${line.level}: ${line.message}`);
+  }
+
+  it("connect-64: a failed connect logs ssh's exit status before the failure line, and no line of ssh's", async () => {
+    deepStrictEqual(
+      await loggedWhenConnectionFails({kind: 'unknown', sshExitStatus: 255}),
+      ['warn: ssh exited with status 255', 'warn: connect failed: unknown'],
+    );
+  });
+
+  it('connect-64: an ssh that ended on a signal', async () => {
+    deepStrictEqual(
+      await loggedWhenConnectionFails({kind: 'unknown', sshExitStatus: null}),
+      ['warn: ssh ended on a signal', 'warn: connect failed: unknown'],
+    );
+  });
+
+  it('connect-64: a failure without an exit status logs as today', async () => {
+    deepStrictEqual(
+      await loggedWhenConnectionFails({kind: 'unknown', logDetail: 'x'}),
+      ['warn: connect failed: unknown', 'warn: the unknown failure: x'],
     );
   });
 

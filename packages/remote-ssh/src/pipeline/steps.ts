@@ -56,6 +56,8 @@ export interface StepFailure extends FailureDetail {
   /** Set only by the pre-connection script, whose own dialog has told the user. */
   userAlreadyNotified?: boolean;
   diagnostics?: readonly string[];
+  /** `ssh`'s exit status, or `null` when it ended on a signal, for the log; absent when the step has none. */
+  sshExitStatus?: number | null;
 }
 
 /** The result of a step: its value, or why it did not work. */

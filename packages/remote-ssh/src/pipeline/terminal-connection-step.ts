@@ -89,6 +89,7 @@ function failureOf(end: TerminalEnd, lines: readonly string[]): StepFailure {
       ? {}
       : {reason: classification.reason}),
     hints: classification.hints,
+    ...(end.code === undefined ? {} : {sshExitStatus: end.code}),
   };
 }
 
