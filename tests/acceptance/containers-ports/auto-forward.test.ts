@@ -281,66 +281,6 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     }
   });
 
-  it('F-1102 AC-6 (other-user): with a remote user that is not root, a listener of root whose port is not on its command line is not forwarded, and the same program of the server’s user is', async () => {
-    const {window, containerId} = await plainWindow('c75-ac6', {
-      remoteUser: 'node',
-    });
-    // `-p 0` takes a port of the system's choice, so no command line names it.
-    await execFileAsync('docker', [
-      'exec',
-      '-d',
-      '--user',
-      'root',
-      containerId,
-      'nc',
-      '-lk',
-      '-p',
-      '0',
-      '-e',
-      'cat',
-    ]);
-    const stopOwn = await inTerminal(window, containerId, 'nc -lk -p 0 -e cat');
-    try {
-      await new Promise(resolve => setTimeout(resolve, 15_000));
-      await showPorts(window);
-      const rows = await rowsWhen(window, shown => shown.length > 0);
-      const {stdout} = await execFileAsync('docker', [
-        'exec',
-        containerId,
-        'ps',
-        '-o',
-        'pid,user,args',
-      ]);
-      const owned = stdout
-        .split('\n')
-        .map(line => line.trim().split(/\s+/))
-        .filter(fields => fields.slice(2).join(' ') === 'nc -lk -p 0 -e cat')
-        .map(fields => ({process: fields[0] ?? '', user: fields[1] ?? ''}));
-      const ownProcess = owned.find(each => each.user === 'node')?.process;
-      deepStrictEqual(
-        {
-          owners: owned.map(each => each.user).sort(),
-          forwarded: rows.map(shown => shown.runningProcess),
-        },
-        {
-          owners: ['node', 'root'],
-          forwarded: [`nc -lk -p 0 -e cat (${String(ownProcess)})`],
-        },
-      );
-    } finally {
-      await stopOwn();
-      await execFileAsync('docker', [
-        'exec',
-        '--user',
-        'root',
-        containerId,
-        'sh',
-        '-c',
-        "pkill -f '[n]c -lk -p 0' || true",
-      ]);
-    }
-  });
-
   it('F-1102 AC-7 (restored-on-reload): after a reload every forward but the stopped one is back, automatic and by hand alike, starting with no running process', async () => {
     const {window, containerId} = await plainWindow('c75-ac7');
     const [auto, hand, stopped] = [
@@ -512,56 +452,169 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     }
   });
 
-  it('F-1102 AC-31 (listening-before-connect): a listener that postStartCommand started is not forwarded, while a later listener started in a terminal is', async () => {
+  /** Starts `nc -lk` in container `containerId` as `user` with `execution`, detached, on `port` (0: the system's choice). */
+  async function execListener(
+    containerId: string,
+    user: string,
+    port: number,
+  ): Promise<void> {
+    await execFileAsync('docker', [
+      'exec',
+      '-d',
+      '--user',
+      user,
+      containerId,
+      'nc',
+      '-lk',
+      '-p',
+      String(port),
+      '-e',
+      'cat',
+    ]);
+  }
+
+  /** The user that owns the process whose command line is `command` in the container, or none. */
+  async function ownerOf(
+    containerId: string,
+    command: string,
+  ): Promise<string | undefined> {
+    const {stdout} = await execFileAsync('docker', [
+      'exec',
+      containerId,
+      'ps',
+      '-o',
+      'user,args',
+    ]);
+    return stdout
+      .split('\n')
+      .map(line => line.trim().split(/\s+/))
+      .find(fields => fields.slice(1).join(' ') === command)?.[0];
+  }
+
+  /** Ends every `nc -lk` of the container, whoever owns it. */
+  async function endListeners(containerId: string): Promise<void> {
+    await execFileAsync('docker', [
+      'exec',
+      '--user',
+      'root',
+      containerId,
+      'sh',
+      '-c',
+      "pkill -f '[n]c -lk' || true",
+    ]);
+  }
+
+  it('F-1102 AC-31 (listening-before-connect): a listener of the server’s user that was there when the window connected is not forwarded, while a later listener started in a terminal is', async () => {
     const [before, later] = [await freePort(), await freePort()];
-    const {window, containerId} = await plainWindow('c75-ac31a', {
-      postStartCommand: `nohup nc -lk -p ${String(before)} -e cat >/dev/null 2>&1 &`,
-    });
+    const {window, containerId} = await plainWindow('c75-ac31a');
+    await execListener(containerId, 'root', before);
+    await reloaded(window);
     await showPorts(window);
     await new Promise(resolve => setTimeout(resolve, 25_000));
     const early = portsOf(await portsRows(window).catch(() => []));
+    const owner = await ownerOf(
+      containerId,
+      `nc -lk -p ${String(before)} -e cat`,
+    );
     const stop = await listenInTerminal(window, containerId, later);
     try {
       const seen = await appearing(window, later, Date.now());
       await new Promise(resolve => setTimeout(resolve, 5000));
       deepStrictEqual(
-        [early, seen.shown !== undefined, portsOf(await portsRows(window))],
-        [[], true, [String(later)]],
+        [
+          owner,
+          early,
+          seen.shown !== undefined,
+          portsOf(await portsRows(window)),
+        ],
+        ['root', [], true, [String(later)]],
       );
     } finally {
       await stop();
+      await endListeners(containerId);
     }
   });
 
-  it('F-1102 AC-31 (on-auto-forward): portsAttributes onAutoForward silent forwards a later listener without a notice, and ignore keeps another one out', async () => {
-    const [silent, ignored] = [await freePort(), await freePort()];
-    const {window, containerId} = await plainWindow('c75-ac31b', {
-      portsAttributes: {
-        [String(silent)]: {onAutoForward: 'silent'},
-        [String(ignored)]: {onAutoForward: 'ignore'},
-      },
-    });
-    const stops = [
-      await listenInTerminal(window, containerId, silent),
-      await listenInTerminal(window, containerId, ignored),
-    ];
-    try {
-      const seen = await appearing(window, silent, Date.now());
-      await new Promise(resolve => setTimeout(resolve, 20_000));
-      deepStrictEqual(
-        [
-          seen.shown?.origin,
-          portsOf(await portsRows(window)),
+  it('F-1102 AC-31 (on-auto-forward): a listener that was there when the window connected is forwarded when onAutoForward is silent, with no notice, and stays out when it is ignore, once another listener changes the set', async () => {
+    const seen: Array<[string, string[], string[]]> = [];
+    for (const [name, mode] of [
+      ['c75-ac31b', 'silent'],
+      ['c75-ac31c', 'ignore'],
+    ] as const) {
+      const [before, later] = [await freePort(), await freePort()];
+      const {window, containerId} = await plainWindow(name, {
+        portsAttributes: {[String(before)]: {onAutoForward: mode}},
+      });
+      await execListener(containerId, 'root', before);
+      await reloaded(window);
+      await showPorts(window);
+      await new Promise(resolve => setTimeout(resolve, 15_000));
+      const stop = await listenInTerminal(window, containerId, later);
+      try {
+        await appearing(window, later, Date.now());
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        seen.push([
+          mode,
+          portsOf(await portsRows(window))
+            .filter(port => port === String(before))
+            .map(() => 'before'),
           (await notificationCentre(window)).filter(text =>
-            text.includes(String(silent)),
+            text.includes(String(before)),
           ),
-        ],
-        ['Auto Forwarded', [String(silent)], []],
-      );
-    } finally {
-      for (const stop of stops) {
+        ]);
+      } finally {
         await stop();
+        await endListeners(containerId);
       }
     }
+    deepStrictEqual(seen, [
+      ['silent', ['before'], []],
+      ['ignore', [], []],
+    ]);
+  });
+
+  it('F-1102 AC-6 (other-user): who may read whose processes decides what is forwarded: a root listener with no port on its command line is not forwarded for a remote user that is not root, a listener of another user with its port on its command line is not forwarded for root, and a remote user that may trace processes gets both', async () => {
+    const cases: Array<
+      [string, Record<string, unknown>, string, string, boolean]
+    > = [
+      // name, configuration, the user of the listener, the same program as the remote user, whether it is forwarded
+      ['c75-ac6-node-root', {remoteUser: 'node'}, 'root', 'root', false],
+      ['c75-ac6-node-own', {remoteUser: 'node'}, 'node', 'node', true],
+      ['c75-ac6-root-node', {remoteUser: 'root'}, 'node', 'node', false],
+      ['c75-ac6-root-own', {remoteUser: 'root'}, 'root', 'root', true],
+      [
+        'c75-ac6-trace-node',
+        {remoteUser: 'root', capAdd: ['SYS_PTRACE']},
+        'node',
+        'node',
+        true,
+      ],
+    ];
+    const seen: Array<[string, boolean]> = [];
+    for (const [name, configuration, user] of cases) {
+      const {window, containerId} = await plainWindow(name, configuration);
+      // A listener of a terminal first, so that the listeners of the case come after core's first pass.
+      const marker = await freePort();
+      const stopMarker = await listenInTerminal(window, containerId, marker);
+      try {
+        await appearing(window, marker, Date.now());
+        // Port 0 takes a port of the system's choice for a listener of root; the other users' name theirs.
+        const named = await freePort();
+        await execListener(containerId, user, user === 'root' ? 0 : named);
+        await new Promise(resolve => setTimeout(resolve, 20_000));
+        const rows = await portsRows(window);
+        const forwardedOthers = rows.filter(
+          shown => shown.port !== String(marker),
+        );
+        seen.push([name, forwardedOthers.length > 0]);
+      } finally {
+        await stopMarker();
+        await endListeners(containerId);
+      }
+    }
+    deepStrictEqual(
+      seen,
+      cases.map(([name, , , , expected]) => [name, expected]),
+    );
   });
 });
