@@ -260,7 +260,16 @@ describe('F-0301 configuration errors (card containers-50)', function () {
         containers: await devContainersOf(folder),
       },
       {
-        dialogs: [FAILED_SETUP, FAILED_SETUP],
+        dialogs: [
+          {
+            ...FAILED_SETUP,
+            details: `Configuration "${path.join(folder, '.devcontainer', 'a', 'devcontainer.json')}" not valid.`,
+          },
+          {
+            ...FAILED_SETUP,
+            details: `Configuration "${path.join(folder, '.devcontainer', 'a', 'devcontainer.json')}" not valid.`,
+          },
+        ],
         picker: undefined,
         containers: [],
       },
