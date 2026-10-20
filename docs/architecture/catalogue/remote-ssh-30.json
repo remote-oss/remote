@@ -771,7 +771,7 @@
   "issue": 77,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Login shells and profile scripts on the host",
   "epic": "E27",
   "acCount": 32,
