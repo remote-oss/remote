@@ -5,6 +5,8 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   inWindow,
@@ -12,6 +14,7 @@ import {
   reloadWindow,
   reopenInContainer,
   reopenStarted,
+  startInWindow,
   runLabelArguments,
   connectedToContainer,
   variable,
@@ -1152,6 +1155,226 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
           status: 'running',
         },
       );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-17 (r17): an anonymous volume mount is backed by a new empty volume after a rebuild, and the old one stays on the host unreferenced', async () => {
+    const folder = devContainerFolder('c54-anonymous', {
+      name: 'Anonymous',
+      mounts: ['type=volume,target=/c54anon'],
+    });
+    const volumes: string[] = [];
+    try {
+      const name = await reopened(folder);
+      const first = await containerOf(folder);
+      await execFileAsync('docker', [
+        'exec',
+        first,
+        'sh',
+        '-c',
+        'echo kept > /c54anon/marker',
+      ]);
+      async function volumeOf(containerId: string): Promise<string> {
+        const {stdout} = await execFileAsync('docker', [
+          'inspect',
+          '-f',
+          '{{range .Mounts}}{{if eq .Destination "/c54anon"}}{{.Name}}{{end}}{{end}}',
+          containerId,
+        ]);
+        return stdout.trim();
+      }
+      const oldVolume = await volumeOf(first);
+      volumes.push(oldVolume);
+      await reopenInContainer(
+        name,
+        DIALOG_MILLISECONDS,
+        'remote-containers.rebuildContainer',
+      );
+      const second = await containerOf(folder);
+      const newVolume = await volumeOf(second);
+      volumes.push(newVolume);
+      const {stdout: marker} = await execFileAsync('docker', [
+        'exec',
+        second,
+        'sh',
+        '-c',
+        'cat /c54anon/marker 2>/dev/null || echo none',
+      ]);
+      const {stdout: listed} = await execFileAsync('docker', [
+        'volume',
+        'ls',
+        '--quiet',
+        '--filter',
+        `name=${oldVolume}`,
+        '--filter',
+        'dangling=true',
+      ]);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          replaced: first !== second,
+          newVolume: newVolume !== '' && newVolume !== oldVolume,
+          marker: marker.trim(),
+          oldDangling: listed.trim() === oldVolume,
+        },
+        {replaced: true, newVolume: true, marker: 'none', oldDangling: true},
+      );
+    } finally {
+      await removeContainers(folder);
+      for (const volume of volumes.filter(each => each !== '')) {
+        await execFileAsync('docker', ['volume', 'rm', '--force', volume]);
+      }
+    }
+  });
+
+  it('F-0405 AC-10 (r10): a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, and skips postStartCommand', async () => {
+    const folder = devContainerFolder('c54-rebuild-poststart', {
+      name: 'Rebuild Poststart',
+      postCreateCommand: 'exit 7',
+      postStartCommand: 'touch /tmp/c54-poststart',
+    });
+    try {
+      const name = await reopened(folder);
+      const mark = containersLog().length;
+      await reopenInContainer(
+        name,
+        DIALOG_MILLISECONDS,
+        'remote-containers.rebuildContainer',
+      );
+      await new Promise(resolve => setTimeout(resolve, 15_000));
+      const containerId = await containerOf(folder);
+      const {stdout: started} = await execFileAsync('docker', [
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        'test -e /tmp/c54-poststart && echo yes || echo no',
+      ]);
+      const lines = containersLogSince(mark).filter(line =>
+        line.includes('lifecycle'),
+      );
+      const centre = await notificationCentre(name);
+      const dialog = await dialogOf(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          started: started.trim(),
+          lines,
+          centre,
+          dialog,
+        },
+        {
+          started: 'no',
+          lines: [
+            'the lifecycle commands failed: lifecycleFailed (postCreateCommand)',
+          ],
+          centre: [],
+          dialog: undefined,
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0501 AC-2 (r2): a configuration with no name gives the plain suffix in the title and the indicator', async () => {
+    const folder = devContainerFolder('c54-no-name', {name: undefined});
+    try {
+      const name = await reopened(folder);
+      const title = await windowTitle(name);
+      const indicator = (await statusItem(name, 'status.host')).text;
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          title: title.startsWith('[c54-no-name [Dev Container]]'),
+          indicator,
+        },
+        {title: true, indicator: 'Dev Container'},
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0504 AC-15 (r15): the host indicator never reads Connected while the window connects to a container', async () => {
+    const folder = devContainerFolder('c54-indicator', {name: 'Indicator'});
+    try {
+      const name = await openFolderWindow(folder);
+      const seen = new Set<string>();
+      const sampling = {done: false};
+      const sampler = (async () => {
+        while (!sampling.done) {
+          try {
+            seen.add((await statusItem(name, 'status.host')).text);
+          } catch {
+            // The window is reloading, or the item is not drawn yet.
+          }
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      })();
+      await reopenInContainer(name);
+      sampling.done = true;
+      await sampler;
+      await closeWindow(name);
+      deepStrictEqual(
+        [
+          [...seen].some(text =>
+            /^\s*(\$\(remote\) )?Connected\s*$/.test(text),
+          ),
+          seen.size > 1,
+        ],
+        [false, true],
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0401 AC-11 (r11): Reopen in Container on a folder whose container is stopped starts the same container', async () => {
+    const folder = devContainerFolder('c54-stopped-reopen', {
+      name: 'Stopped Reopen',
+    });
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      const name = await reopened(folder);
+      const containers = await devContainersOf(folder);
+      const {status} = await inspectOf(containerId);
+      const title = await windowTitle(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          containers: containers.map(shortId =>
+            containerId.startsWith(shortId),
+          ),
+          status,
+          title: title.startsWith(
+            '[c54-stopped-reopen [Dev Container: Stopped Reopen]]',
+          ),
+        },
+        {containers: [true], status: 'running', title: true},
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0401 AC-20 (r20): two Reopen in Container commands in immediate succession make one container', async () => {
+    const folder = devContainerFolder('c54-twice', {name: 'Twice'});
+    try {
+      const name = await openFolderWindow(folder);
+      await startInWindow(name, 'remote-containers.reopenInContainer');
+      try {
+        await startInWindow(name, 'remote-containers.reopenInContainer');
+      } catch {
+        // The first command's reload may have ended the agent before it could accept the second.
+      }
+      await connectedToContainer(name, DIALOG_MILLISECONDS);
+      const containers = await devContainersOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(containers.length, 1);
     } finally {
       await removeContainers(folder);
     }
