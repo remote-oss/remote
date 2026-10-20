@@ -3,6 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {
   devContainersOf,
+  inWindow,
   listenIn,
   reopenInContainer,
 } from '../windows/harness.ts';
@@ -10,6 +11,7 @@ import {
   dialogOf,
   notificationCentre,
   portRowActions,
+  statusItem,
 } from '../windows/renderer.ts';
 import {
   echoes,
@@ -87,15 +89,10 @@ describe('the appPort rows (card containers-74)', function () {
   });
 
   it('F-1101 AC-6 (app-port-attribute): an attribute for the port, added with a rebuild, gives the row no label, and its origin is Statically Forwarded', async () => {
-    // Core shows its Ports view once a tunnel is open, so the window also declares a forward.
-    const [port, view] = [await freePort(), await freePort()];
-    const window = await connectedWith('c74-ac6', {
-      appPort: [port],
-      forwardPorts: [view],
-    });
+    const port = await freePort();
+    const window = await connectedWith('c74-ac6', {appPort: [port]});
     editConfiguration(folderOf('c74-ac6'), {
       appPort: [port],
-      forwardPorts: [view],
       portsAttributes: {[String(port)]: {label: 'web'}},
     });
     await reopenInContainer(
@@ -104,12 +101,10 @@ describe('the appPort rows (card containers-74)', function () {
       'remote-containers.rebuildContainer',
     );
     await showPorts(window);
-    const rows = await rowsWhen(window, shown => shown.length > 1);
+    const rows = await rowsWhen(window, shown => shown.length > 0);
     deepStrictEqual(
-      rows
-        .filter(shown => shown.origin === 'Statically Forwarded')
-        .map(shown => shown.port),
-      [String(port)],
+      rows.map(shown => [shown.port, shown.origin]),
+      [[String(port), 'Statically Forwarded']],
     );
   });
 
@@ -133,64 +128,67 @@ describe('the appPort rows (card containers-74)', function () {
     );
   });
 
-  it('F-1101 AC-24 (app-port-actions): a Statically Forwarded row offers copying the address, opening in the browser and previewing, and the menu adds only Forward a Port', async () => {
-    const [port, view] = [await freePort(), await freePort()];
-    const window = await connectedWith('c74-ac24', {
-      appPort: [port],
-      forwardPorts: [view],
-    });
+  it('F-1101 AC-24 (app-port-actions): a Statically Forwarded row offers copying the address, opening in the browser and previewing, and the menu adds only Forward a Port, with or without a process listening', async () => {
+    const port = await freePort();
+    const window = await connectedWith('c74-ac24', {appPort: [port]});
     await showPorts(window);
-    await rowsWhen(window, shown => shown.length > 1);
-    const actions = await portRowActions(window, String(port));
-    const offered = [
-      'Copy Local Address',
-      'Open in Browser',
-      'Preview in Editor',
-    ];
-    deepStrictEqual(
-      [actions.inline, actions.menu],
-      [
-        offered,
-        [
-          'Open in Browser',
-          'Preview in Editor',
-          'Copy Local Address',
-          'Forward a Port',
-        ],
+    await rowsWhen(window, shown => shown.length > 0);
+    const without = await portRowActions(window, String(port));
+    const [containerId = ''] = await devContainersOf(folderOf('c74-ac24'));
+    const stop = await listenIn(containerId, port);
+    const listening = await portRowActions(window, String(port));
+    await stop();
+    const offered = {
+      inline: ['Copy Local Address', 'Open in Browser', 'Preview in Editor'],
+      menu: [
+        'Open in Browser',
+        'Preview in Editor',
+        'Copy Local Address',
+        'Forward a Port',
       ],
-    );
+    };
+    deepStrictEqual([without, listening], [offered, offered]);
   });
 
-  it('F-1101 AC-40 (app-port-readout): a host:container row shows the tooltip of its container port at the host port on [::1], and no Auto Forwarded row comes for it', async () => {
-    const [number, host, container, view] = [
-      await freePort(),
+  it('F-1101 AC-40 (ruling-1334): a host:container row shows the tooltip of its container port at the host port on [::1] and no running process, no Auto Forwarded row comes for it, and the status item names the ports in the order of appPort', async () => {
+    const [number, host, container] = [
       await freePort(),
       await freePort(),
       await freePort(),
     ];
     const window = await connectedWith('c74-ac40', {
       appPort: [number, `${String(host)}:${String(container)}`],
-      forwardPorts: [view],
     });
     const [containerId = ''] = await devContainersOf(folderOf('c74-ac40'));
-    const stop = await listenIn(containerId, container);
+    // Core's detection takes the processes that a terminal of the window started, so the listener starts in one.
+    await inWindow(window, 'workbench.action.terminal.new');
+    await inWindow(window, 'workbench.action.terminal.sendSequence', {
+      text: `nc -lk -p ${String(container)} -e cat &\n`,
+    });
     await showPorts(window);
-    const rows = await rowsWhen(window, shown => shown.length > 2);
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    await stop();
+    // Detection shows a new listener within seconds; the rows are read after it had its time.
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+    const rows = await rowsWhen(window, shown => shown.length > 1);
+    await execFileAsync('docker', [
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `pkill -f '[n]c -lk -p ${String(container)} ' || true`,
+    ]);
     const shown = rows.find(each => each.port === String(container));
     deepStrictEqual(
       {
         tooltip: shown?.tooltip,
+        process: shown?.runningProcess,
         origins: rows.map(each => each.origin).sort(),
+        status: (await statusItem(window, 'status.forwardedPorts')).ariaLabel,
       },
       {
+        process: '',
         tooltip: `Remote port 0.0.0.0:${String(container)} forwarded to local address [::1]:${String(host)}.`,
-        origins: [
-          'Dev Containers',
-          'Statically Forwarded',
-          'Statically Forwarded',
-        ],
+        origins: ['Statically Forwarded', 'Statically Forwarded'],
+        status: `Forwarded Ports: ${String(number)}, ${String(container)}`,
       },
     );
   });

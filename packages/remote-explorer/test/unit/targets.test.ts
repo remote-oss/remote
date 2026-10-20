@@ -243,7 +243,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     );
   });
 
-  it('F-5902.5.order: a full build asks the pull and the hosts in one turn, before either answers, and changes once both did', async () => {
+  it('F-5902.AC-30: F-5902.5.order: a full build asks the pull first and the hosts in one turn, before either answers, and changes once both did', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();
     const asked = [...scenario.calls.order];

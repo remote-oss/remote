@@ -688,34 +688,34 @@ F-0416.AC-49	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-50	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-51	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-52	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0417.AC-1	todo	
-F-0417.AC-2	todo	
-F-0417.AC-3	todo	
-F-0417.AC-4	todo	
-F-0417.AC-5	todo	
-F-0417.AC-6	todo	
-F-0417.AC-7	todo	
-F-0417.AC-8	todo	
-F-0417.AC-9	todo	
+F-0417.AC-1	acceptance	
+F-0417.AC-2	acceptance	
+F-0417.AC-3	acceptance	
+F-0417.AC-4	deferred	containers release 1: later (Compose)
+F-0417.AC-5	acceptance	
+F-0417.AC-6	acceptance	
+F-0417.AC-7	acceptance	
+F-0417.AC-8	acceptance	
+F-0417.AC-9	deferred	containers release 1: later (Compose)
 F-0417.AC-10	deferred	containers release 1: later (Compose)
 F-0417.AC-11	deferred	containers release 1: later (Compose)
-F-0417.AC-12	todo	
+F-0417.AC-12	acceptance	
 F-0417.AC-13	deferred	containers release 1: later (Compose)
 F-0417.AC-14	deferred	containers release 1: later (attach)
 F-0417.AC-15	deferred	containers release 1: later (Compose)
 F-0417.AC-16	deferred	containers release 1: later (Compose)
-F-0417.AC-17	todo	
+F-0417.AC-17	acceptance	
 F-0417.AC-18	deferred	containers release 1: later (Compose)
-F-0417.AC-19	todo	
+F-0417.AC-19	acceptance	
 F-0417.AC-20	deferred	containers release 1: later (multi-root)
-F-0417.AC-21	todo	
-F-0417.AC-22	todo	
+F-0417.AC-21	acceptance	
+F-0417.AC-22	acceptance	
 F-0417.AC-23	todo	
-F-0417.AC-24	todo	
-F-0417.AC-25	todo	
-F-0417.AC-26	todo	
-F-0417.AC-27	todo	
-F-0417.AC-28	todo	
+F-0417.AC-24	acceptance	
+F-0417.AC-25	acceptance	
+F-0417.AC-26	acceptance	
+F-0417.AC-27	acceptance	
+F-0417.AC-28	acceptance	
 F-0417.AC-29	deferred	containers release 1: later (remote engines)
 F-0417.AC-30	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0417.AC-31	deferred	containers release 1: later (remote engines)
@@ -733,31 +733,31 @@ F-0417.AC-42	deferred	containers release 1: later (Compose)
 F-0417.AC-43	todo	
 F-0417.AC-44	deferred	containers release 1: later (attach)
 F-0417.AC-45	todo	
-F-0417.AC-46	todo	
+F-0417.AC-46	acceptance	
 F-0417.AC-47	deferred	containers release 1: later (Compose)
 F-0417.AC-48	deferred	containers release 1: later (Compose)
 F-0417.AC-49	deferred	containers release 1: later (Compose)
-F-0417.AC-50	todo	
-F-0417.AC-51	todo	
+F-0417.AC-50	deferred	containers release 1: later (Compose)
+F-0417.AC-51	acceptance	
 F-0417.AC-52	deferred	containers release 1: later (Compose)
 F-0417.AC-53	deferred	containers release 1: later (Compose)
 F-0417.AC-54	deferred	containers release 1: later (Reopen Folder Locally)
 F-0417.AC-55	deferred	containers release 1: later (Switch Container, F-0407)
-F-0417.AC-56	todo	
-F-0417.AC-57	todo	
-F-0417.AC-58	todo	
+F-0417.AC-56	acceptance	
+F-0417.AC-57	acceptance	
+F-0417.AC-58	acceptance	
 F-0417.AC-59	deferred	containers release 1: later (Compose)
-F-0417.AC-60	todo	
-F-0417.AC-61	todo	
-F-0417.AC-62	todo	
+F-0417.AC-60	acceptance	
+F-0417.AC-61	acceptance	
+F-0417.AC-62	deferred	containers release 1: later (Reopen Folder Locally)
 F-0417.AC-63	deferred	containers release 1: later (Compose)
 F-0417.AC-64	deferred	containers release 1: later (Compose)
-F-0417.AC-65	todo	
-F-0417.AC-66	todo	
-F-0417.AC-67	todo	
-F-0417.AC-68	todo	
-F-0417.AC-69	todo	
-F-0417.AC-70	todo	
+F-0417.AC-65	acceptance	
+F-0417.AC-66	acceptance	
+F-0417.AC-67	acceptance	
+F-0417.AC-68	acceptance	
+F-0417.AC-69	acceptance	
+F-0417.AC-70	acceptance	
 F-0417.AC-71	deferred	containers release 1: later (attach)
 F-0419.AC-1	acceptance	
 F-0419.AC-2	acceptance	
@@ -1333,7 +1333,7 @@ F-1101.AC-2	acceptance
 F-1101.AC-3	todo	
 F-1101.AC-4	deferred	containers release 1: later (Compose)
 F-1101.AC-5	acceptance	
-F-1101.AC-6	todo	
+F-1101.AC-6	acceptance	
 F-1101.AC-7	todo	
 F-1101.AC-8	todo	
 F-1101.AC-9	todo	
@@ -1351,7 +1351,7 @@ F-1101.AC-20	acceptance
 F-1101.AC-21	todo	
 F-1101.AC-22	todo	
 F-1101.AC-23	deferred	containers release 1: later (remote engines)
-F-1101.AC-24	todo	
+F-1101.AC-24	acceptance	
 F-1101.AC-25	acceptance	
 F-1101.AC-26	acceptance	
 F-1101.AC-27	deferred	containers release 1: later (Compose)
@@ -1367,7 +1367,7 @@ F-1101.AC-36	acceptance
 F-1101.AC-37	acceptance	
 F-1101.AC-38	acceptance	
 F-1101.AC-39	todo	
-F-1101.AC-40	todo	
+F-1101.AC-40	acceptance	
 F-1102.AC-1	acceptance	
 F-1102.AC-2	acceptance	
 F-1102.AC-3	core	core: the auto-forward notification, its buttons and its one entry (F-1102 BR-9, BR-10; the window has core's Ports features through the key set in register-connector.test.ts 'F-1102 duty 2')

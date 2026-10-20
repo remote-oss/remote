@@ -155,6 +155,15 @@
       "path": "tests/acceptance/explorer-alone"
     },
     {
+      "path": "tests/acceptance/explorer-trust"
+    },
+    {
+      "path": "tests/acceptance/explorer-home"
+    },
+    {
+      "path": "tests/acceptance/explorer-rows"
+    },
+    {
       "path": "tests/acceptance/explorer-no-proposals"
     },
     {
@@ -192,6 +201,9 @@
     },
     {
       "path": "tests/acceptance/containers-ports"
+    },
+    {
+      "path": "tests/acceptance/containers-shutdown"
     },
     {
       "path": "tests/acceptance/web-ui"

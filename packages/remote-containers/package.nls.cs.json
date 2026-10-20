@@ -4,6 +4,7 @@
   "configuration.title": "Dev Containers",
   "commands.Reopenincontainer.title": "Reopen in Container",
   "commands.Openfolder.title": "Open Folder in Container...",
+  "commands.Createdevcontainerfile.title": "Add Dev Container Configuration Files...",
   "commands.Rebuildcontainer.title": "Rebuild Container",
   "commands.Rebuildcontainerwithoutcache.title": "Rebuild Container Without Cache",
   "commands.Showreopenincontainernotificationreset.title": "Reset Don't Show Reopen Notification",
@@ -33,5 +34,7 @@
   "viewsWelcome.targetsContainers.noContainersWithFolder": "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
   "viewsWelcome.targetsContainers.noContainersWithoutFolder": "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
   "commands.explorerDetailsRefresh.title": "Refresh",
-  "views.detailsContainers.name": "Details (Containers)"
+  "views.detailsContainers.name": "Details (Containers)",
+  "setting.DefaultFeatures.description": "Configures the list of features to always install while creating a container.",
+  "setting.Lockfile.description": "Controls whether a devcontainer-lock.json should be written."
 }

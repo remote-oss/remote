@@ -78,9 +78,10 @@ export interface AgentEvent {
   /** The prefix a `commands` event was asked for, and the registered command ids that start with it, sorted. */
   prefix?: string;
   commandIds?: string[];
-  /** The extension an `extension` event was asked about, and whether the window's editor has it. */
+  /** The extension an `extension` event was asked about, whether the window's editor has it, and whether it is active there. */
   extensionId?: string;
   present?: boolean;
+  extensionActive?: boolean;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
   /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
@@ -929,15 +930,27 @@ export async function extensionPresent(
   name: string,
   extensionId: string,
 ): Promise<boolean> {
-  return (
-    (
-      await reported(
-        name,
-        'extension',
-        'acceptance.agent.extensionPresent',
-        extensionId,
-      )
-    )?.present === true
+  return (await extensionReport(name, extensionId))?.present === true;
+}
+
+/** Whether the extension `extensionId` has activated in window `name`'s local extension host. */
+export async function extensionActive(
+  name: string,
+  extensionId: string,
+): Promise<boolean> {
+  return (await extensionReport(name, extensionId))?.extensionActive === true;
+}
+
+/** What window `name` reports of the extension `extensionId`: whether its editor has it, and whether it is active. */
+function extensionReport(
+  name: string,
+  extensionId: string,
+): Promise<AgentEvent | undefined> {
+  return reported(
+    name,
+    'extension',
+    'acceptance.agent.extensionPresent',
+    extensionId,
   );
 }
 
@@ -1182,22 +1195,18 @@ export function kill(name: string): Promise<void> {
   return inWindow(name, 'opensshremotes.cleanLocalServer');
 }
 
-/** The run's user settings file. */
-/** The run's user settings file, the one the editor reads. */
+/** The launch's user settings file, the one the editor reads. */
 export function userSettingsFile(): string {
-  return path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'user-data/User/settings.json',
-  );
+  return path.join(variable('HARNESS_USER_DATA'), 'User/settings.json');
 }
 
-/** The bytes of the run's user settings file, or nothing when it has none. */
+/** The bytes of the launch's user settings file, or nothing when it has none. */
 export function readUserSettings(): string | undefined {
   const file = userSettingsFile();
   return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
 }
 
-/** Puts the run's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
+/** Puts the launch's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
 export function restoreUserSettings(bytes: string | undefined): void {
   if (bytes === undefined) {
     rmSync(userSettingsFile(), {force: true});
@@ -1206,7 +1215,7 @@ export function restoreUserSettings(bytes: string | undefined): void {
   }
 }
 
-/** Rewrites the run's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+/** Rewrites the launch's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
 ): Promise<void> {

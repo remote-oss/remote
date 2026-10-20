@@ -9,9 +9,9 @@ import {
   devContainerFolder,
   devContainersOf,
   editorProduct,
-  inWindow,
   reloadingCommand,
   reopenInContainer,
+  startInWindow,
   waitFor,
 } from '../windows/harness.ts';
 import {
@@ -255,9 +255,7 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
     existing: Array<string | undefined>;
   }> {
     const name = await openFolderWindow(folder);
-    void inWindow(name, 'remote-containers.reopenInContainer').catch(
-      () => undefined,
-    );
+    await startInWindow(name, 'remote-containers.reopenInContainer');
     const shown = await waitForDialog(name, 300_000);
     const containers = await devContainersOf(folder);
     await answerDialog(name, 'Retry');

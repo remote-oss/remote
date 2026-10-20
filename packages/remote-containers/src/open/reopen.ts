@@ -6,7 +6,7 @@
 
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {openPathAllowed} from './open-gate.ts';
-import {commandBeforeReload} from './pre-reload.ts';
+import {chooseOrAuthor} from './author-first.ts';
 import type {RebuildOptions} from './rebuild-intent.ts';
 import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
@@ -66,17 +66,12 @@ export function reopenHandlersOf(
       ports.settings.dockerPath(),
       folder,
     ) as Extract<Executable, {kind: 'spawn'}>;
-    const {choice, progress} = await commandBeforeReload(
+    const {choice, progress} = await chooseOrAuthor(
       ports,
       (base, dialogs) => ports.engine.firstCheck(base, dialogs),
-      folder,
-      executable.file,
+      {title, folder, dockerPath: executable.file},
     );
     try {
-      if (choice.kind === 'noConfiguration') {
-        logger.info(`${title} found no configuration in ${folder}`);
-        return;
-      }
       if (choice.kind !== 'chosen') {
         return;
       }

@@ -4,9 +4,20 @@
  */
 
 import {appendFileSync} from 'node:fs';
-import {readFile} from 'node:fs/promises';
+import {
+  access,
+  constants as fileConstants,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
@@ -14,7 +25,7 @@ import {
   resolverEditorOf,
 } from 'lib-authority';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
-import {nodeTimer} from 'lib-helper';
+import {acquire, nodeClientEnvironment, nodeTimer} from 'lib-helper';
 import {identifierHost} from 'lib-identifiers';
 import type {Logger, RevealableChannel} from 'lib-log';
 import {profileOf} from 'lib-product';
@@ -23,6 +34,15 @@ import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
+import {downloadTextOver} from './authoring/catalogue-download.ts';
+import {
+  addConfiguration,
+  createDevContainerFile,
+} from './authoring/create-file.ts';
+import type {PickRow} from './authoring/template-pick.ts';
+import type {WizardPorts} from './authoring/wizard-stages.ts';
+import {wizardRunnerOf} from './authoring/wizard.ts';
+import {writeTemplate} from './authoring/write.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
 import {discoverConfigurations} from './config/discovery.ts';
 import {
@@ -62,6 +82,11 @@ import {
   resetReopenNotification,
 } from './open/reopen-notification.ts';
 import {openFolderInContainer} from './open/open-folder.ts';
+import {
+  SHUTDOWN_CLIENT_WAITS,
+  shutdownHelperRequest,
+} from './shutdown/helper-request.ts';
+import {createWindowLease} from './shutdown/window-lease.ts';
 import {forwarderOf, type TunnelHost} from './ports/forwarder.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import type {ReopenPorts} from './open/reopen-ports.ts';
@@ -371,6 +396,8 @@ export async function activate(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
   let logChannel: RevealableChannel | undefined;
+  /** Tells the shutdown helper that this window leaves its container; the connector gives it once it exists. */
+  const windowShutdown = {leave: (): Promise<void> => Promise.resolve()};
   const channelPort = containersChannelPortFor(
     process.env,
     vscode.window,
@@ -408,6 +435,27 @@ export async function activate(
       environment,
       logger,
     );
+  }
+  /** Offers to reopen the window's folder in its container, over what the window holds now. */
+  function offerReopenFor(logger: Logger): Promise<void> {
+    return offerReopen({
+      window: {
+        remote: vscode.env.remoteName !== undefined,
+        workspaceFile: vscode.workspace.workspaceFile !== undefined,
+        folders: windowFolders(),
+      },
+      global: context.globalState,
+      workspace: context.workspaceState,
+      hasConfiguration: async folder =>
+        (await discoverConfigurations(folder, configFiles, collate)).length > 0,
+      show: (message, buttons) =>
+        vscode.window.showInformationMessage(message, ...buttons),
+      reopen: () =>
+        vscode.commands.executeCommand(commands.reopenInContainer.id),
+      now: Date.now,
+      translate,
+      logger,
+    });
   }
   const result = await activateContainers({
     table: {commands, standDown},
@@ -491,12 +539,159 @@ export async function activate(
             },
             intents: context.globalState,
             now: Date.now,
+            shutdown: {leave: () => windowShutdown.leave()},
             logger: served.logger,
           },
           {buildNoCache},
         );
       }
+      const bridge = bridgeFor(process.env, served.logger);
+      const wizardPorts: WizardPorts = {
+        catalogue: {
+          environment: process.env,
+          download: downloadTextOver((address, init) => fetch(address, init)),
+          setTimer: (milliseconds, callback) => {
+            const timer = setTimeout(callback, milliseconds);
+            return () => {
+              clearTimeout(timer);
+            };
+          },
+        },
+        dialogs: {
+          showModalError: message =>
+            vscode.window.showErrorMessage(message, {modal: true}),
+        },
+        pick: {
+          createQuickPick: () =>
+            vscode.window.createQuickPick<PickRow & vscode.QuickPickItem>(),
+          verifiedIcon: new vscode.ThemeIcon('verified-filled'),
+          openExternal: address =>
+            vscode.env.openExternal(vscode.Uri.parse(address)),
+          templateMetadata: (templateId, cancellation) =>
+            bridge.templateMetadata(templateId, cancellation),
+          translate,
+        },
+        write: (request, cancellation) =>
+          writeTemplate(
+            request,
+            {
+              applyTemplate: (applying, onLine, cancelling) =>
+                bridge.applyTemplate(applying, onLine, cancelling),
+              files: {
+                makeScratchFolder: async () => {
+                  await mkdir(context.globalStorageUri.fsPath, {
+                    recursive: true,
+                  });
+                  return mkdtemp(
+                    path.join(context.globalStorageUri.fsPath, 'template-'),
+                  );
+                },
+                kindOf: async file => {
+                  const found = await stat(file).catch(() => undefined);
+                  if (found === undefined) {
+                    return 'missing';
+                  }
+                  return found.isDirectory() ? 'folder' : 'file';
+                },
+                read: file => readFile(file),
+                write: (file, bytes) => writeFile(file, bytes),
+                makeFolder: async folder => {
+                  await mkdir(folder, {recursive: true});
+                },
+                removeFile: file => rm(file, {force: true}),
+                removeFolder: folder =>
+                  rm(folder, {recursive: true, force: true}),
+                creationProblem: async folder => {
+                  let nearest = folder;
+                  while (!(await stat(nearest).catch(() => undefined))) {
+                    nearest = path.dirname(nearest);
+                  }
+                  return access(nearest, fileConstants.W_OK).then(
+                    () => undefined,
+                    (caught: unknown) =>
+                      caught instanceof Error ? caught.message : String(caught),
+                  );
+                },
+              },
+              dialogs: {
+                show: (severity, message, detail, buttons) =>
+                  Promise.resolve(
+                    severity === 'error'
+                      ? vscode.window.showErrorMessage(
+                          message,
+                          {modal: true, detail},
+                          ...buttons,
+                        )
+                      : vscode.window.showWarningMessage(
+                          message,
+                          {modal: true, detail},
+                          ...buttons,
+                        ),
+                  ),
+                revealLog: () => {
+                  logChannel?.show(true);
+                },
+              },
+              hasUnsavedChanges: file =>
+                vscode.workspace.textDocuments.some(
+                  document => document.isDirty && document.uri.fsPath === file,
+                ),
+              withProgress: (title, work) =>
+                Promise.resolve(
+                  vscode.window.withProgress(
+                    {
+                      location: vscode.ProgressLocation.Notification,
+                      title,
+                      cancellable: false,
+                    },
+                    work,
+                  ),
+                ),
+              logLine: line => {
+                served.logger.info(line);
+              },
+              translate,
+            },
+            cancellation,
+          ),
+        files: {
+          list: async folder =>
+            (await readdir(folder, {withFileTypes: true})).map(entry => ({
+              name: entry.name,
+              kind: entry.isFile()
+                ? 'file'
+                : entry.isDirectory()
+                  ? 'folder'
+                  : 'other',
+            })),
+          read: file => readFile(file),
+          write: (file, bytes) => writeFile(file, bytes),
+        },
+        slotFolder: slot =>
+          path.join(context.globalStorageUri.fsPath, 'configs', slot),
+        record: line => {
+          served.logger.info(line);
+        },
+        translate,
+      };
+      const authoring = {execute: wizardRunnerOf(wizardPorts)};
+      const continuation = {
+        wizard: authoring.execute,
+        openPreview: (file: string) =>
+          vscode.window.showTextDocument(vscode.Uri.file(file), {
+            preview: true,
+          }),
+        offerReopen: () => {
+          offerReopenFor(served.logger).catch((caught: unknown) => {
+            served.logger.error(
+              `the reopen notification failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+            );
+          });
+        },
+        logger: served.logger,
+      };
       const reopenPorts: ReopenPorts = {
+        authoring,
         gate: {
           missing: served.missing,
           setupAgain: () => served.setupAgain(),
@@ -523,8 +718,6 @@ export async function activate(
               createQuickPick: () => vscode.window.createQuickPick(),
               showWarningMessage: (message, options, ...items) =>
                 vscode.window.showWarningMessage(message, options, ...items),
-              showInformationMessage: message =>
-                vscode.window.showInformationMessage(message),
               showTextDocument: (file, options) =>
                 vscode.window.showTextDocument(vscode.Uri.file(file), options),
               iconOf: name => new vscode.ThemeIcon(name),
@@ -545,6 +738,7 @@ export async function activate(
             served.logger,
           ),
           compare: collate,
+          useTemplate: folder => addConfiguration(continuation, folder),
           translate,
         },
         settings: {
@@ -554,6 +748,13 @@ export async function activate(
             vscode.workspace
               .getConfiguration()
               .inspect(settings.experimentalMountGitWorktreeCommonDir.id)
+              ?.globalValue,
+          defaultFeatures: () =>
+            vscode.workspace
+              .getConfiguration()
+              .inspect(settings.defaultFeatures.id)?.globalValue,
+          lockfile: () =>
+            vscode.workspace.getConfiguration().inspect(settings.lockfile.id)
               ?.globalValue,
         },
         engine: {
@@ -586,12 +787,13 @@ export async function activate(
             served.preflight.setTimer(milliseconds, callback),
           translate,
         },
-        bridge: bridgeFor(process.env, served.logger),
+        bridge,
         opener: {
           executeCommand: (command, ...parameters) =>
             vscode.commands.executeCommand(command, ...parameters),
           addressOf: parts => vscode.Uri.from(parts),
         },
+        shutdown: {leave: () => windowShutdown.leave()},
         logger: served.logger,
       };
       const reopenHandler = reopenHandlersOf(reopenPorts);
@@ -619,6 +821,23 @@ export async function activate(
       return {
         reopenInContainer: {execute: reopenHandler()},
         openFolder: {execute: openFolder},
+        createDevContainerFile: {
+          execute: createDevContainerFile({
+            ...continuation,
+            window: {folders: windowFolders},
+            showModal: (message, buttons) =>
+              vscode.window.showWarningMessage(
+                message,
+                {modal: true},
+                ...buttons,
+              ),
+            openFolder: () =>
+              vscode.commands.executeCommand(
+                'workbench.action.files.openFolder',
+              ),
+            translate,
+          }),
+        },
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
         },
@@ -689,7 +908,26 @@ export async function activate(
         applicationName: profile.applicationName,
       },
     );
+    const shutdownHelper = nodeClientEnvironment(
+      process.execPath,
+      SHUTDOWN_CLIENT_WAITS,
+    );
     const connector = containerConnectorOf({
+      shutdown: createWindowLease({
+        acquire: () =>
+          acquire(
+            shutdownHelper,
+            shutdownHelperRequest(
+              {
+                extensionFolder: context.extensionUri.fsPath,
+                storageFolder: context.globalStorageUri.fsPath,
+              },
+              new AbortController().signal,
+            ),
+          ),
+        logger,
+      }),
+      newConnectionId: randomUUID,
       engineFor: file => served.preflight.engineFor(file),
       cliFor: environment => bridgeFor(environment, logger),
       lifecycleFor: (engine, bridge, presenter) =>
@@ -734,6 +972,9 @@ export async function activate(
           mountGitWorktreeCommonDir: configuration.inspect(
             settings.experimentalMountGitWorktreeCommonDir.id,
           )?.globalValue,
+          defaultFeatures: configuration.inspect(settings.defaultFeatures.id)
+            ?.globalValue,
+          lockfile: configuration.inspect(settings.lockfile.id)?.globalValue,
           defaultExtensions: configuration.inspect(
             settings.defaultExtensions.id,
           )?.globalValue,
@@ -803,29 +1044,10 @@ export async function activate(
         logChannel?.show(true);
       },
     });
+    windowShutdown.leave = () => connector.leaveShutdown();
+    connector.announceShutdown(vscode.env.remoteAuthority);
     if (served.missing.length === 0) {
-      offerReopen({
-        window: {
-          remote: vscode.env.remoteName !== undefined,
-          workspaceFile: vscode.workspace.workspaceFile !== undefined,
-          folders: (vscode.workspace.workspaceFolders ?? []).map(folder => ({
-            scheme: folder.uri.scheme,
-            fsPath: folder.uri.fsPath,
-          })),
-        },
-        global: context.globalState,
-        workspace: context.workspaceState,
-        hasConfiguration: async folder =>
-          (await discoverConfigurations(folder, configFiles, collate)).length >
-          0,
-        show: (message, buttons) =>
-          vscode.window.showInformationMessage(message, ...buttons),
-        reopen: () =>
-          vscode.commands.executeCommand(commands.reopenInContainer.id),
-        now: Date.now,
-        translate,
-        logger,
-      }).catch((caught: unknown) => {
+      offerReopenFor(logger).catch((caught: unknown) => {
         logger.error(
           `the reopen notification failed: ${caught instanceof Error ? caught.message : String(caught)}`,
         );

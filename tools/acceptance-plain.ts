@@ -1,7 +1,7 @@
 /**
  * @fileoverview acceptance-plain: the launches that start the editor plainly, as a user does, with no test run in it.
- * One editor process, one user-data folder and the run's extensions folder, which holds our VSIX files and the window
- * agent's. The agent opens, reloads and closes the windows; a Node mocha run makes the assertions, from the record, the
+ * One editor process, the launch's own user-data folder and the run's extensions folder, which holds our VSIX files and
+ * the window agent's. The agent opens, reloads and closes the windows; a Node mocha run makes the assertions, from the record, the
  * agent's events and the host's state.
  */
 
@@ -28,6 +28,16 @@ export function extensionsFolderOf(runFolder: string, launch?: Launch): string {
     (launch.withExtensions !== undefined || launch.client !== undefined)
     ? path.join(runFolder, `extensions-${launch.label}`)
     : path.join(runFolder, 'extensions');
+}
+
+/**
+ * The user-data folder of a launch: its own for a launch with no runner, so nothing one launch stores reaches the next;
+ * the run's for the runner launches and the installs.
+ */
+export function userDataFolderOf(runFolder: string, launch?: Launch): string {
+  return launch?.kind === 'plain'
+    ? path.join(runFolder, `user-data-${launch.label}`)
+    : path.join(runFolder, 'user-data');
 }
 
 /** An entry of an extensions folder's `extensions.json`, as far as a stand-in's copy reads it. */
@@ -103,9 +113,9 @@ export function writeStandIns(
 }
 
 /**
- * What every run's editor is started with: the run's own user-data, shared-data and extensions folders, the proposed
- * API of the extensions unless a launch turns it off, and workspace trust off unless a plain launch turns it on. A
- * launch's own extensions bring their proposed API.
+ * What every run's editor is started with: the launch's user-data and extensions folders and the run's shared-data
+ * folder, the proposed API of the extensions unless a launch turns it off, and workspace trust off unless a plain
+ * launch turns it on. A launch's own extensions bring their proposed API.
  */
 export function editorArguments(
   runFolder: string,
@@ -115,7 +125,7 @@ export function editorArguments(
   const ownExtensions =
     launch?.kind === 'plain' ? (launch.withExtensions ?? []) : [];
   return [
-    `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+    `--user-data-dir=${userDataFolderOf(runFolder, launch)}`,
     // Core keeps trust decisions and the recent list in a folder of the user's home that every run would share.
     `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
     `--extensions-dir=${extensionsFolderOf(runFolder, launch)}`,
@@ -130,9 +140,9 @@ export function editorArguments(
   ];
 }
 
-/** The file in which the editor, started with a debugging port of 0, writes the port it chose. */
-export function debuggingPortFile(runFolder: string): string {
-  return path.join(runFolder, 'user-data', 'DevToolsActivePort');
+/** The file in which the editor of a launch, started with a debugging port of 0, writes the port it chose. */
+export function debuggingPortFile(runFolder: string, launch: Launch): string {
+  return path.join(userDataFolderOf(runFolder, launch), 'DevToolsActivePort');
 }
 
 /**
@@ -425,14 +435,15 @@ export async function runPlainLaunch(
     ),
     REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
     HARNESS_EDITOR_EXECUTABLE: session.executable,
+    HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
     ...withRunTokens(
       launch.environment,
       session.runFolder,
       session.environment.PATH ?? '',
     ),
   };
-  // A port file an earlier launch left would name a port nobody listens on.
-  rmSync(debuggingPortFile(session.runFolder), {force: true});
+  // A port file an earlier attempt left would name a port nobody listens on.
+  rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
   const editor = steps.start(
     plainEditorOf(session.executable, session.runFolder, launch, environment),
   );

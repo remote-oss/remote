@@ -24,7 +24,10 @@ import {createServer as createHttpsServer} from 'node:https';
 import {createSecureContext} from 'node:tls';
 import type {AddressInfo, Socket} from 'node:net';
 import path from 'node:path';
-import {servedTemplatesFolder} from './acceptance-templates.ts';
+import {
+  servedControlFolder,
+  servedTemplatesFolder,
+} from './acceptance-templates.ts';
 import {type CommandRunner, checked} from './command-runner.ts';
 
 /** The VSCodium server for Alpine the download host serves: the release the client is pinned to, by architecture. */
@@ -262,6 +265,8 @@ export interface DownloadHostOptions {
   tlsLogFile: string;
   /** The folder whose `devcontainer-index.json` the host serves under `/templates/`, once the run has written it. */
   templatesFolder: string;
+  /** The folder whose `devcontainer-control-manifest.json` the host serves under `/control/`, once the run has written it. */
+  controlFolder: string;
 }
 
 /** A running download host. */
@@ -314,11 +319,45 @@ function answerTemplates(
   response.end();
 }
 
+/** The answer under `/control/`: the run's control manifest once it is written (404 before), or a connection dropped. */
+function answerControl(
+  request: IncomingMessage,
+  response: ServerResponse,
+  controlFolder: string,
+): void {
+  const manifestFile = path.join(
+    controlFolder,
+    'devcontainer-control-manifest.json',
+  );
+  const requested = String(request.url).split('/')[2];
+  if (requested === 'unreachable') {
+    request.socket.destroy();
+    return;
+  }
+  if (
+    requested === 'devcontainer-control-manifest.json' &&
+    existsSync(manifestFile)
+  ) {
+    const body = readFileSync(manifestFile);
+    response.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Length': body.length,
+    });
+    response.end(body);
+    return;
+  }
+  response.writeHead(404, {'Content-Length': 0});
+  response.end();
+}
+
 /** The answer to one request, chosen by the first segment of its path. */
 function answer(
   request: IncomingMessage,
   response: ServerResponse,
-  options: Pick<DownloadHostOptions, 'archiveFile' | 'templatesFolder'>,
+  options: Pick<
+    DownloadHostOptions,
+    'archiveFile' | 'templatesFolder' | 'controlFolder'
+  >,
   held: Set<Socket>,
 ): void {
   const {archiveFile} = options;
@@ -326,6 +365,9 @@ function answer(
   switch (String(request.url).split('/')[1]) {
     case 'templates':
       answerTemplates(request, response, options.templatesFolder);
+      return;
+    case 'control':
+      answerControl(request, response, options.controlFolder);
       return;
     case 'ok':
       response.writeHead(200, {'Content-Length': archiveLength});
@@ -552,6 +594,7 @@ export async function startRunDownloads(
     logFile,
     tlsLogFile,
     templatesFolder: servedTemplatesFolder(runFolder),
+    controlFolder: servedControlFolder(runFolder),
   });
   return {
     variables: downloadVariables(host, logFile, tlsLogFile),

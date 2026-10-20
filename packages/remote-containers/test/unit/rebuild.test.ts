@@ -12,6 +12,8 @@ interface Setup {
   reloads: number;
   failure: unknown;
   holdReload: Promise<void>;
+  /** How many times the window told the shutdown helper that it leaves its container. */
+  left: number;
 }
 
 function setup(): Setup {
@@ -22,6 +24,7 @@ function setup(): Setup {
     reloads: 0,
     failure: undefined,
     holdReload: Promise.resolve(),
+    left: 0,
   };
 }
 
@@ -55,6 +58,12 @@ async function reopened(
         },
       },
       now: () => 1000,
+      shutdown: {
+        leave: () => {
+          state.left += 1;
+          return Promise.resolve();
+        },
+      },
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     },
     options,
@@ -103,6 +112,24 @@ describe('Rebuild Container', () => {
           },
         ],
       ]),
+    );
+  });
+
+  it('F-0417 BR-9: Rebuild Container tells the shutdown helper that the window leaves, once, and then reloads; with no reload it tells nothing', async () => {
+    const rebuilt = setup();
+    await reopened(rebuilt);
+    const stuck = setup();
+    stuck.failure = new Error('disk full');
+    await reopened(stuck);
+    deepStrictEqual(
+      [
+        [rebuilt.left, rebuilt.reloads],
+        [stuck.left, stuck.reloads],
+      ],
+      [
+        [1, 1],
+        [0, 0],
+      ],
     );
   });
 

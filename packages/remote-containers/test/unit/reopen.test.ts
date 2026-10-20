@@ -118,10 +118,30 @@ describe('Reopen in Container', () => {
             idLabels: [],
             mountWorkspaceGitRoot: true,
             mountGitWorktreeCommonDir: false,
+            features: {defaultFeatures: {}, lockfile: true},
             mounts: [],
             logLevel: 'info',
           },
         ],
+      ],
+    );
+  });
+
+  it('F-0417 BR-9: the window tells the shutdown helper that it leaves, once and just before the reload; a flow that stops before the reload tells nothing', async () => {
+    const reloaded = setup();
+    await reopened(reloaded);
+    await settled();
+    const stopped = setup();
+    stopped.check = 'stopped';
+    await reopened(stopped);
+    deepStrictEqual(
+      [
+        [reloaded.left, reloaded.order.filter(step => step !== 'store')],
+        [stopped.left, stopped.commands.length],
+      ],
+      [
+        [1, ['leave', 'open']],
+        [0, 0],
       ],
     );
   });
@@ -267,7 +287,7 @@ describe('Reopen in Container', () => {
         await reopenedSlowly(state),
         state.timers.map(timer => timer.milliseconds),
       ],
-      [[`progress shown ${START}`, 'progress closed', 'open'], [500]],
+      [[`progress shown ${START}`, 'leave', 'progress closed', 'open'], [500]],
     );
   });
 
@@ -295,21 +315,53 @@ describe('Reopen in Container', () => {
     );
   });
 
-  it('F-0301 6.2: no configuration opens nothing, shows the notice of ours once, and says so in the log', async () => {
+  it('F-0301 6.2: no configuration opens nothing, runs the wizard once after the trust check, and says so in the log', async () => {
     const state = setup();
     state.existing = [];
     const {lines} = await reopened(state);
     deepStrictEqual(
-      [state.commands, state.shown.length, lines],
+      [
+        state.commands,
+        state.calls.filter(call => /^(ensureTrusted|wizard)/.test(call)),
+        lines,
+      ],
       [
         [],
-        1,
+        ['ensureTrusted', 'wizard /w/p'],
         [
           'info: no dev container configuration in /w/p',
           'info: Reopen in Container found no configuration in /w/p',
         ],
       ],
     );
+  });
+
+  it('F-0401 AC-8: a written configuration is chosen again and the window reopens on it, after the trust check', async () => {
+    const state = setup();
+    state.existing = [];
+    state.wizard = {
+      kind: 'written',
+      files: ['.devcontainer/devcontainer.json'],
+      target: '/w/p',
+    };
+    state.wizardLeaves = [CONFIG];
+    await reopened(state);
+    const target = openedTarget(state);
+    deepStrictEqual(
+      [
+        state.calls.filter(call => /^(ensureTrusted|wizard)/.test(call)),
+        'configFile' in target ? target.configFile.fsPath : target,
+      ],
+      [['ensureTrusted', 'wizard /w/p'], CONFIG],
+    );
+  });
+
+  it('F-0405 AC-13: a wizard that failed reopens nothing', async () => {
+    const state = setup();
+    state.existing = [];
+    state.wizard = {kind: 'failed', detail: 'read-only'};
+    await reopened(state);
+    deepStrictEqual(state.commands, []);
   });
 
   it('F-0301 5.0 step 4: two configurations show the picker, and the one picked is what the window reloads on', async () => {
