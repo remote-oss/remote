@@ -33,6 +33,9 @@ class Scene {
   unsaved = new Set<string>();
   problems = new Map<string, string>();
   writeError: Error | undefined;
+  /** The nth write (counting from 1) fails, the first when unset. */
+  failAt: number | undefined;
+  removeError: Error | undefined;
   shown: Array<{
     severity: string;
     message: string;
@@ -45,6 +48,7 @@ class Scene {
   titles: string[] = [];
   logRevealed = 0;
   applyRequests: unknown[] = [];
+  attempts = 0;
 
   ports(): WritePorts {
     return {
@@ -61,14 +65,18 @@ class Scene {
           }
           return Promise.resolve(this.folders.has(file) ? 'folder' : 'missing');
         },
-        read: file =>
-          Promise.resolve(
-            new TextEncoder().encode(
-              this.scratchFiles.get(file.slice(SCRATCH.length + 1)) ?? '',
-            ),
-          ),
+        read: file => {
+          const content = file.startsWith(`${SCRATCH}/`)
+            ? this.scratchFiles.get(file.slice(SCRATCH.length + 1))
+            : this.target.get(file);
+          return Promise.resolve(new TextEncoder().encode(content ?? ''));
+        },
         write: (file, bytes) => {
-          if (this.writeError !== undefined) {
+          this.attempts += 1;
+          if (
+            this.writeError !== undefined &&
+            this.attempts === (this.failAt ?? 1)
+          ) {
             return Promise.reject(this.writeError);
           }
           this.target.set(file, new TextDecoder().decode(bytes));
@@ -79,8 +87,20 @@ class Scene {
           this.folders.add(folder);
           return Promise.resolve();
         },
+        removeFile: file => {
+          if (this.removeError !== undefined) {
+            return Promise.reject(this.removeError);
+          }
+          this.target.delete(file);
+          return Promise.resolve();
+        },
         removeFolder: folder => {
           this.removed.push(folder);
+          for (const each of [...this.folders]) {
+            if (each === folder || each.startsWith(`${folder}/`)) {
+              this.folders.delete(each);
+            }
+          }
           return Promise.resolve();
         },
         creationProblem: folder => Promise.resolve(this.problems.get(folder)),
@@ -352,6 +372,82 @@ describe('the write of a template (card containers-78)', () => {
         0,
         [SCRATCH],
       ],
+    );
+  });
+
+  it('F-0801 7.E8: a write that fails midway puts back the files it replaced and removes what it created, folders included', async () => {
+    const scene = new Scene();
+    scene.target.set(`${TARGET}/a.txt`, 'old a');
+    scene.leaves('a.txt', 'deep/er/b.txt', 'c.txt');
+    scene.answers = ['Overwrite'];
+    scene.writeError = new Error('ENOSPC: no space left on device');
+    scene.failAt = 3;
+    const before = [...scene.target.entries()];
+    const outcome = await scene.execute();
+    deepStrictEqual(
+      [
+        outcome,
+        [...scene.target.entries()],
+        [...scene.folders],
+        scene.removed,
+        scene.shown
+          .filter(each => each.severity === 'error')
+          .map(each => each.message),
+      ],
+      [
+        {kind: 'failed', detail: 'ENOSPC: no space left on device'},
+        before,
+        [TARGET],
+        [`${TARGET}/deep`, SCRATCH],
+        [
+          "The configuration couldn't be written to /work/ws: ENOSPC: no space left on device",
+        ],
+      ],
+    );
+  });
+
+  it('F-0801 7.E8: a restore that fails too is told with the first failure', async () => {
+    const scene = new Scene();
+    scene.leaves('a.txt', 'b.txt');
+    scene.writeError = new Error('EIO: i/o error');
+    scene.failAt = 2;
+    scene.removeError = new Error('EBUSY: resource busy');
+    deepStrictEqual(await scene.execute(), {
+      kind: 'failed',
+      detail:
+        'EIO: i/o error; the target could not be restored: EBUSY: resource busy',
+    });
+  });
+
+  it('F-0801 7.E8: a path the CLI reports that is absolute or climbs out of the folder fails the write before any question, and writes nothing', async () => {
+    const outcomes: Array<[string, number, number]> = [];
+    for (const reported of [
+      '/etc/passwd',
+      '../x',
+      'a/../../x',
+      'C:\\x',
+      '.\\..\\x',
+    ]) {
+      const scene = new Scene();
+      scene.target.set(`${TARGET}/a.txt`, 'old a');
+      scene.applied = {kind: 'applied', files: ['./a.txt', reported]};
+      scene.scratchFiles.set('a.txt', 'new a');
+      const outcome = await scene.execute();
+      outcomes.push([
+        outcome.kind === 'failed' ? outcome.detail : outcome.kind,
+        scene.written.length,
+        scene.shown.filter(each => each.severity === 'warning').length,
+      ]);
+    }
+    deepStrictEqual(
+      outcomes,
+      ['/etc/passwd', '../x', 'a/../../x', 'C:\\x', '.\\..\\x'].map(
+        reported => [
+          `the template reported a path outside its folder: ${reported}`,
+          0,
+          0,
+        ],
+      ),
     );
   });
 });

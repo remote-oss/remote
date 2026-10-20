@@ -55,6 +55,8 @@ interface WriteFiles {
   write(file: string, bytes: Uint8Array): Promise<void>;
   /** Creates the folder and the ones above it that are missing. */
   makeFolder(folder: string): Promise<void>;
+  /** Removes the file. */
+  removeFile(file: string): Promise<void>;
   /** Removes the folder and what is in it; none if it is not there. */
   removeFolder(folder: string): Promise<void>;
   /** Why files could not be created in the folder (it may not exist yet): the file system's words; none when they can. */
@@ -109,6 +111,15 @@ function detailOf(failure: Exclude<CliFailure, {kind: 'cancelled'}>): string {
 /** The scratch-relative path of a file the CLI reports, without a leading `./`. */
 function relativeOf(reported: string): string {
   return reported.replace(/^\.\//, '');
+}
+
+/** Whether a reported path leaves the folder it is relative to: it is absolute, or it climbs with `..`. */
+function leavesItsFolder(reported: string): boolean {
+  return (
+    path.posix.isAbsolute(reported) ||
+    path.win32.isAbsolute(reported) ||
+    reported.split(/[\\/]/).includes('..')
+  );
 }
 
 /** Applies the template into a scratch folder, plans the copy with the questions, and writes. */
@@ -168,6 +179,80 @@ export async function writeTemplate(
     return undefined;
   }
 
+  /** Tells the user that nothing was written, and why. */
+  async function notWritten(detail: string): Promise<WriteOutcome> {
+    await dialogs.show(
+      'error',
+      text(WRITE_TEMPLATES.configurationNotWritten, [
+        request.targetFolder,
+        detail,
+      ]),
+      '',
+      [],
+    );
+    return {kind: 'failed', detail};
+  }
+
+  /** The folders on the way from the target to `folder` that do not exist yet, outermost first. */
+  async function missingFolders(folder: string): Promise<string[]> {
+    const missing: string[] = [];
+    for (
+      let current = folder;
+      current !== request.targetFolder && current !== path.dirname(current);
+      current = path.dirname(current)
+    ) {
+      if ((await files.kindOf(current)) === 'missing') {
+        missing.unshift(current);
+      }
+    }
+    return missing;
+  }
+
+  /**
+   * Copies the planned files. A failure puts back the files it replaced and removes what it created, and gives its
+   * words, with those of a restore that failed too.
+   */
+  async function copy(
+    planned: readonly string[],
+    scratch: string,
+  ): Promise<string | undefined> {
+    const undo: Array<() => Promise<void>> = [];
+    try {
+      for (const relative of planned) {
+        const target = path.join(request.targetFolder, relative);
+        const [created] = await missingFolders(path.dirname(target));
+        const replaced =
+          (await files.kindOf(target)) === 'file'
+            ? await files.read(target)
+            : undefined;
+        await files.makeFolder(path.dirname(target));
+        if (created !== undefined) {
+          undo.push(() => files.removeFolder(created));
+        }
+        undo.push(() =>
+          replaced === undefined
+            ? files.removeFile(target)
+            : files.write(target, replaced),
+        );
+        await files.write(
+          target,
+          await files.read(path.join(scratch, relative)),
+        );
+      }
+      return undefined;
+    } catch (caught) {
+      const detail = (caught as Error).message;
+      try {
+        for (const step of undo.reverse()) {
+          await step();
+        }
+      } catch (undoError) {
+        return `${detail}; the target could not be restored: ${(undoError as Error).message}`;
+      }
+      return detail;
+    }
+  }
+
   return ports.withProgress(text(WRITE_TEMPLATES.progress), async () => {
     const scratch = await files.makeScratchFolder();
     try {
@@ -199,44 +284,23 @@ export async function writeTemplate(
         }
         return {kind: 'failed', detail: detailOf(applied)};
       }
+      const unsafe = applied.files.find(leavesItsFolder);
+      if (unsafe !== undefined) {
+        return await notWritten(
+          `the template reported a path outside its folder: ${unsafe}`,
+        );
+      }
       const planned = await plan(applied.files);
       if (planned === 'cancelled') {
         return {kind: 'cancelled'};
       }
       const problem = await problemOf(planned);
       if (problem !== undefined) {
-        await dialogs.show(
-          'error',
-          text(WRITE_TEMPLATES.configurationNotWritten, [
-            request.targetFolder,
-            problem,
-          ]),
-          '',
-          [],
-        );
-        return {kind: 'failed', detail: problem};
+        return await notWritten(problem);
       }
-      try {
-        for (const relative of planned) {
-          const target = path.join(request.targetFolder, relative);
-          await files.makeFolder(path.dirname(target));
-          await files.write(
-            target,
-            await files.read(path.join(scratch, relative)),
-          );
-        }
-      } catch (caught) {
-        const detail = (caught as Error).message;
-        await dialogs.show(
-          'error',
-          text(WRITE_TEMPLATES.configurationNotWritten, [
-            request.targetFolder,
-            detail,
-          ]),
-          '',
-          [],
-        );
-        return {kind: 'failed', detail};
+      const failure = await copy(planned, scratch);
+      if (failure !== undefined) {
+        return await notWritten(failure);
       }
       return {kind: 'written', files: planned};
     } finally {
