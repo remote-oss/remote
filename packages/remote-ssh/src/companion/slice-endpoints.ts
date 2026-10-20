@@ -19,6 +19,7 @@ import {
 } from 'lib-companion';
 import type {Logger} from 'lib-log';
 import type {HostListResult} from 'lib-ssh';
+import {windowlessLine} from '../connect/windowless.ts';
 import {allOf} from './registrations.ts';
 
 /** What the three endpoints take from the editor and the window. */
@@ -31,6 +32,8 @@ export interface SliceEndpointPorts {
   opener: OpenerHost;
   /** The Remote - SSH log. */
   logger: Logger;
+  /** Whether the editor grants `resolvers`: without it a window opened on a host can't connect, so none is opened. */
+  resolversGranted: boolean;
 }
 
 /** The one log line of a version mismatch. */
@@ -87,6 +90,13 @@ export function serveSliceEndpoints(
       kind: 'change',
       read: readOpenRequest,
       handle: async request => {
+        if (!ports.resolversGranted) {
+          // A no-change answer, so the caller shows nothing of its own and the setup notice stays in front.
+          ports.logger.info(
+            windowlessLine(SSH_ENDPOINTS.openRemoteSshTarget.commandId),
+          );
+          return writeEnvelope();
+        }
         if (request.hostKey === '') {
           throw new Error('the host key is empty');
         }

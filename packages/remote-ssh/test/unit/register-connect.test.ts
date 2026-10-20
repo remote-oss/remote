@@ -10,7 +10,8 @@ import {
 } from '../../src/connect-ports.ts';
 import type {SshTarget} from 'lib-ssh';
 import type {MaintenanceRun} from '../../src/maintenance/maintenance-run.ts';
-import {registerConnect, windowlessLine} from '../../src/register-connect.ts';
+import {windowlessLine} from '../../src/connect/windowless.ts';
+import {registerConnect} from '../../src/register-connect.ts';
 import {nodeMachineOf} from '../../src/node-machine.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
 

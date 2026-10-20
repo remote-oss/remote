@@ -28,6 +28,7 @@ import {
   type ConnectCommandHandlers,
   connectCommandHandlers,
 } from './connect/connect-commands.ts';
+import {windowlessLine} from './connect/windowless.ts';
 import {commands, runtimeCommands} from './identifiers.generated.ts';
 import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
 import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
@@ -80,11 +81,6 @@ export interface ConnectRegistration {
   /** Calls the listener when the session's first resolve settles; it never does without a resolver. */
   onFirstResolveSettled(listener: () => void): void;
   dispose(): void;
-}
-
-/** The log line of a connect command run while the editor does not grant `resolvers`. */
-export function windowlessLine(commandId: string): string {
-  return `${commandId} opens no window: the editor has not enabled the proposed API resolvers for Remote - SSH`;
 }
 
 /**
