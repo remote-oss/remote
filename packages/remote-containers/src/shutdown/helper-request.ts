@@ -9,10 +9,10 @@ import type {AcquireRequest} from 'lib-helper';
 import {SHUTDOWN_END_POLICY} from './shutdown-handler.ts';
 
 /** The registry namespace of the shutdown helper. */
-export const SHUTDOWN_NAMESPACE = 'remote-containers.shutdown';
+const SHUTDOWN_NAMESPACE = 'remote-containers.shutdown';
 
 /** The key of the one helper of an editor instance. */
-export const SHUTDOWN_HELPER_KEY = 'instance';
+const SHUTDOWN_HELPER_KEY = 'instance';
 
 /** How long a window waits on the helper: a running one's answer, a started one's listening, the pause between asks. */
 export const SHUTDOWN_CLIENT_WAITS = {
