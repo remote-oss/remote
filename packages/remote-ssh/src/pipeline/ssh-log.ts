@@ -31,6 +31,14 @@ export function sshLogEntries(
   });
 }
 
+/** ssh's own lines for a channel or a forward: `channel <n>: open failed: …`, `connect_to … failed` and `Warning: …`. */
+const FORWARDING_LINE = /^(?:channel \d+: |connect_to |Warning: )/;
+
+/** Whether `line` is one of ssh's own lines for a channel or a forward, which stay in the log after authentication. */
+export function isForwardingLine(line: string): boolean {
+  return FORWARDING_LINE.test(line.endsWith('\r') ? line.slice(0, -1) : line);
+}
+
 /** Writes `lines` to `logger` as `sshLogEntries` gives them. */
 export function logSshLines(
   logger: Pick<Logger, 'info' | 'trace'>,

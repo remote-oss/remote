@@ -1,7 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {logSshLines, sshLogEntries} from '../../src/pipeline/ssh-log.ts';
+import {
+  isForwardingLine,
+  logSshLines,
+  sshLogEntries,
+} from '../../src/pipeline/ssh-log.ts';
 
 const LINES = [
   'debug1: Reading configuration data /x',
@@ -58,6 +62,22 @@ describe('ssh’s lines in the log (card connect-66)', () => {
           text: '[ssh] ssh: connect to host h port 22: Connection refused',
         },
       ],
+    );
+  });
+
+  it('F-2003 BR-8: ssh’s own channel, forward and warning lines are told from the rest, with or without a carriage return', () => {
+    deepStrictEqual(
+      [
+        'channel 3: open failed: administratively prohibited: open failed',
+        'channel 12: open failed: connect failed: Connection refused\r',
+        'connect_to localhost port 8080: failed.',
+        'Warning: remote port forwarding failed for listen port 9000',
+        'ls -l',
+        'total 4',
+        "printf 'LAYER1-READY\\n'",
+        'a channel 3: not at the start',
+      ].map(isForwardingLine),
+      [true, true, true, true, false, false, false, false],
     );
   });
 });

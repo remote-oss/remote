@@ -214,6 +214,26 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     ]);
   });
 
+  it('F-2003 BR-8: after authentication terminal mode logs only ssh’s own channel and forward lines, from a mixed pty buffer, before and after the hand-over', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write(
+      "printf 'LAYER1-READY\\n'\nexec sh\nls -l\ntotal 4\nchannel 3: open failed: administratively prohibited: open failed\nconnect_to localhost port 8080: failed.\nWarning: remote port forwarding failed for listen port 9000\nLAYER1-READY\n",
+    );
+    await result;
+    terminal.write(
+      'a line of the shell\nchannel 4: open failed: connect failed: Connection refused\n',
+    );
+    deepStrictEqual(sshLogged(made), [
+      '[ssh] Authenticated to dev ([10.0.0.1]:22) using "publickey".',
+      '[ssh] channel 3: open failed: administratively prohibited: open failed',
+      '[ssh] connect_to localhost port 8080: failed.',
+      '[ssh] Warning: remote port forwarding failed for listen port 9000',
+      '[ssh] channel 4: open failed: connect failed: Connection refused',
+    ]);
+  });
+
   it('F-2003 BR-8: at debug terminal mode keeps the lines without debug1, and the failing login’s refusal is among them', async () => {
     const made = fixture({level: 'info'});
     const {result, terminal} = await started(made);
