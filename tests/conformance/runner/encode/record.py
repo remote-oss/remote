@@ -115,6 +115,10 @@ def lab_args(verb, arg):
         return ["rowaction", arg["view"], arg["row"], arg["action"]]
     if verb == "viewaction":
         return ["viewaction", arg["view"], arg["action"]]
+    if verb == "settings_search":
+        return ["settings-search", arg]
+    if verb == "setting_input":
+        return ["setting-input", json.dumps(arg)]
     raise ValueError(verb)
 
 
@@ -181,6 +185,7 @@ def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counte
         known = [c["name"] for c in (case.get("fixture") or {}).get("containers") or []] + run.known_names
         sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log, run_target=run.run_target())
         sess.user_settings = lambda keys: run.read_user_settings(keys)
+        sess.client_listeners = lambda: run.client_listeners()
         sess.mark_urls()   # opened_urls counts from here: this case's URLs only
         run.start_window()
         run.ready(sess)
@@ -231,6 +236,8 @@ def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counte
                 res = run.merge_settings(arg)
             elif verb == "target":
                 res = run.target_action(arg)
+            elif verb == "client_ports":   # kit #289, F-2104 AC-16: `client_ports: free` ends the holder mid-case
+                res = run.free_client_ports()
             elif verb == "restart":
                 try:
                     res = run.restart(sess)
