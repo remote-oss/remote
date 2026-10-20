@@ -160,6 +160,11 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
+/** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
+export async function pageCount(): Promise<number> {
+  return (await pages()).length;
+}
+
 /**
  * The one title among `titles` that window `name`'s folder name gives, `[<name>]` or `[<name> [...`, `[]` for `local`;
  * none when no title or more than one fits. It needs nothing from the window's agent, so it finds the page of a window
@@ -979,6 +984,32 @@ export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
       focused: row.classList.contains('focused'),
     }))`,
   );
+}
+
+/** Presses the button `button` beside the row labelled `label` of the quick pick open in window `name`. */
+export async function pressQuickPickRowButton(
+  name: string,
+  label: string,
+  button: string,
+): Promise<void> {
+  const pressed = await evaluate<boolean>(
+    name,
+    `(() => {
+      const rows = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')];
+      const row = rows.find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
+      const target = [...(row?.querySelectorAll('.quick-input-list-entry .action-label') ?? [])].find(each => (each.getAttribute('aria-label') ?? each.getAttribute('title')) === ${JSON.stringify(button)});
+      if (target === undefined) {
+        return false;
+      }
+      target.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+      return true;
+    })()`,
+  );
+  if (!pressed) {
+    throw new Error(
+      `window ${name}: no button ${JSON.stringify(button)} on the row ${JSON.stringify(label)}`,
+    );
+  }
 }
 
 /** Waits until window `name` shows a quick pick and returns it. */
