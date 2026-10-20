@@ -615,7 +615,7 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
       };
       const collect = async () => {
         for (const entry of ${PORTS_ROWS_EXPRESSION}) {
-          const key = entry.cells.join('|');
+          const key = entry.cells[1] + '|' + entry.cells[4];
           if (!seen.has(key)) {
             seen.set(key, await readRow(entry));
             order.push(key);
@@ -623,7 +623,7 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
         }
       };
       const list = pane.querySelector('.monaco-table .monaco-list');
-      const first = () => (${PORTS_ROWS_EXPRESSION}[0]?.cells.join('|') ?? '');
+      const first = () => (${PORTS_ROWS_EXPRESSION}[0]?.cells[1] ?? '');
       // A wheel moves the list with a smooth scroll, so the next one waits for the move to settle; a step stays under
       // the rows of a viewport so that no row passes unseen. The wheel's sign that scrolls down varies with the build.
       const move = async delta => {
@@ -632,6 +632,10 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
         await wait(600);
         return first() !== before;
       };
+      // The rows come after the table: a read of no row at all is no position to scroll back to.
+      for (let tries = 0; tries < 30 && first() === ''; tries += 1) {
+        await wait(100);
+      }
       const step = Math.max(44, Math.floor(list.clientHeight / 2));
       const topFirst = first();
       await collect();
