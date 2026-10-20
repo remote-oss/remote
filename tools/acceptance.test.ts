@@ -92,8 +92,8 @@ class FakeHarness implements HarnessDependencies {
   /** The files of the run's folder as the first launch found them, by name. */
   readonly firstLaunchFiles = new Map<string, string>();
   readonly answers = new Map<string, CommandResult>();
-  /** What a launch with stand-ins found in its extensions folder when it started: the stand-in's manifest, the list's last entry. */
-  standInFound: [unknown, unknown] | undefined = undefined;
+  /** What each launch with stand-ins found in its extensions folder when it started, by label: the stand-in's manifest, the list's last entry. */
+  readonly standInFound = new Map<string, [unknown, unknown]>();
   /** What a client-search launch found in the run's folder when it started. */
   readonly clientLaunches: Array<{
     label: string;
@@ -223,7 +223,7 @@ class FakeHarness implements HarnessDependencies {
         variables.HARNESS_RUN_FOLDER,
         `extensions-${launch.label}`,
       );
-      this.standInFound = [
+      this.standInFound.set(launch.label, [
         JSON.parse(
           readFileSync(
             path.join(
@@ -239,7 +239,7 @@ class FakeHarness implements HarnessDependencies {
             readFileSync(path.join(folder, 'extensions.json'), 'utf8'),
           ) as unknown[]
         ).at(-1),
-      ];
+      ]);
     }
     return Promise.resolve(
       this.labelResults.get(launch.label) ?? this.testResult,
@@ -379,6 +379,7 @@ const LAUNCH_ORDER = [
   'containers-trust',
   'containers-volume',
   'containers-explorer',
+  'containers-ports',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -973,6 +974,15 @@ describe('acceptance', () => {
               '/run/window-agent.vsix',
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
               path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-ports'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
             ],
             client: 'vscodium',
           },
@@ -1941,7 +1951,7 @@ describe('acceptance', () => {
         'extensions-containers-standdown',
         'ms-vscode-remote.remote-containers-0.0.0',
       );
-      deepStrictEqual(harness.standInFound, [
+      deepStrictEqual(harness.standInFound.get('containers-standdown'), [
         {
           publisher: 'ms-vscode-remote',
           name: 'remote-containers',
