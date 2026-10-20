@@ -116,6 +116,19 @@ connection and registers nothing.
   | 69 | a container made by the row with only the folder's two labels, the file `"none"`: stays 40 s |
   | 70 | `null`, `false`, `0`, `""`: stopped; `1`: stays 40 s |
 
+- **The program's own row** (amended 2026-10-20 on dike's note on #1243). containers-68 excludes
+  `src/programs/shutdown-helper.ts` and `src/programs/helper-launcher.ts` from coverage as "the acceptance run covers
+  it", so a committed row has to prove that, in `tests/acceptance/containers-shutdown/helper-program.test.ts`, named
+  `#1226: the shutdown helper program starts with the first dev container window, outside the editor's process tree,
+  and ends after the last window closed and its check ran`:
+  1. before any dev container window, no process of the run's user runs `shutdown-helper.js` (`pgrep -f`);
+  2. after one window connects, exactly one does, and its parent isn't the editor's process tree (its `PPID` chain
+     doesn't reach the editor's main process);
+  3. its record is under the instance folder `<run>/user-data/User/globalStorage/remote-oss.remote-containers/instance-registry`;
+  4. after the window closes, the container is stopped (AC-1's timing) and, within 30 s after that, no
+     `shutdown-helper.js` process is left.
+  Then make the two exclusions' reasons in `packages/remote-containers/coverage.json` name this row (its file and
+  title), as remote-ssh's `connection-helper.ts` line does for its acceptance proof.
 - `finally`: remove each row's containers.
 - AC-23, AC-35 and AC-43 (ended process trees) are containers-70's.
 
