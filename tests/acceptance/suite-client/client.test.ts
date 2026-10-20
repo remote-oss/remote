@@ -99,7 +99,10 @@ describe(`the client search of ${label}`, () => {
   if (dialog !== undefined) {
     before(async () => {
       dialogRecord = (await recordAfterDialog()).filter(
-        line => !['progress', 'downloadProgress'].includes(line.surface),
+        line =>
+          !['progress', 'downloadProgress', 'progressEnd'].includes(
+            line.surface,
+          ),
       );
     });
   }

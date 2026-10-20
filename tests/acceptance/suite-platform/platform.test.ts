@@ -90,7 +90,8 @@ describe(`the platform case "${label}" of the VSCodium run`, () => {
   before(async () => {
     lines = await recordAfterConnect();
     record = lines.filter(
-      line => !['progress', 'downloadProgress'].includes(line.surface),
+      line =>
+        !['progress', 'downloadProgress', 'progressEnd'].includes(line.surface),
     );
   });
 
