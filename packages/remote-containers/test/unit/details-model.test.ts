@@ -130,6 +130,19 @@ describe('the Details tree (card containers-33)', () => {
     );
   });
 
+  it('F-0901 AC-55: a container created from the tag x:1 is titled x:1 in Details, with the image x:1', () => {
+    const tree = detailsTreeOf({...BOUND, labels: {}, image: 'x:1'}, identity);
+    deepStrictEqual(
+      [
+        tree.title,
+        flat(tree.sections)
+          .filter(entry => entry.label === 'Image')
+          .map(entry => entry.description),
+      ],
+      ['x:1', ['x:1']],
+    );
+  });
+
   it('F-0903 AC-14: no entry speaks of mount performance', () => {
     deepStrictEqual(
       flat(detailsTreeOf(BOUND, identity).sections).filter(entry =>
