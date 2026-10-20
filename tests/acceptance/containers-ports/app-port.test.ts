@@ -6,7 +6,11 @@ import {
   listenIn,
   reopenInContainer,
 } from '../windows/harness.ts';
-import {portRowActions} from '../windows/renderer.ts';
+import {
+  dialogOf,
+  notificationCentre,
+  portRowActions,
+} from '../windows/renderer.ts';
 import {
   connectedWindows,
   echoes,
@@ -62,20 +66,23 @@ describe('the appPort rows (card containers-74)', function () {
     for (const stop of stops) {
       await stop();
     }
+    const bindings = published[`${String(container)}/tcp`] ?? [];
     deepStrictEqual(
       [
         published[`${String(number)}/tcp`]?.map(each => [
           each.HostIp,
           each.HostPort,
         ]),
-        [
-          ...new Set(
-            published[`${String(container)}/tcp`]?.map(each => each.HostPort),
-          ),
-        ],
+        [...new Set(bindings.map(each => each.HostPort))],
+        bindings.map(each => each.HostIp).sort(),
         reachable,
       ],
-      [[['127.0.0.1', String(number)]], [String(host)], [true, true]],
+      [
+        [['127.0.0.1', String(number)]],
+        [String(host)],
+        ['0.0.0.0', '::'],
+        [true, true],
+      ],
     );
   });
 
@@ -114,10 +121,16 @@ describe('the appPort rows (card containers-74)', function () {
     });
     await showPorts(window);
     const rows = await rowsWhen(window, shown => shown.length > 1);
-    deepStrictEqual(rows.map(shown => shown.origin).sort(), [
-      'Dev Containers',
-      'Statically Forwarded',
-    ]);
+    deepStrictEqual(
+      [
+        rows.map(shown => shown.origin).sort(),
+        await dialogOf(window),
+        (await notificationCentre(window)).filter(text =>
+          /error|failed/i.test(text),
+        ),
+      ],
+      [['Dev Containers', 'Statically Forwarded'], undefined, []],
+    );
   });
 
   it('F-1101 AC-24 (app-port-actions): a Statically Forwarded row offers copying the address, opening in the browser and previewing, and the menu adds only Forward a Port', async () => {
