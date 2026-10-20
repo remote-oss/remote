@@ -11,6 +11,7 @@ import {
   inWindow,
   reloadWindow,
   reopenInContainer,
+  terminalBuffer,
   variable,
   waitFor,
 } from '../windows/harness.ts';
@@ -94,13 +95,16 @@ async function reopened(folder: string): Promise<string> {
   return name;
 }
 
-/** The text a terminal or task of `name` printed after `label:` on a line of its own. */
+/**
+ * The text the active terminal of `name` printed after `label:` on a line of its own. The buffer is read whole, which
+ * joins a value the terminal wrapped over several rows.
+ */
 async function resultAfter(name: string, label: string): Promise<string> {
   let found: string | undefined;
   await waitFor(
     `the line ${label}: in window ${name}`,
     async () => {
-      found = (await terminalText(name))
+      found = (await terminalBuffer(name))
         .split('\n')
         .map(line => line.trim())
         .find(line => line.startsWith(`${label}:`) && !line.includes('printf'))
@@ -110,7 +114,7 @@ async function resultAfter(name: string, label: string): Promise<string> {
     90_000,
   ).catch(async (caught: unknown) => {
     throw new Error(
-      `${String(caught)}; the terminal shows: ${JSON.stringify(await terminalText(name))}`,
+      `${String(caught)}; the terminal shows: ${JSON.stringify(await terminalBuffer(name))}`,
       {cause: caught},
     );
   });
