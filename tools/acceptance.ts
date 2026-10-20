@@ -177,6 +177,8 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_LOG: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
+  /** The VS Code executable at the floor of ADR-0007, only when a chosen launch starts it. */
+  HARNESS_VSCODE_EXECUTABLE?: string;
   /** The download host's bases and request log (`tools/acceptance-downloads.ts`), in the VSCodium run only. */
   HARNESS_DOWNLOADS_HTTP?: string;
   HARNESS_DOWNLOADS_HTTPS?: string;
@@ -202,6 +204,8 @@ export interface HarnessDependencies {
   editorCli: () => Promise<string>;
   /** The VSCodium executable at the pinned release, downloading and unpacking it when it is missing. */
   vscodiumExecutable: () => Promise<string>;
+  /** The VS Code executable at the version under test, downloading the editor when it is missing. */
+  vscodeExecutable: () => Promise<string>;
   /**
    * Starts test-cli with the harness variables and returns its exit code and its output; `label` picks one of the
    * configurations, and none runs the only one.
@@ -589,21 +593,46 @@ async function waitForHost(
  * Prepares the host and the run's folder and returns the harness variables. The caller removes the container and
  * the folder through `tearDown`, also when this throws after the container started.
  */
+/** One install of a run: the files put into a folder with the CLI of the editor the folder's launches start. */
+export interface Install {
+  folder: string;
+  files: string[];
+  client: 'vscodium' | 'vscode';
+}
+
 /**
  * The installs of a run: the run's VSIX files into the run's extensions folder, and for each launch with extensions of
- * its own, the same files and the packaged VSIX of each of its own extensions into the launch's folder.
+ * its own, the same files and the packaged VSIX of each of its own extensions into the launch's folder. A launch that
+ * starts VS Code has its folder installed with VS Code's CLI.
  */
 export function installsOf(
   root: string,
   runFolder: string,
   vsixFiles: readonly string[],
   launches: readonly Launch[],
-): Array<{folder: string; files: string[]}> {
+): Install[] {
   return [
-    {folder: extensionsFolderOf(runFolder), files: [...vsixFiles]},
-    ...launches.flatMap(launch =>
-      launch.kind === 'plain' && launch.withExtensions !== undefined
-        ? [
+    {
+      folder: extensionsFolderOf(runFolder),
+      files: [...vsixFiles],
+      client: 'vscodium',
+    },
+    ...launches.flatMap((launch): Install[] => {
+      if (launch.kind !== 'plain') {
+        return [];
+      }
+      if (launch.client !== undefined) {
+        return [
+          {
+            folder: extensionsFolderOf(runFolder, launch),
+            files: [...vsixFiles],
+            client: launch.client,
+          },
+        ];
+      }
+      return launch.withExtensions === undefined
+        ? []
+        : [
             {
               folder: extensionsFolderOf(runFolder, launch),
               files: [
@@ -615,10 +644,10 @@ export function installsOf(
                   ),
                 ),
               ],
+              client: 'vscodium',
             },
-          ]
-        : [],
-    ),
+          ];
+    }),
   ];
 }
 
@@ -629,6 +658,7 @@ async function prepare(
   started: string[],
   editor: EditorChoice,
   stops: Array<() => Promise<void>>,
+  chosen: readonly Launch[],
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
   const runId = acceptanceRunId(process.env, process.pid);
@@ -676,19 +706,37 @@ async function prepare(
   ) {
     vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
   }
+  const vscode = chosen.some(
+    launch => launch.kind === 'plain' && launch.client === 'vscode',
+  )
+    ? await dependencies.vscodeExecutable()
+    : undefined;
   const installs = installsOf(
     root,
     runFolder,
     vsixFiles,
-    editor === 'vscodium' ? launchesOf(root) : [],
+    editor === 'vscodium'
+      ? launchesOf(root).filter(
+          launch =>
+            launch.kind !== 'plain' ||
+            launch.client === undefined ||
+            chosen.includes(launch),
+        )
+      : [],
   ).filter(install => install.files.length > 0);
   if (installs.length > 0) {
-    const editorCommand =
-      vscodium === undefined
-        ? await dependencies.editorCli()
-        : vscodiumCliOf(vscodium);
-    for (const {folder, files} of installs) {
-      checked(command, editorCommand, [
+    const editorCommands = {
+      vscodium:
+        vscodium === undefined
+          ? await dependencies.editorCli()
+          : vscodiumCliOf(vscodium),
+      vscode:
+        vscode === undefined
+          ? ''
+          : resolveCliPathFromVSCodeExecutablePath(vscode),
+    };
+    for (const {folder, files, client} of installs) {
+      checked(command, editorCommands[client], [
         `--extensions-dir=${folder}`,
         `--user-data-dir=${path.join(runFolder, 'user-data')}`,
         `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
@@ -723,6 +771,7 @@ async function prepare(
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
+    ...(vscode === undefined ? {} : {HARNESS_VSCODE_EXECUTABLE: vscode}),
     ...downloads?.variables,
     ...(keys === undefined
       ? {}
@@ -944,6 +993,7 @@ export async function runAcceptance(
       started,
       editor,
       stops,
+      chosen,
     );
     const exitCodes: number[] = [];
     for (const failure of editor === 'vscodium' ? failureCases(root) : []) {
@@ -1207,12 +1257,16 @@ async function bundleFolder(
  * extensions folder, the one the editor is started with; test-cli's own install would use its default folder.
  */
 async function editorCli(): Promise<string> {
-  const executable = await withOneRetry(
+  return resolveCliPathFromVSCodeExecutablePath(await vscodeExecutable());
+}
+
+/** The VS Code executable at the version under test, downloaded when it is missing, with one retry. */
+async function vscodeExecutable(): Promise<string> {
+  return await withOneRetry(
     () => downloadAndUnzipVSCode(EDITOR_VERSION),
     delay,
     console.log.bind(console),
   );
-  return resolveCliPathFromVSCodeExecutablePath(executable);
 }
 
 /** What the VSCodium download needs from outside: the network and the unpacking. */
@@ -1409,20 +1463,32 @@ export function runTestCli(
   );
 }
 
+/** The executable a plain launch starts: VS Code for a launch that names it as its client, the run's VSCodium otherwise. */
+export function editorExecutableOf(
+  variables: HarnessVariables,
+  launch: Launch,
+): string {
+  return (
+    (launch.kind === 'plain' && launch.client === 'vscode'
+      ? variables.HARNESS_VSCODE_EXECUTABLE
+      : variables.HARNESS_VSCODIUM_EXECUTABLE) ?? ''
+  );
+}
+
 /** What a run prints when its arguments are not understood. */
 export const USAGE =
   'usage: node tools/acceptance.ts [--editor vscode|vscodium [--launches all|none|<label>,...]]';
 
 /**
- * The launches a run makes: every one when `selected` is undefined, else those whose label it names,
- * in the run's order; an error text naming the known labels when it names an unknown one.
+ * The launches a run makes: every one that is not `namedOnly` when `selected` is undefined, else those whose label it
+ * names, in the run's order; an error text naming the known labels when it names an unknown one.
  */
 export function chosenLaunches(
   launches: readonly Launch[],
   selected: readonly string[] | undefined,
 ): Launch[] | string {
   if (selected === undefined) {
-    return [...launches];
+    return launches.filter(launch => launch.namedOnly !== true);
   }
   const known = launches.map(launch => launch.label);
   const unknown = selected.filter(label => !known.includes(label));
@@ -1538,6 +1604,7 @@ if (isMainModule(import.meta.url)) {
         sleep: delay,
         bundleSuite,
         editorCli,
+        vscodeExecutable,
         vscodiumExecutable: vscodiumExecutableOf.bind(
           undefined,
           REPOSITORY_ROOT,
@@ -1558,7 +1625,7 @@ if (isMainModule(import.meta.url)) {
             root,
             {
               runFolder: variables.HARNESS_RUN_FOLDER,
-              executable: variables.HARNESS_VSCODIUM_EXECUTABLE ?? '',
+              executable: editorExecutableOf(variables, launch),
               environment: {...process.env, ...variables},
             },
             launch,

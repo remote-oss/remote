@@ -67,11 +67,14 @@ describe("the editor's operations of the connect's surfaces", () => {
     deepStrictEqual(asked.commands, [['opensshremotes.openConfigFile']]);
   });
 
-  it('F-3902 rule 8: Open Setting opens the Settings editor on that setting', async () => {
+  it('F-3902 AC-9 (ruling-ac9-json): Open Setting opens the user’s settings file at that setting, and asks to edit nothing', async () => {
     const {operations, asked} = operationsOver();
     await operations.openSetting('remote.SSH.serverDownloadUrlTemplate');
     deepStrictEqual(asked.commands, [
-      ['workbench.action.openSettings', 'remote.SSH.serverDownloadUrlTemplate'],
+      [
+        'workbench.action.openSettingsJson',
+        {revealSetting: {key: 'remote.SSH.serverDownloadUrlTemplate'}},
+      ],
     ]);
   });
 

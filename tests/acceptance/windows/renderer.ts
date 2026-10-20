@@ -909,6 +909,25 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** The kind of the open dialog, as its icon says ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`): the icon element carries `codicon-dialog-<kind>`. */
+export type DialogKind = 'info' | 'warning' | 'error';
+
+/** The kind of the dialog open in window `name`, or `undefined` when none is open or its icon names no kind. */
+export async function dialogKindOf(
+  name: string,
+): Promise<DialogKind | undefined> {
+  return (
+    (await evaluate<DialogKind | null>(
+      name,
+      `(() => {
+  const icon = document.querySelector('${DIALOG_BOX} .dialog-icon');
+  const kind = /codicon-dialog-(info|warning|error)/.exec(icon?.className ?? '');
+  return kind === null ? null : kind[1];
+})()`,
+    )) ?? undefined
+  );
+}
+
 /** The whole text of the dialog open in window `name`, the markdown details included, or `undefined` when none is. */
 export async function dialogText(name: string): Promise<string | undefined> {
   return (
