@@ -458,6 +458,22 @@ export async function rowAction(
   );
 }
 
+/** The titles of the title actions of view `viewName` in window `name`, in the order shown; none when the view is not there. */
+export async function titleActions(
+  name: string,
+  viewName: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return pane === undefined
+        ? []
+        : [...pane.querySelectorAll('.pane-header .actions .action-label')].map(label => label.getAttribute('aria-label') ?? '');
+    })()`,
+  );
+}
+
 /** Clicks the title action `actionTitle` of view `viewName` in window `name`. */
 export async function titleAction(
   name: string,
@@ -496,6 +512,42 @@ export async function toggleRow(
   if (missing !== null) {
     throw new Error(`window ${name}, view ${viewName}: ${missing}`);
   }
+}
+
+/**
+ * The labels of the context menu that a right click on the row `rowLabel` of view `viewName` in window `name` opens, in
+ * order; none when it opens no menu. The menu is closed again. It fails naming the row when the view has none by that
+ * label.
+ */
+export async function rowContextMenu(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string[]> {
+  const menu = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '');
+      for (const type of ['keydown', 'keyup']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      return labels;
+    })()`,
+  );
+  if (menu === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  return menu;
 }
 
 /** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */

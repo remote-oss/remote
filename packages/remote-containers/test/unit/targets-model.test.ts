@@ -262,7 +262,7 @@ describe('the targets model (card containers-29)', () => {
     );
   });
 
-  it('F-0901 AC-11, AC-36, AC-54: Exited tooltips at the table’s elapsed times', () => {
+  it('F-0901 AC-11, AC-35, AC-36, AC-54: Exited tooltips at the table’s elapsed times', () => {
     const elapsed = [
       0,
       MINUTE,
@@ -273,6 +273,7 @@ describe('the targets model (card containers-29)', () => {
       66 * MINUTE,
       12 * HOUR + 18 * MINUTE,
       4 * ONE_DAY + 17 * HOUR + 39 * MINUTE,
+      26 * HOUR,
     ];
     deepStrictEqual(
       elapsed.map(
@@ -291,6 +292,7 @@ describe('the targets model (card containers-29)', () => {
         'Exited 1 hour ago',
         'Exited 1 day ago',
         'Exited 5 days ago',
+        'Exited 1 day ago',
       ],
     );
   });
@@ -318,11 +320,19 @@ describe('the targets model (card containers-29)', () => {
       [
         running(2 * MINUTE),
         running(70 * MINUTE),
+        running(7 * HOUR + 11 * MINUTE),
         running(7 * HOUR + 25 * MINUTE),
         running(29 * HOUR),
         running(2 * ONE_DAY),
       ],
-      ['Running', 'Running', 'Running', 'Running 1 day', 'Running 2 days'],
+      [
+        'Running',
+        'Running',
+        'Running',
+        'Running',
+        'Running 1 day',
+        'Running 2 days',
+      ],
     );
   });
 
@@ -339,6 +349,34 @@ describe('the targets model (card containers-29)', () => {
         statusOf(container({state: 'paused'})),
       ],
       ['Paused 1 minute ago', 'Paused'],
+    );
+  });
+
+  it('F-0901 AC-22: at short elapsed times no state says "created at" or counts in years', () => {
+    const states: Array<ListedContainer['state']> = [
+      'running',
+      'created',
+      'paused',
+      'restarting',
+      'exited',
+    ];
+    const elapsed = [0, 40 * SECOND, 5 * MINUTE, 3 * HOUR, 40 * ONE_DAY];
+    const tooltips = states.flatMap(state =>
+      elapsed.map(time =>
+        rowOf(
+          container({
+            state,
+            startedAt: FIXED_NOW - time,
+            finishedAt: FIXED_NOW - time,
+          }),
+        ).tooltip.toLowerCase(),
+      ),
+    );
+    deepStrictEqual(
+      tooltips.filter(
+        text => text.includes('created at') || text.includes('year'),
+      ),
+      [],
     );
   });
 
