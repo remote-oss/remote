@@ -98,10 +98,7 @@ function writeDockerfile(
 function argumentsOf(
   values: Record<string, string>,
 ): Record<string, Record<string, string>> {
-  return Object.fromEntries([['args', values]]) as Record<
-    string,
-    Record<string, string>
-  >;
+  return Object.fromEntries([['args', values]]);
 }
 
 /** The base image of the run, for Dockerfiles. */
@@ -419,7 +416,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
         containerId,
       );
       await closeWindow(name);
-      deepStrictEqual(imageTag, `${tagOf(folder)}-uid`);
+      deepStrictEqual(imageTag, tagOf(folder));
     } finally {
       await cleanUp(folder);
     }
@@ -475,5 +472,53 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     } finally {
       await cleanUp(folder);
     }
+  });
+
+  it('F-0412 AC-31, AC-33 (i31): a missing build context and an image nobody can pull each end in the generic dialog and leave no container or image', async () => {
+    const cases: Array<[string, Record<string, unknown>, string]> = [
+      [
+        'c52-missing-context',
+        {
+          image: undefined,
+          build: {dockerfile: 'Dockerfile', context: 'no-such-folder'},
+        },
+        `FROM ${base()}\n`,
+      ],
+      ['c52-unpullable-image', {image: 'does-not-exist.invalid/x:1'}, ''],
+      [
+        'c52-unpullable-from',
+        {image: undefined, build: {dockerfile: 'Dockerfile'}},
+        'FROM does-not-exist.invalid/x:1\n',
+      ],
+    ];
+    const seen: Array<[string, string, string[], string[], string[]]> = [];
+    for (const [folderName, configuration, dockerfile] of cases) {
+      const folder = devContainerFolder(folderName, {
+        name: 'Fails',
+        ...configuration,
+      });
+      if (dockerfile !== '') {
+        writeDockerfile(folder, dockerfile);
+      }
+      try {
+        const name = await openFolderWindow(folder);
+        await reopenStarted(name);
+        const shown = await waitForDialog(name, DIALOG_MILLISECONDS);
+        seen.push([
+          folderName,
+          shown.details,
+          [...shown.buttons].sort(),
+          await devContainersOf(folder),
+          await repositoriesStarting(`vsc-${nameOf(folder)}-`),
+        ]);
+        await closeWindow(name);
+      } finally {
+        await cleanUp(folder);
+      }
+    }
+    deepStrictEqual(
+      seen,
+      cases.map(([folderName]) => [folderName, S034, RECOVERY_BUTTONS, [], []]),
+    );
   });
 });
