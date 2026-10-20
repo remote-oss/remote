@@ -12,7 +12,6 @@ import {
   runLabelArguments,
   variable,
   waitFor,
-  windowNames,
   windowState,
 } from '../windows/harness.ts';
 import {
@@ -23,6 +22,7 @@ import {
   editorTabs,
   notificationCentre,
   notificationProgress,
+  pageCount,
   pressEscape,
   pressQuickPickRowButton,
   quickPickOf,
@@ -141,8 +141,9 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
     );
   });
 
-  it('F-0301 AC-44 (o2): a relative workspaceFolder shows the absolute-path error before any container, leaves the file and the window as they were, and an absolute value then connects', async () => {
+  it('F-0301 AC-44 (o2): a relative workspaceFolder shows the absolute-path error before any container and leaves the file and the window as they were, and after the value is made absolute, reopening that folder connects', async () => {
     const rows: unknown[] = [];
+    const failed: Array<{folder: string; window: string}> = [];
     for (const [name, value] of [
       ['c50-rel-src', 'src'],
       ['c50-rel-sub', 'relative/sub/dir'],
@@ -160,34 +161,50 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
       opened.push(window);
       const running = inWindow(window, 'remote-containers.reopenInContainer');
       const dialog = await waitForDialog(window, 120_000);
-      rows.push([
+      const whileOpen = [
         dialog.details,
         [...dialog.buttons],
+        (await devContainersOf(folder)).length,
+      ];
+      await answerDialog(window, 'Cancel');
+      await running.catch(() => undefined);
+      rows.push([
+        whileOpen,
         (await devContainersOf(folder)).length,
         (await windowTitle(window)).includes('[Dev Container'),
         readFileSync(file, 'utf8') === before,
       ]);
-      await answerDialog(window, 'Cancel');
-      await running.catch(() => undefined);
+      failed.push({folder, window});
     }
-    const fixed = configFolder('c50-rel-fixed', {
-      '.devcontainer/devcontainer.json': {
-        name: 'Fixed',
-        workspaceFolder: '/workspaces/c50-rel-fixed',
-      },
-    });
-    const window = await openFolderWindow(fixed);
-    opened.push(window);
-    await reopenInContainer(window);
-    rows.push((await windowState(window)).remoteName);
+    const [first] = failed;
+    writeFileSync(
+      path.join(first?.folder ?? '', '.devcontainer', 'devcontainer.json'),
+      JSON.stringify({
+        image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+        runArgs: runLabelArguments(),
+        name: 'Rel',
+        workspaceFolder: '/workspaces/c50-rel-src',
+      }),
+    );
+    await reopenInContainer(first?.window ?? '');
     const refused = [
-      'Workspace folder in devcontainer.json must be an absolute path.',
-      ['Cancel', 'Show Log'],
+      [
+        'Workspace folder in devcontainer.json must be an absolute path.',
+        ['Cancel', 'Show Log'],
+        0,
+      ],
       0,
       false,
       true,
     ];
-    deepStrictEqual(rows, [refused, refused, refused, 'dev-container']);
+    deepStrictEqual(
+      [
+        rows,
+        (await windowState(first?.window ?? '')).remoteName,
+        (await devContainersOf(first?.folder ?? '')).length,
+      ],
+      [[refused, refused, refused], 'dev-container', 1],
+    );
   });
 
   it('F-0301 AC-62 (o3): Open Folder in Container shows the target’s picker while the window shows the start folder, and the same window connects with the choice or with the only configuration, or opens a row’s file in place', async () => {
@@ -196,7 +213,7 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
       '.devcontainer/a/devcontainer.json': {name: 'OF-A'},
       '.devcontainer/b/devcontainer.json': {name: 'OF-B'},
     });
-    const windowsBefore = windowNames().length;
+    const pagesBeforeFile = await pageCount();
     void startOpenFolder(start);
     await answerFolderDialog(start, target);
     await pickerShown(start);
@@ -211,22 +228,26 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
       remoteName: (await windowState(start)).remoteName,
       title: await windowTitle(start),
       preview: (await editorTabs(start)).map(entry => entry.preview),
-      windows: windowNames().length - windowsBefore,
+      pages: (await pageCount()) - pagesBeforeFile,
     };
+    const pagesBeforeChoice = await pageCount();
     void startOpenFolder(start);
     await answerFolderDialog(start, target);
     await pickerShown(start);
     await chooseQuickPickItem(start, 'OF-B');
     await connectedToContainer('c50-of-two');
     opened.splice(opened.indexOf(start), 1, 'c50-of-two');
+    const pagesAfterChoice = await pageCount();
     const single = configFolder('c50-of-one', {
       '.devcontainer/devcontainer.json': {name: 'OF-ONE'},
     });
     const second = await startWindow('c50-start-two');
+    const pagesBeforeSingle = await pageCount();
     void startOpenFolder(second);
     await answerFolderDialog(second, single);
     await connectedToContainer('c50-of-one');
     opened.splice(opened.indexOf(second), 1, 'c50-of-one');
+    const pagesAfterSingle = await pageCount();
     deepStrictEqual(
       {
         titleAtPick,
@@ -238,6 +259,10 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
           (await devContainersOf(target)).length,
           (await devContainersOf(single)).length,
         ],
+        noSecondWindow: [
+          pagesAfterChoice === pagesBeforeChoice,
+          pagesAfterSingle === pagesBeforeSingle,
+        ],
       },
       {
         titleAtPick: '[c50-start [Dev Container: Start]]'.replace(
@@ -248,12 +273,13 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
           remoteName: null,
           title: '[c50-start]',
           preview: [true],
-          windows: 0,
+          pages: 0,
         },
         choice: '[c50-of-two [Dev Container: OF-B]]',
         pickerAfter: undefined,
         only: '[c50-of-one [Dev Container: OF-ONE]]',
         containers: [1, 1],
+        noSecondWindow: [true, true],
       },
     );
   });

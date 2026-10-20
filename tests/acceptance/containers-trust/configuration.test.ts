@@ -5,6 +5,7 @@ import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   connectedToContainer,
+  devContainersOf,
   inWindow,
   isTrusted,
   runLabelArguments,
@@ -81,9 +82,8 @@ describe('F-0301 configurations in an untrusted folder (card containers-50)', fu
   const UNTOUCHED = [undefined, undefined, false, null];
 
   it('F-0301 AC-59 (t1): the notification’s Reopen in Container in an untrusted folder with several configurations asks core’s trust question before any picker, and Cancel leaves the window local and restricted with no picker, message or notification', async () => {
-    const window = await openFolderWindow(
-      configFolder('c50-trust-two', ['TA', 'TB']),
-    );
+    const folder = configFolder('c50-trust-two', ['TA', 'TB']);
+    const window = await openFolderWindow(folder);
     opened.push(window);
     await answerNotification(window, NOTICE_START, 'Reopen in Container');
     const shown = await waitForDialog(window, 60_000);
@@ -101,6 +101,7 @@ describe('F-0301 configurations in an untrusted folder (card containers-50)', fu
         (await notificationCentre(window)).filter(text =>
           text.startsWith(NOTICE_START),
         ),
+        await devContainersOf(folder),
       ],
       [
         [
@@ -109,6 +110,7 @@ describe('F-0301 configurations in an untrusted folder (card containers-50)', fu
           undefined,
         ],
         UNTOUCHED,
+        [],
         [],
       ],
     );

@@ -160,6 +160,11 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
+/** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
+export async function pageCount(): Promise<number> {
+  return (await pages()).length;
+}
+
 /**
  * The one title among `titles` that window `name`'s folder name gives, `[<name>]` or `[<name> [...`, `[]` for `local`;
  * none when no title or more than one fits. It needs nothing from the window's agent, so it finds the page of a window
