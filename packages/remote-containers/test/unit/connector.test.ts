@@ -666,38 +666,70 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  it('F-0417 BR-8: a retry or a reconnection is the same connection and registers nothing again, and a new first attempt is a new connection', async () => {
+  it('F-0417 BR-8: a retry or a reconnection is the same connection and registers nothing again, and after a failed connect the next one is a new connection', async () => {
     const scene = sceneOf();
     await scene.connector.connect(inputOf(PAYLOAD));
     await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
-    await scene.connector.connect(inputOf(PAYLOAD));
+    const failing = sceneOf();
+    failing.outcome = {kind: 'discoveryFailed', detail: 'no engine'};
+    await failing.connector.connect(inputOf(PAYLOAD));
+    failing.outcome = READY;
+    await failing.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
     deepStrictEqual(
-      scene.shutdownSent.map(request =>
-        request.type === 'register'
-          ? `register ${request.connectionId}`
-          : `${request.type} ${request.connectionId}`,
+      [scene, failing].map(each =>
+        each.shutdownSent.map(request =>
+          request.type === 'register' ||
+          request.type === 'leave' ||
+          request.type === 'container'
+            ? `${request.type} ${request.connectionId}`
+            : '',
+        ),
       ),
       [
-        'register connection-1',
-        'container connection-1',
-        'container connection-1',
-        'register connection-2',
-        'container connection-2',
+        [
+          'register connection-1',
+          'container connection-1',
+          'container connection-1',
+        ],
+        [
+          'register connection-1',
+          'leave connection-1',
+          'register connection-2',
+          'container connection-2',
+        ],
       ],
     );
   });
 
-  it('F-0417 AC-51, BR-5: a folder that is trusted already registers before anything is read, and one that is asked registers after its answer', async () => {
-    const trusted = sceneOf();
-    await trusted.connector.connect(inputOf(PAYLOAD));
-    const asked = sceneOf();
-    asked.trusted = false;
-    asked.trustAnswer = true;
-    await asked.connector.connect(inputOf(PAYLOAD));
+  it('F-0417 AC-51, BR-5: the authority the window was opened on is announced before the connect starts, once, and the connect then registers nothing more', async () => {
+    const scene = sceneOf();
+    scene.connector.announceShutdown(`dev-container+${PAYLOAD}`);
+    const before = scene.shutdownSent.length;
+    await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
-      [trusted.readsAtShutdown[0], (asked.readsAtShutdown[0] ?? 0) > 0],
-      [0, true],
+      [
+        before,
+        scene.shutdownSent.map(request => request.type),
+        scene.readsAtShutdown[0],
+      ],
+      [1, ['register', 'container'], 0],
     );
+  });
+
+  it('F-0417 BR-5: an authority of another kind, a malformed or a legacy one, none at all, or a folder that is not trusted yet announces nothing', async () => {
+    const trusted = sceneOf();
+    for (const authority of [
+      undefined,
+      'ssh-remote+host',
+      'dev-container+not hex',
+      `dev-container+${Buffer.from('/work/proj').toString('hex')}`,
+    ]) {
+      trusted.connector.announceShutdown(authority);
+    }
+    const untrusted = sceneOf();
+    untrusted.trusted = false;
+    untrusted.connector.announceShutdown(`dev-container+${PAYLOAD}`);
+    deepStrictEqual([trusted.shutdownSent, untrusted.shutdownSent], [[], []]);
   });
 
   it('F-0417 BR-5: a folder the user did not trust registers nothing, since the helper would run its Docker program', async () => {

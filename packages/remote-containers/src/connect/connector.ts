@@ -139,6 +139,11 @@ export interface ContainerConnector extends Connector {
   heldConnection(): HeldConnection | undefined;
   /** Calls the listener when the connection the window holds is made or given back; gives the way to stop listening. */
   onHeldChanged(listener: () => void): () => void;
+  /**
+   * Tells the shutdown helper about the connection this window is about to make, from the authority it was opened on and
+   * before the connect starts: nothing for another kind of authority or a folder that is not trusted yet.
+   */
+  announceShutdown(authority: string | undefined): void;
   /** Tells the shutdown helper that the window leaves the container it holds, before the window reloads elsewhere. */
   leaveShutdown(): Promise<void>;
   /** The local path a URI of this window's container folder stands for; nothing otherwise. */
@@ -1129,9 +1134,6 @@ export function containerConnectorOf(
           return await reconnect(held, controller.signal);
         }
         releaseHeld();
-        if (input.attempt === 1 && !input.isReconnection) {
-          shutdownConnection = undefined;
-        }
         if (target.outer !== undefined) {
           return remoteEngine();
         }
@@ -1180,6 +1182,20 @@ export function containerConnectorOf(
             remoteWorkspaceFolder: held.remoteWorkspaceFolder,
             engine: held.engine,
           },
+    announceShutdown: authority => {
+      const decoded =
+        authority?.startsWith(AUTHORITY_PREFIX) === true
+          ? devContainerTargetOf(authority.slice(AUTHORITY_PREFIX.length))
+          : undefined;
+      if (
+        decoded !== undefined &&
+        !('malformed' in decoded) &&
+        decoded.kind !== 'legacy' &&
+        dependencies.trust.isTrusted()
+      ) {
+        registerWithShutdown(decoded, toolsOf(decoded));
+      }
+    },
     leaveShutdown,
     canonicalPathOf,
     onHeldChanged: listener => heldChanges.subscribe(listener),

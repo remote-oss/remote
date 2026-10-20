@@ -88,6 +88,7 @@ async function registered(
     onHeldChanged: () => () => undefined,
     revealDetails: () => undefined,
     heldConnection: () => undefined,
+    announceShutdown: () => undefined,
     leaveShutdown: () => Promise.resolve(),
     failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,

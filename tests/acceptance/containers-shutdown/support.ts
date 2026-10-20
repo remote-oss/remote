@@ -178,3 +178,16 @@ export function lifecycleEvents(actions: readonly string[]): string[] {
     ['kill', 'stop', 'die', 'start'].includes(action),
   );
 }
+
+/** The process ids of the run's user's shutdown helpers: none once the last window's check has run. */
+export async function helperProcesses(): Promise<string[]> {
+  try {
+    const {stdout} = await execFileAsync('pgrep', [
+      '-f',
+      'shutdown-helper[.]js',
+    ]);
+    return stdout.split('\n').filter(line => line !== '');
+  } catch {
+    return [];
+  }
+}

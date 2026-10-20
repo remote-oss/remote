@@ -728,6 +728,7 @@ export async function activate(
       },
     });
     windowShutdown.leave = () => connector.leaveShutdown();
+    connector.announceShutdown(vscode.env.remoteAuthority);
     if (served.missing.length === 0) {
       offerReopen({
         window: {
