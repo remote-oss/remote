@@ -239,7 +239,7 @@ describe('a launch past its limits', () => {
         calls,
       ],
       [
-        60_000,
+        180_000,
         1_200_000,
         [
           [

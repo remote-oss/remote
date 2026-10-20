@@ -37,6 +37,8 @@ export interface OpenFolderPorts extends Pick<
     remoteAuthority(): string | undefined;
     folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
     homeFolder(): string;
+    /** Whether the window's workspace is trusted now. */
+    isTrusted(): boolean;
     serializedFile: ReopenPorts['window']['serializedFile'];
   };
   /** Core's folder dialog: folders only, one, opened at `start`. */
@@ -74,13 +76,15 @@ export function openFolderInContainer(
       return;
     }
     const own = ownFolder();
-    if ((await ports.engine.firstCheck(own, ports.dialogs)) === 'stopped') {
+    // A relative value is the window's own folder's file, which runs only once that folder is trusted.
+    const base = window.isTrusted() ? own : undefined;
+    if ((await ports.engine.firstCheck(base, ports.dialogs)) === 'stopped') {
       return;
     }
     // The passed check means the setting names a program, with the window's folder as base or none.
     const executable = executableOf(
       ports.settings.dockerPath(),
-      own,
+      base,
     ) as Extract<Executable, {kind: 'spawn'}>;
     const picked = await ports.pickFolder(own ?? window.homeFolder());
     if (picked === undefined) {

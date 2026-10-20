@@ -30,7 +30,7 @@ function hostWith(sshAuthSock: string, display: string): ProbedHost {
     release: 'alpine',
     home: '/home/harness',
     temporaryFolder: '/tmp',
-    loginShell: 'sh',
+    loginShell: '/bin/sh',
     tools: ['wget', 'tar'],
     busyboxWget: true,
     sshAuthSock,

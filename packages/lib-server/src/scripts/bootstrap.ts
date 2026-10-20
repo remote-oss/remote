@@ -291,7 +291,7 @@ const PROBE_BODY: readonly string[] = [
   'else',
   '  fact host.wgetBusybox no',
   'fi',
-  'fact host.shell "${SHELL##*/}"',
+  'fact host.shell "${SHELL:-}"',
   'fact host.sshAuthSock "${SSH_AUTH_SOCK:-}"',
   'fact host.display "${DISPLAY:-}"',
   'fact server.installDir "$INSTALL_DIR"',

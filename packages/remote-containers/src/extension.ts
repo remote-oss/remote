@@ -29,6 +29,7 @@ import {systemCliPorts} from './cli/node-cli-ports.ts';
 import {overrideStoreOf} from './cli/override-files.ts';
 import {containerConnectorOf} from './connect/connector.ts';
 import {openHostRelay} from './connect/host-relay.ts';
+import {recentLabelPortsOf} from './connect/recent-editor.ts';
 import {registerContainerResolver} from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
@@ -505,6 +506,7 @@ export async function activate(
           ...reopenPorts.window,
           remoteAuthority: () => vscode.env.remoteAuthority,
           homeFolder: () => os.homedir(),
+          isTrusted: () => vscode.workspace.isTrusted,
         },
         pickFolder: async start => {
           const [picked] =
@@ -761,6 +763,7 @@ export async function activate(
         }),
         labels: vscode.workspace,
         commands: host,
+        recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
         presenter: recoveryPortsOf(vscode, {
           keepEdit: (folder, configFile) =>
             storePendingEdit(
@@ -803,6 +806,7 @@ export async function activate(
     const windowEngine = {
       dockerPath: () =>
         vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+      trusted: () => vscode.workspace.isTrusted,
       folders: () =>
         (vscode.workspace.workspaceFolders ?? []).map(
           folder => folder.uri.fsPath,
@@ -833,6 +837,10 @@ export async function activate(
           if (event.affectsConfiguration(settings.dockerPath.id)) {
             listener();
           }
+        }),
+      onTrustGranted: listener =>
+        vscode.workspace.onDidGrantWorkspaceTrust(() => {
+          listener();
         }),
       translate,
       logger,

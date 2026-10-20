@@ -2,7 +2,7 @@
  * @fileoverview The registration of the container connector: the resolver of the `dev-container` authority behind the
  * activation's own readiness, the window's label (the named one once a resolve settles with the connection up, the
  * unnamed one once the window is disconnected, never while a failure dialog is open) and the command the progress's
- * "(show log)" link runs.
+ * "(show log)" link runs. The first connection of a window also stores its Open Recent entry with its label.
  */
 
 import {
@@ -27,6 +27,7 @@ import {
 } from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
+import {type RecentLabelPorts, storeRecentLabel} from './recent-label.ts';
 import {workspaceSuffixOf} from './window-identity.ts';
 
 /** What the registration needs of the editor. */
@@ -35,6 +36,8 @@ export interface ConnectorRegistrationHost {
   labels: LabelFormatterHost;
   commands: CommandHost;
   presenter: Omit<RecoveryPorts, 'disconnected'>;
+  /** The Open Recent entry of the window, which gets its label once the window first connects. */
+  recentLabel: RecentLabelPorts;
   translate: Translate;
   /** Opens the forwards the connection declares, once core has the connection. */
   forwarder: Forwarder;
@@ -63,6 +66,7 @@ export async function registerContainerResolver(
   }
   let label: {dispose(): void} | undefined;
   let disposed = false;
+  let recentLabelStored = false;
   let dialogs = 0;
   /** The label with no name, for a window that is disconnected and has none yet; never while a dialog is open. */
   function registerUnnamedLabel(): void {
@@ -136,6 +140,16 @@ export async function registerContainerResolver(
           connection.decodedTarget,
           workspaceSuffixOf(connector.heldIdentity(), translate),
         );
+        const folder = decodedFolderOf(connection.decodedTarget);
+        if (folder !== undefined && !recentLabelStored) {
+          recentLabelStored = true;
+          void storeRecentLabel(
+            host.recentLabel,
+            translate,
+            served.logger,
+            folder,
+          );
+        }
       } else {
         queueMicrotask(() => {
           if (dialogs === 0) {

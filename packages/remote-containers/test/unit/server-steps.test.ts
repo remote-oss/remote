@@ -73,7 +73,7 @@ function hostFacts(
     'host.release=debian',
     'host.home=/home/node',
     'host.tmp=/tmp',
-    'host.shell=sh',
+    'host.shell=/bin/sh',
     'host.tool.tar=yes',
     'host.tool.wget=yes',
     'host.tool.curl=no',

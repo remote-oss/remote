@@ -69,6 +69,7 @@ async function registered(
   const requests: ProgressRequest[] = [];
   const formatters: ResourceLabelFormatter[] = [];
   const disposed: string[] = [];
+  const recentAdded: string[] = [];
   const commands = new Map<string, () => unknown>();
   const recording = recordingResolverEditor(events);
   const listeners: Array<(phase: ConnectPhase) => void> = [];
@@ -133,6 +134,19 @@ async function registered(
         },
       },
       commands: host,
+      recentLabel: {
+        homeFolder: () => '/home/al',
+        windowEntry: () => ({
+          type: 'folder',
+          uri: 'vscode-remote://dev-container%2B7b7d/workspaces/w',
+          remoteAuthority: 'dev-container+7b7d',
+        }),
+        recentEntries: () => Promise.resolve([]),
+        addEntry: entry => {
+          recentAdded.push(entry.label);
+          return Promise.resolve();
+        },
+      },
       presenter: inertRecoveryPorts({
         storePausedRetry: containerId => {
           stored.push(containerId);
@@ -187,6 +201,7 @@ async function registered(
     revealed: () => revealed,
     warned,
     stored,
+    recentAdded,
     identify: (next: typeof identity) => {
       identity = next;
     },
@@ -515,5 +530,29 @@ describe('the registration of the container connector (card containers-08)', () 
     seen.result.dispose();
     await running;
     deepStrictEqual(seen.formatters, []);
+  });
+
+  it('F-0501 AC-1: the first connected resolve of a folder window stores its Open Recent entry with the tilded host path and the static suffix, once', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    await settledResolve(seen, 2, FOLDER_AUTHORITY);
+    deepStrictEqual(seen.recentAdded, ['/w [Dev Container]']);
+  });
+
+  it('F-0501 AC-1: an authority that names no folder stores no Open Recent entry', async () => {
+    const seen = await registered();
+    await settledResolve(seen, 1);
+    deepStrictEqual(seen.recentAdded, []);
+  });
+
+  it('F-0501 AC-1: a connect that fails stores no Open Recent entry', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    deepStrictEqual(seen.recentAdded, []);
   });
 });

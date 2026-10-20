@@ -47,7 +47,7 @@ export const HOST: ProbedHost = {
   release: 'debian',
   home: '/home/dev',
   temporaryFolder: '/tmp',
-  loginShell: 'sh',
+  loginShell: '/bin/sh',
   tools: ['wget', 'tar'],
   busyboxWget: false,
   sshAuthSock: '',

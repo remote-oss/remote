@@ -538,17 +538,26 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(files, [['docker'], ['docker']]);
   });
 
-  it('contracts §2 step 3: a relative path cannot be resolved inside the resolve, so the second check fails and nothing runs', async () => {
-    const scene = sceneOf({dockerPath: 'bin/docker'});
-    const result = await scene.connector.connect(inputOf(PAYLOAD));
-    deepStrictEqual(
-      [
-        'reason' in result && result.reason,
-        scene.engineCalls.length,
-        scene.prepared,
-      ],
-      [{id: 'S339'}, 0, []],
-    );
+  it('F-0201 AC-37, BR-1: a relative docker path is the folder’s file: the engine, the CLI’s read and the container request all get it, with ./ or without', async () => {
+    const seen = [];
+    for (const dockerPath of ['tools/dk', './tools/dk']) {
+      const scene = sceneOf({dockerPath});
+      await connected(scene);
+      seen.push([
+        scene.engineFiles,
+        [
+          ...new Set(
+            scene.configurationReads.map(read => read.target.dockerPath),
+          ),
+        ],
+        scene.prepared.map(request => request.dockerPath),
+      ]);
+    }
+    const resolved = '/work/proj/tools/dk';
+    deepStrictEqual(seen, [
+      [[resolved], [resolved], [resolved]],
+      [[resolved], [resolved], [resolved]],
+    ]);
   });
 
   it('F-0417 BR-5, BR-13: a connect registers its connection with the shutdown helper after the trust gate, with the folder, the configuration file and the engine as it was', async () => {

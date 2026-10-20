@@ -27,7 +27,7 @@ import {
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
-import {executableOf} from '../engine/executable.ts';
+import {type Executable, executableOf} from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
 import type {EngineCoordinates} from '../shutdown/protocol.ts';
 import {
@@ -251,6 +251,7 @@ function mappedPath(
 /** The settings, the program, the engine and the CLI of one folder. */
 interface Tools {
   settings: ReturnType<ContainerConnectorDependencies['settings']>;
+  /** The file that the engine and the CLI run: the setting's value, a relative one resolved against the folder. */
   dockerPath: string;
   configFile: string;
   engine: EngineHost;
@@ -714,16 +715,15 @@ export function containerConnectorOf(
   /** The settings, the program, the engine and the CLI a connect or a read of `folder` uses, made the same way for both. */
   function toolsOf(folder: DevContainerFolder): Tools {
     const settings = dependencies.settings();
-    const dockerPath =
-      typeof settings.dockerPath === 'string' && settings.dockerPath !== ''
-        ? settings.dockerPath
-        : 'docker';
-    const file = executableOf(settings.dockerPath, undefined);
-    const written = file.kind === 'spawn' ? file.file : dockerPath;
-    const unwrapped = dependencies.engineFor(written);
+    // With the folder as base, the setting always names a program: a relative value is the folder's file.
+    const executable = executableOf(
+      settings.dockerPath,
+      folder.hostPath,
+    ) as Extract<Executable, {kind: 'spawn'}>;
+    const unwrapped = dependencies.engineFor(executable.file);
     return {
       settings,
-      dockerPath,
+      dockerPath: executable.file,
       configFile: folder.configFile.fsPath ?? folder.configFile.path,
       engine:
         folder.context === undefined
@@ -893,7 +893,7 @@ export function containerConnectorOf(
         engineFor: () => engine,
         dockerPath: () => settings.dockerPath,
       },
-      undefined,
+      folder.hostPath,
       cancellation,
     );
     if (checked.kind === 'failed') {

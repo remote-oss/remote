@@ -6,7 +6,8 @@
     "src/programs/cli-preload.ts": "runs as a preload in the CLI's own process; the preload rows cover it",
     "src/engine/node-engine-host.ts": "spawns real processes; the server acceptance rows cover it",
     "src/open/reopen-ports.ts": "types only; no executable code",
-    "src/programs/shutdown-helper.ts": "runs as a program of its own over real sockets and processes; the acceptance run covers it"
+    "src/programs/shutdown-helper.ts": "runs as a program of its own over real sockets and processes; the acceptance run covers it",
+    "src/programs/helper-launcher.ts": "runs as a program of its own and starts a detached process; the acceptance run covers it"
   },
   "ratchet": {
     "lines": 100,
