@@ -1,0 +1,6 @@
+{
+  "id": "lab-depends-e",
+  "version": "1.0.0",
+  "name": "Lab Depends E",
+  "description": "The acceptance run's own Feature that another depends on."
+}

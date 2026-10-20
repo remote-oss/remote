@@ -382,11 +382,14 @@ and publish templates into it before its launches (`tools/acceptance-templates.t
     `docs/` and a `README.md` and `NOTES.md`. For the options stage (F-0803) and the optional-files stage (F-0805).
   - `paths-free-lab`: one `enum` option and no `optionalPaths`. For a template with options and no optional files.
   - `bare-lab`: no options and no `optionalPaths`. For a template with neither.
-- **Five Features of our own** in two collections. The collection `remote-oss-run/features` is published, from the
+- **Eight Features of our own** in two collections. The collection `remote-oss-run/features` is published, from the
   Feature folders of `tests/acceptance/fixtures/templates/custom-features/src/` (a `devcontainer-feature.json` and an
   `install.sh` that writes its environment to `/usr/local/share/remote-oss-run/<id>.env`), so a row can build with
   them: `lab-options`, with five options (two booleans, one with no description, an `enum`, `proposals` and a string),
-  and `lab-plain`, with none. The collection `remote-oss-community/features`, a second owner, is only listed
+  and `lab-plain`, with none; `lab-depends-e`, with none, and `lab-depends-a`, which depends on it (its
+  `dependsOn` names `${registry}/remote-oss-run/features/lab-depends-e:1`, and the publish writes the run's registry
+  into a copy of the folder first); and `lab-advised`, which the run's control manifest advises against. The collection
+  `remote-oss-community/features`, a second owner, is only listed
   (`custom-community-features.json`; nothing builds it): `add-community`, `Add Community Tool` and `Adobe Community
   Kit`, whose labels sort differently without regard to case than by code unit (F-0804's sort). For the Features stage
   (F-0804, F-0803, F-0414).
@@ -405,7 +408,13 @@ repository, which gives the owner a Feature list shows).
 - **The variables:**
   - `HARNESS_TEMPLATE_REGISTRY` is the registry as the templates' ids name it, `localhost:<port>`;
   - `REMOTE_OSS_TEMPLATE_INDEX` is the index's URL on the download host. It is harness-only: the product reads it only
-    when `REMOTE_OSS_ACCEPTANCE` is `1`.
+    when `REMOTE_OSS_ACCEPTANCE` is `1`;
+  - `REMOTE_OSS_CONTROL_MANIFEST` is the run's control manifest on the download host, beside it, for the product's own
+    copy (card containers-94). The dev container CLI reads `control-manifest.json` from its cache folder
+    (`<temporary folder>/devcontainercli-<user name>`) while the file is under five minutes old, so a row that needs the
+    run's manifest in the CLI calls `seedControlManifest()` (`windows/control-manifest.ts`) and `removeControlManifest()`
+    after. The manifest is `tools/acceptance-control-manifest.ts`: a disallowed Feature with a documentation address
+    and one without, and an advisory for `lab-advised` 1.0.0 fixed in 1.0.1.
 - **A row's clean-up removes the registry** with every other container of the run (`clearEarlierRows`), so the Dev
   Containers views of later rows list no container but their own. A row that needs the templates calls
   `runTemplatesReady()` (`windows/run-templates.ts`) first. It starts the registry again on the same port, which the
@@ -527,6 +536,7 @@ behaviour is chosen by the first segment of the path:
 | `cut` | 200 with the archive's length, then the connection drops after 1 MiB |
 | `slow` | the archive, 64 KiB every 100 ms |
 | `templates` | `/templates/devcontainer-index.json`: the run's template index once the run has written it (404 before); `/templates/broken-index.json`: an index cut off so it doesn't parse; `/templates/unreachable`: the connection dropped before any answer |
+| `control` | `/control/devcontainer-control-manifest.json`: the run's control manifest once the run has written it (404 before); `/control/unreachable`: the connection dropped before any answer |
 
 The archive is the VSCodium server for Alpine of the release the client is pinned to, cached under
 `.vscode-test/downloads/` and checked against its sha256 (`SERVER_ARCHIVE`). The HTTPS certificate is the run's own,
