@@ -647,7 +647,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(actions, ['stop', 'none', 'stop']);
   });
 
-  it('F-0417 AC-60, BR-8: a connect that fails after its container is ready has told the helper which container the window holds', async () => {
+  it('F-0417 AC-60, BR-8, BR-5: a connect that fails after its container is ready has told the helper which container the window holds, and then that the connection ends, since a failed window holds nothing', async () => {
     const scene = sceneOf();
     const failure: Failed = {
       kind: 'serverFailed',
@@ -662,7 +662,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
       scene.shutdownSent.map(request => request.type),
-      ['register', 'container'],
+      ['register', 'container', 'leave'],
     );
   });
 
@@ -684,6 +684,19 @@ describe('the container connector: the connect (card containers-08)', () => {
         'register connection-2',
         'container connection-2',
       ],
+    );
+  });
+
+  it('F-0417 AC-51, BR-5: a folder that is trusted already registers before anything is read, and one that is asked registers after its answer', async () => {
+    const trusted = sceneOf();
+    await trusted.connector.connect(inputOf(PAYLOAD));
+    const asked = sceneOf();
+    asked.trusted = false;
+    asked.trustAnswer = true;
+    await asked.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [trusted.readsAtShutdown[0], (asked.readsAtShutdown[0] ?? 0) > 0],
+      [0, true],
     );
   });
 

@@ -642,6 +642,15 @@ export function containerConnectorOf(
     }
   }
 
+  /** Tells the shutdown helper that this window's connection ends, if it has one registered, and forgets it. */
+  async function leaveShutdown(): Promise<void> {
+    const connectionId = shutdownConnection;
+    shutdownConnection = undefined;
+    if (connectionId !== undefined) {
+      await dependencies.shutdown.send({type: 'leave', connectionId});
+    }
+  }
+
   /** The engine of `tools`, as the shutdown helper must reach it: the program and the variables that pick the engine. */
   function engineCoordinatesOf(
     folder: DevContainerFolder,
@@ -853,12 +862,16 @@ export function containerConnectorOf(
   async function trustedFolder(
     folder: DevContainerFolder,
     cancellation: AbortSignal,
+    trustedAtStart: boolean,
   ): Promise<boolean> {
     const {trustNeeds, trust} = dependencies;
-    const outcome = await ensureTrusted(trust, {
-      ...trustNeeds,
-      commandTitle: 'the connect',
-    });
+    const outcome = await ensureTrusted(
+      {request: trust.request.bind(trust), isTrusted: () => trustedAtStart},
+      {
+        ...trustNeeds,
+        commandTitle: 'the connect',
+      },
+    );
     if (outcome === 'trusted') {
       return true;
     }
@@ -881,8 +894,13 @@ export function containerConnectorOf(
     failedContainer = undefined;
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
+    // A folder that is trusted already counts as connecting from the start; one that is not waits for its answer.
+    const trustedAtStart = dependencies.trust.isTrusted();
+    if (trustedAtStart) {
+      registerWithShutdown(folder, tools);
+    }
     const read = await readWithinCap(payload, folder, tools);
-    if (!(await trustedFolder(folder, cancellation))) {
+    if (!(await trustedFolder(folder, cancellation, trustedAtStart))) {
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
@@ -1127,6 +1145,10 @@ export function containerConnectorOf(
           controller,
           input,
         );
+        if (!('connectionToken' in result)) {
+          // A window that shows a failure does not hold its container: its connection ends here, and a retry is a new one.
+          await leaveShutdown();
+        }
         return result;
       } finally {
         logger.info(
@@ -1158,13 +1180,7 @@ export function containerConnectorOf(
             remoteWorkspaceFolder: held.remoteWorkspaceFolder,
             engine: held.engine,
           },
-    leaveShutdown: async () => {
-      const connectionId = shutdownConnection;
-      shutdownConnection = undefined;
-      if (connectionId !== undefined) {
-        await dependencies.shutdown.send({type: 'leave', connectionId});
-      }
-    },
+    leaveShutdown,
     canonicalPathOf,
     onHeldChanged: listener => heldChanges.subscribe(listener),
     onPhase: listener => phases.subscribe(listener),

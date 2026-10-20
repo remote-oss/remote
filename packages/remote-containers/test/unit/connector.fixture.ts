@@ -121,8 +121,9 @@ export interface Scene {
   revealed: number;
   /** The `DOCKER_HOST` of the editor's environment, when it has one. */
   dockerHost: string | undefined;
-  /** What the shutdown helper was told, in order. */
+  /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
+  readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
   sink: MemorySink;
@@ -235,6 +236,7 @@ export function sceneOf(
     revealed: 0,
     dockerHost: undefined,
     shutdownSent: [],
+    readsAtShutdown: [],
     metadata: '',
     sink,
     outcome: READY,
@@ -398,6 +400,7 @@ export function sceneOf(
     shutdown: {
       send: request => {
         scene.shutdownSent.push(request);
+        scene.readsAtShutdown.push(scene.configurationReads.length);
         return Promise.resolve();
       },
     },
@@ -473,14 +476,14 @@ export function sceneOf(
     },
     trust: {
       isTrusted: () => {
-        scene.atTrust = {
-          reads: scene.configurationReads.length,
-          engineCalls: scene.engineCalls.length,
-        };
         scene.trustCalls.push('isTrusted');
         return scene.trusted;
       },
       request: message => {
+        scene.atTrust = {
+          reads: scene.configurationReads.length,
+          engineCalls: scene.engineCalls.length,
+        };
         scene.trustCalls.push(`request ${message}`);
         const {trustAnswer} = scene;
         if (typeof trustAnswer === 'function') {
