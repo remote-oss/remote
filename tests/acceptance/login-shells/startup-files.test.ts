@@ -22,7 +22,7 @@ function marked(environment: Record<string, string>, prefix: string): string[] {
     .sort();
 }
 
-describe.skip('login shells and their startup files: which files the connect reads (F-2704)', function () {
+describe('login shells and their startup files: which files the connect reads (F-2704)', function () {
   this.timeout(900_000);
 
   it('F-2704 AC-1 (bash-default): a bash host in the default mode connects with no notice and no dialog', async () => {
