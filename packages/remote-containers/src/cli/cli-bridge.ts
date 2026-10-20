@@ -34,6 +34,7 @@ import {
   type UpResult,
   withoutControlSequences,
 } from './cli-lines.ts';
+import {linkedAbort} from '../linked-abort.ts';
 import {rawHoldOf} from './cli-raw-lines.ts';
 import {referencedSecrets, scrubbed, type Secret} from './cli-secrets.ts';
 import {dropsImage, overrideText} from './override-pre-pass.ts';
@@ -269,14 +270,7 @@ export function cliBridgeOf(
     onLine: (line: string) => void,
     cancellation: AbortSignal,
   ): Promise<Result | CliFailure> {
-    const own = new AbortController();
-    function forward(): void {
-      own.abort();
-    }
-    if (cancellation.aborted) {
-      forward();
-    }
-    cancellation.addEventListener('abort', forward, {once: true});
+    const {own, release} = linkedAbort(cancellation);
     try {
       const finished = await host.run(
         cliArguments,
@@ -294,7 +288,7 @@ export function cliBridgeOf(
         ? {kind: 'cancelled'}
         : read(finished.result, finished.status);
     } finally {
-      cancellation.removeEventListener('abort', forward);
+      release();
     }
   }
 

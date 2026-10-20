@@ -95,5 +95,6 @@
   "Trust is required to build a dev container from it. The folder will now reopen locally.": "Trust is required to build a dev container from it. The folder will now reopen locally.",
   "\"{0}\" does not exist.": "\"{0}\" does not exist.",
   "Open {0}": "Open {0}",
-  "Port number must not start with a dash: {0}": "Port number must not start with a dash: {0}"
+  "Port number must not start with a dash: {0}": "Port number must not start with a dash: {0}",
+  "The list of dev container templates couldn't be downloaded: {0}": "The list of dev container templates couldn't be downloaded: {0}"
 }
