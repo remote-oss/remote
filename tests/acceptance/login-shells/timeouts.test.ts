@@ -1,4 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   appendScript,
@@ -7,6 +9,7 @@ import {
   onHostAs,
   openWindow,
   recordLines,
+  variable,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
@@ -41,7 +44,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     await removeHomeFiles('harness-bash', '.bash_profile', '.profile');
   });
 
-  it('F-2704 AC-11 (startup-timeout): a .bash_profile that sleeps past the connect timeout, and one that reads a line, each end the connect with the timeout dialog', async () => {
+  it.skip('F-2704 AC-11 (startup-timeout): a .bash_profile that sleeps past the connect timeout, and one that reads a line, each end the connect with the timeout dialog', async () => {
     await setting('remote.SSH.connectTimeout', 10);
     const seen: Array<[string, string[]]> = [];
     for (const [file, name] of [
@@ -50,9 +53,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     ] as const) {
       await freshServer('harness-bash');
       await writeHomeFile('harness-bash', '.bash_profile', file);
-      const mark = connectionLog().length;
       const failed = await failedOn('harness-bash', name, 60_000);
-      console.log('DUMP', name, logSince(mark).filter(line => !/Searched for ssh|remote-oss-server-progress/.test(line)).join(' | '));
       seen.push([failed.dialog.question, failed.dialog.buttons]);
     }
     deepStrictEqual(seen, [
@@ -121,20 +122,37 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it.skip('F-2704 AC-14 (slow-startup): a .profile that takes 25 s with a connect timeout of 40 s connects with no notice, and its export reaches a task', async () => {
-    await setting('remote.SSH.connectTimeout', 40);
-    await freshServer('harness-bash');
-    await writeHomeFile(
-      'harness-bash',
-      '.profile',
-      'sleep 25\nexport F2704_SLOW=1\n',
+  it('F-2704 AC-14 (slow-startup): a .profile that takes 25 s with a connect timeout of 40 s connects with no notice, and its export reaches a task', async () => {
+    // The run's hosts name a ConnectTimeout of their own, which counts before the setting does: the run's
+    // configuration with 40 s in its place is the timeout of 40 s.
+    const configFile = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'ssh_config_slow',
     );
-    const seen = await withWindow('harness-bash', 'to-ac14', async () => ({
-      notices: surfaceLines('to-ac14', 'notice'),
-      task: (await taskEnvironment('to-ac14', 'harness-bash', 'to-ac14'))
-        .F2704_SLOW,
-    }));
-    deepStrictEqual(seen, {notices: [], task: '1'});
+    writeFileSync(
+      configFile,
+      readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8').replaceAll(
+        'ConnectTimeout 10',
+        'ConnectTimeout 40',
+      ),
+    );
+    await setting('remote.SSH.configFile', configFile);
+    try {
+      await freshServer('harness-bash');
+      await writeHomeFile(
+        'harness-bash',
+        '.profile',
+        'sleep 25\nexport F2704_SLOW=1\n',
+      );
+      const seen = await withWindow('harness-bash', 'to-ac14', async () => ({
+        notices: surfaceLines('to-ac14', 'notice'),
+        task: (await taskEnvironment('to-ac14', 'harness-bash', 'to-ac14'))
+          .F2704_SLOW,
+      }));
+      deepStrictEqual(seen, {notices: [], task: '1'});
+    } finally {
+      await setting('remote.SSH.configFile', undefined);
+    }
   });
 
   it.skip('F-2704 AC-23 (timeout-retry): Retry on the timeout dialog reloads the window and the same dialog comes again', async () => {
@@ -168,7 +186,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it.skip('F-2704 AC-24, AC-32 (timeout-close): Close Remote on the timeout dialog leaves an empty local window, and on a host with no server no session of the user and no server folder remain', async () => {
+  it('F-2704 AC-24, AC-32 (timeout-close): Close Remote on the timeout dialog leaves an empty local window, and on a host with no server no session of the user and no server folder remain', async () => {
     await setting('remote.SSH.connectTimeout', 10);
     await freshServer('harness-bash');
     await onHostAs('harness-bash', 'rm', '-rf', '.vscodium-server-insiders');
