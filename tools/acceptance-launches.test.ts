@@ -58,6 +58,8 @@ function labelsFromExplorer(): string[] {
     'containers-explorer',
     'containers-ports',
     'containers-shutdown',
+    'containers-index-broken',
+    'containers-index-down',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
@@ -263,6 +265,18 @@ describe('the launches of the VSCodium run', () => {
           true,
           ['ms-vscode-remote.remote-containers'],
         ],
+        [
+          'containers-index-broken',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-index-down',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ['genuine', undefined, true, undefined],
         ['ssh-no-proposals', undefined, true, undefined],
       ],
@@ -343,6 +357,20 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
+        [
+          'containers-index-broken',
+          'containers-index',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-index-down',
+          'containers-index',
+          shared,
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -370,6 +398,8 @@ describe('the launches of the VSCodium run', () => {
         'containers-explorer',
         'containers-ports',
         'containers-shutdown',
+        'containers-index-broken',
+        'containers-index-down',
       ],
     );
   });
@@ -1199,7 +1229,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, and no other containers launch does', () => {
+  it('containers-72, containers-80: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, and no other containers launch has an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1208,7 +1238,25 @@ describe('the platform cases (card coverage-12)', () => {
           launch.kind === 'plain' ? launch.environment : undefined,
         ])
         .filter(([, environment]) => environment !== undefined),
-      [['containers-ports', {PATH: '<run>/xdg-bin:<path>'}]],
+      [
+        ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
+        [
+          'containers-index-broken',
+          {
+            REMOTE_OSS_TEMPLATE_INDEX:
+              '${HARNESS_DOWNLOADS_LOCAL}/templates/broken-index.json',
+            HARNESS_INDEX_CASE: 'broken',
+          },
+        ],
+        [
+          'containers-index-down',
+          {
+            REMOTE_OSS_TEMPLATE_INDEX:
+              '${HARNESS_DOWNLOADS_LOCAL}/templates/unreachable',
+            HARNESS_INDEX_CASE: 'down',
+          },
+        ],
+      ],
     );
   });
 
@@ -1250,12 +1298,12 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('tooling-57: only the containers launch asks for the run’s templates', () => {
+  it('tooling-57, containers-80: only the containers launch and the two index launches ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
-      ['containers'],
+      ['containers', 'containers-index-broken', 'containers-index-down'],
     );
   });
 });

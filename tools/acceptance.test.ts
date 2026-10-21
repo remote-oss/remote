@@ -401,6 +401,8 @@ const LAUNCH_ORDER = [
   'containers-explorer',
   'containers-ports',
   'containers-shutdown',
+  'containers-index-broken',
+  'containers-index-down',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1083,6 +1085,21 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
+          ...['containers-index-broken', 'containers-index-down'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(
+                  workspace.root,
+                  'dist',
+                  'remote-containers-0.1.0.vsix',
+                ),
+              ],
+              client: 'vscodium',
+            }),
+          ),
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
