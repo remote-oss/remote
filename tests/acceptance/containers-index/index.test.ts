@@ -43,12 +43,12 @@ describe('the wizard when the template catalogue cannot be had (card containers-
   this.timeout(600_000);
 
   if (CASE === 'down') {
-    it('F-0801 AC-35 (index-down): an index whose connection is dropped shows the modal with the cause, no screen, and writes nothing', async () => {
+    it('F-0801 AC-35, F-0802 AC-37 (index-down): an index whose connection is dropped shows the modal with the connection’s cause, no screen, and writes nothing, through the palette', async () => {
       const failed = await failureOf('index-down');
       deepStrictEqual(
         [
           failed.said?.includes(
-            "The list of dev container templates couldn't be downloaded: ",
+            "The list of dev container templates couldn't be downloaded: fetch failed",
           ),
           failed.pick,
           failed.written,
@@ -59,12 +59,12 @@ describe('the wizard when the template catalogue cannot be had (card containers-
   }
 
   if (CASE === 'broken') {
-    it('F-0801 AC-36 (index-broken): an index that does not parse shows the modal with the cause, no screen, and writes nothing', async () => {
+    it('containers-80: an index that does not parse shows the modal with the parser’s cause, no screen, and writes nothing', async () => {
       const failed = await failureOf('index-broken');
       deepStrictEqual(
         [
-          failed.said?.includes(
-            "The list of dev container templates couldn't be downloaded: ",
+          /couldn't be downloaded: Unexpected end of JSON input/.test(
+            failed.said ?? '',
           ),
           failed.pick,
           failed.written,
