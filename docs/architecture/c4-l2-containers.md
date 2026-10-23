@@ -99,7 +99,7 @@ the browser bundle of each excludes `lib-ssh`, `lib-host`, `lib-server` and `lib
 3. Stand-down polarity: entries visible by default, hidden by a "standing down" key (area B's ADR draft).
 4. One family-wide proposed-API setup notification (area B's contract), pending the containers room's answer on F-1403.
 5. A feature has one owning component and may list contributors; the matrix carries both columns.
-6. `engines.vscode` floor 1.139 (ADR-0007, to write).
+6. `engines.vscode` floor 1.125, recorded version 1.139.1 (ADR-0007, amended 2026-10-20).
 
 ## 6. Rulings applied after the first version (2026-10-06)
 
