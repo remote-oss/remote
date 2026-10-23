@@ -308,7 +308,8 @@ for (const variant of fetchVariantsToRun(process.env)) {
           writeFileSync(path.join(folder, 'requests.log'), '');
           downloads = await startDownloadHost({
             addresses: ['127.0.0.1', bridgeGateway(runCommand)],
-            archiveFile: path.join(folder, 'archive.tar.gz'),
+            archiveFiles: {'alpine-x64': path.join(folder, 'archive.tar.gz')},
+            defaultPlatform: 'alpine-x64',
             ...makeCertificate(folder),
             templatesFolder: path.join(folder, 'templates'),
             controlFolder: path.join(folder, 'control'),
