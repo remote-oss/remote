@@ -1,7 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {writeFileSync} from 'node:fs';
-import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
@@ -24,7 +22,7 @@ import {
   clearEarlierRows,
   setUserSetting,
 } from '../windows/folder-windows.ts';
-import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
+import {dockerWrapper, rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,13 +36,10 @@ const WELCOME_WITHOUT_FOLDER =
 
 /** A program for `dev.containers.dockerPath` that lists no container and passes every other call on to docker. */
 function noContainersDocker(): string {
-  const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'no-containers');
-  writeFileSync(
-    wrapper,
-    '#!/bin/sh\nif [ "$#" = 4 ] && [ "$1" = ps ] && [ "$2" = -a ]; then exit 0; fi\nexec docker "$@"\n',
-    {mode: 0o755},
+  return dockerWrapper(
+    'no-containers',
+    'if [ "$#" = 4 ] && [ "$1" = ps ] && [ "$2" = -a ]; then exit 0; fi',
   );
-  return wrapper;
 }
 
 /** The welcome text of the view in window `name`, once it shows, with its blocks on one line. */

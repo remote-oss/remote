@@ -83,6 +83,11 @@ const STATE_TOKENS: readonly string[] = [
   'restarting',
 ];
 
+/** The states in which Docker lets the row start, stop and remove its container, one list for each action. */
+const START_STATES: readonly string[] = ['exited', 'created', 'restarting'];
+const STOP_STATES: readonly string[] = ['running', 'paused'];
+const REMOVE_STATES: readonly string[] = ['running', 'exited'];
+
 /**
  * BR-9's order for an English display language: the collator's default strength, which puts punctuation first, a
  * hyphen before a letter, lower case before upper case, and an accented letter after the plain ones, and compares
@@ -141,6 +146,26 @@ function clauseOf(
   return state === 'paused' && exitedBefore ? agoPhrase(startedAt) : undefined;
 }
 
+/**
+ * The tokens of the actions a row offers; the manifest's menus only match them. A window's own row offers none that
+ * would end its connection or open it again.
+ */
+function actionTokensOf(
+  state: string,
+  own: boolean,
+  openable: boolean,
+): string[] {
+  return [
+    ...(openable && !own ? ['openFolder'] : []),
+    ...(!own && START_STATES.includes(state) ? ['start'] : []),
+    ...(!own && STOP_STATES.includes(state) ? ['stop'] : []),
+    ...(!own && REMOVE_STATES.includes(state) ? ['remove'] : []),
+    'details',
+    'inspect',
+    'log',
+  ];
+}
+
 /** The row of one container. */
 function rowOf(container: ListedContainer, input: TargetsInput): TargetRow {
   const {labels, id: containerId, name, image, state} = container;
@@ -152,15 +177,15 @@ function rowOf(container: ListedContainer, input: TargetsInput): TargetRow {
   const clause = own
     ? undefined
     : clauseOf(container, input.now, input.translate);
+  const configured = devContainer && input.withConfiguration.has(containerId);
   const tokens = [
     'container',
     devContainer ? 'dev' : 'other',
     ...(STATE_TOKENS.includes(state) ? [state] : []),
     ...(own ? ['own'] : []),
     ...(own && devContainer && input.window.folderOpen ? ['activeFolder'] : []),
-    ...(devContainer && input.withConfiguration.has(containerId)
-      ? ['configuration']
-      : []),
+    ...(configured ? ['configuration'] : []),
+    ...actionTokensOf(state, own, configured),
   ];
   return {
     id: containerId,

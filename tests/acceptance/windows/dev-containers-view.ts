@@ -3,7 +3,9 @@
  * rows.
  */
 
-import {waitFor} from './harness.ts';
+import {writeFileSync} from 'node:fs';
+import path from 'node:path';
+import {variable, waitFor} from './harness.ts';
 import {rowDetails, type RowDetails} from './renderer.ts';
 
 /** The name of the view. */
@@ -29,4 +31,13 @@ export async function rowsWhen(
     milliseconds,
   );
   return shown;
+}
+
+/** A program for `dev.containers.dockerPath` that runs `intercept` first, and then passes the call on to docker. */
+export function dockerWrapper(name: string, intercept: string): string {
+  const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), name);
+  writeFileSync(wrapper, `#!/bin/sh\n${intercept}\nexec docker "$@"\n`, {
+    mode: 0o755,
+  });
+  return wrapper;
 }

@@ -65,6 +65,7 @@ import {
   RESOLVER_EDITOR_OPTIONS,
 } from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
+import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
 import {
@@ -97,6 +98,7 @@ import {
   type DetailsView,
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
+import {type RowActions, rowActionsOf} from './explorer/row-actions.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
 import {
   engineOfWindow,
@@ -420,6 +422,7 @@ export async function activate(
   const collate = new Intl.Collator(undefined, {sensitivity: 'accent'}).compare;
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
+  let rowActions: RowActions | undefined;
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
@@ -896,6 +899,9 @@ export async function activate(
         rebuildContainerNoCache: {execute: rebuildHandler(true)},
         explorerTargetsRefresh: {execute: () => targetsView?.refresh()},
         explorerDetailsRefresh: {execute: () => detailsView?.refresh()},
+        startContainer: {execute: argument => rowActions?.start(argument)},
+        stopContainer: {execute: argument => rowActions?.stop(argument)},
+        removeContainer: {execute: argument => rowActions?.remove(argument)},
         showReopenInContainerNotificationReset: {
           execute: () =>
             resetReopenNotification(context.globalState, Date.now()),
@@ -1197,6 +1203,25 @@ export async function activate(
       translate,
       logger,
     });
+    const rowActionsStop = new AbortController();
+    rowActions = rowActionsOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
+      confirm: async ({message, detail, accept}) =>
+        (await vscode.window.showWarningMessage(
+          message,
+          {modal: true, detail},
+          accept,
+        )) === accept,
+      showError: text => {
+        void vscode.window.showErrorMessage(text);
+      },
+      refresh: async () => {
+        await targetsView?.refresh();
+      },
+      translate,
+      cancellation: rowActionsStop.signal,
+    });
     detailsView = showDetailsWhenRegistered({
       editor: explorerEditor,
       held: () => connector.heldConnection(),
@@ -1215,6 +1240,7 @@ export async function activate(
     context.subscriptions.push(
       {
         dispose: () => {
+          rowActionsStop.abort();
           targetsView?.dispose();
         },
       },

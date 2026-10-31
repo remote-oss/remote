@@ -156,7 +156,8 @@ describe('the targets model (card containers-29)', () => {
               description: 'happy_dev',
               tooltip: 'proj (happy_dev) Connected',
               icon: 'vmActive',
-              viewItem: 'container dev running own activeFolder configuration',
+              viewItem:
+                'container dev running own activeFolder configuration details inspect log',
               children: [],
             },
           ],
@@ -170,7 +171,7 @@ describe('the targets model (card containers-29)', () => {
     deepStrictEqual(
       rowOf(own, {window: {folderOpen: false, connection: CONNECTION}})
         .viewItem,
-      'container dev running own',
+      'container dev running own details inspect log',
     );
   });
 
@@ -186,7 +187,7 @@ describe('the targets model (card containers-29)', () => {
       [
         'vmRunning',
         'proj (happy_dev) Running',
-        'container dev running configuration',
+        'container dev running configuration openFolder stop remove details inspect log',
       ],
     );
   });
@@ -239,9 +240,17 @@ describe('the targets model (card containers-29)', () => {
         }),
       ]),
       [
-        ['vm', 'Created', 'container other created'],
-        ['vmOutline', 'Paused', 'container other paused'],
-        ['vmOutline', 'Restarting 8 seconds', 'container other restarting'],
+        ['vm', 'Created', 'container other created start details inspect log'],
+        [
+          'vmOutline',
+          'Paused',
+          'container other paused stop details inspect log',
+        ],
+        [
+          'vmOutline',
+          'Restarting 8 seconds',
+          'container other restarting start details inspect log',
+        ],
       ],
     );
   });
@@ -256,8 +265,16 @@ describe('the targets model (card containers-29)', () => {
         container({state: 'exited', finishedAt: undefined}),
       ]),
       [
-        ['vm', 'Exited 5 hours ago', 'container other exited'],
-        ['vm', 'Exited', 'container other exited'],
+        [
+          'vm',
+          'Exited 5 hours ago',
+          'container other exited start remove details inspect log',
+        ],
+        [
+          'vm',
+          'Exited',
+          'container other exited start remove details inspect log',
+        ],
       ],
     );
   });
@@ -546,12 +563,18 @@ describe('the targets model (card containers-29)', () => {
         [
           'devContainers',
           [
-            ['l', 'container dev running'],
-            ['c', 'container dev running configuration'],
-            ['r', 'container dev running'],
+            ['l', 'container dev running stop remove details inspect log'],
+            [
+              'c',
+              'container dev running configuration openFolder stop remove details inspect log',
+            ],
+            ['r', 'container dev running stop remove details inspect log'],
           ],
         ],
-        ['otherContainers', [['v', 'container other running']]],
+        [
+          'otherContainers',
+          [['v', 'container other running stop remove details inspect log']],
+        ],
       ],
     );
   });
@@ -563,7 +586,7 @@ describe('the targets model (card containers-29)', () => {
         statusOf(container({state: 'removing'})),
         iconsOf([container({state: 'dead'})])[0],
       ],
-      ['container other', 'Removing', 'vm'],
+      ['container other details inspect log', 'Removing', 'vm'],
     );
   });
 
@@ -627,7 +650,101 @@ describe('the targets model (card containers-29)', () => {
     });
     deepStrictEqual(
       [entry.icon, entry.tooltip.split(') ')[1], entry.viewItem],
-      ['vmActive', 'Connected', 'container other running own'],
+      [
+        'vmActive',
+        'Connected',
+        'container other running own details inspect log',
+      ],
+    );
+  });
+
+  /** The action tokens of a row: what follows the state, own, activeFolder and configuration tokens. */
+  function actionsOf(
+    single: ListedContainer,
+    changes: Partial<TargetsInput> = {},
+  ): string[] {
+    const tokens = rowOf(single, changes).viewItem.split(' ');
+    return tokens.filter(token =>
+      [
+        'openFolder',
+        'start',
+        'stop',
+        'remove',
+        'details',
+        'inspect',
+        'log',
+      ].includes(token),
+    );
+  }
+
+  it('F-0902 3.1, BR-5, BR-19: openFolder is on a configured dev container that is not the window’s own, in any state', () => {
+    function configured(state: string): boolean {
+      return actionsOf(container({id: 'a', labels: DEV_LABELS, state}), {
+        withConfiguration: new Set(['a']),
+      }).includes('openFolder');
+    }
+    deepStrictEqual(
+      [
+        configured('running'),
+        configured('exited'),
+        actionsOf(container({id: 'a', labels: DEV_LABELS}), {
+          window: {
+            folderOpen: true,
+            connection: {...CONNECTION, containerId: 'a'},
+          },
+          withConfiguration: new Set(['a']),
+        }).includes('openFolder'),
+        actionsOf(container({id: 'a', labels: DEV_LABELS})).includes(
+          'openFolder',
+        ),
+        actionsOf(container({id: 'a'}), {
+          withConfiguration: new Set(['a']),
+        }).includes('openFolder'),
+      ],
+      [true, true, false, false, false],
+    );
+  });
+
+  it('F-0902 3.1: start is on exited, created and restarting rows and no other', () => {
+    deepStrictEqual(
+      ['exited', 'created', 'restarting', 'running', 'paused', 'dead'].map(
+        state => actionsOf(container({state})).includes('start'),
+      ),
+      [true, true, true, false, false, false],
+    );
+  });
+
+  it('F-0902 3.1: stop is on running and paused rows and no other', () => {
+    deepStrictEqual(
+      ['running', 'paused', 'exited', 'created', 'restarting', 'dead'].map(
+        state => actionsOf(container({state})).includes('stop'),
+      ),
+      [true, true, false, false, false, false],
+    );
+  });
+
+  it('F-0902 3.1: remove is on running and exited rows and no other', () => {
+    deepStrictEqual(
+      ['running', 'exited', 'paused', 'created', 'restarting', 'dead'].map(
+        state => actionsOf(container({state})).includes('remove'),
+      ),
+      [true, true, false, false, false, false],
+    );
+  });
+
+  it('F-0902 BR-5: the window’s own row offers no open, start, stop or remove, and every row offers details, inspect and log', () => {
+    deepStrictEqual(
+      [
+        actionsOf(container({id: 'own', labels: DEV_LABELS}), {
+          window: {folderOpen: true, connection: CONNECTION},
+          withConfiguration: new Set(['own']),
+        }),
+        actionsOf(container({state: 'dead'})),
+      ],
+      [
+        ['details', 'inspect', 'log'],
+        ['details', 'inspect', 'log'],
+      ],
     );
   });
 });

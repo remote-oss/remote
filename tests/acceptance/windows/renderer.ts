@@ -645,6 +645,31 @@ export async function toggleRow(
 }
 
 /**
+ * The page's script for a right click on the row `rowLabel` of view `viewName`: it opens the context menu, leaves its
+ * item elements in `items` and runs `after`, which gives the script's value; it gives the JavaScript `missing` when the
+ * view has not one such row.
+ */
+function rowMenuScript(
+  viewName: string,
+  rowLabel: string,
+  missing: string,
+  after: string,
+): string {
+  return `(async () => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return ${missing};
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const items = [...document.querySelectorAll('.context-view .monaco-menu .action-label')];
+      ${after}
+    })()`;
+}
+
+/**
  * The labels of the context menu that a right click on the row `rowLabel` of view `viewName` in window `name` opens, in
  * order; none when it opens no menu. The menu is closed again. It fails naming the row when the view has none by that
  * label.
@@ -656,21 +681,15 @@ export async function rowContextMenu(
 ): Promise<string[]> {
   const menu = await evaluate<string[] | null>(
     name,
-    `(async () => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      if (rows.length !== 1) {
-        return null;
-      }
-      const box = rows[0].getBoundingClientRect();
-      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '');
-      for (const type of ['keydown', 'keyup']) {
+    rowMenuScript(
+      viewName,
+      rowLabel,
+      'null',
+      `for (const type of ['keydown', 'keyup']) {
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
       }
-      return labels;
-    })()`,
+      return items.map(label => label.textContent ?? '');`,
+    ),
   );
   if (menu === null) {
     throw new Error(
@@ -678,6 +697,39 @@ export async function rowContextMenu(
     );
   }
   return menu;
+}
+
+/**
+ * Clicks the item `itemLabel` of the context menu that a right click on the row `rowLabel` of view `viewName` in
+ * window `name` opens. It fails naming the row, or the menu's items, when it finds no such row or item.
+ */
+export async function rowMenuAction(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+  itemLabel: string,
+): Promise<void> {
+  const outcome = await evaluate<string | null>(
+    name,
+    rowMenuScript(
+      viewName,
+      rowLabel,
+      `'no such row'`,
+      `const item = items.find(label => label.textContent === ${JSON.stringify(itemLabel)});
+      if (item === undefined) {
+        return 'no item ' + ${JSON.stringify(JSON.stringify(itemLabel))} + ' among ' + JSON.stringify(items.map(label => label.textContent));
+      }
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        (item.closest('li') ?? item).dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      return '';`,
+    ),
+  );
+  if (outcome !== '') {
+    throw new Error(
+      `window ${name}, view ${viewName}, row ${JSON.stringify(rowLabel)}: ${outcome ?? 'no reply'}`,
+    );
+  }
 }
 
 /** One section of the Extensions view: its title and the display names of its entries. */
