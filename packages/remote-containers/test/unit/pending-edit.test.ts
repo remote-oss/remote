@@ -248,4 +248,28 @@ describe('the pending edit at activation (card containers-11)', () => {
       ['warn: the pending edit could not be read: unreadable store'],
     );
   });
+
+  it('contracts: a pending edit that cannot be read, rejected with a text, is logged by its text', async () => {
+    const sink = new MemorySink();
+    await openPendingEdit({
+      memento: {
+        get: () => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the row feeds a rejection that is not an Error
+          throw 'unreadable store';
+        },
+        update: () => Promise.resolve(),
+      },
+      remoteName: () => undefined,
+      folders: () => [{scheme: 'file', fsPath: '/w/proj'}],
+      now: () => 2000,
+      open: () => Promise.resolve(),
+      openLog: () => Promise.resolve(),
+      exists: () => Promise.resolve(true),
+      logger: createLogger(sink, {minimumLevel: () => 'info'}),
+    });
+    deepStrictEqual(
+      sink.lines.map(line => `${line.level}: ${line.message}`),
+      ['warn: the pending edit could not be read: unreadable store'],
+    );
+  });
 });

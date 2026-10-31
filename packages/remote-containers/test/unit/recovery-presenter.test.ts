@@ -48,6 +48,8 @@ interface Script {
   logFile?: string;
   /** Whether the write of the attempt's log fails. */
   logFails?: boolean;
+  /** A rejection of the attempt's log write that is not an Error. */
+  logRefusal?: string;
 }
 
 /** A presenter over recording ports; `later` queues its tasks until `flush` runs them. */
@@ -80,6 +82,10 @@ function presenting(script: Script = {}) {
       },
       writeAttemptLog: () => {
         written.push(calls.length);
+        if (script.logRefusal !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
+          return Promise.reject(script.logRefusal);
+        }
         return script.logFails === true
           ? Promise.reject(new Error('disk full'))
           : Promise.resolve(script.logFile);
@@ -618,5 +624,15 @@ describe('the failure presenter C8 (card containers-11)', () => {
       errors: ['Cancel'],
     });
     deepStrictEqual(written, []);
+  });
+  it('F-0410 5.0: a log write rejected with a text is logged by its text', async () => {
+    const {sink} = await present(containerSetupFailed(), {
+      errors: [EDIT],
+      logRefusal: 'quota',
+    });
+    deepStrictEqual(
+      sink.lines.map(line => `${line.level}: ${line.message}`),
+      ['warn: the log of the attempt could not be written: quota'],
+    );
   });
 });
