@@ -131,6 +131,21 @@
         }
       },
       {
+        "command": "remote-containers.showDetails",
+        "title": "%commands.showDetails.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.inspectDockerResource",
+        "title": "%commands.inspectDockerResource.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.showContainerLog",
+        "title": "%commands.showContainerLog.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.explorerDetailsRefresh",
         "title": "%commands.explorerDetailsRefresh.title%",
         "category": "Dev Containers",
@@ -189,6 +204,18 @@
         {
           "command": "remote-containers.removeContainer",
           "when": "false"
+        },
+        {
+          "command": "remote-containers.showDetails",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.inspectDockerResource",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.showContainerLog",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -237,17 +264,17 @@
         {
           "command": "remote-containers.showDetails",
           "group": "1_container@4",
-          "when": "view == targetsContainers && viewItem =~ /(^| )details( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )details( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.inspectDockerResource",
           "group": "1_container@5",
-          "when": "view == targetsContainers && viewItem =~ /(^| )inspect( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )inspect( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.showContainerLog",
           "group": "1_container@6",
-          "when": "view == targetsContainers && viewItem =~ /(^| )log( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )log( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.stopContainer",
@@ -273,6 +300,11 @@
           "command": "remote-containers.removeContainer",
           "group": "inline@3",
           "when": "view == targetsContainers && viewItem =~ /(^| )remove( |$)/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.inspectDockerResource",
+          "group": "1_container@5",
+          "when": "view == detailsContainers && viewItem == image && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [
