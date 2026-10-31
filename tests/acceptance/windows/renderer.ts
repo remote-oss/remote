@@ -1805,6 +1805,37 @@ export async function chooseQuickPickRow(
   );
 }
 
+/** What the frame of a quick pick shows: its title, its placeholder, the title-bar buttons and whether it picks several. */
+export interface QuickPickFacts {
+  title: string;
+  placeholder: string;
+  titleButtons: string[];
+  multiSelect: boolean;
+}
+
+/** The frame of the quick pick open in window `name`; `undefined` when none is. */
+export async function quickPickFacts(
+  name: string,
+): Promise<QuickPickFacts | undefined> {
+  return (
+    (await evaluate<QuickPickFacts | null>(
+      name,
+      `(() => {
+        const widget = document.querySelector('${QUICK_WIDGET}');
+        if (widget === null || widget.style.display === 'none') {
+          return null;
+        }
+        return {
+          title: widget.querySelector('.quick-input-title')?.textContent ?? '',
+          placeholder: widget.querySelector('.quick-input-box input')?.getAttribute('placeholder') ?? '',
+          titleButtons: [...widget.querySelectorAll('.quick-input-titlebar .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+          multiSelect: widget.querySelector('.quick-input-check-all') !== null,
+        };
+      })()`,
+    )) ?? undefined
+  );
+}
+
 /** What the input of the quick pick open in window `name` holds. */
 export async function quickPickValue(name: string): Promise<string> {
   return evaluate<string>(

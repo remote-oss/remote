@@ -65,6 +65,7 @@
         "containers-standdown/*.test.ts",
         "containers-no-proposals/*.test.ts",
         "containers-trust/*.test.ts",
+        "containers-index/*.test.ts",
         "containers-volume/*.test.ts",
         "containers-explorer/*.test.ts",
         "containers-ports/*.test.ts",
