@@ -510,12 +510,20 @@ session hands its commands to POSIX `sh` whatever the login shell is.
 
 A second image, `host-ubuntu/`, is `ubuntu:26.04`, pinned by its index digest. Its coreutils are uutils, not GNU's and
 not BusyBox's, as on a user's Ubuntu 26.04 machine.
-- **What it has:** OpenSSH's server with key login only, the one user `harness` (login shell `/bin/sh`, which is dash),
-  and the shells of `HOST_SHELL`. It also has GNU `wget` and `curl` (`HOST_FETCH`: `gnu-wget`, the default, `curl` or
-  `none`), `iptables`, `xauth`, `procps` and the OpenBSD `nc`.
-- **What it doesn't have:** the thirteen other accounts of the Alpine host (`password`, `mute`, `readonly`, `i686` and
-  the rest), so rows that use them stay Alpine's. Nor does it have BusyBox's `wget`.
+- **What it has:** OpenSSH's server with key login only, and two users. `harness` has login shell `/bin/sh`, which is
+  dash, or one of the shells of `HOST_SHELL`. `harness-mute` (the alias `mute`) has the Alpine host's `mute-shell`,
+  which the build takes from `host/` (the build context `alpine-host`). It also has GNU `wget` and `curl`
+  (`HOST_FETCH`: `gnu-wget`, the default, `curl` or `none`), `iptables`, `xauth`, `procps`, the OpenBSD `nc`, `busybox`
+  (not as `/bin/sh`) and `libstdc++6`.
+- **What it doesn't have:** the twelve other accounts of the Alpine host (`password`, `readonly`, `i686` and the rest),
+  so rows that use them stay Alpine's. Nor does it have BusyBox's `wget`.
 - **Its `start-sshd`** is its own: the Alpine one sets up the thirteen accounts and links BusyBox's `wget`.
+- **The listening stand-in server** echoes through `nc` where `nc` is BusyBox's (Alpine), on loopback. Elsewhere it
+  uses `busybox nc -ll`, because OpenBSD's `nc` runs no program per connection; that listener binds every address.
+- **Rows that are Alpine's by their titles** (the probe's musl row, F-2401 AC-2's apk row) skip on another base
+  (`hostBaseIs`, from `HARNESS_HOST_BASE`, which a launch with `hostBase` sets too). Each has an Ubuntu counterpart:
+  `contracts V2: finds an Ubuntu 26.04 host to be a glibc Linux with uutils`, and `#1398: an Ubuntu 26.04 host (glibc,
+  libstdc++6) connects with no prerequisite message`.
 
 `HARNESS_HOST_BASE` (`alpine`, the default, or `ubuntu-26.04`) picks the image that `startHost` starts the server
 rows' host from; another value fails the run. `pnpm test:acceptance:variants` runs the shell-sensitive files, plus
