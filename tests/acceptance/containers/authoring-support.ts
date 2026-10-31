@@ -7,7 +7,11 @@ import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
-import {pressEscape, quickPickOf} from '../windows/renderer.ts';
+import {
+  pressEscape,
+  quickPickOf,
+  typeInQuickPick,
+} from '../windows/renderer.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The command that adds a configuration. */
@@ -63,12 +67,21 @@ export function existing(folder: string, ...relatives: string[]): string[] {
   return relatives.filter(relative => existsSync(path.join(folder, relative)));
 }
 
-/** Closes the screen of `window` with Escape and waits until it is gone. */
+/**
+ * Closes the screen of `window` with Escape, the input focused first because the focus may sit elsewhere, and waits
+ * until it is gone; the editor takes a moment to hide it, so Escape is pressed again if it is still there after 3 s.
+ */
 export async function closeScreen(window: string): Promise<void> {
-  await pressEscape(window);
-  await waitFor(
-    'the pick to close',
-    async () => (await quickPickOf(window)) === undefined,
-    30_000,
-  );
+  const trail: unknown[] = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await typeInQuickPick(window, '');
+    await pressEscape(window);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const left = await quickPickOf(window);
+    trail.push(left === undefined ? 'closed' : left.items.slice(0, 3));
+    if (left === undefined) {
+      return;
+    }
+  }
+  throw new Error(`the pick did not close: ${JSON.stringify(trail)}`);
 }

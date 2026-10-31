@@ -13,8 +13,8 @@ import {
   pressEscape,
   quickPickFacts,
   type QuickPickFacts,
+  windowTitle,
   waitForDialog,
-  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
   closeScreen,
@@ -42,7 +42,13 @@ const TEMPLATE_SCREEN: QuickPickFacts = {
 async function templateScreenOf(
   window: string,
 ): Promise<QuickPickFacts | undefined> {
-  await waitForQuickPick(window, 180_000);
+  await waitFor(
+    'the template screen',
+    async () =>
+      (await quickPickFacts(window))?.placeholder ===
+      TEMPLATE_SCREEN.placeholder,
+    180_000,
+  );
   return quickPickFacts(window);
 }
 
@@ -97,7 +103,12 @@ describe('the authoring wizard from the commands that need a configuration (card
         );
         startCommand(window, REOPEN);
         const facts = await templateScreenOf(window);
-        await closeScreen(window);
+        await closeScreen(window).catch(async (caught: unknown) => {
+          throw new Error(
+            `${String(caught)}; pick ${JSON.stringify(await quickPickFacts(window))}; dialog ${JSON.stringify(await dialogText(window))}`,
+            {cause: caught},
+          );
+        });
         deepStrictEqual([notices, facts], [[], TEMPLATE_SCREEN]);
       },
     );
@@ -128,7 +139,7 @@ describe('the authoring wizard from the commands that need a configuration (card
             30_000,
           );
           seen.push([
-            said?.includes(MISSING_IMAGE),
+            said === `CancelUse Template${MISSING_IMAGE}`,
             kind,
             dialog.buttons,
             behind,
@@ -193,11 +204,12 @@ describe('the authoring wizard from the commands that need a configuration (card
       startCommand(window, OPEN_FOLDER);
       await answerFolderDialog(window, target);
       const facts = await templateScreenOf(window);
-      const folders = (await windowState(window)).folders.map(entry =>
-        decodeURIComponent(new URL(entry).pathname),
-      );
+      const title = await windowTitle(window);
       await closeScreen(window);
-      deepStrictEqual([facts, folders], [TEMPLATE_SCREEN, [folder]]);
+      deepStrictEqual(
+        [facts, title],
+        [TEMPLATE_SCREEN, `[${path.basename(folder)}]`],
+      );
     });
   });
 });
