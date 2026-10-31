@@ -217,10 +217,12 @@ jobs:
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
       # The run retries once inside the tool when the editor window is reported unresponsive; both attempts land in this
-      # log. A runner without xvfb-run has a display of its own (DISPLAY, :99 on the org's runners).
+      # log. A runner without xvfb-run has a display of its own (DISPLAY, :99 on the org's runners). xvfb-run's own screen
+      # is 640x480, where a view or a panel draws only the rows that fit and a toast may not show; the acceptance jobs
+      # give it the 1920x1080 screen of :99, the size the rows are written against.
       - run: |
           if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum pnpm test:acceptance
+            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance
           else
             DISPLAY=${DISPLAY:-:99} pnpm test:acceptance
           fi
@@ -340,7 +342,7 @@ jobs:
       # the part's launches: a group selection, or the launches a dispatch names
       - run: |
           if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           else
             DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           fi
@@ -389,7 +391,7 @@ jobs:
           fi
       - run: |
           if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           else
             DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           fi
