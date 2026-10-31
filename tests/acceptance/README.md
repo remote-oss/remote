@@ -571,7 +571,7 @@ answers for `update.code.visualstudio.com`, its request log shows what the host 
 names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
 built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
 `update.mode`, `extensions.autoCheckUpdates`, `extensions.autoUpdate`, `workbench.enableExperiments`,
-`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
+`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. Every editor the run starts, this one and VSCodium alike, also gets `--disable-crash-reporter`. That wins over the `enable-crash-reporter` VS Code's first run writes into `~/.vscode/argv.json`, so no crash report goes to its publisher, and the user's file stays as it is. The row for an MIT release address (F-3902 AC-15) needs `github.com`
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
