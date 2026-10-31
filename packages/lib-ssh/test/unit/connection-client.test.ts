@@ -491,7 +491,8 @@ describe('the window side of the shared connection (S9)', () => {
     deepStrictEqual((await outcome).kind, 'connected');
   });
 
-  it('starts the login limit over when the question is closed', async () => {
+  it('starts the login limit over when the question is closed, and the timeout then sends one kill', async () => {
+    const order = recordingKills();
     const {connection, outcome} = await connectFirst();
     await askAtEndpoint('password: ');
     clock.advance(3 * LIMITS.loginMilliseconds);
@@ -499,10 +500,10 @@ describe('the window side of the shared connection (S9)', () => {
     await drive();
     clock.advance(LIMITS.loginMilliseconds);
     await drive();
-    deepStrictEqual(await outcome, {
-      kind: 'failed',
-      failure: {kind: 'timeout'},
-    });
+    deepStrictEqual(
+      [await outcome, order],
+      [{kind: 'failed', failure: {kind: 'timeout'}}, ['kill']],
+    );
   });
 
   it('runs a script on the session of the helper, with its lines and its exit status', async () => {
@@ -713,19 +714,6 @@ describe('the window side of the shared connection (S9)', () => {
     clock.advance(2 * LIMITS.loginMilliseconds);
     await drive();
     deepStrictEqual(order, []);
-  });
-
-  it('AC-32 (F-2704): a limit that started over after a question was answered still sends one kill', async () => {
-    const order = recordingKills();
-    const {connection, outcome} = await connectFirst();
-    await askAtEndpoint('password: ');
-    clock.advance(3 * LIMITS.loginMilliseconds);
-    await connection.answer(1, 'secret');
-    await drive();
-    clock.advance(LIMITS.loginMilliseconds);
-    await drive();
-    await outcome;
-    deepStrictEqual(order, ['kill']);
   });
 
   it('reports a helper that is gone', async () => {
