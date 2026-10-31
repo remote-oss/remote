@@ -206,6 +206,9 @@
       "path": "tests/acceptance/containers-shutdown"
     },
     {
+      "path": "tests/acceptance/containers-killed"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {
