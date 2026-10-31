@@ -209,11 +209,11 @@ describe('the write of a template (card containers-78)', () => {
         'written',
         [
           {
-            severity: 'warning',
+            severity: 'info',
             message:
               "File './.devcontainer/devcontainer.json' already exists, overwrite?",
             detail: '',
-            buttons: ['Overwrite', 'Cancel', 'Skip'],
+            buttons: ['Skip', 'Overwrite', 'Cancel'],
           },
         ],
         'new .devcontainer/devcontainer.json',
@@ -459,7 +459,7 @@ describe('the write of a template (card containers-78)', () => {
       outcomes.push([
         outcome.kind === 'failed' ? outcome.detail : outcome.kind,
         scene.written.length,
-        scene.shown.filter(each => each.severity === 'warning').length,
+        scene.shown.filter(each => each.severity === 'info').length,
       ]);
     }
     deepStrictEqual(

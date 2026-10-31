@@ -134,8 +134,15 @@ describe('the store of configurations outside the workspace (card containers-91)
         tildePath('/home/a', '/home/a'),
         tildePath('/home/ab/x', '/home/a'),
         tildePath('/opt/x', '/home/a'),
+        tildePath('/home/a/..hidden/x', '/home/a'),
       ],
-      ['~/.config/x/devcontainer.json', '/home/a', '/home/ab/x', '/opt/x'],
+      [
+        '~/.config/x/devcontainer.json',
+        '/home/a',
+        '/home/ab/x',
+        '/opt/x',
+        '~/..hidden/x',
+      ],
     );
   });
 });

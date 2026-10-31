@@ -11,7 +11,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {openFolderWindow} from '../windows/folder-windows.ts';
+import {activations, openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   variable,
@@ -28,6 +28,7 @@ import {
   editorTabs,
   notificationCentre,
   notificationLinks,
+  primaryButtonOf,
   quickPickFacts,
   quickPickOf,
   typeInQuickPick,
@@ -270,6 +271,7 @@ describe('the location pick and the store of user data (card containers-91)', fu
 
   it('F-0801 AC-5, F-0302 AC-4, AC-5 (u2): Alpine to the user data folder writes the configuration and its marker into the folder’s slot and nothing into the workspace, opens it in a preview and offers the reopen notification with both links, without a reload; run again, the row says the configuration exists and goes straight to the templates', async () => {
     await withWindow('u2', {}, async (window, folder) => {
+      const activated = activations(window);
       await writeToStore(window);
       const slot = path.join(storeRoot(), 'u2');
       await written(path.join(slot, CONFIGURATION));
@@ -300,6 +302,7 @@ describe('the location pick and the store of user data (card containers-91)', fu
         links,
         preview: previewTab?.preview,
         remoteName: state.remoteName,
+        reloaded: activations(window) !== activated,
       };
       await startCommand(window);
       await waitForQuickPick(window);
@@ -328,6 +331,7 @@ describe('the location pick and the store of user data (card containers-91)', fu
             ],
             preview: true,
             remoteName: null,
+            reloaded: false,
           },
           [
             [WORKSPACE_ROW, '', LOCATION.workspaceDetail, true],
@@ -423,6 +427,7 @@ describe('the location pick and the store of user data (card containers-91)', fu
         await writeToStore(window);
         const dialog = await waitForDialog(window);
         const said = await dialogText(window);
+        const primary = await primaryButtonOf(window);
         await answerDialog(window, answer);
         await waitFor(
           'the wizard to end',
@@ -434,15 +439,16 @@ describe('the location pick and the store of user data (card containers-91)', fu
         await new Promise(resolve => setTimeout(resolve, 3000));
         outcomes.push([
           said?.includes(`File '${tilde(stored)}' already exists, overwrite?`),
-          [...dialog.buttons].sort(),
+          dialog.buttons,
+          primary,
           readFileSync(stored, 'utf8') === 'mine' ? 'mine' : 'replaced',
           slotNames(),
         ]);
       }
       deepStrictEqual(outcomes, [
-        [true, ['Cancel', 'Overwrite', 'Skip'], 'mine', ['u5']],
-        [true, ['Cancel', 'Overwrite', 'Skip'], 'mine', ['u5']],
-        [true, ['Cancel', 'Overwrite', 'Skip'], 'replaced', ['u5']],
+        [true, ['Overwrite', 'Cancel', 'Skip'], 'Skip', 'mine', ['u5']],
+        [true, ['Overwrite', 'Cancel', 'Skip'], 'Skip', 'mine', ['u5']],
+        [true, ['Overwrite', 'Cancel', 'Skip'], 'Skip', 'replaced', ['u5']],
       ]);
     });
   });

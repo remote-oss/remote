@@ -111,7 +111,8 @@ export async function writeMarker(
 export function tildePath(file: string, home: string): string {
   const relative = path.relative(home, file);
   return relative === '' ||
-    relative.startsWith('..') ||
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
     path.isAbsolute(relative)
     ? file
     : path.join('~', relative);

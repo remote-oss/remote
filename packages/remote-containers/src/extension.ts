@@ -650,7 +650,7 @@ export async function activate(
                           {modal: true, detail},
                           ...items,
                         )
-                      : await vscode.window.showWarningMessage(
+                      : await vscode.window.showInformationMessage(
                           message,
                           {modal: true, detail},
                           ...items,
