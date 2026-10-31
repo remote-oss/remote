@@ -226,15 +226,11 @@ describe('the pending edit at activation (card containers-11)', () => {
     );
   });
 
-  it('contracts: a pending edit that cannot be read is logged, and the activation goes on', async () => {
+  /** The log lines of an activation whose memento read fails by `failure`. */
+  async function linesAfterFailedRead(failure: () => never): Promise<string[]> {
     const sink = new MemorySink();
     await openPendingEdit({
-      memento: {
-        get: () => {
-          throw new Error('unreadable store');
-        },
-        update: () => Promise.resolve(),
-      },
+      memento: {get: failure, update: () => Promise.resolve()},
       remoteName: () => undefined,
       folders: () => [{scheme: 'file', fsPath: '/w/proj'}],
       now: () => 2000,
@@ -243,32 +239,24 @@ describe('the pending edit at activation (card containers-11)', () => {
       exists: () => Promise.resolve(true),
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     });
+    return sink.lines.map(line => `${line.level}: ${line.message}`);
+  }
+
+  it('contracts: a pending edit that cannot be read is logged, and the activation goes on', async () => {
     deepStrictEqual(
-      sink.lines.map(line => `${line.level}: ${line.message}`),
+      await linesAfterFailedRead(() => {
+        throw new Error('unreadable store');
+      }),
       ['warn: the pending edit could not be read: unreadable store'],
     );
   });
 
   it('contracts: a pending edit that cannot be read, rejected with a text, is logged by its text', async () => {
-    const sink = new MemorySink();
-    await openPendingEdit({
-      memento: {
-        get: () => {
-          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the row feeds a rejection that is not an Error
-          throw 'unreadable store';
-        },
-        update: () => Promise.resolve(),
-      },
-      remoteName: () => undefined,
-      folders: () => [{scheme: 'file', fsPath: '/w/proj'}],
-      now: () => 2000,
-      open: () => Promise.resolve(),
-      openLog: () => Promise.resolve(),
-      exists: () => Promise.resolve(true),
-      logger: createLogger(sink, {minimumLevel: () => 'info'}),
-    });
     deepStrictEqual(
-      sink.lines.map(line => `${line.level}: ${line.message}`),
+      await linesAfterFailedRead(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the row feeds a rejection that is not an Error
+        throw 'unreadable store';
+      }),
       ['warn: the pending edit could not be read: unreadable store'],
     );
   });
