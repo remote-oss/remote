@@ -108,7 +108,7 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
     }
   });
 
-  it('F-0502 AC-28 (R-31): More Actions... after a failed image build lists its four actions with Reload Window focused, and Open Documentation opens our troubleshooting page, not the reference’s aka.ms one', async () => {
+  it('F-0502 AC-28 (c43-more-actions): R-31, More Actions... after a failed image build lists its four actions with Reload Window focused, and Open Documentation opens our troubleshooting page, not the reference’s aka.ms one', async () => {
     installBrowser();
     const folder = failingBuildFolder('c43-build-fails');
     const name = await failedSetup(folder);
