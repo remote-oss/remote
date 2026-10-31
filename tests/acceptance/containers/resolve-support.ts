@@ -168,6 +168,8 @@ export function noDaemonDocker(): string {
   );
   chmodSync(wrapper, 0o755);
   return wrapper;
+}
+
 /** The countdown text of core's reconnection dialog and notification. */
 export const COUNTDOWN = /^Attempting to reconnect in \d+ seconds\.\.\.$/;
 
