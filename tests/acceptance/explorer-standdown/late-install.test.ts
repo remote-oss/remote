@@ -25,7 +25,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {
-  notifications,
+  notificationCentre,
   rowAction,
   titleAction,
   viewRows,
@@ -42,10 +42,13 @@ function pause(milliseconds: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
-/** How many of the window's toasts are the coexistence warning. */
+/**
+ * How many of the window's notifications are the coexistence warning. They are read in the notification centre: a small
+ * window, such as CI's, draws no toast for it.
+ */
 async function warnings(window: string): Promise<number> {
-  return (await notifications(window)).filter(
-    toast => toast === STAND_DOWN_WARNING,
+  return (await notificationCentre(window)).filter(
+    text => text === STAND_DOWN_WARNING,
   ).length;
 }
 
