@@ -22,10 +22,7 @@ const SHELL_NAME = /\b(?:bash|zsh|dash|ksh|csh|tcsh|fish|sh)\b/i;
 /** The Remote - SSH extension's global state: the entries it stored under its own key, by name. */
 function extensionState(): Record<string, unknown> {
   const database = new DatabaseSync(
-    path.join(
-      variable('HARNESS_RUN_FOLDER'),
-      'user-data/User/globalStorage/state.vscdb',
-    ),
+    path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
     {readOnly: true},
   );
   try {
