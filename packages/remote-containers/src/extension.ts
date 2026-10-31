@@ -80,6 +80,7 @@ import {
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
+import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {storePausedRetry} from './state/paused-retry.ts';
@@ -421,6 +422,8 @@ export async function activate(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
   let logChannel: RevealableChannel | undefined;
+  /** The lines of the connect attempt that is running or has failed, which a failure dialog writes to a file. */
+  const attemptLog = createAttemptLog();
   /** Tells the shutdown helper that this window leaves its container; the connector gives it once it exists. */
   const windowShutdown = {leave: (): Promise<void> => Promise.resolve()};
   const channelPort = containersChannelPortFor(
@@ -506,6 +509,7 @@ export async function activate(
         return logChannel;
       },
     },
+    alsoLogTo: attemptLog,
     clock: Date.now,
     banner: {
       displayName: manifest.displayName,
@@ -992,6 +996,17 @@ export async function activate(
       now: Date.now,
       open: file =>
         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file)),
+      openLog: file =>
+        vscode.window.showTextDocument(vscode.Uri.file(file), {
+          preview: true,
+          viewColumn: vscode.ViewColumn.Beside,
+          preserveFocus: true,
+        }),
+      exists: file =>
+        Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(file))).then(
+          () => true,
+          () => false,
+        ),
       logger,
     });
     const host = identifierHost(vscode, manifest);
@@ -1125,6 +1140,9 @@ export async function activate(
           detail,
         });
       },
+      beginAttempt: () => {
+        attemptLog.begin();
+      },
       reopenLocally: async hostPath => {
         await vscode.commands.executeCommand(
           'vscode.openFolder',
@@ -1196,12 +1214,15 @@ export async function activate(
         commands: host,
         recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
         presenter: recoveryPortsOf(vscode, {
-          keepEdit: (folder, configFile) =>
+          writeAttemptLog: async () =>
+            writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
+          keepEdit: (folder, configFile, logFile) =>
             storePendingEdit(
               context.globalState,
               folder,
               configFile,
               Date.now(),
+              logFile,
             ),
           storePausedRetry: containerId =>
             storePausedRetry(context.globalState, containerId, Date.now()),

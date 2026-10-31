@@ -17,6 +17,7 @@ import {
   createLogger,
   type EditorLogPort,
   type Logger,
+  type Sink,
 } from 'lib-log';
 import {standDownIfPresent, type StandDownHost} from 'lib-standdown';
 import type {PreflightDependencies} from './engine/preflight.ts';
@@ -66,6 +67,8 @@ export interface ContainersActivationInputs<
   standDown: StandDownHost;
   commands: CommandHost;
   channels: Pick<EditorLogPort, 'createOutputChannel'>;
+  /** A second sink for the log's lines, which get it after they are masked, as the channel's do. */
+  alsoLogTo: Sink;
   clock: () => number;
   banner: BannerFacts;
   /** The surroundings of the Docker CLI checks, made once the log is open. */
@@ -111,10 +114,18 @@ export async function activateContainers<
     return {kind: 'standing'};
   }
   const sink = createChannelSink(inputs.channels, CHANNEL_NAME);
-  const logger = createLogger(sink, {
-    minimumLevel: () => 'info',
-    clock: inputs.clock,
-  });
+  const logger = createLogger(
+    {
+      write: line => {
+        sink.write(line);
+        inputs.alsoLogTo.write(line);
+      },
+    },
+    {
+      minimumLevel: () => 'info',
+      clock: inputs.clock,
+    },
+  );
   logger.info(
     `${banner.displayName} ${banner.extensionVersion} in ${banner.editorName} ${banner.editorVersion} (${banner.editorCommit}).`,
   );

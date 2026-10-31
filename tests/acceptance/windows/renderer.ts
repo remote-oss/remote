@@ -2103,24 +2103,28 @@ export interface EditorTab {
   preview: boolean;
 }
 
-/** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
-export async function editorTabs(name: string): Promise<EditorTab[]> {
-  return evaluate<EditorTab[]>(
+/** The editor tabs of window `name` by editor group, in the order the groups are shown; read from the page, so it works while a modal dialog is open. */
+export async function editorGroups(name: string): Promise<EditorTab[][]> {
+  return evaluate<EditorTab[][]>(
     name,
-    `[...document.querySelectorAll('.editor-group-container .tabs-container .tab')].map(tab => ({
+    `[...document.querySelectorAll('.editor-group-container')].map(group => [...group.querySelectorAll('.tabs-container .tab')].map(tab => ({
       label: tab.querySelector('.label-name')?.textContent ?? '',
       active: tab.classList.contains('active'),
       preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
-    }))`,
+    })))`,
   );
 }
 
 /** The tab labels of each editor group of window `name`, the groups in the order shown. */
 export async function editorGroupLabels(name: string): Promise<string[][]> {
-  return evaluate<string[][]>(
-    name,
-    `[...document.querySelectorAll('.editor-group-container')].map(group => [...group.querySelectorAll('.tabs-container .tab')].map(tab => tab.querySelector('.label-name')?.textContent ?? ''))`,
+  return (await editorGroups(name)).map(group =>
+    group.map(entry => entry.label),
   );
+}
+
+/** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
+export async function editorTabs(name: string): Promise<EditorTab[]> {
+  return (await editorGroups(name)).flat();
 }
 
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
