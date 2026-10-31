@@ -13,6 +13,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {
+  acceptQuickPick,
   pressEscape,
   quickPickOf,
   typeInQuickPick,
@@ -21,6 +22,9 @@ import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The command that adds a configuration. */
 export const COMMAND = 'remote-containers.createDevContainerFile';
+
+/** The configuration the wizard writes, relative to the folder. */
+export const CONFIGURATION = '.devcontainer/devcontainer.json';
 
 /** The folder of the row `name` with the files `contents` names, made empty first, and the window on it. */
 async function windowWith(
@@ -49,6 +53,20 @@ async function windowWith(
  */
 export function startCommand(window: string, command = COMMAND): Promise<void> {
   return startInWindow(window, command);
+}
+
+/** Waits for the option screen whose placeholder is `placeholder`, and takes its focused item, the template's default. */
+export async function takeOptionScreen(
+  window: string,
+  placeholder: string,
+): Promise<void> {
+  await waitFor(
+    `the option screen ${placeholder}`,
+    async () => (await quickPickOf(window))?.placeholder === placeholder,
+    60_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 500));
+  await acceptQuickPick(window);
 }
 
 /** Runs `body` over a window with the files, and closes the window after. */
