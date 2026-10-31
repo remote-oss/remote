@@ -18,6 +18,11 @@ import {
 } from './check-outcome.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
+import {apiCheckSkipped} from './version-reply.ts';
+
+/** The log line of a first check whose version reply names no server API version. */
+const API_CHECK_SKIPPED =
+  "the engine's version reply names no server API version; the API check was skipped";
 
 /** How long one query may take, in milliseconds. */
 const QUERY_TIMEOUT_MILLISECONDS = 60_000;
@@ -152,6 +157,14 @@ export async function firstCheck(
       );
     }
   }
+  const structured = queries[1];
+  if (
+    structured?.kind === 'ran' &&
+    succeeded(structured) &&
+    apiCheckSkipped(structured.stdout)
+  ) {
+    dependencies.logger.info(API_CHECK_SKIPPED);
+  }
   const outcome = firstCheckOutcomeOf(executable, queries);
   if (outcome === 'passed') {
     return 'proceed';
@@ -205,7 +218,11 @@ export async function currentContext(
       const name = result.stdout.trim();
       return name === '' || name === 'default' ? undefined : name;
     }
-    dependencies.logger.warn(
+    // An engine without the command (Podman exits 125) has no context: that is no news. A spawn that failed, or a
+    // query that did not finish in time, still is.
+    const missing =
+      result.kind === 'ran' && !result.timedOut && result.status !== undefined;
+    dependencies.logger[missing ? 'debug' : 'warn'](
       `the Docker context could not be read: ${exitText(result)}`,
     );
     return undefined;

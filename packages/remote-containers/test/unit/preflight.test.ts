@@ -462,6 +462,55 @@ describe('the second check', () => {
   });
 });
 
+describe('the first check, when the version reply names no server (card containers-108)', () => {
+  /** `podman version --format '{{json .}}'` as Podman 5.8.9 rootless answered it: a client and no server. */
+  const PODMAN_REPLY =
+    '{"Client":{"APIVersion":"5.8.9","Version":"5.8.9","GoVersion":"go1.26.9-X:nodwarf5","GitCommit":"40030f4073bd4e1bf4f2fd9df2f6952b4d9d350a","BuiltTime":"Mon Oct 12 00:00:00 2026","Built":1791763200,"OsArch":"linux/amd64","Os":"linux"}}';
+
+  /** What the first check gave over this reply to the structured query, and the lines it logged about the API check. */
+  async function checked(reply: string) {
+    const scene = sceneOf({
+      [VERSION.join(' ')]: finished(0),
+      [STRUCTURED.join(' ')]: finished(0, reply),
+    });
+    return {
+      result: await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+      lines: scene.lines.filter(line => line.includes('API check')),
+      dialogs: scene.dialogs.length,
+    };
+  }
+
+  it('F-0201 AC-4, containers-108: the reply of Podman passes, and the skipped API check is logged once at info', async () => {
+    deepStrictEqual(await checked(PODMAN_REPLY), {
+      result: 'proceed',
+      lines: [
+        "info: the engine's version reply names no server API version; the API check was skipped",
+      ],
+      dialogs: 0,
+    });
+  });
+
+  it('F-0201 BR-5, containers-108: the reply of Docker, which names a server, logs nothing of the API check', async () => {
+    deepStrictEqual(await checked(GOOD_REPLY), {
+      result: 'proceed',
+      lines: [],
+      dialogs: 0,
+    });
+  });
+
+  it('containers-108: a first check whose client query failed has no version reply to say anything about', async () => {
+    const scene = sceneOf({
+      [VERSION.join(' ')]: finished(1),
+      [STRUCTURED.join(' ')]: finished(0, PODMAN_REPLY),
+    });
+    await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+    deepStrictEqual(
+      scene.lines.filter(line => line.includes('API check')),
+      [],
+    );
+  });
+});
+
 describe('the current context', () => {
   for (const [name, answer, expected] of [
     ['default', finished(0, 'default\n'), undefined],
@@ -479,9 +528,19 @@ describe('the current context', () => {
 
   for (const [name, answer, line] of [
     [
+      'an exit of 125, as Podman answers a command it does not have',
+      finished(125),
+      'debug: the Docker context could not be read: 125',
+    ],
+    [
       'an exit of 1',
       finished(1),
-      'warn: the Docker context could not be read: 1',
+      'debug: the Docker context could not be read: 1',
+    ],
+    [
+      'a query that did not finish',
+      finished(undefined),
+      'warn: the Docker context could not be read: signal',
     ],
     [
       'a spawn that fails',

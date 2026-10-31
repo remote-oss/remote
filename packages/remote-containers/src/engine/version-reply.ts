@@ -20,6 +20,25 @@ export function serverApiOf(stdout: string): string | undefined {
     : undefined;
 }
 
+/**
+ * Whether a reply that parses as a JSON object has no `Server` member at all, as the reply of an engine that has no
+ * server to name does (Podman's `podman version`): the API check then has nothing to check. A reply with a `Server`,
+ * whatever its API version, and text that is no JSON object are not this case.
+ */
+export function apiCheckSkipped(stdout: string): boolean {
+  try {
+    const reply: unknown = JSON.parse(stdout);
+    return (
+      typeof reply === 'object' &&
+      reply !== null &&
+      !Array.isArray(reply) &&
+      !('Server' in reply)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Whether an API version is known and older than the minimum, compared as numbers. */
 export function isBelowMinimum(apiVersion: string | undefined): boolean {
   if (apiVersion === undefined) {
