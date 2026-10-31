@@ -89,6 +89,8 @@ export interface AgentEvent {
   extensionId?: string;
   present?: boolean;
   extensionActive?: boolean;
+  /** The version of the editor an `extension` event came from. */
+  editorVersion?: string;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
   /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
@@ -1048,6 +1050,13 @@ export async function extensionActive(
   extensionId: string,
 ): Promise<boolean> {
   return (await extensionReport(name, extensionId))?.extensionActive === true;
+}
+
+/** The version of the editor of window `name`, as its agent reports it with its answer about an extension. */
+export async function editorVersionOf(name: string): Promise<string> {
+  return (
+    (await extensionReport(name, 'remote-oss.remote-ssh'))?.editorVersion ?? ''
+  );
 }
 
 /** What window `name` reports of the extension `extensionId`: whether its editor has it, and whether it is active. */

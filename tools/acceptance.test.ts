@@ -31,6 +31,7 @@ import {
   chosenLaunches,
   selectionLine,
   editorExecutableOf,
+  genuineVersionIn,
   runArgumentsOf,
   type CommandResult,
   failureText,
@@ -264,8 +265,8 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('codium-insiders');
   };
 
-  readonly vscodeExecutable = (): Promise<string> => {
-    this.calls.push('vscode executable');
+  readonly vscodeExecutable = (version: string): Promise<string> => {
+    this.calls.push(`vscode executable ${version}`);
     return Promise.resolve('/vscode/code');
   };
 
@@ -1125,7 +1126,11 @@ describe('acceptance', () => {
           },
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
-            files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
             client: 'vscode',
           })),
         ],
@@ -1226,7 +1231,8 @@ describe('acceptance', () => {
       deepStrictEqual(
         [
           harness.launched,
-          harness.calls.filter(call => call === 'vscode executable').length,
+          harness.calls.filter(call => call === 'vscode executable 1.139.1')
+            .length,
           harness.calls.filter(
             call =>
               call.startsWith('/vscode/bin/code ') &&
@@ -1240,12 +1246,87 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-69: the genuine launches run the version the job names, the recorded one when it names none, and the rows read it', async () => {
+      const seen: Array<[string | undefined, string[], string | undefined]> =
+        [];
+      for (const named of [undefined, '', '1.125.0']) {
+        const before = process.env.HARNESS_GENUINE_VERSION;
+        if (named === undefined) {
+          delete process.env.HARNESS_GENUINE_VERSION;
+        } else {
+          process.env.HARNESS_GENUINE_VERSION = named;
+        }
+        try {
+          const fake = new FakeHarness();
+          await runAcceptance(workspace.root, fake, 'vscodium', ['genuine']);
+          seen.push([
+            named,
+            fake.calls.filter(call => call.startsWith('vscode executable')),
+            fake.variables?.HARNESS_GENUINE_VERSION,
+          ]);
+        } finally {
+          if (before === undefined) {
+            delete process.env.HARNESS_GENUINE_VERSION;
+          } else {
+            process.env.HARNESS_GENUINE_VERSION = before;
+          }
+        }
+      }
+      deepStrictEqual(seen, [
+        [undefined, ['vscode executable 1.139.1'], '1.139.1'],
+        ['', ['vscode executable 1.139.1'], '1.139.1'],
+        ['1.125.0', ['vscode executable 1.125.0'], '1.125.0'],
+      ]);
+    });
+
+    it('tooling-69: ssh-no-proposals selected with the floor version fails the run before anything starts, and runs with the recorded one', async () => {
+      const before = process.env.HARNESS_GENUINE_VERSION;
+      try {
+        const outcomes: Array<[string, number, Array<string | undefined>]> = [];
+        for (const named of ['1.125.0', '1.139.1']) {
+          process.env.HARNESS_GENUINE_VERSION = named;
+          const fake = new FakeHarness();
+          const code = await runAcceptance(workspace.root, fake, 'vscodium', [
+            'ssh-no-proposals',
+          ]);
+          outcomes.push([named, code, fake.launched]);
+        }
+        deepStrictEqual(outcomes, [
+          ['1.125.0', 2, []],
+          ['1.139.1', 0, ['ssh-no-proposals']],
+        ]);
+      } finally {
+        if (before === undefined) {
+          delete process.env.HARNESS_GENUINE_VERSION;
+        } else {
+          process.env.HARNESS_GENUINE_VERSION = before;
+        }
+      }
+    });
+
+    it('tooling-69: a version the job names that is neither the recorded one nor the floor fails the run before anything starts', () => {
+      deepStrictEqual(
+        [
+          genuineVersionIn({HARNESS_GENUINE_VERSION: '1.130.0'}),
+          genuineVersionIn({HARNESS_GENUINE_VERSION: '1.125.0'}),
+          genuineVersionIn({}),
+        ],
+        [
+          {
+            problem: 'HARNESS_GENUINE_VERSION must be 1.139.1 or 1.125.0',
+          },
+          '1.125.0',
+          '1.139.1',
+        ],
+      );
+    });
+
     it('tooling-51: a run that does not name the genuine label never downloads VS Code, installs for it or makes it', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
       deepStrictEqual(
         [
           harness.launched,
-          harness.calls.filter(call => call === 'vscode executable'),
+          harness.calls.filter(call => call.startsWith('vscode executable')),
           harness.calls.filter(call => call.includes('extensions-genuine')),
           harness.variables?.HARNESS_VSCODE_EXECUTABLE,
         ],
@@ -1354,6 +1435,7 @@ describe('acceptance', () => {
         REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(harness.runFolder, 'signals'),
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
+        HARNESS_EDITOR_VERSION: '1.139.1',
         REMOTE_OSS_ACCEPTANCE_LOG: path.join(harness.runFolder, 'log.txt'),
       });
     });
@@ -3419,6 +3501,7 @@ describe('acceptance', () => {
       (
         await runTestCli(workspace.root, {
           REMOTE_OSS_ACCEPTANCE: '1',
+          HARNESS_EDITOR_VERSION: '',
           HARNESS_SSH_CONFIG: '',
           HARNESS_CONTAINER: '',
           HARNESS_ROUTED_ADDRESS: '',

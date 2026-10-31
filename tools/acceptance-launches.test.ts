@@ -291,8 +291,8 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
-        ['genuine', undefined, true, undefined],
-        ['ssh-no-proposals', undefined, true, undefined],
+        ['genuine', ['remote-oss.remote-explorer'], true, undefined],
+        ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
       ],
     );
   });
@@ -542,7 +542,7 @@ describe('the launches of the VSCodium run', () => {
           'workbench.settings.enableNaturalLanguageSearch': false,
           'chat.disableAIFeatures': true,
         },
-        undefined,
+        ['remote-oss.remote-explorer'],
       ],
     );
   });

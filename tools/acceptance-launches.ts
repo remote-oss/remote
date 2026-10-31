@@ -163,6 +163,7 @@ const GENUINE_LAUNCH: PlainLaunch = {
   suite: 'genuine',
   client: 'vscode',
   namedOnly: true,
+  withExtensions: ['remote-oss.remote-explorer'],
   settings: {
     ...RENDERER_LAUNCH.settings,
     'window.dialogStyle': 'custom',
