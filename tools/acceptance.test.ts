@@ -81,6 +81,20 @@ const CONTAINER = 'c0ffee';
 /** The host's address on the run network, which the `routed` alias names. */
 const ROUTED_ADDRESS = '172.18.0.2';
 
+/** Runs `body` with what it prints on `console.error` collected, and gives what it returned and those lines. */
+async function withErrorLines<Result>(
+  body: () => Promise<Result>,
+): Promise<{result: Result; lines: string[]}> {
+  const lines: string[] = [];
+  const previousError = console.error;
+  console.error = (line: unknown) => lines.push(String(line));
+  try {
+    return {result: await body(), lines};
+  } finally {
+    console.error = previousError;
+  }
+}
+
 /** A harness whose commands succeed, recording each call; `answers` overrides the result of a program. */
 class FakeHarness implements HarnessDependencies {
   readonly calls: string[] = [];
@@ -1665,20 +1679,10 @@ describe('acceptance', () => {
         stdout: `alpine:3\n${PODMAN_IMAGE}\n`,
         stderr: '',
       });
-      const lines: string[] = [];
-      const previousError = console.error;
-      console.error = (line: unknown) => lines.push(String(line));
-      try {
-        const status = await runAcceptance(
-          workspace.root,
-          harness,
-          'vscodium',
-          [label],
-        );
-        return {status, lines};
-      } finally {
-        console.error = previousError;
-      }
+      const {result: status, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness, 'vscodium', [label]),
+      );
+      return {status, lines};
     }
 
     it('containers-101: the containers-podman launch with a Podman older than 5 refuses the run before it starts a host, naming what podman printed', async () => {
@@ -1761,15 +1765,10 @@ describe('acceptance', () => {
 
     it('prints the cause of an empty error and returns 1', async () => {
       harness.bundleSuiteError = new Error('', {cause: 'no space'});
-      const lines: string[] = [];
-      const previousError = console.error;
-      console.error = (line: unknown) => lines.push(String(line));
-      try {
-        const status = await runAcceptance(workspace.root, harness);
-        deepStrictEqual([status, lines], [1, ['acceptance: no space']]);
-      } finally {
-        console.error = previousError;
-      }
+      const {result: status, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness),
+      );
+      deepStrictEqual([status, lines], [1, ['acceptance: no space']]);
     });
   });
 
