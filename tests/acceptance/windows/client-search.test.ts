@@ -57,7 +57,7 @@ function notValid(program: string): string {
 /** The user settings' bytes at the file's start, put back whatever failed. */
 let settingsBytes: string | undefined;
 
-describe('the client search of windows (F-2101 AC-14, 15, 16)', function () {
+describe('the client search of windows (F-2101 AC-3, 14, 15, 16)', function () {
   this.timeout(180_000);
 
   before(async () => {
@@ -89,7 +89,7 @@ describe('the client search of windows (F-2101 AC-14, 15, 16)', function () {
     restoreUserSettings(settingsBytes);
   });
 
-  it('F-2101 AC-14: a new window on the host runs the configured client for check, options and connect', async () => {
+  it('F-2101 AC-3 (new-window): a new window on the host runs the configured client for check, options and connect', async () => {
     const callsStart = callLines().length;
     await userSettings({'remote.SSH.path': client('configured')});
     await openWindow('harness', 'cs1');
@@ -102,6 +102,21 @@ describe('the client search of windows (F-2101 AC-14, 15, 16)', function () {
       ]);
     } finally {
       await closeWindow('cs1');
+    }
+  });
+
+  it('F-2101 AC-14 (reload-invalid): a reload with an invalid remote.SSH.path connects through the running server with no check and no lookup', async () => {
+    await userSettings({'remote.SSH.path': client('configured')});
+    await openWindow('harness', 'cs14');
+    try {
+      await connected('cs14');
+      await userSettings({'remote.SSH.path': '/nonexistent/ssh'});
+      const callsStart = callLines().length;
+      await reloadWindow('cs14');
+      await connected('cs14');
+      deepStrictEqual(callLines().slice(callsStart), []);
+    } finally {
+      await closeWindow('cs14');
     }
   });
 
