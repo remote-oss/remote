@@ -468,6 +468,19 @@ export function activate(context: vscode.ExtensionContext): void {
         names: vscode.window.terminals.map(each => each.name),
       });
     }),
+    vscode.commands.registerCommand(
+      'acceptance.agent.updateWorkspaceFolders',
+      (start: number, deleteCount: number, uris: string[]) => {
+        const updated = vscode.workspace.updateWorkspaceFolders(
+          start,
+          deleteCount,
+          ...uris.map(each => ({uri: vscode.Uri.parse(each)})),
+        );
+        if (!updated) {
+          throw new Error('the workspace folders were not updated');
+        }
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {

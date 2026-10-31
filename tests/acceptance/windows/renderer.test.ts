@@ -147,6 +147,30 @@ describe('pageTitleFor', () => {
     );
   });
 
+  it('coverage-25e harness: a remote window of an unsaved workspace is its title followed by the remote name, and a local one is not', () => {
+    deepStrictEqual(
+      [
+        pageTitleFor(
+          {
+            folders: ['vscode-remote://ssh-remote%2Bharness/a'],
+            remoteName: 'ssh-remote',
+            workspaceFile: 'untitled:Untitled-1',
+          },
+          ['[]', '[Untitled (Workspace)]SSH: harness'],
+        ),
+        pageTitleFor(
+          {
+            folders: ['file:///run/a'],
+            remoteName: null,
+            workspaceFile: 'untitled:Untitled-1',
+          },
+          ['[Untitled (Workspace)]SSH: harness'],
+        ),
+      ],
+      ['[Untitled (Workspace)]SSH: harness', undefined],
+    );
+  });
+
   it('containers-40 harness: a folder window with a null workspace file matches by its folder as before', () => {
     strictEqual(
       pageTitleFor(

@@ -343,6 +343,7 @@ export async function activate(
   });
   const endpoints = serveSliceEndpoints(companion, {
     listHosts: () => configuredHosts(host),
+    hostSource: () => textOf(host, 'configFile'),
     activeConnection: () => connect.activeConnection(),
     opener: openerHostOf(vscode),
     logger: result.logger,

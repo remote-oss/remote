@@ -50,7 +50,11 @@ on:
   schedule:
     - cron: '17 */2 * * *'
     - cron: '43 4 * * *'
+  # Each merge to main runs checks, unit and coverage, on GitHub's runners and not the self-hosted ones. Two pull
+  # requests that pass alone can break each other once both are in: main shows it within minutes, not at the next pull
+  # request's run.
   push:
+    branches: [main]
     tags: ['*-v*']
 
 permissions:
@@ -162,7 +166,7 @@ jobs:
         shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
     # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20 # shard 2 outgrew 10 minutes by 2026-10-31; the shard rebalance (#1383) sets it back
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -186,7 +190,8 @@ jobs:
     name: acceptance (slice 1)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
@@ -225,7 +230,8 @@ jobs:
     name: acceptance (server lifecycle)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
