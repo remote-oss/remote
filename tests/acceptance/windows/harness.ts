@@ -748,6 +748,11 @@ export async function connectedToContainer(
   );
 }
 
+/** `base` scoped to this run, so that a container name never clashes with another run's or a leftover's. */
+export function runScopedName(base: string): string {
+  return `${base}-${variable('HARNESS_RUN_ID')}`;
+}
+
 /** The `docker run` arguments that label a dev container of the run, so that the run's clean-up removes it. */
 export function runLabelArguments(): string[] {
   return [

@@ -10,6 +10,7 @@ import {
   reloadWindow,
   reopenInContainer,
   runLabelArguments,
+  runScopedName,
   variable,
   waitFor,
 } from '../windows/harness.ts';
@@ -79,7 +80,7 @@ async function lists(name: string, containerName: string): Promise<boolean> {
  * text), then opens a local window on a new folder named `folderName` with its Dev Containers view showing rows.
  */
 async function windowWithRows(folderName: string): Promise<string> {
-  await runContainer(`${folderName}-seed`);
+  await runContainer(runScopedName(`${folderName}-seed`));
   const name = await openFolderWindow(devContainerFolder(folderName));
   await inWindow(name, 'workbench.view.remote');
   await rowsWhen(name, rows => rows.length > 0);
@@ -92,17 +93,18 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
   beforeEach(clearEarlierRows);
 
   it('F-0901 AC-56 (gate-row-14): a container started from the command line gets its row, and one removed loses it, each within 5 s and with no Refresh', async () => {
+    const started = runScopedName('events-one-c');
     const name = await windowWithRows('events-one');
-    await runContainer('events-one-c');
+    await runContainer(started);
     await waitFor(
       'the row of the started container',
-      () => lists(name, 'events-one-c'),
+      () => lists(name, started),
       FOLLOW_MILLISECONDS,
     );
-    await removeContainer('events-one-c');
+    await removeContainer(started);
     await waitFor(
       'the row of the removed container to go',
-      async () => !(await lists(name, 'events-one-c')),
+      async () => !(await lists(name, started)),
       FOLLOW_MILLISECONDS,
     );
     await closeWindow(name);
@@ -154,6 +156,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
   });
 
   it('F-0901 AC-45: in a dev container window a dockerPath that names no program changes nothing (the groups and the title actions stay), and a container started afterwards still gets its row, with no welcome', async () => {
+    const later = runScopedName('events-three-c');
     const folder = devContainerFolder('events-three');
     const name = await openFolderWindow(folder);
     await reopenInContainer(name);
@@ -164,10 +167,10 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
       path.join(variable('HARNESS_RUN_FOLDER'), 'no-such-docker'),
     );
     try {
-      await runContainer('events-three-c');
+      await runContainer(later);
       await waitFor(
         'the row of the container started after the change',
-        () => lists(name, 'events-three-c'),
+        () => lists(name, later),
         FOLLOW_MILLISECONDS,
       );
       deepStrictEqual(
@@ -205,6 +208,10 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
   }
 
   it('F-0901 AC-57 (collapse): a collapsed header stays collapsed through a Refresh and every start, run and stop; a group that empties comes back expanded; a reload expands both; a header has no context menu', async () => {
+    const running = runScopedName('events-five-a');
+    const stopped = runScopedName('events-five-stopped');
+    const startedLater = runScopedName('events-five-b');
+    const afterEmptied = runScopedName('events-five-c');
     const folder = devContainerFolder('events-five', {name: 'Events Five'});
     const own = await openFolderWindow(folder);
     await reopenInContainer(own);
@@ -213,11 +220,11 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
     // The row of the window's own dev container has a menu; a header, by the same right click, has none.
     const ownMenu = await rowContextMenu(own, VIEW, 'events-five');
     await closeWindow(own);
-    await runContainer('events-five-a');
+    await runContainer(running);
     await execFileAsync('docker', [
       'create',
       '--name',
-      'events-five-stopped',
+      stopped,
       ...runLabelArguments(),
       variable('HARNESS_DEVCONTAINER_IMAGE'),
       'sleep',
@@ -238,9 +245,9 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
     }
     await titleAction(name, VIEW, 'Refresh');
     await afterEach();
-    await execFileAsync('docker', ['start', 'events-five-stopped']);
+    await execFileAsync('docker', ['start', stopped]);
     await afterEach();
-    await runContainer('events-five-b');
+    await runContainer(startedLater);
     await afterEach();
     const [devId] = await devContainersOf(folder);
     await execFileAsync('docker', ['stop', devId ?? '']);
@@ -249,16 +256,12 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
       await rowContextMenu(name, VIEW, 'Other Containers'),
       await rowContextMenu(name, VIEW, 'Dev Containers'),
     ];
-    for (const plain of [
-      'events-five-a',
-      'events-five-stopped',
-      'events-five-b',
-    ]) {
+    for (const plain of [running, stopped, startedLater]) {
       await removeContainer(plain);
     }
     await settled();
     const emptied = (await headerStates(name))['Other Containers'];
-    await runContainer('events-five-c');
+    await runContainer(afterEmptied);
     await settled();
     const returned = await headerStates(name);
     await toggleRow(name, VIEW, 'Other Containers');
