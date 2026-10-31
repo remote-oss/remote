@@ -291,7 +291,7 @@ from the table (`launchGroupOf`):
 An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
 the longest launch, `containers`, alone:
 
-    node tools/acceptance.ts --editor vscodium --launches @ssh
+    node tools/acceptance.ts --editor vscodium --launches @ssh,!remote-ubuntu
     node tools/acceptance.ts --editor vscodium --launches containers
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
@@ -505,6 +505,35 @@ runs once on the default host, in `pnpm test:acceptance:server`.
 all eight), each in its own mocha run on its own host: `server/login-shell-variant.test.ts` pins the shell the host
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
+
+### The Ubuntu 26.04 host
+
+A second image, `host-ubuntu/`, is `ubuntu:26.04`, pinned by its index digest. Its coreutils are uutils, not GNU's and
+not BusyBox's, as on a user's Ubuntu 26.04 machine.
+- **What it has:** OpenSSH's server with key login only, the one user `harness` (login shell `/bin/sh`, which is dash),
+  and the shells of `HOST_SHELL`. It also has GNU `wget` and `curl` (`HOST_FETCH`: `gnu-wget`, the default, `curl` or
+  `none`), `iptables`, `xauth`, `procps` and the OpenBSD `nc`.
+- **What it doesn't have:** the thirteen other accounts of the Alpine host (`password`, `mute`, `readonly`, `i686` and
+  the rest), so rows that use them stay Alpine's. Nor does it have BusyBox's `wget`.
+- **Its `start-sshd`** is its own: the Alpine one sets up the thirteen accounts and links BusyBox's `wget`.
+
+`HARNESS_HOST_BASE` (`alpine`, the default, or `ubuntu-26.04`) picks the image that `startHost` starts the server
+rows' host from; another value fails the run. `pnpm test:acceptance:variants` runs the shell-sensitive files, plus
+`server/install.test.ts` and `server/probe.test.ts`, once on the Ubuntu host (`host base ubuntu-26.04`).
+
+The VSCodium run starts the Ubuntu host beside its Alpine one only when a chosen launch has `hostBase: 'ubuntu-26.04'`.
+That's `remote-ubuntu`, the `remote` launch on it. The second host gets:
+- the run's key and password, and the download host's names;
+- its own `ssh_config-ubuntu-26.04` beside the run's, which is the launch's `remote.SSH.configFile` and its
+  `HARNESS_SSH_CONFIG`;
+- its own container id, `HARNESS_HOST_UBUNTU_CONTAINER`, which is the launch's `HARNESS_CONTAINER`.
+
+A glibc host is served the glibc server by the download host (tooling-68). A launch on another host can't have a
+`hostSetup`, because that runs in the run's own host.
+
+The backstop's ssh part leaves `remote-ubuntu` out (`@ssh,!remote-ubuntu`) while two of its rows fail on the Ubuntu
+host (#1380): F-2401 AC-2 and F-2304 AC-6. A dispatch that names it runs it, and so does a local run without
+`--launches`.
 
 ## Rows that fail in some runs
 

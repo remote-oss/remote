@@ -307,11 +307,12 @@ jobs:
     # launch alone, the longest; the other containers launches; and the explorer and host-case launches together. Each
     # runner has its own Docker daemon, so the two containers parts never wait for each other's lock. The genuine group
     # has its own job. A dispatch that names its launches runs them as one part; one whose launches input is empty runs
-    # all.
+    # all. The ssh part leaves out `remote-ubuntu` while two of its rows fail on the Ubuntu host; a dispatch that names
+    # it runs it.
     strategy:
       fail-fast: false
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh","containers","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!remote-ubuntu","containers","@containers,!containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.

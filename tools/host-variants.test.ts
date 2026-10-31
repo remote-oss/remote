@@ -2,6 +2,8 @@ import {deepStrictEqual, throws} from 'node:assert';
 import {
   FETCH_VARIANTS,
   fetchVariantOf,
+  HOST_BASE_VARIANTS,
+  hostBaseOf,
   fetchVariantsToRun,
   SHELL_VARIANTS,
   shellVariantOf,
@@ -95,5 +97,30 @@ describe('the host variants of a run', () => {
       '/bin/csh',
       '/bin/mksh',
     ]);
+  });
+
+  it('tooling-70: with no host base named, or an empty one, the host is Alpine', () => {
+    deepStrictEqual(
+      [hostBaseOf({}), hostBaseOf({HARNESS_HOST_BASE: ''})],
+      ['alpine', 'alpine'],
+    );
+  });
+
+  it('tooling-70: a named host base is the base of the process', () => {
+    deepStrictEqual(
+      hostBaseOf({HARNESS_HOST_BASE: 'ubuntu-26.04'}),
+      'ubuntu-26.04',
+    );
+  });
+
+  it('tooling-70: a name that is no host base throws, as an unknown shell does', () => {
+    throws(
+      () => hostBaseOf({HARNESS_HOST_BASE: 'debian'}),
+      /^Error: HARNESS_HOST_BASE names no host base: debian$/,
+    );
+  });
+
+  it('tooling-70: the host bases are Alpine and Ubuntu 26.04, in that order', () => {
+    deepStrictEqual(HOST_BASE_VARIANTS, ['alpine', 'ubuntu-26.04']);
   });
 });

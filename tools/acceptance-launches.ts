@@ -5,6 +5,7 @@
 
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import type {HostBase} from './host-variants.ts';
 
 /** The window the remote launches open: the harness host's home folder over `ssh-remote`. */
 const REMOTE_FOLDER_URI = 'vscode-remote://ssh-remote+harness/home/harness';
@@ -37,6 +38,11 @@ interface LaunchCommon {
   templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
+  /**
+   * The base of the SSH host the launch's window connects to, when it is not Alpine's: the run starts a host of that
+   * base beside its own, and the launch's ssh_config, settings and harness variables name it.
+   */
+  hostBase?: Exclude<HostBase, 'alpine'>;
 }
 
 /** One command of a launch's host setup, run on the host container through `docker exec`, in order. */
@@ -594,6 +600,13 @@ export function launchesOf(root: string): Launch[] {
       hostExtensions: ['slow-remote'],
       // Without commands the entry still makes the run wait out the previous launch's helper, so the resolve is fresh.
       hostSetup: [],
+    },
+    {
+      label: 'remote-ubuntu',
+      runner: 'runner-remote',
+      suite: 'suite-remote',
+      folderUri: REMOTE_FOLDER_URI,
+      hostBase: 'ubuntu-26.04',
     },
     ...clientCases(root).map((each): Launch => ({
       label: each.label,

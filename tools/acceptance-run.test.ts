@@ -67,10 +67,11 @@ function scriptedCommands(): ScriptedCommands & CommandRunner {
   function command(program: string, argv: readonly string[]): CommandResult {
     calls.push({program, argv: [...argv]});
     if (program === 'ssh-keygen') {
-      // The real ssh-keygen writes the key's public part next to the key named by -f.
+      // The real ssh-keygen writes the key named by -f and its public part next to it.
       const target = argv.indexOf('-f');
       const keyFile = target !== -1 ? argv[target + 1] : undefined;
       if (keyFile !== undefined) {
+        writeFileSync(keyFile, 'private\n');
         writeFileSync(`${keyFile}.pub`, 'ssh-ed25519 AAAA acceptance\n');
       }
     }
@@ -294,6 +295,70 @@ describe('startHostContainer (card tooling-10)', () => {
     } finally {
       rmSync(runFolder, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the Ubuntu host (card tooling-70)', () => {
+  it('builds from host-ubuntu under its own tag, and a second start in the run folder keeps the run key and password', () => {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
+    try {
+      const alpine = startHostContainer(
+        startingCommands(),
+        '/root',
+        RUN_ID,
+        runFolder,
+      );
+      const password = readFileSync(alpine.passwordFile, 'utf8');
+      const second = scriptedCommands();
+      second.passes(); // docker build
+      second.passes('c456\n'); // docker run
+      second.passes('127.0.0.1:49154\n'); // docker port
+      const ubuntu = startHostContainer(
+        second,
+        '/root',
+        RUN_ID,
+        runFolder,
+        [],
+        'ubuntu-26.04',
+      );
+      deepStrictEqual(
+        [
+          second
+            .callsOf('docker')
+            .find(argv => argv[0] === 'build')
+            ?.slice(-2),
+          second.callsOf('ssh-keygen').length,
+          readFileSync(ubuntu.passwordFile, 'utf8') === password,
+          second
+            .callsOf('docker')
+            .find(argv => argv[0] === 'run')
+            ?.at(-1),
+          [ubuntu.container, ubuntu.port],
+        ],
+        [
+          [
+            'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+            path.join('/root', 'tests', 'acceptance', 'host-ubuntu'),
+          ],
+          0,
+          true,
+          'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+          ['c456', 49154],
+        ],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it("names Alpine's host image by the run id alone and another base's with the base after it", () => {
+    deepStrictEqual(
+      [hostImageOf('77-2'), hostImageOf('77-2', 'ubuntu-26.04')],
+      [
+        'remote-oss-acceptance-host:77-2',
+        'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+      ],
+    );
   });
 });
 
@@ -660,8 +725,8 @@ function scriptCleanRun(
   }); // docker network rm
   scripted.passes(); // pkill
   scripted.passes(); // pkill, stale editors
-  for (let index = 0; index < 2; index += 1) {
-    // docker image rm --force, the host tag and the dev container tag
+  for (let index = 0; index < 3; index += 1) {
+    // docker image rm --force, the two host tags (Alpine's, Ubuntu's) and the dev container tag
     if (state.imageGone) {
       scripted.fails(1, 'No such image');
     } else {
@@ -739,6 +804,15 @@ describe('cleanRun (card tooling-10)', () => {
           'image',
           'rm',
           '--force',
+          'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+        ],
+      },
+      {
+        program: 'docker',
+        argv: [
+          'image',
+          'rm',
+          '--force',
           'remote-oss-acceptance-devcontainer:77-2',
         ],
       },
@@ -771,7 +845,7 @@ describe('cleanRun (card tooling-10)', () => {
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 9);
+    strictEqual(scripted.calls.length, 10);
   });
 
   it("throws naming the container when one still carries the run's label", () => {
@@ -806,6 +880,7 @@ describe('cleanRun (card tooling-10)', () => {
         'network rm n1',
         'network rm n2',
         `image rm --force remote-oss-acceptance-host:${RUN_ID}`,
+        `image rm --force remote-oss-acceptance-host:${RUN_ID}-ubuntu-26.04`,
         `image rm --force remote-oss-acceptance-devcontainer:${RUN_ID}`,
       ],
     );
@@ -889,7 +964,7 @@ describe('cleanRun (card tooling-10)', () => {
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 9);
+    strictEqual(scripted.calls.length, 10);
   });
 
   it("containers-09: notes the run's dev containers' images before removing the containers, then removes them and the run's dev container tag", () => {
@@ -904,6 +979,7 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force, the host
+    scripted.passes(); // docker image rm --force, the Ubuntu host
     scripted.fails(1, 'image is being used'); // docker image rm --force, the uid image
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps, the second listing
@@ -919,6 +995,7 @@ describe('cleanRun (card tooling-10)', () => {
         'd1',
         'c1',
         'remote-oss-acceptance-host:77-2',
+        'remote-oss-acceptance-host:77-2-ubuntu-26.04',
         'vsc-gate-image-0123-uid',
         'remote-oss-acceptance-devcontainer:77-2',
       ],
