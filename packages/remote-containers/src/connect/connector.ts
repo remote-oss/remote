@@ -987,6 +987,7 @@ export function containerConnectorOf(
         features: featureSettingsOf(
           settings.defaultFeatures,
           settings.lockfile,
+          read?.configuration.features,
         ),
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
