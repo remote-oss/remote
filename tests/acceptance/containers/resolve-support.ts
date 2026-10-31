@@ -169,3 +169,35 @@ export function noDaemonDocker(): string {
   chmodSync(wrapper, 0o755);
   return wrapper;
 }
+
+/** The countdown text of core's reconnection dialog and notification. */
+export const COUNTDOWN = /^Attempting to reconnect in \d+ seconds\.\.\.$/;
+
+/** Waits, for up to `milliseconds`, until `read` gives something, reading every 500 ms. */
+export async function eventually<Value>(
+  what: string,
+  read: () => Promise<Value | undefined>,
+  milliseconds: number,
+): Promise<Value> {
+  const deadline = Date.now() + milliseconds;
+  for (;;) {
+    const value = await read().catch(() => undefined);
+    if (value !== undefined) {
+      return value;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${what}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+
+/** Like `connectedWindow`, and leaves the window `SETTLE_MILLISECONDS` after the connect: core draws no dialog for a permanent failure in about the first second. */
+export async function settledWindow(
+  label: string,
+  configuration: Readonly<Record<string, unknown>> = {},
+): Promise<{name: string; containerId: string; folder: string}> {
+  const connected = await connectedWindow(label, configuration);
+  await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+  return connected;
+}
