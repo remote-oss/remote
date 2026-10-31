@@ -31,6 +31,9 @@ import {
 } from './resolve-support.ts';
 import {labelsOf, mark} from './lifecycle-support.ts';
 
+/** STR:S058, which a refused token must not show. */
+const CANNOT_RECONNECT = 'Cannot reconnect to remote host.';
+
 /** The log line that a container which this connect made gives (S-less: our own line, connector.ts). */
 const NEWLY_STARTED = /^container [0-9a-f]+ was newly started$/;
 
@@ -111,7 +114,7 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
     }
   });
 
-  it('F-0502 AC-2, AC-31 (c43-reload): Reload Window reuses the running server on the same port within 2 s, logs the container as already running, and reconnects under the same title and indicator', async () => {
+  it('F-0502 AC-31 (c43-reload): Reload Window reuses the running server on the same port within 2 s, logs the container as already running, and reconnects under the same title and indicator', async () => {
     const connectMark = containersLog().length;
     const {name, folder} = await connectedWindow('c43-reload');
     try {
@@ -141,6 +144,26 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
         title: true,
         indicator: 'Dev Container: c43-reload',
       });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it.skip('F-0502 AC-2 (c43-reload-phase): a reload logs no Starting VS Code Server phase, which waits for the product change that starts the phase only when a server is started', async () => {
+    const {name, folder} = await connectedWindow('c43-reload-phase');
+    try {
+      const logMark = containersLog().length;
+      await reloadWindow(name);
+      await connectedToContainer(name);
+      const lines = logSince(logMark);
+      await closeWindow(name);
+      deepStrictEqual(
+        [
+          lines.includes('Starting VS Code Server'),
+          lines.includes('reusing the running server'),
+        ],
+        [false, true],
+      );
     } finally {
       await removeContainers(folder);
     }
@@ -245,6 +268,14 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
       const failure = await shownContaining(name, 'auth mismatch', 90_000);
       const lines = logSince(logMark);
       const mismatch = {
+        noReconnectDialog: !(await shownContaining(
+          name,
+          CANNOT_RECONNECT,
+          3000,
+        ).then(
+          () => true,
+          () => false,
+        )),
         failure,
         reused: lines.includes('reusing the running server'),
         samePort: serverPortsOf(lines).every(port => port === oldPort),
@@ -271,6 +302,7 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
         },
         {
           mismatch: {
+            noReconnectDialog: true,
             failure:
               'Failed to connect to the remote extension host server (Error: Connection error: Unauthorized client refused: auth mismatch)',
             reused: true,
