@@ -79,7 +79,7 @@ export interface AgentEvent {
   settingId?: string;
   value?: unknown;
   defaultValue?: unknown;
-  /** Whether the user's settings hold the setting, as `setting` reports it: a key with `null` counts, an absent one does not. */
+  /** Whether the user's settings hold a value for the setting, as `setting` reports it: a key holding `null` reads as no value, as an absent one does. */
   inUserScope?: boolean;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
@@ -1405,7 +1405,7 @@ export async function settingIn(
   )?.value;
 }
 
-/** Whether the user's settings, as window `name` reads them, hold the setting `settingId`: a key written as `null` counts. */
+/** Whether the user's settings, as window `name` reads them, hold a value for the setting `settingId`; a key holding `null` reads as none, so the settings file is what tells it from a removed key. */
 export async function userScopeHolds(
   name: string,
   settingId: string,
@@ -1440,7 +1440,8 @@ export async function writeUserSetting(
     `${window} to read ${settingId} as ${JSON.stringify(value)}`,
     async () =>
       JSON.stringify(await settingIn(window, settingId)) ===
-        JSON.stringify(value) && (await userScopeHolds(window, settingId)),
+        JSON.stringify(value) &&
+      (value === null || (await userScopeHolds(window, settingId))),
     milliseconds,
   );
 }
