@@ -494,7 +494,7 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
     );
   });
 
-  it('F-0419 BR-15 (reset-removes): a reset leaves no dev.containers.cacheVolume key in the user settings', async () => {
+  it('tooling-77 (reset-removes): a reset leaves no dev.containers.cacheVolume key in the user settings', async () => {
     const seen: Array<[boolean, boolean]> = [];
     for (const value of [false, undefined]) {
       await setUserSetting('dev.containers.cacheVolume', value);
