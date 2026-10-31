@@ -298,9 +298,9 @@ export function featureMetadataText(text: string, registry: string): string {
 
 /**
  * Prepares the run's templates: the layer of each of `templates` from the cache under `root` (fetched by `fetchLayer` when it is
- * missing) unpacked, the run's own templates and Features copied, all published into the registry at `registryAddress` with the
- * dev container CLI the package bundles, and the run's index and control manifest written where the download host
- * serves them. Gives the registry as the templates' ids name it.
+ * missing) unpacked, the run's own templates and Features copied with the run's `mini` naming `devContainerImage`, all published
+ * into the registry at `registryAddress` with the dev container CLI the package bundles, and the run's index and control manifest
+ * written where the download host serves them. Gives the registry as the templates' ids name it.
  */
 export async function prepareRunTemplates(
   command: CommandRunner,
@@ -311,6 +311,11 @@ export async function prepareRunTemplates(
   templates: readonly MirroredTemplate[] = MIRRORED_TEMPLATES,
   devContainerImage?: string,
 ): Promise<string> {
+  if (devContainerImage === undefined) {
+    throw new Error(
+      'the run dev container image is missing, and the mini template names it',
+    );
+  }
   const registry = templateRegistryOf(registryAddress);
   const work = runTemplatesFolder(runFolder);
   const mirrorSources = path.join(work, 'mirror', 'src');
@@ -329,25 +334,23 @@ export async function prepareRunTemplates(
   cpSync(path.join(fixtures, 'custom', 'src'), customSources, {
     recursive: true,
   });
-  if (devContainerImage !== undefined) {
-    const mini = path.join(
-      customSources,
-      'mini',
-      '.devcontainer',
-      'devcontainer.json',
-    );
-    const placeholder = `"${RUN_IMAGE_PLACEHOLDER}"`;
-    const text = readFileSync(mini, 'utf8');
-    if (!text.includes(placeholder)) {
-      throw new Error(
-        'the mini template no longer names the run image placeholder',
-      );
-    }
-    writeFileSync(
-      mini,
-      text.replace(placeholder, JSON.stringify(devContainerImage)),
+  const mini = path.join(
+    customSources,
+    'mini',
+    '.devcontainer',
+    'devcontainer.json',
+  );
+  const placeholder = `"${RUN_IMAGE_PLACEHOLDER}"`;
+  const text = readFileSync(mini, 'utf8');
+  if (!text.includes(placeholder)) {
+    throw new Error(
+      'the mini template no longer names the run image placeholder',
     );
   }
+  writeFileSync(
+    mini,
+    text.replace(placeholder, JSON.stringify(devContainerImage)),
+  );
   const bundledCli = path.join(
     root,
     'packages',
