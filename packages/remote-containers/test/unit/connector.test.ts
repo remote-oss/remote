@@ -1188,6 +1188,53 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  /** The phase lines of the log: the starts and ends of Resolving Remote and of the reconnection attempts. */
+  function phaseLines(scene: ReturnType<typeof sceneOf>): string[] {
+    return messages(scene).filter(line =>
+      /^(Resolving Remote|Reconnection attempt \d+)(: \d+ ms)?$/.test(line),
+    );
+  }
+
+  it('F-0502 S286: every reconnection of a connector is a Reconnection attempt phase, counted from 1 and not reset by a success', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
+    }
+    deepStrictEqual(phaseLines(scene), [
+      'Resolving Remote',
+      'Resolving Remote: 100 ms',
+      'Reconnection attempt 1',
+      'Reconnection attempt 1: 25 ms',
+      'Reconnection attempt 2',
+      'Reconnection attempt 2: 25 ms',
+      'Reconnection attempt 3',
+      'Reconnection attempt 3: 25 ms',
+    ]);
+  });
+
+  it('F-0502 S286: a connect after the reconnections is Resolving Remote again, and a new connector counts from 1', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const fresh = sceneOf();
+    await connected(fresh);
+    await fresh.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
+    deepStrictEqual(
+      [phaseLines(scene).slice(2), phaseLines(fresh).slice(2)],
+      [
+        [
+          'Reconnection attempt 1',
+          'Reconnection attempt 1: 25 ms',
+          'Resolving Remote',
+          'Resolving Remote: 100 ms',
+        ],
+        ['Reconnection attempt 1', 'Reconnection attempt 1: 25 ms'],
+      ],
+    );
+  });
+
   it('F-0502 BR-11: a container that was found is told as already running', async () => {
     const scene = sceneOf();
     scene.outcome = {...READY, created: false};
