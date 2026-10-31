@@ -85,7 +85,22 @@ describe('the port attributes of the configuration (card containers-73)', functi
     deepStrictEqual(await portColumn(window, 1), [`Exact (${String(port)})`]);
   });
 
-  it('F-1101 AC-21 (overlap): of two overlapping ranges the lower start wins, in either order', async () => {
+  /** The Port column of `window`'s one row once a process shows on it, read again 3 s later so that a late change counts. */
+  async function columnWithProcess(
+    window: string,
+    port: number,
+    name: string,
+  ): Promise<string[]> {
+    const [containerId = ''] = await devContainersOf(folderOf(name));
+    await listenIn(containerId, port);
+    await rowsWhen(window, shown =>
+      shown.some(each => each.runningProcess !== ''),
+    );
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    return portsOf(await rowsWhen(window, () => true)).sort();
+  }
+
+  it('F-1101 AC-21 (overlap-ranges): of two overlapping ranges the lower start wins in either order, before and after a process starts', async () => {
     const port = await freePort();
     const lower = `${String(port - 10)}-${String(port + 10)}`;
     const higher = `${String(port - 3)}-${String(port + 3)}`;
@@ -93,14 +108,77 @@ describe('the port attributes of the configuration (card containers-73)', functi
       forwardPorts: [port],
       portsAttributes: {[lower]: {label: 'Lower'}, [higher]: {label: 'Higher'}},
     });
-    const inOrder = await portColumn(first, 1);
+    const firstBefore = await portColumn(first, 1);
     const second = await connectedWith('c73-ac21b', {
       forwardPorts: [port],
       portsAttributes: {[higher]: {label: 'Higher'}, [lower]: {label: 'Lower'}},
     });
+    const secondBefore = await portColumn(second, 1);
     deepStrictEqual(
-      [inOrder, await portColumn(second, 1)],
-      [[`Lower (${String(port)})`], [`Lower (${String(port)})`]],
+      [
+        [firstBefore, await columnWithProcess(first, port, 'c73-ac21a')],
+        [secondBefore, await columnWithProcess(second, port, 'c73-ac21b')],
+      ],
+      [
+        [[`Lower (${String(port)})`], [`Lower (${String(port)})`]],
+        [[`Lower (${String(port)})`], [`Lower (${String(port)})`]],
+      ],
+    );
+  });
+
+  it.skip('F-1101 AC-21 (overlap-regexes): of two regex keys that both match the listening process the one listed first wins', async () => {
+    const port = await freePort();
+    const first = await connectedWith('c73-ac21c', {
+      forwardPorts: [port],
+      portsAttributes: {
+        'nc -lk': {label: 'FirstRegex'},
+        '-e cat': {label: 'SecondRegex'},
+      },
+    });
+    const second = await connectedWith('c73-ac21d', {
+      forwardPorts: [port],
+      portsAttributes: {
+        '-e cat': {label: 'SecondRegex'},
+        'nc -lk': {label: 'FirstRegex'},
+      },
+    });
+    deepStrictEqual(
+      [
+        await columnWithProcess(first, port, 'c73-ac21c'),
+        await columnWithProcess(second, port, 'c73-ac21d'),
+      ],
+      [[`FirstRegex (${String(port)})`], [`SecondRegex (${String(port)})`]],
+    );
+  });
+
+  it('F-1101 AC-21 (range-and-regex): a range key’s label wins over a regex key in either order, and keeps winning once the process matches the regex', async () => {
+    const port = await freePort();
+    const range = `${String(port - 5)}-${String(port + 5)}`;
+    const first = await connectedWith('c73-ac21e', {
+      forwardPorts: [port],
+      portsAttributes: {
+        [range]: {label: 'Ranged'},
+        'nc -lk': {label: 'Regexed'},
+      },
+    });
+    const firstBefore = await portColumn(first, 1);
+    const second = await connectedWith('c73-ac21f', {
+      forwardPorts: [port],
+      portsAttributes: {
+        'nc -lk': {label: 'Regexed'},
+        [range]: {label: 'Ranged'},
+      },
+    });
+    const secondBefore = await portColumn(second, 1);
+    deepStrictEqual(
+      [
+        [firstBefore, await columnWithProcess(first, port, 'c73-ac21e')],
+        [secondBefore, await columnWithProcess(second, port, 'c73-ac21f')],
+      ],
+      [
+        [[`Ranged (${String(port)})`], [`Ranged (${String(port)})`]],
+        [[`Ranged (${String(port)})`], [`Ranged (${String(port)})`]],
+      ],
     );
   });
 

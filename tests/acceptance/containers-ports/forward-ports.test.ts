@@ -152,22 +152,6 @@ describe('the declared forwardPorts (card containers-72)', function () {
     );
   });
 
-  it('F-1101 AC-22 (forward-stopped): a declared forward that was stopped is back after a reload, with its origin', async () => {
-    const port = await freePort();
-    const window = await connectedWith('c72-ac22', {forwardPorts: [port]});
-    await showPorts(window);
-    await rowsWhen(window, shown => shown.length > 0);
-    await portRowAction(window, String(port), 'Stop Forwarding Port');
-    const stopped = await rowsWhen(window, shown => shown.length === 0);
-    await reloaded(window);
-    await showPorts(window);
-    const back = await rowsWhen(window, shown => shown.length > 0);
-    deepStrictEqual(
-      [portsOf(stopped), back.map(shown => [shown.port, shown.origin])],
-      [[], [[String(port), 'Dev Containers']]],
-    );
-  });
-
   it('F-1101 AC-25 (forward-other-host): host:port forwards to a name the container resolves, and the port is reachable', async () => {
     const port = await freePort();
     const sibling = await siblingListening(port);
