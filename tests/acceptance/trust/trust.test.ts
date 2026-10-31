@@ -1,11 +1,13 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {
+  connectedWithin,
   isTrusted,
   openWindow,
   recordLines,
   trustSettled,
   windowState,
 } from '../windows/harness.ts';
+import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {answerDialog, dialogOf, waitForDialog} from '../windows/renderer.ts';
 
 /** The question core's startup prompt asks of a folder. */
@@ -81,6 +83,17 @@ describe('the trust launch (card tooling-33)', function () {
       ['ssh-remote+harness', false, FOLDER_QUESTION],
     );
     await answerDialog('r22', "No, I don't trust the authors");
+  });
+
+  it('F-2704 AC-20 (trust-bash): a bash host in the default mode connects while core’s trust question is still open', async () => {
+    await openWindow('harness-bash', 'r20');
+    const asked = await waitForDialog('r20');
+    await connectedWithin('r20', INSTALL_MILLISECONDS);
+    deepStrictEqual(
+      [asked.message, (await dialogOf('r20'))?.message],
+      [FOLDER_QUESTION, FOLDER_QUESTION],
+    );
+    await answerDialog('r20', "No, I don't trust the authors");
   });
 
   it('F-2001 AC-14: the window connects while core’s trust question is still open, and the extension asks nothing of its own', async () => {
