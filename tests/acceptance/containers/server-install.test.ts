@@ -23,7 +23,7 @@ import {
 import {
   answerDialog,
   dialogOf,
-  dialogPrimaryOf,
+  primaryButtonOf,
   notifications,
   pressEscape,
   quickPickOf,
@@ -508,7 +508,7 @@ describe('F-0503 server install (card containers-41)', function () {
     const mark = containersLog().length;
     await reopenStarted(name);
     const dialog = await failureDialog(name);
-    const primary = await dialogPrimaryOf(name);
+    const primary = await primaryButtonOf(name);
     watch.done = true;
     await polling;
     const containerIds = await devContainersOf(folder);
