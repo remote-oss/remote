@@ -44,3 +44,10 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-2407 AC-7 describes the reference refusing such a value with "Provided: …". Ours installs under the home
     folder, and every other value that doesn't start with `/` is still refused (athena on #1277, D-99; spec question
     on remote-oss/remote-ssh#52).
+- **A startup file that reads a line from the terminal fails the connect within a few seconds with "Could not establish
+  connection to <host>."**, not after the connect timeout with "Connecting with SSH timed out".
+  - F-2704 AC-11 describes the timeout dialog for a `.bash_profile` that runs `read`. Ours starts the login shell with no
+    terminal and no input, so the `read` ends at once and the session ends before the host reports its platform; the
+    dialog is AC-13's, and the log's cause line is "the SSH session ended before the host reported its platform" (athena
+    on #1221; spec question on remote-oss/remote-ssh#77). A startup file that sleeps past the connect timeout still gets
+    the timeout dialog.
