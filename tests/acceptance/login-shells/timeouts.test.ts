@@ -108,13 +108,19 @@ describe('login shells that do not finish or end early: the connect fails or wai
       90_000,
     );
     const pick = recordLines('mitigationPick', window)[0];
-    deepStrictEqual(pick?.items, [
-      'Reload Window',
-      'Open Recent...',
-      'Open Documentation',
-      'Open SSH Configuration File',
-      'Open Settings',
-    ]);
+    deepStrictEqual(
+      [pick?.question, pick?.items],
+      [
+        'Pick an action to help resolve the problem.',
+        [
+          'Reload Window',
+          'Open Recent...',
+          'Open Documentation',
+          'Open SSH Configuration File',
+          'Open Settings',
+        ],
+      ],
+    );
   });
 
   it('F-2704 AC-13, AC-25 (startup-exit): a .profile that ends with exit 1 fails within 5 s with the dialog, and the log says the session ended before the host reported its platform', async () => {
@@ -126,7 +132,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
       {
         question: failed.dialog.question,
         buttons: failed.dialog.buttons,
-        quick: failed.dialog.milliseconds < 5000,
+        quick: failed.dialog.sinceConnectStarted < 2000,
         logged: logSince(mark).some(line =>
           line.includes(
             'the SSH session ended before the host reported its platform',

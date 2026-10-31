@@ -43,6 +43,7 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
           '.profile',
           'export F2704_KILL=new\n',
         );
+        const killedAt = Date.now();
         const mark = await runWith(
           'local',
           'opensshremotes.cleanRemoteServer',
@@ -59,11 +60,21 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
             ),
           60_000,
         );
+        const reconnectedAt =
+          linesSince(mark, window).find(
+            line =>
+              line.surface === 'progress' &&
+              line.question === 'Setting up SSH Host harness-bash',
+          )?.time ?? Infinity;
         await reloadWindow(window);
         await connectedWithin(window, INSTALL_MILLISECONDS);
         deepStrictEqual(
-          (await taskEnvironment(window, 'harness-bash', 'wm-ac22')).F2704_KILL,
-          'new',
+          [
+            reconnectedAt - killedAt < 30_000,
+            (await taskEnvironment(window, 'harness-bash', 'wm-ac22'))
+              .F2704_KILL,
+          ],
+          [true, 'new'],
         );
       });
     } finally {
@@ -174,7 +185,7 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
       deepStrictEqual(
         {
           question: failed.dialog.question,
-          quick: failed.dialog.milliseconds < 5000,
+          quick: failed.dialog.sinceConnectStarted < 2000,
           notices: surfaceLines('wm-ac31', 'notice'),
         },
         {

@@ -7,7 +7,7 @@ import {
   appendScript,
   recordLines,
   runProcessTask,
-  terminalNamed,
+  terminalNames,
   waitFor,
 } from '../windows/harness.ts';
 import {
@@ -106,13 +106,19 @@ export async function taskEnvironment(
   );
 }
 
-/** Opens a new terminal in `window` and gives whether one is named after `shell`. */
+/** Opens a new terminal in `window` and gives whether a tab is named exactly `shell`, polling for up to 10 s. */
 export async function newTerminalIs(
   window: string,
   shell: string,
 ): Promise<boolean> {
   await inWindow(window, 'workbench.action.terminal.new');
-  return terminalNamed(window, shell);
+  const deadline = Date.now() + 10_000;
+  let named = (await terminalNames(window)).includes(shell);
+  while (!named && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    named = (await terminalNames(window)).includes(shell);
+  }
+  return named;
 }
 
 /** The lines of the record of `window` for a surface: the notices, the failure dialogs. */
@@ -122,8 +128,16 @@ export function surfaceLines(window: string, surface: string): string[] {
 
 /** The failure dialog and the pick lines of a window whose connect failed. */
 export interface FailedConnect {
-  /** The first failure dialog: its text, its buttons, and the milliseconds from the window's opening to it. */
-  dialog: {question: string; buttons: string[]; milliseconds: number};
+  /**
+   * The first failure dialog: its text, its buttons, the milliseconds from the window's opening to it, and from the
+   * first progress of the connect to it.
+   */
+  dialog: {
+    question: string;
+    buttons: string[];
+    milliseconds: number;
+    sinceConnectStarted: number;
+  };
 }
 
 /**
@@ -146,11 +160,16 @@ export async function failedOn(
   const line = recordLines('failureDialog', window).find(
     each => each.time >= began,
   );
+  const connecting = recordLines('progress', window).find(
+    each =>
+      each.time >= began && each.question.startsWith('Setting up SSH Host'),
+  );
   return {
     dialog: {
       question: line?.question ?? '',
       buttons: line?.buttons ?? [],
       milliseconds: (line?.time ?? began) - began,
+      sinceConnectStarted: (line?.time ?? began) - (connecting?.time ?? began),
     },
   };
 }

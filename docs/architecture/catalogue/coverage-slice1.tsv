@@ -1132,7 +1132,7 @@ F-2605.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-27	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2704.AC-1	acceptance	
+F-2704.AC-1	todo	
 F-2704.AC-2	acceptance	
 F-2704.AC-3	acceptance	
 F-2704.AC-4	acceptance	
@@ -1143,19 +1143,19 @@ F-2704.AC-8	acceptance
 F-2704.AC-9	acceptance	
 F-2704.AC-11	acceptance	
 F-2704.AC-12	acceptance	
-F-2704.AC-13	acceptance	
+F-2704.AC-13	todo	
 F-2704.AC-14	acceptance	
 F-2704.AC-15	acceptance	
 F-2704.AC-16	acceptance	
 F-2704.AC-17	acceptance	
 F-2704.AC-18	acceptance	
-F-2704.AC-19	acceptance	
+F-2704.AC-19	todo	
 F-2704.AC-20	acceptance	
 F-2704.AC-21	acceptance	
 F-2704.AC-22	acceptance	
-F-2704.AC-23	acceptance	
-F-2704.AC-24	acceptance	
-F-2704.AC-25	acceptance	
+F-2704.AC-23	todo	
+F-2704.AC-24	todo	
+F-2704.AC-25	todo	
 F-2704.AC-26	acceptance	
 F-2704.AC-27	acceptance	
 F-2704.AC-28	acceptance	
@@ -1163,7 +1163,7 @@ F-2704.AC-29	acceptance
 F-2704.AC-30	todo	
 F-2704.AC-31	acceptance	
 F-2704.AC-32	todo	
-F-2704.AC-33	acceptance	
+F-2704.AC-33	todo	
 F-3902.AC-1	todo	
 F-3902.AC-2	unit	
 F-3902.AC-3	acceptance	

@@ -61,7 +61,11 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
         () => recordLines('failureDialog', window).length > 0,
         120_000,
       );
-      const timedOut = recordLines('failureDialog', window)[0]?.question;
+      const dialogLine = recordLines('failureDialog', window)[0];
+      const choiceLine = recordLines('platformPick', window)[0];
+      const timedOut = dialogLine?.question;
+      // The platform choice starts the connect wait: 10 s here, and the dialog follows it by 2 s.
+      const afterChoice = (dialogLine?.time ?? 0) - (choiceLine?.time ?? 0);
       await answerDialog(window, 'Trust Folder & Continue');
       signal('tt21-retry');
       await waitFor(
@@ -71,8 +75,11 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
       );
       await connectedWithin(window, INSTALL_MILLISECONDS);
       deepStrictEqual(
-        timedOut?.startsWith('Could not establish connection'),
-        true,
+        [
+          timedOut?.startsWith('Could not establish connection'),
+          afterChoice >= 10_000 && afterChoice < 14_000,
+        ],
+        [true, true],
       );
     } finally {
       await setting('remote.SSH.connectTimeout', undefined);

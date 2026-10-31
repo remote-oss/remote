@@ -11,6 +11,7 @@ import {
   freshServer,
   newTerminalIs,
   removeHomeFiles,
+  surfaceLines,
   taskEnvironment,
   withWindow,
   writeHomeFile,
@@ -65,13 +66,19 @@ describe('login shells: the shell the host reports, the other shells and the oth
     await writeHomeFile('harness-bash', '.zshenv', 'export F2704_ZSHENV=1\n');
     await writeHomeFile('harness-bash', '.zshrc', 'export F2704_ZSHRC=1\n');
     try {
-      const environment = await withWindow('harness-bash', 'ms-ac27', () =>
-        taskEnvironment('ms-ac27', 'harness-bash', 'ms-ac27'),
-      );
-      deepStrictEqual(marked(environment, 'F2704_'), [
-        'F2704_BASHRC',
-        'F2704_ZSHENV',
-      ]);
+      const seen = await withWindow('harness-bash', 'ms-ac27', async () => ({
+        exports: marked(
+          await taskEnvironment('ms-ac27', 'harness-bash', 'ms-ac27'),
+          'F2704_',
+        ),
+        notices: surfaceLines('ms-ac27', 'notice'),
+        dialogs: surfaceLines('ms-ac27', 'failureDialog'),
+      }));
+      deepStrictEqual(seen, {
+        exports: ['F2704_BASHRC', 'F2704_ZSHENV'],
+        notices: [],
+        dialogs: [],
+      });
     } finally {
       await removeHomeFiles(
         'harness-bash',
