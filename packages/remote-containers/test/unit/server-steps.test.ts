@@ -306,6 +306,7 @@ async function runSteps(
     volume?: boolean;
     defaultExtensions?: readonly string[];
     machineSettings?: Record<string, unknown>;
+    devPort?: string;
     cancellation?: AbortSignal;
     root?: RecordingChannel;
   } = {},
@@ -324,6 +325,7 @@ async function runSteps(
     remoteUser: 'node',
     volumeMounted: options.volume ?? false,
     defaultExtensions: options.defaultExtensions ?? [],
+    devPort: options.devPort ?? '',
     machineSettings: options.machineSettings ?? {},
     onPhase: phase => {
       seen.phases.push(phase);
@@ -837,6 +839,42 @@ describe('the server steps of a connect (card containers-08)', () => {
           .filter(message => message.includes('reusing')),
       ],
       [true, ['reusing the running server']],
+    );
+  });
+
+  it('containers-107: a devPort reaches the start script as the one-port range, and no devPort leaves the port dynamic', async () => {
+    const fixed = channelOf();
+    await runSteps(fixed, {devPort: '32100-32100'});
+    const dynamic = channelOf();
+    await runSteps(dynamic);
+    function startScript(channel: ReturnType<typeof channelOf>): string {
+      const call = channel.calls.find(
+        each => each.operation === 'runScript' && isStart(each.request.script),
+      );
+      return call?.operation === 'runScript' ? call.request.script : '';
+    }
+    deepStrictEqual(
+      [
+        startScript(fixed).includes("'32100-32100'"),
+        startScript(dynamic).includes("'32100-32100'"),
+        startScript(dynamic).includes("'--port' '0'"),
+      ],
+      [true, false, true],
+    );
+  });
+
+  it('containers-107, F-0502 7.E14: a devPort the server refuses as malformed ends the start as the setup failure, with no start script run', async () => {
+    const channel = channelOf();
+    const {result} = await runSteps(channel, {devPort: '70000-70000'});
+    deepStrictEqual(
+      [
+        result.kind,
+        channel.calls.filter(
+          call =>
+            call.operation === 'runScript' && isStart(call.request.script),
+        ).length,
+      ],
+      ['failed', 0],
     );
   });
 

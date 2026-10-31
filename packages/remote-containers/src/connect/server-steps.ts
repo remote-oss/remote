@@ -100,6 +100,8 @@ export interface ServerRequest {
   volumeMounted: boolean;
   /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
   defaultExtensions: readonly string[];
+  /** The server's port range from the configuration's `devPort`: `port-port` for a fixed port, empty for a dynamic one. */
+  devPort: string;
   /** The settings to set in the container's machine settings before the server starts. */
   machineSettings: MachineSettings;
   onPhase(phase: 'installing' | 'startingServer'): void;
@@ -514,7 +516,7 @@ export async function runServerSteps(
     parametersOf(dependencies, request, installTree, ''),
     {
       bindHost: '127.0.0.1',
-      portRange: '',
+      portRange: request.devPort,
       licenceAccepted: licence.acceptanceFlag,
       graceSeconds: 0,
       defaultExtensions: request.defaultExtensions,

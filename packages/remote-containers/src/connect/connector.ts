@@ -52,6 +52,7 @@ import {
   settingEntries,
 } from '../extensions/extension-list.ts';
 import {portAttributeSettings} from '../ports/port-attributes.ts';
+import {devPortOf} from './dev-port.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
@@ -1061,6 +1062,7 @@ export function containerConnectorOf(
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         defaultExtensions,
+        devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
         onPhase: phase => {
           phases.tell({name: phase});

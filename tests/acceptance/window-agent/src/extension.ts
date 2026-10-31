@@ -404,6 +404,20 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.openFile',
+      async (relative: string) => {
+        const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (folder === undefined) {
+          throw new Error('the window has no folder');
+        }
+        await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument(
+            vscode.Uri.joinPath(folder, relative),
+          ),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.terminalBuffer',
       async () => {
         const terminals = vscode.window.terminals.map(each => each.name);
