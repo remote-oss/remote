@@ -130,6 +130,7 @@ export async function commandBeforeReload(
   firstCheck: PreReloadPorts['firstCheck'],
   folder: string,
   dockerPath: string,
+  configFile?: string,
 ): ReturnType<typeof beforeReload> {
   const cancellation = new AbortController().signal;
   const result = await beforeReload(
@@ -151,6 +152,7 @@ export async function commandBeforeReload(
         ports.settings.lockfile(),
       ),
       cancellation,
+      ...(configFile === undefined ? {} : {configFile}),
     },
   );
   if (result.choice.kind !== 'chosen') {

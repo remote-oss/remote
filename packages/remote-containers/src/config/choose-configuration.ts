@@ -100,6 +100,8 @@ export interface ConfigurationRequest {
   /** The Feature settings, which the CLI's read of the configuration takes. */
   features: FeatureSettings;
   cancellation: AbortSignal;
+  /** A configuration file to use instead of the folder's own, such as one newly written to the store of user data. */
+  configFile?: string;
   /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
    * ends `stopped`, nothing more is shown and the answer is `stopped`. The work (discovery, reads, the CLI) doesn't
@@ -242,7 +244,16 @@ export async function chooseConfiguration(
     return chosen;
   }
 
-  const candidates = await discoverConfigurations(folder, files, ports.compare);
+  const candidates =
+    request.configFile === undefined
+      ? await discoverConfigurations(folder, files, ports.compare)
+      : [
+          {
+            file: request.configFile,
+            relative: request.configFile,
+            place: {kind: 'main'} as const,
+          },
+        ];
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
     if (!(await engineAllows())) {

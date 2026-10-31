@@ -15,8 +15,10 @@ import {
   type QuickPickFacts,
   windowTitle,
   waitForDialog,
+  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
+  chooseWorkspace,
   closeScreen,
   COMMAND,
   startCommand,
@@ -38,10 +40,12 @@ const TEMPLATE_SCREEN: QuickPickFacts = {
   multiSelect: false,
 };
 
-/** Waits for the template screen in `window` and gives its frame. */
+/** Passes the location pick with the workspace row, waits for the template screen in `window` and gives its frame. */
 async function templateScreenOf(
   window: string,
 ): Promise<QuickPickFacts | undefined> {
+  await waitForQuickPick(window, 180_000);
+  await chooseWorkspace(window);
   await waitFor(
     'the template screen',
     async () =>

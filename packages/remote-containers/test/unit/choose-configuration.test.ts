@@ -94,7 +94,10 @@ function listing(scene: Scene): Record<string, Array<[string, string]>> {
   return tree;
 }
 
-async function choose(scene: Scene): Promise<ConfigurationChoice> {
+async function choose(
+  scene: Scene,
+  configFile?: string,
+): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
     {
@@ -104,6 +107,7 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
       features: {defaultFeatures: {}, lockfile: true},
       cancellation: NEVER,
       engineCheck: scene.engineCheck,
+      ...(configFile === undefined ? {} : {configFile}),
     },
     {
       files: {
@@ -116,7 +120,9 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
           ),
         read: file => {
           scene.calls.push(`read ${file.slice(FOLDER.length + 1)}`);
-          const content = scene.contents[file.slice(FOLDER.length + 1)];
+          const content =
+            scene.contents[file] ??
+            scene.contents[file.slice(FOLDER.length + 1)];
           return Promise.resolve(
             content === undefined || content === 'unreadable'
               ? 'unreadable'
@@ -228,6 +234,37 @@ describe('choosing the configuration (card containers-13)', () => {
           features: [],
         },
         [true],
+      ],
+    );
+  });
+
+  it('F-0403 AC-4: a configuration file given by the request is the only candidate: the folder is not searched, and the CLI reads it with the folder as the workspace', async () => {
+    const stored = '/store/configs/p/.devcontainer/devcontainer.json';
+    const scene = sceneOf({[stored]: IMAGE, [ONLY]: IMAGE});
+    scene.read = configurationOf('/workspaces/p');
+    const choice = await choose(scene, stored);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => call.startsWith('pick')),
+        scene.targets
+          .map(
+            read =>
+              (
+                read as [{workspaceFolder: string; configFile: string}, unknown]
+              )[0],
+          )
+          .map(target => [target.workspaceFolder, target.configFile]),
+      ],
+      [
+        {
+          kind: 'chosen',
+          configFile: stored,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
+        [],
+        [[FOLDER, stored]],
       ],
     );
   });

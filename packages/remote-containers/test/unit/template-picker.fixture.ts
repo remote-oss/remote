@@ -3,17 +3,20 @@
  * row play the user.
  */
 
+import type {QuickPicker} from '../../src/authoring/quick-pick.ts';
 import type {TemplatePicker} from '../../src/authoring/template-pick.ts';
 
 /** A row of the template picker. */
 export type Row = TemplatePicker['items'][number];
 
 /** A quick pick that records what the pick sets and lets a row play the user. */
-export class FakePicker implements TemplatePicker {
+export class FakePicker<
+  Item extends {label: string} = Row,
+> implements QuickPicker<Item> {
   /** The rows shown. */
-  items: readonly Row[] = [];
-  activeItems: readonly Row[] = [];
-  selectedItems: readonly Row[] = [];
+  items: readonly Item[] = [];
+  activeItems: readonly Item[] = [];
+  selectedItems: readonly Item[] = [];
   title: string | undefined = undefined;
   placeholder: string | undefined = undefined;
   value = '';

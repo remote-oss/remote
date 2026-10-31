@@ -13,14 +13,26 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {
+  chooseQuickPickRow,
   pressEscape,
   quickPickOf,
   typeInQuickPick,
+  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The command that adds a configuration. */
 export const COMMAND = 'remote-containers.createDevContainerFile';
+
+/** The workspace row of the location pick. */
+export const WORKSPACE_ROW = 'Add configuration to workspace';
+
+/** The user data row of the location pick. */
+export const USER_DATA_ROW = 'Add configuration to user data folder';
+
+/** The placeholder of the location pick. */
+const LOCATION_PLACEHOLDER =
+  'Where would you like to create your container configuration?';
 
 /** The folder of the row `name` with the files `contents` names, made empty first, and the window on it. */
 async function windowWith(
@@ -49,6 +61,29 @@ async function windowWith(
  */
 export function startCommand(window: string, command = COMMAND): Promise<void> {
   return startInWindow(window, command);
+}
+
+/** Waits until the pick that follows the location pick shows, which replaces it. */
+export function waitForPickAfterLocation(window: string): Promise<void> {
+  return waitFor(
+    'the pick after the location pick',
+    async () => {
+      const shown = await quickPickOf(window);
+      return (
+        shown !== undefined &&
+        shown.items.length > 0 &&
+        shown.placeholder !== LOCATION_PLACEHOLDER
+      );
+    },
+    30_000,
+  );
+}
+
+/** Answers the location pick of `window` with the workspace row, and waits for the template pick. */
+export async function chooseWorkspace(window: string): Promise<void> {
+  await waitForQuickPick(window);
+  await chooseQuickPickRow(window, WORKSPACE_ROW);
+  await waitForPickAfterLocation(window);
 }
 
 /** Runs `body` over a window with the files, and closes the window after. */

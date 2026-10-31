@@ -15,6 +15,7 @@ import {
   setup,
   START,
   type Setup,
+  WRITTEN_IN_FOLDER,
 } from './reopen.fixture.ts';
 
 /** The target the first open went to. */
@@ -339,11 +340,7 @@ describe('Reopen in Container', () => {
   it('F-0401 AC-8: a written configuration is chosen again and the window reopens on it, after the trust check', async () => {
     const state = setup();
     state.existing = [];
-    state.wizard = {
-      kind: 'written',
-      files: ['.devcontainer/devcontainer.json'],
-      target: '/w/p',
-    };
+    state.wizard = WRITTEN_IN_FOLDER;
     state.wizardLeaves = [CONFIG];
     await reopened(state);
     const target = openedTarget(state);

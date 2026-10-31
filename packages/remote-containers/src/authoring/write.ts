@@ -30,6 +30,8 @@ export interface WriteRequest {
   templateArgs: TemplateRequest['templateArgs'];
   features: TemplateRequest['features'];
   omitPaths: readonly string[];
+  /** How a target-relative path is named in the question about an existing file; `./<relative>` when none. */
+  displayPath?: (relative: string) => string;
   /** Changes the applied files in the scratch folder, before the questions; a failure writes nothing. */
   adjust?: (scratchFolder: string) => Promise<void>;
 }
@@ -148,7 +150,9 @@ export async function writeTemplate(
       }
       const answer = await dialogs.show(
         'warning',
-        text(WRITE_TEMPLATES.overwritePrompt, [`./${relative}`]),
+        text(WRITE_TEMPLATES.overwritePrompt, [
+          request.displayPath?.(relative) ?? `./${relative}`,
+        ]),
         ports.hasUnsavedChanges(target)
           ? text(WRITE_TEMPLATES.unsavedChangesNote)
           : '',

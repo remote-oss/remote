@@ -32,9 +32,9 @@ import {
   rememberPage,
   typeInQuickPick,
   waitForDialog,
-  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
+  chooseWorkspace,
   closeScreen,
   existing,
   startCommand,
@@ -49,7 +49,7 @@ const CONFIGURATION = '.devcontainer/devcontainer.json';
 /** Starts the command in `window` and picks the template labelled `label`. */
 async function pickTemplate(window: string, label: string): Promise<void> {
   await startCommand(window);
-  await waitForQuickPick(window);
+  await chooseWorkspace(window);
   await chooseQuickPickRow(window, label);
 }
 
@@ -90,7 +90,7 @@ async function answeredOverwrite(
 /** Opens the screen in `window` and gives its rows, leaving it open. */
 async function screenOf(window: string): Promise<DetailedQuickPickRow[]> {
   await startCommand(window);
-  await waitForQuickPick(window);
+  await chooseWorkspace(window);
   return detailedQuickPickRows(window);
 }
 
@@ -262,7 +262,7 @@ describe('the authoring wizard (card containers-80)', function () {
   it('F-0801 AC-4, F-0802 AC-2 (a4): alpine on an empty folder writes the configuration, opens it in a preview and offers the reopen notification', async () => {
     await withWindow('a4', {}, async (window, folder) => {
       await startCommand(window);
-      await waitForQuickPick(window);
+      await chooseWorkspace(window);
       await chooseQuickPickRow(window, 'Alpine');
       await written(path.join(folder, CONFIGURATION));
       await waitFor(
@@ -563,7 +563,7 @@ describe('the authoring wizard (card containers-80)', function () {
   it('F-0802 AC-18 (r-31): Learn More ends the wizard with nothing written', async () => {
     await withWindow('a18', {}, async (window, folder) => {
       await startCommand(window);
-      await waitForQuickPick(window);
+      await chooseWorkspace(window);
       await chooseQuickPickRow(window, 'Learn More');
       await waitFor(
         'the pick to close',

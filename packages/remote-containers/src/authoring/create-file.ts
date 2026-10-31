@@ -7,6 +7,7 @@
 import path from 'node:path';
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
+import type {NotificationVariant} from '../open/reopen-notification.ts';
 import type {WizardOutcome} from './wizard-stages.ts';
 
 /** The English templates of the command's texts, by their string ids. */
@@ -27,8 +28,11 @@ export interface ContinuationPorts {
   wizard(folder: string): Promise<WizardOutcome>;
   /** Opens the file in a preview editor tab. */
   openPreview(file: string): PromiseLike<unknown>;
-  /** Offers to reopen the window's folder in its container, when its configuration is there; not waited for. */
-  offerReopen(): void;
+  /**
+   * Offers to reopen the window's folder in its container, when its configuration is there (a configuration newly written
+   * to the store is there by definition); not waited for.
+   */
+  offerReopen(variant: NotificationVariant): void;
   logger: Logger;
 }
 
@@ -62,7 +66,7 @@ export async function addConfiguration(
     if (written !== undefined) {
       await ports.openPreview(path.join(outcome.target, written));
     }
-    ports.offerReopen();
+    ports.offerReopen(outcome.place === 'userData' ? 'userData' : 'folder');
   }
   return outcome;
 }

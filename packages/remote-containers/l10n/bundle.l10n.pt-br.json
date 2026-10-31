@@ -129,5 +129,12 @@
   "Empty feature id": "Empty feature id",
   "Failed to fetch control manifest: {0}": "Failed to fetch control manifest: {0}",
   "Please remove this feature from your devcontainer.json and rebuild the dev container before continuing.": "Please remove this feature from your devcontainer.json and rebuild the dev container before continuing.",
-  "The feature was not found either because it is no longer available or because of insufficient permissions to access it.": "The feature was not found either because it is no longer available or because of insufficient permissions to access it."
+  "The feature was not found either because it is no longer available or because of insufficient permissions to access it.": "The feature was not found either because it is no longer available or because of insufficient permissions to access it.",
+  "Where would you like to create your container configuration?": "Where would you like to create your container configuration?",
+  "Add configuration to workspace": "Add configuration to workspace",
+  "This allows you to share the configuration with others via source control": "This allows you to share the configuration with others via source control",
+  "Add configuration to user data folder": "Add configuration to user data folder",
+  "This avoids having outgoing changes in your workspace folder": "This avoids having outgoing changes in your workspace folder",
+  "Configuration already exists": "Configuration already exists",
+  "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository."
 }
