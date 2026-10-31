@@ -15,9 +15,9 @@ import {
 import {
   chooseQuickPickRow,
   pressEscape,
+  quickPickFacts,
   quickPickOf,
   typeInQuickPick,
-  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
@@ -81,7 +81,12 @@ export function waitForPickAfterLocation(window: string): Promise<void> {
 
 /** Answers the location pick of `window` with the workspace row, and waits for the template pick. */
 export async function chooseWorkspace(window: string): Promise<void> {
-  await waitForQuickPick(window);
+  await waitFor(
+    'the location pick',
+    async () =>
+      (await quickPickFacts(window))?.placeholder === LOCATION_PLACEHOLDER,
+    180_000,
+  );
   await chooseQuickPickRow(window, WORKSPACE_ROW);
   await waitForPickAfterLocation(window);
 }
