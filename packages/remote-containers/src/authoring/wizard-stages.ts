@@ -9,6 +9,7 @@ import {
   type CatalogueDialogs,
   type CataloguePorts,
   type CatalogueResult,
+  type CatalogueFeature,
   type CatalogueTemplate,
   showCatalogueFailure,
 } from './catalogue.ts';
@@ -20,19 +21,13 @@ import {
 import type {WalkFiles} from './folder-facts.ts';
 import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
+import {askFeatures, type FeatureChoice} from './select-features.ts';
 import {askTemplateOptions} from './template-options.ts';
 import type {WriteOutcome, WriteRequest} from './write.ts';
 
 /** Where the configuration is written: the workspace folder, or a slot of the extension's own store. */
 export type WizardTarget =
   {kind: 'workspace'} | {kind: 'userData'; slot: string};
-
-/** A Feature the user chose, with its options. */
-interface FeatureChoice {
-  /** The id with its major version, as the CLI writes the key. */
-  id: string;
-  options: Record<string, string | boolean>;
-}
 
 /** What the stages have decided so far. */
 export interface WizardState {
@@ -251,6 +246,40 @@ function templateOptionsStage(ports: StagePorts): WizardStage {
   };
 }
 
+/** The stage that asks which Features to install. */
+function selectFeaturesStage(
+  features: readonly CatalogueFeature[],
+  ports: StagePorts,
+): WizardStage {
+  return {
+    name: 'selectFeatures',
+    execute: async (state, previous, cancellation) => {
+      const answer = await askFeatures(
+        features,
+        previous?.state.features ?? [],
+        {quick: {...ports.options, translate: ports.translate}},
+        cancellation,
+      );
+      switch (answer.kind) {
+        case 'chosen':
+          return {
+            kind: 'next',
+            state: {
+              ...state,
+              features: answer.features,
+              featureMode: answer.mode,
+            },
+            shown: true,
+          };
+        case 'back':
+          return {kind: 'back', keep: false};
+        default:
+          return {kind: 'cancelled'};
+      }
+    },
+  };
+}
+
 /** The stages of the wizard, in order, made once the catalogue is read. */
 export function stagesOf(
   catalogue: CatalogueResult & {kind: 'catalogue'},
@@ -259,5 +288,6 @@ export function stagesOf(
   return [
     templatePickStage(catalogue.templates, ports),
     templateOptionsStage(ports),
+    selectFeaturesStage(catalogue.features, ports),
   ];
 }

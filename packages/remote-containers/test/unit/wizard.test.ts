@@ -17,7 +17,9 @@ import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
 import {
   pressBack,
+  FINISH_BUTTON,
   pressEscape,
+  type Step,
   repeatedInput,
   scriptedInput,
   takeDefaults,
@@ -389,7 +391,7 @@ describe('the wizard (card containers-80)', () => {
       {options: {flag: {type: 'boolean'}}},
     ]) {
       const scene = sceneOf();
-      const input = scriptedInput([takeDefaults]);
+      const input = scriptedInput([takeDefaults, takeDefaults]);
       scene.ports.options = input.ports;
       scene.ports.pick.templateMetadata = () =>
         Promise.resolve({kind: 'metadata', metadata});
@@ -414,6 +416,7 @@ describe('the wizard (card containers-80)', () => {
     const scene = sceneOf();
     scene.ports.options = scriptedInput([
       pressBack,
+      takeDefaults,
       takeDefaults,
       takeDefaults,
     ]).ports;
@@ -564,16 +567,110 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list is the template pick and the template’s options', () => {
+  it('F-0801 BR-5: the stage list is the template pick, the template’s options and Select Features', () => {
     const scene = sceneOf();
-    const stages = stagesOf({kind: 'catalogue', templates: [ALPINE]}, {
-      ...scene.ports,
-      title: 'T',
-      facts: {rootEntries: [], files: [], truncated: false},
-    } satisfies StagePorts);
+    const stages = stagesOf(
+      {kind: 'catalogue', templates: [ALPINE], features: []},
+      {
+        ...scene.ports,
+        title: 'T',
+        facts: {rootEntries: [], files: [], truncated: false},
+      } satisfies StagePorts,
+    );
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick', 'templateOptions'],
+      ['templatePick', 'templateOptions', 'selectFeatures'],
+    );
+  });
+
+  /** The Select Features stage over a catalogue of one Feature, with the screen played by `step`. */
+  function featuresStageOver(step: Step) {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([step]).ports;
+    const stages = stagesOf(
+      {
+        kind: 'catalogue',
+        templates: [ALPINE],
+        features: [
+          {
+            id: 'ghcr.io/x/features/git',
+            version: '1.3.2',
+            name: 'Git',
+            options: {},
+          },
+        ],
+      },
+      {
+        ...scene.ports,
+        title: 'T',
+        facts: {rootEntries: [], files: [], truncated: false},
+      } satisfies StagePorts,
+    );
+    return stages[2];
+  }
+
+  it('F-0804 BR-7, AC-16: Back from Select Features goes back with nothing kept, and Escape cancels the wizard', async () => {
+    deepStrictEqual(
+      [
+        await featuresStageOver(pressBack)?.execute(INITIAL, undefined, NEVER),
+        await featuresStageOver(pressEscape)?.execute(
+          INITIAL,
+          undefined,
+          NEVER,
+        ),
+      ],
+      [{kind: 'back', keep: false}, {kind: 'cancelled'}],
+    );
+  });
+
+  it('F-0804 BR-9: Back from a later stage with keep opens Select Features with the Features checked before', async () => {
+    const seen: string[][] = [];
+    const stage = featuresStageOver(picker => {
+      seen.push(picker.selectedItems.map(each => each.label));
+      pressEscape(picker);
+    });
+    await stage?.execute(
+      INITIAL,
+      {
+        state: {
+          ...INITIAL,
+          features: [{id: 'ghcr.io/x/features/git:1', options: {}}],
+        },
+      },
+      NEVER,
+    );
+    deepStrictEqual(seen, [['Git']]);
+  });
+
+  it('F-0804 BR-8, BR-11, AC-5: the Features checked and the mode of the button are in the state, and the write takes the Features in order', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([
+      picker => {
+        picker.selectedItems = picker.items;
+        picker.trigger(FINISH_BUTTON);
+      },
+    ]).ports;
+    scene.ports.catalogue.download = () =>
+      Promise.resolve(
+        JSON.stringify({
+          collections: [
+            {
+              templates: [
+                {id: `${PREFIX}alpine`, version: '1', name: 'Alpine'},
+              ],
+              features: [
+                {id: 'ghcr.io/x/features/git', version: '1.3.2', name: 'Git'},
+              ],
+            },
+          ],
+        }),
+      );
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await result;
+    deepStrictEqual(
+      scene.written.map(each => each.features),
+      [[{id: 'ghcr.io/x/features/git:1', options: {}}]],
     );
   });
 
