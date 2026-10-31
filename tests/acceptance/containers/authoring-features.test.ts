@@ -35,7 +35,6 @@ import {
   startCommand,
   screenWith,
   startedWith,
-  takeOptionScreen,
   withWindow,
   written,
 } from './authoring-support.ts';
