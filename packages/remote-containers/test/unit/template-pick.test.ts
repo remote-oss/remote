@@ -7,6 +7,7 @@ import {
   type TemplatePickPorts,
 } from '../../src/authoring/template-pick.ts';
 import type {FolderFacts} from '../../src/authoring/curated-templates.ts';
+import type {StoredSlot} from '../../src/authoring/user-data-store.ts';
 import {FakePicker} from './template-picker.fixture.ts';
 import {CONTAINERS_INTRODUCTION} from '../../src/surfaces/recovery-presenter.ts';
 
@@ -57,6 +58,7 @@ function sceneOf(
         return picker;
       },
       verifiedIcon: 'verified-icon',
+      openFileIcon: 'file-icon',
       openExternal: address => {
         scene.opened.push(address);
       },
@@ -78,9 +80,15 @@ function started(
   folder: FolderFacts,
   catalogue: CatalogueTemplate[],
   signal = new AbortController().signal,
+  storedSlot: StoredSlot | undefined = undefined,
 ): {picker: FakePicker; result: Promise<TemplateChoice>} {
   const result = pickTemplate(
-    {title: 'Add Dev Container Configuration Files', folder, catalogue},
+    {
+      title: 'Add Dev Container Configuration Files',
+      folder,
+      catalogue,
+      storedSlot,
+    },
     scene.ports,
     signal,
   );
@@ -238,7 +246,12 @@ describe('the flat template pick (card containers-79)', () => {
     first.picker.accept('Alpine');
     first.picker.type('a/b/c');
     const second = pickTemplate(
-      {title: 'T', folder: NO_FILES, catalogue: CATALOGUE},
+      {
+        title: 'T',
+        folder: NO_FILES,
+        catalogue: CATALOGUE,
+        storedSlot: undefined,
+      },
       scene.ports,
       new AbortController().signal,
     );
@@ -568,5 +581,91 @@ describe('the chooser that offers an existing Dockerfile (card containers-79)', 
     const {picker} = started(sceneOf(), WITH_DOCKERFILES, WITH_EXISTING);
     picker.accept('no such row');
     deepStrictEqual(picker.hidden, false);
+  });
+});
+
+describe('the chooser that offers the stored configuration (card containers-92)', () => {
+  const SLOT: StoredSlot = {
+    name: 'app',
+    folder: '/store/configs/app',
+    configFile: '/store/configs/app/.devcontainer/devcontainer.json',
+  };
+  const WITH_DOCKERFILE: FolderFacts = {
+    rootEntries: [{name: 'Dockerfile', kind: 'file'}],
+    files: [],
+    truncated: false,
+  };
+
+  it('F-0801 AC-8: with a stored configuration the chooser shows, with no Dockerfile in the folder, and has the template row, then Copy existing configuration to workspace with its detail and its Open File button, then Learn More', () => {
+    const {picker} = started(sceneOf(), NO_FILES, CATALOGUE, undefined, SLOT);
+    deepStrictEqual(
+      [
+        picker.placeholder,
+        labels(picker),
+        picker.items.map(each => each.detail),
+        picker.items[1]?.buttons,
+        picker.items.map(each => each.buttons === undefined),
+      ],
+      [
+        'How would you like to create your container configuration?',
+        [
+          'From a predefined container configuration template...',
+          'Copy existing configuration to workspace',
+          'Learn More',
+        ],
+        [
+          'Use a base configuration from the container template registry',
+          'Copy the configuration from your user data folder to the workspace folder',
+          undefined,
+        ],
+        [{iconPath: 'file-icon', tooltip: 'Open File'}],
+        [true, false, true],
+      ],
+    );
+  });
+
+  it('F-0801 AC-8: the copy row comes after the template row and before the From rows when the folder has a Dockerfile too', () => {
+    const {picker} = started(
+      sceneOf(),
+      WITH_DOCKERFILE,
+      CATALOGUE,
+      undefined,
+      SLOT,
+    );
+    deepStrictEqual(labels(picker), [
+      'From a predefined container configuration template...',
+      'Copy existing configuration to workspace',
+      "From 'Dockerfile'",
+      'Learn More',
+    ]);
+  });
+
+  it('F-0302 AC-7: accepting the copy row gives the copy with the slot', async () => {
+    const {picker, result} = started(
+      sceneOf(),
+      NO_FILES,
+      CATALOGUE,
+      undefined,
+      SLOT,
+    );
+    picker.accept('Copy existing configuration to workspace');
+    deepStrictEqual(await result, {kind: 'copyStored', slot: SLOT});
+  });
+
+  it('F-0302 AC-34: the Open File button of the copy row gives openStored with the slot, and the button of no other row does anything', async () => {
+    const {picker, result} = started(
+      sceneOf(),
+      NO_FILES,
+      CATALOGUE,
+      undefined,
+      SLOT,
+    );
+    picker.pressButton('Learn More');
+    const idle = picker.hidden;
+    picker.pressButton('Copy existing configuration to workspace');
+    deepStrictEqual(
+      [idle, await result],
+      [false, {kind: 'openStored', slot: SLOT}],
+    );
   });
 });

@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
+import type {Candidate} from '../../src/config/discovery.ts';
 import {
   chooseConfiguration,
   type ConfigurationChoice,
@@ -35,6 +36,10 @@ interface Scene {
   engineCheck: Promise<FirstCheckResult>;
   /** What the worktree setting is, as the command passes it. */
   mountGitWorktreeCommonDir: boolean;
+  /** The configuration of the folder in the store of user data; none by default. */
+  stored: Candidate | undefined;
+  /** How many times the store was asked. */
+  storedAsked: number;
   /** The absolute paths that exist besides the configuration files; none by default, so a named Dockerfile is missing. */
   existing: string[];
   calls: string[];
@@ -63,6 +68,8 @@ function sceneOf(contents: Scene['contents']): Scene {
     reading: undefined,
     engineCheck: Promise.resolve('proceed'),
     mountGitWorktreeCommonDir: false,
+    stored: undefined,
+    storedAsked: 0,
     existing: [],
     calls: [],
     rows: [],
@@ -161,6 +168,10 @@ async function choose(
           scene.calls.push(`openPreview ${file.slice(FOLDER.length + 1)}`);
           return Promise.resolve();
         },
+      },
+      stored: () => {
+        scene.storedAsked += 1;
+        return Promise.resolve(scene.stored);
       },
       useTemplate: folder => {
         scene.calls.push(`useTemplate ${folder}`);
@@ -913,6 +924,84 @@ describe('choosing the configuration while the engine is checked (card container
         dotfile.calls.some(call => call.includes('"Open .devcontainer.json"')),
       ],
       [['exists .devcontainer/Dockerfile'], 'chosen', true],
+    );
+  });
+
+  const STORED_FILE =
+    '/home/u/.config/store/configs/p/.devcontainer/devcontainer.json';
+  const STORED: Candidate = {
+    file: STORED_FILE,
+    relative: '~/.config/store/configs/p/.devcontainer/devcontainer.json',
+    place: {kind: 'stored', slot: 'p'},
+  };
+
+  it('F-0302 AC-6: a stored configuration alone is chosen with no picker and read with the stored file and the opened folder', async () => {
+    const scene = sceneOf({[STORED_FILE]: IMAGE});
+    scene.stored = STORED;
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.includes('pick'),
+        (
+          scene.targets[0] as [{workspaceFolder: string; configFile: string}]
+        )[0],
+      ].map(each => (each === choice ? choice.kind : each)),
+      [
+        'chosen',
+        false,
+        {
+          workspaceFolder: FOLDER,
+          configFile: STORED_FILE,
+          dockerPath: DOCKER,
+          idLabels: [],
+          mountWorkspaceGitRoot: true,
+          mountGitWorktreeCommonDir: false,
+          features: {defaultFeatures: {}, lockfile: true},
+          mounts: [],
+          logLevel: 'info',
+        },
+      ],
+    );
+  });
+
+  it('F-0302 BR-3: a stored configuration beside the folder’s own gives the pick, every row ordered by absolute path with its ~ path, and the stored one picked is chosen', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE, [STORED_FILE]: '{"image":"i"}'});
+    scene.stored = STORED;
+    scene.answer = {kind: 'picked', index: 1};
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [scene.rows, choice.kind === 'chosen' ? choice.configFile : choice.kind],
+      [
+        [
+          [
+            [
+              {label: 'Main', description: STORED.relative},
+              {label: 'Alpha', description: ONLY},
+            ],
+            'Select a devcontainer.json file.',
+            'Open File',
+          ],
+        ],
+        '/w/p/.devcontainer/devcontainer.json',
+      ],
+    );
+  });
+
+  it('F-0302 BR-3: without a stored configuration the folder’s order stays, and a file the caller names is not matched with the store', async () => {
+    const without = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    await choose(without);
+    const named = sceneOf({[ONLY]: IMAGE});
+    named.stored = STORED;
+    await choose(named, `${FOLDER}/${ONLY}`);
+    deepStrictEqual(
+      [
+        (without.rows[0] as [Array<{description: string}>])[0].map(
+          row => row.description,
+        ),
+        named.storedAsked,
+      ],
+      [[ALPHA, BETA], 0],
     );
   });
 

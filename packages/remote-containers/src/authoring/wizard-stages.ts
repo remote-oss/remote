@@ -19,11 +19,13 @@ import {
   isSpecificationTemplate,
 } from './curated-templates.ts';
 import type {WalkFiles} from './folder-facts.ts';
+import {copyStored, type CopyStoredPorts} from './copy-stored.ts';
 import {askLocation, type LocationPorts} from './location.ts';
 import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
 import {askFeatures, type FeatureChoice} from './select-features.ts';
 import {askTemplateOptions} from './template-options.ts';
+import {slotOf} from './user-data-store.ts';
 import type {WriteOutcome, WriteRequest} from './write.ts';
 
 /** Where the configuration is written: the workspace folder, or a slot of the extension's own store. */
@@ -57,7 +59,9 @@ export type WizardOutcome =
       place: WizardTarget['kind'];
     }
   | {kind: 'cancelled'}
-  | {kind: 'failed'; detail: string};
+  | {kind: 'failed'; detail: string}
+  /** The user asked to see the stored configuration instead: the command shows this file and writes nothing. */
+  | {kind: 'openStored'; file: string};
 
 /** What a stage answers. */
 export type StageResult =
@@ -109,6 +113,8 @@ export interface WizardPorts {
   slotFolder(slot: string): string;
   /** The location pick and the store behind it; without it the configuration goes to the workspace. */
   location?: LocationPorts;
+  /** The copy of a stored configuration into the workspace. */
+  stored: CopyStoredPorts;
   /** Writes a line to the Dev Containers log. */
   record(line: string): void;
   translate: Translate;
@@ -178,8 +184,13 @@ function templatePickStage(
   return {
     name: 'templatePick',
     execute: async (state, previous, cancellation) => {
+      const location = ports.location;
+      const storedSlot =
+        location === undefined || state.target.kind !== 'workspace'
+          ? undefined
+          : await slotOf(location.storeRoot, state.folder, location.store);
       const choice = await pickTemplate(
-        {title: ports.title, folder: ports.facts, catalogue},
+        {title: ports.title, folder: ports.facts, catalogue, storedSlot},
         {
           ...ports.pick,
           curatedPrefix: prefix,
@@ -208,6 +219,19 @@ function templatePickStage(
             kind: 'next',
             state: withTemplate(state, choice.template, choice.entry),
             shown: true,
+          };
+        case 'copyStored':
+          return {
+            kind: 'done',
+            outcome: await copyStored(
+              {folder: state.folder, slot: choice.slot},
+              ports.stored,
+            ),
+          };
+        case 'openStored':
+          return {
+            kind: 'done',
+            outcome: {kind: 'openStored', file: choice.slot.configFile},
           };
         case 'learnMore':
         case 'cancelled':

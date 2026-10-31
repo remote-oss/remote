@@ -3,9 +3,15 @@
  * the root, `devcontainer.json` in `.devcontainer`, and one in each immediate subfolder of `.devcontainer`.
  */
 
-/** A place a configuration is found: the root dotfile, the root `.devcontainer/devcontainer.json`, or a subfolder. */
+/**
+ * A place a configuration is found: the root dotfile, the root `.devcontainer/devcontainer.json`, a subfolder, or the
+ * slot of the folder in the extension's store of user data.
+ */
 export type CandidatePlace =
-  {kind: 'dotfile'} | {kind: 'main'} | {kind: 'subfolder'; name: string};
+  | {kind: 'dotfile'}
+  | {kind: 'main'}
+  | {kind: 'subfolder'; name: string}
+  | {kind: 'stored'; slot: string};
 
 /** One configuration file found in the folder. */
 export interface Candidate {

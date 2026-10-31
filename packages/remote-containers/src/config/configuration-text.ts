@@ -71,7 +71,7 @@ export function labelOf(
   if (place.kind === 'dotfile') {
     return filled(translate, LABEL_TEMPLATES.S280);
   }
-  return place.kind === 'main'
+  return place.kind === 'main' || place.kind === 'stored'
     ? filled(translate, LABEL_TEMPLATES.S224)
     : place.name;
 }

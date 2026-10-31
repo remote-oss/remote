@@ -61,6 +61,9 @@ export async function addConfiguration(
 ): Promise<WizardOutcome> {
   const outcome = await ports.wizard(folder);
   ports.logger.info(`${TITLE} ended: ${outcome.kind}`);
+  if (outcome.kind === 'openStored') {
+    await ports.openPreview(outcome.file);
+  }
   if (outcome.kind === 'written') {
     const written = outcome.files.find(file => CONFIGURATION_PATH.test(file));
     if (written !== undefined) {

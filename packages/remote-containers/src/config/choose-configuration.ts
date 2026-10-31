@@ -30,6 +30,7 @@ import {
   type ConfigFiles,
   discoverConfigurations,
 } from './discovery.ts';
+import {byAbsolutePath} from './stored-candidate.ts';
 
 /** The English templates of the texts of the picker and its dialogs, by their string ids. */
 const CONFIG_TEMPLATES = {
@@ -83,6 +84,8 @@ export interface ConfigurationPorts {
   surfaces: ConfigSurfaces;
   cli: Pick<CliBridge, 'readConfiguration'>;
   compare: (left: string, right: string) => number;
+  /** The configuration of the folder in the store of user data, when it has one; asked where the folder's own are. */
+  stored?(folder: string): Promise<Candidate | undefined>;
   /** Adds a configuration to the folder with the wizard, and shows what the command that adds one shows after it. */
   useTemplate(folder: string): PromiseLike<unknown>;
   translate: Translate;
@@ -256,10 +259,14 @@ export async function chooseConfiguration(
     return chosen;
   }
 
-  const candidates =
+  const found =
     request.configFile === undefined
       ? await discoverConfigurations(folder, files, ports.compare)
       : [namedCandidate(folder, request.configFile)];
+  const stored =
+    request.configFile === undefined ? await ports.stored?.(folder) : undefined;
+  const candidates =
+    stored === undefined ? found : byAbsolutePath([...found, stored]);
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
     if (!(await engineAllows())) {
