@@ -574,9 +574,9 @@ describe('the resolver host: the progress has closed before a connect ends (card
     const context = await setup();
     context.connector.phases = [{name: 'downloading'}];
     context.connector.failure = new Error('the build failed');
-    let closeProgress: () => void = () => undefined;
+    const closeProgress: Array<() => void> = [];
     context.editor.closing = new Promise<void>(resolve => {
-      closeProgress = resolve;
+      closeProgress.push(resolve);
     });
     const events: string[] = [];
     const running = failureOf(context).then(text => {
@@ -586,7 +586,7 @@ describe('the resolver host: the progress has closed before a connect ends (card
     events.push(
       `ended before release: ${String(context.editor.progressEnded)}`,
     );
-    closeProgress();
+    closeProgress[0]?.();
     await running;
     deepStrictEqual(
       [events, context.editor.progressEnded],
