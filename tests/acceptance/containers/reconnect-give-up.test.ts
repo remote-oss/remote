@@ -33,9 +33,9 @@ function attemptsIn(lines: readonly string[]): string[] {
 /** The gaps in milliseconds between core's first four reconnection attempts: at once, then after 5, 5 and 10 s (BR-7). */
 const SCHEDULE_GAPS = [5000, 5000, 10_000];
 
-/** The S286 phases "Start: Reconnection attempt N" that the lines hold, one per attempt of core; our connector does not log them yet. */
+/** The S286 phases "Reconnection attempt N" that the lines hold, one per attempt of core. */
 function phasesIn(lines: readonly string[]): string[] {
-  return lines.filter(line => /^Start: Reconnection attempt \d+$/.test(line));
+  return lines.filter(line => /^Reconnection attempt \d+$/.test(line));
 }
 
 /** Waits `milliseconds`. */
@@ -80,7 +80,7 @@ async function connectedWithPort(label: string) {
 describe('F-0502 reconnection and the give-up rules (card containers-43)', function () {
   this.timeout(900_000);
 
-  it.skip('F-0502 AC-6 (c43-stop): a stopped container gives core’s terminal dialog within 15 s with the indicator disconnected and one answered attempt; Reload Window starts the container and a new server on a new port (skipped until S286 is logged)', async () => {
+  it('F-0502 AC-6 (c43-stop): a stopped container gives core’s terminal dialog within 15 s with the indicator disconnected and one answered attempt; Reload Window starts the container and a new server on a new port', async () => {
     const {name, containerId, folder, port} =
       await connectedWithPort('c43-stop');
     try {
@@ -109,7 +109,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         buttons: ['Cancel', 'Reload Window'],
         withinFifteenSeconds: true,
         indicator: 'Disconnected from Dev Container: c43-stop',
-        attempts: ['Start: Reconnection attempt 1'],
+        attempts: ['Reconnection attempt 1'],
         status: 'running',
         newPort: true,
       });
@@ -118,7 +118,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
     }
   });
 
-  it.skip('F-0502 AC-40 (c43-restart): a restarted container gives the terminal dialog within 6 s and keeps it for 60 s although the container runs again, with one attempt; Reload Window connects a new server on a new port (skipped until S286 is logged)', async () => {
+  it('F-0502 AC-40 (c43-restart): a restarted container gives the terminal dialog within 6 s and keeps it for 60 s although the container runs again, with one attempt; Reload Window connects a new server on a new port', async () => {
     const {name, containerId, folder, port} =
       await connectedWithPort('c43-restart');
     try {
@@ -166,7 +166,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
     }
   });
 
-  it.skip('F-0502 AC-39 (c43-pause): a paused container is waited for with attempts and no give-up, and after the unpause the window is connected again to its server without a start (skipped until S286 is logged)', async () => {
+  it('F-0502 AC-39 (c43-pause): a paused container is waited for with attempts and no give-up, and after the unpause the window is connected again to its server without a start', async () => {
     const {name, containerId, folder} = await connectedWithPort('c43-pause');
     try {
       const mark = containersLog().length;
@@ -236,7 +236,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
     }
   });
 
-  it.skip('F-0502 AC-3 (c43-server-killed): a killed server turns the indicator to Reconnecting within 10 s, the countdown dialog comes after 40 s, and our log answers one attempt each at core’s schedule (skipped until S286 is logged)', async () => {
+  it('F-0502 AC-3 (c43-server-killed): a killed server turns the indicator to Reconnecting within 10 s, the countdown dialog comes after 40 s, and our log answers one attempt each at core’s schedule', async () => {
     const {name, containerId, folder} = await connectedWithPort('c43-killed');
     try {
       const mark = containersLog().length;
