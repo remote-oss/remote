@@ -151,6 +151,8 @@ interface LoginSteps {
   /** The login fell to this window after it was told to wait. */
   owned(): void;
   started(): void;
+  /** Ends the helper's attempt: the window that owns the login sends it when the wait times out. */
+  kill(): void;
 }
 
 /**
@@ -210,6 +212,9 @@ class LoginWait {
   private armTimer(): void {
     this.cancelTimer?.();
     this.cancelTimer = this.steps.timer(this.steps.limitMilliseconds, () => {
+      if (this.owner && !this.finished) {
+        this.steps.kill();
+      }
       this.end({kind: 'failed', failure: {kind: 'timeout'}});
     });
   }
@@ -386,6 +391,9 @@ export class SharedConnection {
           },
           started: () => {
             this.notify({type: 'loginStarted'});
+          },
+          kill: () => {
+            void this.askHelper({type: 'kill'});
           },
         },
         outcome => {

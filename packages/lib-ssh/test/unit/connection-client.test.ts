@@ -84,16 +84,23 @@ describe('the window side of the shared connection (S9)', () => {
 
   const LIMITS = {requestMilliseconds: 5000, loginMilliseconds: 60000};
 
-  async function acquired(
+  async function acquiredWith(
+    limits: {requestMilliseconds: number; loginMilliseconds: number},
     changes: Partial<ConnectionAcquireRequest> = {},
   ): Promise<SharedConnection> {
     const outcome: AcquireConnectionOutcome = await driven(
-      acquireConnection(environment, request(changes), () => LIMITS),
+      acquireConnection(environment, request(changes), () => limits),
     );
     if (outcome.kind !== 'acquired') {
       throw new Error(`no connection: ${outcome.failure}`);
     }
     return outcome.connection;
+  }
+
+  function acquired(
+    changes: Partial<ConnectionAcquireRequest> = {},
+  ): Promise<SharedConnection> {
+    return acquiredWith(LIMITS, changes);
   }
 
   function driven<T>(promise: Promise<T>): Promise<T> {
@@ -484,7 +491,8 @@ describe('the window side of the shared connection (S9)', () => {
     deepStrictEqual((await outcome).kind, 'connected');
   });
 
-  it('starts the login limit over when the question is closed', async () => {
+  it('starts the login limit over when the question is closed, and the timeout then sends one kill', async () => {
+    const order = recordingKills();
     const {connection, outcome} = await connectFirst();
     await askAtEndpoint('password: ');
     clock.advance(3 * LIMITS.loginMilliseconds);
@@ -492,10 +500,10 @@ describe('the window side of the shared connection (S9)', () => {
     await drive();
     clock.advance(LIMITS.loginMilliseconds);
     await drive();
-    deepStrictEqual(await outcome, {
-      kind: 'failed',
-      failure: {kind: 'timeout'},
-    });
+    deepStrictEqual(
+      [await outcome, order],
+      [{kind: 'failed', failure: {kind: 'timeout'}}, ['kill']],
+    );
   });
 
   it('runs a script on the session of the helper, with its lines and its exit status', async () => {
@@ -627,6 +635,85 @@ describe('the window side of the shared connection (S9)', () => {
       kind: 'failed',
       failure: {kind: 'timeout'},
     });
+  });
+
+  /** Has the window side record the order of the kill requests it sends and of the outcomes it hands on. */
+  function recordingKills(): string[] {
+    const order: string[] = [];
+    const real = environment.helper.endpoints;
+    environment.helper = {
+      ...environment.helper,
+      endpoints: {
+        listen: (endpoint, onConnection) => real.listen(endpoint, onConnection),
+        connect: async endpoint => {
+          const connection = await real.connect(endpoint);
+          return {
+            ...connection,
+            send: message => {
+              if (JSON.stringify(message).includes('"type":"kill"')) {
+                order.push('kill');
+              }
+              connection.send(message);
+            },
+            onMessage: listener => {
+              connection.onMessage(listener);
+            },
+            onClose: listener => {
+              connection.onClose(listener);
+            },
+            close: () => {
+              connection.close();
+            },
+          };
+        },
+      },
+    };
+    return order;
+  }
+
+  it('AC-32 (F-2704): the window that owns the login sends one kill at the login limit, before the outcome is handed on', async () => {
+    const order = recordingKills();
+    const connection = await acquired();
+    const outcome = connection.connect(new AbortController().signal);
+    void outcome.then(() => order.push('outcome'));
+    await drive();
+    clock.advance(LIMITS.loginMilliseconds);
+    await drive();
+    await outcome;
+    await drive();
+    deepStrictEqual(
+      [order, sshRuns.started[0]?.killed],
+      [['kill', 'outcome'], true],
+    );
+  });
+
+  it('AC-32 (F-2704): a window that waits on another window’s login sends no kill at its own limit', async () => {
+    const order = recordingKills();
+    const first = await acquiredWith({
+      requestMilliseconds: 5000,
+      loginMilliseconds: 10 * LIMITS.loginMilliseconds,
+    });
+    void first.connect(new AbortController().signal);
+    await drive();
+    const second = await acquired();
+    const outcome = second.connect(new AbortController().signal);
+    await drive();
+    clock.advance(LIMITS.loginMilliseconds);
+    await drive();
+    deepStrictEqual(
+      [await outcome, order],
+      [{kind: 'failed', failure: {kind: 'timeout'}}, []],
+    );
+  });
+
+  it('AC-32 (F-2704): a wait that finished before its limit sends no kill when the limit passes', async () => {
+    const order = recordingKills();
+    const {outcome} = await connectFirst();
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    clock.advance(2 * LIMITS.loginMilliseconds);
+    await drive();
+    deepStrictEqual(order, []);
   });
 
   it('reports a helper that is gone', async () => {
