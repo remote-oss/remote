@@ -234,6 +234,76 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(reasons, [{id: 'S018'}, {id: 'S019'}, {id: 'S034'}]);
   });
 
+  it("F-0414 7.E6: a setup failure whose message quotes one of the configuration's Feature keys says how that key fails, and keeps the kind of the generic one", async () => {
+    const cases: Array<[Record<string, unknown>, string, string]> = [
+      [{'': {}}, "Legacy feature '' not supported. Please check", 'S163'],
+      [{fish: {}}, "Legacy feature 'fish' not supported. Please check", 'S220'],
+      [
+        {'owner/repo': {}},
+        "ERR: Feature 'owner/repo' could not be processed.  You may not",
+        'S357',
+      ],
+    ];
+    const seen: unknown[] = [];
+    for (const [features, message] of cases.map(
+      each => [each[0], each[1]] as const,
+    )) {
+      const scene = sceneOf();
+      scene.configuration = {
+        kind: 'configuration',
+        configuration: {image: 'node:22', features},
+        workspaceFolder: '/workspaces/proj',
+        workspaceMount: undefined,
+        mergedConfiguration: undefined,
+      };
+      scene.outcome = {
+        kind: 'setupFailed',
+        message,
+        description: 'An error occurred setting up the container.',
+        containerId: undefined,
+      };
+      const result = await scene.connector.connect(inputOf(PAYLOAD));
+      seen.push('reason' in result ? [result.kind, result.reason] : result);
+    }
+    deepStrictEqual(
+      seen,
+      cases.map(each => ['containerSetupFailed', {id: each[2]}]),
+    );
+  });
+
+  it("F-0414 7.E6: a setup failure that quotes none of the configuration's Feature keys, or one that is a Feature of the always-installed setting, is named by the key's shape too", async () => {
+    const generic = sceneOf();
+    generic.configuration = {
+      kind: 'configuration',
+      configuration: {image: 'node:22', features: {'./fexit': {}}},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    generic.outcome = {
+      kind: 'setupFailed',
+      message: 'Command failed: docker buildx build x',
+      description: 'An error occurred setting up the container.',
+      containerId: undefined,
+    };
+    const fromSetting = sceneOf();
+    fromSetting.defaultFeatures = {fish: {}};
+    fromSetting.outcome = {
+      kind: 'setupFailed',
+      message: "Legacy feature 'fish' not supported. Please check",
+      description: 'An error occurred setting up the container.',
+      containerId: undefined,
+    };
+    const results = [
+      await generic.connector.connect(inputOf(PAYLOAD)),
+      await fromSetting.connector.connect(inputOf(PAYLOAD)),
+    ];
+    deepStrictEqual(
+      results.map(result => ('reason' in result ? result.reason : result)),
+      [{id: 'S034'}, {id: 'S220'}],
+    );
+  });
+
   it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with the probed environment and no tunnels, and the phases in order', async () => {
     const scene = sceneOf();
     const phases: ConnectPhase[] = [];

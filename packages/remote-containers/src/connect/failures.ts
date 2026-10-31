@@ -5,6 +5,7 @@
 
 import type {FailureReason, Failed} from 'lib-authority';
 import type {DaemonRefusal} from '../cli/cli-lines.ts';
+import type {FeatureFailure} from '../features/failing-feature.ts';
 
 /** The container a failed connect found, for the failure's recovery: its full id, and whether it was paused. */
 export interface FailedContainer {
@@ -69,6 +70,18 @@ export function containerSetupFailed(refusal?: DaemonRefusal): Failed {
     {},
     refusal === undefined ? GENERIC : REFUSAL_REASONS[refusal],
   );
+}
+
+/** The string of the detail of each way a Feature's key fails to resolve. */
+const FEATURE_REASONS: Record<FeatureFailure, FailureReason> = {
+  empty: {id: 'S163'},
+  legacy: {id: 'S220'},
+  notFound: {id: 'S357'},
+};
+
+/** The container could not be set up because a Feature's key could not be resolved; the dialog says how. */
+export function featureResolutionFailed(failureOfKey: FeatureFailure): Failed {
+  return failure('containerSetupFailed', {}, FEATURE_REASONS[failureOfKey]);
 }
 
 /** The configuration's image or Dockerfile entry has the wrong type; `configFile` is the configuration's path. */

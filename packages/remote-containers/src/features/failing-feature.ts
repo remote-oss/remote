@@ -53,3 +53,18 @@ export function featureFailureOf(
   }
   return undefined;
 }
+
+/** The keys of an object value; none for any other value. */
+function keysOf(value: unknown): string[] {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? Object.keys(value)
+    : [];
+}
+
+/** The Features a container asks for: the keys of the configuration's `features` and of the Features to always install. */
+export function requestedFeaturesOf(
+  features: unknown,
+  defaultFeatures: unknown,
+): string[] {
+  return [...new Set([...keysOf(features), ...keysOf(defaultFeatures)])];
+}
