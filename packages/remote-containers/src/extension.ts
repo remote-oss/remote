@@ -801,6 +801,12 @@ export async function activate(
             download: downloadTextOver((address, init) => fetch(address, init)),
             ...manifestStoreOf(context.globalStorageUri.fsPath),
             now: Date.now,
+            setTimer: (milliseconds, callback) => {
+              const timer = setTimeout(callback, milliseconds);
+              return () => {
+                clearTimeout(timer);
+              };
+            },
             translate,
             logger: served.logger,
           },

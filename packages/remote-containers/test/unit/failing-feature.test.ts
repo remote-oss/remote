@@ -113,6 +113,16 @@ describe('the Feature a failed build names (card containers-94)', () => {
     );
   });
 
+  it('F-0414 7.E6: a tarball message that quotes two candidates stays generic, even with one owner/repo/name key among them', () => {
+    deepStrictEqual(
+      featureFailureOf(
+        ['octocat/Hello-World/foo', 'fish'],
+        `${TARBALL} 'octocat/Hello-World/foo' 'fish'`,
+      ),
+      undefined,
+    );
+  });
+
   it('F-0414 7.E6: a registry host or a blank in the first part is not the owner/repo/name shape', () => {
     deepStrictEqual(
       [

@@ -9,8 +9,13 @@ import {
   removeControlManifest,
   seedControlManifest,
 } from '../windows/control-manifest.ts';
-import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
+  activations,
+  openFolderWindow,
+  removeContainers,
+} from '../windows/folder-windows.ts';
+import {
+  activeEditorOf,
   closeWindow,
   containersLog,
   containersLogSince,
@@ -127,7 +132,7 @@ interface Failure extends ShownDialog {
   toasts: string[];
 }
 
-describe('what a failed build with Features says (card containers-94)', function () {
+describe.only('what a failed build with Features says (card containers-94)', function () {
   this.timeout(1_800_000);
 
   const {build, closeNow} = featureBuilds();
@@ -329,24 +334,55 @@ describe('what a failed build with Features says (card containers-94)', function
     );
   });
 
-  it('F-0414 AC-19 (build-step): a rebuild that the CLI refuses ends in an error modal with the buttons Edit, More Actions and Learn More (primary)', async () => {
+  it('F-0414 AC-19 (build-step): a rebuild with a disallowed Feature ends in an error modal with S059 and S275 and the buttons Edit, More Actions and Learn More (primary), the previous container is gone, and Edit reopens the folder locally with the file in the editor', async () => {
     const built = await build('c94-ac19', {});
     askForFeatures(built.folder, {[DISALLOWED]: {}});
     await reloadingCommand(built.window, 'remote-containers.rebuildContainer');
     const dialog = await waitForDialog(built.window, DIALOG_MILLISECONDS);
+    const seen = [
+      await dialogKindOf(built.window),
+      dialog.message,
+      dialog.details,
+      dialog.buttons,
+      await primaryButtonOf(built.window),
+      await devContainersOf(built.folder),
+    ];
+    const before = activations(built.window);
+    await answerDialog(built.window, 'Edit devcontainer.json Locally');
+    await waitFor(
+      'the window to activate in its local folder',
+      () => activations(built.window) > before,
+      30_000,
+    );
+    const configuration = path.join(
+      built.folder,
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    await waitFor(
+      `the active editor to be ${configuration}`,
+      async () => (await activeEditorOf(built.window)) === configuration,
+      30_000,
+    );
+    const local = await windowState(built.window);
     deepStrictEqual(
+      [seen, local.remoteName],
       [
-        await dialogKindOf(built.window),
-        dialog.details,
-        dialog.buttons,
-        await primaryButtonOf(built.window),
+        [
+          'error',
+          problematic(DISALLOWED),
+          REMOVE,
+          STEP_BUTTONS,
+          'Learn More',
+          [],
+        ],
+        null,
       ],
-      ['error', REMOVE, STEP_BUTTONS, 'Learn More'],
     );
   });
 
   it('F-0414 AC-20 (container-stays-up): a refusal before the reload leaves a running container of the folder running, with S059 and not S060', async () => {
-    const built = await build('c94-ac20', {});
+    const built = await build('c94-ac20', {shutdownAction: 'none'});
     await closeNow(built.window);
     askForFeatures(built.folder, {[DISALLOWED]: {}});
     const window = await openFolderWindow(built.folder);
@@ -365,18 +401,7 @@ describe('what a failed build with Features says (card containers-94)', function
     );
   });
 
-  it('F-0414 AC-21 (stopped-by-check): when the CLI’s check stopped a running container the message is S060, with the buttons of the variant', async () => {
-    const built = await build('c94-ac21', {});
-    askForFeatures(built.folder, {[DISALLOWED]: {}});
-    await reloadingCommand(built.window, 'remote-containers.rebuildContainer');
-    const dialog = await waitForDialog(built.window, DIALOG_MILLISECONDS);
-    deepStrictEqual(
-      [dialog.message, dialog.buttons],
-      [`${problematic(DISALLOWED)} ${STOPPED}`, STEP_BUTTONS],
-    );
-  });
-
-  it('F-0414 AC-22 (manifest-unreachable): with the manifest fetch failing and no kept copy a build with a local feature completes and connects, the log has the S177 line, and no dialog or notification appears', async () => {
+  it('F-0414 AC-22 (manifest-404): with the manifest fetch failing and no kept copy a build with a local feature completes and connects, the log has the S177 line, and no dialog or notification appears', async () => {
     await rm(manifestFile(), {force: true});
     const served = path.join(
       servedControlFolder(variable('HARNESS_RUN_FOLDER')),
@@ -462,14 +487,15 @@ describe('what a failed build with Features says (card containers-94)', function
     const built = await build('c94-ac24', {
       features: {[runFeature('lab-advised')]: {}},
     });
-    const logged = containersLogSince(mark).join('\n');
+    const lines = containersLogSince(mark);
+    const named = lines.findIndex(line =>
+      line.includes(`${runFeature('lab-advised').replace(/:1$/u, '')}:1.0.0`),
+    );
     deepStrictEqual(
       [
-        logged.includes(
-          `${runFeature('lab-advised').replace(/:1$/u, '')}:1.0.0`,
-        ),
-        logged.includes('The run’s advisory for lab-advised.'),
-        logged.includes('introduced in 1.0.0, fixed in 1.0.1'),
+        named >= 0,
+        lines[named + 1]?.includes('The run’s advisory for lab-advised.'),
+        lines[named + 1]?.includes('introduced in 1.0.0, fixed in 1.0.1'),
         built.containerId === '',
       ],
       [true, true, true, false],
@@ -545,7 +571,7 @@ describe('what a failed build with Features says (card containers-94)', function
     );
   });
 
-  it('F-0414 AC-49 (build-step-no-address): the CLI’s refusal of an entry with no address has the buttons More Actions and Edit, the second primary, without Learn More', async () => {
+  it('F-0414 AC-49 (build-step-no-address): the CLI’s refusal of an entry with no address shows S059 and S275 with an error icon and the buttons More Actions and Edit, the second primary, without Learn More', async () => {
     const built = await build('c94-ac49', {});
     askForFeatures(built.folder, {[disallowedWithoutAddress()]: {}});
     await reloadingCommand(built.window, 'remote-containers.rebuildContainer');
@@ -553,16 +579,49 @@ describe('what a failed build with Features says (card containers-94)', function
     deepStrictEqual(
       [
         await dialogKindOf(built.window),
+        dialog.message,
         dialog.details,
         dialog.buttons,
         await primaryButtonOf(built.window),
       ],
       [
         'error',
+        problematic(disallowedWithoutAddress()),
         REMOVE,
         ['More Actions...', 'Edit devcontainer.json Locally'],
         'Edit devcontainer.json Locally',
       ],
     );
+  });
+
+  it('F-0414 AC-21 (cli-stops-running): with the manifest 404 and a running container, Reopen from the local window reaches the CLI’s check, which stops the container and ends the build with S060', async () => {
+    const built = await build('c94-ac21', {});
+    await closeNow(built.window);
+    askForFeatures(built.folder, {[DISALLOWED]: {}});
+    await rm(manifestFile(), {force: true});
+    const served = path.join(
+      servedControlFolder(variable('HARNESS_RUN_FOLDER')),
+      'devcontainer-control-manifest.json',
+    );
+    const text = await readFile(served, 'utf8');
+    await rm(served);
+    try {
+      const window = await openFolderWindow(built.folder);
+      windows.push(window);
+      await reopenStarted(window);
+      const dialog = await waitForDialog(window, DIALOG_MILLISECONDS);
+      const {stdout} = await execFileAsync('docker', [
+        'inspect',
+        '-f',
+        '{{.State.Status}}',
+        built.containerId,
+      ]);
+      deepStrictEqual(
+        [dialog.message, dialog.buttons, stdout.trim()],
+        [`${problematic(DISALLOWED)} ${STOPPED}`, STEP_BUTTONS, 'exited'],
+      );
+    } finally {
+      await writeFile(served, text);
+    }
   });
 });

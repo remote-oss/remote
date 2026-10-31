@@ -256,6 +256,7 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         kept: () => undefined,
         keep: () => undefined,
         now: () => 0,
+        setTimer: () => () => undefined,
         translate: template => template,
         logger: createLogger(sink, {minimumLevel: () => 'info'}),
       },

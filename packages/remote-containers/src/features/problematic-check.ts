@@ -39,6 +39,9 @@ export async function problematicFeatureRefused(
     return false;
   }
   const manifest = await controlManifestOf(ports.manifest, cancellation);
+  if (cancellation.aborted) {
+    return true;
+  }
   const {translate} = ports.manifest;
   for (const featureId of requested) {
     const entry = disallowedEntryOf(manifest, featureId);

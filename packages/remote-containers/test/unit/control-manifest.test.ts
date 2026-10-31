@@ -8,6 +8,7 @@ import {
   controlManifestUrlOf,
   disallowedEntryOf,
   MANIFEST_CACHE_MILLISECONDS,
+  MANIFEST_FETCH_MILLISECONDS,
   parseControlManifest,
 } from '../../src/features/control-manifest.ts';
 
@@ -28,6 +29,8 @@ const MANIFEST = JSON.stringify({
 /** The ports over a download that answers `answer`, a kept copy, and a clock at `now`. */
 function sceneOf(options: {
   answer?: () => Promise<string>;
+  /** The download never answers, and rejects when it is aborted. */
+  hang?: boolean;
   kept?: {text: string; keptAt: number};
   now?: number;
   environment?: Record<string, string | undefined>;
@@ -36,11 +39,20 @@ function sceneOf(options: {
     sink: new MemorySink(),
     downloads: [] as string[],
     keeps: [] as Array<[string, number]>,
+    timers: [] as Array<{milliseconds: number; fire: () => void}>,
+    stopped: 0,
   };
   const ports: ControlManifestPorts = {
     environment: options.environment ?? {},
-    download: url => {
+    download: (url, signal) => {
       scene.downloads.push(url);
+      if (options.hang === true) {
+        return new Promise((resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            reject(new Error('aborted'));
+          });
+        });
+      }
       return (options.answer ?? (() => Promise.resolve(MANIFEST)))();
     },
     kept: () => options.kept,
@@ -48,6 +60,12 @@ function sceneOf(options: {
       scene.keeps.push([text, keptAt]);
     },
     now: () => options.now ?? 1_000_000,
+    setTimer: (milliseconds, callback) => {
+      scene.timers.push({milliseconds, fire: callback});
+      return () => {
+        scene.stopped += 1;
+      };
+    },
     translate: template => template,
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
   };
@@ -225,6 +243,49 @@ describe('the control manifest (card containers-94)', () => {
     deepStrictEqual(
       [manifest.disallowedFeatures.length, scene.downloads.length],
       [2, 1],
+    );
+  });
+
+  it('#1307: a download that never answers is a failed fetch after ten seconds: S177, and the kept copy with its time refreshed', async () => {
+    const {scene, ports} = sceneOf({
+      hang: true,
+      kept: {text: MANIFEST, keptAt: 0},
+    });
+    const running = controlManifestOf(ports, NEVER);
+    scene.timers[0]?.fire();
+    const manifest = await running;
+    deepStrictEqual(
+      [
+        scene.timers.map(timer => timer.milliseconds),
+        manifest.disallowedFeatures.length,
+        scene.sink.lines.map(line => line.message),
+        scene.keeps,
+      ],
+      [
+        [MANIFEST_FETCH_MILLISECONDS],
+        2,
+        ['Failed to fetch control manifest: the download timed out'],
+        [[MANIFEST, 1_000_000]],
+      ],
+    );
+  });
+
+  it('#1307: a download that never answers with no kept copy gives an empty manifest', async () => {
+    const {scene, ports} = sceneOf({hang: true});
+    const running = controlManifestOf(ports, NEVER);
+    scene.timers[0]?.fire();
+    deepStrictEqual(await running, {disallowedFeatures: []});
+  });
+
+  it('#1307: a cancel before the ten seconds is a cancel: no S177, and the timer is stopped', async () => {
+    const controller = new AbortController();
+    const {scene, ports} = sceneOf({hang: true});
+    const running = controlManifestOf(ports, controller.signal);
+    controller.abort();
+    await running;
+    deepStrictEqual(
+      [scene.sink.lines.length, scene.stopped, scene.keeps],
+      [0, 1, []],
     );
   });
 });

@@ -8,6 +8,7 @@
 import type {Logger} from 'lib-log';
 import {harnessUrlOf} from '../acceptance-switch.ts';
 import {isRecord} from '../extensions/extension-list.ts';
+import {linkedAbort} from '../linked-abort.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 
@@ -20,6 +21,9 @@ const MANIFEST_VARIABLE = 'REMOTE_OSS_CONTROL_MANIFEST';
 
 /** How long a kept copy is used without downloading again, in milliseconds. */
 export const MANIFEST_CACHE_MILLISECONDS = 300_000;
+
+/** How long the download may take before it counts as failed, in milliseconds. */
+export const MANIFEST_FETCH_MILLISECONDS = 10_000;
 
 /** The log line of a failed download; the string id is `S177`. */
 const FETCH_FAILED_TEMPLATE = 'Failed to fetch control manifest: {0}';
@@ -101,6 +105,8 @@ export interface ControlManifestPorts {
   kept(): {text: string; keptAt: number} | undefined;
   keep(text: string, keptAt: number): void;
   now(): number;
+  /** Runs `callback` once after `milliseconds`; the result cancels it. */
+  setTimer(milliseconds: number, callback: () => void): () => void;
   translate: Translate;
   logger: Logger;
 }
@@ -120,10 +126,16 @@ export async function controlManifestOf(
   ) {
     return keptManifest;
   }
+  const {own, release} = linkedAbort(cancellation);
+  const state = {timedOut: false};
+  const stop = ports.setTimer(MANIFEST_FETCH_MILLISECONDS, () => {
+    state.timedOut = true;
+    own.abort();
+  });
   try {
     const text = await ports.download(
       controlManifestUrlOf(ports.environment),
-      cancellation,
+      own.signal,
     );
     const manifest = parseControlManifest(text);
     if (manifest === undefined) {
@@ -132,11 +144,24 @@ export async function controlManifestOf(
     ports.keep(text, ports.now());
     return manifest;
   } catch (caught) {
+    if (cancellation.aborted) {
+      return keptManifest ?? {disallowedFeatures: []};
+    }
     ports.logger.warn(
       filled(ports.translate, FETCH_FAILED_TEMPLATE, [
-        caught instanceof Error ? caught.message : String(caught),
+        state.timedOut
+          ? 'the download timed out'
+          : caught instanceof Error
+            ? caught.message
+            : String(caught),
       ]),
     );
+    if (kept !== undefined && keptManifest !== undefined) {
+      ports.keep(kept.text, ports.now());
+    }
     return keptManifest ?? {disallowedFeatures: []};
+  } finally {
+    stop();
+    release();
   }
 }
