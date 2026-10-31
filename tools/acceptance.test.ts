@@ -400,6 +400,7 @@ const LAUNCH_ORDER = [
   'containers-volume',
   'containers-explorer',
   'containers-ports',
+  'containers-features',
   'containers-shutdown',
   'containers-killed-23',
   'containers-killed-35',
@@ -1070,6 +1071,15 @@ describe('acceptance', () => {
           },
           {
             folder: path.join('/run', 'extensions-containers-ports'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-features'),
             files: [
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',

@@ -521,7 +521,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -795,6 +795,16 @@ export function launchesOf(root: string): Launch[] {
       // port in the browser opens nothing on the machine.
       environment: {PATH: '<run>/xdg-bin:<path>'},
       // The other Dev Containers, installed and disabled, as in `containers`: the Ports view's rows are core's.
+      standIns: ['ms-vscode-remote.remote-containers'],
+      disabledExtensions: ['ms-vscode-remote.remote-containers'],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-features',
+      suite: 'containers-features',
+      registry: true,
+      templates: true,
+      // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
     },
