@@ -6,6 +6,7 @@
 
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
+import {namesContainerSource} from '../config/configuration-text.ts';
 import type {StdinPresentation} from '../cli/cli-host.ts';
 import type {CliTarget, FeatureSettings} from '../cli/cli-arguments.ts';
 import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
@@ -247,6 +248,42 @@ export function containerLifecycleOf(dependencies: {
     }
   }
 
+  /**
+   * The containers a rebuild removes itself: all of `containers` once the configuration is read and names a container
+   * source, none when it names none or cannot be read, and nothing is read when there is nothing to remove.
+   */
+  async function removableContainers(
+    containers: readonly ContainerFacts[],
+    target: CliTarget,
+    cancellation: AbortSignal,
+  ): Promise<readonly ContainerFacts[] | 'cancelled'> {
+    if (containers.length === 0) {
+      return containers;
+    }
+    const read = await bridge.readConfiguration(
+      target,
+      undefined,
+      () => undefined,
+      cancellation,
+    );
+    if (isAborted(cancellation)) {
+      return 'cancelled';
+    }
+    if (read.kind !== 'configuration') {
+      logger.info(
+        'rebuilding: the configuration could not be read; the existing container is kept',
+      );
+      return [];
+    }
+    if (!namesContainerSource(read.configuration)) {
+      logger.info(
+        'rebuilding: the configuration names no container source; the existing container is kept',
+      );
+      return [];
+    }
+    return containers;
+  }
+
   /** The event for the log, and for the presenter when it belongs to the lifecycle commands. */
   function relayed(
     onCliEvent: (event: CliEvent) => void,
@@ -427,11 +464,33 @@ export function containerLifecycleOf(dependencies: {
       : decision.kind === 'use'
         ? decision.idLabels
         : idLabels(folder, configFile);
+    const target: CliTarget = {
+      workspaceFolder: folder,
+      configFile,
+      dockerPath: request.dockerPath,
+      idLabels: targetIdLabels,
+      mountWorkspaceGitRoot: true,
+      mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
+      features: request.features,
+      mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
+      logLevel: request.logLevel,
+    };
     // a rebuild removes the folder's containers itself, whatever their labels: the CLI's remove would miss a legacy one
-    // (it only finds the labels it's given), and its check of the disallowed Features runs before its remove
-    for (const container of discovery.containers) {
+    // (it only finds the labels it's given), and its check of the disallowed Features runs before its remove. It does so
+    // only once the configuration is read and names a container source: without one the CLI's `up` fails before it removes
+    // anything, and the existing container stays
+    const removing = rebuilding
+      ? await removableContainers(
+          discovery.containers,
+          {...target, idLabels: []},
+          cancellation,
+        )
+      : undefined;
+    if (removing === 'cancelled') {
+      return {kind: 'cancelled'};
+    }
+    for (const container of removing ?? []) {
       if (
-        rebuilding &&
         // a container that is already removing will be gone on its own, and the rm would only fail on it
         container.status !== 'removing'
       ) {
@@ -457,17 +516,6 @@ export function containerLifecycleOf(dependencies: {
         );
       }
     }
-    const target: CliTarget = {
-      workspaceFolder: folder,
-      configFile,
-      dockerPath: request.dockerPath,
-      idLabels: targetIdLabels,
-      mountWorkspaceGitRoot: true,
-      mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
-      features: request.features,
-      mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
-      logLevel: request.logLevel,
-    };
     if (rebuilding) {
       logger.info(
         `rebuilding: the dev container CLI removes ${discovery.containers.map(container => container.id.slice(0, IDENTIFIER_LENGTH)).join(', ') || 'no container'} first`,
