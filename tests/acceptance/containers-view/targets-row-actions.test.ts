@@ -1,8 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
-import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
@@ -10,7 +8,6 @@ import {
   devContainersOf,
   inWindow,
   reopenInContainer,
-  runLabelArguments,
   runScopedName,
   variable,
   waitFor,
@@ -19,13 +16,11 @@ import {
 import {
   answerDialog,
   dialogDetailLines,
-  dialogKindOf,
   dialogOf,
   centreNotifications,
   notifications,
   toastDetails,
   rowContextMenu,
-  rowDetails,
   rowMenuAction,
   statusItemText,
   waitForDialog,
@@ -37,9 +32,20 @@ import {
   removeContainers,
   setUserSetting,
 } from '../windows/folder-windows.ts';
-import {dockerWrapper, rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
-
-const execFileAsync = promisify(execFile);
+import {
+  chosen,
+  docker,
+  dockerWrapper,
+  iconOf,
+  iconReaches,
+  idOf,
+  made,
+  rowsWhen,
+  shown,
+  stateOf,
+  VIEW,
+  viewed,
+} from '../windows/dev-containers-view.ts';
 
 /** The words of the Remove Container confirmation (F-0902 AC-1). */
 const REMOVE_MESSAGE = 'Remove this container?';
@@ -51,100 +57,6 @@ const FOLLOW_MILLISECONDS = 5_000;
 
 /** The `sh -c` script of a container whose process ignores the stop signal. */
 const DEAF = 'trap "" TERM; sleep 600';
-
-/** What `docker <argv>` printed, trimmed. */
-async function docker(...argv: string[]): Promise<string> {
-  const {stdout} = await execFileAsync('docker', argv);
-  return stdout.trim();
-}
-
-/** `State.Status` of a container, or `gone` when Docker has none by that name or id. */
-async function stateOf(container: string): Promise<string> {
-  try {
-    return await docker('inspect', '-f', '{{.State.Status}}', container);
-  } catch {
-    return 'gone';
-  }
-}
-
-/** The full id of a container. */
-function idOf(container: string): Promise<string> {
-  return docker('inspect', '-f', '{{.Id}}', container);
-}
-
-/**
- * Creates a container of the run named `runScopedName(base)` that the view lists as a dev container by the folder name
- * `base`, with `command` run in it. `started` false only creates it. `extra` is added to `docker create` before the image.
- */
-async function made(
-  base: string,
-  command: readonly string[],
-  options: {started?: boolean; extra?: readonly string[]} = {},
-): Promise<string> {
-  const container = runScopedName(base);
-  await docker(
-    options.started === false ? 'create' : 'run',
-    ...(options.started === false ? [] : ['-d']),
-    '--name',
-    container,
-    ...runLabelArguments(),
-    '--label',
-    `devcontainer.local_folder=${path.join(variable('HARNESS_RUN_FOLDER'), base)}`,
-    ...(options.extra ?? []),
-    variable('HARNESS_DEVCONTAINER_IMAGE'),
-    ...command,
-  );
-  return container;
-}
-
-/** Opens the Dev Containers view in the local window and waits for the row labelled `label`. */
-async function viewed(label: string): Promise<void> {
-  await inWindow('local', 'workbench.view.remote');
-  await rowsWhen('local', rows => rows.some(each => each.label === label));
-}
-
-/** The icon of the row labelled `label` in window `name`, or none when the view lists no such row. */
-async function iconOf(
-  name: string,
-  label: string,
-): Promise<string | undefined> {
-  try {
-    return (await rowDetails(name, VIEW))?.find(each => each.label === label)
-      ?.icon;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Waits until the row labelled `label` of window `name` has the icon `icon`, or none when `icon` is undefined. */
-function iconReaches(
-  name: string,
-  label: string,
-  icon: string | undefined,
-  milliseconds = 30_000,
-): Promise<void> {
-  return waitFor(
-    `the row ${label} to have the icon ${String(icon)}`,
-    async () => (await iconOf(name, label)) === icon,
-    milliseconds,
-  );
-}
-
-/** What the open dialog of window `name` says. */
-async function shown(name: string): Promise<{
-  message: string;
-  details: string;
-  buttons: string[];
-  kind: string | undefined;
-}> {
-  const dialog = await waitForDialog(name, 30_000);
-  return {...dialog, kind: await dialogKindOf(name)};
-}
-
-/** Picks the context menu item `item` of the row `label` in the local window. */
-function chosen(label: string, item: string): Promise<void> {
-  return rowMenuAction('local', VIEW, label, item);
-}
 
 /** The toasts of window `name` in the order shown, once there are `count` of them. */
 async function notified(
