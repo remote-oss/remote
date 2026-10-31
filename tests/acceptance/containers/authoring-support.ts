@@ -16,7 +16,10 @@ import {
   acceptQuickPick,
   pressEscape,
   quickPickOf,
+  quickPickRows,
+  type QuickPickRow,
   typeInQuickPick,
+  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
@@ -118,4 +121,43 @@ export async function closeScreen(window: string): Promise<void> {
     }
   }
   throw new Error(`the pick did not close: ${JSON.stringify(trail)}`);
+}
+
+/** The id that names one of the run's own templates in its registry, which the wizard takes as a custom id. */
+function labId(name: string): string {
+  return `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/custom/${name}:1`;
+}
+
+/** Runs the wizard in `window` and takes the template `name` of the run's registry by its id; its first screen follows. */
+export async function startedWith(window: string, name: string): Promise<void> {
+  await startCommand(window);
+  await waitForQuickPick(window);
+  await typeInQuickPick(window, labId(name));
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  await acceptQuickPick(window);
+}
+
+/** Waits until the pick shows the screen whose placeholder is `placeholder`, and gives its rows. */
+export async function screenWith(
+  window: string,
+  placeholder: string,
+): Promise<QuickPickRow[]> {
+  await waitFor(
+    `the screen ${placeholder}`,
+    async () => (await quickPickOf(window))?.placeholder === placeholder,
+    60_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return quickPickRows(window);
+}
+
+/** Takes the focused row of each screen of `placeholders`, in turn. */
+export async function takenThrough(
+  window: string,
+  placeholders: readonly string[],
+): Promise<void> {
+  for (const placeholder of placeholders) {
+    await screenWith(window, placeholder);
+    await acceptQuickPick(window);
+  }
 }
