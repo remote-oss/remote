@@ -37,10 +37,10 @@ F-5001.AC-2	acceptance
 F-5001.AC-3	todo	
 F-5001.AC-4	acceptance	
 F-5001.AC-5	deferred	explorer slice 1: increment 2
-F-5001.AC-6	todo	
+F-5001.AC-6	acceptance	
 F-5001.AC-7	acceptance	
 F-5001.AC-8	acceptance	
-F-5001.AC-9	todo	
+F-5001.AC-9	acceptance	
 F-5001.AC-10	todo	
 F-5001.AC-11	deferred	explorer slice 1: increment 2
 F-5001.AC-12	deferred	explorer slice 1: increment 2
@@ -95,7 +95,7 @@ F-5101.AC-17	todo
 F-5101.AC-18	acceptance	
 F-5101.AC-19	acceptance	
 F-5101.AC-20	core	core: remote.explorerType is written by core for the registered view
-F-5101.AC-21	todo	
+F-5101.AC-21	acceptance	
 F-5101.AC-22	acceptance	
 F-5101.AC-23	acceptance	
 F-5101.AC-24	recorded	
@@ -214,7 +214,7 @@ F-5901.AC-4	recorded
 F-5901.AC-5	unit	
 F-5901.AC-6	acceptance	
 F-5901.AC-7	unit	
-F-5901.AC-8	todo	
+F-5901.AC-8	acceptance	
 F-5901.AC-9	acceptance	
 F-5901.AC-10	acceptance	
 F-5901.AC-11	unit	
@@ -228,7 +228,7 @@ F-5901.AC-18	acceptance
 F-5901.AC-19	unit	
 F-5902.AC-1	unit	
 F-5902.AC-2	recorded	
-F-5902.AC-3	todo	
+F-5902.AC-3	acceptance	
 F-5902.AC-4	acceptance	
 F-5902.AC-5	unit	
 F-5902.AC-6	unit	
@@ -256,7 +256,7 @@ F-5902.AC-27	unit
 F-5902.AC-28	acceptance	
 F-5902.AC-29	deferred	explorer slice 1: increment 2
 F-5902.AC-30	acceptance	
-F-5902.AC-31	todo	
+F-5902.AC-31	acceptance	
 F-5902.AC-32	unit	
 F-5902.AC-33	deferred	D-55: no tunnel rows
 F-5902.AC-34	deferred	D-55: no tunnel rows

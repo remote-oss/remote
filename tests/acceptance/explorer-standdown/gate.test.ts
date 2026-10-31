@@ -4,16 +4,13 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {STAND_DOWN_WARNING} from '../windows/explorer-rows.ts';
 import {inWindow, waitFor} from '../windows/harness.ts';
 import {notifications, viewRows} from '../windows/renderer.ts';
 
 /** The launch's first window and the view it shows. */
 const LOCAL = 'local';
 const VIEW = 'Remotes (Tunnels/SSH)';
-
-/** The coexistence warning the explorer shows beside the stand-in, as explorer-03b publishes it. */
-const STAND_DOWN_WARNING =
-  'Remote Explorer stays inactive in this window because another Remote Explorer extension is enabled. Both use the same commands, settings and views. Disable one of the two and reload the window.';
 
 describe('the gate row of explorer slice 1 in the explorer-standdown launch (card coverage-25b, row 7)', function () {
   this.timeout(180_000);

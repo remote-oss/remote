@@ -24,8 +24,12 @@ import {
   viewRows,
 } from '../windows/renderer.ts';
 import {
+  bindRefreshKey,
   hostLabels,
   listing,
+  NO_EFFECTS,
+  nothingFails,
+  pressRefreshKey,
   rendering,
   VIEW,
 } from '../windows/explorer-rows.ts';
@@ -214,5 +218,68 @@ describe('when the SSH group reads its hosts again (card coverage-25c, part b)',
     } finally {
       await closeWindow(window);
     }
+  });
+  describe('F-5101 AC-21: the refresh key', () => {
+    let unbind: () => void;
+
+    before(() => {
+      unbind = bindRefreshKey();
+    });
+
+    after(() => {
+      unbind();
+    });
+
+    it('F-5101 AC-21 (key-never-shown): pressed before the view was ever shown, the key does nothing but refresh, and a host added before it is listed when the view is shown', async () => {
+      const config = configOf('key-never.conf', ['before-host']);
+      await userSettings({'remote.SSH.configFile': config});
+      const folder = path.join(refreshFolder(), 'key-never');
+      mkdirSync(folder, {recursive: true});
+      const window = await openFolderWindow(folder);
+      try {
+        appendFileSync(config, 'Host added-host\n');
+        const effects = await pressRefreshKey(window);
+        await inWindow(window, SHOW_REMOTE_EXPLORER);
+        await listing(window, ['before-host', 'added-host']);
+        await nothingFails(window);
+        deepStrictEqual(effects, NO_EFFECTS);
+      } finally {
+        await closeWindow(window);
+      }
+    });
+
+    it('F-5101 AC-21 (key-hidden): pressed while another side bar is in front, the key does nothing but refresh, and a host added before it is listed when the view is shown', async () => {
+      const config = configOf('key-hidden.conf', ['before-host']);
+      await userSettings({'remote.SSH.configFile': config});
+      const window = await viewWindow('key-hidden');
+      try {
+        await listing(window, ['before-host']);
+        await inWindow(window, SHOW_FILE_EXPLORER);
+        appendFileSync(config, 'Host added-host\n');
+        const effects = await pressRefreshKey(window);
+        await inWindow(window, SHOW_REMOTE_EXPLORER);
+        await listing(window, ['before-host', 'added-host']);
+        await nothingFails(window);
+        deepStrictEqual(effects, NO_EFFECTS);
+      } finally {
+        await closeWindow(window);
+      }
+    });
+
+    it('F-5101 AC-21 (key-visible): pressed with the view visible, the key does nothing but refresh, and a host added before it is listed', async () => {
+      const config = configOf('key-visible.conf', ['before-host']);
+      await userSettings({'remote.SSH.configFile': config});
+      const window = await viewWindow('key-visible');
+      try {
+        await listing(window, ['before-host']);
+        appendFileSync(config, 'Host added-host\n');
+        const effects = await pressRefreshKey(window);
+        await listing(window, ['before-host', 'added-host']);
+        await nothingFails(window);
+        deepStrictEqual(effects, NO_EFFECTS);
+      } finally {
+        await closeWindow(window);
+      }
+    });
   });
 });
