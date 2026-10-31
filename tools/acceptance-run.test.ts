@@ -1276,6 +1276,8 @@ describe('the Podman of a containers-podman run (card containers-101)', () => {
       scripted.passes(`Loaded image: ${LOADED}\n`); // podman load
       scripted.passes(`alpine:3\n${LOADED}\n`); // podman image ls
       const archive = path.join(runFolder, 'engine-image.tar');
+      // The archive `docker save` wrote, which the scripted call cannot write.
+      writeFileSync(archive, 'image');
 
       const listed = loadImageIntoPodman(scripted, RUN_ID, runFolder);
 
@@ -1390,6 +1392,20 @@ describe('the Podman of a containers-podman run (card containers-101)', () => {
       ['volume', 'rm', 'vscode'],
       ['ps', '--all', '--quiet', '--filter', RUN_FILTER],
     ]);
+  });
+
+  it('containers-101: a vscode volume made in the very second the run began is the run’s, and goes', () => {
+    const scripted = scriptedCommands();
+    scriptedPodmanRun(scripted, {volume: 'created', removed: true});
+
+    cleanPodmanRun(scripted, RUN_ID, CREATED_SECONDS);
+
+    deepStrictEqual(
+      scripted
+        .callsOf('podman')
+        .filter(argv => argv[0] === 'volume' && argv[1] === 'rm'),
+      [['volume', 'rm', 'vscode']],
+    );
   });
 
   it('containers-101: a vscode volume that was there before the run, or none, stays', () => {
