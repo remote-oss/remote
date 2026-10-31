@@ -282,7 +282,7 @@ F-0402.AC-16	deferred	containers 0.4: Reopen from a Remote-SSH window later
 F-0403.AC-1	acceptance	
 F-0403.AC-2	todo	
 F-0403.AC-3	todo	
-F-0403.AC-4	acceptance	
+F-0403.AC-4	todo	
 F-0403.AC-5	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-6	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-7	deferred	containers release 1: increment 2 (authoring)
@@ -996,7 +996,7 @@ F-0505.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0505.AC-38	core	core: the local certificates, from the server's host proxy
 F-0801.AC-1	todo	
 F-0801.AC-2	acceptance	
-F-0801.AC-3	acceptance	
+F-0801.AC-3	todo	
 F-0801.AC-4	todo	
 F-0801.AC-5	acceptance	
 F-0801.AC-6	todo	
@@ -1304,7 +1304,7 @@ F-0903.AC-32	deferred	containers 0.4: F-0903 toolbar commands later
 F-0903.AC-33	todo	
 F-0903.AC-34	unit	
 F-0903.AC-35	acceptance	
-F-0903.AC-36	deferred	containers 0.4: C13 volumes later
+F-0903.AC-36	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0906.AC-1	acceptance	
 F-0906.AC-2	deferred	containers 0.4: F-0904 later
 F-0906.AC-3	deferred	containers 0.4: F-0904 later
