@@ -5,7 +5,7 @@
 
 import type {FailureReason, Failed} from 'lib-authority';
 import type {DaemonRefusal} from '../cli/cli-lines.ts';
-import type {FeatureFailure} from '../features/failing-feature.ts';
+import type {FeatureFailure} from '../cli/failing-feature.ts';
 
 /** The container a failed connect found, for the failure's recovery: its full id, and whether it was paused. */
 export interface FailedContainer {

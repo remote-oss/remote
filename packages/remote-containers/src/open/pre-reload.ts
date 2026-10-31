@@ -19,7 +19,7 @@ import {
   type ProblematicPorts,
   problematicFeatureRefused,
 } from '../features/problematic-check.ts';
-import {requestedFeaturesOf} from '../features/failing-feature.ts';
+import {requestedFeaturesOf} from '../cli/failing-feature.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
   type PreReloadProgress,

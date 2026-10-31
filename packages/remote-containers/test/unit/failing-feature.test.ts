@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {featureFailureOf} from '../../src/features/failing-feature.ts';
+import {featureFailureOf} from '../../src/cli/failing-feature.ts';
 
 /** The sentence the CLI 0.89.0 gives for a bare word it does not know (measured). */
 function legacy(key: string): string {

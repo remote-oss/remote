@@ -13,7 +13,7 @@ import type {
   CliFailure,
   ConfigurationResult,
 } from '../cli/cli-lines.ts';
-import {requestedFeaturesOf} from '../features/failing-feature.ts';
+import {requestedFeaturesOf} from '../cli/failing-feature.ts';
 import {ENGINE_TEMPLATES, type Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';

@@ -26,10 +26,7 @@ import {
   type CliEvent,
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
-import {
-  featureFailureOf,
-  requestedFeaturesOf,
-} from '../features/failing-feature.ts';
+import {featureFailureOf, requestedFeaturesOf} from '../cli/failing-feature.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
