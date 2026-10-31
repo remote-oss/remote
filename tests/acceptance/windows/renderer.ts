@@ -1976,6 +1976,30 @@ export async function terminalText(name: string): Promise<string> {
   );
 }
 
+/** A run of text in the active terminal, with the number of the palette colour it is drawn in; none for the default. */
+export interface TerminalSpan {
+  text: string;
+  foreground: number | undefined;
+}
+
+/** The runs of text of window `name`'s active terminal, in order, each with the palette colour xterm gave its cell. */
+export async function terminalSpans(name: string): Promise<TerminalSpan[]> {
+  return evaluate<TerminalSpan[]>(
+    name,
+    `(() => {
+      const rows = document.querySelectorAll('.xterm-rows');
+      const target = rows[rows.length - 1];
+      return [...(target?.querySelectorAll('span') ?? [])].map(span => {
+        const colour = /xterm-fg-(\\d+)/.exec(span.className);
+        return {
+          text: span.textContent ?? '',
+          foreground: colour === null ? undefined : Number(colour[1]),
+        };
+      });
+    })()`,
+  );
+}
+
 /**
  * Gives window `name`'s active terminal the keyboard focus, as a click on it does: once a connect ends, its window's
  * editor holds the focus, and the input rows type into whatever has it.

@@ -12,13 +12,20 @@ import {
   devContainersOf,
   reopenInContainer,
   reopenStarted,
+  startInWindow,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
 import {
+  acceptQuickPick,
   dialogOf,
+  editorTabs,
   notifications,
   INDICATOR_MILLISECONDS,
+  quickPickOf,
+  statusItem,
   statusItemText,
+  typeInQuickPick,
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -103,6 +110,67 @@ function argumentsOf(
 ): Record<string, Record<string, string>> {
   return Object.fromEntries([['args', values]]);
 }
+
+/**
+ * Samples the notifications and the dialog of window `name` while `connect` goes on, and gives what they showed besides the
+ * connecting toast of the connect itself.
+ */
+async function shownDuring(
+  name: string,
+  connect: () => Promise<void>,
+): Promise<string[]> {
+  const shown = new Set<string>();
+  const gate = {done: false};
+  const sampler = (async () => {
+    while (!gate.done) {
+      try {
+        for (const text of await notifications(name)) {
+          if (
+            !text.startsWith('Connecting to Dev Container') &&
+            !text.startsWith('Folder contains')
+          ) {
+            shown.add(text);
+          }
+        }
+        const dialog = await dialogOf(name);
+        if (dialog !== undefined) {
+          shown.add(dialog.details);
+        }
+      } catch {
+        // The window is reloading.
+      }
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  })();
+  try {
+    await connect();
+  } finally {
+    gate.done = true;
+    await sampler;
+  }
+  return [...shown];
+}
+
+/** Whether the image `imageTag` holds every label of the run's base image, which has at least one. */
+async function baseLabelsKept(imageTag: string): Promise<boolean> {
+  async function labelsOf(image: string): Promise<Record<string, string>> {
+    return JSON.parse(
+      await docker('image', 'inspect', '-f', '{{json .Config.Labels}}', image),
+    ) as Record<string, string>;
+  }
+  const baseLabels = Object.entries(await labelsOf(base()));
+  const built = await labelsOf(imageTag);
+  return (
+    baseLabels.length > 0 &&
+    baseLabels.every(([label, value]) => built[label] === value)
+  );
+}
+
+/** The instructions of the Dockerfile of the build rows that BuildKit's trace names, as the trace writes them. */
+const INSTRUCTIONS = [
+  'COPY workspace-root-file /root-file',
+  `RUN printf '%s|%s' "one" "two words" > /args`,
+];
 
 /** The base image of the run, for Dockerfiles. */
 function base(): string {
@@ -218,6 +286,8 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       arguments: string;
       label: string;
       imageTag: string;
+      traced: string[];
+      baseLabelsKept: boolean;
     }> = [];
     for (const [folderName, configuration] of forms) {
       const folder = devContainerFolder(folderName, {
@@ -230,8 +300,10 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
         `FROM ${base()} AS final\nARG FIRST_ARG\nARG SECOND_ARG\nCOPY workspace-root-file /root-file\nRUN printf '%s|%s' "$FIRST_ARG" "$SECOND_ARG" > /args\n`,
       );
       try {
+        const mark = containersLog().length;
         const name = await openFolderWindow(folder);
         await reopenInContainer(name);
+        const lines = containersLogSince(mark);
         const [containerId = ''] = await devContainersOf(folder);
         const imageTag = await docker(
           'inspect',
@@ -241,6 +313,12 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
         );
         seen.push({
           form: folderName,
+          baseLabelsKept: await baseLabelsKept(imageTag),
+          traced: INSTRUCTIONS.filter(instruction =>
+            lines.some(
+              line => /^#\d+ \[/.test(line) && line.endsWith(instruction),
+            ),
+          ),
           copied: await docker('exec', containerId, 'cat', '/root-file'),
           arguments: await docker('exec', containerId, 'cat', '/args'),
           label: await docker(
@@ -268,36 +346,115 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
         arguments: 'one|two words',
         label: 'yes',
         imageTag: 'vsc',
+        traced: INSTRUCTIONS,
+        baseLabelsKept: true,
       })),
     );
   });
 
-  it('F-0412 AC-5 (i5): a target stage is built with its dependencies only, and a stage it does not depend on never runs', async () => {
-    const folder = devContainerFolder('c52-build-target', {
-      name: 'Build Target',
-      image: undefined,
-      build: {dockerfile: 'Dockerfile', target: 'wanted'},
-    });
-    writeDockerfile(
-      folder,
-      `FROM ${base()} AS earlier\nRUN echo earlier > /earlier\nFROM earlier AS wanted\nRUN echo wanted > /wanted\nFROM ${base()} AS unrelated\nRUN false\n`,
-    );
-    try {
+  it('F-0412 AC-8 (i8): the old top-level dockerFile and context form opened in a trusted folder shows no schema warning, where the image and build pair beside it shows two', async () => {
+    const folders = [
+      [
+        'c58-schema-legacy',
+        {image: undefined, dockerFile: 'Dockerfile', context: '..'},
+      ],
+      ['c58-schema-both', {image: base(), build: {dockerfile: 'Dockerfile'}}],
+    ] as const;
+    const problems: string[] = [];
+    for (const [folderName, configuration] of folders) {
+      const folder = devContainerFolder(folderName, {
+        name: folderName,
+        ...configuration,
+      });
+      writeDockerfile(folder, `FROM ${base()}\n`);
       const name = await openFolderWindow(folder);
-      await reopenInContainer(name);
-      const [containerId = ''] = await devContainersOf(folder);
-      const files = await docker(
-        'exec',
-        containerId,
-        'sh',
-        '-c',
-        'cat /earlier /wanted',
-      );
-      await closeWindow(name);
-      deepStrictEqual(files, 'earlier\nwanted');
-    } finally {
-      await cleanUp(folder);
+      try {
+        await startInWindow(name, 'workbench.action.quickOpen');
+        await typeInQuickPick(name, 'devcontainer.json');
+        await waitFor(
+          'the file in the quick open list',
+          async () =>
+            (await quickPickOf(name))?.items.some(item =>
+              item.includes('devcontainer.json'),
+            ) === true,
+          30_000,
+        );
+        await acceptQuickPick(name);
+        await waitFor(
+          'the file in an editor',
+          async () =>
+            (await editorTabs(name)).some(editor =>
+              editor.label.startsWith('devcontainer'),
+            ),
+          30_000,
+        );
+        // The language service validates a moment after the editor opens the file.
+        await new Promise(resolve => setTimeout(resolve, 8000));
+        problems.push((await statusItem(name, 'status.problems')).text);
+      } finally {
+        await closeWindow(name);
+      }
     }
+    deepStrictEqual(problems, ['0  0', '0  2']);
+  });
+
+  it('F-0412 AC-5 (i5): a target stage is built with its dependencies only, and a stage it does not depend on never runs, in the nested form and in the top-level dockerFile form', async () => {
+    const forms: Array<[string, Record<string, unknown>]> = [
+      [
+        'c52-build-target',
+        {build: {dockerfile: 'Dockerfile', target: 'wanted'}},
+      ],
+      [
+        'c52-build-target-legacy',
+        {dockerFile: 'Dockerfile', build: {target: 'wanted'}},
+      ],
+    ];
+    const seen: Array<[string, string, boolean[], boolean]> = [];
+    for (const [folderName, configuration] of forms) {
+      const folder = devContainerFolder(folderName, {
+        name: folderName,
+        image: undefined,
+        ...configuration,
+      });
+      writeDockerfile(
+        folder,
+        `FROM ${base()} AS earlier\nRUN echo earlier > /earlier\nFROM earlier AS wanted\nRUN echo wanted > /wanted\nFROM ${base()} AS unrelated\nRUN false\n`,
+      );
+      try {
+        const mark = containersLog().length;
+        const name = await openFolderWindow(folder);
+        await reopenInContainer(name);
+        const lines = containersLogSince(mark);
+        const [containerId = ''] = await devContainersOf(folder);
+        const files = await docker(
+          'exec',
+          containerId,
+          'sh',
+          '-c',
+          'cat /earlier /wanted',
+        );
+        await closeWindow(name);
+        seen.push([
+          folderName,
+          files,
+          ['RUN echo earlier > /earlier', 'RUN echo wanted > /wanted'].map(
+            step => lines.some(line => line.endsWith(step)),
+          ),
+          lines.some(line => line.endsWith('RUN false')),
+        ]);
+      } finally {
+        await cleanUp(folder);
+      }
+    }
+    deepStrictEqual(
+      seen,
+      forms.map(([folderName]) => [
+        folderName,
+        'earlier\nwanted',
+        [true, true],
+        false,
+      ]),
+    );
   });
 
   it('F-0412 AC-9 (i9): a cacheFrom that names a local tag nobody pushed does not stop the build, and no dialog or notice shows', async () => {
@@ -308,16 +465,27 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     });
     writeDockerfile(folder, `FROM ${base()}\nRUN echo built > /built\n`);
     try {
+      const mark = containersLog().length;
       const name = await openFolderWindow(folder);
-      await reopenInContainer(name);
+      const shown = await shownDuring(name, () => reopenInContainer(name));
+      const lines = containersLogSince(mark);
       const [containerId = ''] = await devContainersOf(folder);
       deepStrictEqual(
         [
           await docker('exec', containerId, 'cat', '/built'),
           await dialogOf(name),
           await notifications(name),
+          shown,
+          lines.some(line =>
+            line.endsWith('importing cache manifest from c52-never-pushed:1'),
+          ),
+          lines.some(line =>
+            line.includes(
+              'failed to configure registry cache importer: docker.io/library/c52-never-pushed:1: not found',
+            ),
+          ),
         ],
-        ['built', undefined, []],
+        ['built', undefined, [], [], true, true],
       );
       await closeWindow(name);
     } finally {
@@ -641,8 +809,15 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     }
   });
 
-  it('F-0412 AC-31, AC-33 (i31): a missing build context and an image nobody can pull each end in the generic dialog and leave no container or image', async () => {
-    const cases: Array<[string, Record<string, unknown>, string]> = [
+  it('F-0412 AC-31, AC-33 (i31): a missing build context and an image nobody can pull each end in the generic dialog and leave no container or image, with the log naming the cause', async () => {
+    /** What the log and the clock say of a failing connect, besides the dialog. */
+    interface Facts {
+      contextNotFound: boolean;
+      pullFailures: number;
+      buildStarted: boolean;
+      dialogWithinTwoSeconds: boolean | undefined;
+    }
+    const cases: Array<[string, Record<string, unknown>, string, Facts]> = [
       [
         'c52-missing-context',
         {
@@ -650,15 +825,38 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           build: {dockerfile: 'Dockerfile', context: 'no-such-folder'},
         },
         `FROM ${base()}\n`,
+        {
+          contextNotFound: true,
+          pullFailures: 0,
+          buildStarted: false,
+          dialogWithinTwoSeconds: true,
+        },
       ],
-      ['c52-unpullable-image', {image: 'does-not-exist.invalid/x:1'}, ''],
+      [
+        'c52-unpullable-image',
+        {image: 'does-not-exist.invalid/x:1'},
+        '',
+        {
+          contextNotFound: false,
+          pullFailures: 6,
+          buildStarted: false,
+          dialogWithinTwoSeconds: undefined,
+        },
+      ],
       [
         'c52-unpullable-from',
         {image: undefined, build: {dockerfile: 'Dockerfile'}},
         'FROM does-not-exist.invalid/x:1\n',
+        {
+          contextNotFound: false,
+          pullFailures: 6,
+          buildStarted: false,
+          dialogWithinTwoSeconds: undefined,
+        },
       ],
     ];
-    const seen: Array<[string, string, string[], string[], string[]]> = [];
+    const seen: Array<[string, string, string[], string[], string[], Facts]> =
+      [];
     for (const [folderName, configuration, dockerfile] of cases) {
       const folder = devContainerFolder(folderName, {
         name: 'Fails',
@@ -668,15 +866,39 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
         writeDockerfile(folder, dockerfile);
       }
       try {
+        const mark = containersLog().length;
         const name = await openFolderWindow(folder);
         await reopenStarted(name);
+        const started = Date.now();
         const shown = await waitForDialog(name, DIALOG_MILLISECONDS);
+        const elapsed = Date.now() - started;
+        const lines = containersLogSince(mark);
         seen.push([
           folderName,
           shown.details,
           [...shown.buttons].sort(),
           await devContainersOf(folder),
           await repositoriesStarting(`vsc-${nameOf(folder)}-`),
+          {
+            contextNotFound: lines.some(line =>
+              /^ERROR: failed to build: unable to prepare context: path ".*\/no-such-folder" not found$/.test(
+                line,
+              ),
+            ),
+            pullFailures:
+              lines.filter(line => line.startsWith('Retrying (Attempt '))
+                .length +
+              lines.filter(
+                line =>
+                  line ===
+                  'Error: Command failed: docker pull does-not-exist.invalid/x:1',
+              ).length,
+            buildStarted: lines.some(line => /^#\d+ /.test(line)),
+            dialogWithinTwoSeconds:
+              folderName === 'c52-missing-context'
+                ? elapsed <= 2000
+                : undefined,
+          },
         ]);
         await closeWindow(name);
       } finally {
@@ -685,7 +907,14 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     }
     deepStrictEqual(
       seen,
-      cases.map(([folderName]) => [folderName, S034, RECOVERY_BUTTONS, [], []]),
+      cases.map(([folderName, , , facts]) => [
+        folderName,
+        S034,
+        RECOVERY_BUTTONS,
+        [],
+        [],
+        facts,
+      ]),
     );
   });
 });
