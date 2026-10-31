@@ -12,6 +12,7 @@ import {
   reloadingCommand,
   reopenInContainer,
   startInWindow,
+  userScopeHolds,
   waitFor,
 } from '../windows/harness.ts';
 import {
@@ -19,6 +20,7 @@ import {
   removeContainers,
   setUserSetting,
 } from '../windows/folder-windows.ts';
+import {settingsText} from '../windows/maintenance.ts';
 import {
   answerDialog,
   notifications,
@@ -490,5 +492,20 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
       ),
       [true, true],
     );
+  });
+
+  it('F-0419 BR-15 (reset-removes): a reset leaves no dev.containers.cacheVolume key in the user settings', async () => {
+    const seen: Array<[boolean, boolean]> = [];
+    for (const value of [false, undefined]) {
+      await setUserSetting('dev.containers.cacheVolume', value);
+      seen.push([
+        settingsText().includes('"dev.containers.cacheVolume"'),
+        await userScopeHolds('local', 'dev.containers.cacheVolume'),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [true, true],
+      [false, false],
+    ]);
   });
 });

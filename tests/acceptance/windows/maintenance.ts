@@ -27,9 +27,9 @@ import {
   openWindow,
   recordLines,
   type RecordLine,
-  settingIn,
   variable,
   waitFor,
+  writeUserSetting,
   windowNames,
 } from './harness.ts';
 
@@ -153,20 +153,13 @@ export async function runWith(
   return mark;
 }
 
-/** Changes a user setting from the local window, as the Settings editor does, and waits until `window` reads it. */
+/** Changes a user setting from the local window, as the Settings editor does (`undefined` removes it), and waits until `window` reads it. */
 export async function setting(
   settingId: string,
   value: unknown,
   window = 'local',
 ): Promise<void> {
-  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
-  await waitFor(
-    `${window} to read ${settingId}`,
-    async () =>
-      JSON.stringify((await settingIn(window, settingId)) ?? null) ===
-      JSON.stringify(value ?? null),
-    10_000,
-  );
+  await writeUserSetting(settingId, value, window, 10_000);
 }
 
 /** The bytes of the launch's user settings file, as text. */
