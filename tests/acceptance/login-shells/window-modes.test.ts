@@ -185,11 +185,13 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
       deepStrictEqual(
         {
           question: failed.dialog.question,
+          buttons: failed.dialog.buttons,
           quick: failed.dialog.sinceConnectStarted < 2000,
           notices: surfaceLines('wm-ac31', 'notice'),
         },
         {
           question: 'Could not establish connection to "rc-end".',
+          buttons: ['Close Remote', 'Retry', 'More Actions...'],
           quick: true,
           notices: [],
         },
