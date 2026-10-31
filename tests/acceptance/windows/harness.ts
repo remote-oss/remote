@@ -28,6 +28,12 @@ import {
 import {runCommand} from '../../../tools/command-runner.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
+  descendantRootOf,
+  processStatOf,
+  processTreeOf,
+  treeOf,
+} from '../../../tools/process-tree.ts';
+import {
   appendScriptTo,
   signalFile,
   type AppendedEntry,
@@ -696,9 +702,10 @@ export async function reopenStarted(name: string): Promise<void> {
 export async function reloadingCommand(
   name: string,
   command: string,
+  ...parameters: unknown[]
 ): Promise<void> {
   const before = countOf(name, 'activated');
-  send(name, command, []);
+  send(name, command, parameters);
   await waitUntil(
     `window ${name} to activate again after ${command}`,
     () => countOf(name, 'activated') > before,
@@ -826,6 +833,10 @@ export async function devContainersOf(folder: string): Promise<string[]> {
 export const OLD_GLIBC_IMAGE =
   'ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98';
 
+/** `debian:bookworm-slim`, whose glibc 2.36 is above the server's 2.28, pinned by digest as the Alpine base is. */
+export const GLIBC_IMAGE =
+  'debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587';
+
 /** The facts of the launch's editor that the server's names, paths and licence come from. */
 export interface EditorProduct {
   applicationName: string;
@@ -879,6 +890,83 @@ export async function dockerContainers(): Promise<string[]> {
     .split('\n')
     .filter(line => line !== '')
     .sort();
+}
+
+/**
+ * The window's process id: the one its live pid file is named by (the file's text is the window's name).
+ * A window that is reopened leaves the pid file of the process that ran in it before, so a file of a
+ * process that has ended is not the window's process.
+ */
+function windowProcessId(name: string): number {
+  const pids = variable('REMOTE_OSS_ACCEPTANCE_WINDOWS');
+  for (const file of readdirSync(pids)) {
+    if (readFileSync(path.join(pids, file), 'utf8') !== name) {
+      continue;
+    }
+    const processId = Number(file);
+    if (
+      Number.isInteger(processId) &&
+      processId > 0 &&
+      !processIsGone(processId)
+    ) {
+      return processId;
+    }
+  }
+  throw new Error(`window ${name} has no live pid file`);
+}
+
+/** Has the process `processId` ended: its /proc folder is gone. */
+function processIsGone(processId: number): boolean {
+  try {
+    statSync(`/proc/${String(processId)}`);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Kills window `name`'s processes at once (SIGKILL): its process group, its main process, or its whole
+ * tree. The main process is the editor process the run started: the run is this test's own parent, so the
+ * parent-field walk up from the window stops at the process it started. The tree is that process's whole
+ * tree, read from /proc before any of it is killed. Afterwards it waits, at most 5 s, until none of the
+ * killed processes is left.
+ */
+export async function killWindow(
+  name: string,
+  reach: 'processGroup' | 'mainProcess' | 'tree',
+): Promise<void> {
+  const processId = windowProcessId(name);
+  let killed: number[];
+  if (reach === 'processGroup') {
+    const line = readFileSync(`/proc/${String(processId)}/stat`, 'utf8');
+    process.kill(-processStatOf(processId, line).group, 'SIGKILL');
+    killed = [processId];
+  } else {
+    const tree = processTreeOf('/proc');
+    const main = descendantRootOf(tree, processId, process.ppid);
+    killed = reach === 'mainProcess' ? [main] : treeOf(tree, main);
+    for (const victim of killed) {
+      try {
+        process.kill(victim, 'SIGKILL');
+      } catch {
+        // The process ended between the read and the kill; nothing is left of it to kill.
+      }
+    }
+  }
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const remaining = killed.filter(victim => !processIsGone(victim));
+    if (remaining.length === 0) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `the killed processes of window ${name} were still there after 5 s: ${remaining.join(', ')}`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 }
 
 /** Closes window `name` and resolves once its agent has deactivated. */

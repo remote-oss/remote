@@ -31,6 +31,12 @@ const LAUNCHES: Launch[] = [
     suite: 'suite-containers',
     withExtensions: ['remote-oss.remote-containers'],
   },
+  {
+    label: 'containers-three',
+    kind: 'plain',
+    suite: 'suite-containers',
+    withExtensions: ['remote-oss.remote-containers'],
+  },
 ];
 const EVERY = LAUNCHES.map(launch => launch.label);
 
@@ -44,6 +50,7 @@ describe('acceptance-select', () => {
     deepStrictEqual(labelsFor('packages/remote-containers/src/extension.ts'), [
       'containers-one',
       'containers-two',
+      'containers-three',
     ]);
   });
 
@@ -73,10 +80,10 @@ describe('acceptance-select', () => {
     );
   });
 
-  it('a containers test change reaches the containers launches only', () => {
+  it('a containers test change reaches the containers launches only, one suite selecting them all', () => {
     deepStrictEqual(
       labelsFor('tests/acceptance/suite-containers/gate/rows.test.ts'),
-      ['containers-one', 'containers-two'],
+      ['containers-one', 'containers-two', 'containers-three'],
     );
   });
 
@@ -121,7 +128,7 @@ describe('acceptance-select', () => {
         'packages/remote-containers/src/a.ts',
         'packages/remote-explorer/src/b.ts',
       ),
-      ['explorer-one', 'containers-one', 'containers-two'],
+      ['explorer-one', 'containers-one', 'containers-two', 'containers-three'],
     );
   });
 
@@ -147,7 +154,12 @@ describe('acceptance-select', () => {
     ];
     deepStrictEqual(
       selectLaunches(['packages/remote-containers/src/a.ts'], more).labels,
-      ['containers-one', 'containers-two', 'containers-new'],
+      [
+        'containers-one',
+        'containers-two',
+        'containers-three',
+        'containers-new',
+      ],
     );
   });
 
@@ -157,6 +169,7 @@ describe('acceptance-select', () => {
       [
         'containers-one: packages/remote-containers/src/a.ts',
         'containers-two: packages/remote-containers/src/a.ts',
+        'containers-three: packages/remote-containers/src/a.ts',
       ],
     );
   });
@@ -171,7 +184,7 @@ describe('acceptance-select', () => {
           LAUNCHES,
         ),
       ],
-      ['none', 'all', 'containers-one,containers-two'],
+      ['none', 'all', 'containers-one,containers-two,containers-three'],
     );
   });
 

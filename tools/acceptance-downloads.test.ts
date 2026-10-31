@@ -22,7 +22,9 @@ import {
   downloadVariables,
   DROP_HUNG_PATH,
   makeCertificate,
+  requestedPlatform,
   SERVER_ARCHIVE,
+  servedPlatforms,
   serverArchiveName,
   serverArchiveOf,
   startDownloadHost,
@@ -118,6 +120,7 @@ describe('the download host', function () {
   this.timeout(30000);
   let folder = '';
   let archive: Buffer;
+  let glibcArchive: Buffer;
   let logFile = '';
   let tlsLogFile = '';
   let host: DownloadHost;
@@ -125,7 +128,9 @@ describe('the download host', function () {
   before(async () => {
     folder = mkdtempSync(path.join(tmpdir(), 'downloads-unit-'));
     archive = Buffer.alloc(2 * 1024 * 1024 + 7, 'a');
+    glibcArchive = Buffer.alloc(2 * 1024 * 1024 + 11, 'g');
     writeFileSync(path.join(folder, 'archive.tar.gz'), archive);
+    writeFileSync(path.join(folder, 'glibc.tar.gz'), glibcArchive);
     logFile = path.join(folder, 'requests.log');
     tlsLogFile = path.join(folder, 'tls.log');
     writeFileSync(logFile, '');
@@ -133,7 +138,11 @@ describe('the download host', function () {
     const certificate = makeCertificate(folder);
     host = await startDownloadHost({
       addresses: ['127.0.0.1'],
-      archiveFile: path.join(folder, 'archive.tar.gz'),
+      archiveFiles: {
+        'alpine-x64': path.join(folder, 'archive.tar.gz'),
+        'linux-x64': path.join(folder, 'glibc.tar.gz'),
+      },
+      defaultPlatform: 'alpine-x64',
       ...certificate,
       logFile,
       tlsLogFile,
@@ -202,9 +211,55 @@ describe('the download host', function () {
   it('tooling-27: ok gives the archive with its length', async () => {
     const received = await get('http', host.httpPort, '/ok/linux-x64/abc');
     deepStrictEqual(
-      [received.status, received.length, received.body.equals(archive)],
-      [200, archive.length, true],
+      [received.status, received.length, received.body.equals(glibcArchive)],
+      [200, glibcArchive.length, true],
     );
+  });
+
+  it("tooling-68: each platform's request gets its own archive, by the template's or the update service's name", async () => {
+    const answers = await Promise.all(
+      [
+        '/ok/alpine-x64/abc',
+        '/ok/linux-x64/abc',
+        '/ok/commit:abc/server-linux-alpine/stable',
+        '/ok/commit:abc/server-linux-x64/stable',
+      ].map(async pathName => {
+        const received = await get('http', host.httpPort, pathName);
+        return received.body.equals(archive)
+          ? 'alpine'
+          : received.body.equals(glibcArchive) && 'glibc';
+      }),
+    );
+    deepStrictEqual(answers, ['alpine', 'glibc', 'alpine', 'glibc']);
+  });
+
+  it('tooling-68: a path that names no platform gets the Alpine archive, as before', async () => {
+    const received = await get('http', host.httpPort, '/ok/size/check');
+    strictEqual(received.body.equals(archive), true);
+  });
+
+  it('tooling-68: a platform the run serves no archive for gives 404, from ok, cut and slow alike', async () => {
+    const answers = await Promise.all(
+      [
+        '/ok/alpine-arm64/abc',
+        '/ok/darwin-x64/abc',
+        '/ok/commit:abc/server-win32-x64/stable',
+        '/cut/linux-arm64/abc',
+        '/slow/linux-arm64/abc',
+      ].map(async pathName => {
+        const received = await get('http', host.httpPort, pathName);
+        return [received.status, received.body.length];
+      }),
+    );
+    deepStrictEqual(
+      answers,
+      Array.from({length: 5}, () => [404, 0]),
+    );
+  });
+
+  it('tooling-68: slow follows the platform asked', async () => {
+    const received = await get('http', host.httpPort, '/slow/linux-x64/abc');
+    strictEqual(received.body.equals(glibcArchive), true);
   });
 
   it('tooling-27: missing gives 404 and busy gives 503, both empty', async () => {
@@ -398,7 +453,8 @@ describe('startDownloadHost', () => {
       await rejects(
         startDownloadHost({
           addresses: ['127.0.0.1', '192.0.2.1'],
-          archiveFile: path.join(folder, 'none'),
+          archiveFiles: {'alpine-x64': path.join(folder, 'none')},
+          defaultPlatform: 'alpine-x64',
           ...certificate,
           logFile: path.join(folder, 'log'),
           tlsLogFile: path.join(folder, 'tls-log'),
@@ -423,30 +479,65 @@ describe('serverArchiveOf', () => {
     rmSync(folder, {recursive: true, force: true});
   });
 
-  it('tooling-27: names the pinned release asset', () => {
-    strictEqual(
-      serverArchiveName('arm64'),
+  it('tooling-27, tooling-68: names the pinned release asset of each platform', () => {
+    deepStrictEqual(['alpine-arm64', 'linux-x64'].map(serverArchiveName), [
       `vscodium-reh-alpine-arm64-${SERVER_ARCHIVE.tagName}.tar.gz`,
-    );
+      `vscodium-reh-linux-x64-${SERVER_ARCHIVE.tagName}.tar.gz`,
+    ]);
   });
 
-  it('tooling-27: an architecture without a pinned archive throws', async () => {
+  it('tooling-68: the Alpine and the glibc server are pinned for both architectures', () => {
+    deepStrictEqual(Object.keys(SERVER_ARCHIVE.sha256).sort(), [
+      'alpine-arm64',
+      'alpine-x64',
+      'linux-arm64',
+      'linux-x64',
+    ]);
+  });
+
+  it('tooling-27: a platform without a pinned archive throws', async () => {
     await rejects(
       serverArchiveOf(
         folder,
-        'riscv64',
+        'linux-riscv64',
         () => Promise.resolve(new Uint8Array()),
         writeFileSync,
       ),
-      /no server archive is pinned for riscv64/,
+      /no server archive is pinned for linux-riscv64/,
     );
+  });
+
+  it("tooling-68: the checksums are checked per platform: one platform's download never passes as another's", async () => {
+    const body = Buffer.from('fresh');
+    const checksums = {
+      'alpine-arm64': createHash('sha256').update(body).digest('hex'),
+      'linux-arm64': createHash('sha256').update('other').digest('hex'),
+    };
+    const outcomes = await Promise.all(
+      ['alpine-arm64', 'linux-arm64'].map(platform =>
+        serverArchiveOf(
+          folder,
+          platform,
+          () => Promise.resolve(body),
+          writeFileSync,
+          checksums,
+        ).then(
+          file => path.basename(file),
+          (caught: unknown) => (caught as Error).message,
+        ),
+      ),
+    );
+    deepStrictEqual(outcomes, [
+      serverArchiveName('alpine-arm64'),
+      'the server archive download does not match its checksum',
+    ]);
   });
 
   it('tooling-27: a download that does not match the checksum throws and writes nothing', async () => {
     const written: string[] = [];
     const failure = await serverArchiveOf(
       folder,
-      'arm64',
+      'alpine-arm64',
       () => Promise.resolve(new Uint8Array([1, 2, 3])),
       file => written.push(file),
     ).catch((caught: unknown) => (caught as Error).message);
@@ -457,7 +548,7 @@ describe('serverArchiveOf', () => {
   });
 
   it('tooling-27: a cached file whose checksum matches is used without a download', async () => {
-    const file = path.join(folder, serverArchiveName('arm64'));
+    const file = path.join(folder, serverArchiveName('alpine-arm64'));
     writeFileSync(file, 'cached');
     const downloads: string[] = [];
     const sha256 = createHash('sha256').update('cached').digest('hex');
@@ -469,7 +560,10 @@ describe('serverArchiveOf', () => {
   });
 
   it('tooling-27: a cached file whose checksum does not match is downloaded again and replaced', async () => {
-    writeFileSync(path.join(folder, serverArchiveName('arm64')), 'tampered');
+    writeFileSync(
+      path.join(folder, serverArchiveName('alpine-arm64')),
+      'tampered',
+    );
     const {downloads, result} = await freshDownload();
     deepStrictEqual(
       [downloads.length, readFileSync(result, 'utf8')],
@@ -483,7 +577,7 @@ describe('serverArchiveOf', () => {
       [downloads, readFileSync(result, 'utf8')],
       [
         [
-          `https://github.com/${SERVER_ARCHIVE.repository}/releases/download/${SERVER_ARCHIVE.tagName}/${serverArchiveName('arm64')}`,
+          `https://github.com/${SERVER_ARCHIVE.repository}/releases/download/${SERVER_ARCHIVE.tagName}/${serverArchiveName('alpine-arm64')}`,
         ],
         'fresh',
       ],
@@ -511,34 +605,83 @@ describe('serverArchiveOf', () => {
     cacheFolder: string,
     download: (address: string) => Promise<Uint8Array>,
   ): Promise<string> {
-    return serverArchiveOf(cacheFolder, 'arm64', download, writeFileSync, {
-      'alpine-arm64': sha256,
-    });
+    return serverArchiveOf(
+      cacheFolder,
+      'alpine-arm64',
+      download,
+      writeFileSync,
+      {'alpine-arm64': sha256},
+    );
   }
 });
 
+describe('the platform a request names (card tooling-68)', () => {
+  it("tooling-68: the template's <os>-<arch> and the update service's server-<platform> name it; other paths name none", () => {
+    deepStrictEqual(
+      [
+        '/ok/alpine-x64/abc',
+        '/ok/linux-arm64/abc?x=1',
+        '/ok/commit:abc/server-linux-alpine/stable',
+        '/ok/commit:abc/server-alpine-arm64/insider',
+        '/ok/commit:abc/server-linux-x64/stable',
+        '/ok/x',
+        '/ok/size/check',
+        '/cut/linux-x64/x',
+      ].map(requestedPlatform),
+      [
+        'alpine-x64',
+        'linux-arm64',
+        'alpine-x64',
+        'alpine-arm64',
+        'linux-x64',
+        undefined,
+        undefined,
+        'linux-x64',
+      ],
+    );
+  });
+
+  it('tooling-68: a run serves the Alpine server first, then the glibc one, of its architecture', () => {
+    deepStrictEqual(servedPlatforms('arm64'), ['alpine-arm64', 'linux-arm64']);
+  });
+});
+
 describe('the download host in the run', () => {
-  it("tooling-27: a run's download host serves the cached archive on the loopback and the gateway only, and stops", async () => {
+  it("tooling-27, tooling-68: a run's download host serves the cached archives on the loopback and the gateway only, and stops", async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'downloads-root-'));
     const runFolder = mkdtempSync(path.join(tmpdir(), 'downloads-run-'));
     try {
       const cache = path.join(root, '.vscode-test', 'downloads');
       mkdirSync(cache, {recursive: true});
-      writeFileSync(path.join(cache, serverArchiveName('arm64')), 'cached');
+      writeFileSync(
+        path.join(cache, serverArchiveName('alpine-arm64')),
+        'cached',
+      );
+      writeFileSync(
+        path.join(cache, serverArchiveName('linux-arm64')),
+        'glibc',
+      );
       const downloads = await startRunDownloads(
         (): CommandResult => ({status: 0, stdout: '127.0.0.2\n', stderr: ''}),
         () => Promise.reject(new Error('no download expected')),
         root,
         runFolder,
         'arm64',
-        {'alpine-arm64': createHash('sha256').update('cached').digest('hex')},
+        {
+          'alpine-arm64': createHash('sha256').update('cached').digest('hex'),
+          'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
+        },
       );
       const port = Number(
         /:(\d+)$/.exec(downloads.variables.HARNESS_DOWNLOADS_LOCAL ?? '')?.[1],
       );
       const bodies = await Promise.all(
-        ['127.0.0.1', '127.0.0.2'].map(async address =>
-          (await getFrom(address, port, '/ok/x')).toString(),
+        [
+          ['127.0.0.1', '/ok/x'],
+          ['127.0.0.2', '/ok/x'],
+          ['127.0.0.1', '/ok/linux-arm64/abc'],
+        ].map(async ([address = '', pathName = '']) =>
+          (await getFrom(address, port, pathName)).toString(),
         ),
       );
       const elsewhere = await getFrom('127.0.0.3', port, '/ok/x').then(
@@ -562,7 +705,7 @@ describe('the download host in the run', () => {
             'utf8',
           ).split('\n').length - 1,
         ],
-        ['refused', 'ended', ['cached', 'cached'], 3],
+        ['refused', 'ended', ['cached', 'cached', 'glibc'], 4],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
