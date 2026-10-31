@@ -79,6 +79,8 @@ export interface AgentEvent {
   settingId?: string;
   value?: unknown;
   defaultValue?: unknown;
+  /** Whether the user's settings hold a value for the setting, as `setting` reports it: a key holding `null` reads as no value, as an absent one does. */
+  inUserScope?: boolean;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -1412,6 +1414,47 @@ export async function settingIn(
   return (
     await reported(name, 'setting', 'acceptance.agent.setting', settingId)
   )?.value;
+}
+
+/** Whether the user's settings, as window `name` reads them, hold a value for the setting `settingId`; a key holding `null` reads as none, so the settings file is what tells it from a removed key. */
+export async function userScopeHolds(
+  name: string,
+  settingId: string,
+): Promise<boolean> {
+  return (
+    (await reported(name, 'setting', 'acceptance.agent.setting', settingId))
+      ?.inUserScope === true
+  );
+}
+
+/**
+ * Sets the user setting from the local window, or removes it for `undefined`, and waits until `window` reads the
+ * result: `undefined` would reach the agent as `null`, which the editor writes as a key with `null`, not as no key.
+ */
+export async function writeUserSetting(
+  settingId: string,
+  value: unknown,
+  window: string,
+  milliseconds: number,
+): Promise<void> {
+  if (value === undefined) {
+    await inWindow('local', 'acceptance.agent.removeSetting', settingId);
+    await waitFor(
+      `${window} to read ${settingId} removed`,
+      async () => !(await userScopeHolds(window, settingId)),
+      milliseconds,
+    );
+    return;
+  }
+  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
+  await waitFor(
+    `${window} to read ${settingId} as ${JSON.stringify(value)}`,
+    async () =>
+      JSON.stringify(await settingIn(window, settingId)) ===
+        JSON.stringify(value) &&
+      (value === null || (await userScopeHolds(window, settingId))),
+    milliseconds,
+  );
 }
 
 /** The default window `name` has for the setting `settingId`, the one its Settings editor shows, or null for none. */
