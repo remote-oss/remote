@@ -2,6 +2,8 @@ import {deepStrictEqual, fail} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
+  factOfLine,
+  LAUNCHING_LINE,
   parseResult,
   type ResultBlock,
   RESULT_BEGIN,
@@ -27,6 +29,52 @@ function blockOf(name: string): ResultBlock {
 }
 
 const EMPTY_BLOCK = {hostFacts: {}, serverFacts: {}, cliFacts: {}, timings: {}};
+
+describe('the streamed launching line (card server-26)', () => {
+  it('server-26: parseResult ignores the streamed line outside the markers, and a block that holds the fact keeps it', () => {
+    deepStrictEqual(
+      [
+        parseResult([LAUNCHING_LINE]),
+        parseResult([LAUNCHING_LINE, RESULT_BEGIN, 'status=Ok', RESULT_END]),
+        parseResult([
+          LAUNCHING_LINE,
+          RESULT_BEGIN,
+          'status=Ok',
+          'server.launching=yes',
+          RESULT_END,
+        ]),
+      ],
+      [
+        {failure: 'noResultBlock'},
+        {block: {status: 'Ok', ...EMPTY_BLOCK}},
+        {
+          block: {
+            status: 'Ok',
+            ...EMPTY_BLOCK,
+            serverFacts: {launching: 'yes'},
+          },
+        },
+      ],
+    );
+  });
+
+  it('server-26: factOfLine splits at the first = and trims nothing, and a line without one has none', () => {
+    deepStrictEqual(
+      [
+        factOfLine(LAUNCHING_LINE),
+        factOfLine(' a = b=c '),
+        factOfLine('no separator'),
+        factOfLine('='),
+      ],
+      [
+        {field: 'server.launching', value: 'yes'},
+        {field: ' a ', value: ' b=c '},
+        undefined,
+        {field: '', value: ''},
+      ],
+    );
+  });
+});
 
 describe('parseResult (card server-02 table)', () => {
   it('[] -> noResultBlock', () => {
