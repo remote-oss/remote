@@ -65,10 +65,17 @@ const SERVING_LAUNCHER = [
   '',
 ].join('\n');
 
-/** The launcher that listens: the same ready line, then a loopback port that echoes what it is sent, until killed. */
+/**
+ * The launcher that listens: the same ready line, then a port that echoes what it is sent, until killed. BusyBox's
+ * full nc (Alpine's nc) keeps listening on loopback; where nc is another one (OpenBSD's, on Ubuntu, which runs no
+ * program per connection), the host's busybox does it with its own persistent listener, which binds every address.
+ */
 const LISTENING_LAUNCHER = [
   ...SERVING_LINES,
-  'nc -lk -p "$PORT" -s 127.0.0.1 -e /bin/cat &',
+  'case $(readlink -f "$(command -v nc)") in',
+  '  */busybox) nc -lk -p "$PORT" -s 127.0.0.1 -e /bin/cat & ;;',
+  '  *) busybox nc -ll -p "$PORT" -e /bin/cat & ;;',
+  'esac',
   'wait',
   '',
 ].join('\n');

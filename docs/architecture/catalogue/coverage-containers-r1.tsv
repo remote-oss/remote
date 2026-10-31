@@ -381,7 +381,7 @@ F-0409.AC-8	acceptance
 F-0409.AC-9	acceptance	
 F-0409.AC-10	acceptance	
 F-0409.AC-11	todo	
-F-0409.AC-12	todo	
+F-0409.AC-12	acceptance	
 F-0409.AC-13	todo	
 F-0409.AC-14	todo	
 F-0409.AC-15	unit	
@@ -411,7 +411,7 @@ F-0409.AC-39	todo
 F-0409.AC-40	acceptance	
 F-0409.AC-41	deferred	containers 0.4: F-0407 later
 F-0409.AC-42	todo	
-F-0409.AC-43	todo	
+F-0409.AC-43	acceptance	
 F-0409.AC-44	acceptance	
 F-0409.AC-45	acceptance	
 F-0409.AC-46	acceptance	
@@ -568,20 +568,20 @@ F-0414.AC-24	acceptance
 F-0414.AC-25	acceptance	
 F-0414.AC-26	acceptance	
 F-0414.AC-27	acceptance	
-F-0414.AC-28	todo	
+F-0414.AC-28	acceptance	
 F-0414.AC-29	acceptance	
 F-0414.AC-30	acceptance	
 F-0414.AC-31	todo	
 F-0414.AC-32	deferred	containers release 1: later (Compose)
 F-0414.AC-33	acceptance	
 F-0414.AC-34	acceptance	
-F-0414.AC-35	todo	
+F-0414.AC-35	acceptance	
 F-0414.AC-36	acceptance	
 F-0414.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0414.AC-38	acceptance	
 F-0414.AC-39	acceptance	
 F-0414.AC-40	acceptance	
-F-0414.AC-41	todo	
+F-0414.AC-41	acceptance	
 F-0414.AC-42	acceptance	
 F-0414.AC-43	acceptance	
 F-0414.AC-44	acceptance	
@@ -879,17 +879,17 @@ F-0503.AC-5	acceptance
 F-0503.AC-6	acceptance	
 F-0503.AC-7	acceptance	
 F-0503.AC-8	deferred	containers release 1: later (Compose)
-F-0503.AC-9	todo	
+F-0503.AC-9	acceptance	
 F-0503.AC-10	acceptance	
 F-0503.AC-11	acceptance	
 F-0503.AC-12	acceptance	
-F-0503.AC-13	todo	
+F-0503.AC-13	acceptance	
 F-0503.AC-14	acceptance	
 F-0503.AC-15	todo	
-F-0503.AC-16	todo	
+F-0503.AC-16	acceptance	
 F-0503.AC-17	acceptance	
 F-0503.AC-18	acceptance	
-F-0503.AC-19	todo	
+F-0503.AC-19	acceptance	
 F-0503.AC-20	acceptance	
 F-0503.AC-21	todo	
 F-0503.AC-22	deferred	containers release 1: later (attach)
@@ -913,7 +913,7 @@ F-0503.AC-39	unit
 F-0503.AC-40	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0503.AC-41	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0503.AC-42	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0503.AC-43	todo	
+F-0503.AC-43	acceptance	
 F-0503.AC-44	acceptance	
 F-0503.AC-45	acceptance	
 F-0503.AC-46	deferred	containers release 1: later (attach)
@@ -1074,11 +1074,11 @@ F-0802.AC-34	todo
 F-0802.AC-35	todo	
 F-0802.AC-36	deferred	containers release 1: later (Compose)
 F-0802.AC-37	todo	
-F-0803.AC-1	todo	
-F-0803.AC-2	todo	
+F-0803.AC-1	acceptance	
+F-0803.AC-2	acceptance	
 F-0803.AC-3	todo	
-F-0803.AC-4	todo	
-F-0803.AC-5	todo	
+F-0803.AC-4	acceptance	
+F-0803.AC-5	acceptance	
 F-0803.AC-6	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0803.AC-7	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0803.AC-8	todo	
@@ -1090,21 +1090,21 @@ F-0803.AC-13	todo
 F-0803.AC-14	todo	
 F-0803.AC-15	todo	
 F-0803.AC-16	todo	
-F-0803.AC-17	todo	
+F-0803.AC-17	acceptance	
 F-0803.AC-18	todo	
 F-0803.AC-19	todo	
-F-0803.AC-20	todo	
+F-0803.AC-20	acceptance	
 F-0803.AC-21	todo	
 F-0803.AC-22	deferred	containers release 1: later (Configure Container Features, F-0807)
-F-0803.AC-23	todo	
-F-0803.AC-24	todo	
+F-0803.AC-23	acceptance	
+F-0803.AC-24	acceptance	
 F-0803.AC-25	todo	
 F-0803.AC-26	todo	
 F-0803.AC-27	todo	
 F-0803.AC-28	todo	
 F-0803.AC-29	todo	
 F-0803.AC-30	todo	
-F-0803.AC-31	todo	
+F-0803.AC-31	acceptance	
 F-0803.AC-32	todo	
 F-0804.AC-1	deferred	containers release 1: later (Configure Container Features, F-0807)
 F-0804.AC-2	todo	
@@ -1171,7 +1171,7 @@ F-0901.AC-12	deferred	containers 0.4: C12 attach later
 F-0901.AC-13	deferred	containers 0.4: C12 attach later
 F-0901.AC-14	deferred	containers 0.4: F-0406 later
 F-0901.AC-15	unit	
-F-0901.AC-16	todo	
+F-0901.AC-16	deferred	containers 0.4: F-0201 installDocker and the help view later
 F-0901.AC-17	deferred	containers 0.4: F-1302 later
 F-0901.AC-18	deferred	containers 0.4: F-0406 later
 F-0901.AC-19	deferred	containers 0.4: Kubernetes later
@@ -1304,8 +1304,8 @@ F-0903.AC-32	deferred	containers 0.4: F-0903 toolbar commands later
 F-0903.AC-33	todo	
 F-0903.AC-34	unit	
 F-0903.AC-35	acceptance	
-F-0903.AC-36	todo	
-F-0906.AC-1	todo	
+F-0903.AC-36	deferred	containers 0.4: C13 volumes later
+F-0906.AC-1	acceptance	
 F-0906.AC-2	deferred	containers 0.4: F-0904 later
 F-0906.AC-3	deferred	containers 0.4: F-0904 later
 F-0906.AC-4	deferred	containers 0.4: F-0904 later
@@ -1348,8 +1348,8 @@ F-1101.AC-17	acceptance
 F-1101.AC-18	acceptance	
 F-1101.AC-19	deferred	containers release 1: later (Compose)
 F-1101.AC-20	acceptance	
-F-1101.AC-21	todo	
-F-1101.AC-22	todo	
+F-1101.AC-21	acceptance	
+F-1101.AC-22	acceptance	
 F-1101.AC-23	deferred	containers release 1: later (remote engines)
 F-1101.AC-24	acceptance	
 F-1101.AC-25	acceptance	

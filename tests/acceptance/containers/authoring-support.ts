@@ -13,6 +13,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {
+  acceptQuickPick,
   chooseQuickPickRow,
   pressEscape,
   quickPickFacts,
@@ -33,6 +34,9 @@ export const USER_DATA_ROW = 'Add configuration to user data folder';
 /** The placeholder of the location pick. */
 const LOCATION_PLACEHOLDER =
   'Where would you like to create your container configuration?';
+
+/** The configuration the wizard writes, relative to the folder. */
+export const CONFIGURATION = '.devcontainer/devcontainer.json';
 
 /** The folder of the row `name` with the files `contents` names, made empty first, and the window on it. */
 async function windowWith(
@@ -89,6 +93,31 @@ export async function chooseWorkspace(window: string): Promise<void> {
   );
   await chooseQuickPickRow(window, WORKSPACE_ROW);
   await waitForPickAfterLocation(window);
+}
+
+/** Waits for the option screen whose placeholder is `placeholder`, and takes its focused item, the template's default. */
+export async function takeOptionScreen(
+  window: string,
+  placeholder: string,
+): Promise<void> {
+  await waitFor(
+    `the option screen ${placeholder}`,
+    async () => (await quickPickOf(window))?.placeholder === placeholder,
+    60_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 500));
+  await acceptQuickPick(window);
+}
+
+/** The placeholder of the one option screen of the Alpine template. */
+export const ALPINE_OPTION = 'Alpine version:';
+
+/** The placeholder of the Select Features screen. */
+const FEATURES_PLACEHOLDER = 'Select additional features to install';
+
+/** Waits for Select Features and presses OK with nothing checked. */
+export async function takeFeatureScreen(window: string): Promise<void> {
+  await takeOptionScreen(window, FEATURES_PLACEHOLDER);
 }
 
 /** Runs `body` over a window with the files, and closes the window after. */

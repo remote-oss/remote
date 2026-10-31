@@ -9,6 +9,7 @@ import {
   type CatalogueDialogs,
   type CataloguePorts,
   type CatalogueResult,
+  type CatalogueFeature,
   type CatalogueTemplate,
   showCatalogueFailure,
 } from './catalogue.ts';
@@ -19,19 +20,15 @@ import {
 } from './curated-templates.ts';
 import type {WalkFiles} from './folder-facts.ts';
 import {askLocation, type LocationPorts} from './location.ts';
+import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
+import {askFeatures, type FeatureChoice} from './select-features.ts';
+import {askTemplateOptions} from './template-options.ts';
 import type {WriteOutcome, WriteRequest} from './write.ts';
 
 /** Where the configuration is written: the workspace folder, or a slot of the extension's own store. */
 export type WizardTarget =
   {kind: 'workspace'} | {kind: 'userData'; slot: string};
-
-/** A Feature the user chose, with its options. */
-interface FeatureChoice {
-  /** The id with its major version, as the CLI writes the key. */
-  id: string;
-  options: Record<string, string | boolean>;
-}
 
 /** What the stages have decided so far. */
 export interface WizardState {
@@ -100,6 +97,8 @@ export interface WizardPorts {
   dialogs: CatalogueDialogs;
   /** The quick pick and its surroundings; the wizard adds the curated prefix and the verified test. */
   pick: Omit<TemplatePickPorts, 'curatedPrefix' | 'isVerified'>;
+  /** The quick input of the option screens; the wizard adds the translation. */
+  options: Omit<QuickInputPorts, 'translate'>;
   /** Writes the template with what the stages chose. */
   write(
     request: WriteRequest,
@@ -140,7 +139,10 @@ function customTemplateOf(
   return {
     id: templateId,
     version: '',
-    name: templateId,
+    name:
+      typeof metadata?.name === 'string' && metadata.name !== ''
+        ? metadata.name
+        : templateId,
     owner: '',
     options: recordOf(metadata?.options),
     optionalPaths: paths,
@@ -150,21 +152,7 @@ function customTemplateOf(
 /** The template of a state before one is chosen. */
 export const NO_TEMPLATE: CatalogueTemplate = customTemplateOf('', undefined);
 
-/** The defaults of a template's options, each as the CLI's `-a` takes it. */
-function defaultsOf(template: CatalogueTemplate): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(template.options).flatMap(([name, option]) => {
-      const fallback = recordOf(option).default;
-      return typeof fallback === 'string' ||
-        typeof fallback === 'number' ||
-        typeof fallback === 'boolean'
-        ? [[name, String(fallback)]]
-        : [];
-    }),
-  );
-}
-
-/** The state after the template is chosen: its defaults, and every optional path left out. */
+/** The state after the template is chosen: no option value yet, and every optional path left out. */
 function withTemplate(
   state: WizardState,
   template: CatalogueTemplate,
@@ -173,7 +161,7 @@ function withTemplate(
   return {
     ...state,
     template,
-    templateArgs: defaultsOf(template),
+    templateArgs: {},
     omitPaths: template.optionalPaths,
     ...(reuseEntry === undefined ? {} : {reuseEntry}),
   };
@@ -270,13 +258,80 @@ function locationStage(
   };
 }
 
+/** The stage that asks for the template's options. */
+function templateOptionsStage(ports: StagePorts): WizardStage {
+  return {
+    name: 'templateOptions',
+    execute: async (state, previous, cancellation) => {
+      const answer = await askTemplateOptions(
+        state.template,
+        {
+          title: ports.title,
+          quick: {...ports.options, translate: ports.translate},
+        },
+        cancellation,
+      );
+      switch (answer.kind) {
+        case 'chosen':
+          return {
+            kind: 'next',
+            state: {...state, templateArgs: answer.templateArgs},
+            shown: answer.shown,
+          };
+        case 'back':
+          return {kind: 'back', keep: false};
+        default:
+          return {kind: 'cancelled'};
+      }
+    },
+  };
+}
+
+/** The stage that asks which Features to install. */
+function selectFeaturesStage(
+  features: readonly CatalogueFeature[],
+  ports: StagePorts,
+): WizardStage {
+  return {
+    name: 'selectFeatures',
+    execute: async (state, previous, cancellation) => {
+      const answer = await askFeatures(
+        features,
+        previous?.state.features ?? [],
+        {quick: {...ports.options, translate: ports.translate}},
+        cancellation,
+      );
+      switch (answer.kind) {
+        case 'chosen':
+          return {
+            kind: 'next',
+            state: {
+              ...state,
+              features: answer.features,
+              featureMode: answer.mode,
+            },
+            shown: true,
+          };
+        case 'back':
+          return {kind: 'back', keep: false};
+        default:
+          return {kind: 'cancelled'};
+      }
+    },
+  };
+}
+
 /** The stages of the wizard, in order, made once the catalogue is read. */
 export function stagesOf(
   catalogue: CatalogueResult & {kind: 'catalogue'},
   ports: StagePorts,
 ): readonly WizardStage[] {
-  const templatePick = templatePickStage(catalogue.templates, ports);
+  const rest = [
+    templatePickStage(catalogue.templates, ports),
+    templateOptionsStage(ports),
+    selectFeaturesStage(catalogue.features, ports),
+  ];
   return ports.location === undefined
-    ? [templatePick]
-    : [locationStage(ports.location, ports), templatePick];
+    ? rest
+    : [locationStage(ports.location, ports), ...rest];
 }

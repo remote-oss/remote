@@ -116,3 +116,11 @@ export function hostBaseOf(
   }
   return named;
 }
+
+/** Whether this process's SSH host is of `base`, for a row that holds on one base only (`HARNESS_HOST_BASE`). */
+export function hostBaseIs(
+  base: HostBase,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return hostBaseOf(environment) === base;
+}

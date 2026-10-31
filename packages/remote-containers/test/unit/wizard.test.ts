@@ -15,8 +15,17 @@ import type {
 } from '../../src/authoring/wizard-stages.ts';
 import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
-import type {LocationPorts, LocationRow} from '../../src/authoring/location.ts';
-import {FakePicker} from './template-picker.fixture.ts';
+import type {LocationPorts} from '../../src/authoring/location.ts';
+import {
+  pressBack,
+  FINISH_BUTTON,
+  pressEscape,
+  type Step,
+  repeatedInput,
+  scriptedInput,
+  takeDefaults,
+} from './option-picker.fixture.ts';
+import {FakeLocationPicker, FakePicker} from './template-picker.fixture.ts';
 
 const NEVER = new AbortController().signal;
 const PREFIX = 'ghcr.io/devcontainers/templates/';
@@ -191,8 +200,6 @@ const ALPINE = templateOf(
   {
     imageVariant: {type: 'string', default: '3.23'},
     flag: {type: 'boolean', default: false},
-    free: {type: 'string'},
-    object: {default: {}},
   },
   ['.github/dependabot.yml'],
 );
@@ -227,7 +234,7 @@ const FLAT_INDEX = JSON.stringify({
 
 interface Scene {
   pickers: FakePicker[];
-  locationPickers: Array<FakePicker<LocationRow>>;
+  locationPickers: FakeLocationPicker[];
   failures: string[];
   written: WriteRequest[];
   logged: string[];
@@ -277,10 +284,14 @@ function sceneOf(
       templateMetadata: () =>
         Promise.resolve({
           kind: 'metadata',
-          metadata: {options: {size: {default: 3}}, optionalPaths: ['a', 2]},
+          metadata: {
+            options: {size: {type: 'string', default: '3'}},
+            optionalPaths: ['a', 2],
+          },
         }),
       translate: template => template,
     },
+    options: repeatedInput(takeDefaults),
     write: async request => {
       scene.written.push(request);
       await request.adjust?.('/scratch');
@@ -308,7 +319,7 @@ function sceneOf(
 function locationOf(scene: Scene): LocationPorts {
   return {
     createQuickPick: () => {
-      const picker = new FakePicker<LocationRow>();
+      const picker = new FakeLocationPicker();
       scene.locationPickers.push(picker);
       return picker;
     },
@@ -391,6 +402,53 @@ describe('the wizard (card containers-80)', () => {
           },
         ],
       ],
+    );
+  });
+
+  it('F-0803 AC-4: the boolean screen of a custom template names it by its metadata’s name, or by its id when the metadata has none', async () => {
+    const placeholders: Array<string | undefined> = [];
+    for (const metadata of [
+      {name: 'Lab', options: {flag: {type: 'boolean'}}},
+      {options: {flag: {type: 'boolean'}}},
+    ]) {
+      const scene = sceneOf();
+      const input = scriptedInput([takeDefaults, takeDefaults]);
+      scene.ports.options = input.ports;
+      scene.ports.pick.templateMetadata = () =>
+        Promise.resolve({kind: 'metadata', metadata});
+      await customWritten(scene);
+      placeholders.push(input.pickers[0]?.placeholder);
+    }
+    deepStrictEqual(placeholders, [
+      "Select the options for the 'Lab' dev container",
+      "Select the options for the 'a/b/c' dev container",
+    ]);
+  });
+
+  it('F-0803 AC-20: Escape on the first option screen cancels the wizard and writes nothing', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([pressEscape]).ports;
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    deepStrictEqual([await result, scene.written], [{kind: 'cancelled'}, []]);
+  });
+
+  it('F-0803 BR-14: Back from the first option screen runs the template pick again, and the template chosen again is written with the new answers', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([
+      pressBack,
+      takeDefaults,
+      takeDefaults,
+      takeDefaults,
+    ]).ports;
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.pickers[1]?.accept('Alpine');
+    await result;
+    deepStrictEqual(
+      [scene.pickers.length, scene.written.map(each => each.templateArgs)],
+      [2, [{imageVariant: '3.23', flag: 'false'}]],
     );
   });
 
@@ -530,30 +588,127 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list of this card is the template pick alone', () => {
+  it('F-0801 BR-5: the stage list is the template pick, the template’s options and Select Features', () => {
     const scene = sceneOf();
-    const stages = stagesOf({kind: 'catalogue', templates: [ALPINE]}, {
-      ...scene.ports,
-      title: 'T',
-      facts: {rootEntries: [], files: [], truncated: false},
-    } satisfies StagePorts);
+    const stages = stagesOf(
+      {kind: 'catalogue', templates: [ALPINE], features: []},
+      {
+        ...scene.ports,
+        title: 'T',
+        facts: {rootEntries: [], files: [], truncated: false},
+      } satisfies StagePorts,
+    );
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick'],
+      ['templatePick', 'templateOptions', 'selectFeatures'],
+    );
+  });
+
+  /** The Select Features stage over a catalogue of one Feature, with the screen played by `step`. */
+  function featuresStageOver(step: Step) {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([step]).ports;
+    const stages = stagesOf(
+      {
+        kind: 'catalogue',
+        templates: [ALPINE],
+        features: [
+          {
+            id: 'ghcr.io/x/features/git',
+            version: '1.3.2',
+            name: 'Git',
+            options: {},
+          },
+        ],
+      },
+      {
+        ...scene.ports,
+        title: 'T',
+        facts: {rootEntries: [], files: [], truncated: false},
+      } satisfies StagePorts,
+    );
+    return stages[2];
+  }
+
+  it('F-0804 BR-7, AC-16: Back from Select Features goes back with nothing kept, and Escape cancels the wizard', async () => {
+    deepStrictEqual(
+      [
+        await featuresStageOver(pressBack)?.execute(INITIAL, undefined, NEVER),
+        await featuresStageOver(pressEscape)?.execute(
+          INITIAL,
+          undefined,
+          NEVER,
+        ),
+      ],
+      [{kind: 'back', keep: false}, {kind: 'cancelled'}],
+    );
+  });
+
+  it('F-0804 BR-9: Back from a later stage with keep opens Select Features with the Features checked before', async () => {
+    const seen: string[][] = [];
+    const stage = featuresStageOver(picker => {
+      seen.push(picker.selectedItems.map(each => each.label));
+      pressEscape(picker);
+    });
+    await stage?.execute(
+      INITIAL,
+      {
+        state: {
+          ...INITIAL,
+          features: [{id: 'ghcr.io/x/features/git:1', options: {}}],
+        },
+      },
+      NEVER,
+    );
+    deepStrictEqual(seen, [['Git']]);
+  });
+
+  it('F-0804 BR-8, BR-11, AC-5: the Features checked and the mode of the button are in the state, and the write takes the Features in order', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([
+      picker => {
+        picker.selectedItems = picker.items;
+        picker.trigger(FINISH_BUTTON);
+      },
+    ]).ports;
+    scene.ports.catalogue.download = () =>
+      Promise.resolve(
+        JSON.stringify({
+          collections: [
+            {
+              templates: [
+                {id: `${PREFIX}alpine`, version: '1', name: 'Alpine'},
+              ],
+              features: [
+                {id: 'ghcr.io/x/features/git', version: '1.3.2', name: 'Git'},
+              ],
+            },
+          ],
+        }),
+      );
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await result;
+    deepStrictEqual(
+      scene.written.map(each => each.features),
+      [[{id: 'ghcr.io/x/features/git:1', options: {}}]],
     );
   });
 
   it('F-0801 BR-5: with the location ports the location stage runs before the template pick', () => {
     const scene = sceneOf();
-    const stages = stagesOf({kind: 'catalogue', templates: [ALPINE]}, {
-      ...scene.ports,
-      location: locationOf(scene),
-      title: 'T',
-      facts: {rootEntries: [], files: [], truncated: false},
-    } satisfies StagePorts);
+    const stages = stagesOf(
+      {kind: 'catalogue', templates: [ALPINE], features: []},
+      {
+        ...scene.ports,
+        location: locationOf(scene),
+        title: 'T',
+        facts: {rootEntries: [], files: [], truncated: false},
+      } satisfies StagePorts,
+    );
     deepStrictEqual(
       stages.map(each => each.name),
-      ['location', 'templatePick'],
+      ['location', 'templatePick', 'templateOptions', 'selectFeatures'],
     );
   });
 

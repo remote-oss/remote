@@ -617,4 +617,84 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       cases.map(([name, , , , expected]) => [name, expected]),
     );
   });
+
+  it('F-1101 AC-22 (forward-stopped): a declared forward stopped by hand is back after a reload with its label and origin, and an auto-detected port stopped the same way stays stopped', async () => {
+    const [declared, detected] = [await freePort(), await freePort()];
+    const {window, containerId} = await plainWindow('c72-ac22', {
+      forwardPorts: [declared],
+      portsAttributes: {[String(declared)]: {label: 'Declared'}},
+    });
+    const stopDetected = await listenInTerminal(window, containerId, detected);
+    try {
+      await rowsWhen(window, shown =>
+        portsOf(shown).includes(`Declared (${String(declared)})`),
+      );
+      await appearing(window, detected, Date.now());
+      await portRowAction(
+        window,
+        `Declared (${String(declared)})`,
+        'Stop Forwarding Port',
+      );
+      await portRowAction(window, String(detected), 'Stop Forwarding Port');
+      await rowsWhen(window, shown => shown.length === 0);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const stopped = portsOf(await portsRows(window));
+      await reloaded(window);
+      await execFileAsync('docker', [
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        `grep -qi ":$(printf '%04X' ${String(detected)}) " /proc/net/tcp /proc/net/tcp6`,
+      ]);
+      await showPorts(window);
+      const back = await rowsWhen(window, shown => shown.length > 0);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const after = await portsRows(window);
+      deepStrictEqual(
+        [
+          stopped,
+          back.map(shown => [shown.port, shown.origin]),
+          portsOf(after),
+        ],
+        [
+          [],
+          [[`Declared (${String(declared)})`, 'Dev Containers']],
+          [`Declared (${String(declared)})`],
+        ],
+      );
+    } finally {
+      await stopDetected();
+    }
+  });
+
+  it('F-1101 AC-21 (overlap-regexes): of two regex keys that both match a detected listener’s command line, the one listed first gives the row its label', async () => {
+    const outcomes: string[][] = [];
+    for (const [name, attributes] of [
+      ['c73-ac21c', {lk: {label: 'FirstRegex'}, cat: {label: 'SecondRegex'}}],
+      ['c73-ac21d', {cat: {label: 'SecondRegex'}, lk: {label: 'FirstRegex'}}],
+    ] as const) {
+      const port = await freePort();
+      const {window, containerId} = await plainWindow(name, {
+        portsAttributes: attributes,
+      });
+      const stop = await listenInTerminal(window, containerId, port);
+      try {
+        await showPorts(window);
+        await rowsWhen(window, shown => shown.length > 0);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        outcomes.push(
+          portsOf(await portsRows(window)).map(text =>
+            text.replace(String(port), '<port>'),
+          ),
+        );
+      } finally {
+        await stop();
+      }
+    }
+    deepStrictEqual(outcomes, [
+      ['FirstRegex (<port>)'],
+      ['SecondRegex (<port>)'],
+    ]);
+  });
 });

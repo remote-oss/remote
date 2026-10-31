@@ -18,7 +18,7 @@ import {askpassEndpointPath} from '../askpass/paths.ts';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
-import {sessionStartFor} from './session-bootstrap.ts';
+import {connectionStart, sessionStartFor} from './session-bootstrap.ts';
 
 /** The start values a client gives the helper in `HelperParameters.options`. */
 export interface ConnectionHelperOptions {
@@ -88,11 +88,24 @@ export async function runConnectionHelper(
       fromHost: request.effective.connectTimeout !== undefined,
       unboundedWaitSeconds: options.unboundedWaitSeconds,
     };
-    const start = sessionStartFor(waitSettings);
+    if (
+      request.settings.remoteCommandInEffect &&
+      request.remoteProgram !== undefined
+    ) {
+      throw new Error(
+        'a shared connection whose RemoteCommand is in effect takes no remote program',
+      );
+    }
+    const start = connectionStart(
+      sessionStartFor(waitSettings),
+      request.settings.remoteCommandInEffect,
+    );
     const handler = new ConnectionHandler({
       invocation: buildInvocation({
         ...request,
-        remoteProgram: start.remoteProgram,
+        ...(start.remoteProgram === undefined
+          ? {}
+          : {remoteProgram: start.remoteProgram}),
         forwards: [{kind: 'dynamic', localPort: options.socksPort}],
       }),
       sessionPrelude: start.prelude,

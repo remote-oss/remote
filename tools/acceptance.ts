@@ -53,9 +53,10 @@ import {
 import {
   acceptanceRunId,
   buildDevContainerImage,
+  cleanRun,
   connectRunNetwork,
   startHostContainer,
-  sweepStaleDevContainers,
+  sweepStaleRunObjects,
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
@@ -938,7 +939,7 @@ function devContainerImageFor(
   root: string,
   runId: string,
 ): string {
-  sweepStaleDevContainers(command, runId, Date.now() / 1000);
+  sweepStaleRunObjects(command, runId, Date.now() / 1000);
   return buildDevContainerImage(command, root, runId);
 }
 
@@ -1163,15 +1164,12 @@ export async function runAcceptance(
     );
     return 2;
   }
+  const runId = acceptanceRunId(process.env, process.pid);
   // The run id in the name lets the clean-up find the editor of a run that was killed.
-  const runFolder = mkdtempSync(
-    path.join(
-      tmpdir(),
-      `acceptance-${acceptanceRunId(process.env, process.pid)}-`,
-    ),
-  );
+  const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
   const started: string[] = [];
   const stops: Array<() => Promise<void>> = [];
+  let exitCode = 1;
   try {
     const variables = await prepare(
       root,
@@ -1260,10 +1258,10 @@ export async function runAcceptance(
         ),
       )),
     );
-    return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
+    exitCode = exitCodes.find(code => code !== 0) ?? 0;
   } catch (error) {
     console.error(`acceptance: ${failureText(error)}`);
-    return 1;
+    exitCode = 1;
   } finally {
     for (const container of started) {
       dependencies.command('docker', ['rm', '--force', container]);
@@ -1271,9 +1269,18 @@ export async function runAcceptance(
     for (const stop of stops) {
       await stop();
     }
+    // What the rows made under the run's label goes too, before the run folder, since it also ends an editor still on
+    // one of the run's user-data folders. A failed clean-up fails the run, and an earlier failure keeps its code.
+    try {
+      cleanRun(dependencies.command, runId);
+    } catch (error) {
+      console.error(`acceptance: ${failureText(error)}`);
+      exitCode = exitCode === 0 ? 1 : exitCode;
+    }
     rmSync(runFolder, {recursive: true, force: true});
     removeBundles(root);
   }
+  return exitCode;
 }
 
 /**
@@ -1339,12 +1346,13 @@ export function vscodiumConfiguration(
       'pids',
     ),
     HARNESS_USER_DATA: userDataFolderOf(runFolder),
-    // A launch on a host of another base checks that host, through its own ssh_config.
+    // A launch on a host of another base checks that host, through its own ssh_config, and its rows know its base.
     ...(launch.hostBase === undefined
       ? {}
       : {
           HARNESS_CONTAINER: environment.HARNESS_HOST_UBUNTU_CONTAINER ?? '',
           HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
+          HARNESS_HOST_BASE: launch.hostBase,
         }),
     ...(launch.ownScript === true
       ? {

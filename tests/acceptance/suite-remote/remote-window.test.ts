@@ -2,6 +2,7 @@ import {deepStrictEqual, notStrictEqual, strictEqual} from 'node:assert';
 import {hostname} from 'node:os';
 import * as vscode from 'vscode';
 import {cliNotUsedLine} from '../../../packages/remote-ssh/src/pipeline/server-steps.ts';
+import {hostBaseIs} from '../../../tools/host-variants.ts';
 import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import {hostServer, isRunning, keepServer} from '../suite/host-server.ts';
 
@@ -87,7 +88,10 @@ describe('the remote window of the VSCodium run', () => {
     strictEqual(await isRunning(server.processId), true);
   });
 
-  it('F-2401 AC-2: the Alpine host with libstdc++ and libgcc connected with no prerequisite message', async () => {
+  it('F-2401 AC-2: the Alpine host with libstdc++ and libgcc connected with no prerequisite message', async function () {
+    if (!hostBaseIs('alpine')) {
+      this.skip();
+    }
     const packages = await onHost('apk', 'info', '-e', 'libstdc++', 'libgcc');
     deepStrictEqual(
       [
@@ -101,9 +105,51 @@ describe('the remote window of the VSCodium run', () => {
     );
   });
 
+  /** When this launch's connect began: the run's record also holds the connects of the launches before it. */
+  const connect = {start: 0};
+
+  before(() => {
+    const titles = recordLines('progress').filter(
+      line => line.question === 'Setting up SSH Host harness',
+    );
+    const last = titles.at(-1);
+    if (last === undefined) {
+      throw new Error(
+        'the record holds no progress line "Setting up SSH Host harness"',
+      );
+    }
+    connect.start = last.time;
+  });
+
+  /** The lines of the record for a surface that this launch's connect wrote. */
+  function connectLines(surface: string) {
+    return recordLines(surface).filter(line => line.time >= connect.start);
+  }
+
+  it('#1398: an Ubuntu 26.04 host (glibc, libstdc++6) connects with no prerequisite message', async function () {
+    if (!hostBaseIs('ubuntu-26.04')) {
+      this.skip();
+    }
+    deepStrictEqual(
+      [
+        (await onHost('cat', '/etc/os-release'))
+          .split('\n')
+          .includes('VERSION_ID="26.04"'),
+        (await onHost('getconf', 'GNU_LIBC_VERSION')).startsWith('glibc '),
+        (await onHost('dpkg', '-s', 'libstdc++6'))
+          .split('\n')
+          .includes('Status: install ok installed'),
+        vscode.env.remoteName,
+        recordLines().some(line => line.question.includes('prerequisites')),
+        connectionLog().some(line => line.includes('prerequisites')),
+      ],
+      [true, true, true, 'ssh-remote', false, false],
+    );
+  });
+
   /** The texts of the connect's progress, title first, and the phases' details flags. */
   function progress(): Array<{text: string; details: boolean | undefined}> {
-    return recordLines('progress').map(line => ({
+    return connectLines('progress').map(line => ({
       text: line.question,
       details: line.details,
     }));
@@ -155,11 +201,11 @@ describe('the remote window of the VSCodium run', () => {
   it('F-2304 AC-5: the download stage has no details link and no percentage, and the record has no download progress line', () => {
     deepStrictEqual(
       [
-        recordLines('progress').find(
+        connectLines('progress').find(
           line => line.question === 'Downloading VS Code Server',
         )?.details,
-        recordLines('progress').some(line => /\d+\s*%/.test(line.question)),
-        recordLines('downloadProgress').length,
+        connectLines('progress').some(line => /\d+\s*%/.test(line.question)),
+        connectLines('downloadProgress').length,
       ],
       [false, false, 0],
     );
@@ -167,7 +213,7 @@ describe('the remote window of the VSCodium run', () => {
 
   it("D-85: the connect's progress is in the record, title first", () => {
     strictEqual(
-      recordLines('progress')[0]?.question.startsWith(
+      connectLines('progress')[0]?.question.startsWith(
         'Setting up SSH Host harness',
       ),
       true,

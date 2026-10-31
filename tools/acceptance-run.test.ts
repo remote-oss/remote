@@ -31,7 +31,7 @@ import {
   RUN_LABEL,
   runNetworkOf,
   startHostContainer,
-  sweepStaleDevContainers,
+  sweepStaleRunObjects,
 } from './acceptance-run.ts';
 import {
   checked,
@@ -299,7 +299,7 @@ describe('startHostContainer (card tooling-10)', () => {
 });
 
 describe('the Ubuntu host (card tooling-70)', () => {
-  it('builds from host-ubuntu under its own tag, and a second start in the run folder keeps the run key and password', () => {
+  it("builds from host-ubuntu under its own tag, with the Alpine host's folder as alpine-host (tooling-75), and a second start in the run folder keeps the run key and password", () => {
     const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
     try {
       const alpine = startHostContainer(
@@ -326,7 +326,7 @@ describe('the Ubuntu host (card tooling-70)', () => {
           second
             .callsOf('docker')
             .find(argv => argv[0] === 'build')
-            ?.slice(-2),
+            ?.slice(-4),
           second.callsOf('ssh-keygen').length,
           readFileSync(ubuntu.passwordFile, 'utf8') === password,
           second
@@ -338,6 +338,8 @@ describe('the Ubuntu host (card tooling-70)', () => {
         [
           [
             'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+            '--build-context',
+            `alpine-host=${path.join('/root', 'tests', 'acceptance', 'host')}`,
             path.join('/root', 'tests', 'acceptance', 'host-ubuntu'),
           ],
           0,
@@ -522,6 +524,78 @@ describe('the run network (card tooling-47)', () => {
       );
     } finally {
       runCommand('docker', ['network', 'rm', name]);
+    }
+  });
+
+  it("tooling-76: on the daemon the sweep removes a plain container that another run left, from the container's own inspect line", function () {
+    if (runCommand('docker', ['info', '--format', '{{.ID}}']).status !== 0) {
+      this.skip();
+    }
+    const folder = mkdtempSync(path.join(tmpdir(), 'acceptance-sweep-'));
+    const image = `remote-oss-acceptance-empty:${String(process.pid)}`;
+    // An image of no files, made from an empty archive, so that the row needs no registry.
+    writeFileSync(path.join(folder, 'empty.tar'), Buffer.alloc(1024));
+    checked(runCommand, 'docker', [
+      'image',
+      'import',
+      path.join(folder, 'empty.tar'),
+      image,
+    ]);
+    const containerId = checked(runCommand, 'docker', [
+      'create',
+      '--label',
+      `${RUN_LABEL}=other-run`,
+      image,
+      '/none',
+    ]).trim();
+    try {
+      const created =
+        Date.parse(
+          checked(runCommand, 'docker', [
+            'inspect',
+            '--format',
+            '{{.Created}}',
+            containerId,
+          ]).trim(),
+        ) / 1000;
+      // The daemon's own listing, narrowed to this row's container and to no image, so that the sweep never reaches
+      // the objects of a run that is going on the same daemon.
+      function narrowed(
+        program: string,
+        programArguments: readonly string[],
+      ): CommandResult {
+        const result = runCommand(program, programArguments);
+        if (programArguments[0] === 'ps') {
+          return {
+            ...result,
+            stdout: result.stdout
+              .split('\n')
+              .filter(
+                line =>
+                  containerId.startsWith(line.trim()) && line.trim() !== '',
+              )
+              .join('\n'),
+          };
+        }
+        return programArguments[0] === 'image' && programArguments[1] === 'ls'
+          ? {...result, stdout: ''}
+          : result;
+      }
+      sweepStaleRunObjects(narrowed, 'this-run', created + 3 * 3600);
+      deepStrictEqual(
+        checked(runCommand, 'docker', [
+          'ps',
+          '--all',
+          '--quiet',
+          '--filter',
+          `id=${containerId}`,
+        ]).trim(),
+        '',
+      );
+    } finally {
+      runCommand('docker', ['rm', '--force', containerId]);
+      runCommand('docker', ['image', 'rm', '--force', image]);
+      rmSync(folder, {recursive: true, force: true});
     }
   });
 
@@ -1054,7 +1128,7 @@ describe('the dev container image and its sweep (card containers-09)', () => {
     );
   });
 
-  it("containers-09: the sweep removes only another run's dev containers and images older than two hours", () => {
+  it("containers-09, tooling-76: the sweep removes another run's containers of any kind and its dev container images older than two hours, and keeps younger ones and the run's own", () => {
     const scripted = scriptedCommands();
     scripted.passes('mine\nold\nyoung\n'); // docker ps
     scripted.passes(
@@ -1074,7 +1148,7 @@ describe('the dev container image and its sweep (card containers-09)', () => {
     ); // docker image inspect
     scripted.fails(1, 'image is being used'); // docker image rm --force sha256:a
 
-    sweepStaleDevContainers(scripted, RUN_ID, NOW_SECONDS);
+    sweepStaleRunObjects(scripted, RUN_ID, NOW_SECONDS);
 
     deepStrictEqual(
       scripted.calls
@@ -1087,12 +1161,41 @@ describe('the dev container image and its sweep (card containers-09)', () => {
     );
   });
 
+  it('tooling-76: the sweep lists every container with a run label, a plain one too, and the images by the dev container label', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps
+    scripted.passes(''); // docker image ls
+
+    sweepStaleRunObjects(scripted, RUN_ID, NOW_SECONDS);
+
+    deepStrictEqual(
+      scripted.calls.map(call => call.argv),
+      [
+        [
+          'ps',
+          '--all',
+          '--quiet',
+          '--filter',
+          'label=remote-oss.acceptance.run',
+        ],
+        [
+          'image',
+          'ls',
+          '--quiet',
+          '--no-trunc',
+          '--filter',
+          'label=remote-oss.acceptance.devcontainer=1',
+        ],
+      ],
+    );
+  });
+
   it('containers-09: a sweep with no labelled container or image inspects nothing', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps
     scripted.passes(''); // docker image ls
 
-    sweepStaleDevContainers(scripted, RUN_ID, NOW_SECONDS);
+    sweepStaleRunObjects(scripted, RUN_ID, NOW_SECONDS);
 
     deepStrictEqual(
       scripted.calls.map(call => call.argv.slice(0, 2)),

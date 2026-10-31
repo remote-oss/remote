@@ -1181,6 +1181,9 @@ describe('acceptance', () => {
   });
 
   describe('runAcceptance', () => {
+    /** The `docker ps` call of the clean-up that removes the containers of the run, by its label. */
+    const RUN_CONTAINERS = `docker ps --all --quiet --filter label=remote-oss.acceptance.run=${acceptanceRunId(process.env, process.pid)}`;
+
     it('tooling-50: a run given labels makes only those launches, in the run order', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', [
         'remote',
@@ -1397,6 +1400,17 @@ describe('acceptance', () => {
           'ssh -F',
           'bundle suite',
           `docker rm`,
+          // the clean-up of what the run's label holds: containers, networks, editors, images, then the check
+          'docker ps',
+          'docker ps',
+          'docker network',
+          'pkill -f',
+          'pkill -O',
+          'docker image',
+          'docker image',
+          'docker image',
+          'docker ps',
+          'docker network',
         ],
       );
     });
@@ -1485,9 +1499,13 @@ describe('acceptance', () => {
 
     it('removes the container and the run folder after the tests', async () => {
       await runAcceptance(workspace.root, harness);
+      const removed = harness.calls.indexOf(`docker rm --force ${CONTAINER}`);
       deepStrictEqual(
-        [harness.calls.at(-1), existsSync(harness.runFolder)],
-        [`docker rm --force ${CONTAINER}`, false],
+        [
+          removed >= 0 && removed < harness.calls.indexOf(RUN_CONTAINERS),
+          existsSync(harness.runFolder),
+        ],
+        [true, false],
       );
     });
 
@@ -1517,8 +1535,8 @@ describe('acceptance', () => {
       harness.sshFailures = 40;
       const status = await runAcceptance(workspace.root, harness);
       deepStrictEqual(
-        [status, harness.calls.at(-1)],
-        [1, `docker rm --force ${CONTAINER}`],
+        [status, harness.calls.includes(`docker rm --force ${CONTAINER}`)],
+        [1, true],
       );
     });
 
@@ -1529,7 +1547,95 @@ describe('acceptance', () => {
         stderr: 'no daemon',
       });
       const status = await runAcceptance(workspace.root, harness);
-      deepStrictEqual([status, harness.calls.length], [1, 1]);
+      deepStrictEqual(
+        [
+          status,
+          harness.calls[0]?.startsWith('docker build '),
+          harness.calls.filter(call => call.startsWith('docker rm ')),
+        ],
+        [1, true, []],
+      );
+    });
+
+    it('tooling-76: a run removes the containers under its own label at its end, when it passes, when a launch fails and when it throws', async () => {
+      const outcomes: Array<[number, boolean]> = [];
+      for (const fail of ['none', 'launch', 'throw']) {
+        const fake = new FakeHarness();
+        if (fail === 'launch') {
+          fake.testResult = {exitCode: 3, output: ''};
+        }
+        if (fail === 'throw') {
+          fake.bundleSuiteError = new Error('bundle failed');
+        }
+        const previousError = console.error;
+        console.error = () => undefined;
+        try {
+          outcomes.push([
+            await runAcceptance(workspace.root, fake),
+            fake.calls.includes(RUN_CONTAINERS),
+          ]);
+        } finally {
+          console.error = previousError;
+        }
+      }
+      deepStrictEqual(outcomes, [
+        [0, true],
+        [3, true],
+        [1, true],
+      ]);
+    });
+
+    it('tooling-76: the clean-up runs while the run folder is still there', async () => {
+      const folderThere: boolean[] = [];
+      const record = harness.command;
+      (harness as unknown as {command: CommandRunner}).command = (
+        program,
+        programArguments,
+      ) => {
+        if ([program, ...programArguments].join(' ') === RUN_CONTAINERS) {
+          folderThere.push(existsSync(harness.runFolder));
+        }
+        return record(program, programArguments);
+      };
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(
+        [
+          folderThere.length > 0 && folderThere.every(Boolean),
+          existsSync(harness.runFolder),
+        ],
+        [true, false],
+      );
+    });
+
+    it('tooling-76: a clean-up that fails fails the run with its message, and an earlier failure keeps its own code', async () => {
+      const outcomes: Array<[number, boolean]> = [];
+      for (const earlier of [0, 3]) {
+        const fake = new FakeHarness();
+        fake.testResult = {exitCode: earlier, output: ''};
+        // A container that stays under the run's label after the removal makes cleanRun throw.
+        fake.answers.set('docker ps', {
+          status: 0,
+          stdout: 'c999\n',
+          stderr: '',
+        });
+        const lines: string[] = [];
+        const previousError = console.error;
+        console.error = (line: unknown) => lines.push(String(line));
+        try {
+          outcomes.push([
+            await runAcceptance(workspace.root, fake),
+            lines.some(line =>
+              /^acceptance: the run .+ still owns containers/.test(line),
+            ),
+          ]);
+        } finally {
+          console.error = previousError;
+        }
+      }
+      deepStrictEqual(outcomes, [
+        [1, true],
+        [3, true],
+      ]);
     });
 
     it('prints the cause of an empty error and returns 1', async () => {
@@ -2349,10 +2455,10 @@ describe('acceptance', () => {
       );
     });
 
-    it("containers-09: the VSCodium run sweeps other runs' stale dev containers, then builds the run's dev container image, and passes its tag", async () => {
+    it("containers-09, tooling-76: the VSCodium run sweeps other runs' stale containers, then builds the run's dev container image, and passes its tag", async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       const sweep = harness.calls.indexOf(
-        'docker ps --all --quiet --filter label=remote-oss.acceptance.devcontainer=1',
+        'docker ps --all --quiet --filter label=remote-oss.acceptance.run',
       );
       const build = harness.calls.findIndex(
         call =>
@@ -2382,7 +2488,10 @@ describe('acceptance', () => {
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(
         [
-          harness.calls.some(call => call.includes('devcontainer')),
+          harness.calls.some(
+            call =>
+              call.startsWith('docker build') && call.includes('devcontainer'),
+          ),
           harness.variables?.HARNESS_DEVCONTAINER_IMAGE,
         ],
         [false, undefined],
@@ -2898,7 +3007,7 @@ describe('acceptance', () => {
       );
     });
 
-    it("tooling-70: a launch on the Ubuntu host checks that host: its container and its ssh_config stand for the run's", () => {
+    it("tooling-70, tooling-75: a launch on the Ubuntu host checks that host: its container and its ssh_config stand for the run's, and its rows know its base", () => {
       const {env} = vscodiumConfiguration(
         workspace.root,
         {
@@ -2911,8 +3020,12 @@ describe('acceptance', () => {
         {...LAUNCH, hostBase: 'ubuntu-26.04'},
       );
       deepStrictEqual(
-        [env.HARNESS_CONTAINER, env.HARNESS_SSH_CONFIG],
-        ['ubuntu-host', path.join('/run', 'ssh_config-ubuntu-26.04')],
+        [env.HARNESS_CONTAINER, env.HARNESS_SSH_CONFIG, env.HARNESS_HOST_BASE],
+        [
+          'ubuntu-host',
+          path.join('/run', 'ssh_config-ubuntu-26.04'),
+          'ubuntu-26.04',
+        ],
       );
     });
 

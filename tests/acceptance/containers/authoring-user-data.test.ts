@@ -36,9 +36,13 @@ import {
   acceptQuickPick,
 } from '../windows/renderer.ts';
 import {
+  ALPINE_OPTION,
+  CONFIGURATION,
   closeScreen,
   existing,
   startCommand,
+  takeFeatureScreen,
+  takeOptionScreen,
   USER_DATA_ROW,
   waitForPickAfterLocation,
   withWindow,
@@ -47,8 +51,6 @@ import {
 } from './authoring-support.ts';
 
 const execFileAsync = promisify(execFile);
-
-const CONFIGURATION = '.devcontainer/devcontainer.json';
 
 const MARKER = '.devcontainer/.devcontainer-internal.json';
 
@@ -146,6 +148,8 @@ async function writeToStore(window: string, label = 'Alpine'): Promise<void> {
   await startCommand(window);
   await chooseUserData(window);
   await chooseQuickPickRow(window, label);
+  await takeOptionScreen(window, ALPINE_OPTION);
+  await takeFeatureScreen(window);
 }
 
 /** Picks the custom template `mini` of the run's registry in the pick open in `window`. */
@@ -164,6 +168,8 @@ async function chooseMini(window: string): Promise<void> {
     10_000,
   );
   await acceptQuickPick(window);
+  await takeOptionScreen(window, 'Greeting:');
+  await takeFeatureScreen(window);
 }
 
 /**
@@ -348,6 +354,8 @@ describe('the location pick and the store of user data (card containers-91)', fu
       await chooseQuickPickRow(secondWindow, USER_DATA_ROW);
       await waitForPickAfterLocation(secondWindow);
       await chooseQuickPickRow(secondWindow, 'Alpine');
+      await takeOptionScreen(secondWindow, ALPINE_OPTION);
+      await takeFeatureScreen(secondWindow);
       await written(path.join(storeRoot(), 'app-2', CONFIGURATION));
       deepStrictEqual(
         [

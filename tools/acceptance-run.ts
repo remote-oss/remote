@@ -67,6 +67,16 @@ const HOST_FOLDERS: Readonly<Record<HostBase, string>> = {
   'ubuntu-26.04': 'host-ubuntu',
 };
 
+/** The `docker build` arguments that give a base's Dockerfile the Alpine host's folder as `alpine-host`, for its scripts. */
+function hostBuildContexts(root: string, base: HostBase): string[] {
+  return base === 'alpine'
+    ? []
+    : [
+        '--build-context',
+        `alpine-host=${path.join(root, 'tests', 'acceptance', HOST_FOLDERS.alpine)}`,
+      ];
+}
+
 /** The image tag of the run's host: `remote-oss-acceptance-host:<run id>`, and `-<base>` after it for another base. */
 export function hostImageOf(runId: string, base: HostBase = 'alpine'): string {
   return base === 'alpine'
@@ -138,11 +148,12 @@ function labelledObjects(lines: string): LabelledObject[] {
 }
 
 /**
- * Removes the dev containers and their images that another run left: each with the dev container label, another run's
- * label and a creation time more than two hours before `nowSeconds`. Age is the key, not another run's id alone,
- * because two jobs may share a runner's daemon and a younger object belongs to a run that may still be going.
+ * Removes the containers of any other run, and the dev container images, each older than two hours: a container with
+ * another run's label, whatever else it carries, and an image with the dev container label and another run's label,
+ * each created more than two hours before `nowSeconds`. Age is the key, not another run's id alone, because two jobs
+ * may share a runner's daemon and a younger object belongs to a run that may still be going.
  */
-export function sweepStaleDevContainers(
+export function sweepStaleRunObjects(
   command: CommandRunner,
   runId: string,
   nowSeconds: number,
@@ -153,9 +164,14 @@ export function sweepStaleDevContainers(
       nowSeconds - object.createdSeconds > STALE_RUN_SECONDS
     );
   }
-  const filter = `label=${DEVCONTAINER_LABEL}=1`;
   const containers = idsOf(
-    checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
+    checked(command, 'docker', [
+      'ps',
+      '--all',
+      '--quiet',
+      '--filter',
+      `label=${RUN_LABEL}`,
+    ]),
   );
   if (containers.length > 0) {
     for (const stale of labelledObjects(
@@ -183,7 +199,7 @@ export function sweepStaleDevContainers(
       '--quiet',
       '--no-trunc',
       '--filter',
-      filter,
+      `label=${DEVCONTAINER_LABEL}=1`,
     ]),
   );
   if (images.length > 0) {
@@ -354,6 +370,7 @@ export function startHostContainer(
     '--progress=plain', // as the dev container image's build: a failed step's error reaches the thrown message
     '--tag',
     hostImageOf(runId, base),
+    ...hostBuildContexts(root, base),
     path.join(root, 'tests', 'acceptance', HOST_FOLDERS[base]),
   ]);
   const keyFile = path.join(runFolder, 'id_ed25519');

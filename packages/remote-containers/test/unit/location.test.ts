@@ -4,9 +4,8 @@ import {
   askLocation,
   type LocationChoice,
   type LocationPorts,
-  type LocationRow,
 } from '../../src/authoring/location.ts';
-import {FakePicker} from './template-picker.fixture.ts';
+import {FakeLocationPicker} from './template-picker.fixture.ts';
 
 const NEVER = new AbortController().signal;
 
@@ -26,10 +25,10 @@ interface Scene {
 /** Runs the stage over `scene`; `answer` plays the user on the picker, or hides it for Escape. */
 async function asked(
   scene: Partial<Scene>,
-  answer: (picker: FakePicker<LocationRow>) => void,
+  answer: (picker: FakeLocationPicker) => void,
   cancellation: AbortSignal = NEVER,
-): Promise<{result: LocationChoice; picker: FakePicker<LocationRow>}> {
-  const picker = new FakePicker<LocationRow>();
+): Promise<{result: LocationChoice; picker: FakeLocationPicker}> {
+  const picker = new FakeLocationPicker();
   const markers = scene.markers ?? {};
   const location: LocationPorts = {
     createQuickPick: () => picker,
