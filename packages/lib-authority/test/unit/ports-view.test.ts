@@ -82,27 +82,27 @@ async function turn(): Promise<void> {
 }
 
 describe("core's Ports view of the connected window (card connect-33)", () => {
-  it('F-2501 AC-35: a connected first resolve enables the Ports view once', () => {
+  it('connect-33, containers-85: a connected first resolve enables the Ports view once', () => {
     const ports = portsRow();
     ports.settled({decodedTarget: sshTarget('dev'), state: 'connected'});
     deepStrictEqual(ports.enabledCount(), 1);
   });
 
   for (const state of ['failed', 'transportLost', 'transportClosed'] as const) {
-    it(`F-2501 AC-35: a first resolve that settles as ${state} does not enable the Ports view`, () => {
+    it(`connect-33, containers-85: a first resolve that settles as ${state} does not enable the Ports view`, () => {
       const ports = portsRow();
       ports.settled({decodedTarget: sshTarget('dev'), state});
       deepStrictEqual(ports.enabledCount(), 0);
     });
   }
 
-  it('F-2501 AC-35: a first resolve that settles with no connection does not enable the Ports view', () => {
+  it('connect-33, containers-85: a first resolve that settles with no connection does not enable the Ports view', () => {
     const ports = portsRow();
     ports.settled(undefined);
     deepStrictEqual(ports.enabledCount(), 0);
   });
 
-  it('F-2501 AC-35: the Ports view is not enabled before the first resolve settles', () => {
+  it('connect-33, containers-85: the Ports view is not enabled before the first resolve settles', () => {
     deepStrictEqual(portsRow().enabledCount(), 0);
   });
 

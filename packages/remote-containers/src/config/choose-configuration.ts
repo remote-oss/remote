@@ -8,10 +8,11 @@ import path from 'node:path';
 import type {Logger} from 'lib-log';
 import type {FeatureSettings} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import type {
-  CliEvent,
-  CliFailure,
-  ConfigurationResult,
+import {
+  type CliEvent,
+  type CliFailure,
+  cliFailureText,
+  type ConfigurationResult,
 } from '../cli/cli-lines.ts';
 import {requestedFeaturesOf} from '../cli/failing-feature.ts';
 import {ENGINE_TEMPLATES, type Translate} from '../surfaces/engine-dialogs.ts';
@@ -105,13 +106,6 @@ export interface ConfigurationRequest {
    * wait.
    */
   engineCheck: Promise<FirstCheckResult>;
-}
-
-/** What a CLI failure says in the log: its kind and, when it has one, its message. */
-function failureText(failure: CliFailure): string {
-  return 'message' in failure
-    ? `${failure.kind}: ${failure.message}`
-    : failure.kind;
 }
 
 /** How choosing ended. */
@@ -321,7 +315,7 @@ export async function chooseConfiguration(
     return {kind: 'dismissed'};
   }
   if (read.kind !== 'configuration') {
-    logger.warn(`the configuration could not be read: ${failureText(read)}`);
+    logger.warn(`the configuration could not be read: ${cliFailureText(read)}`);
     const opening = surfaces.openPreview(candidate.file);
     await refuse(
       '',

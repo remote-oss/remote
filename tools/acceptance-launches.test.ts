@@ -59,12 +59,15 @@ function labelsFromExplorer(): string[] {
     'containers-ports',
     'containers-features',
     'containers-shutdown',
+    'containers-index-broken',
+    'containers-index-down',
     'containers-killed-23',
     'containers-killed-35',
     'containers-killed-43',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
+    'containers-view',
   ];
 }
 
@@ -107,7 +110,23 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  it('tooling-70: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and no launch on another host has a host setup', () => {
+    const remote = launches.find(launch => launch.label === 'remote');
+    deepStrictEqual(
+      [
+        launches.find(launch => launch.label === 'remote-ubuntu'),
+        launches
+          .filter(
+            launch =>
+              launch.hostBase !== undefined && launch.hostSetup !== undefined,
+          )
+          .map(launch => launch.label),
+      ],
+      [{...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'}, []],
+    );
+  });
+
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -123,6 +142,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal',
         'socket',
         'slow',
+        'remote-ubuntu',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
@@ -274,6 +294,18 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
         ],
         [
+          'containers-index-broken',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-index-down',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
           'containers-killed-23',
           ['remote-oss.remote-containers'],
           true,
@@ -293,6 +325,7 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
+        ['containers-view', ['remote-oss.remote-containers'], true, undefined],
       ],
     );
   });
@@ -379,6 +412,20 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-index-broken',
+          'containers-index',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-index-down',
+          'containers-index',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
           'containers-killed-23',
           'containers-killed',
           shared,
@@ -399,6 +446,7 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
   });
@@ -427,9 +475,12 @@ describe('the launches of the VSCodium run', () => {
         'containers-ports',
         'containers-features',
         'containers-shutdown',
+        'containers-index-broken',
+        'containers-index-down',
         'containers-killed-23',
         'containers-killed-35',
         'containers-killed-43',
+        'containers-view',
       ],
     );
   });
@@ -1259,7 +1310,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70: containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the three killed launches name their cases, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80: containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, the three killed launches name their cases, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1271,6 +1322,22 @@ describe('the platform cases (card coverage-12)', () => {
       [
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
         ['containers-features', {PATH: '<run>/browser-bin:<path>'}],
+        [
+          'containers-index-broken',
+          {
+            REMOTE_OSS_TEMPLATE_INDEX:
+              '${HARNESS_DOWNLOADS_LOCAL}/templates/broken-index.json',
+            HARNESS_INDEX_CASE: 'broken',
+          },
+        ],
+        [
+          'containers-index-down',
+          {
+            REMOTE_OSS_TEMPLATE_INDEX:
+              '${HARNESS_DOWNLOADS_LOCAL}/templates/unreachable',
+            HARNESS_INDEX_CASE: 'down',
+          },
+        ],
         ['containers-killed-23', {HARNESS_KILLED_CASE: '23'}],
         ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
         ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],
@@ -1307,21 +1374,31 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59, tooling-56: only the containers launch, containers-ports and containers-features ask for the run’s registry', () => {
+  it('containers-59, tooling-56, tooling-74: only the containers launch, containers-ports, containers-features and containers-view ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
-      ['containers', 'containers-ports', 'containers-features'],
+      [
+        'containers',
+        'containers-ports',
+        'containers-features',
+        'containers-view',
+      ],
     );
   });
 
-  it('tooling-57: only the containers launch and containers-features ask for the run’s templates', () => {
+  it('tooling-57, containers-80: only the containers launch, containers-features and the two index launches ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
-      ['containers', 'containers-features'],
+      [
+        'containers',
+        'containers-features',
+        'containers-index-broken',
+        'containers-index-down',
+      ],
     );
   });
 });

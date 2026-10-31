@@ -17,6 +17,7 @@ import {
   showDetails,
   showDetailsWhenRegistered,
 } from '../../src/explorer/details-view.ts';
+import {REGISTRATION_POLLS} from '../../src/explorer/when-registered.ts';
 import {sharedContainerEvents} from '../../src/explorer/targets-events.ts';
 import {contextKeys, views} from '../../src/identifiers.generated.ts';
 import {fakeEngine, type FakeEngine} from './fake-engine.ts';
@@ -203,6 +204,14 @@ function lines(scene: Scene): string[] {
   return scene.sink.lines.map(line => `${line.level}: ${line.message}`);
 }
 
+/** Lets `polls` looks of the wait for the view pass, each finding nothing. */
+async function missed(scene: Scene, polls: number): Promise<void> {
+  for (let poll = 0; poll < polls; poll += 1) {
+    await settled();
+    scene.timers.at(-1)?.callback();
+  }
+}
+
 /** The view shown over a scene with a connection, and the next read held until the row settles it. */
 async function shownThenHeld(scene: Scene) {
   scene.held = connectionOf(scene);
@@ -236,6 +245,28 @@ describe('the Details view (card containers-33)', () => {
     await settled();
     view.dispose();
     deepStrictEqual([waiting, scene.created.length], [[[1000], 0], 1]);
+  });
+
+  it('#1367: a view that is never registered is looked for at every poll and gives exactly one log line, at the end', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    showDetailsWhenRegistered(portsOf(scene));
+    await missed(scene, REGISTRATION_POLLS);
+    await settled();
+    deepStrictEqual(lines(scene), [
+      'info: the Details view is not registered, so it is not shown',
+    ]);
+  });
+
+  it('#1367: a view found after some misses logs nothing', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    showDetailsWhenRegistered(portsOf(scene));
+    await missed(scene, 3);
+    scene.commands = [`${views.detailsContainers}.focus`];
+    scene.timers.at(-1)?.callback();
+    await settled();
+    deepStrictEqual([lines(scene), scene.created.length], [[], 1]);
   });
 
   it('F-0903 AC-1, 6.4: with a connection the key is true, the container is read once by its id with nothing else, and the title and the rows are its', async () => {

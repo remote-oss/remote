@@ -120,7 +120,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
 - `web-ui` and `web-ui-trust`: plain launches with a debugging port and a recording `xdg-open` first on the editor's PATH; the suite writes it into `<run>/browser-bin` and reads the addresses it was asked to open from `<run>/browser-urls` (`windows/web-ui-support.ts`), for the rows of Open Web UI. `web-ui-trust` has workspace trust on and core's startup trust prompt off, so a window opens in Restricted Mode and silent. A terminal-mode connect in it (`remote.SSH.useLocalServer` off) waits on core's trust question before its login terminal starts, and fails when nothing answers within the connect timeout, so its rows connect only through the local server.
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, `containers-features`, as `containers` is, for the rows of a build with Features (F-0414), which use the run's own Features and so run on the Alpine image the harness's server needs, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close, and `containers-killed-23`, `containers-killed-35` and `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view`, `containers-index-broken` and `containers-index-down`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, `containers-features`, as `containers` is, for the rows of a build with Features (F-0414), which use the run's own Features and so run on the Alpine image the harness's server needs, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close, `containers-view`, as `containers` is, for the rows of the Dev Containers view, which empty the run's daemon of its containers, the run's host and registry included, so it is the table's last launch and a selection that names it runs it last, and `containers-killed-23`, `containers-killed-35` and `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last; the two `containers-index-…` launches, as `containers` is, are for the wizard's rows when the template catalogue cannot be had: their `REMOTE_OSS_TEMPLATE_INDEX` names the download host's `broken-index.json` (an index that does not parse) or `unreachable` (a connection dropped before any answer), through the launch's own `environment`, which resolves `${HARNESS_DOWNLOADS_LOCAL}` as the settings do.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -291,7 +291,7 @@ from the table (`launchGroupOf`):
 An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
 the longest launch, `containers`, alone:
 
-    node tools/acceptance.ts --editor vscodium --launches @ssh
+    node tools/acceptance.ts --editor vscodium --launches @ssh,!remote-ubuntu
     node tools/acceptance.ts --editor vscodium --launches containers
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
@@ -505,6 +505,35 @@ runs once on the default host, in `pnpm test:acceptance:server`.
 all eight), each in its own mocha run on its own host: `server/login-shell-variant.test.ts` pins the shell the host
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
+
+### The Ubuntu 26.04 host
+
+A second image, `host-ubuntu/`, is `ubuntu:26.04`, pinned by its index digest. Its coreutils are uutils, not GNU's and
+not BusyBox's, as on a user's Ubuntu 26.04 machine.
+- **What it has:** OpenSSH's server with key login only, the one user `harness` (login shell `/bin/sh`, which is dash),
+  and the shells of `HOST_SHELL`. It also has GNU `wget` and `curl` (`HOST_FETCH`: `gnu-wget`, the default, `curl` or
+  `none`), `iptables`, `xauth`, `procps` and the OpenBSD `nc`.
+- **What it doesn't have:** the thirteen other accounts of the Alpine host (`password`, `mute`, `readonly`, `i686` and
+  the rest), so rows that use them stay Alpine's. Nor does it have BusyBox's `wget`.
+- **Its `start-sshd`** is its own: the Alpine one sets up the thirteen accounts and links BusyBox's `wget`.
+
+`HARNESS_HOST_BASE` (`alpine`, the default, or `ubuntu-26.04`) picks the image that `startHost` starts the server
+rows' host from; another value fails the run. `pnpm test:acceptance:variants` runs the shell-sensitive files, plus
+`server/install.test.ts` and `server/probe.test.ts`, once on the Ubuntu host (`host base ubuntu-26.04`).
+
+The VSCodium run starts the Ubuntu host beside its Alpine one only when a chosen launch has `hostBase: 'ubuntu-26.04'`.
+That's `remote-ubuntu`, the `remote` launch on it. The second host gets:
+- the run's key and password, and the download host's names;
+- its own `ssh_config-ubuntu-26.04` beside the run's, which is the launch's `remote.SSH.configFile` and its
+  `HARNESS_SSH_CONFIG`;
+- its own container id, `HARNESS_HOST_UBUNTU_CONTAINER`, which is the launch's `HARNESS_CONTAINER`.
+
+A glibc host is served the glibc server by the download host (tooling-68). A launch on another host can't have a
+`hostSetup`, because that runs in the run's own host.
+
+The backstop's ssh part leaves `remote-ubuntu` out (`@ssh,!remote-ubuntu`) while two of its rows fail on the Ubuntu
+host (#1380): F-2401 AC-2 and F-2304 AC-6. A dispatch that names it runs it, and so does a local run without
+`--launches`.
 
 ## Rows that fail in some runs
 

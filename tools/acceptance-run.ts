@@ -10,11 +10,12 @@
  */
 
 import {randomInt} from 'node:crypto';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {stopRunHelpers} from './acceptance-helper-stop.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
+import {HOST_BASE_VARIANTS, type HostBase} from './host-variants.ts';
 import {isMainModule, messageOf} from './repository.ts';
 
 /** The label every Docker object of an acceptance run carries; its value is the run's id. */
@@ -60,9 +61,17 @@ export function acceptanceRunId(
   return `local-${String(processId)}`;
 }
 
-/** The image tag of the run: `remote-oss-acceptance-host:<run id>`. */
-export function hostImageOf(runId: string): string {
-  return `${HOST_IMAGE}:${runId}`;
+/** The folder under tests/acceptance that each base of the SSH host builds from. */
+const HOST_FOLDERS: Readonly<Record<HostBase, string>> = {
+  alpine: 'host',
+  'ubuntu-26.04': 'host-ubuntu',
+};
+
+/** The image tag of the run's host: `remote-oss-acceptance-host:<run id>`, and `-<base>` after it for another base. */
+export function hostImageOf(runId: string, base: HostBase = 'alpine'): string {
+  return base === 'alpine'
+    ? `${HOST_IMAGE}:${runId}`
+    : `${HOST_IMAGE}:${runId}-${base}`;
 }
 
 /** The image tag of the run's dev container image: `remote-oss-acceptance-devcontainer:<run id>`. */
@@ -326,9 +335,10 @@ export function mappedPort(dockerPortOutput: string): number {
 }
 
 /**
- * Builds the run's image, makes the run's key and password in `runFolder`, and runs the labelled container: the one
- * start of the host both acceptance harnesses share. The password reaches the container in an env file, never in a
- * command line. `extraArguments` go to `docker run` before the image, such as the `--env` of a host variant.
+ * Builds the run's image of `base`, makes the run's key and password in `runFolder`, and runs the labelled container:
+ * the one start of the host both acceptance harnesses share. The password reaches the container in an env file, never
+ * in a command line. `extraArguments` go to `docker run` before the image, such as the `--env` of a host variant. A
+ * second start in the same run folder, a host of another base, keeps the run's key and password.
  */
 export function startHostContainer(
   command: CommandRunner,
@@ -336,30 +346,35 @@ export function startHostContainer(
   runId: string,
   runFolder: string,
   extraArguments: readonly string[] = [],
+  base: HostBase = 'alpine',
 ): HostContainer {
   checked(command, 'docker', [
     'build',
     '--load',
     '--progress=plain', // as the dev container image's build: a failed step's error reaches the thrown message
     '--tag',
-    hostImageOf(runId),
-    path.join(root, 'tests', 'acceptance', 'host'),
+    hostImageOf(runId, base),
+    path.join(root, 'tests', 'acceptance', HOST_FOLDERS[base]),
   ]);
   const keyFile = path.join(runFolder, 'id_ed25519');
-  checked(command, 'ssh-keygen', [
-    '-q',
-    '-t',
-    'ed25519',
-    '-N',
-    '',
-    '-C',
-    'acceptance',
-    '-f',
-    keyFile,
-  ]);
+  if (!existsSync(keyFile)) {
+    checked(command, 'ssh-keygen', [
+      '-q',
+      '-t',
+      'ed25519',
+      '-N',
+      '',
+      '-C',
+      'acceptance',
+      '-f',
+      keyFile,
+    ]);
+  }
   const publicKey = readFileSync(`${keyFile}.pub`, 'utf8').trim();
-  const password = newPassword();
   const passwordFile = path.join(runFolder, 'password');
+  const password = existsSync(passwordFile)
+    ? readFileSync(passwordFile, 'utf8')
+    : newPassword();
   const environmentFile = path.join(runFolder, 'host.env');
   writeFileSync(passwordFile, password, {mode: 0o600});
   writeFileSync(environmentFile, `HOST_PASSWORD=${password}\n`, {mode: 0o600});
@@ -378,7 +393,7 @@ export function startHostContainer(
     '--publish',
     '127.0.0.1::22',
     ...extraArguments,
-    hostImageOf(runId),
+    hostImageOf(runId, base),
   ]).trim();
   const port = mappedPort(
     checked(command, 'docker', ['port', container, '22']),
@@ -436,7 +451,9 @@ export function cleanRun(command: CommandRunner, runId: string): void {
     'acceptance-[0-9]+-[0-9]+-[A-Za-z0-9_-]+-[A-Za-z0-9]+/user-data',
   ]);
   // The images may already be gone: their removal's status is ignored.
-  command('docker', ['image', 'rm', '--force', hostImageOf(runId)]);
+  for (const base of HOST_BASE_VARIANTS) {
+    command('docker', ['image', 'rm', '--force', hostImageOf(runId, base)]);
+  }
   for (const image of new Set([
     ...devContainerImages,
     devContainerImageOf(runId),

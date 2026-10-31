@@ -54,6 +54,16 @@ export type CliFailure =
   | {kind: 'spawnFailed'; message: string}
   | {kind: 'cancelled'};
 
+/** What a CLI failure says in the log: its kind and, when it has one, its message. */
+export function cliFailureText(failure: CliFailure): string {
+  if (!('message' in failure)) {
+    return failure.kind;
+  }
+  return failure.message === ''
+    ? `${failure.kind}, with no reason from the CLI`
+    : `${failure.kind}: ${failure.message}`;
+}
+
 /** What `up` gives. */
 export type UpResult =
   | {

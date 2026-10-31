@@ -194,6 +194,9 @@
       "path": "tests/acceptance/containers-trust"
     },
     {
+      "path": "tests/acceptance/containers-index"
+    },
+    {
       "path": "tests/acceptance/containers-volume"
     },
     {
@@ -210,6 +213,9 @@
     },
     {
       "path": "tests/acceptance/containers-killed"
+    },
+    {
+      "path": "tests/acceptance/containers-view"
     },
     {
       "path": "tests/acceptance/web-ui"
