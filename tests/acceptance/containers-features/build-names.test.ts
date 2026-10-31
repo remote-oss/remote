@@ -19,30 +19,36 @@ describe('how a build names its Features (card containers-93)', function () {
   this.timeout(1_800_000);
   const {build, reopen} = featureBuilds();
 
-  it('F-0414 AC-28 (ruling-case-merge): a Feature named in features in mixed case and in defaultFeatures in lower case, with two values of one option, is in the metadata under both keys with the defaults’ value applied last, and the lockfile has one entry under the mixed-case key', async () => {
+  it('F-0414 AC-28 (ruling-case-merge): a Feature named in features in mixed case and in defaultFeatures in lower case, with the same option value or two, is installed once with the features value, and the lockfile has one entry under the mixed-case key', async () => {
     const mixed = runFeature('lab-options').replace(
       'remote-oss-run/features/lab-options',
       'Remote-OSS-Run/Features/Lab-Options',
     );
-    await setUserSetting('dev.containers.defaultFeatures', {
-      [runFeature('lab-options')]: {level: 'low'},
-    });
-    try {
-      const built = await build('c93-ac28', {
-        features: {[mixed]: {level: 'high'}},
+    const results: unknown[] = [];
+    for (const [label, defaultLevel] of [
+      ['same', 'high'],
+      ['differing', 'low'],
+    ] as const) {
+      await setUserSetting('dev.containers.defaultFeatures', {
+        [runFeature('lab-options')]: {level: defaultLevel},
       });
-      deepStrictEqual(
-        [
+      try {
+        const built = await build(`c93-ac28-${label}`, {
+          features: {[mixed]: {level: 'high'}},
+        });
+        results.push([
           idsOf(await metadataOf(built.containerId)),
           Object.keys(lockfileOf(built.folder)?.features ?? {}),
-          // Measured with CLI 0.89.0: the CLI keeps both keys, and the install of the defaults' key runs last.
           (await environmentOf(built.containerId, 'lab-options')).LEVEL,
-        ],
-        [[mixed, runFeature('lab-options')], [mixed], 'low'],
-      );
-    } finally {
-      await setUserSetting('dev.containers.defaultFeatures', undefined);
+        ]);
+      } finally {
+        await setUserSetting('dev.containers.defaultFeatures', undefined);
+      }
     }
+    deepStrictEqual(results, [
+      [[mixed], [mixed], 'high'],
+      [[mixed], [mixed], 'high'],
+    ]);
   });
 
   it('F-0414 AC-46 (default-everywhere): a defaultFeatures Feature is installed by two folders’ builds and by a rebuild of one', async () => {
