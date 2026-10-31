@@ -421,6 +421,37 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     );
   });
 
+  it('F-2704 AC-30: a connection request that carries a remote program while a RemoteCommand is in effect is refused, and a connection without a program or any other purpose is not', () => {
+    const connection = makeRequest({
+      effective: {remoteCommand: 'exec zsh -l'},
+      remoteCommandInEffect: true,
+    });
+    deepStrictEqual(
+      [
+        () => buildInvocation({...connection, remoteProgram: 'sh -c prog'}),
+        () => buildInvocation(connection),
+        () =>
+          buildInvocation({
+            ...connection,
+            purpose: 'oneShot',
+            remoteProgram: 'true',
+          }),
+      ].map(call => {
+        try {
+          call();
+          return 'built';
+        } catch (caught) {
+          return (caught as Error).message;
+        }
+      }),
+      [
+        'a connection whose RemoteCommand is in effect takes no remote program',
+        'built',
+        'built',
+      ],
+    );
+  });
+
   it('F-2107.BR-1: no remote command adds no RemoteCommand', () => {
     const invocation = buildInvocation(
       makeRequest({remoteCommandInEffect: false}),

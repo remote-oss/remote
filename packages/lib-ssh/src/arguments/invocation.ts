@@ -100,6 +100,15 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   if (request.purpose === 'copy') {
     return copyInvocation(request, common);
   }
+  if (
+    request.purpose === 'connection' &&
+    request.settings.remoteCommandInEffect &&
+    request.remoteProgram !== undefined
+  ) {
+    throw new Error(
+      'a connection whose RemoteCommand is in effect takes no remote program',
+    );
+  }
   const argumentList = [...common];
   if (
     request.purpose === 'connection' &&

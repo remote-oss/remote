@@ -11,6 +11,7 @@ import {
   type ConnectWaitSettings,
   DEFAULT_FIRST_MESSAGE_MILLISECONDS,
   type RunBase,
+  connectionStart,
   sessionStartFor,
   type SshRequest,
 } from 'lib-ssh';
@@ -145,7 +146,8 @@ export function connectionRequestOf(
 }
 
 /**
- * The `ssh` request of the install connection in terminal mode: the session start as the remote program, and either our
+ * The `ssh` request of the install connection in terminal mode: the session start as the remote program (none when the
+ * host's RemoteCommand is in effect: the program then goes in on the session's input), and either our
  * `-D` port when the window tunnel rides it, or, with no `-D`, the user's own forwards cleared so the run holds none.
  */
 export function installRequestOf(
@@ -157,10 +159,14 @@ export function installRequestOf(
   socksPort: number | undefined,
   connectWait: ConnectWaitSettings,
 ): SshRequest {
+  const {remoteProgram} = connectionStart(
+    sessionStartFor(connectWait),
+    terms.remoteCommandInEffect,
+  );
   return {
     ...runBaseOf(input, terms, state, settings, environment),
     purpose: 'connection',
-    remoteProgram: sessionStartFor(connectWait).remoteProgram,
+    ...(remoteProgram === undefined ? {} : {remoteProgram}),
     ...(socksPort === undefined
       ? {clearUserForwards: true}
       : {forwards: [{kind: 'dynamic' as const, localPort: socksPort}]}),
