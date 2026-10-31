@@ -34,23 +34,27 @@ describe('the legacy words and the Features of ghcr.io (card containers-93)', fu
   this.timeout(2_400_000);
   const {build} = featureBuilds();
 
-  for (const word of ['maven', 'gradle']) {
-    it(`F-0414 AC-35 (legacy-${word}): "${word}" warns that the legacy feature is deprecated, and the metadata and the lockfile name the java Feature, never the word`, async () => {
-      const mark = containersLog().length;
-      const built = await build(`c93-ac35-${word}`, {
-        image: GLIBC_IMAGE,
-        features: {[word]: {}},
-      });
-      deepStrictEqual(
-        [
-          containersLogSince(mark).some(line => /deprecated/i.test(line)),
-          idsOf(await metadataOf(built.containerId)),
-          Object.keys(lockfileOf(built.folder)?.features ?? {}),
-        ],
-        [true, [JAVA], [JAVA]],
-      );
+  /** Builds a folder whose only Feature is the legacy `word`, and gives what the log, the metadata and the lockfile say. */
+  async function legacyJava(word: string): Promise<unknown[]> {
+    const mark = containersLog().length;
+    const built = await build(`c93-ac35-${word}`, {
+      image: GLIBC_IMAGE,
+      features: {[word]: {}},
     });
+    return [
+      containersLogSince(mark).some(line => /deprecated/i.test(line)),
+      idsOf(await metadataOf(built.containerId)),
+      Object.keys(lockfileOf(built.folder)?.features ?? {}),
+    ];
   }
+
+  it('F-0414 AC-35 (legacy-maven): "maven" warns that the legacy feature is deprecated, and the metadata and the lockfile name the java Feature, never the word', async () => {
+    deepStrictEqual(await legacyJava('maven'), [true, [JAVA], [JAVA]]);
+  });
+
+  it('F-0414 AC-35 (legacy-gradle): "gradle" warns that the legacy feature is deprecated, and the metadata and the lockfile name the java Feature, never the word', async () => {
+    deepStrictEqual(await legacyJava('gradle'), [true, [JAVA], [JAVA]]);
+  });
 
   it('F-0414 AC-35 (legacy-jupyterlab): "jupyterlab" is the python Feature, whose own install script fails on this image as 7.E16 says, with the generic dialog and the python Feature named in the log', async () => {
     const folder = devContainerFolder('c93-ac35-jupyterlab', {
