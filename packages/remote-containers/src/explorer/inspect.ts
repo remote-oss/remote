@@ -33,11 +33,11 @@ function inspectArgumentsOf(argument: unknown): string[] | undefined {
   if (container !== undefined) {
     return ['inspect', container.id];
   }
-  const row = recordOf(argument);
-  return row?.viewItem === 'image' &&
-    typeof row.description === 'string' &&
-    row.description !== ''
-    ? ['image', 'inspect', row.description]
+  const imageRow = recordOf(argument);
+  return imageRow?.viewItem === 'image' &&
+    typeof imageRow.description === 'string' &&
+    imageRow.description !== ''
+    ? ['image', 'inspect', imageRow.description]
     : undefined;
 }
 

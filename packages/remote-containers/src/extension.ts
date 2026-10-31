@@ -912,9 +912,9 @@ export async function activate(
         removeContainer: {execute: argument => rowActions?.remove(argument)},
         showDetails: {
           execute: async argument => {
-            const row = containerRowOf(argument);
-            if (row !== undefined) {
-              await detailsView?.showContainer(row.id, row.label);
+            const target = containerRowOf(argument);
+            if (target !== undefined) {
+              await detailsView?.showContainer(target.id, target.label);
             }
           },
         },

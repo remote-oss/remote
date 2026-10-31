@@ -62,6 +62,7 @@ export interface AgentEvent {
     | 'recentlyOpened'
     | 'taskEnded'
     | 'terminalNames'
+    | 'untitledDocuments'
     | 'tunnels';
   time: number;
   id?: string;
@@ -115,8 +116,18 @@ export interface AgentEvent {
   exitCode?: number | null;
   /** The names of the window's terminals, in order, as a `terminalNames` event listed them. */
   names?: string[];
+  /** The window's untitled documents, as an `untitledDocuments` event read them. */
+  documents?: UntitledDocument[];
   /** The window's forwarded ports, as a `tunnels` event listed them: environment tunnels are not among them. */
   tunnels?: ForwardedTunnel[];
+}
+
+/** One untitled document of a window: its address, its language, its whole text and whether it has unsaved changes. */
+export interface UntitledDocument {
+  uri: string;
+  language: string;
+  text: string;
+  dirty: boolean;
 }
 
 /** One folder or workspace of the Open Recent list: its address, and the label and remote authority stored with it. */
@@ -546,6 +557,21 @@ export async function terminalNames(name: string): Promise<string[]> {
   return (
     (await reported(name, 'terminalNames', 'acceptance.agent.terminalNames'))
       ?.names ?? []
+  );
+}
+
+/** The untitled documents of window `name`, in the order the editor lists them, as an `untitledDocuments` event read them. */
+export async function untitledDocuments(
+  name: string,
+): Promise<UntitledDocument[]> {
+  return (
+    (
+      await reported(
+        name,
+        'untitledDocuments',
+        'acceptance.agent.untitledDocuments',
+      )
+    )?.documents ?? []
   );
 }
 

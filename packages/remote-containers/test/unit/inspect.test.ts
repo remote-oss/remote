@@ -26,6 +26,9 @@ const IMAGE = {
   children: [],
 };
 
+/** The engine's answer when `docker` could not be started. */
+const NOT_RUNNING: EngineRunOutcome = {kind: 'failed', detail: 'no docker'};
+
 function finished(status: number, stdout = ''): EngineRunOutcome {
   return {kind: 'ran', status, stdout, stderr: ''};
 }
@@ -65,7 +68,7 @@ function sceneOf(answer: EngineRunOutcome, engine = true) {
 describe('Inspect of the Dev Containers view (card containers-104)', () => {
   it('F-0902 AC-11: a container row is inspected by its id, and its first object is opened, indented with tabs', async () => {
     const {scene, inspect} = sceneOf(
-      finished(0, JSON.stringify([{Id: 'target', Config: {Image: 'alpine'}}])),
+      finished(0, '[{"Id":"target","Config":{"Image":"alpine"}}]'),
     );
     await inspect(CONTAINER);
     deepStrictEqual(scene.events, [
@@ -114,7 +117,7 @@ describe('Inspect of the Dev Containers view (card containers-104)', () => {
       [finished(1), true],
       [finished(0, 'not json'), true],
       [finished(0, '[]'), true],
-      [{kind: 'failed', detail: 'no docker'} as EngineRunOutcome, true],
+      [NOT_RUNNING, true],
       [finished(0, '[{}]'), false],
     ] as const) {
       const {scene, inspect} = sceneOf(answer, engine);

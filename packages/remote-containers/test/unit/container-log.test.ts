@@ -35,7 +35,7 @@ function sceneOf(answer: EngineRunOutcome, engine = true) {
     },
     spawn: () => Promise.resolve({kind: 'failed', detail: 'no spawn'}),
   };
-  const log = containerLogOf({
+  const showLog = containerLogOf({
     engine: () => (engine ? host : undefined),
     engineFile: () => '/usr/bin/docker',
     createTerminal: options => {
@@ -49,13 +49,13 @@ function sceneOf(answer: EngineRunOutcome, engine = true) {
     },
     cancellation: new AbortController().signal,
   });
-  return {events, terminals, log};
+  return {events, terminals, showLog};
 }
 
 describe('Show Container Log of the Dev Containers view (card containers-104)', () => {
   it('F-0902 AC-12: a terminal titled with the container’s image reference follows the log, with the engine file and the id as words of the script, and is shown', async () => {
-    const {events, terminals, log} = sceneOf(finished(0, 'alpine:3.20\n'));
-    await log(CONTAINER);
+    const {events, terminals, showLog} = sceneOf(finished(0, 'alpine:3.20\n'));
+    await showLog(CONTAINER);
     deepStrictEqual(
       [events, terminals],
       [
@@ -77,9 +77,9 @@ describe('Show Container Log of the Dev Containers view (card containers-104)', 
   });
 
   it('F-0902 AC-12: every call opens a terminal again', async () => {
-    const {terminals, log} = sceneOf(finished(0, 'alpine\n'));
-    await log(CONTAINER);
-    await log(CONTAINER);
+    const {terminals, showLog} = sceneOf(finished(0, 'alpine\n'));
+    await showLog(CONTAINER);
+    await showLog(CONTAINER);
     deepStrictEqual(terminals.length, 2);
   });
 
@@ -90,22 +90,22 @@ describe('Show Container Log of the Dev Containers view (card containers-104)', 
       [finished(0, '\n'), true],
       [finished(0, 'alpine'), false],
     ] as const) {
-      const {terminals, log} = sceneOf(answer, engine);
-      await log(CONTAINER);
+      const {terminals, showLog} = sceneOf(answer, engine);
+      await showLog(CONTAINER);
       names.push(...terminals.map(each => each.name));
     }
     deepStrictEqual(names, ['proj', 'proj', 'proj']);
   });
 
   it('F-0902 AC-56: anything else than a container row does nothing at all', async () => {
-    const {events, log} = sceneOf(finished(0, 'alpine'));
+    const {events, showLog} = sceneOf(finished(0, 'alpine'));
     for (const argument of [
       undefined,
       'target',
       {...CONTAINER, viewItem: 'image'},
       {id: 'g', label: 'Group', rows: []},
     ]) {
-      await log(argument);
+      await showLog(argument);
     }
     deepStrictEqual(events, []);
   });

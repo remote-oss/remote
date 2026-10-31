@@ -472,6 +472,22 @@ export function activate(context: vscode.ExtensionContext): void {
         report(agentFolder, name, {event: 'taskEnded', exitCode});
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.untitledDocuments',
+      () => {
+        report(agentFolder, name, {
+          event: 'untitledDocuments',
+          documents: vscode.workspace.textDocuments
+            .filter(document => document.uri.scheme === 'untitled')
+            .map(document => ({
+              uri: document.uri.toString(),
+              language: document.languageId,
+              text: document.getText(),
+              dirty: document.isDirty,
+            })),
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.terminalNames', () => {
       report(agentFolder, name, {
         event: 'terminalNames',

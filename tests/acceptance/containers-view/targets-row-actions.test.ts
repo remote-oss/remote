@@ -1,8 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
-import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
@@ -10,7 +8,6 @@ import {
   devContainersOf,
   inWindow,
   reopenInContainer,
-  runLabelArguments,
   runScopedName,
   variable,
   waitFor,
@@ -19,13 +16,10 @@ import {
 import {
   answerDialog,
   dialogDetailLines,
-  dialogKindOf,
   dialogOf,
   centreNotifications,
   notifications,
-  toastDetails,
   rowContextMenu,
-  rowDetails,
   rowMenuAction,
   statusItemText,
   waitForDialog,
@@ -38,8 +32,19 @@ import {
   setUserSetting,
 } from '../windows/folder-windows.ts';
 import {dockerWrapper, rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
-
-const execFileAsync = promisify(execFile);
+import {
+  chosen,
+  docker,
+  iconOf,
+  iconReaches,
+  idOf,
+  idsOf,
+  made,
+  notified,
+  shown,
+  stateOf,
+  viewed,
+} from '../windows/container-rows.ts';
 
 /** The words of the Remove Container confirmation (F-0902 AC-1). */
 const REMOVE_MESSAGE = 'Remove this container?';
@@ -51,125 +56,6 @@ const FOLLOW_MILLISECONDS = 5_000;
 
 /** The `sh -c` script of a container whose process ignores the stop signal. */
 const DEAF = 'trap "" TERM; sleep 600';
-
-/** What `docker <argv>` printed, trimmed. */
-async function docker(...argv: string[]): Promise<string> {
-  const {stdout} = await execFileAsync('docker', argv);
-  return stdout.trim();
-}
-
-/** `State.Status` of a container, or `gone` when Docker has none by that name or id. */
-async function stateOf(container: string): Promise<string> {
-  try {
-    return await docker('inspect', '-f', '{{.State.Status}}', container);
-  } catch {
-    return 'gone';
-  }
-}
-
-/** The full id of a container. */
-function idOf(container: string): Promise<string> {
-  return docker('inspect', '-f', '{{.Id}}', container);
-}
-
-/**
- * Creates a container of the run named `runScopedName(base)` that the view lists as a dev container by the folder name
- * `base`, with `command` run in it. `started` false only creates it. `extra` is added to `docker create` before the image.
- */
-async function made(
-  base: string,
-  command: readonly string[],
-  options: {started?: boolean; extra?: readonly string[]} = {},
-): Promise<string> {
-  const container = runScopedName(base);
-  await docker(
-    options.started === false ? 'create' : 'run',
-    ...(options.started === false ? [] : ['-d']),
-    '--name',
-    container,
-    ...runLabelArguments(),
-    '--label',
-    `devcontainer.local_folder=${path.join(variable('HARNESS_RUN_FOLDER'), base)}`,
-    ...(options.extra ?? []),
-    variable('HARNESS_DEVCONTAINER_IMAGE'),
-    ...command,
-  );
-  return container;
-}
-
-/** Opens the Dev Containers view in the local window and waits for the row labelled `label`. */
-async function viewed(label: string): Promise<void> {
-  await inWindow('local', 'workbench.view.remote');
-  await rowsWhen('local', rows => rows.some(each => each.label === label));
-}
-
-/** The icon of the row labelled `label` in window `name`, or none when the view lists no such row. */
-async function iconOf(
-  name: string,
-  label: string,
-): Promise<string | undefined> {
-  try {
-    return (await rowDetails(name, VIEW))?.find(each => each.label === label)
-      ?.icon;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Waits until the row labelled `label` of window `name` has the icon `icon`, or none when `icon` is undefined. */
-function iconReaches(
-  name: string,
-  label: string,
-  icon: string | undefined,
-  milliseconds = 30_000,
-): Promise<void> {
-  return waitFor(
-    `the row ${label} to have the icon ${String(icon)}`,
-    async () => (await iconOf(name, label)) === icon,
-    milliseconds,
-  );
-}
-
-/** What the open dialog of window `name` says. */
-async function shown(name: string): Promise<{
-  message: string;
-  details: string;
-  buttons: string[];
-  kind: string | undefined;
-}> {
-  const dialog = await waitForDialog(name, 30_000);
-  return {...dialog, kind: await dialogKindOf(name)};
-}
-
-/** Picks the context menu item `item` of the row `label` in the local window. */
-function chosen(label: string, item: string): Promise<void> {
-  return rowMenuAction('local', VIEW, label, item);
-}
-
-/** The toasts of window `name` in the order shown, once there are `count` of them. */
-async function notified(
-  name: string,
-  count: number,
-): Promise<Array<{message: string; buttons: string[]}>> {
-  let shownToasts: Awaited<ReturnType<typeof toastDetails>> = [];
-  await waitFor(
-    `${String(count)} notifications in window ${name}`,
-    async () => {
-      shownToasts = await toastDetails(name);
-      return shownToasts.length >= count;
-    },
-    30_000,
-  );
-  return shownToasts.map(({message, buttons}) => ({message, buttons}));
-}
-
-/** The ids `docker <listing>` prints, sorted: the containers, images or volumes the engine holds. */
-async function idsOf(...listing: string[]): Promise<string[]> {
-  return (await docker(...listing))
-    .split('\n')
-    .filter(line => line !== '')
-    .sort();
-}
 
 describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container (card containers-102)', function () {
   this.timeout(600_000);
@@ -639,7 +525,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     );
   });
 
-  // Show Details, Inspect and Show Container Log are in the menu from containers-104, and Open in Container from containers-103.
+  // Open in Container is in the menu from containers-103.
   it.skip('F-0902 AC-26 (dev-row-half): after a confirmed Stop, the exited menu of a configured dev container row is Start, Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
     const base = 'ra-menu-dev';
     const folder = devContainerFolder(base, {name: 'Menu Dev'});
@@ -677,7 +563,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
   });
 
-  it.skip('F-0902 AC-14 (own-row-half): the window’s own row offers no Stop, Start or Remove, and Show Details, Inspect and Show Container Log', async () => {
+  it('F-0902 AC-14 (own-row-half): the window’s own row offers no Stop, Start or Remove, and Show Details, Inspect and Show Container Log', async () => {
     const base = 'ra-menu-own';
     const folder = devContainerFolder(base, {name: 'Menu Own'});
     const connected = await openFolderWindow(folder);

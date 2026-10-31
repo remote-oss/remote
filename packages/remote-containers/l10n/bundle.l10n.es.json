@@ -146,5 +146,6 @@
   "Stop {0}?": "Stop {0}?",
   "This action is not reversible and deletes the container permanently.": "This action is not reversible and deletes the container permanently.",
   "This is the last container using '{0}'.": "This is the last container using '{0}'.",
-  "Remove": "Remove"
+  "Remove": "Remove",
+  "Error inspecting: {0}": "Error inspecting: {0}"
 }
