@@ -90,18 +90,36 @@ export async function removeContainers(folder: string): Promise<void> {
   }
 }
 
-/** Removes every container of the run. */
-async function removeRunContainers(): Promise<void> {
-  const {stdout} = await execFileAsync('docker', [
+/** Runs `docker` with the arguments and gives what it printed. */
+export type DockerRunner = (
+  dockerArguments: readonly string[],
+) => Promise<{stdout: string}>;
+
+/** Runs the real `docker`. */
+function realDocker(
+  dockerArguments: readonly string[],
+): Promise<{stdout: string}> {
+  return execFileAsync('docker', dockerArguments);
+}
+
+/**
+ * Removes every container carrying the run's label, and no other: a developer's own containers on the same daemon are
+ * left, so the rows that read the daemon's containers fail there instead of removing them.
+ */
+export async function removeRunContainers(
+  runId = variable('HARNESS_RUN_ID'),
+  docker: DockerRunner = realDocker,
+): Promise<void> {
+  const {stdout} = await docker([
     'ps',
     '--all',
     '--quiet',
     '--filter',
-    `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+    `label=remote-oss.acceptance.run=${runId}`,
   ]);
   const containerIds = stdout.split('\n').filter(line => line !== '');
   if (containerIds.length > 0) {
-    await execFileAsync('docker', ['rm', '-f', ...containerIds]);
+    await docker(['rm', '-f', ...containerIds]);
   }
 }
 

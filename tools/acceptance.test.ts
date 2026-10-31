@@ -364,7 +364,7 @@ const FAILURE = {
   dialog: 'Could not establish connection to "refused".',
 };
 
-/** The labels a run launches with the fixture's cases, in order: the ports case last. */
+/** The labels a run launches with the fixture's cases, in order: the ports cases, then containers-view last. */
 const LAUNCH_ORDER = [
   'local',
   'remote',
@@ -404,6 +404,7 @@ const LAUNCH_ORDER = [
   'ports-probe',
   'install-probe',
   'platform-probe',
+  'containers-view',
 ];
 
 const CLIENT_CASE = {
@@ -1143,6 +1144,15 @@ describe('acceptance', () => {
             ],
             client: 'vscode',
           })),
+          {
+            folder: path.join('/run', 'extensions-containers-view'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
         ],
       );
     });
@@ -1478,6 +1488,22 @@ describe('acceptance', () => {
       deepStrictEqual(
         [harness.calls.at(-1), existsSync(harness.runFolder)],
         [`docker rm --force ${CONTAINER}`, false],
+      );
+    });
+
+    it('tooling-74: a host container the rows already removed is done at the end of the run, and the tests’ exit code stands', async () => {
+      harness.answers.set('docker rm', {
+        status: 1,
+        stdout: '',
+        stderr: `Error response from daemon: No such container: ${CONTAINER}`,
+      });
+      harness.testResult = {exitCode: 0, output: ''};
+      deepStrictEqual(
+        [
+          await runAcceptance(workspace.root, harness),
+          existsSync(harness.runFolder),
+        ],
+        [0, false],
       );
     });
 
@@ -3228,12 +3254,44 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51, connect-84: the genuine-client launches are the last of the table', () => {
+    it('tooling-51, connect-84, tooling-74: the genuine-client launches are the last of the table but one, and containers-view is the last, because its rows empty the run’s daemon', () => {
       deepStrictEqual(
         launchesOf(REPOSITORY_ROOT)
-          .slice(-2)
+          .slice(-3)
           .map(launch => launch.label),
-        ['genuine', 'ssh-no-proposals'],
+        ['genuine', 'ssh-no-proposals', 'containers-view'],
+      );
+    });
+
+    it('tooling-74: every selection that names containers-view runs it last, the groups, the dispatch lists and the scheduled split’s parts included, and only one part of the split has it', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const workflow = readFileSync(
+        path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+        'utf8',
+      );
+      const parts = JSON.parse(
+        /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
+      ) as string[];
+      const selections = [
+        ['@containers'],
+        ['containers-view', 'containers'],
+        ['@ssh', 'containers-view', '@explorer'],
+        ...parts.map(part => part.split(',')),
+      ];
+      deepStrictEqual(
+        [
+          parts.length > 0,
+          selections.map(selected => {
+            const labels = chosenLabels(launches, selected);
+            return labels.includes('containers-view')
+              ? labels.at(-1)
+              : 'containers-view';
+          }),
+          parts.filter(part =>
+            chosenLabels(launches, part.split(',')).includes('containers-view'),
+          ).length,
+        ],
+        [true, selections.map(() => 'containers-view'), 1],
       );
     });
 
