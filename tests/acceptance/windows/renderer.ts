@@ -116,7 +116,7 @@ function workspaceTitleName(workspaceFile: string): string {
   return `${folderName(workspaceFile).replace(/\.code-workspace$/, '')} (Workspace)`;
 }
 
-/** The test of a title for a window of this state: the workspace's name, the folder name in brackets, or `[]`. */
+/** The test of a title for a window of this state: the workspace's name, the folder name in brackets (a remote window's followed by its remote name), or `[]`. */
 function titleMatcher(state: PageState): (title: string) => boolean {
   const folder = state.folders[0];
   const workspaceFile = state.workspaceFile ?? null;
@@ -131,7 +131,9 @@ function titleMatcher(state: PageState): (title: string) => boolean {
       ? state.remoteName === null
         ? title === '[]'
         : title.startsWith('[]') && title !== '[]'
-      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`);
+      : title === `[${bracketed}]` ||
+        title.startsWith(`[${bracketed} [`) ||
+        (state.remoteName !== null && title.startsWith(`[${bracketed}]`));
 }
 
 /**
@@ -391,6 +393,7 @@ function paneExpression(viewName: string): string {
 /** A row of a view as the list renders it now, with the size of the set it belongs to. */
 export interface RenderedRow {
   label: string;
+  description: string;
   level: number;
   setSize: number;
 }
@@ -412,6 +415,7 @@ export async function renderedRows(
         .filter(row => row.getAttribute('aria-level') !== null)
         .map(row => ({
           label: row.querySelector('.label-name')?.textContent ?? '',
+          description: row.querySelector('.label-description')?.textContent ?? '',
           level: Number(row.getAttribute('aria-level')),
           setSize: Number(row.getAttribute('aria-setsize')),
         }));
@@ -674,6 +678,76 @@ export async function rowContextMenu(
     );
   }
   return menu;
+}
+
+/** One section of the Extensions view: its title and the display names of its entries. */
+export interface ExtensionsSection {
+  title: string;
+  entries: string[];
+}
+
+/** The sections of the Extensions view of window `name`, in order, with the entries each lists. */
+export async function extensionsViewSections(
+  name: string,
+): Promise<ExtensionsSection[]> {
+  return evaluate<ExtensionsSection[]>(
+    name,
+    `[...document.querySelectorAll('.extensions-viewlet .split-view-view')].map(pane => ({
+      title: pane.querySelector('.pane-header .title')?.textContent ?? '',
+      entries: [...pane.querySelectorAll('.extension-list-item .name')].map(entry => entry.textContent ?? ''),
+    }))`,
+  );
+}
+
+/**
+ * The labels of the context menu that a right click on the entry `displayName` of the Extensions view in window `name`
+ * opens, in order. The menu is closed again. It fails naming the entry when the view lists it not once.
+ */
+export async function extensionContextMenu(
+  name: string,
+  displayName: string,
+): Promise<string[]> {
+  const menu = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+      for (const type of ['keydown', 'keyup']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      return labels;
+    })()`,
+  );
+  if (menu === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return menu;
+}
+
+/**
+ * Whether the entry `displayName` of the Extensions view in window `name` shows its status marker, the icon core puts
+ * on an extension that Restricted Mode limits or disables; `undefined` when the view lists no such entry.
+ */
+export async function extensionStatusShown(
+  name: string,
+  displayName: string,
+): Promise<boolean | undefined> {
+  return evaluate<boolean | undefined>(
+    name,
+    `(() => {
+      const row = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].find(each => each.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const status = row?.querySelector('.extension-status');
+      return status === undefined || status === null ? undefined : !status.classList.contains('hide');
+    })()`,
+  );
 }
 
 /** One row of core's Ports view. */
@@ -1957,6 +2031,32 @@ async function pressCharacter(
   character: string,
 ): Promise<void> {
   await pressStroke(address, owner, characterStroke(character));
+}
+
+/** The modifier bits of the protocol's key events. */
+const ALT_AND_CONTROL = 3;
+
+/** Presses Ctrl+Alt+`character` in window `name`, as the keyboard does, so that a keybinding on it runs its command. */
+export async function pressControlAlt(
+  name: string,
+  character: string,
+): Promise<void> {
+  const upper = character.toUpperCase();
+  await pressStroke(await pageOf(name), name, {
+    key: character,
+    code: `Key${upper}`,
+    windowsVirtualKeyCode: upper.charCodeAt(0),
+    nativeVirtualKeyCode: upper.charCodeAt(0),
+    modifiers: ALT_AND_CONTROL,
+  });
+}
+
+/** The label of the activity bar item that is checked in window `name`, the side bar in front; empty when none is. */
+export async function activeSideBar(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `document.querySelector('.activitybar .action-item.checked .action-label')?.getAttribute('aria-label') ?? ''`,
+  );
 }
 
 /** Types `folder` into window `name`'s folder dialog and confirms it, as Enter does with no item focused. */

@@ -4,9 +4,20 @@
  */
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {recordLines, waitFor, windowEvents} from './harness.ts';
+import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {
+  readUserSettings,
+  recordLines,
+  variable,
+  waitFor,
+  windowEvents,
+  windowNames,
+} from './harness.ts';
+import {
+  activeSideBar,
   notifications,
+  pressControlAlt,
   renderedRows,
   type RenderedRow,
   viewRows,
@@ -133,3 +144,64 @@ export async function nothingFails(name: string): Promise<void> {
     [],
   );
 }
+
+/** The user keybinding the Refresh rows press: the key and the command it runs. */
+const REFRESH_KEY = 'ctrl+alt+r';
+
+/**
+ * Writes a user keybinding for `remote-explorer.refresh` on Ctrl+Alt+R into the launch's profile and returns the
+ * function that puts the profile's `keybindings.json` back as it was.
+ */
+export function bindRefreshKey(): () => void {
+  const file = path.join(
+    variable('HARNESS_USER_DATA'),
+    'User/keybindings.json',
+  );
+  const before = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+  writeFileSync(
+    file,
+    JSON.stringify([{key: REFRESH_KEY, command: 'remote-explorer.refresh'}]),
+  );
+  return () => {
+    if (before === undefined) {
+      rmSync(file, {force: true});
+    } else {
+      writeFileSync(file, before);
+    }
+  };
+}
+
+/** What pressing the refresh key did beyond refreshing: every field is its resting value when it did nothing. */
+export interface KeyEffects {
+  toasts: string[];
+  settingsWritten: boolean;
+  windowsChanged: boolean;
+  sideBarSwitched: boolean;
+}
+
+/** The effects of a press that did nothing but refresh. */
+export const NO_EFFECTS: KeyEffects = {
+  toasts: [],
+  settingsWritten: false,
+  windowsChanged: false,
+  sideBarSwitched: false,
+};
+
+/** Presses the refresh key in window `name`, waits for it to take effect, and reports what else it changed. */
+export async function pressRefreshKey(name: string): Promise<KeyEffects> {
+  const settings = readUserSettings();
+  const windows = windowNames().join(',');
+  const sideBar = await activeSideBar(name);
+  await pressControlAlt(name, 'r');
+  await new Promise(resolve => setTimeout(resolve, 3_000));
+  return {
+    toasts: await notifications(name),
+    settingsWritten: readUserSettings() !== settings,
+    windowsChanged: windowNames().join(',') !== windows,
+    sideBarSwitched: (await activeSideBar(name)) !== sideBar,
+  };
+}
+
+/** The coexistence warning the explorer shows beside the stand-in, as explorer-03b publishes it. */
+export const STAND_DOWN_WARNING =
+  'Remote Explorer stays inactive in this window because another Remote Explorer extension is enabled. Both use the same commands, settings and views. Disable one of the two and reload the window.';

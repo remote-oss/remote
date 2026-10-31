@@ -26,6 +26,8 @@ import {allOf} from './registrations.ts';
 export interface SliceEndpointPorts {
   /** The hosts of the files in effect, read at each call: the host pick's own reading. */
   listHosts(): HostListResult;
+  /** The source the hosts are read from: the value of `remote.SSH.configFile`, empty when unset. */
+  hostSource(): string;
   /** The window's connection, as `ConnectRegistration.activeConnection` gives it. */
   activeConnection(): {hostKey: string; lastResolve: LastResolve} | undefined;
   /** The editor's commands, for the window opener. */
@@ -46,15 +48,23 @@ export function hostListLine(file: string, reason: string): string {
   return `The Remotes view gets no hosts: ${file}: ${reason}`;
 }
 
-/** The names of the configured hosts, or a rejection with the parser's message after one log line. */
-function hostnamesOf(ports: SliceEndpointPorts) {
+/** The names of the configured hosts. When the files can't be read, the names last read from the same source, or a rejection with the parser's message when there are none; one log line either way. */
+function hostnamesOf(
+  ports: SliceEndpointPorts,
+  memory: {lastGood?: {source: string; hostnames: string[]}},
+) {
   const listing = ports.listHosts();
   if ('parseError' in listing) {
     const {file, reason} = listing.parseError;
     ports.logger.warn(hostListLine(file, reason));
+    if (memory.lastGood?.source === ports.hostSource()) {
+      return writeHostnames({hostnames: memory.lastGood.hostnames});
+    }
     throw new Error(`${file}: ${reason}`);
   }
-  return writeHostnames({hostnames: listing.hosts.map(entry => entry.name)});
+  const hostnames = listing.hosts.map(entry => entry.name);
+  memory.lastGood = {source: ports.hostSource(), hostnames};
+  return writeHostnames({hostnames});
 }
 
 /** The window's active remote: connected from the first successful resolve until a resolve fails. */
@@ -70,12 +80,13 @@ export function serveSliceEndpoints(
   protocol: Protocol,
   ports: SliceEndpointPorts,
 ): Registration {
+  const memory: {lastGood?: {source: string; hostnames: string[]}} = {};
   const registrations = [
     protocol.serve({
       commandId: SSH_ENDPOINTS.getConfiguredHostnames.commandId,
       kind: 'query',
       read: readEnvelope,
-      handle: () => hostnamesOf(ports),
+      handle: () => hostnamesOf(ports, memory),
       empty: () => writeHostnames({hostnames: []}),
     }),
     protocol.serve({

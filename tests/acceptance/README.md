@@ -120,7 +120,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
 - `web-ui` and `web-ui-trust`: plain launches with a debugging port and a recording `xdg-open` first on the editor's PATH; the suite writes it into `<run>/browser-bin` and reads the addresses it was asked to open from `<run>/browser-urls` (`windows/web-ui-support.ts`), for the rows of Open Web UI. `web-ui-trust` has workspace trust on and core's startup trust prompt off, so a window opens in Restricted Mode and silent. A terminal-mode connect in it (`remote.SSH.useLocalServer` off) waits on core's trust question before its login terminal starts, and fails when nothing answers within the connect timeout, so its rows connect only through the local server.
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close, and `containers-killed-23`, `containers-killed-35` and `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -530,19 +530,25 @@ behaviour is chosen by the first segment of the path:
 
 | Segment | Answer |
 |---|---|
-| `ok` | 200 with the server archive, `Content-Length` set |
+| `ok` | 200 with the server archive of the platform the path names (see below), `Content-Length` set; 404 for a platform the run has no archive for |
 | `missing` | 404, empty |
 | `missing-cors` | 404, empty, with an `Access-Control-Allow-Origin: *` header |
 | `busy` | 503, empty |
 | `junk` | 200 with 64 KiB of random bytes |
 | `hang` | the request is accepted and never answered, until `GET /control/drop-hung` or the run's end |
-| `cut` | 200 with the archive's length, then the connection drops after 1 MiB |
-| `slow` | the archive, 64 KiB every 100 ms |
+| `cut` | 200 with the archive's length, then the connection drops after 1 MiB (the archive chosen as for `ok`) |
+| `slow` | the archive, 64 KiB every 100 ms (the archive chosen as for `ok`) |
 | `templates` | `/templates/devcontainer-index.json`: the run's template index once the run has written it (404 before); `/templates/broken-index.json`: an index cut off so it doesn't parse; `/templates/unreachable`: the connection dropped before any answer |
 | `control` | `/control/devcontainer-control-manifest.json`: the run's control manifest once the run has written it (404 before); `/control/unreachable`: the connection dropped before any answer |
 
-The archive is the VSCodium server for Alpine of the release the client is pinned to, cached under
-`.vscode-test/downloads/` and checked against its sha256 (`SERVER_ARCHIVE`). The HTTPS certificate is the run's own,
+The archives are the VSCodium servers of the release the client is pinned to, for this machine's architecture: the
+Alpine (musl) one and the glibc one. They're cached under `.vscode-test/downloads/` and checked against their sha256
+(`SERVER_ARCHIVE`, by platform).
+- A path segment `alpine-<arch>` (Remote - SSH's `${os}-${arch}` on a musl host), or the update service's
+  `server-linux-alpine` (Alpine on x64) or `server-alpine-<arch>`, gets the Alpine server.
+- `linux-<arch>` or `server-linux-<arch>` gets the glibc server, as for a Debian container (`GLIBC_IMAGE`).
+- A path that names no platform, such as `/ok/x`, gets the Alpine server.
+- A platform the run has no archive for, another architecture or another system, gets 404. The HTTPS certificate is the run's own,
 made in Node for `downloads` and `update.code.visualstudio.com` and kept in the run's folder; nothing trusts it. The
 host's BusyBox `wget` verifies certificates through `ssl_client`, so an HTTPS download from it fails unless
 `--no-check-certificate` is given (measured on the host's image).

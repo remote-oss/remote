@@ -135,6 +135,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/containers-explorer/tsconfig.json',
   './tests/acceptance/containers-ports/tsconfig.json',
   './tests/acceptance/containers-shutdown/tsconfig.json',
+  './tests/acceptance/containers-killed/tsconfig.json',
   './tests/acceptance/web-ui/tsconfig.json',
   './tests/acceptance/web-ui-trust/tsconfig.json',
 ];
