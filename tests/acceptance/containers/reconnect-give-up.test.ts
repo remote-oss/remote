@@ -38,6 +38,21 @@ function phasesIn(lines: readonly string[]): string[] {
   return lines.filter(line => /^Reconnection attempt \d+$/.test(line));
 }
 
+/** The gaps in milliseconds between core's first eight reconnection attempts: at once, then after 5, 5, then 10 s five times (BR-7). */
+const FULL_SCHEDULE = [5000, 5000, 10_000, 10_000, 10_000, 10_000, 10_000];
+
+/** The numbers of the S286 phases that the lines hold, in order. */
+function numbersOf(lines: readonly string[]): number[] {
+  return phasesIn(lines).map(line => Number(/\d+/.exec(line)?.[0]));
+}
+
+/** The gaps in milliseconds between consecutive `arrivals`. */
+function gapsOf(arrivals: readonly number[]): number[] {
+  return arrivals
+    .slice(1)
+    .map((arrival, index) => arrival - (arrivals[index] ?? 0));
+}
+
 /** Waits `milliseconds`. */
 async function pause(milliseconds: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -212,6 +227,10 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           terminal: whilePaused.terminal,
           attemptsWhilePaused: whilePaused.attempts.length >= 2,
           gaveUp: after.some(line => line.endsWith('containerGone')),
+          notRunning: after.some(line => line.includes('is not running')),
+          numbered: numbersOf(after).every(
+            (number, index) => number === index + 1,
+          ),
           returned,
           dialog,
           startedAgain: after.includes('Starting VS Code Server'),
@@ -223,6 +242,8 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
           terminal: false,
           attemptsWhilePaused: true,
           gaveUp: false,
+          notRunning: false,
+          numbered: true,
           returned: 'Dev Container: c43-pause',
           dialog: undefined,
           startedAgain: false,
@@ -245,6 +266,7 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       const arrivals: number[] = [];
       let indicatorAt = 0;
       let dialogAt = 0;
+      let buttons: string[] = [];
       while (dialogAt === 0 && Date.now() - began < 120_000) {
         const count = phasesIn(logSince(mark)).length;
         while (arrivals.length < count) {
@@ -261,18 +283,20 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         const shown = await dialogOf(name).catch(() => undefined);
         if (shown !== undefined && COUNTDOWN.test(shown.details)) {
           dialogAt = Date.now() - began;
+          buttons = [...shown.buttons];
         }
         await pause(250);
       }
-      const gaps = arrivals
-        .slice(1, 4)
-        .map((arrival, index) => arrival - (arrivals[index] ?? 0));
+      const gaps = gapsOf(arrivals).slice(0, 3);
+      const numbers = numbersOf(logSince(mark)).slice(0, 4);
       await answerDialog(name, 'Dismiss').catch(() => undefined);
       await closeWindow(name);
       deepStrictEqual(
         {
           indicatorWithinTen: indicatorAt > 0 && indicatorAt < 10_000,
           dialogAfterForty: dialogAt > 40_000,
+          buttons,
+          numbers,
           firstAtOnce: (arrivals[0] ?? 99_999) < 8000,
           gapsNearSchedule: SCHEDULE_GAPS.map(
             (expected, index) => Math.abs((gaps[index] ?? 0) - expected) < 3000,
@@ -281,6 +305,8 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         {
           indicatorWithinTen: true,
           dialogAfterForty: true,
+          buttons: ['Reload Window', 'Dismiss', 'Reconnect Now'],
+          numbers: [1, 2, 3, 4],
           firstAtOnce: true,
           gapsNearSchedule: [true, true, true],
         },
@@ -339,15 +365,34 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       await connectedWithPort('c43-five');
     try {
       const mark = containersLog().length;
+      const killed = Date.now();
       await killServer(containerId);
-      await pause(300_000);
+      const arrivals: number[] = [];
+      while (Date.now() - killed < 300_000) {
+        const count = phasesIn(logSince(mark)).length;
+        while (arrivals.length < count) {
+          arrivals.push(Date.now() - killed);
+        }
+        await pause(500);
+      }
       const dialog = await countdownIn(name, 60_000);
       const indicator = await statusBarText(name, 'status.host');
       const began = Date.now();
       await answerDialog(name, 'Reload Window');
       await connectedToContainer(name);
       const seconds = (Date.now() - began) / 1000;
+      const gaps = gapsOf(arrivals);
       const state = {
+        numbered: numbersOf(logSince(mark))
+          .slice(0, arrivals.length)
+          .every((number, index) => number === index + 1),
+        scheduled: FULL_SCHEDULE.map(
+          (expected, index) => Math.abs((gaps[index] ?? 0) - expected) < 3000,
+        ),
+        everyThirty: gaps
+          .slice(7)
+          .every(interval => Math.abs(interval - 30_000) < 3000),
+        tail: gaps.length > 7,
         countdown: COUNTDOWN.test(dialog.details),
         indicator,
         withinEightSeconds: seconds < 8,
@@ -356,6 +401,10 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
       };
       await closeWindow(name);
       deepStrictEqual(state, {
+        numbered: true,
+        scheduled: [true, true, true, true, true, true, true],
+        everyThirty: true,
+        tail: true,
         countdown: true,
         indicator: 'Reconnecting to Dev Container: c43-five...',
         withinEightSeconds: true,
