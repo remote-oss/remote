@@ -413,6 +413,7 @@ describe('the run templates', () => {
         '127.0.0.1:49200',
         counting().fetchLayer,
         [TEMPLATE],
+        'remote-oss-acceptance-devcontainer:run-1',
       );
       const bundledCli = path.join(
         root,
@@ -533,6 +534,25 @@ describe('the run templates', () => {
           readFileSync(fixture, 'utf8').includes(`"${RUN_IMAGE_PLACEHOLDER}"`),
         ],
         [true, false, true],
+      );
+    });
+
+    it('tooling-81: a publish without the run image fails before running anything, so a republish cannot name the placeholder', async () => {
+      const {root, runFolder, command, calls} = preparedRun();
+      const error: unknown = await prepareRunTemplates(
+        command,
+        root,
+        runFolder,
+        '127.0.0.1:49202',
+        counting().fetchLayer,
+        [],
+      ).catch((failure: unknown) => failure);
+      deepStrictEqual(
+        [error instanceof Error && error.message, calls],
+        [
+          'the run dev container image is missing, and the mini template names it',
+          [],
+        ],
       );
     });
   });
