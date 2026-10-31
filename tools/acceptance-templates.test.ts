@@ -30,6 +30,7 @@ import {
   ORAS_IMAGE,
   prepareRunTemplates,
   publishArguments,
+  RUN_IMAGE_PLACEHOLDER,
   runIndexText,
   servedTemplatesFolder,
   templateLayerOf,
@@ -515,15 +516,25 @@ describe('the run templates', () => {
   });
 
   describe('prepareRunTemplates', () => {
-    it("tooling-57: each layer is unpacked, both collections are published with the package's CLI, and the run's index is written where the host serves it", async () => {
+    /** The snapshot copied into a root, with the run's folder and the recording command. */
+    function preparedRun(): {
+      root: string;
+      runFolder: string;
+      command: CommandRunner;
+      calls: string[][];
+    } {
       const root = path.join(folder, 'root');
       cpSync(
         path.join(REPOSITORY_ROOT, SNAPSHOT_FOLDER),
         path.join(root, SNAPSHOT_FOLDER),
         {recursive: true},
       );
-      const runFolder = path.join(folder, 'run');
       const {command, calls} = recording();
+      return {root, runFolder: path.join(folder, 'run'), command, calls};
+    }
+
+    it("tooling-57: each layer is unpacked, both collections are published with the package's CLI, and the run's index is written where the host serves it", async () => {
+      const {root, runFolder, command, calls} = preparedRun();
       const registry = await prepareRunTemplates(
         command,
         root,
@@ -638,6 +649,46 @@ describe('the run templates', () => {
           ),
           CUSTOM_FEATURE_IDS.map(featureId => `localhost:49200/${featureId}`),
         ],
+      );
+    });
+
+    it('tooling-81: the packaged mini names the run dev container image, and the fixture names only the placeholder', async () => {
+      const {root, runFolder, command} = preparedRun();
+      const imageTag = 'remote-oss-acceptance-devcontainer:run-1';
+      await prepareRunTemplates(
+        command,
+        root,
+        runFolder,
+        '127.0.0.1:49201',
+        counting().fetchLayer,
+        [],
+        imageTag,
+      );
+      const fixture = path.join(
+        REPOSITORY_ROOT,
+        SNAPSHOT_FOLDER,
+        'custom',
+        'src',
+        'mini',
+        '.devcontainer',
+        'devcontainer.json',
+      );
+      const packaged = path.join(
+        runFolder,
+        'templates',
+        'custom',
+        'src',
+        'mini',
+        '.devcontainer',
+        'devcontainer.json',
+      );
+      deepStrictEqual(
+        [
+          readFileSync(packaged, 'utf8').includes(`"image": "${imageTag}"`),
+          readFileSync(packaged, 'utf8').includes(RUN_IMAGE_PLACEHOLDER),
+          readFileSync(fixture, 'utf8').includes(`"${RUN_IMAGE_PLACEHOLDER}"`),
+        ],
+        [true, false, true],
       );
     });
   });

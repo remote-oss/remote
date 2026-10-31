@@ -75,6 +75,9 @@ const METADATA_ANNOTATION = 'dev.containers.metadata';
 /** The namespace of the run's own Features, which are published; the second owner's are listed only. */
 export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
 
+/** The image the run's `mini` template names in its fixture; packaging replaces it with the run's dev container image. */
+export const RUN_IMAGE_PLACEHOLDER = 'remote-oss-acceptance-run-image';
+
 /** Fetches the layer of a mirrored template; the run's goes to `ghcr.io`, a test's is a fake. */
 export type LayerFetch = (template: MirroredTemplate) => Promise<Uint8Array>;
 
@@ -306,6 +309,7 @@ export async function prepareRunTemplates(
   registryAddress: string,
   fetchLayer: LayerFetch,
   templates: readonly MirroredTemplate[] = MIRRORED_TEMPLATES,
+  devContainerImage?: string,
 ): Promise<string> {
   const registry = templateRegistryOf(registryAddress);
   const work = runTemplatesFolder(runFolder);
@@ -325,6 +329,25 @@ export async function prepareRunTemplates(
   cpSync(path.join(fixtures, 'custom', 'src'), customSources, {
     recursive: true,
   });
+  if (devContainerImage !== undefined) {
+    const mini = path.join(
+      customSources,
+      'mini',
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    const placeholder = `"${RUN_IMAGE_PLACEHOLDER}"`;
+    const text = readFileSync(mini, 'utf8');
+    if (!text.includes(placeholder)) {
+      throw new Error(
+        'the mini template no longer names the run image placeholder',
+      );
+    }
+    writeFileSync(
+      mini,
+      text.replace(placeholder, JSON.stringify(devContainerImage)),
+    );
+  }
   const bundledCli = path.join(
     root,
     'packages',

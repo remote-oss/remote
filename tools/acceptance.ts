@@ -271,11 +271,12 @@ export interface HarnessDependencies {
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
   startRegistry: (runId: string) => Promise<RunRegistry>;
-  /** Publishes the run's templates into the registry at `address` and writes the run's index; gives the templates' registry. */
+  /** Publishes the run's templates into the registry at `address` and writes the run's index; the run's dev container image names its `mini` template; gives the templates' registry. */
   prepareTemplates: (
     root: string,
     runFolder: string,
     address: string,
+    devContainerImage: string | undefined,
   ) => Promise<string>;
 }
 
@@ -892,6 +893,9 @@ async function prepare(
       writeStandIns(runFolder, launch, standInEngines(root, launch));
     }
   }
+  const devContainerImage = launches.some(needsDevContainerImage)
+    ? devContainerImageFor(command, root, runId)
+    : undefined;
   const registry = chosen.some(
     launch => launch.registry === true || launch.templates === true,
   )
@@ -902,12 +906,14 @@ async function prepare(
   }
   const templateRegistry =
     registry !== undefined && chosen.some(launch => launch.templates === true)
-      ? await dependencies.prepareTemplates(root, runFolder, registry.address)
+      ? await dependencies.prepareTemplates(
+          root,
+          runFolder,
+          registry.address,
+          devContainerImage,
+        )
       : undefined;
   const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
-  const devContainerImage = launches.some(needsDevContainerImage)
-    ? devContainerImageFor(command, root, runId)
-    : undefined;
   const engineImage =
     podman && devContainerImage !== undefined
       ? loadImageIntoPodman(command, runId, runFolder)
@@ -2078,8 +2084,16 @@ if (isMainModule(import.meta.url)) {
         startAgent: startRunAgent,
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),
-        prepareTemplates: (root, runFolder, address) =>
-          prepareRunTemplates(runCommand, root, runFolder, address, ghcrLayer),
+        prepareTemplates: (root, runFolder, address, devContainerImage) =>
+          prepareRunTemplates(
+            runCommand,
+            root,
+            runFolder,
+            address,
+            ghcrLayer,
+            undefined,
+            devContainerImage,
+          ),
         startDownloads: startRunDownloads.bind(
           undefined,
           runCommand,

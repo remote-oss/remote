@@ -222,8 +222,12 @@ class FakeHarness implements HarnessDependencies {
     root: string,
     runFolder: string,
     address: string,
+    devContainerImage: string | undefined,
   ): Promise<string> => {
     this.calls.push(`templates prepared ${address}`);
+    if (devContainerImage !== undefined) {
+      this.calls.push(`templates named the image ${devContainerImage}`);
+    }
     return Promise.resolve('localhost:5000');
   };
 
@@ -1259,7 +1263,10 @@ describe('acceptance', () => {
           harness.variables?.HARNESS_TEMPLATE_REGISTRY,
         ],
         [
-          ['templates prepared 127.0.0.1:5000'],
+          [
+            'templates prepared 127.0.0.1:5000',
+            `templates named the image remote-oss-acceptance-devcontainer:${acceptanceRunId(process.env, process.pid)}`,
+          ],
           'http://127.0.0.1:8080/templates/devcontainer-index.json',
           'http://127.0.0.1:8080/control/devcontainer-control-manifest.json',
           'localhost:5000',
