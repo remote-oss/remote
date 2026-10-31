@@ -31,6 +31,7 @@ import {
   startCommand,
   startedWith,
   takeOptionScreen,
+  takenThrough,
   withWindow,
 } from './authoring-support.ts';
 
@@ -453,6 +454,29 @@ describe('the Features’ options in the wizard (card containers-89)', function 
         ['loud||true', 'Use: lo|(custom)|false'],
         ['Use: zz|(custom)|true'],
         ['loud||true'],
+      ]);
+    });
+  });
+
+  it('F-0803 AC-30 (use-item-plain): on a template’s plain-string screen the Use item follows the matching values, is focused only when none matches, and is absent when the text is exactly a value', async () => {
+    await withWindow('o89-use-plain', {}, async window => {
+      await startedWith(window, 'options-lab');
+      await takenThrough(window, ['Flavour:', 'Channel:']);
+      await screenWith(window, 'Motto:');
+      const shown = [];
+      for (const text of ['pl', 'zz', 'plain']) {
+        await typeInQuickPick(window, text);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        shown.push(
+          (await quickPickRows(window)).map(
+            each => `${each.label}|${each.description}|${String(each.focused)}`,
+          ),
+        );
+      }
+      deepStrictEqual(shown, [
+        ['plain|(default)|true', 'Use: pl|(custom)|false'],
+        ['Use: zz|(custom)|true'],
+        ['plain|(default)|true'],
       ]);
     });
   });
