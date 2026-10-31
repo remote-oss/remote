@@ -739,8 +739,12 @@ export async function activate(
           },
           home: os.homedir(),
         },
-        record: line => {
-          served.logger.info(line);
+        record: (line, level) => {
+          if (level === 'warn') {
+            served.logger.warn(line);
+          } else {
+            served.logger.info(line);
+          }
         },
         translate,
       };

@@ -1036,7 +1036,7 @@ F-0801.AC-38	acceptance
 F-0801.AC-39	todo	
 F-0801.AC-40	acceptance	
 F-0801.AC-41	acceptance	
-F-0801.AC-42	todo	
+F-0801.AC-42	acceptance	
 F-0802.AC-1	deferred	containers release 1: later (New Dev Container, F-0806; volumes and Clone in Volume, F-0701)
 F-0802.AC-2	acceptance	
 F-0802.AC-3	acceptance	
@@ -1044,7 +1044,7 @@ F-0802.AC-4	acceptance
 F-0802.AC-5	todo	
 F-0802.AC-6	todo	
 F-0802.AC-7	acceptance	
-F-0802.AC-8	todo	
+F-0802.AC-8	acceptance	
 F-0802.AC-9	acceptance	
 F-0802.AC-10	acceptance	
 F-0802.AC-11	todo	
@@ -1135,24 +1135,24 @@ F-0804.AC-26	deferred	containers release 1: later (Configure Container Features,
 F-0804.AC-27	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-28	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-29	deferred	containers release 1: later (Configure Container Features, F-0807)
-F-0805.AC-1	todo	
-F-0805.AC-2	todo	
-F-0805.AC-3	todo	
-F-0805.AC-4	todo	
-F-0805.AC-5	todo	
-F-0805.AC-6	todo	
+F-0805.AC-1	acceptance	
+F-0805.AC-2	acceptance	
+F-0805.AC-3	acceptance	
+F-0805.AC-4	acceptance	
+F-0805.AC-5	acceptance	
+F-0805.AC-6	acceptance	
 F-0805.AC-7	todo	
 F-0805.AC-8	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-9	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-10	deferred	containers release 1: later (New Dev Container, F-0806)
-F-0805.AC-11	todo	
+F-0805.AC-11	acceptance	
 F-0805.AC-12	todo	
-F-0805.AC-13	todo	
+F-0805.AC-13	acceptance	
 F-0805.AC-14	deferred	containers release 1: later (New Dev Container, F-0806)
-F-0805.AC-15	todo	
-F-0805.AC-16	todo	
-F-0805.AC-17	todo	
-F-0805.AC-18	todo	
+F-0805.AC-15	acceptance	
+F-0805.AC-16	acceptance	
+F-0805.AC-17	acceptance	
+F-0805.AC-18	acceptance	
 F-0805.AC-19	todo	
 F-0805.AC-20	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0805.AC-21	todo	

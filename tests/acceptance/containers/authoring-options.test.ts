@@ -17,9 +17,11 @@ import {
   typeInQuickPick,
 } from '../windows/renderer.ts';
 import {
+  BOOLEAN_SCREEN,
   CONFIGURATION,
   screenWith,
   startedWith,
+  STRING_SCREENS,
   takeFeatureScreen,
   takenThrough,
   withWindow,
@@ -40,10 +42,6 @@ async function writtenIn(window: string, folder: string): Promise<Written> {
   await new Promise(resolve => setTimeout(resolve, 1000));
   return JSON.parse(readFileSync(file, 'utf8')) as Written;
 }
-
-const STRING_SCREENS = ['Flavour:', 'Channel:', 'Motto:'] as const;
-
-const BOOLEAN_SCREEN = "Select the options for the 'Options Lab' dev container";
 
 describe('the template’s options in the wizard (card containers-87)', function () {
   this.timeout(600_000);
