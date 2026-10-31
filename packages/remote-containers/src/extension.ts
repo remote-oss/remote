@@ -44,6 +44,7 @@ import type {OptionRow} from './authoring/option-screens.ts';
 import type {PickRow} from './authoring/template-pick.ts';
 import type {WizardPorts} from './authoring/wizard-stages.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
+import {finishTooltip} from './authoring/select-features.ts';
 import {writeTemplate} from './authoring/write.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
 import {discoverConfigurations} from './config/discovery.ts';
@@ -577,6 +578,11 @@ export async function activate(
           createQuickPick: () =>
             vscode.window.createQuickPick<OptionRow & vscode.QuickPickItem>(),
           backButton: vscode.QuickInputButtons.Back,
+          finishButton: {
+            iconPath: new vscode.ThemeIcon('check-all'),
+            tooltip: finishTooltip(translate),
+          },
+          verifiedIcon: new vscode.ThemeIcon('verified'),
         },
         write: (request, cancellation) =>
           writeTemplate(

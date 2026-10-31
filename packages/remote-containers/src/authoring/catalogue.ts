@@ -40,9 +40,26 @@ export interface CatalogueTemplate {
   documentationURL?: string;
 }
 
+/** What the wizard shows of one Feature. */
+export interface CatalogueFeature {
+  /** The full OCI reference without a tag, e.g. `ghcr.io/devcontainers/features/common-utils`. */
+  id: string;
+  /** The published version, e.g. `2.5.3`. */
+  version: string;
+  /** The label. */
+  name: string;
+  /** The GitHub owner its collection's repository names; none when the repository is not on `github.com`. */
+  owner?: string;
+  options: Readonly<Record<string, unknown>>;
+}
+
 /** What reading or downloading the catalogue gives. */
 export type CatalogueResult =
-  | {kind: 'catalogue'; templates: CatalogueTemplate[]}
+  | {
+      kind: 'catalogue';
+      templates: CatalogueTemplate[];
+      features: CatalogueFeature[];
+    }
   | {kind: 'failed'; cause: string};
 
 /** What the download needs of its surroundings. */
@@ -102,20 +119,33 @@ function ownerOf(
   );
 }
 
-/** The template an entry of the index describes; none for an entry without a text `id`, `name` and `version`. */
-function templateOf(
+/** What every entry of the index, template or Feature, must have: a text `id`, `name` and `version`. */
+function identityOf(
   entry: unknown,
-  repository: string | undefined,
-): CatalogueTemplate | undefined {
+):
+  | {fields: Fields; reference: string; name: string; version: string}
+  | undefined {
   if (!isRecord(entry)) {
     return undefined;
   }
   const reference = textOf(entry.id);
   const name = textOf(entry.name);
   const version = textOf(entry.version);
-  if (reference === undefined || name === undefined || version === undefined) {
+  return reference === undefined || name === undefined || version === undefined
+    ? undefined
+    : {fields: entry, reference, name, version};
+}
+
+/** The template an entry of the index describes; none for an entry without a text `id`, `name` and `version`. */
+function templateOf(
+  candidate: unknown,
+  repository: string | undefined,
+): CatalogueTemplate | undefined {
+  const identity = identityOf(candidate);
+  if (identity === undefined) {
     return undefined;
   }
+  const {fields: entry, reference, name, version} = identity;
   const description = textOf(entry.description);
   const documentationURL = textOf(entry.documentationURL);
   return {
@@ -135,6 +165,26 @@ function templateOf(
   };
 }
 
+/** The Feature an entry of the index describes; none for an entry without a text `id`, `name` and `version`. */
+function featureOf(
+  candidate: unknown,
+  repository: string | undefined,
+): CatalogueFeature | undefined {
+  const identity = identityOf(candidate);
+  if (identity === undefined) {
+    return undefined;
+  }
+  const {fields, reference, name, version} = identity;
+  const owner = repositoryOwnerOf(repository);
+  return {
+    id: reference,
+    version,
+    name,
+    ...(owner === undefined ? {} : {owner}),
+    options: isRecord(fields.options) ? fields.options : {},
+  };
+}
+
 /** The repository a collection of the index names as its source, when it names one. */
 function repositoryOf(collection: Fields): string | undefined {
   return isRecord(collection.sourceInformation)
@@ -142,7 +192,7 @@ function repositoryOf(collection: Fields): string | undefined {
     : undefined;
 }
 
-/** The templates of the index text, in the index's order; the parser's own message for text that is no JSON. */
+/** The templates and the Features of the index text, in the index's order; the parser's own message for text that is no JSON. */
 export function parseCatalogue(text: string): CatalogueResult {
   let index: unknown;
   try {
@@ -160,6 +210,13 @@ export function parseCatalogue(text: string): CatalogueResult {
       isRecord(collection) && Array.isArray(collection.templates)
         ? (collection.templates as unknown[]).flatMap(
             entry => templateOf(entry, repositoryOf(collection)) ?? [],
+          )
+        : [],
+    ),
+    features: collections.flatMap(collection =>
+      isRecord(collection) && Array.isArray(collection.features)
+        ? (collection.features as unknown[]).flatMap(
+            entry => featureOf(entry, repositoryOf(collection)) ?? [],
           )
         : [],
     ),

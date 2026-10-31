@@ -69,6 +69,14 @@ export async function takeOptionScreen(
   await acceptQuickPick(window);
 }
 
+/** The placeholder of the Select Features screen. */
+const FEATURES_PLACEHOLDER = 'Select additional features to install';
+
+/** Waits for Select Features and presses OK with nothing checked. */
+export async function takeFeatureScreen(window: string): Promise<void> {
+  await takeOptionScreen(window, FEATURES_PLACEHOLDER);
+}
+
 /** Runs `body` over a window with the files, and closes the window after. */
 export async function withWindow(
   name: string,

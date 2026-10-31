@@ -39,6 +39,7 @@ import {
   closeScreen,
   existing,
   startCommand,
+  takeFeatureScreen,
   takeOptionScreen,
   withWindow,
   written,
@@ -55,6 +56,7 @@ async function pickTemplate(window: string, label: string): Promise<void> {
   await waitForQuickPick(window);
   await chooseQuickPickRow(window, label);
   await takeOptionScreen(window, ALPINE_OPTION);
+  await takeFeatureScreen(window);
 }
 
 /** The S182 question for an existing configuration, answered `answer`: whether the file stayed the user's. */
@@ -269,6 +271,7 @@ describe('the authoring wizard (card containers-80)', function () {
       await waitForQuickPick(window);
       await chooseQuickPickRow(window, 'Alpine');
       await takeOptionScreen(window, ALPINE_OPTION);
+      await takeFeatureScreen(window);
       await written(path.join(folder, CONFIGURATION));
       await waitFor(
         'the reopen notification',
@@ -605,6 +608,7 @@ describe('the authoring wizard (card containers-80)', function () {
       );
       await acceptQuickPick(window);
       await takeOptionScreen(window, 'Greeting:');
+      await takeFeatureScreen(window);
       await written(path.join(folder, CONFIGURATION));
     });
   });
@@ -627,6 +631,7 @@ describe('the authoring wizard (card containers-80)', function () {
         10_000,
       );
       await acceptQuickPick(window);
+      await takeFeatureScreen(window);
       const dialog = await waitForDialog(window, 120_000);
       const said = await dialogText(window);
       const kind = await dialogKindOf(window);
@@ -664,6 +669,7 @@ describe('the authoring wizard (card containers-80)', function () {
       async (window, folder) => {
         const rows = (await screenOf(window)).map(each => each.label);
         await chooseQuickPickRow(window, "From 'api.Dockerfile'");
+        await takeFeatureScreen(window);
         await written(path.join(folder, CONFIGURATION));
         const text = readFileSync(path.join(folder, CONFIGURATION), 'utf8');
         deepStrictEqual(
