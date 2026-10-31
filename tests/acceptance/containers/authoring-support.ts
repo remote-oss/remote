@@ -6,7 +6,12 @@
 import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
+import {
+  closeWindow,
+  startInWindow,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
 import {
   pressEscape,
   quickPickOf,
@@ -38,9 +43,12 @@ async function windowWith(
   return {window: await openFolderWindow(folder), folder};
 }
 
-/** Runs the command in `window` without waiting for it, which ends only when the wizard does. */
-export function startCommand(window: string, command = COMMAND): void {
-  inWindow(window, command).catch(() => undefined);
+/**
+ * Starts the command in `window` and returns once the window has accepted it, without waiting for it to end: it ends
+ * only when the wizard does, and a command that reloads the window would leave a poll running past the row.
+ */
+export function startCommand(window: string, command = COMMAND): Promise<void> {
+  return startInWindow(window, command);
 }
 
 /** Runs `body` over a window with the files, and closes the window after. */

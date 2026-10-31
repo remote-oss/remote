@@ -48,7 +48,7 @@ const CONFIGURATION = '.devcontainer/devcontainer.json';
 
 /** Starts the command in `window` and picks the template labelled `label`. */
 async function pickTemplate(window: string, label: string): Promise<void> {
-  startCommand(window);
+  await startCommand(window);
   await waitForQuickPick(window);
   await chooseQuickPickRow(window, label);
 }
@@ -89,7 +89,7 @@ async function answeredOverwrite(
 
 /** Opens the screen in `window` and gives its rows, leaving it open. */
 async function screenOf(window: string): Promise<DetailedQuickPickRow[]> {
-  startCommand(window);
+  await startCommand(window);
   await waitForQuickPick(window);
   return detailedQuickPickRows(window);
 }
@@ -170,7 +170,7 @@ describe('the authoring wizard (card containers-80)', function () {
     );
     await rememberPage(window);
     try {
-      startCommand(window);
+      await startCommand(window);
       const shown = await waitForDialog(window);
       const said = await dialogText(window);
       const kind = await dialogKindOf(window);
@@ -178,7 +178,7 @@ describe('the authoring wizard (card containers-80)', function () {
       await answerDialog(window, 'Cancel');
       await new Promise(resolve => setTimeout(resolve, 2000));
       const afterCancel = [await dialogOf(window), await quickPickOf(window)];
-      startCommand(window);
+      await startCommand(window);
       await waitForDialog(window);
       await answerDialog(window, 'Open Folder');
       await waitFor(
@@ -226,7 +226,7 @@ describe('the authoring wizard (card containers-80)', function () {
       inWindow('local', 'workbench.action.newWindow'),
     );
     await rememberPage(window);
-    startCommand(window);
+    await startCommand(window);
     await waitForDialog(window);
     await answerDialog(window, 'Open Folder');
     await answerFolderDialog(window, target);
@@ -261,7 +261,7 @@ describe('the authoring wizard (card containers-80)', function () {
 
   it('F-0801 AC-4, F-0802 AC-2 (a4): alpine on an empty folder writes the configuration, opens it in a preview and offers the reopen notification', async () => {
     await withWindow('a4', {}, async (window, folder) => {
-      startCommand(window);
+      await startCommand(window);
       await waitForQuickPick(window);
       await chooseQuickPickRow(window, 'Alpine');
       await written(path.join(folder, CONFIGURATION));
@@ -562,7 +562,7 @@ describe('the authoring wizard (card containers-80)', function () {
 
   it('F-0802 AC-18 (r-31): Learn More ends the wizard with nothing written', async () => {
     await withWindow('a18', {}, async (window, folder) => {
-      startCommand(window);
+      await startCommand(window);
       await waitForQuickPick(window);
       await chooseQuickPickRow(window, 'Learn More');
       await waitFor(

@@ -73,7 +73,7 @@ describe('the authoring wizard from the commands that need a configuration (card
 
   it('F-0802 AC-1 (f1): the command opens the template screen: non-modal, one choice, S302, no Back button, titled for the command', async () => {
     await withWindow('f1', {}, async window => {
-      startCommand(window, COMMAND);
+      await startCommand(window, COMMAND);
       deepStrictEqual(await templateScreenOf(window), TEMPLATE_SCREEN);
       await closeScreen(window);
     });
@@ -81,7 +81,7 @@ describe('the authoring wizard from the commands that need a configuration (card
 
   it('F-0301 AC-7, F-0802 AC-1 (f7): Reopen in Container on a folder with no configuration opens the template screen, not an error', async () => {
     await withWindow('f7', {}, async window => {
-      startCommand(window, REOPEN);
+      await startCommand(window, REOPEN);
       const facts = await templateScreenOf(window);
       const dialog = await dialogOf(window);
       await closeScreen(window);
@@ -101,7 +101,7 @@ describe('the authoring wizard from the commands that need a configuration (card
         const notices = (await notificationCentre(window)).filter(text =>
           text.startsWith(NOTICE_START),
         );
-        startCommand(window, REOPEN);
+        await startCommand(window, REOPEN);
         const facts = await templateScreenOf(window);
         await closeScreen(window).catch(async (caught: unknown) => {
           throw new Error(
@@ -123,7 +123,7 @@ describe('the authoring wizard from the commands that need a configuration (card
         const seen: unknown[] = [];
         for (const closing of ['Cancel', 'Escape'] as const) {
           await inWindow(window, 'workbench.action.closeAllEditors');
-          startCommand(window, REOPEN);
+          await startCommand(window, REOPEN);
           const dialog = await waitForDialog(window, 180_000);
           const said = await dialogText(window);
           const kind = await dialogKindOf(window);
@@ -148,7 +148,7 @@ describe('the authoring wizard from the commands that need a configuration (card
           ]);
         }
         await inWindow(window, 'workbench.action.closeAllEditors');
-        startCommand(window, REOPEN);
+        await startCommand(window, REOPEN);
         await waitForDialog(window, 180_000);
         await answerDialog(window, 'Use Template');
         const facts = await templateScreenOf(window);
@@ -201,7 +201,7 @@ describe('the authoring wizard from the commands that need a configuration (card
     rmSync(target, {recursive: true, force: true});
     mkdirSync(target, {recursive: true});
     await withWindow('fa', {}, async (window, folder) => {
-      startCommand(window, OPEN_FOLDER);
+      await startCommand(window, OPEN_FOLDER);
       await answerFolderDialog(window, target);
       const facts = await templateScreenOf(window);
       const title = await windowTitle(window);
