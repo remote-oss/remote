@@ -16,8 +16,7 @@ import {
 const FEATURE_TEMPLATES = {
   S301: 'Select Features',
   S308: 'Select additional features to install',
-  /** The tooltip of the title-bar button that finishes with what is checked; it has no string id of its own. */
-  finish: 'Finish',
+  S183: 'Finish',
 } as const;
 
 /** The owner whose Features carry the verified icon. */
@@ -61,7 +60,7 @@ export function featureKeyOf(feature: CatalogueFeature): string {
 
 /** The tooltip of the Finish button of the screen. */
 export function finishTooltip(translate: Translate): string {
-  return translate(FEATURE_TEMPLATES.finish);
+  return translate(FEATURE_TEMPLATES.S183);
 }
 
 function text(translate: Translate, template: string): string {
