@@ -143,6 +143,8 @@ class FakeEditor implements ResolverEditor {
   progressEnded = 0;
   /** What the editor's own closing of the progress waits for after the task has ended. */
   closing: Promise<void> = Promise.resolve();
+  /** Whether the editor's progress promise rejects after its task ended. */
+  closingFails = false;
   actions: string[] = [];
   timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
     [];
@@ -167,6 +169,10 @@ class FakeEditor implements ResolverEditor {
       } finally {
         await this.closing;
         this.progressEnded += 1;
+        if (this.closingFails) {
+          // eslint-disable-next-line no-unsafe-finally -- the editor's own progress rejecting after its task, on purpose
+          throw new Error('the editor lost the progress');
+        }
       }
     },
   };
@@ -623,6 +629,24 @@ describe('the resolver host: the progress has closed before a connect ends (card
           .filter(milliseconds => milliseconds === 2000),
       ],
       [false, 'notAvailable(handled=true): the build failed', [2000]],
+    );
+  });
+
+  it('F-0408 AC-19: a progress promise that rejects after its task changes nothing: the caller gets the connect’s error at once, with no wait', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'downloading'}];
+    context.connector.failure = new Error('the build failed');
+    context.editor.closingFails = true;
+    const text = await failureOf(context);
+    deepStrictEqual(
+      [
+        text,
+        context.editor.progressEnded,
+        context.editor.timers.filter(
+          timer => timer.milliseconds === 2000 && timer.live,
+        ).length,
+      ],
+      ['notAvailable(handled=true): the build failed', 1, 0],
     );
   });
 
