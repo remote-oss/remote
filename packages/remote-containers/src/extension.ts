@@ -102,6 +102,7 @@ import {
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
 import {type RowActions, rowActionsOf} from './explorer/row-actions.ts';
+import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
 import {
   engineOfWindow,
@@ -873,6 +874,19 @@ export async function activate(
         logger: served.logger,
       };
       const reopenHandler = reopenHandlersOf(reopenPorts);
+      const rowOpen = rowOpenOf({
+        ...reopenPorts,
+        window: {
+          serializedFile: file => reopenPorts.window.serializedFile(file),
+        },
+        engineFor: file => served.preflight.engineFor(file),
+        exists: file =>
+          Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(file))).then(
+            () => true,
+            () => false,
+          ),
+        cancellation: new AbortController().signal,
+      });
       const openFolder = openFolderInContainer({
         ...reopenPorts,
         window: {
@@ -927,6 +941,12 @@ export async function activate(
         startContainer: {execute: argument => rowActions?.start(argument)},
         stopContainer: {execute: argument => rowActions?.stop(argument)},
         removeContainer: {execute: argument => rowActions?.remove(argument)},
+        openFolderInContainerInCurrentWindow: {
+          execute: argument => rowOpen.current(argument),
+        },
+        openFolderInContainerInNewWindow: {
+          execute: argument => rowOpen.inNewWindow(argument),
+        },
         showReopenInContainerNotificationReset: {
           execute: () =>
             resetReopenNotification(context.globalState, Date.now()),

@@ -302,6 +302,47 @@ describe('choosing the configuration (card containers-13)', () => {
     );
   });
 
+  it('F-0902 BR-7: a configuration file the caller names is chosen and read with no discovery and no picker, though the folder holds two', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    const choice = await choose(scene, `${FOLDER}/${BETA}`);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => call !== 'readConfiguration'),
+        scene.targets.map(
+          target => (target as [{configFile: string}])[0].configFile,
+        ),
+      ],
+      [
+        {
+          kind: 'chosen',
+          configFile: `${FOLDER}/${BETA}`,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
+        [`read ${BETA}`],
+        [`${FOLDER}/${BETA}`],
+      ],
+    );
+  });
+
+  it('F-0902 BR-7: a configuration file the caller names that cannot be read shows the dialog with its path relative to the folder, and no picker', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE});
+    const choice = await choose(scene, `${FOLDER}/${BETA}`);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.includes('pick'),
+        scene.calls.filter(call => call.startsWith('showError')),
+      ],
+      [
+        {kind: 'rejected'},
+        false,
+        [`showError ${JSON.stringify(['', S181(BETA), ['Show Log']])}`],
+      ],
+    );
+  });
+
   it('F-0301 AC-3, AC-5: two configurations give one picker with their names and paths, the placeholder and the tooltip (5.0 step 4)', async () => {
     const scene = sceneOf({
       [ALPHA]: '{"name":"Alpha","image":"i"}',

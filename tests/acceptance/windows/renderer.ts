@@ -588,6 +588,30 @@ export async function rowAction(
   );
 }
 
+/** The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the order shown. */
+export async function rowActionTitles(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string[]> {
+  const titles = await evaluate<string[] | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      return rows.length !== 1
+        ? null
+        : [...rows[0].querySelectorAll('.actions .action-label')].map(label => label.getAttribute('aria-label') ?? '');
+    })()`,
+  );
+  if (titles === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  return titles;
+}
+
 /** The titles of the title actions of view `viewName` in window `name`, in the order shown; none when the view is not there. */
 export async function titleActions(
   name: string,

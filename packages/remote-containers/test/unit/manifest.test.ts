@@ -101,18 +101,18 @@ function rowWhen(token: string, extra = ''): string {
   return `view == targetsContainers && viewItem =~ /(^| )${token}( |$)/${extra} && !remote-containers:standingDown`;
 }
 
-/** The entries slice B adds to the row menu, in the manifest's order; the five commands of later cards carry `false`. */
+/** The entries slice B adds to the row menu, in the manifest's order; the three commands of containers-104 carry `false`. */
 const ROW_ACTION_ENTRIES = [
-  ['openFolderInContainerInCurrentWindow', '1_folder@1', 'openFolder', true],
-  ['openFolderInContainerInNewWindow', '1_folder@2', 'openFolder', true],
+  ['openFolderInContainerInCurrentWindow', '1_folder@1', 'openFolder', false],
+  ['openFolderInContainerInNewWindow', '1_folder@2', 'openFolder', false],
   ['startContainer', '1_container@3', 'start', false],
   ['showDetails', '1_container@4', 'details', true],
   ['inspectDockerResource', '1_container@5', 'inspect', true],
   ['showContainerLog', '1_container@6', 'log', true],
   ['stopContainer', '2_container@2', 'stop', false],
   ['removeContainer', '2_container@3', 'remove', false],
-  ['openFolderInContainerInCurrentWindow', 'inline@1', 'openFolder', true],
-  ['openFolderInContainerInNewWindow', 'inline@2', 'openFolder', true],
+  ['openFolderInContainerInCurrentWindow', 'inline@1', 'openFolder', false],
+  ['openFolderInContainerInNewWindow', 'inline@2', 'openFolder', false],
   ['removeContainer', 'inline@3', 'remove', false],
 ].map(([command, group, token, later]) => ({
   command: `remote-containers.${String(command)}`,
@@ -154,6 +154,10 @@ const ENGLISH = {
   'commands.startContainer.title': 'Start Container',
   'commands.stopContainer.title': 'Stop Container',
   'commands.removeContainer.title': 'Remove Container',
+  'commands.openFolderInContainerInCurrentWindow.title':
+    'Open in Container in Current Window',
+  'commands.openFolderInContainerInNewWindow.title':
+    'Open in Container in New Window',
   'views.targetsContainers.name': 'Dev Containers',
   'commands.explorerDetailsRefresh.title': 'Refresh',
   'views.detailsContainers.name': 'Details (Containers)',
@@ -350,6 +354,18 @@ describe('the manifest', () => {
             },
           },
           {
+            command: 'remote-containers.openFolderInContainerInCurrentWindow',
+            title: '%commands.openFolderInContainerInCurrentWindow.title%',
+            category: 'Dev Containers',
+            icon: '$(arrow-right)',
+          },
+          {
+            command: 'remote-containers.openFolderInContainerInNewWindow',
+            title: '%commands.openFolderInContainerInNewWindow.title%',
+            category: 'Dev Containers',
+            icon: '$(empty-window)',
+          },
+          {
             command: 'remote-containers.explorerDetailsRefresh',
             title: '%commands.explorerDetailsRefresh.title%',
             category: 'Dev Containers',
@@ -400,6 +416,14 @@ describe('the manifest', () => {
             {command: 'remote-containers.startContainer', when: 'false'},
             {command: 'remote-containers.stopContainer', when: 'false'},
             {command: 'remote-containers.removeContainer', when: 'false'},
+            {
+              command: 'remote-containers.openFolderInContainerInCurrentWindow',
+              when: 'false',
+            },
+            {
+              command: 'remote-containers.openFolderInContainerInNewWindow',
+              when: 'false',
+            },
           ],
           'view/title': [
             {
@@ -1064,7 +1088,7 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the five commands of later cards stay shut with false', () => {
+  it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
         VIEW_PARTS.menus['view/item/context']?.slice(2),
@@ -1084,6 +1108,27 @@ describe('the manifest', () => {
           'remote-containers.removeContainer',
         ],
       ],
+    );
+  });
+
+  it('F-0902 3.1, containers-103: the two Open in Container commands are registered, and none of their row menu, inline or palette entries holds a staging false', () => {
+    const opens = [
+      'remote-containers.openFolderInContainerInCurrentWindow',
+      'remote-containers.openFolderInContainerInNewWindow',
+    ];
+    const entries = [
+      ...(VIEW_PARTS.menus['view/item/context'] ?? []),
+      ...(VIEW_PARTS.menus.commandPalette ?? []),
+    ].filter(entry => opens.includes(entry.command));
+    deepStrictEqual(
+      [
+        VIEW_PARTS.commands
+          .map(entry => entry.command)
+          .filter(command => opens.includes(command)),
+        entries.length,
+        entries.filter(entry => / && false\b/.test(entry.when)).length,
+      ],
+      [opens, 6, 0],
     );
   });
 
