@@ -100,9 +100,20 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
         containerRowOf('target'),
         containerRowOf({id: 'x', label: 'y', rows: []}),
         containerRowOf({...EXITED, viewItem: 'group'}),
+        containerRowOf({...EXITED, viewItem: 'dev exited'}),
+        containerRowOf({...EXITED, viewItem: 'container other exited'})?.id,
         containerRowOf({...EXITED, id: 3}),
       ],
-      [EXITED, undefined, undefined, undefined, undefined, undefined],
+      [
+        EXITED,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'target',
+        undefined,
+      ],
     );
   });
 
