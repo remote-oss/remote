@@ -5,6 +5,8 @@ import {promisify} from 'node:util';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   dockerContainers,
@@ -98,6 +100,29 @@ describe('the Details (Containers) view (card containers-33)', function () {
       ],
     );
     await closeWindow(name);
+  });
+
+  it('#1367 (quiet-wait): in a local folder window the Dev Containers log holds no Details-view line in the 30 s after the window opens, and none is repeated', async () => {
+    const folder = devContainerFolder('c99-quiet', {name: 'c99'});
+    const mark = containersLog().length;
+    const name = await openFolderWindow(folder);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 30_000));
+      const lines = containersLogSince(mark);
+      deepStrictEqual(
+        [
+          lines.filter(line => line.includes('Details view')),
+          lines.filter(
+            (line, index) =>
+              lines.indexOf(line) !== index &&
+              line.includes('view is not registered'),
+          ),
+        ],
+        [[], []],
+      );
+    } finally {
+      await closeWindow(name);
+    }
   });
 
   it('F-0903 AC-35 (refresh-anywhere): the Refresh command, run before the Remote Explorer is shown and after, in a window with no Details section, changes no container, volume or image, writes no settings, and leaves the window usable', async () => {
