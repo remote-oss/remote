@@ -212,6 +212,9 @@
       "path": "tests/acceptance/containers-killed"
     },
     {
+      "path": "tests/acceptance/containers-view"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {

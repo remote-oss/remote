@@ -528,7 +528,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown` and `containers-view` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -867,6 +867,13 @@ export function launchesOf(root: string): Launch[] {
     ),
     GENUINE_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
+    // Last: its rows remove every container of the run, the run's host and registry included.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-view',
+      suite: 'containers-view',
+      registry: true,
+    },
   ];
   return launches;
 }
