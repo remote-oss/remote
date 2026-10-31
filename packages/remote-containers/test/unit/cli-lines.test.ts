@@ -113,6 +113,31 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('F-0414 7.E10: an error result that names a disallowed Feature is a disallowed Feature, with its address and whether a container was stopped', () => {
+    deepStrictEqual(
+      [
+        '{"outcome":"error","message":"Cannot use the x Feature","description":"d","disallowedFeatureId":"ghcr.io/o/f:1","didStopContainer":false,"learnMoreUrl":"https://example.org/f"}',
+        '{"outcome":"error","message":"m","description":"d","disallowedFeatureId":"ghcr.io/o/f:1","didStopContainer":true}',
+      ].map(line => readUpResult(line, 1)),
+      [
+        {
+          kind: 'disallowedFeature',
+          message: 'Cannot use the x Feature',
+          featureId: 'ghcr.io/o/f:1',
+          stoppedContainer: false,
+          learnMoreUrl: 'https://example.org/f',
+        },
+        {
+          kind: 'disallowedFeature',
+          message: 'm',
+          featureId: 'ghcr.io/o/f:1',
+          stoppedContainer: true,
+          learnMoreUrl: undefined,
+        },
+      ],
+    );
+  });
+
   it('C3: a docker build line without buildx is a build failure too', () => {
     deepStrictEqual(
       readUpResult(

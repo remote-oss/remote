@@ -78,6 +78,7 @@ import {
   configurationInvalid,
   containerGone,
   containerSetupFailed,
+  disallowedFeature,
   featureResolutionFailed,
   containerUnusable,
   engineCheckFailed,
@@ -570,6 +571,13 @@ export function containerConnectorOf(
         containerId: outcome.foundContainerId,
         paused: false,
       };
+    }
+    if (outcome.kind === 'disallowedFeature') {
+      return disallowedFeature(
+        outcome.featureId,
+        outcome.stoppedContainer,
+        outcome.learnMoreUrl,
+      );
     }
     const unresolved =
       outcome.kind === 'setupFailed'

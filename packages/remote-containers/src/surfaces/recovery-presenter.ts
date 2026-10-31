@@ -175,7 +175,7 @@ export function recoveryPresenterOf(
       if (button?.action === 'editLocally') {
         await editLocally(button.folder);
       } else if (button?.action === 'learnMore') {
-        await ports.openExternal(CONTAINERS_REQUIREMENTS);
+        await ports.openExternal(button.address ?? CONTAINERS_REQUIREMENTS);
         ports.disconnected();
         ports.later(() => void showQuickPick());
       } else {

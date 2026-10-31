@@ -127,6 +127,59 @@ describe('the failure dialog (card containers-11)', () => {
     );
   });
 
+  it('F-0414 AC-19: a disallowed Feature with an address has S059 as its message, S275 as its detail and the buttons Learn More, Edit and More Actions in that order', () => {
+    const dialog = failureDialogOf(
+      {
+        ...failed('disallowedFeature', {id: 'S059', values: ['ghcr.io/o/f:1']}),
+        hints: [
+          {
+            status: 'disallowedFeature',
+            message: 'ghcr.io/o/f:1',
+            mitigations: [],
+            resources: ['https://example.org/f'],
+          },
+        ],
+      },
+      TARGET,
+      identity,
+    );
+    deepStrictEqual(
+      [
+        dialog.message,
+        dialog.detail,
+        dialog.buttons.map(button => button.label),
+      ],
+      [
+        "Cannot use the 'ghcr.io/o/f:1' feature since it was reported to be problematic.",
+        FAILURE_TEMPLATES.S275,
+        ['Learn More', EDIT.label, 'More Actions...'],
+      ],
+    );
+  });
+
+  it('F-0414 AC-49: a disallowed Feature with no address has the buttons Edit and More Actions only', () => {
+    const dialog = failureDialogOf(
+      failed('disallowedFeature', {id: 'S059', values: ['ghcr.io/o/f:1']}),
+      TARGET,
+      identity,
+    );
+    deepStrictEqual(
+      dialog.buttons.map(button => button.label),
+      [EDIT.label, 'More Actions...'],
+    );
+  });
+
+  it('F-0414 AC-21: a disallowed Feature that stopped a running container has S060 as its message', () => {
+    deepStrictEqual(
+      failureDialogOf(
+        failed('disallowedFeature', {id: 'S060', values: ['ghcr.io/o/f:1']}),
+        TARGET,
+        identity,
+      ).message,
+      "Cannot use the 'ghcr.io/o/f:1' feature since it was reported to be problematic. The existing dev container was stopped.",
+    );
+  });
+
   it("F-0503 7.E1: the requirements failure has S346 as its message and the check's text as detail", () => {
     const dialog = failureDialogOf(
       failed('requirementsNotMet', {text: 'Error: Missing GLIBC'}),

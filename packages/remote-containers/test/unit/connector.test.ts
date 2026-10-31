@@ -304,6 +304,38 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0414 7.E10: a build that stops at a disallowed Feature ends the connect with S059 or S060 and the manifest entry’s address', async () => {
+    const reasons: unknown[] = [];
+    for (const stoppedContainer of [false, true]) {
+      const scene = sceneOf();
+      scene.outcome = {
+        kind: 'disallowedFeature',
+        message: 'Cannot use the x Feature',
+        featureId: 'ghcr.io/o/f:1',
+        stoppedContainer,
+        learnMoreUrl: 'https://example.org/f',
+      };
+      const result = await scene.connector.connect(inputOf(PAYLOAD));
+      reasons.push(
+        'reason' in result
+          ? [result.kind, result.reason, result.hints[0]?.resources]
+          : result,
+      );
+    }
+    deepStrictEqual(reasons, [
+      [
+        'disallowedFeature',
+        {id: 'S059', values: ['ghcr.io/o/f:1']},
+        ['https://example.org/f'],
+      ],
+      [
+        'disallowedFeature',
+        {id: 'S060', values: ['ghcr.io/o/f:1']},
+        ['https://example.org/f'],
+      ],
+    ]);
+  });
+
   it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with the probed environment and no tunnels, and the phases in order', async () => {
     const scene = sceneOf();
     const phases: ConnectPhase[] = [];

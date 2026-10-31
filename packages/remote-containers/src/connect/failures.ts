@@ -84,6 +84,38 @@ export function featureResolutionFailed(failureOfKey: FeatureFailure): Failed {
   return failure('containerSetupFailed', {}, FEATURE_REASONS[failureOfKey]);
 }
 
+/**
+ * A Feature the control manifest disallows stopped the build. The dialog says S059, or S060 when the check stopped a
+ * running container, and its Learn More button opens `learnMoreUrl`, which a hint carries.
+ */
+export function disallowedFeature(
+  featureId: string,
+  stoppedContainer: boolean,
+  learnMoreUrl: string | undefined,
+): Failed {
+  return {
+    ...failure(
+      'disallowedFeature',
+      {},
+      {
+        id: stoppedContainer ? 'S060' : 'S059',
+        values: [featureId],
+      },
+    ),
+    hints:
+      learnMoreUrl === undefined
+        ? []
+        : [
+            {
+              status: 'disallowedFeature',
+              message: featureId,
+              mitigations: [],
+              resources: [learnMoreUrl],
+            },
+          ],
+  };
+}
+
 /** The configuration's image or Dockerfile entry has the wrong type; `configFile` is the configuration's path. */
 export function configurationInvalid(configFile: string): Failed {
   return failure(
