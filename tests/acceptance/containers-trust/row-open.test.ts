@@ -69,7 +69,7 @@ async function untrusted(
 describe('Open in Container from a row, in an untrusted folder (card containers-103)', function () {
   this.timeout(900_000);
 
-  it('F-0902 AC-49 (trust-asked): Open in Container in New Window on an exited row of an untrusted folder opens a window on the local folder with core’s trust modal, the container stays exited while it is open, and Trust Folder & Continue connects the window to the same container', async () => {
+  it('F-0902 AC-49 (ruling-1464): Open in Container in New Window on an exited row of an untrusted folder opens a window that is already on the container’s authority with core’s trust modal (the deviation of ruling 1464), the container stays exited while it is open, and Trust Folder & Continue connects the window to the same container', async () => {
     const base = 'ro-trust';
     const {folder, container} = await untrusted(base);
     try {
