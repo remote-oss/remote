@@ -15,6 +15,7 @@ import {
 import {
   acceptQuickPick,
   chooseQuickPickRow,
+  clickQuickPickRow,
   clearQuickPickInput,
   detailedQuickPickRows,
   dialogOf,
@@ -122,6 +123,19 @@ describe('Select Features in the wizard (card containers-88)', function () {
           await quickPickChrome(window),
         ],
         [false, FEATURES_SCREEN, {counter: '0 Selected', okShown: true}],
+      );
+    });
+  });
+
+  it('F-0803 AC-3 (click-item): clicking an item of the last option screen commits it as Enter does, and Select Features follows', async () => {
+    await withWindow('f88-click', {}, async window => {
+      await startedWith(window, 'paths-free-lab');
+      await screenWith(window, 'Size:');
+      await clickQuickPickRow(window, 'small');
+      await screenWith(window, FEATURES);
+      deepStrictEqual(
+        [await quickPickFacts(window), await quickPickChrome(window)],
+        [FEATURES_SCREEN, {counter: '0 Selected', okShown: true}],
       );
     });
   });
@@ -310,14 +324,14 @@ describe('Select Features in the wizard (card containers-88)', function () {
           Object.keys(configuration.features ?? {}).map(key =>
             key.split('/').slice(-1).join(''),
           ),
-          Object.values(configuration.features ?? {}).slice(1),
+          Object.values(configuration.features ?? {}),
           await dialogOf(window),
         ],
         [
           '0 Selected',
           [],
           ['docker-in-docker:2', 'docker-in-docker:4'],
-          [{}],
+          [{version: 'latest', moby: 'true'}, {}],
           undefined,
         ],
       );
