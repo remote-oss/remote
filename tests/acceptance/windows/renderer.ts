@@ -1672,17 +1672,36 @@ export async function quickPickOf(
 export interface QuickPickRow {
   label: string;
   description: string;
+  buttons: string[];
+  focused: boolean;
+}
+
+/** A row of a quick pick as {@link detailedQuickPickRows} reads it: also its second line and its codicons. */
+export interface DetailedQuickPickRow extends QuickPickRow {
   /** The second line of the row, the hover text the pick shows beside the label. */
   detail: string;
   /** The codicon classes the row carries, such as `codicon-verified`. */
   icons: string[];
-  buttons: string[];
-  focused: boolean;
 }
 
 /** The rows of the quick pick open in window `name`, with what each shows; none when no quick pick is open. */
 export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
   return evaluate<QuickPickRow[]>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      description: row.querySelector('.label-description')?.textContent ?? '',
+      buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+      focused: row.classList.contains('focused'),
+    }))`,
+  );
+}
+
+/** The rows of the quick pick open in window `name` with their second lines and codicons as well; none when no quick pick is open. */
+export async function detailedQuickPickRows(
+  name: string,
+): Promise<DetailedQuickPickRow[]> {
+  return evaluate<DetailedQuickPickRow[]>(
     name,
     `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
       label: row.querySelector('.label-name')?.textContent ?? '',
