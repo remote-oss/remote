@@ -6,7 +6,7 @@
  */
 
 import type {EngineHost} from '../engine/engine-host.ts';
-import {type Executable, executableOf} from '../engine/executable.ts';
+import {executableOf} from '../engine/executable.ts';
 import {configFileOf, localFolderOf} from '../lifecycle/labels.ts';
 import {commandBeforeReload} from '../open/pre-reload.ts';
 import {reloadIntoContainer} from '../open/reload.ts';
@@ -107,11 +107,12 @@ export function rowOpenOf(ports: RowOpenPorts): RowOpen {
     ) {
       return;
     }
-    // The passed check means the setting names a program; a relative one has no base here, so the check refused it.
-    const executable = executableOf(
-      ports.settings.dockerPath(),
-      undefined,
-    ) as Extract<Executable, {kind: 'spawn'}>;
+    // A relative value has no base here: it names no program, whatever the check said.
+    const executable = executableOf(ports.settings.dockerPath(), undefined);
+    if (executable.kind !== 'spawn') {
+      logger.info(`${title} found no Docker program`);
+      return;
+    }
     const labels = await labelsOf(
       ports.engineFor(executable.file),
       containerRow.id,

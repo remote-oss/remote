@@ -142,8 +142,18 @@ describe('Open in Container from the rows of the Dev Containers view (card conta
           openWindows().length,
           openWindows().includes(issuer),
           await windowTitle(base),
+          await dialogOf(base),
+          await dialogOf('local'),
         ],
-        [[container], 'running', windows.length, false, titleOf(base)],
+        [
+          [container],
+          'running',
+          windows.length,
+          false,
+          titleOf(base),
+          undefined,
+          undefined,
+        ],
       );
     } finally {
       await closeWindow(base).catch(() => undefined);
@@ -256,12 +266,14 @@ describe('Open in Container from the rows of the Dev Containers view (card conta
         [
           modal.details,
           await stateOf(container),
+          await devContainersOf(folder),
           await dialogOf('local'),
           await notifications('local'),
         ],
         [
           'A port the container is setup to bind to is already in use. See the Dev Containers terminal for details.',
           'exited',
+          [container],
           undefined,
           [],
         ],

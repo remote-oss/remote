@@ -244,4 +244,11 @@ describe('the open commands of the Dev Containers rows (card containers-103)', (
     await settled();
     deepStrictEqual(state.commands, []);
   });
+  it('F-0201 AC-55: a relative dockerPath names no program for a row, whatever the check said, and reloads nothing', async () => {
+    const state = setup();
+    state.dockerPath = './docker';
+    const {commands, asked} = commandsOf(state, inspected(LABELS));
+    await commands.inNewWindow(OPEN_ROW);
+    deepStrictEqual([state.commands, asked], [[], []]);
+  });
 });

@@ -81,13 +81,20 @@ describe('Open in Container from a row, in an untrusted folder (card containers-
         asked.buttons,
         (await dialogText(base))?.includes(S265),
         await stateOf(container),
+        // The resolve asks the question once the window has switched to the container's authority (the card's ruling).
+        (await windowState(base)).remoteName,
       ];
       await answerDialog(base, 'Trust Folder & Continue');
       await connectedToContainer(base);
       deepStrictEqual(
         [whileOpen, await devContainersOf(folder), await stateOf(container)],
         [
-          [['Manage', 'Cancel', 'Trust Folder & Continue'], true, 'exited'],
+          [
+            ['Manage', 'Cancel', 'Trust Folder & Continue'],
+            true,
+            'exited',
+            'dev-container',
+          ],
           [container],
           'running',
         ],
