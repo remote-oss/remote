@@ -480,7 +480,17 @@ export function containerLifecycleOf(dependencies: {
         ['volume', 'create', VOLUME_NAME],
         cancellation,
       );
-      if (created.kind === 'failed') {
+      // A volume that is already there is what creating it was for: Podman, unlike Docker, fails to create one.
+      if (
+        created.kind === 'failed' &&
+        (
+          await askEngine(
+            engine,
+            ['volume', 'inspect', VOLUME_NAME],
+            cancellation,
+          )
+        ).kind === 'failed'
+      ) {
         logger.warn(
           `the vscode volume could not be created before the build: ${created.detail}`,
         );
