@@ -650,6 +650,38 @@ describe('runPlainLaunch', () => {
     );
   });
 
+  it('containers-80: a launch’s environment resolves the run’s download bases, so it can name the host’s paths, and leaves other placeholders as written', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      {
+        ...PLAIN_RUN,
+        environment: {
+          HARNESS_RUN_FOLDER: '/run',
+          HARNESS_DOWNLOADS_LOCAL: 'http://localhost:9',
+        },
+      },
+      {
+        ...LAUNCH,
+        environment: {
+          INDEX: '${HARNESS_DOWNLOADS_LOCAL}/templates/unreachable',
+          OTHER: '${localEnv:HOME}',
+        },
+      },
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(program => [
+        program.environment.INDEX,
+        program.environment.OTHER,
+      ]),
+      [
+        ['http://localhost:9/templates/unreachable', '${localEnv:HOME}'],
+        ['http://localhost:9/templates/unreachable', '${localEnv:HOME}'],
+      ],
+    );
+  });
+
   it('tooling-69: a genuine launch’s tests get the version the job named as the editor version, and any other launch keeps the recorded one', async () => {
     const seen: Array<string | undefined> = [];
     for (const label of ['genuine', 'windows']) {
