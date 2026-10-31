@@ -22,7 +22,27 @@ describe('the vscode volume cache, from the user\u2019s settings', () => {
     deepStrictEqual(cacheVolumeOf(false, true), false);
   });
 
-  it('contracts: a non-boolean counts as unset', () => {
+  it('F-0419 AC-30: the number 0 is false', () => {
+    deepStrictEqual(cacheVolumeOf(0, undefined), false);
+  });
+
+  it('F-0419 AC-30: the string "false" is true', () => {
     deepStrictEqual(cacheVolumeOf('false', undefined), true);
+  });
+
+  it('F-0419 BR-15: an empty string is false', () => {
+    deepStrictEqual(cacheVolumeOf('', undefined), false);
+  });
+
+  it('F-0419 BR-15: null is set, and false', () => {
+    deepStrictEqual(cacheVolumeOf(null, true), false);
+  });
+
+  it('F-0419 AC-31: a set current value wins by its truthiness', () => {
+    deepStrictEqual(cacheVolumeOf(0, true), false);
+  });
+
+  it('F-0419 BR-8: the deprecated key by its truthiness', () => {
+    deepStrictEqual(cacheVolumeOf(undefined, 0), false);
   });
 });

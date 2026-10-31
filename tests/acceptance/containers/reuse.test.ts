@@ -557,6 +557,34 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
+  it('F-0419 AC-30 (cache-zero): with the number 0 for dev.containers.cacheVolume, the new container has no mount at /vscode', async () => {
+    const folder = devContainerFolder('cache-zero');
+    await setUserSetting('dev.containers.cacheVolume', 0);
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(await vscodeMounted(containerId), false);
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0419 AC-30 (cache-string-false): with the string "false" for dev.containers.cacheVolume, the new container mounts the vscode volume at /vscode', async () => {
+    const folder = devContainerFolder('cache-string-false');
+    await setUserSetting('dev.containers.cacheVolume', 'false');
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(await vscodeMounted(containerId), true);
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
+    }
+  });
+
   it('F-0405 AC-26 (b26b): in a local window with a missing docker, Rebuild and Reopen shows the engine dialog, and Cancel keeps the container', async () => {
     const folder = devContainerFolder('rebuild-local');
     try {
