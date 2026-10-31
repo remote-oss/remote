@@ -165,9 +165,34 @@ describe('the Details (Containers) view (card containers-33)', function () {
         `the Details section ${title} to show its rows`,
         async () => {
           try {
+            const [containerId = ''] = await devContainersOf(folder);
+            const {stdout} = await execFileAsync('docker', [
+              'inspect',
+              '--format',
+              '{{.Name}} {{json .Mounts}}',
+              containerId,
+            ]);
+            const space = stdout.indexOf(' ');
+            const containerName = stdout.slice(1, space);
+            const mounted = (
+              JSON.parse(stdout.slice(space + 1)) as Array<{
+                Type: string;
+                Name?: string;
+              }>
+            )
+              .filter(mount => mount.Type === 'volume')
+              .map(mount => mount.Name ?? '')
+              .sort();
             const rows = (await viewRows(name, title)) ?? [];
             const named = rows.find(each => each.label === 'Name');
-            if (named === undefined) {
+            if (named?.description !== containerName) {
+              return false;
+            }
+            const volumes = rows
+              .filter(each => each.label === 'Volume')
+              .map(each => each.description)
+              .sort();
+            if (JSON.stringify(volumes) !== JSON.stringify(mounted)) {
               return false;
             }
             found = {
