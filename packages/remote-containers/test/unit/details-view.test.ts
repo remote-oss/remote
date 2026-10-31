@@ -53,6 +53,8 @@ interface Scene {
   changes: number;
   timers: Array<{milliseconds: number; callback: () => void}>;
   disposed: string[];
+  /** How many times the view was given the focus. */
+  focused: number;
   /** The fake `docker` whose spawns are the events processes. */
   docker: FakeEngine;
   sink: MemorySink;
@@ -74,6 +76,7 @@ function sceneOf(): Scene {
     changes: 0,
     timers: [],
     disposed: [],
+    focused: 0,
     docker: fakeEngine(),
     sink: new MemorySink(),
   };
@@ -145,8 +148,13 @@ function portsOf(scene: Scene): DetailsViewPorts {
       setContext: (key, value) => contextSetOn(scene, key, value),
       createTreeView: (viewId, provider) =>
         treeViewOver(scene, viewId, provider),
+      focus: () => {
+        scene.focused += 1;
+        return Promise.resolve();
+      },
     },
     held: () => scene.held,
+    engine: () => engineOf(scene),
     events: sharedContainerEvents({
       engine: () => scene.held?.engine,
       setTimer: (milliseconds, callback) => {
@@ -352,6 +360,80 @@ describe('the Details view (card containers-33)', () => {
       [scene.runs.map(argv => argv[0]), scene.changes - before],
       [['inspect', 'inspect'], 1],
     );
+  });
+
+  const OTHER = 'b2b2b2b2b2b2';
+
+  it('F-0902 AC-13: Show Details of a container the window does not hold reads it by its id on the view’s engine, shows it under the row’s label with the key set, and gives the view the focus', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    const before = scene.runs.length;
+    await view.showContainer(OTHER, 'My App');
+    deepStrictEqual(
+      [
+        scene.runs.slice(before),
+        scene.titles.at(-1),
+        scene.contexts.at(-1),
+        scene.focused,
+        (await labelsOf(provider)).slice(0, 1),
+      ],
+      [
+        [['inspect', '--type', 'container', OTHER]],
+        'My App',
+        [SHOW_KEY, true],
+        1,
+        ['Attributes'],
+      ],
+    );
+  });
+
+  it('F-0902 AC-28: Show Details again on the same row leaves the one tree, reads it again and focuses again', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    const first = await labelsOf(provider);
+    await view.showContainer(OTHER, 'My App');
+    deepStrictEqual(
+      [await labelsOf(provider), scene.titles.at(-1), scene.focused],
+      [first, 'My App', 2],
+    );
+  });
+
+  it('F-0902 6.8: a Refresh keeps the choice, and a later Show Details replaces it', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    await view.refresh();
+    const refreshed = [scene.runs.at(-1)?.at(-1), scene.titles.at(-1)];
+    await view.showContainer('c3c3c3c3c3c3', 'Other App');
+    deepStrictEqual(
+      [refreshed, scene.runs.at(-1)?.at(-1), scene.titles.at(-1)],
+      [[OTHER, 'My App'], 'c3c3c3c3c3c3', 'Other App'],
+    );
+  });
+
+  it('F-0902 6.8: a connection made or given back ends the choice, and the view shows what the window holds', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    connect(scene, connectionOf(scene));
+    await settled();
+    const held = [scene.runs.at(-1)?.at(-1), scene.titles.at(-1)];
+    connect(scene, undefined);
+    await settled();
+    deepStrictEqual(
+      [held, scene.contexts.at(-1), scene.titles.at(-1)],
+      [[CONTAINER, 'c33w'], [SHOW_KEY, false], undefined],
+    );
+  });
+
+  it('F-0902 6.8: a choice made before core has registered the view has nothing to show it in, and the handle goes on', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    const view = showDetailsWhenRegistered(portsOf(scene));
+    await view.showContainer(OTHER, 'My App');
+    view.dispose();
+    deepStrictEqual([scene.runs, scene.focused], [[], 0]);
   });
 
   it('F-0903 AC-8: a connection made, replaced or given back reads again, and the key follows', async () => {

@@ -153,5 +153,6 @@
   "Add configuration to user data folder": "Add configuration to user data folder",
   "This avoids having outgoing changes in your workspace folder": "This avoids having outgoing changes in your workspace folder",
   "Configuration already exists": "Configuration already exists",
-  "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository."
+  "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.",
+  "Error inspecting: {0}": "Error inspecting: {0}"
 }

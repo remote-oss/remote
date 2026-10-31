@@ -103,10 +103,10 @@ export async function made(
   return container;
 }
 
-/** Opens the Dev Containers view in the local window and waits for the row labelled `label`. */
-export async function viewed(label: string): Promise<void> {
-  await inWindow('local', 'workbench.view.remote');
-  await rowsWhen('local', rows => rows.some(each => each.label === label));
+/** Opens the Dev Containers view in window `name` (the local one by default) and waits for the row labelled `label`. */
+export async function viewed(label: string, name = 'local'): Promise<void> {
+  await inWindow(name, 'workbench.view.remote');
+  await rowsWhen(name, rows => rows.some(each => each.label === label));
 }
 
 /** The icon of the row labelled `label` in window `name`, or none when the view lists no such row. */
@@ -147,7 +147,11 @@ export async function shown(name: string): Promise<{
   return {...dialog, kind: await dialogKindOf(name)};
 }
 
-/** Picks the context menu item `item` of the row `label` in the local window. */
-export function chosen(label: string, item: string): Promise<void> {
-  return rowMenuAction('local', VIEW, label, item);
+/** Picks the context menu item `item` of the row `label` in window `name` (the local one by default). */
+export function chosen(
+  label: string,
+  item: string,
+  name = 'local',
+): Promise<void> {
+  return rowMenuAction(name, VIEW, label, item);
 }

@@ -7,6 +7,7 @@
 
 import type {Logger} from 'lib-log';
 import type {HeldConnection} from '../connect/connector.ts';
+import type {EngineHost} from '../engine/engine-host.ts';
 import {contextKeys, views} from '../identifiers.generated.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {
@@ -43,6 +44,8 @@ interface DetailsEditor {
   commandIds(): PromiseLike<readonly string[]>;
   setContext(key: string, value: boolean): PromiseLike<unknown>;
   createTreeView(viewId: string, provider: DetailsProvider): DetailsTreeView;
+  /** Gives the view the focus. */
+  focus(): PromiseLike<unknown>;
 }
 
 /** Everything the view needs. */
@@ -50,6 +53,8 @@ export interface DetailsViewPorts {
   editor: DetailsEditor;
   /** The connection the window holds, from the connector. */
   held(): HeldConnection | undefined;
+  /** The engine the Dev Containers view lists with, which reads a container the window does not hold. */
+  engine(): EngineHost | undefined;
   /** Calls the listener when the connection the window holds is made, replaced or given back. */
   onHeldChanged(listener: () => void): () => void;
   /** The Docker events of the window, shared with the other views. */
@@ -64,6 +69,11 @@ export interface DetailsViewPorts {
 export interface DetailsView {
   /** Reads the container again now, or joins the read that is running. */
   refresh(): Promise<void>;
+  /**
+   * Shows the container `containerId` under the title `label` and gives the view the focus. The choice holds until the
+   * next one, or until the connection the window holds changes; a refresh keeps it.
+   */
+  showContainer(containerId: string, label: string): Promise<void>;
   dispose(): void;
 }
 
@@ -94,11 +104,13 @@ export async function showDetails(
   let current: readonly DetailsRow[] = [];
   let reading: Promise<void> | undefined;
   let visible = false;
+  /** The container a Show Details chose, in place of the one the window holds. */
+  let chosen: {containerId: string; label: string} | undefined;
 
-  /** The container the window holds, read through the connection's engine; none when it can't be read. */
-  async function shownBy(held: HeldConnection) {
-    const inspected = await held.engine.run(
-      inspectArguments([held.containerId]),
+  /** The container `containerId`, read through `engine`; none when it can't be read. */
+  async function shownBy(engine: EngineHost, containerId: string) {
+    const inspected = await engine.run(
+      inspectArguments([containerId]),
       {kind: 'none'},
       {cancellation: stopping.signal},
     );
@@ -118,22 +130,29 @@ export async function showDetails(
   /** Reads the container, builds the next tree and swaps it in with the title. */
   async function build(): Promise<void> {
     const held = ports.held();
-    const shown = held === undefined ? undefined : await shownBy(held);
+    const choice = chosen;
+    const engine = choice === undefined ? held?.engine : ports.engine();
+    const containerId = choice?.containerId ?? held?.containerId;
+    const shown =
+      engine === undefined || containerId === undefined
+        ? undefined
+        : await shownBy(engine, containerId);
     const next =
       shown === undefined ? undefined : detailsTreeOf(shown, ports.translate);
+    const showing = held !== undefined || choice !== undefined;
     await editor.setContext(
       contextKeys.remoteContainersShowDetails.id,
-      held !== undefined,
+      showing,
     );
     if (stopping.signal.aborted) {
       return;
     }
     current = next?.sections ?? [];
-    treeView.setTitle(next?.title);
+    treeView.setTitle(choice === undefined ? next?.title : choice.label);
     listeners.forEach(listener => {
       listener();
     });
-    if (visible && held !== undefined) {
+    if (visible && showing) {
       events.start();
     }
   }
@@ -176,10 +195,20 @@ export async function showDetails(
       events.stop();
     }
   });
-  const unsubscribe = ports.onHeldChanged(readLogged);
+  const unsubscribe = ports.onHeldChanged(() => {
+    chosen = undefined;
+    readLogged();
+  });
   readLogged();
   return {
     refresh: read,
+    showContainer: async (containerId, label) => {
+      chosen = {containerId, label};
+      // A read that started before the choice is waited for, so that the next one is of the choice.
+      await reading?.catch(() => undefined);
+      await read();
+      await editor.focus();
+    },
     dispose: () => {
       if (stopping.signal.aborted) {
         return;
@@ -198,5 +227,20 @@ export async function showDetails(
 export function showDetailsWhenRegistered(
   ports: DetailsViewPorts,
 ): DetailsView {
-  return whenRegistered(() => showDetails(ports), ports, 'Details');
+  let shown: DetailsView | undefined;
+  const handle = whenRegistered(
+    async () => {
+      shown = await showDetails(ports);
+      return shown;
+    },
+    ports,
+    'Details',
+  );
+  return {
+    ...handle,
+    // A choice before core has registered the view has nothing to show it in.
+    showContainer: async (containerId, label) => {
+      await shown?.showContainer(containerId, label);
+    },
+  };
 }

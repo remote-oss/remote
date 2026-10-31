@@ -101,7 +101,13 @@ import {
   type DetailsView,
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
-import {type RowActions, rowActionsOf} from './explorer/row-actions.ts';
+import {containerLogOf} from './explorer/container-log.ts';
+import {inspectOf} from './explorer/inspect.ts';
+import {
+  containerRowOf,
+  type RowActions,
+  rowActionsOf,
+} from './explorer/row-actions.ts';
 import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
 import {
@@ -427,6 +433,8 @@ export async function activate(
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
+  let inspectRow: ((argument: unknown) => Promise<void>) | undefined;
+  let showContainerLog: ((argument: unknown) => Promise<void>) | undefined;
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
@@ -941,6 +949,16 @@ export async function activate(
         startContainer: {execute: argument => rowActions?.start(argument)},
         stopContainer: {execute: argument => rowActions?.stop(argument)},
         removeContainer: {execute: argument => rowActions?.remove(argument)},
+        showDetails: {
+          execute: async argument => {
+            const target = containerRowOf(argument);
+            if (target !== undefined) {
+              await detailsView?.showContainer(target.id, target.label);
+            }
+          },
+        },
+        inspectDockerResource: {execute: argument => inspectRow?.(argument)},
+        showContainerLog: {execute: argument => showContainerLog?.(argument)},
         openFolderInContainerInCurrentWindow: {
           execute: argument => rowOpen.current(argument),
         },
@@ -1267,9 +1285,41 @@ export async function activate(
       translate,
       cancellation: rowActionsStop.signal,
     });
+    inspectRow = inspectOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
+      open: async content => {
+        const document = await vscode.workspace.openTextDocument({
+          language: 'json',
+          content,
+        });
+        return vscode.window.showTextDocument(document);
+      },
+      showError: text => {
+        void vscode.window.showErrorMessage(text);
+      },
+      translate,
+      cancellation: rowActionsStop.signal,
+    });
+    showContainerLog = containerLogOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      engineFile: () => {
+        const executable = executableOf(windowEngine.dockerPath(), undefined);
+        return executable.kind === 'spawn'
+          ? executable.file
+          : executable.written;
+      },
+      createTerminal: options => vscode.window.createTerminal(options),
+      cancellation: rowActionsStop.signal,
+    });
     detailsView = showDetailsWhenRegistered({
-      editor: explorerEditor,
+      editor: {
+        ...explorerEditor,
+        focus: () =>
+          vscode.commands.executeCommand(`${views.detailsContainers}.focus`),
+      },
       held: () => connector.heldConnection(),
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
       onHeldChanged: listener => connector.onHeldChanged(listener),
       events: containerEvents,
       setTimer: (milliseconds, callback) =>
