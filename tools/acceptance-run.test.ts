@@ -10,6 +10,7 @@ import {
   throws,
 } from 'node:assert';
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -21,13 +22,16 @@ import path from 'node:path';
 import {
   acceptanceRunId,
   buildDevContainerImage,
+  cleanPodmanRun,
   cleanRun,
   connectRunNetwork,
   createdSecondsOf,
   hostImageOf,
   type HostContainer,
+  loadImageIntoPodman,
   NETWORK_AGE_FORMAT,
   newPassword,
+  requirePodman,
   RUN_LABEL,
   runNetworkOf,
   startHostContainer,
@@ -1204,5 +1208,232 @@ describe('the dev container image and its sweep (card containers-09)', () => {
         ['image', 'ls'],
       ],
     );
+  });
+});
+
+describe('the Podman of a containers-podman run (card containers-101)', () => {
+  const RUN_FILTER = 'label=remote-oss.acceptance.run=77-2';
+  const LOADED = 'docker.io/library/remote-oss-acceptance-devcontainer:77-2';
+
+  it('containers-101: a program that does not start answers with status 1 and its error, not with a failure of the caller', () => {
+    const result = runCommand(
+      'podman-that-is-not-installed-containers-101',
+      [],
+    );
+    deepStrictEqual(
+      [result.status, result.stdout, result.stderr.includes('ENOENT')],
+      [1, '', true],
+    );
+  });
+
+  it('containers-101: Podman 5 and later is accepted, asked for its client version', () => {
+    const scripted = scriptedCommands();
+    scripted.passes('5.8.9\n');
+    scripted.passes('6.0.0\n');
+
+    requirePodman(scripted);
+    requirePodman(scripted);
+
+    deepStrictEqual(scripted.callsOf('podman'), [
+      ['version', '--format', '{{.Client.Version}}'],
+      ['version', '--format', '{{.Client.Version}}'],
+    ]);
+  });
+
+  it('containers-101: an older Podman, an answer that is no version and a Podman that does not run refuse the launch, naming what was printed', () => {
+    const messages: string[] = [];
+    for (const answer of [
+      (scripted: ScriptedCommands) => {
+        scripted.passes('4.9.3\n');
+      },
+      (scripted: ScriptedCommands) => {
+        scripted.passes('\n');
+      },
+      (scripted: ScriptedCommands) => {
+        scripted.fails(1, 'spawnSync podman ENOENT\n');
+      },
+    ]) {
+      const scripted = scriptedCommands();
+      answer(scripted);
+      try {
+        requirePodman(scripted);
+      } catch (error) {
+        messages.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+    deepStrictEqual(messages, [
+      'the containers-podman launch needs Podman 5 or later: 4.9.3',
+      'the containers-podman launch needs Podman 5 or later: ',
+      'the containers-podman launch needs Podman 5 or later: spawnSync podman ENOENT',
+    ]);
+  });
+
+  it('containers-101: the run’s dev container image goes from Docker’s storage to Podman’s through a file of the run’s folder, which is gone after, and the name Podman lists is given', () => {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'podman-load-'));
+    try {
+      const scripted = scriptedCommands();
+      scripted.passes(''); // docker save
+      scripted.passes(`Loaded image: ${LOADED}\n`); // podman load
+      scripted.passes(`alpine:3\n${LOADED}\n`); // podman image ls
+      const archive = path.join(runFolder, 'engine-image.tar');
+      // The archive `docker save` wrote, which the scripted call cannot write.
+      writeFileSync(archive, 'image');
+
+      const listed = loadImageIntoPodman(scripted, RUN_ID, runFolder);
+
+      deepStrictEqual(
+        [listed, scripted.calls, existsSync(archive)],
+        [
+          LOADED,
+          [
+            {
+              program: 'docker',
+              argv: [
+                'save',
+                '--output',
+                archive,
+                'remote-oss-acceptance-devcontainer:77-2',
+              ],
+            },
+            {program: 'podman', argv: ['load', '--input', archive]},
+            {
+              program: 'podman',
+              argv: ['image', 'ls', '--format', '{{.Repository}}:{{.Tag}}'],
+            },
+          ],
+          false,
+        ],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('containers-101: a load that fails, and an image Podman does not list after it, throw', () => {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'podman-load-'));
+    try {
+      const failing = scriptedCommands();
+      failing.passes('');
+      failing.fails(125, 'no space left');
+      const unlisted = scriptedCommands();
+      unlisted.passes('');
+      unlisted.passes('');
+      unlisted.passes('alpine:3\n');
+      const messages = [failing, unlisted].map(scripted => {
+        try {
+          loadImageIntoPodman(scripted, RUN_ID, runFolder);
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      });
+      deepStrictEqual(
+        [
+          /podman load --input .* failed \(125\): no space left/.test(
+            messages[0] ?? '',
+          ),
+          messages[1],
+        ],
+        [
+          true,
+          'podman lists no image remote-oss-acceptance-devcontainer:77-2 after loading it',
+        ],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  const CREATED = '2026-10-31 15:23:46.294023453 +0000 UTC';
+  const CREATED_SECONDS = Date.parse(CREATED) / 1000;
+
+  /** Queues the answers of a clean-up of two containers, one of whose image is not the run's own tag. */
+  function scriptedPodmanRun(
+    scripted: ScriptedCommands,
+    options: {
+      volume: 'created' | 'missing';
+      removed?: true;
+      remaining?: string;
+    },
+  ): void {
+    scripted.passes('other:1\nother:1\n'); // ps: the images of the containers
+    scripted.passes('c1\nc2\n'); // ps: their ids
+    scripted.passes(''); // rm c1
+    scripted.passes(''); // rm c2
+    scripted.passes(`alpine:3\n${LOADED}\n`); // image ls
+    scripted.passes(''); // image rm other:1
+    scripted.passes(''); // image rm the run's tag
+    if (options.volume === 'created') {
+      scripted.passes(`${CREATED}\n`); // volume inspect
+    } else {
+      scripted.fails(125, 'no such volume');
+    }
+    if (options.removed === true) {
+      scripted.passes(''); // volume rm
+    }
+    scripted.passes(options.remaining ?? ''); // ps: what is left
+  }
+
+  it('containers-101: the clean-up removes the run’s containers, their images and the run’s loaded image, and a vscode volume made after the run began', () => {
+    const scripted = scriptedCommands();
+    scriptedPodmanRun(scripted, {volume: 'created', removed: true});
+
+    cleanPodmanRun(scripted, RUN_ID, CREATED_SECONDS - 1);
+
+    deepStrictEqual(scripted.callsOf('podman'), [
+      ['ps', '--all', '--filter', RUN_FILTER, '--format', '{{.Image}}'],
+      ['ps', '--all', '--quiet', '--filter', RUN_FILTER],
+      ['rm', '--force', 'c1'],
+      ['rm', '--force', 'c2'],
+      ['image', 'ls', '--format', '{{.Repository}}:{{.Tag}}'],
+      ['image', 'rm', '--force', 'other:1'],
+      ['image', 'rm', '--force', LOADED],
+      ['volume', 'inspect', 'vscode', '--format', '{{.CreatedAt}}'],
+      ['volume', 'rm', 'vscode'],
+      ['ps', '--all', '--quiet', '--filter', RUN_FILTER],
+    ]);
+  });
+
+  it('containers-101: a vscode volume made in the very second the run began is the run’s, and goes', () => {
+    const scripted = scriptedCommands();
+    scriptedPodmanRun(scripted, {volume: 'created', removed: true});
+
+    cleanPodmanRun(scripted, RUN_ID, CREATED_SECONDS);
+
+    deepStrictEqual(
+      scripted
+        .callsOf('podman')
+        .filter(argv => argv[0] === 'volume' && argv[1] === 'rm'),
+      [['volume', 'rm', 'vscode']],
+    );
+  });
+
+  it('containers-101: a vscode volume that was there before the run, or none, stays', () => {
+    const before = scriptedCommands();
+    scriptedPodmanRun(before, {volume: 'created'});
+    const none = scriptedCommands();
+    scriptedPodmanRun(none, {volume: 'missing'});
+
+    cleanPodmanRun(before, RUN_ID, CREATED_SECONDS + 1);
+    cleanPodmanRun(none, RUN_ID, 0);
+
+    deepStrictEqual(
+      [before, none].map(
+        scripted =>
+          scripted
+            .callsOf('podman')
+            .filter(argv => argv[0] === 'volume' && argv[1] === 'rm').length,
+      ),
+      [0, 0],
+    );
+  });
+
+  it('containers-101: a container that still carries the run’s label after the clean-up makes it throw, naming the ids', () => {
+    const scripted = scriptedCommands();
+    scriptedPodmanRun(scripted, {volume: 'missing', remaining: 'c9\n'});
+
+    throws(() => {
+      cleanPodmanRun(scripted, RUN_ID, 0);
+    }, /the run 77-2 still owns podman containers after the clean-up: c9/);
   });
 });

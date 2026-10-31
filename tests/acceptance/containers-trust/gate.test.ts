@@ -39,6 +39,9 @@ import {folderWrapper, recordedCalls} from '../windows/folder-wrapper.ts';
 /** The question core asks of a folder, F-0106 5.0 step 2. */
 const TRUST_QUESTION = 'Do you trust the authors of the files in this folder?';
 
+/** The start of the discovery notification, which F-0301 5.0 step 2 shows in Restricted Mode as well. */
+const DISCOVERY = 'Folder contains a Dev Container configuration file.';
+
 /** The body the extension gives core's dialog, STR:S265. */
 const S265 =
   'Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.';
@@ -122,7 +125,10 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
         await answerDialog(name, 'Cancel');
         await running;
         await new Promise(resolve => setTimeout(resolve, 2000));
-        const after = await notifications(name);
+        // The discovery notification shows before the attempt, in Restricted Mode too: it isn't the attempt's.
+        const after = (await notifications(name)).filter(
+          text => !text.startsWith(DISCOVERY),
+        );
         declined.push({
           shown: [shown.message, text?.includes(S265), shown.buttons],
           whileOpen,

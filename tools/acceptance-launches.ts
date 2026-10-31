@@ -39,6 +39,12 @@ interface LaunchCommon {
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
   /**
+   * The engine the launch's extension drives instead of Docker: it sets `dev.containers.dockerPath`, and the run
+   * prepares that engine's storage. The run's own infrastructure (the SSH host, the registry, the download host) stays
+   * on Docker.
+   */
+  engine?: 'podman';
+  /**
    * The base of the SSH host the launch's window connects to, when it is not Alpine's: the run starts a host of that
    * base beside its own, and the launch's ssh_config, settings and harness variables name it.
    */
@@ -872,6 +878,14 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers-killed',
       environment: {HARNESS_KILLED_CASE: '43'},
     },
+    // Named only: it needs Podman 5 on the machine, and the run refuses without it.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-podman',
+      suite: 'containers-podman',
+      engine: 'podman',
+      namedOnly: true,
+    },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
         label: hostCaseLabel(suite, hostCase),
@@ -947,6 +961,15 @@ export function launchGroupOf(launch: Launch): LaunchGroup {
   return HOST_CASE_SUITES.some(suite => suite.suite === launch.suite)
     ? 'hosts'
     : 'ssh';
+}
+
+/** The user settings a launch gets: its own, and the engine's `dev.containers.dockerPath` when it names one. */
+export function settingsOfLaunch(
+  launch: Launch,
+): Readonly<Record<string, unknown>> | undefined {
+  return launch.engine === undefined
+    ? launch.settings
+    : {...launch.settings, 'dev.containers.dockerPath': launch.engine};
 }
 
 /** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */
