@@ -645,39 +645,6 @@ export async function toggleRow(
 }
 
 /**
- * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the order
- * the row lists them; they are in the page whether or not the pointer is over the row. It fails naming the row when the
- * view has not one row by that label.
- */
-export async function rowInlineActions(
-  name: string,
-  viewName: string,
-  rowLabel: string,
-): Promise<string[]> {
-  const titles = await evaluate<string[] | null>(
-    name,
-    `(async () => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      if (rows.length !== 1) {
-        return null;
-      }
-      rows[0].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const inline = [...rows[0].querySelectorAll('.actions-container .action-label')].map(label => label.getAttribute('aria-label') ?? '');
-      rows[0].dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
-      return inline;
-    })()`,
-  );
-  if (titles === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
-  return titles;
-}
-
-/**
  * The labels of the context menu that a right click on the row `rowLabel` of view `viewName` in window `name` opens, in
  * order; none when it opens no menu. The menu is closed again. It fails naming the row when the view has none by that
  * label.
@@ -695,15 +662,10 @@ export async function rowContextMenu(
       if (rows.length !== 1) {
         return null;
       }
-      rows[0].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
-      await new Promise(resolve => setTimeout(resolve, 300));
       const box = rows[0].getBoundingClientRect();
       rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
-      for (let tries = 0; tries < 30 && document.querySelector('.context-view .monaco-menu .action-label') === null; tries += 1) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '');
       for (const type of ['keydown', 'keyup']) {
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
       }
