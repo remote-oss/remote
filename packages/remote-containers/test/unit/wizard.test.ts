@@ -17,6 +17,7 @@ import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
 import type {LocationPorts} from '../../src/authoring/location.ts';
 import {
+  pick,
   pressBack,
   FINISH_BUTTON,
   pressEscape,
@@ -344,6 +345,15 @@ function locationOf(scene: Scene): LocationPorts {
   };
 }
 
+/** The stages of a catalogue with one template and no Feature, over the ports of `scene`. */
+function stagesWithoutFeatures(scene: Scene): ReturnType<typeof stagesOf> {
+  return stagesOf({kind: 'catalogue', templates: [ALPINE], features: []}, {
+    ...scene.ports,
+    title: 'T',
+    facts: {rootEntries: [], files: [], truncated: false},
+  } satisfies StagePorts);
+}
+
 /** Starts the wizard and gives the first quick pick it makes, once the catalogue and the folder were read. */
 async function started(scene: Scene): Promise<{
   picker: FakePicker;
@@ -600,19 +610,12 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list is the template pick, the template’s options and Select Features', () => {
+  it('F-0801 BR-5: the stage list is the template pick, the template’s options, Select Features and the Features’ options', () => {
     const scene = sceneOf();
-    const stages = stagesOf(
-      {kind: 'catalogue', templates: [ALPINE], features: []},
-      {
-        ...scene.ports,
-        title: 'T',
-        facts: {rootEntries: [], files: [], truncated: false},
-      } satisfies StagePorts,
-    );
+    const stages = stagesWithoutFeatures(scene);
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick', 'templateOptions', 'selectFeatures'],
+      ['templatePick', 'templateOptions', 'selectFeatures', 'featureOptions'],
     );
   });
 
@@ -707,6 +710,102 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  /** A catalogue with an Alpine template and the Feature `Lab Options`, which declares a boolean and an enum. */
+  function labCatalogue(): string {
+    return JSON.stringify({
+      collections: [
+        {
+          templates: [{id: `${PREFIX}alpine`, version: '1', name: 'Alpine'}],
+          features: [
+            {
+              id: 'ghcr.io/x/features/lab',
+              version: '1.0.0',
+              name: 'Lab Options',
+              options: {
+                enabled: {type: 'boolean', default: true},
+                level: {type: 'string', enum: ['low', 'high'], default: 'low'},
+              },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  /** Runs the wizard over the lab catalogue to its end, the Features' screens played by `steps`. */
+  async function ranOverLab(steps: Step[]) {
+    const scene = sceneOf();
+    const input = scriptedInput(steps);
+    scene.ports.options = input.ports;
+    scene.ports.catalogue.download = () => Promise.resolve(labCatalogue());
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await result;
+    return {scene, input};
+  }
+
+  it('F-0803 AC-11, BR-5: OK on Select Features with a Feature that declares options asks Keep Defaults or Configure Options, and Keep Defaults writes the Feature as {}', async () => {
+    const {scene, input} = await ranOverLab([
+      picker => {
+        picker.acceptChecked(['Lab Options']);
+      },
+      pick('Keep Defaults'),
+    ]);
+    deepStrictEqual(
+      [scene.written.map(each => each.features), input.pickers[1]?.title],
+      [
+        [[{id: 'ghcr.io/x/features/lab:1', options: {}}]],
+        'Keep Feature defaults or configure options?',
+      ],
+    );
+  });
+
+  it('F-0803 AC-25, BR-14: Back in the Features’ walk reopens Select Features with nothing checked', async () => {
+    const {input} = await ranOverLab([
+      picker => {
+        picker.acceptChecked(['Lab Options']);
+      },
+      pick('Configure Options'),
+      pressBack,
+      pressEscape,
+    ]);
+    deepStrictEqual(
+      [
+        input.pickers.map(each => each.title),
+        input.pickers[3]?.selectedItems.length,
+      ],
+      [
+        [
+          'Select Features',
+          'Keep Feature defaults or configure options?',
+          "Select boolean options for 'Lab Options'",
+          'Select Features',
+        ],
+        0,
+      ],
+    );
+  });
+
+  it('F-0803 BR-8: a Feature the catalogue does not list keeps its entry and asks nothing', async () => {
+    const scene = sceneOf();
+    const input = scriptedInput([]);
+    scene.ports.options = input.ports;
+    const stages = stagesWithoutFeatures(scene);
+    const result = await stages[3]?.execute(
+      {
+        ...INITIAL,
+        features: [{id: 'ghcr.io/x/features/gone:1', options: {}}],
+        featureMode: 'configure',
+      },
+      undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      [result?.kind === 'next' && result.state.features, input.pickers.length],
+      [[{id: 'ghcr.io/x/features/gone:1', options: {}}], 0],
+    );
+  });
+
   it('F-0801 BR-5: with the location ports the location stage runs before the template pick', () => {
     const scene = sceneOf();
     const stages = stagesOf(
@@ -720,7 +819,13 @@ describe('the wizard (card containers-80)', () => {
     );
     deepStrictEqual(
       stages.map(each => each.name),
-      ['location', 'templatePick', 'templateOptions', 'selectFeatures'],
+      [
+        'location',
+        'templatePick',
+        'templateOptions',
+        'selectFeatures',
+        'featureOptions',
+      ],
     );
   });
 

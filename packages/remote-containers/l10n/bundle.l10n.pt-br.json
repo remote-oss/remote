@@ -160,5 +160,11 @@
   "Delete": "Delete",
   "Keep": "Keep",
   "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.",
-  "Error inspecting: {0}": "Error inspecting: {0}"
+  "Error inspecting: {0}": "Error inspecting: {0}",
+  "Configure Options": "Configure Options",
+  "Keep Defaults": "Keep Defaults",
+  "Keep Feature defaults or configure options?": "Keep Feature defaults or configure options?",
+  "Select boolean options for '{0}'": "Select boolean options for '{0}'",
+  "Select boolean options for {0}": "Select boolean options for {0}",
+  "Select options for '{0}'": "Select options for '{0}'"
 }
