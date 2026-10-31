@@ -77,7 +77,7 @@ describe('F-0415 reopening, the environment, the log and the terminal (card cont
       const centre = await notificationCentre(name);
       const dialog = await dialogOf(name);
       await closeWindow(name);
-      const positions = [
+      const [outputAt = -1, failureAt = -1, doneAt = -1] = [
         'c58-before-failure',
         failure,
         'Done. Press any key to close the terminal.',
@@ -86,9 +86,7 @@ describe('F-0415 reopening, the environment, the log and the terminal (card cont
         {
           outputKept: lines.includes('c58-before-failure'),
           terminalInOrder:
-            positions.every(position => position >= 0) &&
-            positions[0] < positions[1] &&
-            positions[1] < positions[2],
+            outputAt >= 0 && outputAt < failureAt && failureAt < doneAt,
           failureIsRed: [1, 9].includes(
             spans.find(span => span.text.includes(failure))?.foreground ?? -1,
           ),
