@@ -91,6 +91,7 @@ describe('the port attributes of the configuration (card containers-73)', functi
     port: number,
     name: string,
   ): Promise<string[]> {
+    await showPorts(window);
     const [containerId = ''] = await devContainersOf(folderOf(name));
     await listenIn(containerId, port);
     await rowsWhen(window, shown =>
