@@ -9,7 +9,7 @@
  * a lower-case letter (`AC-17b`). A test row proves the
  * criteria its name starts with (feature ids, each with its `AC-` numbers, after a space or a dot, in a `, `-separated list, then a colon). The check fails when a line is malformed, when a tag asks for a
  * kind of row that does not cite the criterion, when a row cites a criterion the file does not have, or when an
- * acceptance row names a feature of a file and no criterion. It prints how many criteria each tag holds, per file. Exit 0
+ * acceptance row names a feature of a file and no criterion. It prints how many criteria each tag holds, per file. A `todo` line a row already cites gets a note, which never changes the exit code. Exit 0
  * when it passes, 1 with problems, 2 when a file cannot be read.
  */
 
@@ -70,6 +70,7 @@ export type CoverageReport =
   | {
       kind: 'checked';
       problems: string[];
+      notes: string[];
       counts: Array<{file: string; counts: Record<Tag, number>}>;
     };
 
@@ -302,6 +303,7 @@ function rowProblems(
   lines: readonly Line[],
   rows: readonly Row[],
   problems: string[],
+  notes: string[],
 ): void {
   const known = new Set(lines.map(line => line.id));
   const acceptanceCited = new Set<string>();
@@ -345,6 +347,20 @@ function rowProblems(
       );
     }
   }
+  for (const line of lines) {
+    if (line.tagName !== 'todo') {
+      continue;
+    }
+    if (acceptanceCited.has(line.id)) {
+      notes.push(
+        `${place(scope.file, line.number)}: ${line.id} is todo and an acceptance row cites it`,
+      );
+    } else if (unitCited.has(line.id)) {
+      notes.push(
+        `${place(scope.file, line.number)}: ${line.id} is todo and a unit row cites it`,
+      );
+    }
+  }
 }
 
 /** The count of `lines` per tag. */
@@ -382,6 +398,7 @@ export function checkCoverage(
     existsSync(path.join(root, scope.file)),
   );
   const problems: string[] = [];
+  const notes: string[] = [];
   const rows = rowsOf(root);
   const counts = present.map(scope => {
     const lines = linesOf(
@@ -390,10 +407,15 @@ export function checkCoverage(
       problems,
     );
     reasonProblems(scope, lines, problems);
-    rowProblems(scope, lines, rows, problems);
+    rowProblems(scope, lines, rows, problems, notes);
     return {file: scope.file, counts: countsOf(lines)};
   });
-  return {kind: 'checked', problems: problems.sort(), counts};
+  return {
+    kind: 'checked',
+    problems: problems.sort(),
+    notes: notes.sort(),
+    counts,
+  };
 }
 
 /** The lines the command prints for a report, and its exit code. */
@@ -409,7 +431,11 @@ export function outputOf(report: CoverageReport): {
     ...TAGS.map(name => `${name}: ${String(each.counts[name])}`),
   ]);
   return {
-    lines: [...report.problems, ...counts],
+    lines: [
+      ...report.problems,
+      ...report.notes.map(note => `note: ${note}`),
+      ...counts,
+    ],
     exitCode: report.problems.length === 0 ? 0 : 1,
   };
 }

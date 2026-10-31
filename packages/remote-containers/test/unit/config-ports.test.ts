@@ -65,10 +65,6 @@ function scene(options: {openFails?: unknown; warningAnswer?: string} = {}) {
       calls.push(['warn', message, given, items]);
       return Promise.resolve(options.warningAnswer);
     },
-    showInformationMessage: message => {
-      calls.push(['info', message]);
-      return Promise.resolve(undefined);
-    },
     showTextDocument: (file, given) => {
       calls.push(['open', file, given]);
       return 'openFails' in options
@@ -177,12 +173,6 @@ describe('the editor adapters of the configuration choice (card containers-13)',
       [answer, calls],
       ['x', [['warn', '', {modal: true, detail: 'detail'}, []]]],
     );
-  });
-
-  it('F-0301 6.2: the information message is shown without waiting for it', () => {
-    const {surfaces, calls} = scene();
-    surfaces.showInformation('hello');
-    deepStrictEqual(calls, [['info', 'hello']]);
   });
 
   it('F-0301 5.0 step 6: a file opens as a preview', async () => {

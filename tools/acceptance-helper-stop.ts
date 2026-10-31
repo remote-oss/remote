@@ -1,7 +1,7 @@
 /**
  * @fileoverview The helper processes a run's windows leave running. A helper that left the editor's process tree
  * outlives the editor, so at the end of every launch, and in the clean-up of a run that was killed, the run stops each
- * helper recorded under its user-data folder. This side finds the records and runs the acceptance package's program,
+ * helper recorded under its user-data folders. This side finds the records and runs the acceptance package's program,
  * which stops them with the helpers' own library.
  */
 
@@ -113,20 +113,37 @@ export function stopHelpersUnder(
   }
 }
 
-/** The user-data folders of the run `runId` under `temporaryFolder`, named as the run names its folder. */
+/** A user-data folder in a run's folder: the run's own, or a plain launch's (`user-data-<label>`). */
+const USER_DATA_FOLDER = /^user-data(-[a-z0-9-]+)?$/;
+
+/** The folders under `parent` whose names `wanted` accepts, sorted. */
+function foldersNamed(
+  parent: string,
+  wanted: (name: string) => boolean,
+): string[] {
+  return readdirSync(parent, {withFileTypes: true})
+    .filter(entry => entry.isDirectory() && wanted(entry.name))
+    .map(entry => path.join(parent, entry.name))
+    .sort();
+}
+
+/**
+ * The user-data folders of the run `runId` under `temporaryFolder`: every one in each folder named as the run names
+ * its folder.
+ */
 export function runUserDataFolders(
   temporaryFolder: string,
   runId: string,
 ): string[] {
   const prefix = `acceptance-${runId}-`;
-  return readdirSync(temporaryFolder)
-    .filter(
-      name =>
-        name.startsWith(prefix) &&
-        /^[A-Za-z0-9]+$/.test(name.slice(prefix.length)),
-    )
-    .sort()
-    .map(name => path.join(temporaryFolder, name, 'user-data'));
+  return foldersNamed(
+    temporaryFolder,
+    name =>
+      name.startsWith(prefix) &&
+      /^[A-Za-z0-9]+$/.test(name.slice(prefix.length)),
+  ).flatMap(runFolder =>
+    foldersNamed(runFolder, name => USER_DATA_FOLDER.test(name)),
+  );
 }
 
 /** Stops the helpers of every folder the run `runId` left under `temporaryFolder`. */

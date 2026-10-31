@@ -54,6 +54,8 @@ async function registered(
     ) => Promise<string | undefined>;
     /** The ports the connector says the connection declares. */
     ports?: DeclaredPorts;
+    /** The editor's registration of the resolver throws, as it does when the proposal is not enabled. */
+    registerThrows?: boolean;
   } = {},
 ) {
   const warned: string[] = [];
@@ -114,10 +116,18 @@ async function registered(
     showOutOfContext: () => undefined,
   };
   let revealed = 0;
+  const thrown: string[] = [];
   const result = await registerContainerResolver(
     {
       resolverEditor: {
         ...recording.editor,
+        ...(options.registerThrows === true
+          ? {
+              registerRemoteAuthorityResolver: () => {
+                throw new Error('the resolvers proposal is not enabled');
+              },
+            }
+          : {}),
         progress: {
           withProgress: (request, task) => {
             requests.push(request);
@@ -195,8 +205,12 @@ async function registered(
         },
       },
     },
-  );
+  ).catch((caught: unknown) => {
+    thrown.push(caught instanceof Error ? caught.message : String(caught));
+    return {registration: 'proposalMissing' as const, dispose: () => undefined};
+  });
   return {
+    thrown,
     result,
     events,
     forwarded,
@@ -303,6 +317,17 @@ describe('the registration of the container connector (card containers-08)', () 
     deepStrictEqual(
       [seen.result.registration, seen.events, [...seen.commands.keys()]],
       ['proposalMissing', [], ['remote-containers.revealLogTerminal']],
+    );
+  });
+
+  it('F-0101 AC-15: the log command is registered before the resolver, so a registration that throws leaves it there', async () => {
+    const seen = await registered({registerThrows: true});
+    deepStrictEqual(
+      [seen.thrown, [...seen.commands.keys()]],
+      [
+        ['the resolvers proposal is not enabled'],
+        ['remote-containers.revealLogTerminal'],
+      ],
     );
   });
 

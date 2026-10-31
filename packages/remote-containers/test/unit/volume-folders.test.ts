@@ -183,7 +183,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
         result.status,
         result.facts.created,
         result.facts.writeFailedPath,
-        result.facts.writeFailedError?.includes(folders[1] ?? ''),
+        result.facts.writeFailedError?.startsWith('mkdir: '),
         result.facts.writeFailedError?.includes('\n'),
       ],
       ['CreateInstallDirFailed', '', folders[1], true, false],

@@ -20,6 +20,7 @@ const TARGET: CliTarget = {
   idLabels: ['a=b'],
   mountWorkspaceGitRoot: true,
   mountGitWorktreeCommonDir: false,
+  features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
   logLevel: 'info',
 };

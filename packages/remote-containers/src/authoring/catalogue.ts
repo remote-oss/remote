@@ -30,8 +30,13 @@ export interface CatalogueTemplate {
   /** The label. */
   name: string;
   description?: string;
-  /** The owner shown beside the label: the second part of a `ghcr.io` reference, else the publisher. */
+  /**
+   * The owner shown beside the label: the second part of the path of its collection's repository on `github.com`,
+   * else the second part of a `ghcr.io` reference, else the publisher.
+   */
   owner: string;
+  /** The repository of the template's collection as the index publishes it (`sourceInformation.repository`). */
+  collectionRepository?: string;
   options: Readonly<Record<string, unknown>>;
   optionalPaths: readonly string[];
   documentationURL?: string;
@@ -70,16 +75,45 @@ export function catalogueUrlOf(
     : CATALOGUE_URL;
 }
 
-/** The owner of a template: the second part of its `ghcr.io` reference (the GitHub owner), else its publisher. */
-function ownerOf(reference: string, entry: Fields): string {
+/** The owner a collection's repository on `github.com` names: the first part of its path. */
+function repositoryOwnerOf(repository: string | undefined): string | undefined {
+  if (repository === undefined) {
+    return undefined;
+  }
+  try {
+    const address = new URL(repository);
+    const [, owner] = address.pathname.split('/');
+    return address.hostname === 'github.com' && owner !== ''
+      ? owner
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The owner of a template: the GitHub owner its collection's repository names, else the second part of its `ghcr.io`
+ * reference, else its publisher.
+ */
+function ownerOf(
+  reference: string,
+  entry: Fields,
+  repository: string | undefined,
+): string {
   const [registry, owner] = reference.split('/');
-  return registry === 'ghcr.io' && owner !== undefined
-    ? owner
-    : (textOf(entry.publisher) ?? '');
+  return (
+    repositoryOwnerOf(repository) ??
+    (registry === 'ghcr.io' && owner !== undefined
+      ? owner
+      : (textOf(entry.publisher) ?? ''))
+  );
 }
 
 /** The template an entry of the index describes; none for an entry without a text `id`, `name` and `version`. */
-function templateOf(entry: unknown): CatalogueTemplate | undefined {
+function templateOf(
+  entry: unknown,
+  repository: string | undefined,
+): CatalogueTemplate | undefined {
   if (!isRecord(entry)) {
     return undefined;
   }
@@ -96,7 +130,8 @@ function templateOf(entry: unknown): CatalogueTemplate | undefined {
     version,
     name,
     ...(description === undefined ? {} : {description}),
-    owner: ownerOf(reference, entry),
+    owner: ownerOf(reference, entry, repository),
+    ...(repository === undefined ? {} : {collectionRepository: repository}),
     options: isRecord(entry.options) ? entry.options : {},
     optionalPaths: Array.isArray(entry.optionalPaths)
       ? entry.optionalPaths.filter(
@@ -105,6 +140,13 @@ function templateOf(entry: unknown): CatalogueTemplate | undefined {
       : [],
     ...(documentationURL === undefined ? {} : {documentationURL}),
   };
+}
+
+/** The repository a collection of the index names as its source, when it names one. */
+function repositoryOf(collection: Fields): string | undefined {
+  return isRecord(collection.sourceInformation)
+    ? textOf(collection.sourceInformation.repository)
+    : undefined;
 }
 
 /** The templates of the index text, in the index's order; the parser's own message for text that is no JSON. */
@@ -119,14 +161,15 @@ export function parseCatalogue(text: string): CatalogueResult {
     isRecord(index) && Array.isArray(index.collections)
       ? (index.collections as unknown[])
       : [];
-  const entries = collections.flatMap((collection): unknown[] =>
-    isRecord(collection) && Array.isArray(collection.templates)
-      ? (collection.templates as unknown[])
-      : [],
-  );
   return {
     kind: 'catalogue',
-    templates: entries.flatMap(entry => templateOf(entry) ?? []),
+    templates: collections.flatMap(collection =>
+      isRecord(collection) && Array.isArray(collection.templates)
+        ? (collection.templates as unknown[]).flatMap(
+            entry => templateOf(entry, repositoryOf(collection)) ?? [],
+          )
+        : [],
+    ),
   };
 }
 

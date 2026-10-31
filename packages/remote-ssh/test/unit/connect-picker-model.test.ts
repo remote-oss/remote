@@ -142,7 +142,7 @@ describe('pickerModel (card remote-ssh-02)', () => {
     );
   });
 
-  it('F-2301.AC-5: a listing with no hosts has only the fixed items', () => {
+  it('F-2301.AC-5: a listing with no hosts has the fixed items alone', () => {
     deepStrictEqual(pickerModel(NONE, ''), expected([]));
   });
 

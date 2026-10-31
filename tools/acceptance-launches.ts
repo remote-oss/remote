@@ -670,6 +670,23 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...EXPLORER_LAUNCH,
+      label: 'explorer-trust',
+      suite: 'explorer-trust',
+      workspaceTrust: true,
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-home',
+      suite: 'explorer-home',
+      environment: {HOME: '<run>/home'},
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-rows',
+      suite: 'explorer-rows',
+    },
+    {
+      ...EXPLORER_LAUNCH,
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,

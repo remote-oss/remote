@@ -820,6 +820,27 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it('F-0414 3.2, 6.2, 6.3: the Feature settings reach the container request and both reads of the configuration', async () => {
+    const features = {'ghcr.io/devcontainers/features/node:1': {}};
+    const scene = sceneOf();
+    scene.defaultFeatures = features;
+    scene.lockfile = false;
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.features,
+        scene.configurationReads.map(read => read.target.features),
+      ],
+      [
+        {defaultFeatures: features, lockfile: false},
+        [
+          {defaultFeatures: features, lockfile: false},
+          {defaultFeatures: features, lockfile: false},
+        ],
+      ],
+    );
+  });
+
   it('F-0411 BR-7, BR-11: the settings are read at each connect, so a change between two connects takes effect', async () => {
     const scene = sceneOf();
     scene.workspaceMountConsistency = 'cached';

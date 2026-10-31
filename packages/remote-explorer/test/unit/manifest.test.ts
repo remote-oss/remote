@@ -4,7 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
@@ -94,7 +94,37 @@ function alternativesOf(when: unknown): string[] {
     .map(each => each.trim());
 }
 
+/** An address of Microsoft's: its sites, its short links, or the reference extensions' repositories. */
+const MICROSOFT_ADDRESS =
+  /microsoft\.com|aka\.ms|visualstudio\.com|Microsoft\/vscode/i;
+
+/** The manifest, the string bundles and the README, each as its text. */
+function addressedTexts(): string[] {
+  return readdirSync(PACKAGE)
+    .filter(file => /^(package(\.nls.*)?\.json|README\.md)$/.test(file))
+    .map(file => readFileSync(path.join(PACKAGE, file), 'utf8'));
+}
+
 describe('the manifest of the Remote Explorer package', () => {
+  it('F-5901 AC-3 (ruling-d56): the repository and bugs are the monorepo’s, as the pack’s and the other members’ are, and no address in the manifest, the bundles or the README is Microsoft’s', () => {
+    deepStrictEqual(
+      [
+        MANIFEST.repository,
+        MANIFEST.bugs,
+        addressedTexts().filter(text => MICROSOFT_ADDRESS.test(text)),
+      ],
+      [
+        {
+          type: 'git',
+          url: 'https://github.com/remote-oss/remote.git',
+          directory: 'packages/remote-explorer',
+        },
+        {url: 'https://github.com/remote-oss/remote/issues'},
+        [],
+      ],
+    );
+  });
+
   it('F-5001.AC-18, F-5901.AC-1: F-5901.5.identity: the top-level fields are the card, and no other', () => {
     deepStrictEqual(
       {

@@ -23,6 +23,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-0416 7.E4 and AC-35 describe a failed connect instead (ruling 16 on #737; spec question on
     remote-oss/remote-containers#63).
 
+- **A port the configuration publishes with `appPort` shows no running process, and the status item lists the published
+  ports in the order of `appPort`.** The row's Running Process stays empty and its icon is the one without a process,
+  even while something listens on the port. The status item reads `Forwarded Ports: <first>, <second>`, in the order
+  the configuration lists them.
+  - F-1101 AC-40 describes the process, the icon with a process and the ports in the order `<container port>, <number>`.
+    Core 1.139.1 takes a static row's process only when the authority resolves, and later processes update only the
+    forwarded rows; the order is the one our resolver gives (athena on #1334; spec question on
+    remote-oss/remote-containers#42).
+
 - **A dev container whose setup failed is stopped about ten seconds after the failure dialog**, unless its
   `shutdownAction` is `none`; it is not left running. The dialog stays, and Retry or a reload starts the container
   again.
@@ -36,11 +45,6 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   Container", to use the edit. The notification that offers the rebuild (F-0303) comes in a later release.
   - F-0416 AC-25, AC-31, AC-34 and AC-35 answer that notification with "Ignore", and their rows reload instead
     (ruling 15 on #737).
-
-- **A folder with no dev container configuration shows a short notice** that asks for a
-  `.devcontainer/devcontainer.json` file and for the command to be run again. The wizard that adds a configuration
-  (F-0801) comes in a later release, and replaces the notice.
-  - F-0301 6.2, AC-7 and AC-49 stay deferred (athena on #890, card containers-13 §1).
 
 - **"show log" in the progress notification, and the log commands, open the Dev Containers log in the Output panel.**
   They do not open a terminal named "Dev Containers". The log terminal (F-0104) comes in a later release.
