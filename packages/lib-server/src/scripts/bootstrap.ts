@@ -24,7 +24,7 @@ import {
   TREE_FUNCTIONS,
   UNPACK_FUNCTIONS,
 } from './posix-script.ts';
-import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
+import {LAUNCHING_LINE, RESULT_BEGIN, RESULT_END} from './result-block.ts';
 
 /** The steps of a single-script install. */
 export type ScriptStep =
@@ -631,6 +631,8 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '  fi',
     `  ${startOptions(start)}`,
     '  WRITE_ERROR=$( (umask 077; printf \'\' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"',
+    `  printf '%s\\n' ${shellQuote(LAUNCHING_LINE)}`,
+    '  fact server.launching yes',
     '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
     '  SERVER_PID=$!',
     '  WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }',

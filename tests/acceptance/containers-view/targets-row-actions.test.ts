@@ -551,8 +551,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     );
   });
 
-  // Show Details, Inspect and Show Container Log are in the menu from containers-104, and Open in Container from containers-103.
-  it.skip('F-0902 AC-26 (dev-row-half): after a confirmed Stop, the exited menu of a configured dev container row is Start, Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
+  it('F-0902 AC-26 (dev-row-half): after a confirmed Stop, the exited menu of a configured dev container row is Start, Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
     const base = 'ra-menu-dev';
     const folder = devContainerFolder(base, {name: 'Menu Dev'});
     const connected = await openFolderWindow(folder);
@@ -589,7 +588,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
   });
 
-  it.skip('F-0902 AC-14 (own-row-half): the window’s own row offers no Stop, Start or Remove, and Show Details, Inspect and Show Container Log', async () => {
+  it('F-0902 AC-14 (own-row-half): the window’s own row offers no Stop, Start or Remove, and Show Details, Inspect and Show Container Log', async () => {
     const base = 'ra-menu-own';
     const folder = devContainerFolder(base, {name: 'Menu Own'});
     const connected = await openFolderWindow(folder);

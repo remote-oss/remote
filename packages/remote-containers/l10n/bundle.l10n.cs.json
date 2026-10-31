@@ -83,6 +83,7 @@
   "Source": "Source",
   "Volume": "Volume",
   "Volume mount": "Volume mount",
+  "Workspace": "Workspace",
   "Folder contains a Dev Container configuration file.": "Folder contains a Dev Container configuration file.",
   "Reopen in Container": "Reopen in Container",
   "Don't Show Again...": "Don't Show Again...",
@@ -153,5 +154,6 @@
   "Add configuration to user data folder": "Add configuration to user data folder",
   "This avoids having outgoing changes in your workspace folder": "This avoids having outgoing changes in your workspace folder",
   "Configuration already exists": "Configuration already exists",
-  "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository."
+  "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.",
+  "Error inspecting: {0}": "Error inspecting: {0}"
 }

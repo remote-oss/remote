@@ -435,6 +435,8 @@ export function containerConnectorOf(
   /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
   let shutdownConnection: string | undefined;
   let checking = false;
+  /** The reconnection attempts of core that this connector, one per window session, has answered (S286). */
+  let reconnectionAttempts = 0;
   /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
   const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
 
@@ -1176,7 +1178,13 @@ export function containerConnectorOf(
       const controller = new AbortController();
       running = controller;
       const began = dependencies.clock();
-      logger.info('Resolving Remote');
+      if (input.isReconnection) {
+        reconnectionAttempts += 1;
+      }
+      const phase = input.isReconnection
+        ? `Reconnection attempt ${String(reconnectionAttempts)}`
+        : 'Resolving Remote';
+      logger.info(phase);
       try {
         const target = input.target as ContainerTarget;
         if (input.isReconnection && held !== undefined) {
@@ -1202,9 +1210,7 @@ export function containerConnectorOf(
         }
         return result;
       } finally {
-        logger.info(
-          `Resolving Remote: ${String(dependencies.clock() - began)} ms`,
-        );
+        logger.info(`${phase}: ${String(dependencies.clock() - began)} ms`);
         if (running === controller) {
           running = undefined;
         }

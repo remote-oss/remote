@@ -390,6 +390,58 @@ function paneExpression(viewName: string): string {
   return `[...document.querySelectorAll('.pane')].find(pane => pane.querySelector('.pane-header .title')?.textContent === ${JSON.stringify(viewName)})`;
 }
 
+/** Whether the keyboard focus of window `name` is inside the pane whose header title is `viewName`. */
+export async function paneFocused(
+  name: string,
+  viewName: string,
+): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return pane !== undefined && pane.contains(document.activeElement);
+    })()`,
+  );
+}
+
+/** Whether the pane whose header title is `viewName` in window `name` is expanded; none when no pane has that title. */
+export async function paneExpanded(
+  name: string,
+  viewName: string,
+): Promise<boolean | undefined> {
+  return (
+    (await evaluate<boolean | null>(
+      name,
+      `(() => {
+        const pane = ${paneExpression(viewName)};
+        const header = pane?.querySelector('.pane-header');
+        return header === undefined || header === null ? null : header.classList.contains('expanded');
+      })()`,
+    )) ?? undefined
+  );
+}
+
+/** Clicks the header of the pane titled `viewName` in window `name`, which collapses or expands it as a user's click does. */
+export async function togglePane(
+  name: string,
+  viewName: string,
+): Promise<void> {
+  const missing = await evaluate<boolean>(
+    name,
+    `(() => {
+      const title = ${paneExpression(viewName)}?.querySelector('.pane-header .title');
+      if (title === undefined || title === null) {
+        return true;
+      }
+      title.click();
+      return false;
+    })()`,
+  );
+  if (missing) {
+    throw new Error(`window ${name}: no pane titled ${viewName}`);
+  }
+}
+
 /** A row of a view as the list renders it now, with the size of the set it belongs to. */
 export interface RenderedRow {
   label: string;
@@ -688,7 +740,7 @@ function rowMenuScript(
       const box = rows[0].getBoundingClientRect();
       rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
       await new Promise(resolve => setTimeout(resolve, 800));
-      const items = [...document.querySelectorAll('.context-view .monaco-menu .action-label')];
+      let items = [...document.querySelectorAll('.context-view .monaco-menu .action-label')];
       ${after}
     })()`;
 }
@@ -739,7 +791,13 @@ export async function rowMenuAction(
       viewName,
       rowLabel,
       `'no such row'`,
-      `const item = items.find(label => label.textContent === ${JSON.stringify(itemLabel)});
+      `// The first menu of a window may not be drawn within the first wait, so the right click is made again.
+      for (let again = 0; items.length === 0 && again < 3; again += 1) {
+        rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        items = [...document.querySelectorAll('.context-view .monaco-menu .action-label')];
+      }
+      const item = items.find(label => label.textContent === ${JSON.stringify(itemLabel)});
       if (item === undefined) {
         return 'no item ' + ${JSON.stringify(JSON.stringify(itemLabel))} + ' among ' + JSON.stringify(items.map(label => label.textContent));
       }

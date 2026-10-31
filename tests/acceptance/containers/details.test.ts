@@ -55,7 +55,7 @@ describe('the Details (Containers) view (card containers-33)', function () {
       '{{.Name}}',
       containerId,
     ]);
-    const attributes = (await rows()).slice(0, 5);
+    const attributes = (await rows()).slice(0, 6);
     await toggleRow(name, title, 'Attributes');
     await toggleRow(name, title, 'Volume mount');
     const mounts = await rows();
@@ -81,6 +81,7 @@ describe('the Details (Containers) view (card containers-33)', function () {
       [
         [
           '1 Attributes: ',
+          `2 Workspace: ${folder}`,
           `2 Name: ${containerName.trim()}`,
           `2 Image: ${variable('HARNESS_DEVCONTAINER_IMAGE')}`,
           `2 Configuration: ${path.join(folder, '.devcontainer', 'devcontainer.json')}`,

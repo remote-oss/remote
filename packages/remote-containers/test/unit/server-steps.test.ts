@@ -15,6 +15,7 @@ import {
   type DownloadRequest,
   type DownloadResult,
   type LicenceModal,
+  LAUNCHING_LINE,
   RESULT_BEGIN,
   RESULT_END,
 } from 'lib-server';
@@ -100,6 +101,18 @@ const STARTED = blockOf(
   'server.reused=no',
 );
 
+/** What a start prints when it launches a server: the streamed line, then the block. */
+const LAUNCHED = [LAUNCHING_LINE, ...STARTED];
+
+/** What a start prints when a server already runs: no launching line, and a block that says so. */
+const REUSED = blockOf(
+  'Ok',
+  'server.port=4321',
+  'server.pid=77',
+  'server.token=abcdefghijklmnopqrstuvwxyz012345',
+  'server.reused=yes',
+);
+
 function answer(
   matches: (script: string) => boolean,
   lines: readonly string[],
@@ -181,7 +194,7 @@ function channelOf(
           ]
         : []),
       answer(isRelay, []),
-      answer(isStart, options.start ?? STARTED, options.startStatus ?? 0),
+      answer(isStart, options.start ?? LAUNCHED, options.startStatus ?? 0),
       answer(isInstall, options.install ?? blockOf('Ok')),
       ...(options.extra ?? []),
     ],
@@ -628,11 +641,11 @@ describe('the server steps of a connect (card containers-08)', () => {
       scripts: [
         answer(isProbe, blockOf('Ok', ...first)),
         answer(isRelay, []),
-        answer(isStart, STARTED),
+        answer(isStart, REUSED),
       ],
     });
     const {seen} = await runSteps(reusing);
-    deepStrictEqual([seen.phases, seen.downloads], [['startingServer'], []]);
+    deepStrictEqual([seen.phases, seen.downloads], [[], []]);
   });
 
   it('F-0503 AC-31, AC-32: F-0503 7.E3: an unsupported machine on Alpine and on glibc is S031 and S359, with the machine named, and a failed first probe runs no second one', async () => {
@@ -824,6 +837,33 @@ describe('the server steps of a connect (card containers-08)', () => {
           .filter(message => message.includes('reusing')),
       ],
       [true, ['reusing the running server']],
+    );
+  });
+
+  it('server-26: a server that already runs gives no startingServer phase and no Starting VS Code Server line, only the reuse line', async () => {
+    const {seen} = await runSteps(channelOf({start: REUSED}));
+    const messages = seen.sink.lines.map(line => line.message);
+    deepStrictEqual(
+      [
+        seen.phases,
+        messages.includes('Starting VS Code Server'),
+        messages.includes('reusing the running server'),
+      ],
+      [['installing'], false, true],
+    );
+  });
+
+  it('server-26: a launch gives the phase and the line, in that order, before the ready result', async () => {
+    const {seen} = await runSteps(channelOf());
+    const messages = seen.sink.lines.map(line => line.message);
+    deepStrictEqual(
+      [
+        seen.phases,
+        messages.indexOf('Starting VS Code Server') <
+          messages.indexOf('server listening on 127.0.0.1:4321'),
+        messages.includes('Starting VS Code Server'),
+      ],
+      [['installing', 'startingServer'], true, true],
     );
   });
 

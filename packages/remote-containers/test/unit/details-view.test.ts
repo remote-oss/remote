@@ -13,6 +13,7 @@ import {
   type DetailsProvider,
   type DetailsView,
   type DetailsViewPorts,
+  CHOICE_MILLISECONDS,
   detailsSpecOf,
   showDetails,
   showDetailsWhenRegistered,
@@ -53,6 +54,8 @@ interface Scene {
   changes: number;
   timers: Array<{milliseconds: number; callback: () => void}>;
   disposed: string[];
+  /** How many times the view was given the focus. */
+  focused: number;
   /** The fake `docker` whose spawns are the events processes. */
   docker: FakeEngine;
   sink: MemorySink;
@@ -74,6 +77,7 @@ function sceneOf(): Scene {
     changes: 0,
     timers: [],
     disposed: [],
+    focused: 0,
     docker: fakeEngine(),
     sink: new MemorySink(),
   };
@@ -145,8 +149,13 @@ function portsOf(scene: Scene): DetailsViewPorts {
       setContext: (key, value) => contextSetOn(scene, key, value),
       createTreeView: (viewId, provider) =>
         treeViewOver(scene, viewId, provider),
+      focus: () => {
+        scene.focused += 1;
+        return Promise.resolve();
+      },
     },
     held: () => scene.held,
+    engine: () => engineOf(scene),
     events: sharedContainerEvents({
       engine: () => scene.held?.engine,
       setTimer: (milliseconds, callback) => {
@@ -158,9 +167,13 @@ function portsOf(scene: Scene): DetailsViewPorts {
       logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
     }),
     setTimer: (milliseconds, callback) => {
-      scene.timers.push({milliseconds, callback});
+      const timer = {milliseconds, callback};
+      scene.timers.push(timer);
       return () => {
-        scene.timers.pop();
+        const index = scene.timers.indexOf(timer);
+        if (index >= 0) {
+          scene.timers.splice(index, 1);
+        }
       };
     },
     onHeldChanged: listener => {
@@ -289,6 +302,7 @@ describe('the Details view (card containers-33)', () => {
         [
           'Attributes',
           'Mounts',
+          'Workspace',
           'Name',
           'Image',
           'Configuration',
@@ -352,6 +366,287 @@ describe('the Details view (card containers-33)', () => {
       [scene.runs.map(argv => argv[0]), scene.changes - before],
       [['inspect', 'inspect'], 1],
     );
+  });
+
+  const OTHER = 'b2b2b2b2b2b2';
+
+  it('F-0902 AC-13: Show Details of a container the window does not hold reads it by its id on the view’s engine, shows it under the row’s label with the key set, and gives the view the focus', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    const before = scene.runs.length;
+    await view.showContainer(OTHER, 'My App');
+    deepStrictEqual(
+      [
+        scene.runs.slice(before),
+        scene.titles.at(-1),
+        scene.contexts.at(-1),
+        scene.focused,
+        (await labelsOf(provider)).slice(0, 1),
+      ],
+      [
+        [['inspect', '--type', 'container', OTHER]],
+        'My App',
+        [SHOW_KEY, true],
+        1,
+        ['Attributes'],
+      ],
+    );
+  });
+
+  it('F-0902 AC-28: Show Details again on the same row leaves the one tree, reads it again and focuses again', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    const first = await labelsOf(provider);
+    await view.showContainer(OTHER, 'My App');
+    deepStrictEqual(
+      [await labelsOf(provider), scene.titles.at(-1), scene.focused],
+      [first, 'My App', 2],
+    );
+  });
+
+  it('F-0902 6.8: a Refresh keeps the choice, and a later Show Details replaces it', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    await view.refresh();
+    const refreshed = [scene.runs.at(-1)?.at(-1), scene.titles.at(-1)];
+    await view.showContainer('c3c3c3c3c3c3', 'Other App');
+    deepStrictEqual(
+      [refreshed, scene.runs.at(-1)?.at(-1), scene.titles.at(-1)],
+      [[OTHER, 'My App'], 'c3c3c3c3c3c3', 'Other App'],
+    );
+  });
+
+  it('F-0902 6.8: a connection made or given back ends the choice, and the view shows what the window holds', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    connect(scene, connectionOf(scene));
+    await settled();
+    const held = [scene.runs.at(-1)?.at(-1), scene.titles.at(-1)];
+    connect(scene, undefined);
+    await settled();
+    deepStrictEqual(
+      [held, scene.contexts.at(-1), scene.titles.at(-1)],
+      [[CONTAINER, 'c33w'], [SHOW_KEY, false], undefined],
+    );
+  });
+
+  /** The timers of the view that end a choice. */
+  function choiceTimers(scene: Scene) {
+    return scene.timers.filter(
+      timer => timer.milliseconds === CHOICE_MILLISECONDS,
+    );
+  }
+
+  it('F-0903 AC-28, BR-10: in a window that holds a connection a choice goes back to the window’s own container after ten seconds, and a new choice restarts the wait', async () => {
+    const scene = sceneOf();
+    scene.held = connectionOf(scene);
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    const first = choiceTimers(scene);
+    await view.showContainer(OTHER, 'My App');
+    const second = choiceTimers(scene);
+    const before = scene.runs.length;
+    second[0]?.callback();
+    await settled();
+    deepStrictEqual(
+      [
+        first.length,
+        second.length,
+        second[0] === first[0],
+        scene.runs.slice(before),
+        scene.titles.at(-1),
+      ],
+      [1, 1, false, [['inspect', '--type', 'container', CONTAINER]], 'c33w'],
+    );
+  });
+
+  it('F-0903 AC-23, BR-10: in a window that holds no connection a choice has no wait and stays', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    deepStrictEqual(
+      [choiceTimers(scene).length, scene.titles.at(-1)],
+      [0, 'My App'],
+    );
+  });
+
+  it('F-0903 BR-10: a connection that changes, or the view disposed, ends the wait of a choice', async () => {
+    const scene = sceneOf();
+    scene.held = connectionOf(scene);
+    const {view} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    connect(scene, connectionOf(scene));
+    await settled();
+    const afterChange = choiceTimers(scene).length;
+    await view.showContainer(OTHER, 'My App');
+    view.dispose();
+    deepStrictEqual([afterChange, choiceTimers(scene).length], [0, 0]);
+  });
+
+  it('F-0903 AC-26, 7.E7: a view the user collapsed is not given the focus, still shows the new container when it is expanded, and one never reported hidden is revealed', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    await view.showContainer(OTHER, 'First');
+    const revealed = scene.focused;
+    scene.visibility[0]?.(true);
+    scene.visibility[0]?.(false);
+    await view.showContainer('c3c3c3c3c3c3', 'Second');
+    const collapsed = [scene.focused, scene.titles.at(-1)];
+    scene.visibility[0]?.(true);
+    await settled();
+    await view.showContainer(OTHER, 'Third');
+    deepStrictEqual(
+      [
+        revealed,
+        collapsed,
+        scene.focused,
+        (await labelsOf(provider)).slice(0, 1),
+      ],
+      [1, [1, 'Second'], 2, ['Attributes']],
+    );
+  });
+
+  it('F-0903 AC-26: a view that goes away with its context key, and comes back, is revealed again', async () => {
+    const scene = sceneOf();
+    scene.held = connectionOf(scene);
+    const {view} = await shown(scene);
+    scene.visibility[0]?.(false);
+    connect(scene, undefined);
+    await settled();
+    await view.showContainer(OTHER, 'My App');
+    deepStrictEqual(scene.focused, 1);
+  });
+
+  it('F-0903 AC-27, 7.E7: each Show Details gives the nodes ids of a new generation, and a refresh, an event or becoming visible keeps them', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    /** The ids of the nodes of the sections, as the editor is given them. */
+    async function idsNow(): Promise<string[]> {
+      return (await provider.getChildren(undefined)).map(
+        node => provider.getTreeItem(node).id,
+      );
+    }
+    await view.showContainer(OTHER, 'My App');
+    const first = await idsNow();
+    await view.refresh();
+    scene.visibility[0]?.(true);
+    await settled();
+    const kept = await idsNow();
+    await view.showContainer(OTHER, 'My App');
+    const next = await idsNow();
+    deepStrictEqual(
+      [kept, next],
+      [first, first.map(nodeId => nodeId.replace(/^1\//, '2/'))],
+    );
+  });
+
+  it('F-0903 AC-9, 7.E1: a shown container that is gone keeps its rows and title when an event or becoming visible reads it, and logs no error', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    const rows = await labelsOf(provider);
+    scene.answer = () => ({kind: 'ran', status: 1, stdout: '', stderr: ''});
+    scene.visibility[0]?.(false);
+    scene.visibility[0]?.(true);
+    await settled();
+    deepStrictEqual(
+      [
+        await labelsOf(provider),
+        scene.titles.at(-1),
+        lines(scene).filter(line => line.startsWith('error')),
+      ],
+      [rows, 'My App', []],
+    );
+  });
+
+  it('F-0903 AC-29, 7.E1, BR-6: a Refresh of a shown container that is gone shows zero rows under the view’s own name, joined by a second Refresh, and the rows stay empty for an event', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    scene.answer = () => ({kind: 'ran', status: 1, stdout: '', stderr: ''});
+    const before = scene.runs.length;
+    await Promise.all([view.refresh(), view.refresh()]);
+    const refreshed = [
+      scene.runs.length - before,
+      await labelsOf(provider),
+      scene.titles.at(-1),
+    ];
+    scene.visibility[0]?.(true);
+    await settled();
+    deepStrictEqual(
+      [refreshed, await labelsOf(provider), scene.titles.at(-1)],
+      [[1, [], undefined], [], undefined],
+    );
+  });
+
+  it('F-0903 AC-29, BR-6: a Refresh made while the read of another Refresh is running joins it, and one inspect gives the zero rows', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    await view.showContainer(OTHER, 'My App');
+    const hold = pendingOf<EngineRunOutcome>();
+    scene.answer = () => hold.promise;
+    const before = scene.runs.length;
+    const first = view.refresh();
+    await settled();
+    const second = view.refresh();
+    hold.resolve({kind: 'ran', status: 1, stdout: '', stderr: ''});
+    await Promise.all([first, second]);
+    deepStrictEqual(
+      [
+        scene.runs.length - before,
+        await labelsOf(provider),
+        scene.titles.at(-1),
+      ],
+      [1, [], undefined],
+    );
+  });
+
+  it('F-0903 AC-29, BR-6: a Refresh made while another read is running waits for it, then reads once more as its own answer', async () => {
+    const scene = sceneOf();
+    const {view, hold} = await shownThenHeld(scene);
+    const before = scene.runs.length;
+    scene.visibility[0]?.(true);
+    await settled();
+    const refreshing = view.refresh();
+    await settled();
+    const waiting = scene.runs.length - before;
+    hold.resolve({kind: 'ran', status: 0, stdout: RECORDED, stderr: ''});
+    await refreshing;
+    deepStrictEqual([waiting, scene.runs.length - before], [1, 2]);
+  });
+
+  it('F-0903 7.E1: a Show Details of a container that cannot be read shows zero rows under the row’s label, and the next event keeps that', async () => {
+    const scene = sceneOf();
+    const {view, provider} = await shown(scene);
+    scene.answer = () => ({kind: 'ran', status: 1, stdout: '', stderr: ''});
+    await view.showContainer(OTHER, 'Gone');
+    scene.visibility[0]?.(true);
+    await settled();
+    deepStrictEqual(
+      [await labelsOf(provider), scene.titles.at(-1)],
+      [[], 'Gone'],
+    );
+  });
+
+  it('F-0902 6.8: a choice made once core has registered the view is shown', async () => {
+    const scene = sceneOf();
+    const view = showDetailsWhenRegistered(portsOf(scene));
+    await settled();
+    await view.showContainer(OTHER, 'My App');
+    view.dispose();
+    deepStrictEqual(scene.titles.at(-1), 'My App');
+  });
+
+  it('F-0902 6.8: a choice made before core has registered the view has nothing to show it in, and the handle goes on', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    const view = showDetailsWhenRegistered(portsOf(scene));
+    await view.showContainer(OTHER, 'My App');
+    view.dispose();
+    deepStrictEqual([scene.runs, scene.focused], [[], 0]);
   });
 
   it('F-0903 AC-8: a connection made, replaced or given back reads again, and the key follows', async () => {

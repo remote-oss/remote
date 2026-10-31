@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {appendFileSync} from 'node:fs';
+import {appendFileSync, readFileSync} from 'node:fs';
 import {
   access,
   constants as fileConstants,
@@ -101,9 +101,16 @@ import {
   type DetailsView,
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
-import {type RowActions, rowActionsOf} from './explorer/row-actions.ts';
+import {containerLogOf} from './explorer/container-log.ts';
+import {inspectOf} from './explorer/inspect.ts';
+import {
+  containerRowOf,
+  type RowActions,
+  rowActionsOf,
+} from './explorer/row-actions.ts';
 import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
+import {registeredNameOf} from './explorer/view-name.ts';
 import {
   engineOfWindow,
   showTargetsWhenRegistered,
@@ -164,8 +171,8 @@ interface TreeProvider<Node> {
 
 /**
  * The tree view of the editor for `provider`, with each node's item made from what the provider says of it. Its title
- * is set through a cast, since exact optional types do not let a plain assignment give back the registered name with
- * none.
+ * is set through a cast, since exact optional types do not let a plain assignment clear it; giving none leaves the
+ * header blank, so none brings back the name the manifest gives the view.
  */
 function treeViewOf<Node>(
   viewId: string,
@@ -176,6 +183,14 @@ function treeViewOf<Node>(
   const subscription = provider.onDidChangeTreeData(() => {
     emitter.fire(undefined);
   });
+  /** The text of the strings file `file` of the extension, or none when it can't be read. */
+  function readStrings(file: string): string | undefined {
+    try {
+      return readFileSync(path.join(extensionUri.fsPath, file), 'utf8');
+    } catch {
+      return undefined;
+    }
+  }
   const treeView = vscode.window.createTreeView<Node>(viewId, {
     treeDataProvider: {
       onDidChangeTreeData: emitter.event,
@@ -190,7 +205,8 @@ function treeViewOf<Node>(
         listener(event.visible);
       }),
     setTitle: (title: string | undefined) => {
-      (treeView as {title: string | undefined}).title = title;
+      (treeView as {title: string | undefined}).title =
+        title ?? registeredNameOf(readStrings, vscode.env.language, viewId);
     },
     dispose: () => {
       treeView.dispose();
@@ -427,6 +443,8 @@ export async function activate(
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
+  let inspectRow: ((argument: unknown) => Promise<void>) | undefined;
+  let showContainerLog: ((argument: unknown) => Promise<void>) | undefined;
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
@@ -941,6 +959,16 @@ export async function activate(
         startContainer: {execute: argument => rowActions?.start(argument)},
         stopContainer: {execute: argument => rowActions?.stop(argument)},
         removeContainer: {execute: argument => rowActions?.remove(argument)},
+        showDetails: {
+          execute: async argument => {
+            const target = containerRowOf(argument);
+            if (target !== undefined) {
+              await detailsView?.showContainer(target.id, target.label);
+            }
+          },
+        },
+        inspectDockerResource: {execute: argument => inspectRow?.(argument)},
+        showContainerLog: {execute: argument => showContainerLog?.(argument)},
         openFolderInContainerInCurrentWindow: {
           execute: argument => rowOpen.current(argument),
         },
@@ -1267,9 +1295,41 @@ export async function activate(
       translate,
       cancellation: rowActionsStop.signal,
     });
+    inspectRow = inspectOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
+      open: async content => {
+        const document = await vscode.workspace.openTextDocument({
+          language: 'json',
+          content,
+        });
+        return vscode.window.showTextDocument(document);
+      },
+      showError: text => {
+        void vscode.window.showErrorMessage(text);
+      },
+      translate,
+      cancellation: rowActionsStop.signal,
+    });
+    showContainerLog = containerLogOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      engineFile: () => {
+        const executable = executableOf(windowEngine.dockerPath(), undefined);
+        return executable.kind === 'spawn'
+          ? executable.file
+          : executable.written;
+      },
+      createTerminal: options => vscode.window.createTerminal(options),
+      cancellation: rowActionsStop.signal,
+    });
     detailsView = showDetailsWhenRegistered({
-      editor: explorerEditor,
+      editor: {
+        ...explorerEditor,
+        focus: () =>
+          vscode.commands.executeCommand(`${views.detailsContainers}.focus`),
+      },
       held: () => connector.heldConnection(),
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
       onHeldChanged: listener => connector.onHeldChanged(listener),
       events: containerEvents,
       setTimer: (milliseconds, callback) =>

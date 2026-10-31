@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   decodeConfiguration,
   hasContainerSource,
+  namesContainerSource,
   labelOf,
   parseConfiguration,
 } from '../../src/config/configuration-text.ts';
@@ -131,6 +132,42 @@ describe('the text of a configuration (card containers-13)', () => {
         {build: ['D']},
       ].map(hasContainerSource),
       [false, false, false, false, false],
+    );
+  });
+
+  it('F-0405 AC-31: a configuration names a container source by a non-empty image, build.dockerfile, dockerFile, or dockerComposeFile (a string or a list with one)', () => {
+    deepStrictEqual(
+      [
+        {image: 'alpine'},
+        {build: {dockerfile: 'Dockerfile'}},
+        {dockerFile: 'Dockerfile'},
+        {dockerComposeFile: 'compose.yml'},
+        {dockerComposeFile: ['', 'compose.yml']},
+      ].map(namesContainerSource),
+      [true, true, true, true, true],
+    );
+  });
+
+  it('F-0405 AC-31: no source, empty strings, an empty list, a build without dockerfile and a value that is no object name none', () => {
+    deepStrictEqual(
+      [
+        {},
+        {name: 'bare'},
+        {image: ''},
+        {dockerFile: ''},
+        {dockerComposeFile: ''},
+        {dockerComposeFile: []},
+        {dockerComposeFile: ['']},
+        {image: 3},
+        {build: {context: '.'}},
+        {build: {dockerfile: ''}},
+        {build: 'Dockerfile'},
+        null,
+        'image',
+        ['image'],
+        undefined,
+      ].map(namesContainerSource),
+      Array<boolean>(15).fill(false),
     );
   });
 });

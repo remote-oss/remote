@@ -509,8 +509,6 @@ export async function runServerSteps(
       );
     }
   }
-  request.onPhase('startingServer');
-  logger.info('Starting VS Code Server');
   const started = await startOrReuse(
     channel,
     parametersOf(dependencies, request, installTree, ''),
@@ -523,6 +521,11 @@ export async function runServerSteps(
       fileWatcherPollingMilliseconds: 0,
       readySeconds: READY_SECONDS,
       socketMode: false,
+      // The phase shows when a server is launched, not for one that already runs.
+      onLaunching: () => {
+        request.onPhase('startingServer');
+        logger.info('Starting VS Code Server');
+      },
     },
     CONTAINERS_POLICY,
     {
