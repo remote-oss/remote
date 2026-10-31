@@ -8,6 +8,7 @@ import type {CliTarget, UpOptions} from '../../src/cli/cli-arguments.ts';
 import type {
   CliEvent,
   CliFailure,
+  ConfigurationResult,
   RunUserCommandsResult,
   UpResult,
 } from '../../src/cli/cli-lines.ts';
@@ -51,6 +52,14 @@ const UP: UpResult = {
   containerId: NEW,
   remoteUser: 'vscode',
   remoteWorkspaceFolder: '/workspaces/a',
+};
+/** A configuration that names an image. */
+const CONFIGURED: ConfigurationResult = {
+  kind: 'configuration',
+  configuration: {image: 'alpine'},
+  workspaceFolder: '/workspaces/a',
+  workspaceMount: undefined,
+  mergedConfiguration: undefined,
 };
 const LISTING = discoveryArguments(FOLDER).join(' ');
 const LEGACY_LISTING = legacyDiscoveryArguments(FOLDER).join(' ');
@@ -168,6 +177,9 @@ interface FakeBridge extends CliBridge {
     stdin: StdinOf | undefined;
   }>;
   upResult: UpResult;
+  /** What `read-configuration` gives, and how many times it was asked. */
+  configuration: ConfigurationResult | CliFailure;
+  reads: number;
   runResult: Promise<RunUserCommandsResult>;
   /** The events `up` and `run-user-commands` print, before they answer. */
   upEvents: CliEvent[];
@@ -179,6 +191,8 @@ function fakeBridge(): FakeBridge {
     ups: [],
     runs: [],
     upResult: UP,
+    configuration: CONFIGURED,
+    reads: 0,
     runResult: Promise.resolve({kind: 'done'}),
     upEvents: [],
     runEvents: [],
@@ -194,7 +208,10 @@ function fakeBridge(): FakeBridge {
       bridge.runEvents.forEach(onEvent);
       return bridge.runResult;
     },
-    readConfiguration: () => Promise.reject(new Error('never read')),
+    readConfiguration: () => {
+      bridge.reads += 1;
+      return Promise.resolve(bridge.configuration);
+    },
     applyTemplate: () => Promise.reject(new Error('never applied')),
     templateMetadata: () => Promise.reject(new Error('never read')),
   };
@@ -1490,6 +1507,94 @@ describe('containerLifecycleOf', () => {
       rebuild: {buildNoCache: false},
     });
     deepStrictEqual(order, [`rm --force ${OLD}`, 'up']);
+  });
+
+  /** A rebuild of a folder whose container `OLD` runs, over a bridge that reads `configuration`. */
+  async function rebuiltReading(
+    configuration: ConfigurationResult | CliFailure,
+  ) {
+    const engine = scriptedEngine({
+      ...standardListing('running'),
+      [`rm --force ${OLD}`]: [ran('')],
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
+    });
+    const bridge = fakeBridge();
+    bridge.configuration = configuration;
+    const result = await prepared(
+      engine,
+      bridge,
+      new AbortController().signal,
+      {
+        ...REQUEST,
+        rebuild: {buildNoCache: false},
+      },
+    );
+    return {
+      removed: engine.commands.filter(command => command.startsWith('rm ')),
+      ups: result.bridge.ups.length,
+      reads: result.bridge.reads,
+      lines: result.lines,
+    };
+  }
+
+  it('F-0405 AC-31: a configuration that names no container source removes nothing, and the CLI’s up still runs', async () => {
+    const result = await rebuiltReading({
+      ...CONFIGURED,
+      configuration: {name: 'bare', image: ''},
+    });
+    deepStrictEqual(
+      [
+        result.removed,
+        result.ups,
+        result.reads,
+        result.lines.includes(
+          'info: rebuilding: the configuration names no container source; the existing container is kept',
+        ),
+      ],
+      [[], 1, 1, true],
+    );
+  });
+
+  it('F-0405 AC-31: a configuration that cannot be read removes nothing', async () => {
+    const result = await rebuiltReading({
+      kind: 'malformedResult',
+      field: 'configuration',
+    });
+    deepStrictEqual(
+      [
+        result.removed,
+        result.lines.includes(
+          'info: rebuilding: the configuration could not be read; the existing container is kept',
+        ),
+      ],
+      [[], true],
+    );
+  });
+
+  it('F-0405 AC-31: a configuration that names a source removes the container before up, as it did', async () => {
+    const result = await rebuiltReading(CONFIGURED);
+    deepStrictEqual([result.removed, result.reads], [[`rm --force ${OLD}`], 1]);
+  });
+
+  it('F-0405 AC-31: a rebuild cancelled while the configuration is read removes nothing and is cancelled', async () => {
+    const controller = new AbortController();
+    const bridge = fakeBridge();
+    bridge.readConfiguration = () => {
+      controller.abort();
+      return Promise.resolve({kind: 'cancelled'});
+    };
+    const engine = scriptedEngine(standardListing('running'));
+    const result = await prepared(engine, bridge, controller.signal, {
+      ...REQUEST,
+      rebuild: {buildNoCache: false},
+    });
+    deepStrictEqual(
+      [
+        result.outcome.kind,
+        engine.commands.filter(command => command.startsWith('rm ')),
+      ],
+      ['cancelled', []],
+    );
   });
 
   it('F-0405 5.0 step 3, #1307: a failed removal of a container that is not legacy stops the rebuild before the CLI', async () => {

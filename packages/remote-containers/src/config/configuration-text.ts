@@ -90,6 +90,39 @@ export function hasContainerSource(parsed: Record<string, unknown>): boolean {
   );
 }
 
+/** Whether a value is a string with something in it. */
+function nonEmpty(value: unknown): boolean {
+  return typeof value === 'string' && value !== '';
+}
+
+/**
+ * Whether the configuration, as the CLI reads it, names a container source: a non-empty `image`, a `build` object with a
+ * non-empty `dockerfile`, a non-empty top-level `dockerFile`, or a `dockerComposeFile` that is a non-empty string or
+ * a list with a non-empty string.
+ */
+export function namesContainerSource(configuration: unknown): boolean {
+  if (
+    typeof configuration !== 'object' ||
+    configuration === null ||
+    Array.isArray(configuration)
+  ) {
+    return false;
+  }
+  const {image, build, dockerFile, dockerComposeFile} = configuration as Record<
+    string,
+    unknown
+  >;
+  return (
+    nonEmpty(image) ||
+    nonEmpty(dockerFile) ||
+    nonEmpty(dockerComposeFile) ||
+    (Array.isArray(dockerComposeFile) && dockerComposeFile.some(nonEmpty)) ||
+    (typeof build === 'object' &&
+      build !== null &&
+      nonEmpty((build as Record<string, unknown>).dockerfile))
+  );
+}
+
 /**
  * The absolute path of the Dockerfile the configuration names: `build.dockerfile`, else the legacy `dockerFile`, read
  * against the folder of the configuration file. None when it names no Dockerfile, or when its text holds a variable
