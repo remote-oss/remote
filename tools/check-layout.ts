@@ -28,6 +28,14 @@ const REQUIRED_FILES = [
 
 const PACKAGE_TSCONFIGS = ['tsconfig.json', 'tsconfig.test.json'];
 
+// The extensions the acceptance run installs besides the family's: they run in the same editor, so they declare the same floor.
+const ACCEPTANCE_EXTENSIONS = [
+  'runner',
+  'runner-remote',
+  'slow-remote',
+  'window-agent',
+];
+
 // ADR-0002, decision 5: the last @vscode/vsce without the proprietary @vscode/vsce-sign dependency.
 const VSCE_VERSION = '2.26.0';
 
@@ -62,6 +70,28 @@ function readManifest(file: string): ManifestIdentity {
   }
 }
 
+function engineProblems(
+  where: string,
+  fields: ManifestIdentity,
+  problems: string[],
+): void {
+  if (fields.engines?.vscode !== EDITOR_ENGINE) {
+    problems.push(
+      `${where}/package.json has engines.vscode '${fields.engines?.vscode ?? ''}', expected '${EDITOR_ENGINE}' (ADR-0007)`,
+    );
+  }
+}
+
+function checkAcceptanceExtensions(root: string, problems: string[]): void {
+  for (const folder of ACCEPTANCE_EXTENSIONS) {
+    const where = `tests/acceptance/${folder}`;
+    const manifest = path.join(root, where, 'package.json');
+    if (existsSync(manifest)) {
+      engineProblems(where, readManifest(manifest), problems);
+    }
+  }
+}
+
 function checkPackageFolder(
   root: string,
   folder: string,
@@ -91,13 +121,8 @@ function checkPackageFolder(
       );
     }
     // A manifest with a publisher is an extension manifest; the placeholders have none yet (ADR-0007).
-    if (
-      fields.publisher !== undefined &&
-      fields.engines?.vscode !== EDITOR_ENGINE
-    ) {
-      problems.push(
-        `${where}/package.json has engines.vscode '${fields.engines?.vscode ?? ''}', expected '${EDITOR_ENGINE}' (ADR-0007)`,
-      );
+    if (fields.publisher !== undefined) {
+      engineProblems(where, fields, problems);
     }
     if (fields.publisher !== undefined && rootLicense !== undefined) {
       const licence = path.join(directory, 'LICENSE');
@@ -251,6 +276,7 @@ export function checkLayout(root: string): string[] {
       problems.push(...stringTableProblems(root, folder));
     }
   }
+  checkAcceptanceExtensions(root, problems);
   checkDecisionRecords(root, problems);
   checkPackagingTool(root, problems);
   checkProductLiterals(root, problems);

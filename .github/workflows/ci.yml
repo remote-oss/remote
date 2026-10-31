@@ -40,7 +40,7 @@ on:
         type: string
         default: all
       genuine:
-        description: Also run the genuine launch, VS Code 1.139.1 with our VSIX, on X64
+        description: Also run the genuine launches, VS Code 1.139.1 (the recorded version) and 1.125.0 (the floor), with our VSIX, on X64
         type: boolean
         default: false
   # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
@@ -69,6 +69,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
+  # The jobs on GitHub's runners pin ubuntu-24.04. On 2026-10-25 ubuntu-latest moved to ubuntu-26.04, whose coreutils
+  # are uutils, and a unit row that read GNU mkdir's wording turned every pull request red at once. image-canary.yml
+  # runs the same checks and unit tests on ubuntu-latest once a day, so the next image move shows there first (#1379).
   # Whether a pull request changes only docs/ (no .tsv): only the checks job reads docs/ (layout, public surface,
   # coverage citations, the user guide's unit test), so the quality and acceptance jobs skip such a change and the run
   # still concludes success at its head. The diff is the merge commit's against its base parent, what the pull request
@@ -76,7 +79,7 @@ jobs:
   changes:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
     # a git diff only, so a GitHub runner (allowed by the user, 2026-10-20) and no wait for a self-hosted one
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
@@ -98,7 +101,7 @@ jobs:
   checks:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
@@ -139,7 +142,7 @@ jobs:
   # 11 minutes.
   unit:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -165,8 +168,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
     # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 20 # shard 2 outgrew 10 minutes by 2026-10-31; the shard rebalance (#1383) sets it back
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10 # the slowest shard took 6 minutes with each unit's tests in parallel (2026-10-31, #1383)
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -304,11 +307,12 @@ jobs:
     # launch alone, the longest; the other containers launches; and the explorer and host-case launches together. Each
     # runner has its own Docker daemon, so the two containers parts never wait for each other's lock. The genuine group
     # has its own job. A dispatch that names its launches runs them as one part; one whose launches input is empty runs
-    # all.
+    # all. The ssh part leaves out `remote-ubuntu` while two of its rows fail on the Ubuntu host; a dispatch that names
+    # it runs it.
     strategy:
       fail-fast: false
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh","containers","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!remote-ubuntu","containers","@containers,!containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
@@ -345,18 +349,28 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
-  # The genuine launch: VS Code at ADR-0007's floor runs our VSIX against the run's stand-in download host, with the real
-  # dialogs. Nothing accepts a licence on the user's behalf, and no server is downloaded from the editor's publisher. It
-  # runs on a dispatch (the `genuine` input), once a day on main, and on the tag of a release, never on
-  # a pull request, and always on X64, the architecture the launch is measured on. Its concurrency follows the VSCodium
-  # job's: the daily run keeps one group, each tag its own, and dispatches queue. ssh-no-proposals runs after genuine in
-  # the same run (the table's order): the family's setup notice is told once per profile, genuine's passing probe
-  # clears an earlier "Not Now", and the VSCodium no-proposals launch, which dismisses it, never shares this run.
+  # The genuine launches: VS Code runs our VSIX against the run's stand-in download host, with the real dialogs, at the
+  # two versions of ADR-0007: the recorded version and the floor, each on its own runner. Nothing accepts a licence on
+  # the user's behalf, and no server is downloaded from the editor's publisher. It runs on a dispatch (the `genuine`
+  # input), once a day on main, and on the tag of a release, never on a pull request, and always on X64, the
+  # architecture the launch is measured on. Its concurrency follows the VSCodium job's, per version: the daily run keeps
+  # one group, each tag its own, and dispatches queue. ssh-no-proposals runs after genuine in the same run (the table's
+  # order): the family's setup notice is told once per profile, genuine's passing probe clears an earlier "Not Now", and
+  # the VSCodium no-proposals launch, which dismisses it, never shares this run. It runs at the recorded version only:
+  # at the floor the editor lets Remote - SSH resolve without the proposals, and the run refuses that pair.
   acceptance-genuine:
-    name: acceptance (genuine)
+    name: acceptance (genuine ${{ matrix.version }})
     if: inputs.genuine || github.event.schedule == '43 4 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: 1.139.1
+            launches: genuine,ssh-no-proposals
+          - version: 1.125.0
+            launches: genuine
     concurrency:
-      group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}
+      group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}-${{ matrix.version }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
     timeout-minutes: 30
@@ -375,10 +389,13 @@ jobs:
           fi
       - run: |
           if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches genuine,ssh-no-proposals
+            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches genuine,ssh-no-proposals
+            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
           fi
+        env:
+          HARNESS_GENUINE_VERSION: ${{ matrix.version }}
+          LAUNCHES: ${{ matrix.launches }}
       - if: always()
         run: pnpm acceptance:clean
 
@@ -401,7 +418,7 @@ jobs:
       - acceptance-vscodium
       - acceptance-genuine
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: The needed jobs' results

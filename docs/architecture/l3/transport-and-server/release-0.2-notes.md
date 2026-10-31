@@ -5,6 +5,11 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
+- **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
+  - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
+    family's floor (ADR-0007 as amended, the user's decision D-102 on #1368). The proposed APIs it uses read the same
+    at 1.125.0 (athena on #1373). Spec question on remote-oss/remote-ssh#11.
+
 - **In VS Code without the proposed APIs Remote - SSH needs, "Connect to Host..." opens no window.** The window you ran
   it from shows the notification that says how to enable them. A window opened directly on an SSH host shows the same
   notification in its notification centre, and VS Code's own offer to install an extension appears beside it.

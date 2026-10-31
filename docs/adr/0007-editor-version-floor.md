@@ -61,10 +61,12 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
    has no 1.125 release: its stable tags go from 1.121 to 1.126.
    - **On 1.125.0 it covers:**
      - install at `^1.125.0`;
-     - activation with and without the proposals (the genuine and `ssh-no-proposals` launches);
+     - activation with the proposals (the genuine launch). The `ssh-no-proposals` launch runs at the recorded
+       version only. Genuine 1.125.0 let Remote - SSH resolve with the proposals not enabled, so the "without the
+       proposals" case doesn't occur there as it does on 1.139.1 (tooling-69, #1402). Why it doesn't is measured
+       in tooling-72 (#1385). Until that's settled, the floor run makes no claim about the no-proposals path;
      - a connect up to the declined licence;
-     - the Remote Explorer's rows without a connect. That needs the genuine launch to load the explorer and one row of
-       its own (tooling-69), because neither launch opens the explorer today.
+     - the Remote Explorer's rows without a connect, through the genuine launch's explorer row (tooling-69).
    - **It doesn't cover a connect, a container open or the Ports view.** Those need the server of genuine 1.125.0's
      own commit, which is Microsoft's server under its licence. The genuine job runs on the opposite terms: nothing
      accepts that licence for the user, and no server comes from the publisher. VSCodium's server doesn't match a
@@ -104,4 +106,4 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 - **The constant:** `tools/check-layout` verifies that every extension manifest's `engines.vscode` equals the root
   constant, and that a package declaring `enabledApiProposals` carries the pinned declaration files.
 - **The recorded suite** runs on 1.139.1.
-- **The floor run** (decision 4) runs the genuine launch, with the explorer, and the `ssh-no-proposals` launch on 1.125.0.
+- **The floor run** (decision 4) runs the genuine launch, with the explorer, on 1.125.0. `ssh-no-proposals` runs on 1.139.1.

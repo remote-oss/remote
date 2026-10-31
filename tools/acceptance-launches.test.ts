@@ -57,6 +57,7 @@ function labelsFromExplorer(): string[] {
     'containers-volume',
     'containers-explorer',
     'containers-ports',
+    'containers-features',
     'containers-shutdown',
     'containers-killed-23',
     'containers-killed-35',
@@ -106,6 +107,22 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
+  it('tooling-70: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and no launch on another host has a host setup', () => {
+    const remote = launches.find(launch => launch.label === 'remote');
+    deepStrictEqual(
+      [
+        launches.find(launch => launch.label === 'remote-ubuntu'),
+        launches
+          .filter(
+            launch =>
+              launch.hostBase !== undefined && launch.hostSetup !== undefined,
+          )
+          .map(launch => launch.label),
+      ],
+      [{...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'}, []],
+    );
+  });
+
   it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
@@ -122,6 +139,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal',
         'socket',
         'slow',
+        'remote-ubuntu',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
@@ -261,6 +279,12 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
         ],
         [
+          'containers-features',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
+        ],
+        [
           'containers-shutdown',
           ['remote-oss.remote-containers'],
           true,
@@ -284,8 +308,8 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
-        ['genuine', undefined, true, undefined],
-        ['ssh-no-proposals', undefined, true, undefined],
+        ['genuine', ['remote-oss.remote-explorer'], true, undefined],
+        ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
       ],
     );
   });
@@ -358,6 +382,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-features',
+          'containers-features',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
+        [
           'containers-shutdown',
           'containers-shutdown',
           shared,
@@ -411,6 +442,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         'containers-ports',
+        'containers-features',
         'containers-shutdown',
         'containers-killed-23',
         'containers-killed-35',
@@ -527,7 +559,7 @@ describe('the launches of the VSCodium run', () => {
           'workbench.settings.enableNaturalLanguageSearch': false,
           'chat.disableAIFeatures': true,
         },
-        undefined,
+        ['remote-oss.remote-explorer'],
       ],
     );
   });
@@ -1291,21 +1323,21 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59, tooling-56: only the containers launch and containers-ports ask for the run’s registry', () => {
+  it('containers-59, tooling-56: only the containers launch, containers-ports and containers-features ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
-      ['containers', 'containers-ports'],
+      ['containers', 'containers-ports', 'containers-features'],
     );
   });
 
-  it('tooling-57: only the containers launch asks for the run’s templates', () => {
+  it('tooling-57: only the containers launch and containers-features ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
-      ['containers'],
+      ['containers', 'containers-features'],
     );
   });
 });

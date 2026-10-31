@@ -19,7 +19,7 @@ import {
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
 const DESCRIPTION =
   'Work on any machine you can reach over SSH as if the code were on your own disk.';
-const EDITOR_ENGINE = '^1.139.0';
+const EDITOR_ENGINE = '^1.125.0';
 
 /** The standing-down key every gated when clause negates. */
 const STANDING_DOWN = '!opensshremotes.standingDown';
@@ -838,11 +838,10 @@ describe('the manifest rows of slices 1 and 2', () => {
     return entries;
   }
 
-  it('F-2001 AC-19: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished, and an engines floor of at least 1.133.0 (BR-1, BR-2, BR-7, BR-13)', () => {
-    const floor = /^\^1\.(\d+)\.\d+$/.exec(manifest.engines.vscode);
+  it('F-2001 AC-19 (ruling-d102-floor): extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished, and the engines floor of ADR-0007, which is below the criterion’s 1.133.0 (BR-1, BR-2, BR-7)', () => {
     deepStrictEqual(
       [
-        Number(floor?.[1] ?? 0) >= 133,
+        manifest.engines.vscode,
         manifest.extensionKind,
         manifest.capabilities.untrustedWorkspaces,
         'virtualWorkspaces' in manifest.capabilities,
@@ -850,7 +849,7 @@ describe('the manifest rows of slices 1 and 2', () => {
           event => event === '*' || event === 'onStartupFinished',
         ),
       ],
-      [true, ['ui'], {supported: true}, false, []],
+      [EDITOR_ENGINE, ['ui'], {supported: true}, false, []],
     );
   });
 

@@ -28,7 +28,7 @@ import {checked, runCommand} from '../../../tools/command-runner.ts';
 import {harnessSshConfig} from '../../../tools/acceptance.ts';
 import {downloadHostArguments} from '../../../tools/acceptance-downloads.ts';
 import {makeRunKeys} from '../../../tools/acceptance-keys.ts';
-import {shellVariantOf} from '../../../tools/host-variants.ts';
+import {hostBaseOf, shellVariantOf} from '../../../tools/host-variants.ts';
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
 
@@ -171,6 +171,7 @@ export async function startHost(
         ...(variant.downloads === true ? downloadHostArguments() : []),
         ...makeRunKeys(runCommand, runFolder).hostArguments,
       ],
+      hostBaseOf(process.env),
     );
     container = host.container;
     const port = host.port;

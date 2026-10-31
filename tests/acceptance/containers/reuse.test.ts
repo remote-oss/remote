@@ -309,15 +309,26 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0408 AC-13, F-0409 AC-2 (gate-row-4): a stopped container is started again with the same id, and no dialog shows', async () => {
-    const folder = devContainerFolder('reuse-stopped');
+  it('F-0408 AC-13, F-0409 AC-2 (gate-row-4): a stopped container is started again with the same id, with no image build and a Starting container step in the log, its postCreateCommand not run again and its postStartCommand run, and no dialog shows', async () => {
+    const folder = devContainerFolder('reuse-stopped', {
+      postCreateCommand: 'echo create >> /tmp/c58-runs',
+      postStartCommand: 'echo start >> /tmp/c58-runs',
+    });
     try {
       const stopped = await inspectOf(await containerLeftBy(folder));
       await execFileAsync('docker', ['stop', stopped.id]);
+      const mark = containersLog().length;
       const name = await reopened(folder);
       const dialog = await dialogOf(name);
+      const lines = containersLogSince(mark);
       const containerIds = await devContainersOf(folder);
       const started = await inspectOf(containerIds[0] ?? '');
+      const {stdout: runs} = await execFileAsync('docker', [
+        'exec',
+        started.id,
+        'cat',
+        '/tmp/c58-runs',
+      ]);
       await closeWindow(name);
       deepStrictEqual(
         {
@@ -326,6 +337,9 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
           status: started.status,
           later: started.startedAt > stopped.startedAt,
           dialog,
+          builds: lines.filter(line => /^#\d+ /.test(line)),
+          startingStep: lines.includes('Starting container'),
+          runs: runs.trim().split('\n'),
         },
         {
           containers: 1,
@@ -333,6 +347,9 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
           status: 'running',
           later: true,
           dialog: undefined,
+          builds: [],
+          startingStep: true,
+          runs: ['create', 'start', 'start'],
         },
       );
     } finally {
@@ -551,6 +568,34 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
           mountedRebuilt: false,
         },
       );
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0419 AC-30 (cache-zero): with the number 0 for dev.containers.cacheVolume, the new container has no mount at /vscode', async () => {
+    const folder = devContainerFolder('cache-zero');
+    await setUserSetting('dev.containers.cacheVolume', 0);
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(await vscodeMounted(containerId), false);
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0419 AC-30 (cache-string-false): with the string "false" for dev.containers.cacheVolume, the new container mounts the vscode volume at /vscode', async () => {
+    const folder = devContainerFolder('cache-string-false');
+    await setUserSetting('dev.containers.cacheVolume', 'false');
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(await vscodeMounted(containerId), true);
     } finally {
       await setUserSetting('dev.containers.cacheVolume', undefined);
       await removeContainers(folder);

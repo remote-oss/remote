@@ -968,6 +968,60 @@ export function answerInputBox(name: string, text: string): Promise<void> {
   return keyInFolderDialog(name, 'Enter', text);
 }
 
+/** One problem of the Problems panel, with the file it is listed under. */
+export interface Problem {
+  /** The file's folder and name, `.devcontainer/devcontainer.json`, or the name alone for a file at the root. */
+  file: string;
+  message: string;
+  code: string;
+  /** The link the code carries, or an empty string. */
+  target: string;
+  /** `error`, `warning` or `info`. */
+  severity: string;
+  line: number;
+}
+
+/** The windows whose Problems panel `problemsOf` maximized, so that it shows many rows at once. */
+const maximizedPanels = new Set<string>();
+
+/** Focuses the Problems panel of window `name`, maximized, and reads its problems in the order shown. */
+export async function problemsOf(name: string): Promise<Problem[]> {
+  await paletteRun(name, 'Problems: Focus on Problems View');
+  if (!maximizedPanels.has(name)) {
+    maximizedPanels.add(name);
+    await paletteRun(name, 'View: Toggle Maximized Panel');
+  }
+  return evaluate<Problem[]>(
+    name,
+    `(() => {
+      const problems = [];
+      let file = '';
+      for (const row of document.querySelectorAll('.markers-panel [role="treeitem"]')) {
+        if (row.getAttribute('aria-level') === '1') {
+          const folder = row.querySelector('.label-description')?.textContent ?? '';
+          const label = row.querySelector('.label-name')?.textContent ?? '';
+          file = folder === '' ? label : folder + '/' + label;
+          continue;
+        }
+        const line = row.querySelector('.marker-line')?.textContent ?? '';
+        problems.push({
+          file,
+          message: row.querySelector('.marker-message')?.textContent ?? '',
+          code: row.querySelector('.marker-code')?.textContent ?? '',
+          target: row.querySelector('a.monaco-link')?.getAttribute('href') ?? '',
+          severity: row.querySelector('.marker-icon')?.classList.contains('error')
+            ? 'error'
+            : row.querySelector('.marker-icon')?.classList.contains('warning')
+              ? 'warning'
+              : 'info',
+          line: Number(/Ln (\\d+)/.exec(line)?.[1] ?? 0),
+        });
+      }
+      return problems;
+    })()`,
+  );
+}
+
 /** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */
 export interface RowDetails {
   label: string;
@@ -2104,6 +2158,30 @@ export async function terminalText(name: string): Promise<string> {
       const rows = document.querySelectorAll('.xterm-rows');
       const target = rows[rows.length - 1];
       return target?.innerText ?? '';
+    })()`,
+  );
+}
+
+/** A run of text in the active terminal, with the number of the palette colour it is drawn in; none for the default. */
+export interface TerminalSpan {
+  text: string;
+  foreground: number | undefined;
+}
+
+/** The runs of text of window `name`'s active terminal, in order, each with the palette colour xterm gave its cell. */
+export async function terminalSpans(name: string): Promise<TerminalSpan[]> {
+  return evaluate<TerminalSpan[]>(
+    name,
+    `(() => {
+      const rows = document.querySelectorAll('.xterm-rows');
+      const target = rows[rows.length - 1];
+      return [...(target?.querySelectorAll('span') ?? [])].map(span => {
+        const colour = /xterm-fg-(\\d+)/.exec(span.className);
+        return {
+          text: span.textContent ?? '',
+          foreground: colour === null ? undefined : Number(colour[1]),
+        };
+      });
     })()`,
   );
 }

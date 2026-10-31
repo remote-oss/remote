@@ -1,14 +1,24 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {
   closeWindow,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
   waitFor,
 } from '../windows/harness.ts';
-import {focusTerminal, terminalText} from '../windows/renderer.ts';
+import {
+  dialogOf,
+  focusTerminal,
+  notificationCentre,
+  terminalSpans,
+  terminalText,
+} from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   containerOf,
@@ -17,6 +27,8 @@ import {
   mark,
   untilLabels,
 } from './lifecycle-support.ts';
+
+const execFileAsync = promisify(execFile);
 
 /** The text of `fileName` in `folder` on the host, or an empty string when the command has not written it. */
 function hostFile(folder: string, fileName: string): string {
@@ -29,6 +41,74 @@ function hostFile(folder: string, fileName: string): string {
 
 describe('F-0415 reopening, the environment, the log and the terminal (card containers-44)', function () {
   this.timeout(900_000);
+
+  it('F-0415 AC-11 (m11): a postCreateCommand that fails after the connect keeps its output, stops postStartCommand and postAttachCommand of that run, shows no notification or dialog, ends the Configuring terminal with the red failure line and the closing line, and leaves the container running', async () => {
+    const failure =
+      'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.';
+    const folder = devContainerFolder('c58-postcreate-fails', {
+      name: 'Postcreate Fails',
+      postCreateCommand: 'echo c58-before-failure; exit 7',
+      postStartCommand: 'touch /tmp/c58-poststart',
+      postAttachCommand: 'touch /tmp/c58-postattach',
+    });
+    try {
+      const logMark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      await new Promise(resolve => setTimeout(resolve, 15_000));
+      const containerId = await containerOf(folder);
+      await focusTerminal(name);
+      const text = (await terminalText(name)).replaceAll('\n', ' ');
+      const spans = await terminalSpans(name);
+      const lines = containersLogSince(logMark);
+      const {stdout: leftBehind} = await execFileAsync('docker', [
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        'ls /tmp | grep c58- || true',
+      ]);
+      const {stdout: status} = await execFileAsync('docker', [
+        'inspect',
+        '-f',
+        '{{.State.Status}}',
+        containerId,
+      ]);
+      const centre = await notificationCentre(name);
+      const dialog = await dialogOf(name);
+      await closeWindow(name);
+      const [outputAt = -1, failureAt = -1, doneAt = -1] = [
+        'c58-before-failure',
+        failure,
+        'Done. Press any key to close the terminal.',
+      ].map(each => text.indexOf(each));
+      deepStrictEqual(
+        {
+          outputKept: lines.includes('c58-before-failure'),
+          terminalInOrder:
+            outputAt >= 0 && outputAt < failureAt && failureAt < doneAt,
+          failureIsRed: [1, 9].includes(
+            spans.find(span => span.text.includes(failure))?.foreground ?? -1,
+          ),
+          laterCommandsRan: leftBehind.trim(),
+          status: status.trim(),
+          centre,
+          dialog,
+        },
+        {
+          outputKept: true,
+          terminalInOrder: true,
+          failureIsRed: true,
+          laterCommandsRan: '',
+          status: 'running',
+          centre: [],
+          dialog: undefined,
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
 
   it('F-0415 AC-12 (m12): a command that failed in an earlier run is not retried when the same container is reopened without a rebuild', async () => {
     const folder = devContainerFolder('c44-no-retry', {

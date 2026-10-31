@@ -22,7 +22,7 @@ Remote - Tunnels: not part of this release.
 
 ## Requirements
 
-You need an editor of version 1.139.0 or later. What each member needs besides that, such as the supported remote
+You need an editor of version 1.125.0 or later. What each member needs besides that, such as the supported remote
 platforms, an SSH client or a container engine, is described in the member's own readme:
 
 - [Dev Containers](https://github.com/remote-oss/remote/tree/main/packages/remote-containers#readme)

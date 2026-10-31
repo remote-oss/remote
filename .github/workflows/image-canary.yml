@@ -1,0 +1,36 @@
+# Once a day the checks and the unit tests run on GitHub's newest image (ubuntu-latest), while the pull request jobs of
+# ci.yml stay on the pinned ubuntu-24.04. A change of the image (its tools, their wording) shows here first, as one red
+# run, instead of on every pull request at once; moving the pin is then a pull request of its own (#1379).
+name: image-canary
+
+on:
+  schedule:
+    - cron: '29 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-image:
+    name: checks and unit on ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: The image's release and its coreutils
+        run: |
+          grep -E '^(PRETTY_NAME|VERSION_ID)=' /etc/os-release
+          mkdir --version | head -n 1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm identifiers
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:unit --parallel --jobs 4
+        env:
+          TMPDIR: ${{ runner.temp }}

@@ -322,6 +322,7 @@ export function activate(context: vscode.ExtensionContext): void {
           extensionId,
           present: extension !== undefined,
           extensionActive: extension?.isActive === true,
+          editorVersion: vscode.version,
         });
       },
     ),

@@ -120,7 +120,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
 - `web-ui` and `web-ui-trust`: plain launches with a debugging port and a recording `xdg-open` first on the editor's PATH; the suite writes it into `<run>/browser-bin` and reads the addresses it was asked to open from `<run>/browser-urls` (`windows/web-ui-support.ts`), for the rows of Open Web UI. `web-ui-trust` has workspace trust on and core's startup trust prompt off, so a window opens in Restricted Mode and silent. A terminal-mode connect in it (`remote.SSH.useLocalServer` off) waits on core's trust question before its login terminal starts, and fails when nothing answers within the connect timeout, so its rows connect only through the local server.
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close, and `containers-killed-23`, `containers-killed-35` and `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, `containers-features`, as `containers` is, for the rows of a build with Features (F-0414), which use the run's own Features and so run on the Alpine image the harness's server needs, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close, and `containers-killed-23`, `containers-killed-35` and `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -291,7 +291,7 @@ from the table (`launchGroupOf`):
 An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
 the longest launch, `containers`, alone:
 
-    node tools/acceptance.ts --editor vscodium --launches @ssh
+    node tools/acceptance.ts --editor vscodium --launches @ssh,!remote-ubuntu
     node tools/acceptance.ts --editor vscodium --launches containers
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
@@ -361,7 +361,7 @@ listening on port" line yet.
 
 ## The run's registry
 
-A launch with `registry: true` (today `containers` and `containers-ports`) makes the run start a registry of its own before its
+A launch with `registry: true` (today `containers`, `containers-ports` and `containers-features`) makes the run start a registry of its own before its
 launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
 `tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
 (`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
@@ -371,7 +371,7 @@ container label, so the run's clean-up and the stale sweep remove it with its an
 
 ## The run's templates
 
-A launch with `templates: true` (today only `containers`) makes the run start its registry, as `registry: true` does,
+A launch with `templates: true` (today `containers` and `containers-features`) makes the run start its registry, as `registry: true` does,
 and publish templates into it before its launches (`tools/acceptance-templates.ts`):
 - **Three of the specification's templates**, the smallest the rows need: `alpine`, `docker-existing-dockerfile` and
   `docker-in-docker` (`MIRRORED_TEMPLATES`; the last is the template F-0801 AC-40 applies). Each one's single layer is
@@ -506,6 +506,35 @@ all eight), each in its own mocha run on its own host: `server/login-shell-varia
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
 
+### The Ubuntu 26.04 host
+
+A second image, `host-ubuntu/`, is `ubuntu:26.04`, pinned by its index digest. Its coreutils are uutils, not GNU's and
+not BusyBox's, as on a user's Ubuntu 26.04 machine.
+- **What it has:** OpenSSH's server with key login only, the one user `harness` (login shell `/bin/sh`, which is dash),
+  and the shells of `HOST_SHELL`. It also has GNU `wget` and `curl` (`HOST_FETCH`: `gnu-wget`, the default, `curl` or
+  `none`), `iptables`, `xauth`, `procps` and the OpenBSD `nc`.
+- **What it doesn't have:** the thirteen other accounts of the Alpine host (`password`, `mute`, `readonly`, `i686` and
+  the rest), so rows that use them stay Alpine's. Nor does it have BusyBox's `wget`.
+- **Its `start-sshd`** is its own: the Alpine one sets up the thirteen accounts and links BusyBox's `wget`.
+
+`HARNESS_HOST_BASE` (`alpine`, the default, or `ubuntu-26.04`) picks the image that `startHost` starts the server
+rows' host from; another value fails the run. `pnpm test:acceptance:variants` runs the shell-sensitive files, plus
+`server/install.test.ts` and `server/probe.test.ts`, once on the Ubuntu host (`host base ubuntu-26.04`).
+
+The VSCodium run starts the Ubuntu host beside its Alpine one only when a chosen launch has `hostBase: 'ubuntu-26.04'`.
+That's `remote-ubuntu`, the `remote` launch on it. The second host gets:
+- the run's key and password, and the download host's names;
+- its own `ssh_config-ubuntu-26.04` beside the run's, which is the launch's `remote.SSH.configFile` and its
+  `HARNESS_SSH_CONFIG`;
+- its own container id, `HARNESS_HOST_UBUNTU_CONTAINER`, which is the launch's `HARNESS_CONTAINER`.
+
+A glibc host is served the glibc server by the download host (tooling-68). A launch on another host can't have a
+`hostSetup`, because that runs in the run's own host.
+
+The backstop's ssh part leaves `remote-ubuntu` out (`@ssh,!remote-ubuntu`) while two of its rows fail on the Ubuntu
+host (#1380): F-2401 AC-2 and F-2304 AC-6. A dispatch that names it runs it, and so does a local run without
+`--launches`.
+
 ## Rows that fail in some runs
 
 Each launch of a run starts with a line `acceptance: launch <label>`, so a run's log splits by launch.
@@ -563,10 +592,10 @@ the server suite the same names, and `server/downloads.test.ts` holds the rows t
 
 ## Genuine VS Code launch
 
-The `genuine` launch starts VS Code at the floor of ADR-0007 (`EDITOR_VERSION`, downloaded under `.vscode-test/` on
+The `genuine` launch starts VS Code at the recorded version of ADR-0007 as amended (`EDITOR_VERSION`, 1.139.1, downloaded under `.vscode-test/` on
 first use) instead of the run's VSCodium, with the extensions installed in a folder of its own, `<run>/extensions-genuine`,
 by VS Code's CLI. Two launch fields do it: `client: 'vscode'` names the editor, and `namedOnly: true` keeps the launch
-out of a run that names no launches, so only `--launches genuine` makes it (it comes after every VSCodium launch, and only `ssh-no-proposals` comes after it). The launch
+out of a run that names no launches, so only `--launches genuine` makes it (it comes after every VSCodium launch, and only `ssh-no-proposals` and `genuine-floor` come after it). The launch
 sets `REMOTE_OSS_ACCEPTANCE_SCRIPT` to the empty string, so the extension shows its real dialogs, which the rows read and
 answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settingsEditorOf`); `localServerDownload` is off,
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
@@ -577,7 +606,7 @@ answers for `update.code.visualstudio.com`, its request log shows what the host 
 names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
 built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
 `update.mode`, `extensions.autoCheckUpdates`, `extensions.autoUpdate`, `workbench.enableExperiments`,
-`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. The row for an MIT release address (F-3902 AC-15) needs `github.com`
+`workbench.settings.enableNaturalLanguageSearch` and `chat.disableAIFeatures`. Every editor the run starts, this one and VSCodium alike, also gets `--disable-crash-reporter`. That wins over the `enable-crash-reporter` VS Code's first run writes into `~/.vscode/argv.json`, so no crash report goes to its publisher, and the user's file stays as it is. The row for an MIT release address (F-3902 AC-15) needs `github.com`
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
@@ -590,6 +619,15 @@ removes both in its `finally`. The container's removal at the end of the run is 
 a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's rows never reaches it:
 
     node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
+
+The genuine launches run the recorded version unless the job names the floor: the variable `HARNESS_GENUINE_VERSION` is
+`1.139.1` (the default when it is unset) or `1.125.0`, and any other value fails the run before it starts. The run
+downloads that version, installs the family's extensions into it, and gives the tests the version as
+`HARNESS_EDITOR_VERSION`. `ssh-no-proposals` runs at the recorded version only: at the floor the editor lets Remote - SSH resolve without the proposals, so a run that names the floor and that launch fails before it starts. The `genuine` launch also installs Remote Explorer, so its suite shows the Remotes view's SSH
+group at either version with no connect (a genuine editor cannot connect to the run's host: its install of the run's
+VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the declined licence). CI runs both versions:
+
+    HARNESS_GENUINE_VERSION=1.125.0 node tools/acceptance.ts --editor vscodium --launches genuine
 
 ## The host's other accounts (D-85)
 

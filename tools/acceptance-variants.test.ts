@@ -50,10 +50,34 @@ describe('acceptance-variants (card tooling-14)', () => {
     );
   });
 
-  it('runs the shell runs before the download runs', () => {
+  it('runs the shell runs, then the download runs, then the host-base run', () => {
     deepStrictEqual(
       variantRuns().map(variant => variant.label.split(' ')[0]),
-      [...Array<string>(8).fill('login'), ...Array<string>(4).fill('download')],
+      [
+        ...Array<string>(8).fill('login'),
+        ...Array<string>(4).fill('download'),
+        'host',
+      ],
+    );
+  });
+
+  it('tooling-70: runs the shell-sensitive, install and probe rows once on the Ubuntu 26.04 host', () => {
+    deepStrictEqual(
+      variantRuns().filter(variant => variant.label.startsWith('host')),
+      [
+        {
+          label: 'host base ubuntu-26.04',
+          testFiles: [
+            'tests/acceptance/server/login-shell-variant.test.ts',
+            'tests/acceptance/server/login-shells.test.ts',
+            'tests/acceptance/server/start.test.ts',
+            'tests/acceptance/server/shared-session.test.ts',
+            'tests/acceptance/server/install.test.ts',
+            'tests/acceptance/server/probe.test.ts',
+          ],
+          environment: {HARNESS_HOST_BASE: 'ubuntu-26.04'},
+        },
+      ],
     );
   });
 

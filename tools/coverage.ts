@@ -18,7 +18,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import {tmpdir} from 'node:os';
+import {availableParallelism, tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   isMainModule,
@@ -160,11 +160,16 @@ export function nextRatchet(
   };
 }
 
-/** Runs the unit's tests under c8 from `root` and returns the measured numbers, or undefined when the tests fail. */
+/**
+ * Runs the unit's tests under c8 from `root` and returns the measured numbers, or undefined when the tests fail. With
+ * more than one job, mocha runs the test files in that many processes at once; c8 collects their coverage as it does its
+ * child's, so the numbers are those of a serial run.
+ */
 export function measureUnit(
   root: string,
   unit: CoverageUnit,
   excluded: string[],
+  jobs = availableParallelism(),
 ): CoverageNumbers | undefined {
   const reports = mkdtempSync(path.join(tmpdir(), 'coverage-'));
   try {
@@ -193,6 +198,7 @@ export function measureUnit(
         '--no-config',
         '--extension=ts',
         '--timeout=10000',
+        ...(jobs > 1 ? ['--parallel', `--jobs=${String(jobs)}`] : []),
         ...unit.tests,
       ],
       {cwd: root, stdio: ['ignore', 'inherit', 'inherit']},
