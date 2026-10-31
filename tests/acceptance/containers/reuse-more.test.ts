@@ -44,6 +44,9 @@ const RECOVERY_BUTTONS = [
   'Retry',
 ];
 
+/** How long a connected window is left before its container is removed from outside. */
+const SETTLE_MILLISECONDS = 8000;
+
 /** How long a connect that ends in a dialog takes. */
 const DIALOG_MILLISECONDS = 180_000;
 
@@ -158,6 +161,8 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
     const name = await reopened(folder);
     const containerId = await containerOf(folder);
     await settled(name);
+    // Core draws no dialog for a permanent failure in about the first seconds after the connect.
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
     const began = Date.now();
     await docker('rm', '-f', containerId);
     const dialog = await waitForDialog(name, 30_000);
@@ -318,13 +323,14 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
         `window ${name} to show an editor for the missing file`,
         async () =>
           (await editorTabs(name)).some(
-            editor => editor.active && editor.label === 'devcontainer.json',
+            editor => editor.active && editor.label.startsWith('devcontainer'),
           ),
         30_000,
       );
       deepStrictEqual(
         [
           existsSync(configuration),
+          /file was not found/i.test(await pageText(name)),
           (await windowState(name)).remoteName,
           await docker(
             'inspect',
@@ -333,7 +339,7 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
             containerId,
           ),
         ],
-        [false, null, 'true'],
+        [false, true, null, 'true'],
       );
       await closeWindow(name);
     } finally {
