@@ -40,6 +40,7 @@ interface World {
   activeCalls: number;
   opened: unknown[][];
   hostList: () => HostListResult;
+  hostSource: () => string;
   connection: () => {hostKey: string; lastResolve: LastResolve} | undefined;
   openerFailure: Error | undefined;
   mismatches: string[];
@@ -55,6 +56,7 @@ function worldWith(changes: Partial<World> = {}): World {
     activeCalls: 0,
     opened: [],
     hostList: () => ({hosts: []}),
+    hostSource: () => '',
     connection: () => undefined,
     openerFailure: undefined,
     mismatches: [],
@@ -78,6 +80,7 @@ function served(world: World) {
       world.listCalls += 1;
       return world.hostList();
     },
+    hostSource: () => world.hostSource(),
     activeConnection: () => {
       world.activeCalls += 1;
       return world.connection();
@@ -166,6 +169,66 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     deepStrictEqual(
       [call(world, HOSTS, ENVELOPE), world.listCalls],
       [writeHostnames({hostnames: ['two']}), 2],
+    );
+  });
+
+  it('F-5102.AC-35: a re-read that fails answers the names last read from the same source, and logs the line once', () => {
+    const world = worldWith({
+      hostList: () => ({
+        hosts: [
+          {name: 'a', file: '/c'},
+          {name: 'b', file: '/c'},
+        ],
+      }),
+    });
+    served(world);
+    const first = call(world, HOSTS, ENVELOPE);
+    world.hostList = () => ({parseError: {file: '/c', reason: 'bad line 3'}});
+    const second = call(world, HOSTS, ENVELOPE);
+    deepStrictEqual(
+      [first, second, world.sink.lines.map(line => [line.level, line.message])],
+      [
+        writeHostnames({hostnames: ['a', 'b']}),
+        writeHostnames({hostnames: ['a', 'b']}),
+        [['warn', 'The Remotes view gets no hosts: /c: bad line 3']],
+      ],
+    );
+  });
+
+  it('F-5102.AC-35: a failure after the source changed rejects', async () => {
+    const world = worldWith({
+      hostList: () => ({hosts: [{name: 'keep', file: '/k'}]}),
+    });
+    served(world);
+    call(world, HOSTS, ENVELOPE);
+    world.hostSource = () => '/x/config';
+    world.hostList = () => ({
+      parseError: {file: '/x/config', reason: 'bad line 1'},
+    });
+    deepStrictEqual(
+      await refusalOf(
+        Promise.resolve().then(() => call(world, HOSTS, ENVELOPE)),
+      ),
+      '/x/config: bad line 1',
+    );
+  });
+
+  it('F-5102.AC-35: a good read after a failure answers the new names', () => {
+    const world = worldWith({
+      hostList: () => ({hosts: [{name: 'a', file: '/c'}]}),
+    });
+    served(world);
+    call(world, HOSTS, ENVELOPE);
+    world.hostList = () => ({parseError: {file: '/c', reason: 'bad line 3'}});
+    try {
+      call(world, HOSTS, ENVELOPE);
+    } catch {
+      // The failure keeps the last good reading for the next read.
+    }
+    world.hostList = () => ({hosts: [{name: 'b', file: '/c'}]});
+    deepStrictEqual(
+      call(world, HOSTS, ENVELOPE),
+      writeHostnames({hostnames: ['b']}),
     );
   });
 

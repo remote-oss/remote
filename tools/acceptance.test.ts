@@ -400,7 +400,11 @@ const LAUNCH_ORDER = [
   'containers-volume',
   'containers-explorer',
   'containers-ports',
+  'containers-features',
   'containers-shutdown',
+  'containers-killed-23',
+  'containers-killed-35',
+  'containers-killed-43',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1075,7 +1079,43 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           {
+            folder: path.join('/run', 'extensions-containers-features'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
             folder: path.join('/run', 'extensions-containers-shutdown'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-killed-23'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-killed-35'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-containers-killed-43'),
             files: [
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',
