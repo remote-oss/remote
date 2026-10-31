@@ -1,13 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
+import {closeWindow} from '../windows/harness.ts';
+import {removeContainers} from '../windows/folder-windows.ts';
 import {
-  closeWindow,
-  devContainerFolder,
-  devContainersOf,
-  reopenInContainer,
-} from '../windows/harness.ts';
-import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+  COUNTDOWN,
+  docker,
+  eventually,
+  settledWindow as connectedWindow,
+} from './resolve-support.ts';
 import {
   answerDialog,
   dialogOf,
@@ -15,53 +14,6 @@ import {
   toastDetails,
   waitForDialog,
 } from '../windows/renderer.ts';
-
-const execFileAsync = promisify(execFile);
-
-/** How long a window is left after the connect: core's remote status listener draws no dialog for a permanent failure in about the first second after the window connects (measured: 0-3 of 5 at once, 12 of 12 from 2 s). */
-const SETTLE_MILLISECONDS = 5000;
-
-/** The countdown text of core's reconnection dialog and notification. */
-const COUNTDOWN = /^Attempting to reconnect in \d+ seconds\.\.\.$/;
-
-/** The output of `docker` run with `parameters`, trimmed. */
-async function docker(...parameters: string[]): Promise<string> {
-  const {stdout} = await execFileAsync('docker', parameters);
-  return stdout.trim();
-}
-
-/** Connects a window on a new folder named `label` and leaves it a few seconds; gives the window, its container and the folder. */
-async function connectedWindow(label: string): Promise<{
-  name: string;
-  containerId: string;
-  folder: string;
-}> {
-  const folder = devContainerFolder(label, {name: label});
-  const name = await openFolderWindow(folder);
-  await reopenInContainer(name);
-  const [containerId = ''] = await devContainersOf(folder);
-  await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
-  return {name, containerId, folder};
-}
-
-/** Waits, for up to `milliseconds`, until `read` gives something, reading every 500 ms. */
-async function eventually<Value>(
-  what: string,
-  read: () => Promise<Value | undefined>,
-  milliseconds: number,
-): Promise<Value> {
-  const deadline = Date.now() + milliseconds;
-  for (;;) {
-    const value = await read().catch(() => undefined);
-    if (value !== undefined) {
-      return value;
-    }
-    if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for ${what}`);
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-}
 
 describe('F-0409 a connected window whose container changes outside the editor (card containers-61)', function () {
   this.timeout(600_000);
