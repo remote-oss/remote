@@ -173,7 +173,8 @@ describe('the Details (Containers) view (card containers-33)', function () {
               containerId,
             ]);
             const space = stdout.indexOf(' ');
-            const containerName = stdout.slice(1, space);
+            // The Details section's Name row shows the container's name as Docker reports it, leading slash and all.
+            const containerName = stdout.slice(0, space);
             const mounted = (
               JSON.parse(stdout.slice(space + 1)) as Array<{
                 Type: string;
