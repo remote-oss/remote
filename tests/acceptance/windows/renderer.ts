@@ -2117,7 +2117,9 @@ export async function editorGroups(name: string): Promise<EditorTab[][]> {
 
 /** The tab labels of each editor group of window `name`, the groups in the order shown. */
 export async function editorGroupLabels(name: string): Promise<string[][]> {
-  return (await editorGroups(name)).map(group => group.map(tab => tab.label));
+  return (await editorGroups(name)).map(group =>
+    group.map(entry => entry.label),
+  );
 }
 
 /** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
