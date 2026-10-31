@@ -56,7 +56,7 @@ async function serverRuns(user: string): Promise<boolean> {
 }
 
 /** Stops the server of host user `user`, so that the next connect starts one that reads the startup files again. */
-export async function stopServer(user: string): Promise<void> {
+async function stopServer(user: string): Promise<void> {
   await onHostAs(
     user,
     'sh',
