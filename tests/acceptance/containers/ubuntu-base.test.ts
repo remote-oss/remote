@@ -121,10 +121,50 @@ describe('a dev container on ubuntu:26.04 (card containers-100)', function () {
     );
   });
 
-  it('#1382: its lifecycle commands, an exec channel and a forwarded port work', async () => {
+  it('F-0415 AC-2 (ubuntu-26-04): the five in-container commands run once each, in their fixed order', async () => {
+    const commands = [
+      'onCreateCommand',
+      'updateContentCommand',
+      'postCreateCommand',
+      'postStartCommand',
+      'postAttachCommand',
+    ];
+    const folder = ubuntuFolder(
+      'u100-lifecycle',
+      Object.fromEntries(
+        commands.map(command => [
+          command,
+          `echo ${command} >> /tmp/u100-order`,
+        ]),
+      ),
+    );
+    await inUbuntu(folder, async (window, containerId) => {
+      let order: string[] = [];
+      await waitFor(
+        'the five commands to have run',
+        async () => {
+          order = (
+            await inContainer(containerId, 'cat /tmp/u100-order').catch(
+              () => '',
+            )
+          )
+            .split('\n')
+            .filter(line => line !== '');
+          return order.length >= commands.length;
+        },
+        120_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const settled = (
+        await inContainer(containerId, 'cat /tmp/u100-order')
+      ).split('\n');
+      deepStrictEqual(settled, commands);
+    });
+  });
+
+  it('#1382: an exec channel and a forwarded port work', async () => {
     const port = await freePort();
     const folder = ubuntuFolder('u100-lifecycle', {
-      postCreateCommand: 'echo created > /tmp/u100-marker',
       forwardPorts: [port],
     });
     await inUbuntu(folder, async (window, containerId) => {
@@ -170,12 +210,11 @@ describe('a dev container on ubuntu:26.04 (card containers-100)', function () {
       );
       deepStrictEqual(
         [
-          await inContainer(containerId, 'cat /tmp/u100-marker'),
           exitCode,
           await inContainer(containerId, 'cat /tmp/u100-task'),
           forwarded?.forwardedAddress !== '',
         ],
-        ['created', 0, 'u100-task', true],
+        [0, 'u100-task', true],
       );
     });
   });

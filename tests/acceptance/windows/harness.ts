@@ -836,7 +836,7 @@ export async function devContainersOf(folder: string): Promise<string[]> {
 export const OLD_GLIBC_IMAGE =
   'ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98';
 
-/** `ubuntu:26.04`, whose coreutils are uutils, pinned by its index digest as the Alpine base is (`docker buildx imagetools inspect ubuntu:26.04`, Docker Hub, 2026-10-31). */
+/** `ubuntu:26.04`, whose coreutils are uutils, pinned by its index digest as the Alpine base is (`docker buildx imagetools inspect ubuntu:26.04`, Docker Hub, 2026-10-31); `tests/acceptance/host-ubuntu/Dockerfile` pins the same digest, so a bump moves both. */
 export const UBUNTU_IMAGE =
   'ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c';
 
