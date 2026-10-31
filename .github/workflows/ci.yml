@@ -69,6 +69,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
+  # The jobs on GitHub's runners pin ubuntu-24.04. On 2026-10-25 ubuntu-latest moved to ubuntu-26.04, whose coreutils
+  # are uutils, and a unit row that read GNU mkdir's wording turned every pull request red at once. image-canary.yml
+  # runs the same checks and unit tests on ubuntu-latest once a day, so the next image move shows there first (#1379).
   # Whether a pull request changes only docs/ (no .tsv): only the checks job reads docs/ (layout, public surface,
   # coverage citations, the user guide's unit test), so the quality and acceptance jobs skip such a change and the run
   # still concludes success at its head. The diff is the merge commit's against its base parent, what the pull request
@@ -76,7 +79,7 @@ jobs:
   changes:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
     # a git diff only, so a GitHub runner (allowed by the user, 2026-10-20) and no wait for a self-hosted one
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
@@ -98,7 +101,7 @@ jobs:
   checks:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
@@ -139,7 +142,7 @@ jobs:
   # 11 minutes.
   unit:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -165,7 +168,7 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
     # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20 # shard 2 outgrew 10 minutes by 2026-10-31; the shard rebalance (#1383) sets it back
     steps:
       - uses: actions/checkout@v7
@@ -401,7 +404,7 @@ jobs:
       - acceptance-vscodium
       - acceptance-genuine
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: The needed jobs' results
