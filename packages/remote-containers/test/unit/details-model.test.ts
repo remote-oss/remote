@@ -64,6 +64,7 @@ describe('the Details tree (card containers-33)', () => {
         [
           {
             Attributes: [
+              `Workspace: ${FOLDER}`,
               'Name: /happy_euler',
               'Image: debian:12',
               `Configuration: ${CONFIG}`,
@@ -109,6 +110,42 @@ describe('the Details tree (card containers-33)', () => {
         .map(entry => entry.description),
     );
     deepStrictEqual(rows, [[], ['/tmp/y/devcontainer.json']]);
+  });
+
+  it('F-0903 AC-33, §11: the Workspace origin row is first in Attributes, from the folder label, and a container without a folder label has no origin row; the Workspace text is an [adaptation] key of its own', () => {
+    function attributes(labels: Record<string, string>): string[] {
+      return flat(detailsTreeOf({...BOUND, labels}, identity).sections)
+        .filter(entry => entry.id.startsWith('attributes/'))
+        .map(entry => `${entry.label}: ${entry.description}`);
+    }
+    deepStrictEqual(
+      [
+        attributes({
+          'devcontainer.local_folder': '/tmp/x',
+          'devcontainer.config_file': '/tmp/y/devcontainer.json',
+        }),
+        attributes({'devcontainer.local_folder': '/tmp/x'}),
+        attributes({'vsch.local.folder': '/tmp/legacy'}),
+        attributes({'devcontainer.config_file': '/tmp/y/devcontainer.json'}),
+        attributes({}),
+      ],
+      [
+        [
+          'Workspace: /tmp/x',
+          'Name: /happy_euler',
+          'Image: debian:12',
+          'Configuration: /tmp/y/devcontainer.json',
+        ],
+        ['Workspace: /tmp/x', 'Name: /happy_euler', 'Image: debian:12'],
+        ['Workspace: /tmp/legacy', 'Name: /happy_euler', 'Image: debian:12'],
+        [
+          'Name: /happy_euler',
+          'Image: debian:12',
+          'Configuration: /tmp/y/devcontainer.json',
+        ],
+        ['Name: /happy_euler', 'Image: debian:12'],
+      ],
+    );
   });
 
   it('F-0903 AC-10: F-0903 BR-9: a container with no mount has no Mounts section', () => {

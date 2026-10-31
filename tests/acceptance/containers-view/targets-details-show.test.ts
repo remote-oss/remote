@@ -119,7 +119,7 @@ describe('Show Details and the Details section’s single slot (card containers-
         await sectionsTitled('local', base),
         await paneExpanded('local', base),
         await paneFocused('local', base),
-        (await rowsOf('local', base)).slice(0, 3),
+        (await rowsOf('local', base)).slice(0, 4),
         [windowNames().length, activations('local')],
       ],
       [
@@ -128,6 +128,7 @@ describe('Show Details and the Details section’s single slot (card containers-
         true,
         [
           'Attributes',
+          `Workspace: ${path.join(variable('HARNESS_RUN_FOLDER'), base)}`,
           `Name: /${runScopedName(base)}`,
           `Image: ${variable('HARNESS_DEVCONTAINER_IMAGE')}`,
         ],
@@ -375,7 +376,7 @@ describe('Show Details and the Details section’s single slot (card containers-
     );
   });
 
-  it('F-0903 AC-33 (labels): Show Details on a container with only the folder label is titled by the folder with no Configuration row, and on one with only the configuration label by its image with that Configuration row', async () => {
+  it('F-0903 AC-33 (labels): Show Details on a container with only the folder label is titled by the folder with a Workspace row and no Configuration row, and on one with only the configuration label is titled by its image with no origin row and that Configuration row', async () => {
     const image = variable('HARNESS_DEVCONTAINER_IMAGE');
     await plain('ds-folder', ['--label', 'devcontainer.local_folder=/tmp/x']);
     await plain('ds-config', [
@@ -386,25 +387,35 @@ describe('Show Details and the Details section’s single slot (card containers-
     await viewed(image);
     await chosen('x', 'Show Details');
     await sectionShown('local', 'x');
+    await waitFor(
+      'the rows of the folder container',
+      async () => (await rowsOf('local', 'x')).length >= 4,
+      30_000,
+    );
     const folder = await rowsOf('local', 'x');
     await chosen(image, 'Show Details');
     await sectionShown('local', image);
     await waitFor(
-      'the Configuration row',
-      async () =>
-        (await rowsOf('local', image)).some(each =>
-          each.startsWith('Configuration'),
-        ),
+      'the rows of the configuration container',
+      async () => (await rowsOf('local', image)).length >= 4,
       30_000,
     );
     deepStrictEqual(
+      [folder, await rowsOf('local', image)],
       [
-        folder.some(each => each.startsWith('Configuration')),
-        (await rowsOf('local', image)).filter(each =>
-          each.startsWith('Configuration'),
-        ),
+        [
+          'Attributes',
+          'Workspace: /tmp/x',
+          `Name: /${runScopedName('ds-folder')}`,
+          `Image: ${image}`,
+        ],
+        [
+          'Attributes',
+          `Name: /${runScopedName('ds-config')}`,
+          `Image: ${image}`,
+          'Configuration: /tmp/y/devcontainer.json',
+        ],
       ],
-      [false, ['Configuration: /tmp/y/devcontainer.json']],
     );
   });
 });

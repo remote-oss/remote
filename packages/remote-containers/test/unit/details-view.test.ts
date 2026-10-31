@@ -302,6 +302,7 @@ describe('the Details view (card containers-33)', () => {
         [
           'Attributes',
           'Mounts',
+          'Workspace',
           'Name',
           'Image',
           'Configuration',
