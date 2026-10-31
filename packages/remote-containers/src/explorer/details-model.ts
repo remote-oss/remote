@@ -26,6 +26,8 @@ const DETAILS_TEMPLATES = {
   S330: 'Source',
   S393: 'Volume',
   S396: 'Volume mount',
+  /** An `[adaptation]` key: its string id is not given yet. */
+  workspaceOrigin: 'Workspace',
 } as const;
 
 /** One mount of the container, as the view reads it. */
@@ -179,7 +181,17 @@ export function detailsTreeOf(
   translate: Translate,
 ): DetailsTree {
   const configuration = configFileOf(shown.labels);
+  const workspace = localFolderOf(shown.labels);
   const attributes = branch('attributes', textOf('S043', translate), [
+    ...(workspace === undefined
+      ? []
+      : [
+          leaf(
+            'attributes/workspace',
+            textOf('workspaceOrigin', translate),
+            workspace,
+          ),
+        ]),
     leaf('attributes/name', textOf('S229', translate), shown.name),
     {
       ...leaf('attributes/image', textOf('S202', translate), shown.image),
