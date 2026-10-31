@@ -112,9 +112,24 @@ describe('the client search of windows (F-2101 AC-3, 14, 15, 16)', function () {
       await connected('cs14');
       await userSettings({'remote.SSH.path': '/nonexistent/ssh'});
       const callsStart = callLines().length;
+      const logStart = connectionLog().length;
       await reloadWindow('cs14');
       await connected('cs14');
-      deepStrictEqual(callLines().slice(callsStart), []);
+      deepStrictEqual(
+        [
+          callLines().slice(callsStart),
+          connectionLog()
+            .slice(logStart)
+            .filter(line => line.startsWith('Checking ssh client: ')).length,
+          connectionLog()
+            .slice(logStart)
+            .filter(line => line.startsWith('Searched for ssh in: ')).length,
+          connectionLog()
+            .slice(logStart)
+            .filter(line => line === notValid('/nonexistent/ssh')).length,
+        ],
+        [[], 0, 0, 0],
+      );
     } finally {
       await closeWindow('cs14');
     }
