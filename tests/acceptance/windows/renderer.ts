@@ -1953,7 +1953,7 @@ export async function quickPickFacts(
           title: widget.querySelector('.quick-input-title')?.textContent ?? '',
           placeholder: widget.querySelector('.quick-input-box input')?.getAttribute('placeholder') ?? '',
           titleButtons: [...widget.querySelectorAll('.quick-input-titlebar .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
-          multiSelect: widget.querySelector('.quick-input-check-all') !== null,
+          multiSelect: widget.querySelector('.quick-input-list .monaco-list-row[role=checkbox]') !== null,
         };
       })()`,
     )) ?? undefined
@@ -1996,7 +1996,11 @@ export async function typeInQuickPick(
   name: string,
   text: string,
 ): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+  await settled(
+    () => `a quick pick in window ${name}`,
+    async () => ((await quickPickOf(name)) === undefined ? undefined : true),
+    30_000,
+  );
   await setQuickPickInput(name, text);
 }
 
@@ -2120,11 +2124,17 @@ interface KeyStroke {
   modifiers?: number;
 }
 
-/** Presses the `stroke` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
-async function pressStroke(
+/** One protocol input command. */
+interface InputEvent {
+  method: 'Input.dispatchKeyEvent' | 'Input.dispatchMouseEvent';
+  params: Record<string, unknown>;
+}
+
+/** Sends the input commands `events` one after the other to the page at protocol address `address`, each awaiting its answer. */
+async function dispatchInput(
   address: string,
   owner: string,
-  stroke: KeyStroke,
+  events: readonly InputEvent[],
 ): Promise<void> {
   const socket = new WebSocket(address);
   try {
@@ -2136,31 +2146,72 @@ async function pressStroke(
         reject(new Error(`no protocol connection to window ${owner}`));
       });
     });
-    for (const [index, type] of ['keyDown', 'keyUp'].entries()) {
+    for (const [index, event] of events.entries()) {
       const answered = new Promise<void>(resolve => {
         socket.addEventListener('message', function listener() {
           socket.removeEventListener('message', listener);
           resolve();
         });
       });
-      socket.send(
-        JSON.stringify({
-          id: index + 1,
-          method: 'Input.dispatchKeyEvent',
-          params: {
-            type,
-            ...stroke,
-            ...(type === 'keyDown' && stroke.text !== undefined
-              ? {text: stroke.text}
-              : {}),
-          },
-        }),
-      );
+      socket.send(JSON.stringify({id: index + 1, ...event}));
       await answered;
     }
   } finally {
     socket.close();
   }
+}
+
+/** Sends `stroke` to the page at protocol address `address`, with its key down and up. */
+async function pressStroke(
+  address: string,
+  owner: string,
+  stroke: KeyStroke,
+): Promise<void> {
+  await dispatchInput(
+    address,
+    owner,
+    ['keyDown', 'keyUp'].map(type => ({
+      method: 'Input.dispatchKeyEvent',
+      params: {
+        type,
+        ...stroke,
+        ...(type === 'keyDown' && stroke.text !== undefined
+          ? {text: stroke.text}
+          : {}),
+      },
+    })),
+  );
+}
+
+/** Clicks, with the mouse, the row of the open quick pick in window `name` whose label is `label`. */
+export async function clickQuickPickRow(
+  name: string,
+  label: string,
+): Promise<void> {
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
+      if (row === undefined) {
+        return null;
+      }
+      const box = row.getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}: no quick pick row ${JSON.stringify(label)}`,
+    );
+  }
+  await dispatchInput(
+    await pageOf(name),
+    name,
+    ['mousePressed', 'mouseReleased'].map(type => ({
+      method: 'Input.dispatchMouseEvent',
+      params: {type, ...point, button: 'left', clickCount: 1},
+    })),
+  );
 }
 
 /** The protocol virtual key codes of the keys the helpers press. */
@@ -2419,11 +2470,48 @@ export async function toggleQuickPickRow(
   await evaluate<null>(
     name,
     `(() => {
-      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.getAttribute('aria-label') === ${JSON.stringify(label)});
+      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
       row.querySelector('.monaco-custom-toggle').click();
       return null;
     })()`,
   );
+}
+
+/** What the chrome of the multi-select quick pick open in window `name` shows besides its rows: the counter and whether it has an OK button. */
+export async function quickPickChrome(
+  name: string,
+): Promise<{counter: string; okShown: boolean}> {
+  return evaluate<{counter: string; okShown: boolean}>(
+    name,
+    `(() => {
+      const widget = document.querySelector('${QUICK_WIDGET}');
+      const ok = widget?.querySelector('.quick-input-action .monaco-button');
+      return {
+        counter: widget?.querySelector('.quick-input-count')?.textContent?.trim() ?? '',
+        okShown: ok !== null && ok !== undefined && ok.getBoundingClientRect().width > 0,
+      };
+    })()`,
+  );
+}
+
+/** Clicks the title-bar button of the quick pick open in window `name` whose tooltip is `tooltip`. */
+export async function pressQuickPickTitleButton(
+  name: string,
+  tooltip: string,
+): Promise<void> {
+  const pressed = await evaluate<boolean>(
+    name,
+    `(() => {
+      const button = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-titlebar .action-label')].find(each => (each.getAttribute('aria-label') ?? each.getAttribute('title')) === ${JSON.stringify(tooltip)});
+      button?.click();
+      return button !== undefined;
+    })()`,
+  );
+  if (!pressed) {
+    throw new Error(
+      `window ${name}: no title-bar button ${JSON.stringify(tooltip)}`,
+    );
+  }
 }
 
 /** Clicks the OK button of the multi-select quick pick open in window `name`. */

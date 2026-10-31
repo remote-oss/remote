@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable, waitFor} from '../windows/harness.ts';
+import {waitFor} from '../windows/harness.ts';
 import {
   acceptQuickPick,
   clearQuickPickInput,
@@ -12,24 +12,19 @@ import {
   quickPickChecks,
   quickPickOf,
   quickPickRows,
-  type QuickPickRow,
   quickPickTitle,
   toggleQuickPickRow,
   typeInQuickPick,
 } from '../windows/renderer.ts';
 import {
-  chooseWorkspace,
   CONFIGURATION,
-  startCommand,
+  screenWith,
+  startedWith,
   takeFeatureScreen,
+  takenThrough,
   withWindow,
   written,
 } from './authoring-support.ts';
-
-/** The id that names one of the run's own templates in its registry, which the wizard takes as a custom id. */
-function labId(name: string): string {
-  return `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/custom/${name}:1`;
-}
 
 /** What a configuration the options reached holds. */
 interface Written {
@@ -44,40 +39,6 @@ async function writtenIn(window: string, folder: string): Promise<Written> {
   await written(file);
   await new Promise(resolve => setTimeout(resolve, 1000));
   return JSON.parse(readFileSync(file, 'utf8')) as Written;
-}
-
-/** Runs the wizard in `window` and takes the template `name` of the run's registry by its id; its first screen follows. */
-async function startedWith(window: string, name: string): Promise<void> {
-  await startCommand(window);
-  await chooseWorkspace(window);
-  await typeInQuickPick(window, labId(name));
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  await acceptQuickPick(window);
-}
-
-/** Waits until the pick shows the screen whose placeholder is `placeholder`, and gives its rows. */
-async function screenWith(
-  window: string,
-  placeholder: string,
-): Promise<QuickPickRow[]> {
-  await waitFor(
-    `the screen ${placeholder}`,
-    async () => (await quickPickOf(window))?.placeholder === placeholder,
-    60_000,
-  );
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return quickPickRows(window);
-}
-
-/** Takes the focused row of each screen of `placeholders`, in turn. */
-async function takenThrough(
-  window: string,
-  placeholders: readonly string[],
-): Promise<void> {
-  for (const placeholder of placeholders) {
-    await screenWith(window, placeholder);
-    await acceptQuickPick(window);
-  }
 }
 
 const STRING_SCREENS = ['Flavour:', 'Channel:', 'Motto:'] as const;
