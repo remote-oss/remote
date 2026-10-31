@@ -645,6 +645,39 @@ export async function toggleRow(
 }
 
 /**
+ * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name`, in the order
+ * the row lists them; they are in the page whether or not the pointer is over the row. It fails naming the row when the
+ * view has not one row by that label.
+ */
+export async function rowInlineActions(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string[]> {
+  const titles = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      rows[0].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const inline = [...rows[0].querySelectorAll('.actions-container .action-label')].map(label => label.getAttribute('aria-label') ?? '');
+      rows[0].dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+      return inline;
+    })()`,
+  );
+  if (titles === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  return titles;
+}
+
+/**
  * The labels of the context menu that a right click on the row `rowLabel` of view `viewName` in window `name` opens, in
  * order; none when it opens no menu. The menu is closed again. It fails naming the row when the view has none by that
  * label.
@@ -662,10 +695,15 @@ export async function rowContextMenu(
       if (rows.length !== 1) {
         return null;
       }
+      rows[0].dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+      await new Promise(resolve => setTimeout(resolve, 300));
       const box = rows[0].getBoundingClientRect();
       rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '');
+      for (let tries = 0; tries < 30 && document.querySelector('.context-view .monaco-menu .action-label') === null; tries += 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
       for (const type of ['keydown', 'keyup']) {
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
       }
@@ -1106,6 +1144,62 @@ export async function welcomeText(
     })()`,
     )) ?? undefined
   );
+}
+
+/** The words of the links in the welcome text of view `viewName` in window `name`, in order; none when it shows none. */
+export async function welcomeLinks(
+  name: string,
+  viewName: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('.welcome-view-content a') ?? [])].map(link => link.textContent ?? '');
+    })()`,
+  );
+}
+
+/** What the Extensions view shows of one extension's card. */
+export interface ExtensionCard {
+  name: string;
+  publisher: string;
+  description: string;
+  /** The address of the card's icon image, empty when it shows core's default icon. */
+  iconSource: string;
+  /** The activation time core shows on the card (`12ms`); none when it shows none. */
+  badge: string | undefined;
+}
+
+/** The card of the Extensions entry `displayName` in window `name`; it fails when the view lists it not once. */
+export async function extensionCard(
+  name: string,
+  displayName: string,
+): Promise<ExtensionCard> {
+  const card = await evaluate<ExtensionCard | null>(
+    name,
+    `(() => {
+      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const row = rows[0];
+      const icon = row.querySelector('img.icon');
+      return {
+        name: row.querySelector('.name')?.textContent ?? '',
+        publisher: row.querySelector('.publisher-name')?.textContent ?? '',
+        description: row.querySelector('.description')?.textContent ?? '',
+        iconSource: icon !== null && icon.style.display !== 'none' ? icon.getAttribute('src') ?? '' : '',
+        badge: row.querySelector('.activationTime')?.textContent ?? undefined,
+      };
+    })()`,
+  );
+  if (card === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return card;
 }
 
 /** Clicks the link of the welcome text of view `viewName` whose words are `linkText`; it fails naming what it did not find. */
