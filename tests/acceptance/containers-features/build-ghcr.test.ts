@@ -105,7 +105,7 @@ describe('the legacy words and the Features of ghcr.io (card containers-93)', fu
       {
         image: GLIBC_IMAGE,
         // Node 26, the Feature's default, needs libatomic, which this image lacks.
-        features: {[NODE]: {version: '20'}, './local': {}},
+        features: {'./local': {}, [NODE]: {version: '20'}},
         overrideFeatureInstallOrder: [NODE],
       },
       folder => {

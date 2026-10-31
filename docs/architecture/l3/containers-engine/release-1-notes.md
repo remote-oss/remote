@@ -11,6 +11,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     open in a window whose remote authority did not resolve (measured on VS Code 1.139.1 and VSCodium); the settings
     file opens there (athena on #737; spec question on remote-oss/remote-ssh#79).
 
+- **A Feature named in `features` and again in `dev.containers.defaultFeatures`, differing only in letter case, is installed once, with the configuration's options.**
+  - F-0414 AC-28 and BR-14 have `features` win on the same id; the dev container CLI merges the two lists by their ids'
+    text, so it would install both and let the defaults' options apply last. The extension leaves out of
+    `--additional-features` every default whose id equals a key of `features` ignoring case (athena on #1204;
+    remote-oss/remote-containers#59, card containers-93).
+
 - **Reopen in Container checks Docker and reads the configuration before the window reloads.** When that takes longer
   than half a second, a "Connecting to Dev Container" notification shows meanwhile.
   - F-0401 5.0 step 2 has the reload "within about 1 s"; the dev container CLI's read of the configuration can't
