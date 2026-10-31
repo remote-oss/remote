@@ -12,6 +12,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {acceptQuickPick, quickPickOf} from '../windows/renderer.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The command that starts the wizard. */
@@ -44,6 +45,20 @@ async function windowWith(
 /** Starts the command in `window`; it returns once the window has accepted it, and the wizard goes on in the window. */
 export async function startCommand(window: string): Promise<void> {
   await startInWindow(window, COMMAND);
+}
+
+/** Waits for the option screen whose placeholder is `placeholder`, and takes its focused item, the template's default. */
+export async function takeOptionScreen(
+  window: string,
+  placeholder: string,
+): Promise<void> {
+  await waitFor(
+    `the option screen ${placeholder}`,
+    async () => (await quickPickOf(window))?.placeholder === placeholder,
+    60_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 500));
+  await acceptQuickPick(window);
 }
 
 /** Runs `body` over a window with the files, and closes the window after. */

@@ -37,17 +37,22 @@ import {
 import {
   CONFIGURATION,
   startCommand,
+  takeOptionScreen,
   withWindow,
   written,
 } from './authoring-support.ts';
 
 const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
+/** The placeholder of the one option screen of the Alpine template. */
+const ALPINE_OPTION = 'Alpine version:';
+
 /** Starts the command in `window` and picks the template labelled `label`. */
 async function pickTemplate(window: string, label: string): Promise<void> {
   await startCommand(window);
   await waitForQuickPick(window);
   await chooseQuickPickRow(window, label);
+  await takeOptionScreen(window, ALPINE_OPTION);
 }
 
 /** The files named `relatives` under `folder`, those that exist. */
@@ -276,6 +281,7 @@ describe('the authoring wizard (card containers-80)', function () {
       await startCommand(window);
       await waitForQuickPick(window);
       await chooseQuickPickRow(window, 'Alpine');
+      await takeOptionScreen(window, ALPINE_OPTION);
       await written(path.join(folder, CONFIGURATION));
       await waitFor(
         'the reopen notification',
@@ -611,6 +617,7 @@ describe('the authoring wizard (card containers-80)', function () {
         10_000,
       );
       await acceptQuickPick(window);
+      await takeOptionScreen(window, 'Greeting:');
       await written(path.join(folder, CONFIGURATION));
     });
   });
