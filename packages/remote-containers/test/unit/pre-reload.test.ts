@@ -196,7 +196,12 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       [during, outcome?.choice],
       [
         undefined,
-        {kind: 'chosen', configFile: MAIN, workspaceFolder: '/workspaces/p'},
+        {
+          kind: 'chosen',
+          configFile: MAIN,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
       ],
     );
   });
@@ -255,7 +260,12 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       [
         false,
         true,
-        {kind: 'chosen', configFile: DOTFILE, workspaceFolder: '/workspaces/p'},
+        {
+          kind: 'chosen',
+          configFile: DOTFILE,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
       ],
     );
   });
