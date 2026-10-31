@@ -132,7 +132,7 @@ interface Failure extends ShownDialog {
   toasts: string[];
 }
 
-describe.only('what a failed build with Features says (card containers-94)', function () {
+describe('what a failed build with Features says (card containers-94)', function () {
   this.timeout(1_800_000);
 
   const {build, closeNow} = featureBuilds();
