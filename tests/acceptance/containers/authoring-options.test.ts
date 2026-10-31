@@ -16,9 +16,9 @@ import {
   quickPickTitle,
   toggleQuickPickRow,
   typeInQuickPick,
-  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
+  chooseWorkspace,
   CONFIGURATION,
   startCommand,
   takeFeatureScreen,
@@ -49,7 +49,7 @@ async function writtenIn(window: string, folder: string): Promise<Written> {
 /** Runs the wizard in `window` and takes the template `name` of the run's registry by its id; its first screen follows. */
 async function startedWith(window: string, name: string): Promise<void> {
   await startCommand(window);
-  await waitForQuickPick(window);
+  await chooseWorkspace(window);
   await typeInQuickPick(window, labId(name));
   await new Promise(resolve => setTimeout(resolve, 1500));
   await acceptQuickPick(window);
