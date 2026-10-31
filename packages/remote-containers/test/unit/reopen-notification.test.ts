@@ -3,6 +3,7 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   isSuppressed,
+  type NotificationVariant,
   offerReopen,
   REOPEN_NOTIFICATION_KEY,
   type ReopenNotificationPorts,
@@ -69,38 +70,65 @@ function sceneOf(): Scene {
   };
 }
 
-async function offered(scene: Scene, now = 1000): Promise<void> {
-  await offerReopen({
-    window: scene.window,
-    global: scene.global,
-    workspace: scene.workspace,
-    hasConfiguration: folder => {
-      scene.asked.push(folder);
-      return Promise.resolve(scene.configuration);
+async function offered(
+  scene: Scene,
+  now = 1000,
+  variant?: NotificationVariant,
+): Promise<void> {
+  await offerReopen(
+    {
+      window: scene.window,
+      global: scene.global,
+      workspace: scene.workspace,
+      hasConfiguration: folder => {
+        scene.asked.push(folder);
+        return Promise.resolve(scene.configuration);
+      },
+      show: (message, buttons) => {
+        scene.shown.push([message, buttons]);
+        return Promise.resolve(scene.answers.shift());
+      },
+      reopen: () => {
+        scene.reopened += 1;
+        return Promise.resolve();
+      },
+      now: () => now,
+      translate: template => template,
+      logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
     },
-    show: (message, buttons) => {
-      scene.shown.push([message, buttons]);
-      return Promise.resolve(scene.answers.shift());
-    },
-    reopen: () => {
-      scene.reopened += 1;
-      return Promise.resolve();
-    },
-    now: () => now,
-    translate: template => template,
-    logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
-  });
+    variant,
+  );
 }
 
 function lines(scene: Scene): string[] {
   return scene.sink.lines.map(line => `${line.level}: ${line.message}`);
 }
 
+const S368 =
+  'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
+
 describe('the reopen notification (card containers-23, F-0402)', () => {
   it('F-0402 AC-1: a local folder with a configuration shows S426 with S186 and the two buttons', async () => {
     const scene = sceneOf();
     await offered(scene);
     deepStrictEqual(scene.shown, [[S426, [REOPEN, SUPPRESS]]]);
+  });
+
+  it('F-0302 AC-5: the user data variant shows S368 with the same buttons, without asking the folder for a configuration', async () => {
+    const scene = sceneOf();
+    scene.configuration = false;
+    await offered(scene, 1000, 'userData');
+    deepStrictEqual(
+      [scene.shown, scene.asked],
+      [[[S368, [REOPEN, SUPPRESS]]], []],
+    );
+  });
+
+  it('F-0302 AC-5: the user data variant is suppressed like the folder one', async () => {
+    const scene = sceneOf();
+    scene.workspace = mementoOf({suppressedAt: 500});
+    await offered(scene, 1000, 'userData');
+    deepStrictEqual(scene.shown, []);
   });
 
   it('F-0402 AC-2: Reopen in Container runs the reopen command and stores nothing', async () => {

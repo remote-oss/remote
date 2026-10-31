@@ -28,9 +28,9 @@ import {
   quickPickOf,
   toggleQuickPickRow,
   typeInQuickPick,
-  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
+  chooseWorkspace,
   CONFIGURATION,
   existing,
   startCommand,
@@ -307,7 +307,7 @@ describe('Select Features in the wizard (card containers-88)', function () {
   it('F-0801 AC-40 (template-then-feature): Select Features opens with 0 Selected after the template with its defaults, and a template that carries a Feature and a picked Feature are both written, the template’s first, the picked one with no options, and no dialog shows', async () => {
     await withWindow('f88-dind', {}, async (window, folder) => {
       await startCommand(window);
-      await waitForQuickPick(window);
+      await chooseWorkspace(window);
       await chooseQuickPickRow(window, 'Docker in Docker');
       await takenUntil(window, FEATURES);
       const arrival = await quickPickChrome(window);

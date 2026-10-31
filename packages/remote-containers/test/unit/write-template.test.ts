@@ -127,9 +127,16 @@ class Scene {
   }
 
   /** Runs the write over this scene. */
-  execute(adjust?: WriteRequest['adjust']): ReturnType<typeof writeTemplate> {
+  execute(
+    adjust?: WriteRequest['adjust'],
+    displayPath?: WriteRequest['displayPath'],
+  ): ReturnType<typeof writeTemplate> {
     return writeTemplate(
-      adjust === undefined ? REQUEST : {...REQUEST, adjust},
+      {
+        ...REQUEST,
+        ...(adjust === undefined ? {} : {adjust}),
+        ...(displayPath === undefined ? {} : {displayPath}),
+      },
       this.ports(),
       NEVER,
     );
@@ -202,15 +209,27 @@ describe('the write of a template (card containers-78)', () => {
         'written',
         [
           {
-            severity: 'warning',
+            severity: 'info',
             message:
               "File './.devcontainer/devcontainer.json' already exists, overwrite?",
             detail: '',
-            buttons: ['Overwrite', 'Cancel', 'Skip'],
+            buttons: ['Skip', 'Overwrite', 'Cancel'],
           },
         ],
         'new .devcontainer/devcontainer.json',
       ],
+    );
+  });
+
+  it('F-0302 AC-35: the question names the file as the request’s display path gives it', async () => {
+    const scene = new Scene();
+    scene.target.set(`${TARGET}/a.txt`, 'old');
+    scene.leaves('a.txt');
+    scene.answers = ['Skip'];
+    await scene.execute(undefined, relative => `~/store/${relative}`);
+    deepStrictEqual(
+      scene.shown.map(each => each.message),
+      ["File '~/store/a.txt' already exists, overwrite?"],
     );
   });
 
@@ -440,7 +459,7 @@ describe('the write of a template (card containers-78)', () => {
       outcomes.push([
         outcome.kind === 'failed' ? outcome.detail : outcome.kind,
         scene.written.length,
-        scene.shown.filter(each => each.severity === 'warning').length,
+        scene.shown.filter(each => each.severity === 'info').length,
       ]);
     }
     deepStrictEqual(

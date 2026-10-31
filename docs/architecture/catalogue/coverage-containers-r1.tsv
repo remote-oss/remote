@@ -197,18 +197,18 @@ F-0301.AC-76	unit
 F-0302.AC-1	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-2	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-3	deferred	containers release 1: later (repository configuration folders)
-F-0302.AC-4	todo	
-F-0302.AC-5	todo	
+F-0302.AC-4	acceptance	
+F-0302.AC-5	acceptance	
 F-0302.AC-6	todo	
 F-0302.AC-7	todo	
 F-0302.AC-8	todo	
 F-0302.AC-9	todo	
 F-0302.AC-10	todo	
-F-0302.AC-11	todo	
+F-0302.AC-11	acceptance	
 F-0302.AC-12	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-13	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-14	deferred	containers release 1: later (repository configuration folders)
-F-0302.AC-15	todo	
+F-0302.AC-15	acceptance	
 F-0302.AC-16	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-17	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-18	deferred	containers release 1: later (repository configuration folders)
@@ -223,7 +223,7 @@ F-0302.AC-26	deferred	containers release 1: later (multi-root)
 F-0302.AC-27	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0302.AC-28	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0302.AC-29	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0302.AC-30	todo	
+F-0302.AC-30	acceptance	
 F-0302.AC-31	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-32	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-33	todo	
@@ -998,7 +998,7 @@ F-0801.AC-1	todo
 F-0801.AC-2	acceptance	
 F-0801.AC-3	todo	
 F-0801.AC-4	todo	
-F-0801.AC-5	todo	
+F-0801.AC-5	acceptance	
 F-0801.AC-6	todo	
 F-0801.AC-7	todo	
 F-0801.AC-8	todo	
@@ -1010,7 +1010,7 @@ F-0801.AC-13	deferred	containers release 1: later (multi-root)
 F-0801.AC-14	todo	
 F-0801.AC-15	acceptance	
 F-0801.AC-16	todo	
-F-0801.AC-17	todo	
+F-0801.AC-17	acceptance	
 F-0801.AC-18	todo	
 F-0801.AC-19	deferred	containers release 1: later (tunnel windows, D-55)
 F-0801.AC-20	deferred	containers release 1: later (the recovery container)
@@ -1300,7 +1300,7 @@ F-0903.AC-32	deferred	containers 0.4: F-0903 toolbar commands later
 F-0903.AC-33	todo	
 F-0903.AC-34	unit	
 F-0903.AC-35	acceptance	
-F-0903.AC-36	deferred	containers 0.4: C13 volumes later
+F-0903.AC-36	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0906.AC-1	acceptance	
 F-0906.AC-2	deferred	containers 0.4: F-0904 later
 F-0906.AC-3	deferred	containers 0.4: F-0904 later

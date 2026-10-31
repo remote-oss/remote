@@ -18,6 +18,7 @@ export const REOPEN_NOTIFICATION_KEY =
 const REOPEN_TEMPLATES = {
   S426: `{0} Reopen folder to develop in a container ([learn more](${CONTAINERS_INTRODUCTION})).{1}`,
   S186: 'Folder contains a Dev Container configuration file.',
+  S368: 'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.',
   S293: 'Reopen in Container',
   S150: "Don't Show Again...",
   S151: "Don't show again for the current folder or for any folder?",
@@ -98,9 +99,16 @@ async function store(
   });
 }
 
-/** Offers to reopen the window's folder in its container, once. */
+/** Where the configuration the notification speaks of is: in the folder, or in the extension's store of user data. */
+export type NotificationVariant = 'folder' | 'userData';
+
+/**
+ * Offers to reopen the window's folder in its container, once. The user data variant is for a configuration newly
+ * written to the store, which the folder's own files do not show.
+ */
 export async function offerReopen(
   ports: ReopenNotificationPorts,
+  variant: NotificationVariant = 'folder',
 ): Promise<void> {
   const {window, translate, logger} = ports;
   const [folder] = window.folders;
@@ -113,7 +121,7 @@ export async function offerReopen(
       ports.global.get(REOPEN_NOTIFICATION_KEY),
       ports.workspace.get(REOPEN_NOTIFICATION_KEY),
     ) ||
-    !(await ports.hasConfiguration(folder.fsPath))
+    (variant === 'folder' && !(await ports.hasConfiguration(folder.fsPath)))
   ) {
     return;
   }
@@ -121,7 +129,9 @@ export async function offerReopen(
   const suppress = translate(REOPEN_TEMPLATES.S150);
   const answer = await ports.show(
     filled(translate, REOPEN_TEMPLATES.S426, [
-      translate(REOPEN_TEMPLATES.S186),
+      translate(
+        variant === 'folder' ? REOPEN_TEMPLATES.S186 : REOPEN_TEMPLATES.S368,
+      ),
       '',
     ]),
     [reopen, suppress],

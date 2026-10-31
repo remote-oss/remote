@@ -8,6 +8,7 @@ import path from 'node:path';
 import {applyEdits, modify} from 'jsonc-parser';
 import {fetchCatalogue, showCatalogueFailure} from './catalogue.ts';
 import {readFolderFacts} from './folder-facts.ts';
+import {tildePath, writeMarker} from './user-data-store.ts';
 import {
   type StageMemory,
   stagesOf,
@@ -117,9 +118,13 @@ async function referToEntry(
 }
 
 /** The outcome of the wizard from the write's. */
-function outcomeOf(written: WriteOutcome, folder: string): WizardOutcome {
+function outcomeOf(
+  written: WriteOutcome,
+  folder: string,
+  place: WizardTarget['kind'],
+): WizardOutcome {
   if (written.kind === 'written') {
-    return {kind: 'written', files: written.files, target: folder};
+    return {kind: 'written', files: written.files, target: folder, place};
   }
   return written.kind === 'cancelled'
     ? {kind: 'cancelled'}
@@ -160,6 +165,7 @@ export async function runWizard(
   const {state} = walked;
   const folder = targetFolderOf(state, ports);
   const entry = state.reuseEntry;
+  const home = ports.location?.home;
   const written = await ports.write(
     {
       targetFolder: folder,
@@ -167,13 +173,24 @@ export async function runWizard(
       templateArgs: state.templateArgs,
       features: state.features,
       omitPaths: state.omitPaths,
+      ...(state.target.kind === 'workspace' || home === undefined
+        ? {}
+        : {
+            displayPath: (relative: string) =>
+              tildePath(path.join(folder, relative), home),
+          }),
       ...(entry === undefined
         ? {}
         : {adjust: scratch => referToEntry(scratch, entry, ports)}),
     },
     cancellation,
   );
-  return outcomeOf(written, folder);
+  if (written.kind === 'written' && state.target.kind === 'userData') {
+    await writeMarker(folder, state.folder, async (file, text) => {
+      await ports.files.write(file, new TextEncoder().encode(text));
+    });
+  }
+  return outcomeOf(written, folder, state.target.kind);
 }
 
 /** The English templates of the wizard's own text, by their string ids. */

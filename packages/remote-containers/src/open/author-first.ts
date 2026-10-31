@@ -4,6 +4,7 @@
  * and never reloads it, so the command's own reload follows.
  */
 
+import path from 'node:path';
 import type {WizardOutcome} from '../authoring/wizard-stages.ts';
 import {type CommandChecksPorts, commandBeforeReload} from './pre-reload.ts';
 
@@ -17,7 +18,8 @@ export interface AuthoringPort {
 
 /**
  * The checks before a reload over `folder`; with no configuration there, the wizard runs, and a written one is chosen by
- * a second pass whose engine check is the first's. Anything else the wizard ends with leaves the command with nothing
+ * a second pass whose engine check is the first's, over the written file when it is in the store of user data (the folder's
+ * own discovery does not look there). Anything else the wizard ends with leaves the command with nothing
  * to reload.
  */
 export async function chooseOrAuthor(
@@ -46,5 +48,8 @@ export async function chooseOrAuthor(
     () => Promise.resolve('proceed'),
     folder,
     dockerPath,
+    outcome.place === 'userData'
+      ? path.join(outcome.target, '.devcontainer', 'devcontainer.json')
+      : undefined,
   );
 }

@@ -3,6 +3,7 @@
  * row play the user.
  */
 
+import type {LocationRow} from '../../src/authoring/location.ts';
 import type {TemplatePicker} from '../../src/authoring/template-pick.ts';
 import {FakeQuickPick} from './quick-pick.fixture.ts';
 
@@ -11,5 +12,10 @@ export type Row = TemplatePicker['items'][number];
 
 /** A quick pick that records what the pick sets and lets a row play the user. */
 export class FakePicker extends FakeQuickPick<Row> implements TemplatePicker {
+  matchOnDetail = true;
+}
+
+/** A quick pick for the rows of the location pick. */
+export class FakeLocationPicker extends FakeQuickPick<LocationRow> {
   matchOnDetail = true;
 }
