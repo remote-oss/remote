@@ -1514,12 +1514,9 @@ describe('containerLifecycleOf', () => {
     configuration: ConfigurationResult | CliFailure,
   ) {
     const engine = scriptedEngine({
-      [LISTING]: [ran(`${OLD}\n`)],
-      [LEGACY_LISTING]: [ran('')],
-      [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, 'running']]))],
+      ...standardListing('running'),
       [`rm --force ${OLD}`]: [ran('')],
       [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
-      'volume create vscode': [ran('vscode')],
     });
     const bridge = fakeBridge();
     bridge.configuration = configuration;
