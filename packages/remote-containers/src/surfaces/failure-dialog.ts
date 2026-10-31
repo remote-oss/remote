@@ -10,7 +10,8 @@ import {failureText, reasonText} from './failure-strings.ts';
 
 /** One button of the dialog and what choosing it does; Edit Locally names the folder it goes back to. */
 type FailureButton =
-  | {label: string; action: 'retry' | 'moreActions' | 'learnMore'}
+  | {label: string; action: 'retry' | 'moreActions'}
+  | {label: string; action: 'learnMore'; address?: string}
   | {label: string; action: 'editLocally'; folder: DevContainerFolder};
 
 /** A modal error dialog: its message, its detail and its buttons, in the order they are passed to the editor. */
@@ -64,6 +65,26 @@ export function failureDialogOf(
   const first: FailureButton = requirements
     ? {label: failureText('S218', [], translate), action: 'learnMore'}
     : {label: failureText('S297', [], translate), action: 'retry'};
+  if (failed.kind === 'disallowedFeature') {
+    const address = failed.hints[0]?.resources[0];
+    return {
+      message: reasonText(failed.reason, translate),
+      detail: failureText('S275', [], translate),
+      buttons: [
+        ...(address === undefined
+          ? []
+          : [
+              {
+                label: failureText('S218', [], translate),
+                action: 'learnMore' as const,
+                address,
+              },
+            ]),
+        ...edit,
+        {label: failureText('S227', [], translate), action: 'moreActions'},
+      ],
+    };
+  }
   return {
     message: requirements ? failureText('S346', [], translate) : '',
     detail:

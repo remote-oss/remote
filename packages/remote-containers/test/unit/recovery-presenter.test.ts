@@ -6,6 +6,7 @@ import type {DevContainerFolder} from '../../src/authority/payload.ts';
 import {
   containerSetupFailed,
   containerUnusable,
+  disallowedFeature,
   type FailedContainer,
   noServerSource,
   requirementsNotMet,
@@ -353,6 +354,17 @@ describe('the failure presenter C8 (card containers-11)', () => {
         ],
         ['disconnected after 1 calls'],
       ],
+    );
+  });
+
+  it("F-0414 AC-19: Learn More on a disallowed Feature opens the manifest entry's address, not the requirements page", async () => {
+    const {calls} = await present(
+      disallowedFeature('ghcr.io/o/f:1', false, 'https://example.org/f'),
+      {errors: ['Learn More'], picks: [undefined]},
+    );
+    deepStrictEqual(
+      calls.filter(call => call.startsWith('openExternal')),
+      ['openExternal https://example.org/f'],
     );
   });
 

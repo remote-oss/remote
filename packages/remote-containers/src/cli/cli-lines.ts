@@ -29,6 +29,16 @@ export type CliFailure =
       containerId: string | undefined;
     }
   | {kind: 'configurationFailed'; message: string}
+  | {
+      kind: 'disallowedFeature';
+      message: string;
+      /** The id of the Feature as the configuration wrote it. */
+      featureId: string;
+      /** Whether the CLI's check stopped a running container of the same configuration. */
+      stoppedContainer: boolean;
+      /** Where the control manifest explains the Feature; absent when its entry gives none. */
+      learnMoreUrl: string | undefined;
+    }
   | {kind: 'buildFailed'; message: string}
   | {kind: 'pullFailed'; message: string}
   | {
@@ -218,6 +228,16 @@ function errorOf(fields: Fields): CliFailure {
   const message = textOf(fields.message) ?? '';
   const description = textOf(fields.description) ?? '';
   const containerId = textOf(fields.containerId);
+  const disallowedFeatureId = textOf(fields.disallowedFeatureId);
+  if (disallowedFeatureId !== undefined) {
+    return {
+      kind: 'disallowedFeature',
+      message,
+      featureId: disallowedFeatureId,
+      stoppedContainer: fields.didStopContainer === true,
+      learnMoreUrl: textOf(fields.learnMoreUrl),
+    };
+  }
   const hook = HOOK_FAILED.exec(description);
   if (hook?.[2] !== undefined) {
     return {

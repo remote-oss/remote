@@ -123,5 +123,11 @@
   "Use a base configuration from the container template registry": "Use a base configuration from the container template registry",
   "Use Template": "Use Template",
   "Open a folder to create the configuration files in first.": "Open a folder to create the configuration files in first.",
-  "Open Folder": "Open Folder"
+  "Open Folder": "Open Folder",
+  "Cannot use the '{0}' feature since it was reported to be problematic.": "Cannot use the '{0}' feature since it was reported to be problematic.",
+  "Cannot use the '{0}' feature since it was reported to be problematic. The existing dev container was stopped.": "Cannot use the '{0}' feature since it was reported to be problematic. The existing dev container was stopped.",
+  "Empty feature id": "Empty feature id",
+  "Failed to fetch control manifest: {0}": "Failed to fetch control manifest: {0}",
+  "Please remove this feature from your devcontainer.json and rebuild the dev container before continuing.": "Please remove this feature from your devcontainer.json and rebuild the dev container before continuing.",
+  "The feature was not found either because it is no longer available or because of insufficient permissions to access it.": "The feature was not found either because it is no longer available or because of insufficient permissions to access it."
 }

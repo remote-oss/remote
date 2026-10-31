@@ -827,6 +827,9 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers-features',
       registry: true,
       templates: true,
+      // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that Learn More
+      // opens nothing on the machine and its address can be read.
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

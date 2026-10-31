@@ -27,6 +27,7 @@ import {
   cliFailureText,
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
+import {featureFailureOf, requestedFeaturesOf} from '../cli/failing-feature.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
@@ -75,6 +76,8 @@ import {
   configurationInvalid,
   containerGone,
   containerSetupFailed,
+  disallowedFeature,
+  featureResolutionFailed,
   containerUnusable,
   engineCheckFailed,
   type FailedContainer,
@@ -549,6 +552,7 @@ export function containerConnectorOf(
   /** The failure a container outcome that is not ready ends the connect with. */
   function failureOf(
     outcome: Exclude<ContainerOutcome, {kind: 'ready'}>,
+    requestedFeatures: readonly string[],
   ): Failed {
     if (outcome.kind === 'cancelled') {
       return cancelled();
@@ -565,6 +569,20 @@ export function containerConnectorOf(
         containerId: outcome.foundContainerId,
         paused: false,
       };
+    }
+    if (outcome.kind === 'disallowedFeature') {
+      return disallowedFeature(
+        outcome.featureId,
+        outcome.stoppedContainer,
+        outcome.learnMoreUrl,
+      );
+    }
+    const unresolved =
+      outcome.kind === 'setupFailed'
+        ? featureFailureOf(requestedFeatures, outcome.message)
+        : undefined;
+    if (unresolved !== undefined) {
+      return featureResolutionFailed(unresolved);
     }
     return containerSetupFailed(
       outcome.kind === 'setupFailed' ? outcome.refusal : undefined,
@@ -982,7 +1000,13 @@ export function containerConnectorOf(
       cancellation,
     );
     if (prepared.kind !== 'ready') {
-      return failureOf(prepared);
+      return failureOf(
+        prepared,
+        requestedFeaturesOf(
+          read?.configuration.features,
+          settings.defaultFeatures,
+        ),
+      );
     }
     failedContainer = {containerId: prepared.containerId, paused: false};
     if (isAborted(cancellation)) {

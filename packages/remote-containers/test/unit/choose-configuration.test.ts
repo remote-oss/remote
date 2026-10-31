@@ -225,6 +225,7 @@ describe('choosing the configuration (card containers-13)', () => {
           kind: 'chosen',
           configFile: '/w/p/.devcontainer/devcontainer.json',
           workspaceFolder: '/workspaces/wt-rel/wt',
+          features: [],
         },
         [true],
       ],
@@ -241,6 +242,7 @@ describe('choosing the configuration (card containers-13)', () => {
           kind: 'chosen',
           configFile: '/w/p/.devcontainer/devcontainer.json',
           workspaceFolder: '/workspaces/p',
+          features: [],
         },
         false,
         [
@@ -295,6 +297,7 @@ describe('choosing the configuration (card containers-13)', () => {
           kind: 'chosen',
           configFile: `/w/p/${BETA}`,
           workspaceFolder: '/workspaces/p',
+          features: [],
         },
         2,
       ],
@@ -510,6 +513,7 @@ describe('choosing the configuration (card containers-13)', () => {
       kind: 'chosen',
       configFile: `/w/p/${ONLY}`,
       workspaceFolder: '/w/p/x',
+      features: [],
     });
   });
 
@@ -648,6 +652,7 @@ describe('choosing the configuration while the engine is checked (card container
           kind: 'chosen',
           configFile: `/w/p/${ONLY}`,
           workspaceFolder: '/workspaces/p',
+          features: [],
         },
       ],
     );
