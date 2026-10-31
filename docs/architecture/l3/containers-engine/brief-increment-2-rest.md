@@ -28,8 +28,16 @@ transport contracts, ADR-0009 and the register.
 already does that: C2 is the one place that spawns the engine CLI, and C3 passes `--docker-path` to the dev container
 CLI. So Podman is **one measured launch, and a product change only where a measurement finds one.**
 
+0. **The runner, first** (proteus's job steps): rootless Podman needs `newuidmap` and `newgidmap` setuid
+   (`chmod u+s`) in our runner image.
 1. **The launch:** `containers-podman`, the `containers` launch with `dev.containers.dockerPath: "podman"` and Podman 5 on
    the runner.
+   - **How a Podman container reaches the run's infrastructure** (measured by proteus on #1433: rootless Podman 5.8.9
+     can't reach the host's loopback on its default network). The harness sets pasta's `--map-host-loopback` in the job
+     user's `containers.conf`, with the run's host names mapped to it. So the container reaches the download host and
+     the registry by the same names the Docker rows use.
+     - **Not `--network host`:** it would hide the port-mapping differences the launch is there to find.
+     - **No product change:** this is the harness's setup, as a user's own Podman setup is theirs.
    - **The rows that use the engine** read it through one harness helper (`engineCli()`, the launch's executable), not a
      hard-coded `docker`.
    - **The run's own infrastructure** (the SSH host, the registry, the download host) stays on Docker. Only the
