@@ -33,6 +33,9 @@ export type PhaseName =
 /** The latest the progress opens after a resolve starts. */
 const PROGRESS_FALLBACK_MILLISECONDS = 1500;
 
+/** The longest a resolve waits for its progress to close before it returns or throws, so that a stuck one holds nothing. */
+const PROGRESS_CLOSE_MILLISECONDS = 2000;
+
 /** A stage the connector reports, with the share downloaded for `serverDownloadPercent`. */
 export interface ConnectPhase {
   name: PhaseName;
@@ -328,6 +331,20 @@ export async function registerResolver(
     return editor.notAvailable(message, true);
   }
 
+  /** Resolves when `done` settles, or after `milliseconds`, whichever comes first. */
+  function closedWithin(
+    done: Promise<void>,
+    milliseconds: number,
+  ): Promise<void> {
+    return new Promise<void>(resolve => {
+      const cancel = editor.startTimer(milliseconds, resolve);
+      void done.then(() => {
+        cancel();
+        resolve();
+      });
+    });
+  }
+
   async function connect(
     decoded: DecodedTarget,
     input: ConnectInput,
@@ -348,6 +365,7 @@ export async function registerResolver(
       return increment;
     }
     let opened = false;
+    let progressDone: Promise<void> | undefined;
     const releases: Array<() => void> = [];
     const settled = new Promise<void>(resolve => {
       releases.push(resolve);
@@ -358,25 +376,30 @@ export async function registerResolver(
       }
       opened = true;
       stopTimer();
-      void editor.progress.withProgress(
-        {
-          title: options.startTitle(decoded),
-          cancellable: options.cancellable,
-          onCancel: () => {
-            connector.cancel();
+      progressDone = editor.progress
+        .withProgress(
+          {
+            title: options.startTitle(decoded),
+            cancellable: options.cancellable,
+            onCancel: () => {
+              connector.cancel();
+            },
+            onDetails: () => {
+              connector.revealDetails();
+            },
           },
-          onDetails: () => {
-            connector.revealDetails();
+          async update => {
+            report = update;
+            if (shown !== undefined) {
+              update(shown.title, shown.details, incrementOf());
+            }
+            await settled;
           },
-        },
-        async update => {
-          report = update;
-          if (shown !== undefined) {
-            update(shown.title, shown.details, incrementOf());
-          }
-          await settled;
-        },
-      );
+        )
+        .then(
+          () => undefined,
+          () => undefined,
+        );
     }
     const stopTimer = editor.startTimer(PROGRESS_FALLBACK_MILLISECONDS, open);
     const stop = connector.onPhase(phase => {
@@ -400,6 +423,9 @@ export async function registerResolver(
       stopTimer();
       for (const release of releases) {
         release();
+      }
+      if (progressDone !== undefined) {
+        await closedWithin(progressDone, PROGRESS_CLOSE_MILLISECONDS);
       }
     }
   }

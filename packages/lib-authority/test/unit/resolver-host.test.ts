@@ -141,6 +141,8 @@ class FakeEditor implements ResolverEditor {
     ProgressRequest & {updates: string[]; increments: Array<number | undefined>}
   > = [];
   progressEnded = 0;
+  /** What the editor's own closing of the progress waits for after the task has ended. */
+  closing: Promise<void> = Promise.resolve();
   actions: string[] = [];
   timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
     [];
@@ -163,6 +165,7 @@ class FakeEditor implements ResolverEditor {
           entry.increments.push(increment);
         });
       } finally {
+        await this.closing;
         this.progressEnded += 1;
       }
     },
@@ -563,6 +566,75 @@ describe('the resolver host: progress (F-2304)', () => {
     const context = await setup();
     await resolve(context);
     deepStrictEqual(context.connector.listenerCount(), 2);
+  });
+});
+
+describe('the resolver host: the progress has closed before a connect ends (card connect-90)', () => {
+  it('F-0408 AC-19: a failing connect reaches its caller only after the progress promise settled', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'downloading'}];
+    context.connector.failure = new Error('the build failed');
+    let closeProgress: () => void = () => undefined;
+    context.editor.closing = new Promise<void>(resolve => {
+      closeProgress = resolve;
+    });
+    const events: string[] = [];
+    const running = failureOf(context).then(text => {
+      events.push(`caller: ${text}`);
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    events.push(
+      `ended before release: ${String(context.editor.progressEnded)}`,
+    );
+    closeProgress();
+    await running;
+    deepStrictEqual(
+      [events, context.editor.progressEnded],
+      [
+        [
+          'ended before release: 0',
+          'caller: notAvailable(handled=true): the build failed',
+        ],
+        1,
+      ],
+    );
+  });
+
+  it('F-0408 AC-19: a progress that never closes holds the failure for 2 s and no longer', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'downloading'}];
+    context.connector.failure = new Error('the build failed');
+    context.editor.closing = new Promise<void>(() => undefined);
+    let finished = false;
+    const running = failureOf(context).then(text => {
+      finished = true;
+      return text;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const before = finished;
+    context.editor.fireTimers();
+    const text = await running;
+    deepStrictEqual(
+      [
+        before,
+        text,
+        context.editor.timers
+          .map(timer => timer.milliseconds)
+          .filter(milliseconds => milliseconds === 2000),
+      ],
+      [false, 'notAvailable(handled=true): the build failed', [2000]],
+    );
+  });
+
+  it('F-0408 AC-19: a connect that opened no progress waits for none', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'initializing', quiet: true}];
+    context.connector.failure = new Error('the build failed');
+    context.editor.closing = new Promise<void>(() => undefined);
+    deepStrictEqual(
+      await failureOf(context),
+      'notAvailable(handled=true): the build failed',
+    );
   });
 });
 
