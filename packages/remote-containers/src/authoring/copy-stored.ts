@@ -8,7 +8,6 @@ import path from 'node:path';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {StoredSlot} from './user-data-store.ts';
-import type {WizardOutcome} from './wizard-stages.ts';
 
 /** The English templates of the texts of the copy, by their string ids. */
 const COPY_TEMPLATES = {
@@ -24,6 +23,19 @@ const COPY_TEMPLATES = {
 
 /** The workspace file the copy writes, relative to the folder. */
 const WORKSPACE_FILE = path.join('.devcontainer', 'devcontainer.json');
+
+/** How the copy ends; the wizard ends with it. */
+export type CopyOutcome =
+  | {
+      kind: 'written';
+      files: string[];
+      /** The folder the files are in. */
+      target: string;
+      /** Whether that is the workspace or the slot. */
+      place: 'workspace' | 'userData';
+    }
+  | {kind: 'cancelled'}
+  | {kind: 'failed'; detail: string};
 
 /** What the copy needs of its surroundings. */
 export interface CopyStoredPorts {
@@ -54,7 +66,7 @@ export interface CopyStoredPorts {
 export async function copyStored(
   request: {folder: string; slot: StoredSlot},
   ports: CopyStoredPorts,
-): Promise<WizardOutcome> {
+): Promise<CopyOutcome> {
   const {folder, slot} = request;
   function text(template: string, values: readonly string[] = []): string {
     return filled(ports.translate, template, values);

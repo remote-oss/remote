@@ -80,7 +80,7 @@ function started(
   folder: FolderFacts,
   catalogue: CatalogueTemplate[],
   signal = new AbortController().signal,
-  storedSlot: StoredSlot | undefined = undefined,
+  storedSlot?: StoredSlot,
 ): {picker: FakePicker; result: Promise<TemplateChoice>} {
   const result = pickTemplate(
     {

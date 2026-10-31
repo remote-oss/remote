@@ -997,7 +997,7 @@ describe('choosing the configuration while the engine is checked (card container
     deepStrictEqual(
       [
         (without.rows[0] as [Array<{description: string}>])[0].map(
-          row => row.description,
+          entry => entry.description,
         ),
         named.storedAsked,
       ],

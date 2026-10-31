@@ -803,27 +803,42 @@ describe('the wizard (card containers-80)', () => {
     };
   }
 
-  it('F-0801 AC-8: with a stored configuration and the workspace chosen the chooser offers the copy, and Delete in S108 ends the wizard with the workspace file written and the slot removed', async () => {
-    const scene = sceneOf();
-    const removed: string[] = [];
-    scene.ports = withSlot(scene, 'Delete', removed);
+  /** Runs the wizard over a store holding the folder's slot, answers the location pick with `choice` and waits for the template pick. */
+  async function pastLocation(
+    scene: Scene,
+    choice: string,
+    answer?: string,
+    removed: string[] = [],
+  ): Promise<{result: ReturnType<typeof runWizard>}> {
+    scene.ports = withSlot(scene, answer, removed);
     const result = runWizard(
       {title: 'T', folder: '/home/a/ws'},
       scene.ports,
       NEVER,
     );
     await new Promise(resolve => setTimeout(resolve, 0));
-    scene.locationPickers[0]?.accept('Add configuration to workspace');
+    scene.locationPickers[0]?.accept(choice);
     await new Promise(resolve => setTimeout(resolve, 0));
+    return {result};
+  }
+
+  const COPY = 'Copy existing configuration to workspace';
+
+  it('F-0801 AC-8: with a stored configuration and the workspace chosen the chooser offers the copy, and Delete in S108 ends the wizard with the workspace file written and the slot removed', async () => {
+    const scene = sceneOf();
+    const removed: string[] = [];
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to workspace',
+      'Delete',
+      removed,
+    );
     const offered = scene.pickers[0]?.items.map(each => each.label);
-    scene.pickers[0]?.accept('Copy existing configuration to workspace');
+    scene.pickers[0]?.accept(COPY);
     deepStrictEqual(
       [offered?.slice(0, 2), await result, removed, scene.written.length],
       [
-        [
-          'From a predefined container configuration template...',
-          'Copy existing configuration to workspace',
-        ],
+        ['From a predefined container configuration template...', COPY],
         {
           kind: 'written',
           files: ['.devcontainer/devcontainer.json'],
@@ -838,16 +853,11 @@ describe('the wizard (card containers-80)', () => {
 
   it('F-0302 AC-34: the Open File button of the copy row ends the wizard with the stored file to show and nothing written', async () => {
     const scene = sceneOf();
-    scene.ports = withSlot(scene, undefined, []);
-    const result = runWizard(
-      {title: 'T', folder: '/home/a/ws'},
-      scene.ports,
-      NEVER,
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to workspace',
     );
-    await new Promise(resolve => setTimeout(resolve, 0));
-    scene.locationPickers[0]?.accept('Add configuration to workspace');
-    await new Promise(resolve => setTimeout(resolve, 0));
-    scene.pickers[0]?.pressButton('Copy existing configuration to workspace');
+    scene.pickers[0]?.pressButton(COPY);
     deepStrictEqual(
       [await result, scene.written.length],
       [
@@ -862,22 +872,14 @@ describe('the wizard (card containers-80)', () => {
 
   it('F-0801 AC-8: the copy is not offered when the configuration goes to the user data folder', async () => {
     const scene = sceneOf();
-    scene.ports = withSlot(scene, undefined, []);
-    const result = runWizard(
-      {title: 'T', folder: '/home/a/ws'},
-      scene.ports,
-      NEVER,
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to user data folder',
     );
-    await new Promise(resolve => setTimeout(resolve, 0));
-    scene.locationPickers[0]?.accept('Add configuration to user data folder');
-    await new Promise(resolve => setTimeout(resolve, 0));
     const labelsShown = scene.pickers[0]?.items.map(each => each.label);
     scene.pickers[0]?.hide();
     await result;
-    deepStrictEqual(
-      labelsShown?.includes('Copy existing configuration to workspace'),
-      false,
-    );
+    deepStrictEqual(labelsShown?.includes(COPY), false);
   });
 
   it('F-0801 AC-3: Escape on the location pick cancels the wizard before any template is asked', async () => {

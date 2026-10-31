@@ -168,6 +168,33 @@ function translate(template: string): string {
   return vscode.l10n.t(template);
 }
 
+/** A modal dialog with the buttons, the first the primary one and Cancel the close affordance; gives the title chosen. */
+async function modalShown(
+  severity: 'error' | 'info',
+  message: string,
+  detail: string,
+  buttons: readonly string[],
+): Promise<string | undefined> {
+  const cancel = translate('Cancel');
+  const items = buttons.map(title => ({
+    title,
+    isCloseAffordance: title === cancel,
+  }));
+  const chosen =
+    severity === 'error'
+      ? await vscode.window.showErrorMessage(
+          message,
+          {modal: true, detail},
+          ...items,
+        )
+      : await vscode.window.showInformationMessage(
+          message,
+          {modal: true, detail},
+          ...items,
+        );
+  return chosen?.title;
+}
+
 /** What the editor asks of a tree whose nodes are `Node`. */
 interface TreeProvider<Node> {
   onDidChangeTreeData(listener: () => void): {dispose(): void};
@@ -691,26 +718,7 @@ export async function activate(
                 },
               },
               dialogs: {
-                show: async (severity, message, detail, buttons) => {
-                  const cancel = translate('Cancel');
-                  const items = buttons.map(title => ({
-                    title,
-                    isCloseAffordance: title === cancel,
-                  }));
-                  const chosen =
-                    severity === 'error'
-                      ? await vscode.window.showErrorMessage(
-                          message,
-                          {modal: true, detail},
-                          ...items,
-                        )
-                      : await vscode.window.showInformationMessage(
-                          message,
-                          {modal: true, detail},
-                          ...items,
-                        );
-                  return chosen?.title;
-                },
+                show: modalShown,
                 revealLog: () => {
                   logChannel?.show(true);
                 },
@@ -766,26 +774,7 @@ export async function activate(
             },
             removeFolder: folder => rm(folder, {recursive: true, force: true}),
           },
-          show: async (severity, message, detail, buttons) => {
-            const cancel = translate('Cancel');
-            const items = buttons.map(title => ({
-              title,
-              isCloseAffordance: title === cancel,
-            }));
-            const chosen =
-              severity === 'error'
-                ? await vscode.window.showErrorMessage(
-                    message,
-                    {modal: true, detail},
-                    ...items,
-                  )
-                : await vscode.window.showInformationMessage(
-                    message,
-                    {modal: true, detail},
-                    ...items,
-                  );
-            return chosen?.title;
-          },
+          show: modalShown,
           translate,
         },
         slotFolder: slot =>
