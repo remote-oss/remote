@@ -1,14 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import {chmodSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import path from 'node:path';
-import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
@@ -42,69 +34,23 @@ import {
   waitForDialog,
   waitForQuickPick,
 } from '../windows/renderer.ts';
-import {runTemplatesReady} from '../windows/run-templates.ts';
-
-const COMMAND = 'remote-containers.createDevContainerFile';
+import {
+  closeScreen,
+  existing,
+  startCommand,
+  withWindow,
+  written,
+} from './authoring-support.ts';
 
 const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
 const CONFIGURATION = '.devcontainer/devcontainer.json';
-
-/** The folder of the row `name` with the files `contents` names, made empty first, and the window on it. */
-async function windowWith(
-  name: string,
-  contents: Readonly<Record<string, string>> = {},
-): Promise<{window: string; folder: string}> {
-  await runTemplatesReady();
-  const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'authoring', name);
-  rmSync(folder, {recursive: true, force: true});
-  mkdirSync(folder, {recursive: true});
-  for (const [relative, text] of Object.entries(contents)) {
-    const file = path.join(folder, relative);
-    if (relative.endsWith('/')) {
-      mkdirSync(file, {recursive: true});
-      continue;
-    }
-    mkdirSync(path.dirname(file), {recursive: true});
-    writeFileSync(file, text);
-  }
-  return {window: await openFolderWindow(folder), folder};
-}
-
-/** Runs the command in `window` without waiting for it, which ends only when the wizard does. */
-function startCommand(window: string): void {
-  inWindow(window, COMMAND).catch(() => undefined);
-}
-
-/** Runs `body` over a window with the files, and closes the window after. */
-async function withWindow(
-  name: string,
-  contents: Readonly<Record<string, string>>,
-  body: (window: string, folder: string) => Promise<void>,
-): Promise<void> {
-  const {window, folder} = await windowWith(name, contents);
-  try {
-    await body(window, folder);
-  } finally {
-    await closeWindow(window).catch(() => undefined);
-  }
-}
 
 /** Starts the command in `window` and picks the template labelled `label`. */
 async function pickTemplate(window: string, label: string): Promise<void> {
   startCommand(window);
   await waitForQuickPick(window);
   await chooseQuickPickRow(window, label);
-}
-
-/** Waits until `file` exists. */
-function written(file: string): Promise<void> {
-  return waitFor(`${file} to be written`, () => existsSync(file), 60_000);
-}
-
-/** The files named `relatives` under `folder`, those that exist. */
-function existing(folder: string, ...relatives: string[]): string[] {
-  return relatives.filter(relative => existsSync(path.join(folder, relative)));
 }
 
 /** The S182 question for an existing configuration, answered `answer`: whether the file stayed the user's. */
@@ -146,16 +92,6 @@ async function screenOf(window: string): Promise<DetailedQuickPickRow[]> {
   startCommand(window);
   await waitForQuickPick(window);
   return detailedQuickPickRows(window);
-}
-
-/** Closes the screen of `window` with Escape and waits until it is gone. */
-async function closeScreen(window: string): Promise<void> {
-  await pressEscape(window);
-  await waitFor(
-    'the pick to close',
-    async () => (await quickPickOf(window)) === undefined,
-    30_000,
-  );
 }
 
 /** Types `text` into the screen of `window` and gives the rows once the list has followed. */
