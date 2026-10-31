@@ -12,6 +12,7 @@ import {
   portsOf,
   setup,
   type Setup,
+  WRITTEN_IN_FOLDER,
 } from './reopen.fixture.ts';
 
 /** What the dialog is asked, and what it answers. */
@@ -61,6 +62,12 @@ function commandOf(state: Setup, authority?: string) {
     },
   });
   return {handler, dialog, sink};
+}
+
+/** The dev container target the first command of the setup opened. */
+function reloadTargetOf(state: Setup): ReturnType<typeof devContainerTargetOf> {
+  const {authority} = state.commands[0]?.parameters[0] as {authority: string};
+  return devContainerTargetOf(authority.slice('dev-container+'.length));
 }
 
 describe('Open Folder in Container', () => {
@@ -213,10 +220,7 @@ describe('Open Folder in Container', () => {
     const {handler} = commandOf(state);
     await handler();
     await settled();
-    const {authority} = state.commands[0]?.parameters[0] as {authority: string};
-    const target = devContainerTargetOf(
-      authority.slice('dev-container+'.length),
-    );
+    const target = reloadTargetOf(state);
     deepStrictEqual(
       [
         state.calls,
@@ -262,11 +266,7 @@ describe('Open Folder in Container', () => {
   it('F-0403 AC-23: a written configuration is read and the window reloads on it, with no notice shown, and no trust asked first (ruling 2)', async () => {
     const state = setup();
     state.existing = [];
-    state.wizard = {
-      kind: 'written',
-      files: ['.devcontainer/devcontainer.json'],
-      target: '/w/p',
-    };
+    state.wizard = WRITTEN_IN_FOLDER;
     state.wizardLeaves = [CONFIG];
     const {handler} = commandOf(state);
     await handler();
@@ -277,6 +277,31 @@ describe('Open Folder in Container', () => {
         state.calls.includes('ensureTrusted'),
       ],
       [['vscode.openFolder'], [], false],
+    );
+  });
+
+  it('F-0403 AC-4: a configuration written to the store of user data is the one the window reloads on: the container’s configuration is that file, and the folder stays the opened one', async () => {
+    const stored = '/store/configs/p/.devcontainer/devcontainer.json';
+    const state = setup();
+    state.existing = [];
+    state.wizard = {
+      kind: 'written',
+      files: ['.devcontainer/devcontainer.json'],
+      target: '/store/configs/p',
+      place: 'userData',
+    };
+    state.contents[stored] = '{"image":"i"}';
+    const {handler} = commandOf(state);
+    await handler();
+    await settled();
+    const target = reloadTargetOf(state);
+    deepStrictEqual(
+      [
+        state.calls.filter(call => call.startsWith('readConfiguration')),
+        'hostPath' in target ? target.hostPath : target,
+        'configFile' in target ? target.configFile.fsPath : target,
+      ],
+      [['readConfiguration /w/p'], '/w/p', stored],
     );
   });
 

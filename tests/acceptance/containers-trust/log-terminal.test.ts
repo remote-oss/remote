@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
-import {chosen, docker, made, viewed} from '../windows/container-rows.ts';
+import {chosen, docker, made, viewed} from '../windows/dev-containers-view.ts';
 import {
   closeWindow,
   devContainerFolder,

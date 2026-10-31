@@ -10,6 +10,7 @@ import {filled} from '../surfaces/filled.ts';
 import {failureText} from '../surfaces/failure-strings.ts';
 import {CONTAINERS_INTRODUCTION} from '../surfaces/recovery-presenter.ts';
 import type {CatalogueTemplate} from './catalogue.ts';
+import {type QuickPicker, shownPick} from './quick-pick.ts';
 import {
   curatedTemplates,
   type FolderFacts,
@@ -72,23 +73,7 @@ export interface PickRow {
 }
 
 /** The members of the editor's quick pick the pick uses. */
-export interface TemplatePicker {
-  items: readonly PickRow[];
-  activeItems: readonly PickRow[];
-  readonly selectedItems: readonly PickRow[];
-  title: string | undefined;
-  placeholder: string | undefined;
-  value: string;
-  matchOnDescription: boolean;
-  matchOnDetail: boolean;
-  ignoreFocusOut: boolean;
-  onDidAccept(listener: () => void): unknown;
-  onDidChangeValue(listener: (value: string) => void): unknown;
-  onDidHide(listener: () => void): unknown;
-  show(): void;
-  hide(): void;
-  dispose(): void;
-}
+export type TemplatePicker = QuickPicker<PickRow>;
 
 /** What the pick needs of its surroundings. */
 export interface TemplatePickPorts {
@@ -194,41 +179,6 @@ function byName(templates: readonly CatalogueTemplate[]): CatalogueTemplate[] {
   );
 }
 
-/** A pick that ends when a row is accepted or the pick is hidden. */
-function shown(
-  ports: TemplatePickPorts,
-  cancellation: AbortSignal,
-  setUp: (
-    picker: TemplatePicker,
-    finish: (outcome: TemplateChoice) => void,
-  ) => void,
-): Promise<TemplateChoice> {
-  return new Promise(resolve => {
-    const picker = ports.createQuickPick();
-    let finished = false;
-    function finish(outcome: TemplateChoice): void {
-      if (!finished) {
-        finished = true;
-        resolve(outcome);
-        picker.hide();
-      }
-    }
-    picker.matchOnDescription = false;
-    picker.matchOnDetail = false;
-    picker.ignoreFocusOut = false;
-    setUp(picker, finish);
-    picker.onDidHide(() => {
-      finished = true;
-      resolve({kind: 'cancelled'});
-      picker.dispose();
-    });
-    cancellation.addEventListener('abort', () => {
-      finish({kind: 'cancelled'});
-    });
-    picker.show();
-  });
-}
-
 /** The template pick: the list of templates, flat or curated, with custom ids. */
 function templatePick(
   request: TemplatePickRequest,
@@ -242,79 +192,87 @@ function templatePick(
       : undefined;
   const flat = byName(request.catalogue);
   let showingAll = false;
-  return shown(ports, cancellation, (picker, finish) => {
-    /** The curated templates while the curated list shows; none once Show All Templates was taken. */
-    function curated(): CatalogueTemplate[] | undefined {
-      return showingAll ? undefined : curatedList;
-    }
-    function showAllRow(): PickRow {
-      return {
-        label: text(ports, 'S323'),
-        detail: text(ports, 'S325'),
-        alwaysShow: true,
-        action: {kind: 'showAll'},
-      };
-    }
-    function rowsFor(value: string): PickRow[] {
-      const list = curated();
-      const templates = list ?? flat;
-      const extra = list === undefined ? [] : [showAllRow()];
-      if (value.split('/').length - 1 >= CUSTOM_SLASHES) {
+  return shownPick<PickRow, TemplateChoice>(
+    () => ports.createQuickPick(),
+    cancellation,
+    (picker, finish) => {
+      /** The curated templates while the curated list shows; none once Show All Templates was taken. */
+      function curated(): CatalogueTemplate[] | undefined {
+        return showingAll ? undefined : curatedList;
+      }
+      function showAllRow(): PickRow {
+        return {
+          label: text(ports, 'S323'),
+          detail: text(ports, 'S325'),
+          alwaysShow: true,
+          action: {kind: 'showAll'},
+        };
+      }
+      function rowsFor(value: string): PickRow[] {
+        const list = curated();
+        const templates = list ?? flat;
+        const extra = list === undefined ? [] : [showAllRow()];
+        if (value.split('/').length - 1 >= CUSTOM_SLASHES) {
+          return [
+            {
+              label: text(ports, 'S388', [value]),
+              detail: text(ports, 'S040'),
+              alwaysShow: true,
+              action: {kind: 'custom', value},
+            },
+            learnMoreRow(ports),
+            ...extra,
+          ];
+        }
         return [
-          {
-            label: text(ports, 'S388', [value]),
-            detail: text(ports, 'S040'),
-            alwaysShow: true,
-            action: {kind: 'custom', value},
-          },
-          learnMoreRow(ports),
           ...extra,
+          learnMoreRow(ports),
+          ...templates.map(each => templateRow(each, ports)),
         ];
       }
-      return [
-        ...extra,
-        learnMoreRow(ports),
-        ...templates.map(each => templateRow(each, ports)),
-      ];
-    }
-    function show(value: string): void {
-      const rows = rowsFor(value);
-      picker.items = rows;
-      const first = rows.find(
-        each =>
-          each.action.kind === 'template' || each.action.kind === 'custom',
-      );
-      picker.activeItems = first === undefined ? [] : [first];
-    }
-    picker.title = request.title;
-    picker.placeholder = text(ports, 'S302');
-    show('');
-    picker.onDidChangeValue(show);
-    picker.onDidAccept(() => {
-      const [selected] = picker.selectedItems;
-      const action = selected?.action;
-      if (action === undefined) {
-        return;
+      function show(value: string): void {
+        const rows = rowsFor(value);
+        picker.items = rows;
+        const first = rows.find(
+          each =>
+            each.action.kind === 'template' || each.action.kind === 'custom',
+        );
+        picker.activeItems = first === undefined ? [] : [first];
       }
-      if (action.kind === 'showAll') {
-        showingAll = true;
-        show(picker.value);
-      } else if (action.kind === 'learnMore') {
-        void ports.openExternal(CONTAINERS_INTRODUCTION);
-        finish({kind: 'learnMore'});
-      } else if (action.kind === 'template') {
-        finish({kind: 'listed', template: action.template});
-      } else if (action.kind === 'custom') {
-        void ports.templateMetadata(action.value, cancellation).then(result => {
-          finish({
-            kind: 'custom',
-            templateId: action.value,
-            ...(result.kind === 'metadata' ? {metadata: result.metadata} : {}),
-          });
-        });
-      }
-    });
-  });
+      picker.title = request.title;
+      picker.placeholder = text(ports, 'S302');
+      show('');
+      picker.onDidChangeValue(show);
+      picker.onDidAccept(() => {
+        const [selected] = picker.selectedItems;
+        const action = selected?.action;
+        if (action === undefined) {
+          return;
+        }
+        if (action.kind === 'showAll') {
+          showingAll = true;
+          show(picker.value);
+        } else if (action.kind === 'learnMore') {
+          void ports.openExternal(CONTAINERS_INTRODUCTION);
+          finish({kind: 'learnMore'});
+        } else if (action.kind === 'template') {
+          finish({kind: 'listed', template: action.template});
+        } else if (action.kind === 'custom') {
+          void ports
+            .templateMetadata(action.value, cancellation)
+            .then(result => {
+              finish({
+                kind: 'custom',
+                templateId: action.value,
+                ...(result.kind === 'metadata'
+                  ? {metadata: result.metadata}
+                  : {}),
+              });
+            });
+        }
+      });
+    },
+  );
 }
 
 /** The chooser that offers an existing Dockerfile, which goes on to the template pick when asked. */
@@ -325,36 +283,40 @@ async function chooserPick(
   cancellation: AbortSignal,
 ): Promise<TemplateChoice> {
   let chosen: RowAction | undefined;
-  const outcome = await shown(ports, cancellation, (picker, finish) => {
-    const rows = chooserRows(entries, ports);
-    picker.title = request.title;
-    picker.placeholder = text(ports, 'S198');
-    picker.items = rows;
-    picker.activeItems = rows.slice(0, 1);
-    picker.onDidAccept(() => {
-      const [selected] = picker.selectedItems;
-      chosen = selected?.action;
-      if (chosen?.kind === 'chooseTemplate') {
-        finish({kind: 'cancelled'});
-      } else if (chosen?.kind === 'learnMore') {
-        void ports.openExternal(CONTAINERS_INTRODUCTION);
-        finish({kind: 'learnMore'});
-      } else if (chosen?.kind === 'reuse') {
-        const existing = request.catalogue.find(
-          template => lastPartOf(template) === EXISTING_DOCKERFILE,
-        );
-        const {entry} = chosen;
-        finish(
-          existing === undefined
-            ? {
-                kind: 'failed',
-                cause: `the catalogue has no ${EXISTING_DOCKERFILE} template`,
-              }
-            : {kind: 'reuse', template: existing, entry},
-        );
-      }
-    });
-  });
+  const outcome = await shownPick<PickRow, TemplateChoice>(
+    () => ports.createQuickPick(),
+    cancellation,
+    (picker, finish) => {
+      const rows = chooserRows(entries, ports);
+      picker.title = request.title;
+      picker.placeholder = text(ports, 'S198');
+      picker.items = rows;
+      picker.activeItems = rows.slice(0, 1);
+      picker.onDidAccept(() => {
+        const [selected] = picker.selectedItems;
+        chosen = selected?.action;
+        if (chosen?.kind === 'chooseTemplate') {
+          finish({kind: 'cancelled'});
+        } else if (chosen?.kind === 'learnMore') {
+          void ports.openExternal(CONTAINERS_INTRODUCTION);
+          finish({kind: 'learnMore'});
+        } else if (chosen?.kind === 'reuse') {
+          const existing = request.catalogue.find(
+            template => lastPartOf(template) === EXISTING_DOCKERFILE,
+          );
+          const {entry} = chosen;
+          finish(
+            existing === undefined
+              ? {
+                  kind: 'failed',
+                  cause: `the catalogue has no ${EXISTING_DOCKERFILE} template`,
+                }
+              : {kind: 'reuse', template: existing, entry},
+          );
+        }
+      });
+    },
+  );
   return chosen?.kind === 'chooseTemplate'
     ? templatePick(request, ports, cancellation)
     : outcome;

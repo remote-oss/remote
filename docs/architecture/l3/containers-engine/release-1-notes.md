@@ -45,6 +45,14 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     connection ended, and a failed connect ends it (athena's ruling on #1331; spec question on
     remote-oss/remote-containers#32).
 
+- **Open in Container in New Window on the row of a folder the profile does not trust shows core's trust question in the
+  new window while that window is already on the container's authority**, not on the local folder. Trusting connects
+  the window to the same container, which stays stopped until then; declining shows the notice that the folder is not
+  trusted and leaves the window on the local folder, the container still stopped.
+  - F-0902 AC-49 has the new window open on the local folder when the question shows. The extension asks it inside the
+    new window's resolve, after the window has switched (athena on #1464, ruling-1464; spec question on
+    remote-oss/remote-containers#80).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild

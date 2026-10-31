@@ -43,6 +43,8 @@ import {
 import type {OptionRow} from './authoring/option-screens.ts';
 import type {PickRow} from './authoring/template-pick.ts';
 import type {WizardPorts} from './authoring/wizard-stages.ts';
+import {storeRootOf} from './authoring/user-data-store.ts';
+import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
 import {finishTooltip} from './authoring/select-features.ts';
 import {writeTemplate} from './authoring/write.ts';
@@ -82,6 +84,7 @@ import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {storePausedRetry} from './state/paused-retry.ts';
 import {
+  type NotificationVariant,
   offerReopen,
   resetReopenNotification,
 } from './open/reopen-notification.ts';
@@ -105,6 +108,7 @@ import {
   type RowActions,
   rowActionsOf,
 } from './explorer/row-actions.ts';
+import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
 import {
   engineOfWindow,
@@ -451,25 +455,32 @@ export async function activate(
     );
   }
   /** Offers to reopen the window's folder in its container, over what the window holds now. */
-  function offerReopenFor(logger: Logger): Promise<void> {
-    return offerReopen({
-      window: {
-        remote: vscode.env.remoteName !== undefined,
-        workspaceFile: vscode.workspace.workspaceFile !== undefined,
-        folders: windowFolders(),
+  function offerReopenFor(
+    logger: Logger,
+    variant: NotificationVariant = 'folder',
+  ): Promise<void> {
+    return offerReopen(
+      {
+        window: {
+          remote: vscode.env.remoteName !== undefined,
+          workspaceFile: vscode.workspace.workspaceFile !== undefined,
+          folders: windowFolders(),
+        },
+        global: context.globalState,
+        workspace: context.workspaceState,
+        hasConfiguration: async folder =>
+          (await discoverConfigurations(folder, configFiles, collate)).length >
+          0,
+        show: (message, buttons) =>
+          vscode.window.showInformationMessage(message, ...buttons),
+        reopen: () =>
+          vscode.commands.executeCommand(commands.reopenInContainer.id),
+        now: Date.now,
+        translate,
+        logger,
       },
-      global: context.globalState,
-      workspace: context.workspaceState,
-      hasConfiguration: async folder =>
-        (await discoverConfigurations(folder, configFiles, collate)).length > 0,
-      show: (message, buttons) =>
-        vscode.window.showInformationMessage(message, ...buttons),
-      reopen: () =>
-        vscode.commands.executeCommand(commands.reopenInContainer.id),
-      now: Date.now,
-      translate,
-      logger,
-    });
+      variant,
+    );
   }
   const result = await activateContainers({
     table: {commands, standDown},
@@ -651,7 +662,7 @@ export async function activate(
                           {modal: true, detail},
                           ...items,
                         )
-                      : await vscode.window.showWarningMessage(
+                      : await vscode.window.showInformationMessage(
                           message,
                           {modal: true, detail},
                           ...items,
@@ -686,19 +697,34 @@ export async function activate(
           ),
         files: {
           list: async folder =>
-            (await readdir(folder, {withFileTypes: true})).map(entry => ({
-              name: entry.name,
-              kind: entry.isFile()
-                ? 'file'
-                : entry.isDirectory()
-                  ? 'folder'
-                  : 'other',
-            })),
+            (await readdir(folder, {withFileTypes: true}).catch(() => [])).map(
+              entry => ({
+                name: entry.name,
+                kind: entry.isFile()
+                  ? 'file'
+                  : entry.isDirectory()
+                    ? 'folder'
+                    : 'other',
+              }),
+            ),
           read: file => readFile(file),
           write: (file, bytes) => writeFile(file, bytes),
         },
         slotFolder: slot =>
-          path.join(context.globalStorageUri.fsPath, 'configs', slot),
+          path.join(storeRootOf(context.globalStorageUri.fsPath), slot),
+        location: {
+          createQuickPick: () =>
+            vscode.window.createQuickPick<LocationRow & vscode.QuickPickItem>(),
+          storeRoot: storeRootOf(context.globalStorageUri.fsPath),
+          store: {
+            folderNames: async folder =>
+              (await readdir(folder, {withFileTypes: true}).catch(() => []))
+                .filter(entry => entry.isDirectory())
+                .map(entry => entry.name),
+            readText: file => readFile(file, 'utf8').catch(() => undefined),
+          },
+          home: os.homedir(),
+        },
         record: line => {
           served.logger.info(line);
         },
@@ -711,8 +737,8 @@ export async function activate(
           vscode.window.showTextDocument(vscode.Uri.file(file), {
             preview: true,
           }),
-        offerReopen: () => {
-          offerReopenFor(served.logger).catch((caught: unknown) => {
+        offerReopen: (variant: NotificationVariant) => {
+          offerReopenFor(served.logger, variant).catch((caught: unknown) => {
             served.logger.error(
               `the reopen notification failed: ${caught instanceof Error ? caught.message : String(caught)}`,
             );
@@ -856,6 +882,19 @@ export async function activate(
         logger: served.logger,
       };
       const reopenHandler = reopenHandlersOf(reopenPorts);
+      const rowOpen = rowOpenOf({
+        ...reopenPorts,
+        window: {
+          serializedFile: file => reopenPorts.window.serializedFile(file),
+        },
+        engineFor: file => served.preflight.engineFor(file),
+        exists: file =>
+          Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(file))).then(
+            () => true,
+            () => false,
+          ),
+        cancellation: new AbortController().signal,
+      });
       const openFolder = openFolderInContainer({
         ...reopenPorts,
         window: {
@@ -920,6 +959,12 @@ export async function activate(
         },
         inspectDockerResource: {execute: argument => inspectRow?.(argument)},
         showContainerLog: {execute: argument => showContainerLog?.(argument)},
+        openFolderInContainerInCurrentWindow: {
+          execute: argument => rowOpen.current(argument),
+        },
+        openFolderInContainerInNewWindow: {
+          execute: argument => rowOpen.inNewWindow(argument),
+        },
         showReopenInContainerNotificationReset: {
           execute: () =>
             resetReopenNotification(context.globalState, Date.now()),

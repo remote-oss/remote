@@ -14,14 +14,28 @@ import {
 } from '../windows/harness.ts';
 import {
   acceptQuickPick,
+  chooseQuickPickRow,
   pressEscape,
+  quickPickFacts,
   quickPickOf,
+  quickPickRows,
+  type QuickPickRow,
   typeInQuickPick,
 } from '../windows/renderer.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 /** The command that adds a configuration. */
 export const COMMAND = 'remote-containers.createDevContainerFile';
+
+/** The workspace row of the location pick. */
+export const WORKSPACE_ROW = 'Add configuration to workspace';
+
+/** The user data row of the location pick. */
+export const USER_DATA_ROW = 'Add configuration to user data folder';
+
+/** The placeholder of the location pick. */
+const LOCATION_PLACEHOLDER =
+  'Where would you like to create your container configuration?';
 
 /** The configuration the wizard writes, relative to the folder. */
 export const CONFIGURATION = '.devcontainer/devcontainer.json';
@@ -55,6 +69,34 @@ export function startCommand(window: string, command = COMMAND): Promise<void> {
   return startInWindow(window, command);
 }
 
+/** Waits until the pick that follows the location pick shows, which replaces it. */
+export function waitForPickAfterLocation(window: string): Promise<void> {
+  return waitFor(
+    'the pick after the location pick',
+    async () => {
+      const shown = await quickPickOf(window);
+      return (
+        shown !== undefined &&
+        shown.items.length > 0 &&
+        shown.placeholder !== LOCATION_PLACEHOLDER
+      );
+    },
+    30_000,
+  );
+}
+
+/** Answers the location pick of `window` with the workspace row, and waits for the template pick. */
+export async function chooseWorkspace(window: string): Promise<void> {
+  await waitFor(
+    'the location pick',
+    async () =>
+      (await quickPickFacts(window))?.placeholder === LOCATION_PLACEHOLDER,
+    180_000,
+  );
+  await chooseQuickPickRow(window, WORKSPACE_ROW);
+  await waitForPickAfterLocation(window);
+}
+
 /** Waits for the option screen whose placeholder is `placeholder`, and takes its focused item, the template's default. */
 export async function takeOptionScreen(
   window: string,
@@ -68,6 +110,9 @@ export async function takeOptionScreen(
   await new Promise(resolve => setTimeout(resolve, 500));
   await acceptQuickPick(window);
 }
+
+/** The placeholder of the one option screen of the Alpine template. */
+export const ALPINE_OPTION = 'Alpine version:';
 
 /** The placeholder of the Select Features screen. */
 const FEATURES_PLACEHOLDER = 'Select additional features to install';
@@ -118,4 +163,43 @@ export async function closeScreen(window: string): Promise<void> {
     }
   }
   throw new Error(`the pick did not close: ${JSON.stringify(trail)}`);
+}
+
+/** The id that names one of the run's own templates in its registry, which the wizard takes as a custom id. */
+function labId(name: string): string {
+  return `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/custom/${name}:1`;
+}
+
+/** Runs the wizard in `window` and takes the template `name` of the run's registry by its id; its first screen follows. */
+export async function startedWith(window: string, name: string): Promise<void> {
+  await startCommand(window);
+  await chooseWorkspace(window);
+  await typeInQuickPick(window, labId(name));
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  await acceptQuickPick(window);
+}
+
+/** Waits until the pick shows the screen whose placeholder is `placeholder`, and gives its rows. */
+export async function screenWith(
+  window: string,
+  placeholder: string,
+): Promise<QuickPickRow[]> {
+  await waitFor(
+    `the screen ${placeholder}`,
+    async () => (await quickPickOf(window))?.placeholder === placeholder,
+    60_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return quickPickRows(window);
+}
+
+/** Takes the focused row of each screen of `placeholders`, in turn. */
+export async function takenThrough(
+  window: string,
+  placeholders: readonly string[],
+): Promise<void> {
+  for (const placeholder of placeholders) {
+    await screenWith(window, placeholder);
+    await acceptQuickPick(window);
+  }
 }

@@ -101,18 +101,18 @@ function rowWhen(token: string, extra = ''): string {
   return `view == targetsContainers && viewItem =~ /(^| )${token}( |$)/${extra} && !remote-containers:standingDown`;
 }
 
-/** The entries slice B adds to the row menu, in the manifest's order; the two commands of containers-103 carry `false`. */
+/** The entries slice B adds to the row menu, in the manifest's order; every entry carries the clauses of its token and none is staged any more. */
 const ROW_ACTION_ENTRIES = [
-  ['openFolderInContainerInCurrentWindow', '1_folder@1', 'openFolder', true],
-  ['openFolderInContainerInNewWindow', '1_folder@2', 'openFolder', true],
+  ['openFolderInContainerInCurrentWindow', '1_folder@1', 'openFolder', false],
+  ['openFolderInContainerInNewWindow', '1_folder@2', 'openFolder', false],
   ['startContainer', '1_container@3', 'start', false],
   ['showDetails', '1_container@4', 'details', false],
   ['inspectDockerResource', '1_container@5', 'inspect', false],
   ['showContainerLog', '1_container@6', 'log', false],
   ['stopContainer', '2_container@2', 'stop', false],
   ['removeContainer', '2_container@3', 'remove', false],
-  ['openFolderInContainerInCurrentWindow', 'inline@1', 'openFolder', true],
-  ['openFolderInContainerInNewWindow', 'inline@2', 'openFolder', true],
+  ['openFolderInContainerInCurrentWindow', 'inline@1', 'openFolder', false],
+  ['openFolderInContainerInNewWindow', 'inline@2', 'openFolder', false],
   ['removeContainer', 'inline@3', 'remove', false],
 ].map(([command, group, token, later]) => ({
   command: `remote-containers.${String(command)}`,
@@ -120,7 +120,7 @@ const ROW_ACTION_ENTRIES = [
   when: rowWhen(String(token), later === true ? ' && false' : ''),
 }));
 
-/** Inspect on the Image row of the Details view, after the entries of the Dev Containers view's rows. */
+/** The Inspect entry of the Details view's Image row. */
 const DETAILS_IMAGE_INSPECT = {
   command: 'remote-containers.inspectDockerResource',
   group: '1_container@5',
@@ -161,6 +161,10 @@ const ENGLISH = {
   'commands.startContainer.title': 'Start Container',
   'commands.stopContainer.title': 'Stop Container',
   'commands.removeContainer.title': 'Remove Container',
+  'commands.openFolderInContainerInCurrentWindow.title':
+    'Open in Container in Current Window',
+  'commands.openFolderInContainerInNewWindow.title':
+    'Open in Container in New Window',
   'commands.showDetails.title': 'Show Details',
   'commands.inspectDockerResource.title': 'Inspect',
   'commands.showContainerLog.title': 'Show Container Log',
@@ -360,6 +364,18 @@ describe('the manifest', () => {
             },
           },
           {
+            command: 'remote-containers.openFolderInContainerInCurrentWindow',
+            title: '%commands.openFolderInContainerInCurrentWindow.title%',
+            category: 'Dev Containers',
+            icon: '$(arrow-right)',
+          },
+          {
+            command: 'remote-containers.openFolderInContainerInNewWindow',
+            title: '%commands.openFolderInContainerInNewWindow.title%',
+            category: 'Dev Containers',
+            icon: '$(empty-window)',
+          },
+          {
             command: 'remote-containers.showDetails',
             title: '%commands.showDetails.title%',
             category: 'Dev Containers',
@@ -425,6 +441,14 @@ describe('the manifest', () => {
             {command: 'remote-containers.startContainer', when: 'false'},
             {command: 'remote-containers.stopContainer', when: 'false'},
             {command: 'remote-containers.removeContainer', when: 'false'},
+            {
+              command: 'remote-containers.openFolderInContainerInCurrentWindow',
+              when: 'false',
+            },
+            {
+              command: 'remote-containers.openFolderInContainerInNewWindow',
+              when: 'false',
+            },
             {command: 'remote-containers.showDetails', when: 'false'},
             {command: 'remote-containers.inspectDockerResource', when: 'false'},
             {command: 'remote-containers.showContainerLog', when: 'false'},
@@ -1093,10 +1117,10 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the five commands of later cards stay shut with false', () => {
+  it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
-        VIEW_PARTS.menus['view/item/context']?.slice(2),
+        VIEW_PARTS.menus['view/item/context']?.slice(2, -1),
         VIEW_PARTS.commands
           .map(entry => entry.command)
           .filter(command =>
@@ -1106,7 +1130,7 @@ describe('the manifest', () => {
           ),
       ],
       [
-        [...ROW_ACTION_ENTRIES, DETAILS_IMAGE_INSPECT],
+        ROW_ACTION_ENTRIES,
         [
           'remote-containers.startContainer',
           'remote-containers.stopContainer',
@@ -1116,28 +1140,49 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0902 3.1, containers-104: Show Details, Inspect and Show Container Log are declared, out of the palette, and no menu or palette entry of them is shut with a clause of false', () => {
-    const commands = [
-      'remote-containers.showDetails',
-      'remote-containers.inspectDockerResource',
-      'remote-containers.showContainerLog',
+  it('F-0902 3.1, containers-103: the two Open in Container commands are registered, and none of their row menu, inline or palette entries holds a staging false', () => {
+    const opens = [
+      'remote-containers.openFolderInContainerInCurrentWindow',
+      'remote-containers.openFolderInContainerInNewWindow',
     ];
     const entries = [
       ...(VIEW_PARTS.menus['view/item/context'] ?? []),
       ...(VIEW_PARTS.menus.commandPalette ?? []),
-    ].filter(entry => commands.includes(entry.command));
+    ].filter(entry => opens.includes(entry.command));
     deepStrictEqual(
       [
-        commands.filter(command =>
-          VIEW_PARTS.commands.some(entry => entry.command === command),
-        ),
+        VIEW_PARTS.commands
+          .map(entry => entry.command)
+          .filter(command => opens.includes(command)),
         entries.length,
-        entries.filter(entry => / && false\b/.test(entry.when)),
-        (VIEW_PARTS.menus.commandPalette ?? [])
-          .filter(entry => commands.includes(entry.command))
-          .map(entry => entry.when),
+        entries.filter(entry => / && false\b/.test(entry.when)).length,
       ],
-      [commands, 7, [], ['false', 'false', 'false']],
+      [opens, 6, 0],
+    );
+  });
+
+  it('F-0902 3.1, containers-104: Show Details, Inspect and Show Container Log are registered, are in the row menu and the Image row, are out of the palette, and no menu entry is staged', () => {
+    const names = [
+      'remote-containers.showDetails',
+      'remote-containers.inspectDockerResource',
+      'remote-containers.showContainerLog',
+    ];
+    const menu = (VIEW_PARTS.menus['view/item/context'] ?? []).filter(entry =>
+      names.includes(entry.command),
+    );
+    const palette = (VIEW_PARTS.menus.commandPalette ?? []).filter(entry =>
+      names.includes(entry.command),
+    );
+    deepStrictEqual(
+      [
+        VIEW_PARTS.commands
+          .map(entry => entry.command)
+          .filter(command => names.includes(command)),
+        menu.length,
+        menu.filter(entry => / && false\b/.test(entry.when)),
+        palette.map(entry => entry.when),
+      ],
+      [names, 4, [], ['false', 'false', 'false']],
     );
   });
 

@@ -8,10 +8,10 @@ import {
   commandsOf,
   devContainerFolder,
   devContainersOf,
+  editorLogsFolder,
   inWindow,
   reloadWindow,
   waitFor,
-  variable,
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
@@ -33,7 +33,7 @@ const OUR_SECTIONS = ['Dev Containers', 'Details', 'Dev Volumes'];
 
 /** The lines of the run editor's window logs that name the remote view container and the contribViewsRemote proposal. */
 function proposalWarnings(): string[] {
-  const logs = path.join(variable('HARNESS_USER_DATA'), 'logs');
+  const logs = editorLogsFolder();
   return readdirSync(logs, {recursive: true, encoding: 'utf8'})
     .filter(file => file.endsWith('renderer.log'))
     .flatMap(file => readFileSync(path.join(logs, file), 'utf8').split('\n'))

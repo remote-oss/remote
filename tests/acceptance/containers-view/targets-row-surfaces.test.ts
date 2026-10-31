@@ -1,12 +1,19 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  devContainerFolder,
   inWindow,
   untitledDocuments,
   waitFor,
   windowNames,
   terminalNames,
 } from '../windows/harness.ts';
-import {chosen, docker, idOf, made, viewed} from '../windows/container-rows.ts';
+import {
+  chosen,
+  docker,
+  idOf,
+  made,
+  viewed,
+} from '../windows/dev-containers-view.ts';
 import {
   paneFocused,
   remoteExplorerSections,
@@ -196,8 +203,9 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
     );
   });
 
-  // The Open in Container items are in the menu from containers-103.
-  it.skip('F-0901 AC-6 (menu): the menu of an exited dev row and of a running one, seen from a window not connected to them, is Start or Stop, Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
+  it('F-0901 AC-6 (menu): the menu of an exited dev row and of a running one, seen from a window not connected to them, is Start, or Stop after them, with Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
+    devContainerFolder('rs-menu-exited');
+    devContainerFolder('rs-menu-running');
     await made('rs-menu-exited', ['true']);
     await made('rs-menu-running', ['sleep', '600']);
     await viewed('rs-menu-exited');
@@ -221,12 +229,12 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
         'Remove Container',
       ],
       [
-        'Stop Container',
         'Show Details',
         'Inspect',
         'Show Container Log',
         'Open in Container in Current Window',
         'Open in Container in New Window',
+        'Stop Container',
         'Remove Container',
       ],
     ]);

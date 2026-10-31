@@ -12,6 +12,8 @@
   "commands.startContainer.title": "Start Container",
   "commands.stopContainer.title": "Stop Container",
   "commands.removeContainer.title": "Remove Container",
+  "commands.openFolderInContainerInCurrentWindow.title": "Open in Container in Current Window",
+  "commands.openFolderInContainerInNewWindow.title": "Open in Container in New Window",
   "commands.showDetails.title": "Show Details",
   "commands.inspectDockerResource.title": "Inspect",
   "commands.showContainerLog.title": "Show Container Log",

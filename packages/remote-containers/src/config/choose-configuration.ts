@@ -101,6 +101,11 @@ export interface ConfigurationRequest {
   features: FeatureSettings;
   cancellation: AbortSignal;
   /**
+   * A configuration file to use instead of the folder's own, absolute, such as the one a row's container was made from
+   * or one newly written to the store of user data: with it nothing is discovered and no picker shows.
+   */
+  configFile?: string;
+  /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
    * ends `stopped`, nothing more is shown and the answer is `stopped`. The work (discovery, reads, the CLI) doesn't
    * wait.
@@ -136,7 +141,16 @@ function textOf(
   return filled(translate, template, values);
 }
 
-/** Chooses the configuration of `request.folder`. */
+/** The candidate for a configuration file the caller names, whatever its place in the folder. */
+function namedCandidate(folder: string, file: string): Candidate {
+  return {
+    file,
+    relative: path.relative(folder, file).split(path.sep).join('/'),
+    place: {kind: 'main'},
+  };
+}
+
+/** Chooses the configuration of `request.folder`, or reads the one `request.configFile` names. */
 export async function chooseConfiguration(
   request: ConfigurationRequest,
   ports: ConfigurationPorts,
@@ -242,7 +256,10 @@ export async function chooseConfiguration(
     return chosen;
   }
 
-  const candidates = await discoverConfigurations(folder, files, ports.compare);
+  const candidates =
+    request.configFile === undefined
+      ? await discoverConfigurations(folder, files, ports.compare)
+      : [namedCandidate(folder, request.configFile)];
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
     if (!(await engineAllows())) {

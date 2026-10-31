@@ -255,6 +255,11 @@ function logLinesOf(variableName: string): string[] {
     .map(line => line.slice(line.indexOf('] ') + 2));
 }
 
+/** The folder the launch's editor keeps its state in, its logs included: one session folder per start of the editor, with `main.log` below it. */
+export function editorLogsFolder(): string {
+  return variable('HARNESS_EDITOR_LOGS');
+}
+
 /** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
 export function connectionLog(): string[] {
   return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');

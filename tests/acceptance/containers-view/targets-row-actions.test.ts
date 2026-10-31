@@ -19,6 +19,7 @@ import {
   dialogOf,
   centreNotifications,
   notifications,
+  toastDetails,
   rowContextMenu,
   rowMenuAction,
   statusItemText,
@@ -31,20 +32,20 @@ import {
   removeContainers,
   setUserSetting,
 } from '../windows/folder-windows.ts';
-import {dockerWrapper, rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 import {
   chosen,
   docker,
+  dockerWrapper,
   iconOf,
   iconReaches,
   idOf,
-  idsOf,
   made,
-  notified,
+  rowsWhen,
   shown,
   stateOf,
+  VIEW,
   viewed,
-} from '../windows/container-rows.ts';
+} from '../windows/dev-containers-view.ts';
 
 /** The words of the Remove Container confirmation (F-0902 AC-1). */
 const REMOVE_MESSAGE = 'Remove this container?';
@@ -56,6 +57,31 @@ const FOLLOW_MILLISECONDS = 5_000;
 
 /** The `sh -c` script of a container whose process ignores the stop signal. */
 const DEAF = 'trap "" TERM; sleep 600';
+
+/** The toasts of window `name` in the order shown, once there are `count` of them. */
+async function notified(
+  name: string,
+  count: number,
+): Promise<Array<{message: string; buttons: string[]}>> {
+  let shownToasts: Awaited<ReturnType<typeof toastDetails>> = [];
+  await waitFor(
+    `${String(count)} notifications in window ${name}`,
+    async () => {
+      shownToasts = await toastDetails(name);
+      return shownToasts.length >= count;
+    },
+    30_000,
+  );
+  return shownToasts.map(({message, buttons}) => ({message, buttons}));
+}
+
+/** The ids `docker <listing>` prints, sorted: the containers, images or volumes the engine holds. */
+async function idsOf(...listing: string[]): Promise<string[]> {
+  return (await docker(...listing))
+    .split('\n')
+    .filter(line => line !== '')
+    .sort();
+}
 
 describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container (card containers-102)', function () {
   this.timeout(600_000);
@@ -525,8 +551,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     );
   });
 
-  // Open in Container is in the menu from containers-103.
-  it.skip('F-0902 AC-26 (dev-row-half): after a confirmed Stop, the exited menu of a configured dev container row is Start, Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
+  it('F-0902 AC-26 (dev-row-half): after a confirmed Stop, the exited menu of a configured dev container row is Start, Show Details, Inspect, Show Container Log, the two Open in Container items and Remove', async () => {
     const base = 'ra-menu-dev';
     const folder = devContainerFolder(base, {name: 'Menu Dev'});
     const connected = await openFolderWindow(folder);

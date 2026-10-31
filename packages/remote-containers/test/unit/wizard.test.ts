@@ -15,6 +15,7 @@ import type {
 } from '../../src/authoring/wizard-stages.ts';
 import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
+import type {LocationPorts} from '../../src/authoring/location.ts';
 import {
   pressBack,
   FINISH_BUTTON,
@@ -24,7 +25,7 @@ import {
   scriptedInput,
   takeDefaults,
 } from './option-picker.fixture.ts';
-import {FakePicker} from './template-picker.fixture.ts';
+import {FakeLocationPicker, FakePicker} from './template-picker.fixture.ts';
 
 const NEVER = new AbortController().signal;
 const PREFIX = 'ghcr.io/devcontainers/templates/';
@@ -233,6 +234,7 @@ const FLAT_INDEX = JSON.stringify({
 
 interface Scene {
   pickers: FakePicker[];
+  locationPickers: FakeLocationPicker[];
   failures: string[];
   written: WriteRequest[];
   logged: string[];
@@ -249,6 +251,7 @@ function sceneOf(
 ): Scene {
   const scene: Scene = {
     pickers: [],
+    locationPickers: [],
     failures: [],
     written: [],
     logged: [],
@@ -312,6 +315,23 @@ function sceneOf(
   return scene;
 }
 
+/** Location ports over the scene's picker, with an empty store. */
+function locationOf(scene: Scene): LocationPorts {
+  return {
+    createQuickPick: () => {
+      const picker = new FakeLocationPicker();
+      scene.locationPickers.push(picker);
+      return picker;
+    },
+    storeRoot: '/store/configs',
+    store: {
+      folderNames: () => Promise.resolve([]),
+      readText: () => Promise.resolve(undefined),
+    },
+    home: '/store',
+  };
+}
+
 /** Starts the wizard and gives the first quick pick it makes, once the catalogue and the folder were read. */
 async function started(scene: Scene): Promise<{
   picker: FakePicker;
@@ -370,6 +390,7 @@ describe('the wizard (card containers-80)', () => {
           kind: 'written',
           files: ['.devcontainer/devcontainer.json'],
           target: '/work/ws',
+          place: 'workspace',
         },
         [
           {
@@ -674,6 +695,101 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  it('F-0801 BR-5: with the location ports the location stage runs before the template pick', () => {
+    const scene = sceneOf();
+    const stages = stagesOf(
+      {kind: 'catalogue', templates: [ALPINE], features: []},
+      {
+        ...scene.ports,
+        location: locationOf(scene),
+        title: 'T',
+        facts: {rootEntries: [], files: [], truncated: false},
+      } satisfies StagePorts,
+    );
+    deepStrictEqual(
+      stages.map(each => each.name),
+      ['location', 'templatePick', 'templateOptions', 'selectFeatures'],
+    );
+  });
+
+  it('F-0302 AC-4: a write to the user data target gets the display path with ~ and then the marker of the folder, and the workspace target gets neither', async () => {
+    const userData = sceneOf();
+    userData.ports = {...userData.ports, location: locationOf(userData)};
+    const first = runWizard(
+      {title: 'T', folder: '/home/a/ws'},
+      userData.ports,
+      NEVER,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    userData.locationPickers[0]?.accept(
+      'Add configuration to user data folder',
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    userData.pickers[0]?.accept('Alpine');
+    await first;
+    const workspace = sceneOf();
+    const second = runWizard(
+      {title: 'T', folder: '/home/a/ws'},
+      workspace.ports,
+      NEVER,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    workspace.pickers[0]?.accept('Alpine');
+    await second;
+    deepStrictEqual(
+      [
+        userData.written.map(each => each.displayPath?.('x/y.json')),
+        userData.writes,
+        workspace.written.map(each => each.displayPath),
+        workspace.writes,
+      ],
+      [
+        ['~/configs/ws/x/y.json'],
+        [
+          [
+            '/store/configs/ws/.devcontainer/.devcontainer-internal.json',
+            '// Maintained by the Dev Container extension\n{"rootFolder":"/home/a/ws"}\n',
+          ],
+        ],
+        [undefined],
+        [],
+      ],
+    );
+  });
+
+  it('F-0801 AC-3: Escape on the location pick cancels the wizard before any template is asked', async () => {
+    const scene = sceneOf();
+    scene.ports = {...scene.ports, location: locationOf(scene)};
+    const result = runWizard(
+      {title: 'T', folder: '/home/a/ws'},
+      scene.ports,
+      NEVER,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.locationPickers[0]?.hide();
+    deepStrictEqual(
+      [await result, scene.pickers.length, scene.written.length],
+      [{kind: 'cancelled'}, 0, 0],
+    );
+  });
+
+  it('F-0302 AC-35: a user data write that was cancelled or failed writes no marker', async () => {
+    const scene = sceneOf();
+    scene.outcome = {kind: 'cancelled'};
+    const result = runWizard(
+      {
+        title: 'T',
+        folder: '/home/a/ws',
+        target: {kind: 'userData', slot: 'ws'},
+      },
+      scene.ports,
+      NEVER,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.pickers[0]?.accept('Alpine');
+    deepStrictEqual([await result, scene.writes], [{kind: 'cancelled'}, []]);
+  });
+
   it('F-0801 BR-5: a request aimed at a slot of the store writes into that slot’s folder', async () => {
     const scene = sceneOf();
     const result = runWizard(
@@ -690,6 +806,7 @@ describe('the wizard (card containers-80)', () => {
           kind: 'written',
           files: ['.devcontainer/devcontainer.json'],
           target: '/store/configs/one',
+          place: 'userData',
         },
         ['/store/configs/one'],
       ],

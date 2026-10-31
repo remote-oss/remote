@@ -13,6 +13,7 @@ const WRITTEN: WizardOutcome = {
   kind: 'written',
   files: ['README.md', '.devcontainer/devcontainer.json'],
   target: '/w/p',
+  place: 'workspace',
 };
 
 interface Scene {
@@ -52,8 +53,8 @@ function sceneOf(
         calls.push(`preview ${file}`);
         return Promise.resolve();
       },
-      offerReopen: () => {
-        calls.push('offerReopen');
+      offerReopen: variant => {
+        calls.push(`offerReopen ${variant}`);
       },
       translate: template => template,
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -68,14 +69,28 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
     deepStrictEqual(scene.calls, [
       'wizard /w/p',
       'preview /w/p/.devcontainer/devcontainer.json',
-      'offerReopen',
+      'offerReopen folder',
+    ]);
+  });
+
+  it('F-0302 AC-5: a write to the store opens the stored configuration and offers the user data variant', async () => {
+    const scene = sceneOf({
+      ...WRITTEN,
+      target: '/store/configs/p',
+      place: 'userData',
+    });
+    await createDevContainerFile(scene.ports)();
+    deepStrictEqual(scene.calls, [
+      'wizard /w/p',
+      'preview /store/configs/p/.devcontainer/devcontainer.json',
+      'offerReopen userData',
     ]);
   });
 
   it('F-0801 AC-4: a write with no configuration file among its paths only offers the notification', async () => {
     const scene = sceneOf({...WRITTEN, files: ['README.md']});
     await createDevContainerFile(scene.ports)();
-    deepStrictEqual(scene.calls, ['wizard /w/p', 'offerReopen']);
+    deepStrictEqual(scene.calls, ['wizard /w/p', 'offerReopen folder']);
   });
 
   for (const outcome of [

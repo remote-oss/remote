@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   debuggingPortFile,
   editorArguments,
+  editorLogsEnvironment,
   extensionsFolderOf,
   launchFiles,
   packageWindowAgent,
@@ -13,6 +14,7 @@ import {
   type Program,
   runPlainLaunch,
   startDetached,
+  stateFolderOf,
   userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
@@ -272,6 +274,31 @@ describe('the files of a launch', () => {
   });
 });
 
+describe('the state folder of a launch (card tooling-79)', () => {
+  it('tooling-79: it is the launch’s own folder in the run’s, and the logs variable follows a launch’s own state folder', () => {
+    deepStrictEqual(
+      [
+        stateFolderOf('/run', 'windows'),
+        editorLogsEnvironment('/run/windows/state', undefined),
+        editorLogsEnvironment('/run/windows/state', {}),
+        editorLogsEnvironment('/run/windows/state', {XDG_STATE_HOME: '/mine'}),
+      ],
+      [
+        '/run/windows/state',
+        {
+          XDG_STATE_HOME: '/run/windows/state',
+          HARNESS_EDITOR_LOGS: '/run/windows/state',
+        },
+        {
+          XDG_STATE_HOME: '/run/windows/state',
+          HARNESS_EDITOR_LOGS: '/run/windows/state',
+        },
+        {XDG_STATE_HOME: '/mine', HARNESS_EDITOR_LOGS: '/mine'},
+      ],
+    );
+  });
+});
+
 describe('the extensions folder of a launch', () => {
   it('tooling-51: the genuine launch has a folder of its own, and a launch with no extensions of its own has the run’s', () => {
     const launches = launchesOf(REPOSITORY_ROOT);
@@ -441,6 +468,41 @@ describe('runPlainLaunch', () => {
     deepStrictEqual(
       programs.map(program => program.environment.HARNESS_USER_DATA),
       ['/run/user-data-windows', '/run/user-data-windows'],
+    );
+  });
+
+  it("tooling-79: each launch's editor and tests get a state folder of their own in the run's, and HARNESS_EDITOR_LOGS names it", async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    deepStrictEqual(
+      programs.map(program => [
+        program.environment.XDG_STATE_HOME,
+        program.environment.HARNESS_EDITOR_LOGS,
+      ]),
+      [
+        ['/run/windows/state', '/run/windows/state'],
+        ['/run/windows/state', '/run/windows/state'],
+      ],
+    );
+  });
+
+  it("tooling-79: a launch's own XDG_STATE_HOME wins, as config-files has one, and HARNESS_EDITOR_LOGS is that one", async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      PLAIN_RUN,
+      {...LAUNCH, environment: {XDG_STATE_HOME: '<run>/xdg/state'}},
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(program => [
+        program.environment.XDG_STATE_HOME,
+        program.environment.HARNESS_EDITOR_LOGS,
+      ]),
+      [
+        ['/run/xdg/state', '/run/xdg/state'],
+        ['/run/xdg/state', '/run/xdg/state'],
+      ],
     );
   });
 

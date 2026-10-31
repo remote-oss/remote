@@ -124,12 +124,16 @@ export interface CommandChecksPorts {
   logger: Logger;
 }
 
-/** The checks before a reload of an open command, over `folder`, with the program the engine runs as `dockerPath`. */
+/**
+ * The checks before a reload of an open command, over `folder`, with the program the engine runs as `dockerPath`. With
+ * `configFile` the choice is that file and no picker shows.
+ */
 export async function commandBeforeReload(
   ports: CommandChecksPorts,
   firstCheck: PreReloadPorts['firstCheck'],
   folder: string,
   dockerPath: string,
+  configFile?: string,
 ): ReturnType<typeof beforeReload> {
   const cancellation = new AbortController().signal;
   const result = await beforeReload(
@@ -151,6 +155,7 @@ export async function commandBeforeReload(
         ports.settings.lockfile(),
       ),
       cancellation,
+      ...(configFile === undefined ? {} : {configFile}),
     },
   );
   if (result.choice.kind !== 'chosen') {

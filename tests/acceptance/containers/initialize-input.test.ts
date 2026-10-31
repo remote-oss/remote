@@ -6,6 +6,7 @@ import {
   closeWindow,
   connectedToContainer,
   devContainerFolder,
+  editorLogsFolder,
   inWindow,
   terminalBuffer,
   terminalFacts,
@@ -45,7 +46,7 @@ const LOG_LINES_QUOTED = 6;
 
 /** The last lines of the newest extension host logs of the run's editor, to tell a window that never finished starting. */
 function extensionHostLogTails(): Record<string, string[]> | string {
-  const logs = path.join(variable('HARNESS_USER_DATA'), 'logs');
+  const logs = editorLogsFolder();
   try {
     return Object.fromEntries(
       readdirSync(logs, {recursive: true, encoding: 'utf8'})

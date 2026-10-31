@@ -94,7 +94,10 @@ function listing(scene: Scene): Record<string, Array<[string, string]>> {
   return tree;
 }
 
-async function choose(scene: Scene): Promise<ConfigurationChoice> {
+async function choose(
+  scene: Scene,
+  configFile?: string,
+): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
     {
@@ -104,6 +107,7 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
       features: {defaultFeatures: {}, lockfile: true},
       cancellation: NEVER,
       engineCheck: scene.engineCheck,
+      ...(configFile === undefined ? {} : {configFile}),
     },
     {
       files: {
@@ -116,7 +120,9 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
           ),
         read: file => {
           scene.calls.push(`read ${file.slice(FOLDER.length + 1)}`);
-          const content = scene.contents[file.slice(FOLDER.length + 1)];
+          const content =
+            scene.contents[file] ??
+            scene.contents[file.slice(FOLDER.length + 1)];
           return Promise.resolve(
             content === undefined || content === 'unreadable'
               ? 'unreadable'
@@ -232,6 +238,37 @@ describe('choosing the configuration (card containers-13)', () => {
     );
   });
 
+  it('F-0403 AC-4: a configuration file given by the request is the only candidate: the folder is not searched, and the CLI reads it with the folder as the workspace', async () => {
+    const stored = '/store/configs/p/.devcontainer/devcontainer.json';
+    const scene = sceneOf({[stored]: IMAGE, [ONLY]: IMAGE});
+    scene.read = configurationOf('/workspaces/p');
+    const choice = await choose(scene, stored);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => call.startsWith('pick')),
+        scene.targets
+          .map(
+            read =>
+              (
+                read as [{workspaceFolder: string; configFile: string}, unknown]
+              )[0],
+          )
+          .map(target => [target.workspaceFolder, target.configFile]),
+      ],
+      [
+        {
+          kind: 'chosen',
+          configFile: stored,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
+        [],
+        [[FOLDER, stored]],
+      ],
+    );
+  });
+
   it('F-0301 AC-1: one configuration is chosen with no picker, and the CLI reads it with the target of the folder (BR-4)', async () => {
     const scene = sceneOf({[ONLY]: IMAGE});
     const choice = await choose(scene);
@@ -261,6 +298,47 @@ describe('choosing the configuration (card containers-13)', () => {
             undefined,
           ],
         ],
+      ],
+    );
+  });
+
+  it('F-0902 BR-7: a configuration file the caller names is chosen and read with no discovery and no picker, though the folder holds two', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    const choice = await choose(scene, `${FOLDER}/${BETA}`);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => call !== 'readConfiguration'),
+        scene.targets.map(
+          target => (target as [{configFile: string}])[0].configFile,
+        ),
+      ],
+      [
+        {
+          kind: 'chosen',
+          configFile: `${FOLDER}/${BETA}`,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
+        [`read ${BETA}`],
+        [`${FOLDER}/${BETA}`],
+      ],
+    );
+  });
+
+  it('F-0902 BR-7: a configuration file the caller names that cannot be read shows the dialog with its path relative to the folder, and no picker', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE});
+    const choice = await choose(scene, `${FOLDER}/${BETA}`);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.includes('pick'),
+        scene.calls.filter(call => call.startsWith('showError')),
+      ],
+      [
+        {kind: 'rejected'},
+        false,
+        [`showError ${JSON.stringify(['', S181(BETA), ['Show Log']])}`],
       ],
     );
   });

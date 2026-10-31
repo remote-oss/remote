@@ -104,11 +104,13 @@ import {
 } from './acceptance-launches.ts';
 import {
   editorArguments,
+  editorLogsEnvironment,
   extensionsFolderOf,
   launchFiles,
   packageWindowAgent,
   runPlainLaunch,
   startDetached,
+  stateFolderOf,
   type Started,
   userDataFolderOf,
   writeStandIns,
@@ -864,13 +866,24 @@ async function prepare(
           ? ''
           : resolveCliPathFromVSCodeExecutablePath(vscode),
     };
-    for (const {folder, files, client} of installs) {
-      checked(command, editorCommands[client], [
-        `--extensions-dir=${folder}`,
-        `--user-data-dir=${userDataFolderOf(runFolder)}`,
-        `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
-        ...files.flatMap(file => ['--install-extension', file]),
-      ]);
+    // The editor's command line writes a log session as the editor does: into the run's folder, not the user's.
+    const stateBefore = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = stateFolderOf(runFolder, 'install');
+    try {
+      for (const {folder, files, client} of installs) {
+        checked(command, editorCommands[client], [
+          `--extensions-dir=${folder}`,
+          `--user-data-dir=${userDataFolderOf(runFolder)}`,
+          `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
+          ...files.flatMap(file => ['--install-extension', file]),
+        ]);
+      }
+    } finally {
+      if (stateBefore === undefined) {
+        delete process.env.XDG_STATE_HOME;
+      } else {
+        process.env.XDG_STATE_HOME = stateBefore;
+      }
     }
   }
   const launches = editor === 'vscodium' ? launchesOf(root) : [];
@@ -1353,7 +1366,11 @@ export function acceptanceConfiguration(
     // test-cli expands a glob relative to its configuration file, tests/acceptance/vscode-test.mjs.
     files: 'dist/**/*.test.cjs',
     launchArgs: editorArguments(runFolder),
-    env: {...environment, HARNESS_USER_DATA: userDataFolderOf(runFolder)},
+    env: {
+      ...environment,
+      ...editorLogsEnvironment(stateFolderOf(runFolder, 'runner'), undefined),
+      HARNESS_USER_DATA: userDataFolderOf(runFolder),
+    },
     mocha: {ui: 'bdd', timeout: 60_000},
   };
 }
@@ -1369,8 +1386,17 @@ export function vscodiumConfiguration(
   const files = launchFiles(runFolder, launch.label);
   const acceptance = path.join(root, 'tests', 'acceptance');
   const runner = path.join(acceptance, launch.runner);
+  const launchEnvironment = withRunTokens(
+    launch.environment,
+    runFolder,
+    environment.PATH ?? '',
+  );
   const env: Record<string, string | undefined> = {
     ...environment,
+    ...editorLogsEnvironment(
+      stateFolderOf(runFolder, launch.label),
+      launchEnvironment,
+    ),
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
     REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
       runFolder,
@@ -1393,7 +1419,7 @@ export function vscodiumConfiguration(
           REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
         }
       : {}),
-    ...withRunTokens(launch.environment, runFolder, environment.PATH ?? ''),
+    ...launchEnvironment,
   };
   return {
     label: launch.label,

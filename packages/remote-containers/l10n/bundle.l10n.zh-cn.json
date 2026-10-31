@@ -147,5 +147,12 @@
   "This action is not reversible and deletes the container permanently.": "This action is not reversible and deletes the container permanently.",
   "This is the last container using '{0}'.": "This is the last container using '{0}'.",
   "Remove": "Remove",
+  "Where would you like to create your container configuration?": "Where would you like to create your container configuration?",
+  "Add configuration to workspace": "Add configuration to workspace",
+  "This allows you to share the configuration with others via source control": "This allows you to share the configuration with others via source control",
+  "Add configuration to user data folder": "Add configuration to user data folder",
+  "This avoids having outgoing changes in your workspace folder": "This avoids having outgoing changes in your workspace folder",
+  "Configuration already exists": "Configuration already exists",
+  "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.",
   "Error inspecting: {0}": "Error inspecting: {0}"
 }
