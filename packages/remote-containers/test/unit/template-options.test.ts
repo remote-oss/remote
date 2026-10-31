@@ -143,6 +143,23 @@ describe('the template options stage (card containers-87)', () => {
     });
   });
 
+  it('F-0803 AC-5, AC-17: a boolean whose default is the string true or false, as the published templates write it, starts checked or not by that string and is given as true or false', async () => {
+    const {result, screens} = await ranStage(
+      {
+        ...OPTIONS_LAB,
+        options: {
+          installZsh: {type: 'boolean', default: 'true', description: 'ZSH'},
+          upgrade: {type: 'boolean', default: 'false', description: 'Upgrade'},
+        },
+      },
+      [takeDefaults],
+    );
+    deepStrictEqual(
+      [screens[0]?.selectedItems.map(each => each.label), argsOf(result)],
+      [['ZSH'], {installZsh: 'true', upgrade: 'false'}],
+    );
+  });
+
   it('F-0803 AC-19: Escape on the boolean screen goes on with nothing checked', async () => {
     const {result} = await ranStage(OPTIONS_LAB, [
       takeDefaults,
