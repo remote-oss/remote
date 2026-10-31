@@ -143,6 +143,7 @@ describe('the server listens on the configuration’s devPort (card containers-1
           hostListens: await hostListens(port),
           published: await publishedPorts(containerId),
           dialog: await dialogOf(name),
+          notices: await notificationCentre(name),
           problems: messages.sort(),
         },
         {
@@ -151,6 +152,7 @@ describe('the server listens on the configuration’s devPort (card containers-1
           hostListens: true,
           published: '{}',
           dialog: undefined,
+          notices: [],
           problems: [
             'Property devPort is not allowed.',
             "Use 'customizations/vscode/devPort' instead",
