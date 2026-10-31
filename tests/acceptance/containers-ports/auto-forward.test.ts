@@ -618,7 +618,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     );
   });
 
-  it.skip('F-1101 AC-22 (forward-stopped): a declared forward stopped by hand is back after a reload with its label and origin, and an auto-detected port stopped the same way stays stopped', async () => {
+  it('F-1101 AC-22 (forward-stopped): a declared forward stopped by hand is back after a reload with its label and origin, and an auto-detected port stopped the same way stays stopped', async () => {
     const [declared, detected] = [await freePort(), await freePort()];
     const {window, containerId} = await plainWindow('c72-ac22', {
       forwardPorts: [declared],
@@ -626,9 +626,15 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     });
     const stopDetected = await listenInTerminal(window, containerId, detected);
     try {
-      await appearing(window, declared, Date.now());
+      await rowsWhen(window, shown =>
+        portsOf(shown).includes(`Declared (${String(declared)})`),
+      );
       await appearing(window, detected, Date.now());
-      await portRowAction(window, String(declared), 'Stop Forwarding Port');
+      await portRowAction(
+        window,
+        `Declared (${String(declared)})`,
+        'Stop Forwarding Port',
+      );
       await portRowAction(window, String(detected), 'Stop Forwarding Port');
       await rowsWhen(window, shown => shown.length === 0);
       await new Promise(resolve => setTimeout(resolve, 5000));

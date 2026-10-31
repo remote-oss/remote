@@ -132,13 +132,13 @@ describe('the port attributes of the configuration (card containers-73)', functi
       forwardPorts: [port],
       portsAttributes: {
         'nc -lk': {label: 'FirstRegex'},
-        '-e cat': {label: 'SecondRegex'},
+        cat$: {label: 'SecondRegex'},
       },
     });
     const second = await connectedWith('c73-ac21d', {
       forwardPorts: [port],
       portsAttributes: {
-        '-e cat': {label: 'SecondRegex'},
+        cat$: {label: 'SecondRegex'},
         'nc -lk': {label: 'FirstRegex'},
       },
     });
