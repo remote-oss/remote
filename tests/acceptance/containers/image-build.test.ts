@@ -815,7 +815,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       contextNotFound: boolean;
       pullFailures: number;
       buildStarted: boolean;
-      dialogWithinTwoSeconds: boolean | undefined;
+      dialogWithinBound: boolean | undefined;
     }
     const cases: Array<[string, Record<string, unknown>, string, Facts]> = [
       [
@@ -829,7 +829,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           contextNotFound: true,
           pullFailures: 0,
           buildStarted: false,
-          dialogWithinTwoSeconds: true,
+          dialogWithinBound: true,
         },
       ],
       [
@@ -840,7 +840,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           contextNotFound: false,
           pullFailures: 6,
           buildStarted: false,
-          dialogWithinTwoSeconds: undefined,
+          dialogWithinBound: undefined,
         },
       ],
       [
@@ -851,7 +851,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
           contextNotFound: false,
           pullFailures: 6,
           buildStarted: false,
-          dialogWithinTwoSeconds: undefined,
+          dialogWithinBound: undefined,
         },
       ],
     ];
@@ -894,9 +894,9 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
                   'Error: Command failed: docker pull does-not-exist.invalid/x:1',
               ).length,
             buildStarted: lines.some(line => /^#\d+ /.test(line)),
-            dialogWithinTwoSeconds:
+            dialogWithinBound:
               folderName === 'c52-missing-context'
-                ? elapsed <= 2000
+                ? elapsed <= 1500
                 : undefined,
           },
         ]);

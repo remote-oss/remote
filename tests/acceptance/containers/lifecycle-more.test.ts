@@ -77,14 +77,18 @@ describe('F-0415 reopening, the environment, the log and the terminal (card cont
       const centre = await notificationCentre(name);
       const dialog = await dialogOf(name);
       await closeWindow(name);
+      const positions = [
+        'c58-before-failure',
+        failure,
+        'Done. Press any key to close the terminal.',
+      ].map(each => text.indexOf(each));
       deepStrictEqual(
         {
           outputKept: lines.includes('c58-before-failure'),
-          terminalOrder: [
-            'c58-before-failure',
-            failure,
-            'Done. Press any key to close the terminal.',
-          ].map(each => text.indexOf(each)),
+          terminalInOrder:
+            positions.every(position => position >= 0) &&
+            positions[0] < positions[1] &&
+            positions[1] < positions[2],
           failureIsRed: [1, 9].includes(
             spans.find(span => span.text.includes(failure))?.foreground ?? -1,
           ),
@@ -95,11 +99,7 @@ describe('F-0415 reopening, the environment, the log and the terminal (card cont
         },
         {
           outputKept: true,
-          terminalOrder: [
-            text.indexOf('c58-before-failure'),
-            text.indexOf(failure),
-            text.indexOf('Done. Press any key to close the terminal.'),
-          ].sort((left, right) => left - right),
+          terminalInOrder: true,
           failureIsRed: true,
           laterCommandsRan: '',
           status: 'running',
