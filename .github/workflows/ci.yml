@@ -50,8 +50,9 @@ on:
   schedule:
     - cron: '17 */2 * * *'
     - cron: '43 4 * * *'
-  # Each merge to main runs checks, unit and coverage, on GitHub's runners and not the lab's. Two pull requests that pass
-  # alone can break each other once both are in: main shows it within minutes, not at the next pull request's run.
+  # Each merge to main runs checks, unit and coverage, on GitHub's runners and not the self-hosted ones. Two pull
+  # requests that pass alone can break each other once both are in: main shows it within minutes, not at the next pull
+  # request's run.
   push:
     branches: [main]
     tags: ['*-v*']
