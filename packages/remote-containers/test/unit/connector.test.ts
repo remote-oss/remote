@@ -1047,9 +1047,24 @@ describe('the container connector: the connect (card containers-08)', () => {
         41000,
         undefined,
         [
-          'the configuration of /work/proj could not be read: configurationFailed',
-          "the configuration's name could not be read: configurationFailed",
+          'the configuration of /work/proj could not be read: configurationFailed: x',
+          "the configuration's name could not be read: configurationFailed: x",
         ],
+      ],
+    );
+  });
+
+  it('#1367: a configuration read that fails with no message from the CLI says so in the warning', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: ''};
+    await connected(scene);
+    deepStrictEqual(
+      scene.sink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message)
+        .slice(0, 1),
+      [
+        'the configuration of /work/proj could not be read: configurationFailed, with no reason from the CLI',
       ],
     );
   });
@@ -2040,7 +2055,7 @@ describe('the container connector: the canonical path (card containers-22)', () 
         [undefined, '/work/proj'],
         2,
         [
-          'the configuration of /work/proj could not be read: configurationFailed',
+          'the configuration of /work/proj could not be read: configurationFailed: x',
         ],
       ],
     );

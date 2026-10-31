@@ -354,8 +354,8 @@ F-0408.AC-8	todo
 F-0408.AC-9	todo	
 F-0408.AC-10	acceptance	
 F-0408.AC-11	acceptance	
-F-0408.AC-12	todo	
-F-0408.AC-13	todo	
+F-0408.AC-12	acceptance	
+F-0408.AC-13	acceptance	
 F-0408.AC-14	todo	
 F-0408.AC-15	todo	
 F-0408.AC-16	deferred	containers release 1: later (Compose)
@@ -500,12 +500,12 @@ F-0411.AC-42	acceptance
 F-0412.AC-1	acceptance	
 F-0412.AC-2	acceptance	
 F-0412.AC-3	acceptance	
-F-0412.AC-4	todo	
-F-0412.AC-5	todo	
+F-0412.AC-4	acceptance	
+F-0412.AC-5	acceptance	
 F-0412.AC-6	acceptance	
 F-0412.AC-7	acceptance	
-F-0412.AC-8	todo	
-F-0412.AC-9	todo	
+F-0412.AC-8	acceptance	
+F-0412.AC-9	acceptance	
 F-0412.AC-10	acceptance	
 F-0412.AC-11	acceptance	
 F-0412.AC-12	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
@@ -527,9 +527,9 @@ F-0412.AC-27	deferred	containers release 1: S343 needs apt's text matched in the
 F-0412.AC-28	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
 F-0412.AC-29	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
 F-0412.AC-30	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
-F-0412.AC-31	todo	
+F-0412.AC-31	acceptance	
 F-0412.AC-32	acceptance	
-F-0412.AC-33	todo	
+F-0412.AC-33	acceptance	
 F-0412.AC-34	acceptance	
 F-0412.AC-35	deferred	containers release 1: later (remote engines)
 F-0412.AC-36	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -604,7 +604,7 @@ F-0415.AC-8	acceptance
 F-0415.AC-9	acceptance	
 F-0415.AC-9b	todo	
 F-0415.AC-10	acceptance	
-F-0415.AC-11	todo	
+F-0415.AC-11	acceptance	
 F-0415.AC-12	acceptance	
 F-0415.AC-13	acceptance	
 F-0415.AC-14	acceptance	
@@ -624,7 +624,7 @@ F-0415.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0415.AC-27	todo	
 F-0415.AC-28	todo	
 F-0415.AC-29	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0415.AC-30	todo	
+F-0415.AC-30	acceptance	
 F-0415.AC-31	acceptance	
 F-0415.AC-32	deferred	containers release 1: later (personalization and relays)
 F-0415.AC-33	unit	
@@ -788,7 +788,7 @@ F-0419.AC-26	acceptance
 F-0419.AC-27	acceptance	
 F-0419.AC-28	deferred	containers release 1: later (Switch Container, F-0407)
 F-0419.AC-29	acceptance	
-F-0419.AC-30	todo	
+F-0419.AC-30	acceptance	
 F-0419.AC-31	unit	
 F-0419.AC-32	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0419.AC-33	acceptance	

@@ -98,21 +98,33 @@ describe('check-layout', () => {
     workspace.writeManifest('remote-wsl', {publisher: 'remote-oss'});
     workspace.writeManifest('remote-server', {
       publisher: 'remote-oss',
-      engines: {vscode: '^1.139.0'},
+      engines: {vscode: '^1.125.0'},
     });
     for (const folder of ['remote-ssh', 'remote-wsl', 'remote-server']) {
       workspace.write(`packages/${folder}/LICENSE`, 'text\n');
     }
     deepStrictEqual(checkLayout(workspace.root), [
-      "packages/remote-ssh/package.json has engines.vscode '^1.74.0', expected '^1.139.0' (ADR-0007)",
-      "packages/remote-wsl/package.json has engines.vscode '', expected '^1.139.0' (ADR-0007)",
+      "packages/remote-ssh/package.json has engines.vscode '^1.74.0', expected '^1.125.0' (ADR-0007)",
+      "packages/remote-wsl/package.json has engines.vscode '', expected '^1.125.0' (ADR-0007)",
+    ]);
+  });
+
+  it('reports an acceptance extension whose engines.vscode is not the floor (ADR-0007)', () => {
+    workspace.write('tests/acceptance/runner/package.json', {
+      engines: {vscode: '^1.139.0'},
+    });
+    workspace.write('tests/acceptance/window-agent/package.json', {
+      engines: {vscode: '^1.125.0'},
+    });
+    deepStrictEqual(checkLayout(workspace.root), [
+      "tests/acceptance/runner/package.json has engines.vscode '^1.139.0', expected '^1.125.0' (ADR-0007)",
     ]);
   });
 
   it('reports an extension without its LICENSE', () => {
     workspace.writeManifest('remote-ssh', {
       publisher: 'remote-oss',
-      engines: {vscode: '^1.139.0'},
+      engines: {vscode: '^1.125.0'},
     });
     deepStrictEqual(checkLayout(workspace.root), [
       'packages/remote-ssh/LICENSE is missing (every extension ships the MIT licence)',
@@ -122,7 +134,7 @@ describe('check-layout', () => {
   it("reports an extension whose LICENSE differs from the repository's", () => {
     workspace.writeManifest('remote-ssh', {
       publisher: 'remote-oss',
-      engines: {vscode: '^1.139.0'},
+      engines: {vscode: '^1.125.0'},
     });
     workspace.write('packages/remote-ssh/LICENSE', 'Different\n');
     deepStrictEqual(checkLayout(workspace.root), [
@@ -133,7 +145,7 @@ describe('check-layout', () => {
   it('reports a .vscodeignore that leaves LICENSE out', () => {
     workspace.writeManifest('remote-ssh', {
       publisher: 'remote-oss',
-      engines: {vscode: '^1.139.0'},
+      engines: {vscode: '^1.125.0'},
     });
     workspace.write('packages/remote-ssh/LICENSE', 'text\n');
     workspace.write('packages/remote-ssh/.vscodeignore', 'out/**\n');

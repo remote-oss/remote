@@ -223,6 +223,32 @@ describe('coverage', () => {
       strictEqual(measureUnit(workspace.root, packageUnit(), []), undefined);
     });
 
+    it('tooling-74: test files run in parallel processes give the numbers of a serial run', function () {
+      this.timeout(60_000);
+      workspace.write(
+        'packages/remote-a/test/unit/second.test.ts',
+        "import {strictEqual} from 'node:assert';\nimport {sign} from '../../src/sign.ts';\n\nit('signs a positive number', () => {\n  strictEqual(sign(1), 'positive');\n});\n",
+      );
+      // The second file alone covers the other branch: a parallel run that lost one process's coverage reads below 100.
+      const full = {lines: 100, branches: 100, functions: 100};
+      deepStrictEqual(
+        [
+          measureUnit(workspace.root, packageUnit(), [], 2),
+          measureUnit(workspace.root, packageUnit(), [], 1),
+        ],
+        [full, full],
+      );
+    });
+
+    it('tooling-74: a failing test in a parallel run returns nothing', function () {
+      this.timeout(60_000);
+      workspace.write(
+        'packages/remote-a/test/unit/sign.test.ts',
+        "import {strictEqual} from 'node:assert';\n\nit('fails', () => {\n  strictEqual(1, 2);\n});\n",
+      );
+      strictEqual(measureUnit(workspace.root, packageUnit(), [], 2), undefined);
+    });
+
     it('tooling-21: a unit test of 2.5 s passes under the 10 s default', function () {
       this.timeout(30_000);
       workspace.write(

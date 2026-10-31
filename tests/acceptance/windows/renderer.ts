@@ -1672,17 +1672,36 @@ export async function quickPickOf(
 export interface QuickPickRow {
   label: string;
   description: string;
+  buttons: string[];
+  focused: boolean;
+}
+
+/** A row of a quick pick as {@link detailedQuickPickRows} reads it: also its second line and its codicons. */
+export interface DetailedQuickPickRow extends QuickPickRow {
   /** The second line of the row, the hover text the pick shows beside the label. */
   detail: string;
   /** The codicon classes the row carries, such as `codicon-verified`. */
   icons: string[];
-  buttons: string[];
-  focused: boolean;
 }
 
 /** The rows of the quick pick open in window `name`, with what each shows; none when no quick pick is open. */
 export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
   return evaluate<QuickPickRow[]>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      description: row.querySelector('.label-description')?.textContent ?? '',
+      buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+      focused: row.classList.contains('focused'),
+    }))`,
+  );
+}
+
+/** The rows of the quick pick open in window `name` with their second lines and codicons as well; none when no quick pick is open. */
+export async function detailedQuickPickRows(
+  name: string,
+): Promise<DetailedQuickPickRow[]> {
+  return evaluate<DetailedQuickPickRow[]>(
     name,
     `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
       label: row.querySelector('.label-name')?.textContent ?? '',
@@ -2108,6 +2127,30 @@ export async function terminalText(name: string): Promise<string> {
       const rows = document.querySelectorAll('.xterm-rows');
       const target = rows[rows.length - 1];
       return target?.innerText ?? '';
+    })()`,
+  );
+}
+
+/** A run of text in the active terminal, with the number of the palette colour it is drawn in; none for the default. */
+export interface TerminalSpan {
+  text: string;
+  foreground: number | undefined;
+}
+
+/** The runs of text of window `name`'s active terminal, in order, each with the palette colour xterm gave its cell. */
+export async function terminalSpans(name: string): Promise<TerminalSpan[]> {
+  return evaluate<TerminalSpan[]>(
+    name,
+    `(() => {
+      const rows = document.querySelectorAll('.xterm-rows');
+      const target = rows[rows.length - 1];
+      return [...(target?.querySelectorAll('span') ?? [])].map(span => {
+        const colour = /xterm-fg-(\\d+)/.exec(span.className);
+        return {
+          text: span.textContent ?? '',
+          foreground: colour === null ? undefined : Number(colour[1]),
+        };
+      });
     })()`,
   );
 }

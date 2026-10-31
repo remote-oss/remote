@@ -6,6 +6,8 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   inWindow,
@@ -22,11 +24,13 @@ import {
 } from '../windows/folder-windows.ts';
 import {
   answerDialog,
+  editorTabs,
   focusToasts,
   notificationCentre,
   notificationProgress,
   pressDelete,
   statusBarText,
+  terminalText,
   toastDetails,
   type ToastDetails,
   waitForDialog,
@@ -53,18 +57,16 @@ interface Sample {
   indicator: string;
 }
 
-/** Samples window `name` every 100 ms until `stop` is called; a reading that fails because the window reloads is skipped. */
-function sampling(name: string): {stop(): Promise<Sample[]>} {
-  const samples: Sample[] = [];
+/** Reads every 100 ms until `stop` is called; a reading that fails because the window reloads is skipped. */
+function sampled<Reading>(read: () => Promise<Reading>): {
+  stop(): Promise<Reading[]>;
+} {
+  const readings: Reading[] = [];
   const gate = {done: false};
   const loop = (async () => {
     while (!gate.done) {
       try {
-        samples.push({
-          takenAt: Date.now(),
-          toasts: await toastDetails(name),
-          indicator: await statusBarText(name, 'status.host'),
-        });
+        readings.push(await read());
       } catch {
         // The window is reloading.
       }
@@ -75,8 +77,48 @@ function sampling(name: string): {stop(): Promise<Sample[]>} {
     stop: async () => {
       gate.done = true;
       await loop;
-      return samples;
+      return readings;
     },
+  };
+}
+
+/** Samples window `name`'s toasts and remote indicator every 100 ms until `stop` is called. */
+function sampling(name: string): {stop(): Promise<Sample[]>} {
+  return sampled(async () => ({
+    takenAt: Date.now(),
+    toasts: await toastDetails(name),
+    indicator: await statusBarText(name, 'status.host'),
+  }));
+}
+
+/** What window `name` showed on its surfaces and the log held while `connect` went on, and the log terminal's text after it. */
+async function flowOf(name: string, connect: () => Promise<void>) {
+  const logMark = containersLog().length;
+  const sampler = sampled(async () => [
+    await statusBarText(name, 'status.host'),
+    await windowTitle(name),
+    ...(await toastDetails(name)).map(toast => toast.message),
+    ...(await editorTabs(name)).map(editor => editor.label),
+  ]);
+  await connect();
+  const surfaces = (await sampler.stop()).flat();
+  await startInWindow(name, 'remote-containers.revealLogTerminal');
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  const terminal = await terminalText(name);
+  const lines = containersLogSince(logMark);
+  return {
+    onSurfaces: surfaces.filter(text =>
+      NEVER_SHOWN.some(shown => text.includes(shown)),
+    ),
+    inTerminal: NEVER_SHOWN.filter(
+      shown => shown !== 'Starting container' && terminal.includes(shown),
+    ),
+    inLog: NEVER_SHOWN.filter(
+      shown =>
+        shown !== 'Starting container' &&
+        lines.some(line => line.includes(shown)),
+    ),
+    stepInLog: lines.includes('Starting container'),
   };
 }
 
@@ -253,6 +295,39 @@ describe('F-0408 the connect progress (card containers-53)', function () {
         },
       );
       await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0408 AC-12 (p12): in a first open, a rebuild and the reopening of a stopped container, none of the strings that never show is in a notification, the indicator, the title, an editor tab, the log terminal or the log, and Starting container is a step of the log alone', async () => {
+    const folder = slowBuildFolder('c58-surfaces', 'Surfaces');
+    try {
+      const first = await openFolderWindow(folder);
+      const opened = await flowOf(first, () => reopenInContainer(first));
+      const rebuilt = await flowOf(first, () =>
+        reopenInContainer(first, 300_000, 'remote-containers.rebuildContainer'),
+      );
+      const [containerId = ''] = await devContainersOf(folder);
+      await closeWindow(first);
+      await promisify(execFile)('docker', ['stop', containerId]);
+      const second = await openFolderWindow(folder);
+      const restarted = await flowOf(second, () => reopenInContainer(second));
+      await closeWindow(second);
+      const clean = {
+        onSurfaces: [],
+        inTerminal: [],
+        inLog: [],
+        stepInLog: true,
+      };
+      deepStrictEqual(
+        {opened, rebuilt, restarted},
+        {
+          opened: clean,
+          rebuilt: clean,
+          restarted: clean,
+        },
+      );
     } finally {
       await removeContainers(folder);
     }
