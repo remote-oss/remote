@@ -15,6 +15,7 @@ import type {
 } from '../../src/authoring/wizard-stages.ts';
 import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
+import {repeatedInput, TAKE_DEFAULTS} from './option-picker.fixture.ts';
 import {FakePicker} from './template-picker.fixture.ts';
 
 const NEVER = new AbortController().signal;
@@ -190,8 +191,6 @@ const ALPINE = templateOf(
   {
     imageVariant: {type: 'string', default: '3.23'},
     flag: {type: 'boolean', default: false},
-    free: {type: 'string'},
-    object: {default: {}},
   },
   ['.github/dependabot.yml'],
 );
@@ -274,10 +273,14 @@ function sceneOf(
       templateMetadata: () =>
         Promise.resolve({
           kind: 'metadata',
-          metadata: {options: {size: {default: 3}}, optionalPaths: ['a', 2]},
+          metadata: {
+            options: {size: {type: 'string', default: '3'}},
+            optionalPaths: ['a', 2],
+          },
         }),
       translate: template => template,
     },
+    options: repeatedInput(TAKE_DEFAULTS),
     write: async request => {
       scene.written.push(request);
       await request.adjust?.('/scratch');
@@ -509,7 +512,7 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list of this card is the template pick alone', () => {
+  it('F-0801 BR-5: the stage list is the template pick and the template’s options', () => {
     const scene = sceneOf();
     const stages = stagesOf({kind: 'catalogue', templates: [ALPINE]}, {
       ...scene.ports,
@@ -518,7 +521,7 @@ describe('the wizard (card containers-80)', () => {
     } satisfies StagePorts);
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick'],
+      ['templatePick', 'templateOptions'],
     );
   });
 

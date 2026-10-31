@@ -174,3 +174,29 @@ export const PRESS_BACK: Step = picker => {
 export const PRESS_ESCAPE: Step = picker => {
   picker.hide();
 };
+
+/** The step that takes what a screen offers as it is: the focused row, or the rows already checked. */
+export const TAKE_DEFAULTS: Step = picker => {
+  if (picker.canSelectMany) {
+    picker.acceptChecked(picker.selectedItems.map(each => each.label));
+  } else {
+    picker.acceptFocused();
+  }
+};
+
+/** The quick input over fakes whose every screen is played by `step`. */
+export function repeatedInput(step: Step): Omit<QuickInputPorts, 'translate'> {
+  return {
+    backButton: BACK_BUTTON,
+    createQuickPick: () => {
+      const picker = new FakeOptionPicker();
+      picker.show = () => {
+        picker.shown = true;
+        queueMicrotask(() => {
+          step(picker);
+        });
+      };
+      return picker;
+    },
+  };
+}
