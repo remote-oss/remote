@@ -1108,6 +1108,62 @@ export async function welcomeText(
   );
 }
 
+/** The words of the links in the welcome text of view `viewName` in window `name`, in order; none when it shows none. */
+export async function welcomeLinks(
+  name: string,
+  viewName: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('.welcome-view-content a') ?? [])].map(link => link.textContent ?? '');
+    })()`,
+  );
+}
+
+/** What the Extensions view shows of one extension's card. */
+export interface ExtensionCard {
+  name: string;
+  publisher: string;
+  description: string;
+  /** The address of the card's icon image, empty when it shows core's default icon. */
+  iconSource: string;
+  /** The activation time core shows on the card (`12ms`); none when it shows none. */
+  badge: string | undefined;
+}
+
+/** The card of the Extensions entry `displayName` in window `name`; it fails when the view lists it not once. */
+export async function extensionCard(
+  name: string,
+  displayName: string,
+): Promise<ExtensionCard> {
+  const card = await evaluate<ExtensionCard | null>(
+    name,
+    `(() => {
+      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const row = rows[0];
+      const icon = row.querySelector('img.icon');
+      return {
+        name: row.querySelector('.name')?.textContent ?? '',
+        publisher: row.querySelector('.publisher-name')?.textContent ?? '',
+        description: row.querySelector('.description')?.textContent ?? '',
+        iconSource: icon !== null && icon.style.display !== 'none' ? icon.getAttribute('src') ?? '' : '',
+        badge: row.querySelector('.activationTime')?.textContent ?? undefined,
+      };
+    })()`,
+  );
+  if (card === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return card;
+}
+
 /** Clicks the link of the welcome text of view `viewName` whose words are `linkText`; it fails naming what it did not find. */
 export async function welcomeLink(
   name: string,
@@ -1852,12 +1908,8 @@ export async function moveQuickPickFocus(
   await pressKey(await pageOf(name), name, key);
 }
 
-/** Types `text` into the input of the quick pick open in window `name`, replacing what is there, and leaves it open. */
-export async function typeInQuickPick(
-  name: string,
-  text: string,
-): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+/** Sets the input of the quick pick open in window `name` to `text`, whether or not the list has a row. */
+async function setQuickPickInput(name: string, text: string): Promise<void> {
   await evaluate<null>(
     name,
     `(() => {
@@ -1869,6 +1921,20 @@ export async function typeInQuickPick(
       return null;
     })()`,
   );
+}
+
+/** Types `text` into the input of the quick pick open in window `name`, replacing what is there, and leaves it open. */
+export async function typeInQuickPick(
+  name: string,
+  text: string,
+): Promise<void> {
+  await waitForQuickPick(name, 30_000);
+  await setQuickPickInput(name, text);
+}
+
+/** Empties the input of the quick pick open in window `name`, which brings back the rows a typed text had filtered out. */
+export async function clearQuickPickInput(name: string): Promise<void> {
+  await setQuickPickInput(name, '');
 }
 
 /** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
@@ -2243,4 +2309,62 @@ export async function typeInTerminal(
       await pressCharacter(address, name, character);
     }
   }
+}
+
+/** The title the quick pick open in window `name` shows in its title bar. */
+export async function quickPickTitle(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `document.querySelector('${QUICK_WIDGET} .quick-input-title')?.textContent ?? ''`,
+  );
+}
+
+/** Presses the Back button of the title bar of the quick pick open in window `name`. */
+export async function pressQuickPickBack(name: string): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      document.querySelector('${QUICK_WIDGET} .quick-input-titlebar .codicon-quick-input-back').click();
+      return null;
+    })()`,
+  );
+}
+
+/** The rows of the multi-select quick pick open in window `name` with the state of each one's checkbox. */
+export async function quickPickChecks(
+  name: string,
+): Promise<Array<{label: string; checked: boolean}>> {
+  return evaluate<Array<{label: string; checked: boolean}>>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].map(row => ({
+      label: row.getAttribute('aria-label') ?? '',
+      checked: row.getAttribute('aria-checked') === 'true',
+    }))`,
+  );
+}
+
+/** Clicks the checkbox of the row labelled `label` of the multi-select quick pick open in window `name`. */
+export async function toggleQuickPickRow(
+  name: string,
+  label: string,
+): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.getAttribute('aria-label') === ${JSON.stringify(label)});
+      row.querySelector('.monaco-custom-toggle').click();
+      return null;
+    })()`,
+  );
+}
+
+/** Clicks the OK button of the multi-select quick pick open in window `name`. */
+export async function pressQuickPickOk(name: string): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      document.querySelector('${QUICK_WIDGET} .quick-input-action .monaco-button').click();
+      return null;
+    })()`,
+  );
 }

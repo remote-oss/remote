@@ -2898,7 +2898,7 @@ describe('acceptance', () => {
       );
     });
 
-    it("tooling-70: a launch on the Ubuntu host checks that host: its container and its ssh_config stand for the run's", () => {
+    it("tooling-70, tooling-75: a launch on the Ubuntu host checks that host: its container and its ssh_config stand for the run's, and its rows know its base", () => {
       const {env} = vscodiumConfiguration(
         workspace.root,
         {
@@ -2911,8 +2911,12 @@ describe('acceptance', () => {
         {...LAUNCH, hostBase: 'ubuntu-26.04'},
       );
       deepStrictEqual(
-        [env.HARNESS_CONTAINER, env.HARNESS_SSH_CONFIG],
-        ['ubuntu-host', path.join('/run', 'ssh_config-ubuntu-26.04')],
+        [env.HARNESS_CONTAINER, env.HARNESS_SSH_CONFIG, env.HARNESS_HOST_BASE],
+        [
+          'ubuntu-host',
+          path.join('/run', 'ssh_config-ubuntu-26.04'),
+          'ubuntu-26.04',
+        ],
       );
     });
 

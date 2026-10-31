@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {probe, type ProbedHost, type ScriptParameters} from 'lib-server';
+import {hostBaseIs} from '../../../tools/host-variants.ts';
 import {startHost, type RunningHost} from './host-fixture.ts';
 
 const PARAMETERS: ScriptParameters = {
@@ -62,7 +63,10 @@ describe('F-2401 the probe of a host', function () {
     return outcome.host;
   }
 
-  it('contracts V2: finds an Alpine host to be a musl Linux with the tools of BusyBox', async () => {
+  it('contracts V2: finds an Alpine host to be a musl Linux with the tools of BusyBox', async function () {
+    if (!hostBaseIs('alpine')) {
+      this.skip();
+    }
     const {operatingSystem, libc, release, tools, busyboxWget} = await probed();
     deepStrictEqual(
       {operatingSystem, libc, release, tools, busyboxWget},
@@ -72,6 +76,31 @@ describe('F-2401 the probe of a host', function () {
         release: 'alpine',
         tools: ['wget', 'tar', 'unzip', 'flock', 'gzip'],
         busyboxWget: true,
+      },
+    );
+  });
+
+  it('contracts V2: finds an Ubuntu 26.04 host to be a glibc Linux with uutils', async function () {
+    if (!hostBaseIs('ubuntu-26.04')) {
+      this.skip();
+    }
+    const {operatingSystem, libc, release, tools, busyboxWget} = await probed();
+    deepStrictEqual(
+      {
+        operatingSystem,
+        libc,
+        release,
+        tools,
+        busyboxWget,
+        coreutils: host.onHost('ls', '--version').split('\n')[0],
+      },
+      {
+        operatingSystem: 'linux',
+        libc: 'glibc',
+        release: 'ubuntu',
+        tools: ['wget', 'tar', 'flock', 'gzip'],
+        busyboxWget: false,
+        coreutils: 'ls (uutils coreutils) 0.10.0',
       },
     );
   });

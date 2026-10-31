@@ -1339,12 +1339,13 @@ export function vscodiumConfiguration(
       'pids',
     ),
     HARNESS_USER_DATA: userDataFolderOf(runFolder),
-    // A launch on a host of another base checks that host, through its own ssh_config.
+    // A launch on a host of another base checks that host, through its own ssh_config, and its rows know its base.
     ...(launch.hostBase === undefined
       ? {}
       : {
           HARNESS_CONTAINER: environment.HARNESS_HOST_UBUNTU_CONTAINER ?? '',
           HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
+          HARNESS_HOST_BASE: launch.hostBase,
         }),
     ...(launch.ownScript === true
       ? {

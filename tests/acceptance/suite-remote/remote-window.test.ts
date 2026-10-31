@@ -2,6 +2,7 @@ import {deepStrictEqual, notStrictEqual, strictEqual} from 'node:assert';
 import {hostname} from 'node:os';
 import * as vscode from 'vscode';
 import {cliNotUsedLine} from '../../../packages/remote-ssh/src/pipeline/server-steps.ts';
+import {hostBaseIs} from '../../../tools/host-variants.ts';
 import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import {hostServer, isRunning, keepServer} from '../suite/host-server.ts';
 
@@ -87,7 +88,10 @@ describe('the remote window of the VSCodium run', () => {
     strictEqual(await isRunning(server.processId), true);
   });
 
-  it('F-2401 AC-2: the Alpine host with libstdc++ and libgcc connected with no prerequisite message', async () => {
+  it('F-2401 AC-2: the Alpine host with libstdc++ and libgcc connected with no prerequisite message', async function () {
+    if (!hostBaseIs('alpine')) {
+      this.skip();
+    }
     const packages = await onHost('apk', 'info', '-e', 'libstdc++', 'libgcc');
     deepStrictEqual(
       [
@@ -121,6 +125,27 @@ describe('the remote window of the VSCodium run', () => {
   function connectLines(surface: string) {
     return recordLines(surface).filter(line => line.time >= connect.start);
   }
+
+  it('#1398: an Ubuntu 26.04 host (glibc, libstdc++6) connects with no prerequisite message', async function () {
+    if (!hostBaseIs('ubuntu-26.04')) {
+      this.skip();
+    }
+    deepStrictEqual(
+      [
+        (await onHost('cat', '/etc/os-release'))
+          .split('\n')
+          .includes('VERSION_ID="26.04"'),
+        (await onHost('getconf', 'GNU_LIBC_VERSION')).startsWith('glibc '),
+        (await onHost('dpkg', '-s', 'libstdc++6'))
+          .split('\n')
+          .includes('Status: install ok installed'),
+        vscode.env.remoteName,
+        recordLines().some(line => line.question.includes('prerequisites')),
+        connectionLog().some(line => line.includes('prerequisites')),
+      ],
+      [true, true, true, 'ssh-remote', false, false],
+    );
+  });
 
   /** The texts of the connect's progress, title first, and the phases' details flags. */
   function progress(): Array<{text: string; details: boolean | undefined}> {

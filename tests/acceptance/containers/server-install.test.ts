@@ -7,6 +7,8 @@ import {volumeServerFolder} from 'lib-product';
 import {
   activeEditorOf,
   closeWindow,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   connectedToContainer,
   devContainersOf,
@@ -21,6 +23,7 @@ import {
 import {
   answerDialog,
   dialogOf,
+  primaryButtonOf,
   notifications,
   pressEscape,
   quickPickOf,
@@ -33,6 +36,7 @@ import {
   removeContainers,
   setUserSetting,
 } from '../windows/folder-windows.ts';
+import {installBrowser, openedUrls} from '../windows/web-ui-support.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -205,6 +209,7 @@ describe('F-0503 server install (card containers-41)', function () {
   }
 
   before(async () => {
+    installBrowser();
     downloadFolder = path.join(variable('HARNESS_RUN_FOLDER'), 'c41-cache');
     mkdirSync(downloadFolder, {recursive: true});
     await setUserSetting('remote.serverDownloadFolder', downloadFolder);
@@ -361,9 +366,20 @@ describe('F-0503 server install (card containers-41)', function () {
     );
   });
 
-  it('F-0503 AC-13 (s6): a removed container gives a new id, and Installing server does not show', async () => {
+  /** When the server's settings file in `data/Machine/` of the container was last written, in seconds. */
+  async function machineWrittenAt(containerId: string): Promise<number> {
+    return Number(
+      await inContainer(
+        containerId,
+        `stat -c %Y ~/${editorProduct().serverDataFolderName}/data/Machine/settings.json`,
+      ),
+    );
+  }
+
+  it('F-0503 AC-13 (s6): a removed container gives a new id with new data/Machine/ files, and Installing server does not show', async () => {
     const folder = folderOf('c41-removed');
     const first = await connect(folder);
+    const firstWritten = await machineWrittenAt(first.containerId);
     await closeWindow(first.name);
     opened.length = 0;
     await removeContainers(folder);
@@ -371,9 +387,10 @@ describe('F-0503 server install (card containers-41)', function () {
     deepStrictEqual(
       {
         newId: second.containerId !== first.containerId,
+        newFiles: (await machineWrittenAt(second.containerId)) > firstWritten,
         installing: second.phases.includes(INSTALLING),
       },
-      {newId: true, installing: false},
+      {newId: true, newFiles: true, installing: false},
     );
   });
 
@@ -429,12 +446,13 @@ describe('F-0503 server install (card containers-41)', function () {
    */
   async function withFailingSource(
     body: (folder: string, downloads: string) => Promise<void>,
+    source = failingSource,
   ): Promise<void> {
     await removeTree();
     const downloads = path.join(variable('HARNESS_RUN_FOLDER'), 'c41-failing');
     mkdirSync(downloads, {recursive: true});
     await setUserSetting('remote.serverDownloadFolder', downloads);
-    await setUserSetting('remote.serverDownloadBaseUrl', failingSource);
+    await setUserSetting('remote.serverDownloadBaseUrl', source);
     try {
       await body(folderOf('c41-failing'), downloads);
     } finally {
@@ -463,51 +481,89 @@ describe('F-0503 server install (card containers-41)', function () {
     buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
   };
 
-  it('F-0503 AC-19 (s9): a source that answers 404 shows the generic dialog with Retry, no S157 notification, and leaves the container running', async () => {
-    await withFailingSource(async folder => {
-      const name = await openFolderWindow(folder);
-      opened.push(name);
-      const shown = new Set<string>();
-      const watch = {done: false};
-      const polling = (async () => {
-        while (!watch.done) {
-          for (const text of await notifications(name).catch(() => [])) {
-            shown.add(text);
-          }
-          await new Promise(resolve => setTimeout(resolve, 250));
+  /** What a connect to a folder whose download fails shows: the dialog, its primary button, the notices and the log's URL. */
+  async function failedDownload(
+    folder: string,
+    url: string,
+  ): Promise<{
+    dialog: {message: string; details: string; buttons: string[]};
+    primary: string | undefined;
+    waiting: boolean;
+    containers: number;
+    status: string;
+    logNamesUrl: boolean;
+  }> {
+    const name = await openFolderWindow(folder);
+    opened.push(name);
+    const shown = new Set<string>();
+    const watch = {done: false};
+    const polling = (async () => {
+      while (!watch.done) {
+        for (const text of await notifications(name).catch(() => [])) {
+          shown.add(text);
         }
-      })();
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    })();
+    const mark = containersLog().length;
+    await reopenStarted(name);
+    const dialog = await failureDialog(name);
+    const primary = await primaryButtonOf(name);
+    watch.done = true;
+    await polling;
+    const containerIds = await devContainersOf(folder);
+    const {stdout} = await execFileAsync('docker', [
+      'inspect',
+      '-f',
+      '{{.State.Status}}',
+      containerIds[0] ?? '',
+    ]);
+    return {
+      dialog,
+      primary,
+      waiting: [...shown].some(text => text.includes(S157)),
+      containers: containerIds.length,
+      status: stdout.trim(),
+      logNamesUrl: containersLogSince(mark).some(line => line.includes(url)),
+    };
+  }
+
+  it('F-0503 AC-19 (s9): a source that answers 404 shows the generic dialog with Retry primary, no S157 notification, the container running and the URL in the log', async () => {
+    await withFailingSource(async folder => {
       const before = requestCount();
-      await reopenStarted(name);
-      const dialog = await failureDialog(name);
-      watch.done = true;
-      await polling;
-      const containerIds = await devContainersOf(folder);
-      const {stdout} = await execFileAsync('docker', [
-        'inspect',
-        '-f',
-        '{{.State.Status}}',
-        containerIds[0] ?? '',
-      ]);
+      const failed = await failedDownload(folder, failingSource);
       deepStrictEqual(
         {
-          dialog,
-          waiting: [...shown].some(text => text.includes(S157)),
-          containers: containerIds.length,
-          status: stdout.trim(),
+          ...failed,
           requests: requestsSince(before).every(request =>
             request.startsWith('GET /missing/'),
           ),
         },
         {
           dialog: FAILED_SETUP,
+          primary: 'Retry',
           waiting: false,
           containers: 1,
           status: 'running',
+          logNamesUrl: true,
           requests: true,
         },
       );
     });
+  });
+
+  it('F-0503 AC-19 (s9-unreachable): a source nothing listens on shows the generic dialog with Retry primary, no S157 notification, the container running and the URL in the log', async () => {
+    const unreachable = 'http://127.0.0.1:1/ok';
+    await withFailingSource(async folder => {
+      deepStrictEqual(await failedDownload(folder, unreachable), {
+        dialog: FAILED_SETUP,
+        primary: 'Retry',
+        waiting: false,
+        containers: 1,
+        status: 'running',
+        logNamesUrl: true,
+      });
+    }, unreachable);
   });
 
   it('F-0503 AC-20 (s10): Retry with the cause unchanged ends in the same dialog on the same container, and Retry after the source is fixed connects it', async () => {
@@ -532,7 +588,7 @@ describe('F-0503 server install (card containers-41)', function () {
     });
   });
 
-  it('F-0503 AC-43 (s11): the editor’s own server folder holds the install, no other server folder is made, and the download is of the editor’s quality', async () => {
+  it('F-0503 AC-43 (ruling-server-layout): the editor’s own server folder holds the install, the token file and data/Machine/, no other server folder is made, remoteagent.log is in the editor’s state folder and not in the server folder, and the download is of the editor’s quality', async () => {
     await removeTree();
     const downloads = path.join(variable('HARNESS_RUN_FOLDER'), 'c41-names');
     mkdirSync(downloads, {recursive: true});
@@ -542,12 +598,33 @@ describe('F-0503 server install (card containers-41)', function () {
       const first = await connect(folderOf('c41-names'));
       const tree = await treeOfImage();
       const product = editorProduct();
+      const base = `~/${product.serverDataFolderName}`;
       deepStrictEqual(
         {
           serverFolders: (await inContainer(first.containerId, 'ls -A ~'))
             .split('\n')
             .filter(entry => entry.startsWith('.vscod')),
           link: (await installedIn(first.containerId, tree)).link,
+          token: await inContainer(
+            first.containerId,
+            `test -s ${base}/.${product.commit}.token && echo yes || echo no`,
+          ),
+          machine: await inContainer(
+            first.containerId,
+            `test -d ${base}/data/Machine && echo yes || echo no`,
+          ),
+          remoteAgentLogs: (
+            await inContainer(
+              first.containerId,
+              'find ~ /tmp -name remoteagent.log 2>/dev/null',
+            )
+          )
+            .split('\n')
+            .map(file =>
+              file.includes(product.serverDataFolderName)
+                ? 'in the server folder'
+                : file.replace(/\/\d{8}T\d{6}\//, '/<timestamp>/'),
+            ),
           request: requestsSince(before),
           archive: filesUnder(downloads).filter(file =>
             file.endsWith(`-${product.quality}.tar.gz`),
@@ -556,6 +633,12 @@ describe('F-0503 server install (card containers-41)', function () {
         {
           serverFolders: [product.serverDataFolderName],
           link: tree,
+          token: 'yes',
+          machine: 'yes',
+          // The server's own log is the editor's state folder's, not the server folder's data/logs/; .<commit>.log stands in.
+          remoteAgentLogs: [
+            `/root/.local/state/${product.nameLong}/<timestamp>/remoteagent.log`,
+          ],
           request: [
             `GET /ok/commit:${product.commit}/server-${updateServicePlatform(tree)}/${product.quality}`,
           ],
@@ -566,6 +649,11 @@ describe('F-0503 server install (card containers-41)', function () {
       await setUserSetting('remote.serverDownloadFolder', downloadFolder);
     }
   });
+
+  /** Clicks More Actions... on the dialog open in window `window`. */
+  function answerMoreActions(window: string): Promise<void> {
+    return answerDialog(window, 'More Actions...');
+  }
 
   /** The failure dialog of a connect to a container whose glibc is too old, with the window it is in. */
   async function requirementsDialog(name: string): Promise<string> {
@@ -626,6 +714,40 @@ describe('F-0503 server install (card containers-41)', function () {
     );
   });
 
+  it('F-0503 AC-9 (ruling-server-layout): every connection line of the server log comes from 127.0.0.1, with at least one of each kind, and the token file is not empty and readable by its owner only', async () => {
+    const product = editorProduct();
+    const connected = await connect(
+      folderOf('c41-layout', {remoteUser: 'node'}),
+    );
+    const base = `~/${product.serverDataFolderName}`;
+    const serverLog = await inContainer(
+      connected.containerId,
+      `cat ${base}/.${product.commit}.log`,
+      'node',
+    );
+    const connections = [
+      ...serverLog.matchAll(
+        /\[([0-9.]+)\]\[[0-9a-f]+\]\[(ManagementConnection|ExtensionHostConnection)\] New connection established\./g,
+      ),
+    ].map(match => [match[1], match[2]]);
+    deepStrictEqual(
+      {
+        sources: [...new Set(connections.map(([source]) => source))],
+        kinds: [...new Set(connections.map(([, kind]) => kind))].sort(),
+        token: await inContainer(
+          connected.containerId,
+          `stat -c '%a %s' ${base}/.${product.commit}.token`,
+          'node',
+        ),
+      },
+      {
+        sources: ['127.0.0.1'],
+        kinds: ['ExtensionHostConnection', 'ManagementConnection'],
+        token: '600 32',
+      },
+    );
+  });
+
   it('F-0503 AC-10, AC-29 (s14): an Alpine container gets the Alpine tree of its architecture with no dialog, and the progress notification is gone after the connect', async () => {
     const connected = await connect(folderOf('c41-alpine'));
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -666,35 +788,66 @@ describe('F-0503 server install (card containers-41)', function () {
     ]);
   });
 
-  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog shows the disconnected status and the five-item recovery quick pick of ruling 14, and Escape on it closes it and leaves the window disconnected', async () => {
-    const window = await requirementsDialog('c41-requirements-pick');
-    await answerDialog(window, 'More Actions...');
-    const pick = await waitForQuickPick(window, 30_000);
-    const indicator = (await statusItem(window, 'status.host')).text;
-    await pressEscape(window);
-    deepStrictEqual(
-      {
+  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog, or Escape on the dialog itself, shows the disconnected status and the five-item recovery quick pick of ruling 14 and opens no URL, and Escape on it closes it and leaves the status', async () => {
+    const urlsBefore = openedUrls().length;
+    const results: unknown[] = [];
+    for (const [label, leave] of [
+      ['c41-requirements-pick', answerMoreActions],
+      ['c41-requirements-escape', pressEscape],
+    ] as const) {
+      const window = await requirementsDialog(label);
+      await leave(window);
+      const pick = await waitForQuickPick(window, 30_000);
+      const indicator = (await statusItem(window, 'status.host')).text;
+      await pressEscape(window);
+      results.push({
         pick,
         indicator,
         after: [
           await dialogOf(window),
           (await statusItem(window, 'status.host')).text,
         ],
+      });
+    }
+    const expected = {
+      pick: {
+        placeholder: S272,
+        items: [
+          'Reload Window',
+          'Rebuild Container',
+          'Edit devcontainer.json Locally',
+          'Open Recent...',
+          'Open Documentation',
+        ],
       },
-      {
-        pick: {
-          placeholder: S272,
-          items: [
-            'Reload Window',
-            'Rebuild Container',
-            'Edit devcontainer.json Locally',
-            'Open Recent...',
-            'Open Documentation',
-          ],
-        },
-        indicator: 'Disconnected from Dev Container',
-        after: [undefined, 'Disconnected from Dev Container'],
-      },
+      indicator: 'Disconnected from Dev Container',
+      after: [undefined, 'Disconnected from Dev Container'],
+    };
+    deepStrictEqual(
+      [results, openedUrls().slice(urlsBefore)],
+      [[expected, expected], []],
+    );
+  });
+
+  it('F-0503 AC-16 (s16-control): Learn More on the requirements dialog asks to open the extension’s requirements page and opens it on Open, the control of the rows that open none', async () => {
+    const urlsBefore = openedUrls().length;
+    const window = await requirementsDialog('c41-requirements-learn');
+    await answerDialog(window, 'Learn More');
+    const confirmation = await waitForDialog(window, 30_000);
+    await answerDialog(window, 'Open');
+    await waitFor(
+      'the requirements page to be opened',
+      () => openedUrls().length > urlsBefore,
+      30_000,
+    );
+    deepStrictEqual(
+      [confirmation.message, openedUrls().slice(urlsBefore)],
+      [
+        `Do you want ${editorProduct().nameLong} to open the external website?`,
+        [
+          'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md#requirements',
+        ],
+      ],
     );
   });
 

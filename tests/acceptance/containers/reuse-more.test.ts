@@ -19,6 +19,7 @@ import {
 import {
   answerDialog,
   dialogOf,
+  editorTabs,
   notifications,
   pageText,
   statusItem,
@@ -42,6 +43,9 @@ const RECOVERY_BUTTONS = [
   'More Actions...',
   'Retry',
 ];
+
+/** How long a connected window is left before its container is removed from outside. */
+const SETTLE_MILLISECONDS = 8000;
 
 /** How long a connect that ends in a dialog takes. */
 const DIALOG_MILLISECONDS = 180_000;
@@ -145,27 +149,81 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
     }
   });
 
-  it('F-0409 AC-12 (r12): a container removed outside the editor leaves the window disconnected under its name, and reloading the window recreates the container', async () => {
-    const folder = devContainerFolder('c52-removed', {name: 'Removed One'});
+  /** Opens a window on a new folder, removes its container from outside, and gives the dialog that follows. */
+  async function removedFromOutside(label: string): Promise<{
+    folder: string;
+    name: string;
+    containerId: string;
+    saying: {message: string; details: string; buttons: string[]};
+    withinFiveSeconds: boolean;
+  }> {
+    const folder = devContainerFolder(label, {name: 'Removed One'});
+    const name = await reopened(folder);
+    const containerId = await containerOf(folder);
+    await settled(name);
+    // Core draws no dialog for a permanent failure in about the first seconds after the connect.
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+    const began = Date.now();
+    await docker('rm', '-f', containerId);
+    const dialog = await waitForDialog(name, 30_000);
+    return {
+      folder,
+      name,
+      containerId,
+      saying: sayingOf(dialog),
+      withinFiveSeconds: (Date.now() - began) / 1000 < 5,
+    };
+  }
+
+  /** What core's dialog for a connection that cannot be restored says, with its buttons in order. */
+  const CANNOT_RECONNECT = {
+    message: '',
+    details: 'Cannot reconnect. Please reload the window.',
+    buttons: ['Cancel', 'Reload Window'],
+  };
+
+  it('F-0409 AC-12 (r12): a container removed outside the editor gives core’s Cannot reconnect dialog within a few seconds, and Reload Window creates a new container silently', async () => {
+    const removed = await removedFromOutside('c52-removed');
     try {
-      const name = await reopened(folder);
-      const containerId = await containerOf(folder);
-      await settled(name);
-      await docker('rm', '-f', containerId);
-      await disconnected(name, 'Removed One');
-      await reloadWindow(name);
-      await connectedToContainer(name, DIALOG_MILLISECONDS);
-      const [created = ''] = await devContainersOf(folder);
+      await answerDialog(removed.name, 'Reload Window');
+      await connectedToContainer(removed.name, DIALOG_MILLISECONDS);
+      const created = await devContainersOf(removed.folder);
       deepStrictEqual(
         [
-          created !== '' && created !== containerId,
-          (await devContainersOf(folder)).length,
+          removed.saying,
+          removed.withinFiveSeconds,
+          created.length === 1 && created[0] !== removed.containerId,
+          await dialogOf(removed.name),
+          await notifications(removed.name),
         ],
-        [true, 1],
+        [CANNOT_RECONNECT, true, true, undefined, []],
       );
-      await closeWindow(name);
+      await closeWindow(removed.name);
     } finally {
-      await removeContainers(folder);
+      await removeContainers(removed.folder);
+    }
+  });
+
+  it('F-0409 AC-12 (r12-cancel): Cancel on that dialog leaves the window disconnected under its name and the container removed', async () => {
+    const removed = await removedFromOutside('c52-removed-cancel');
+    try {
+      await answerDialog(removed.name, 'Cancel');
+      await disconnected(removed.name, 'Removed One');
+      deepStrictEqual(
+        [
+          removed.saying,
+          await windowTitle(removed.name),
+          await devContainersOf(removed.folder),
+        ],
+        [
+          CANNOT_RECONNECT,
+          '[c52-removed-cancel [Dev Container: Removed One]]',
+          [],
+        ],
+      );
+      await closeWindow(removed.name);
+    } finally {
+      await removeContainers(removed.folder);
     }
   });
 
@@ -238,7 +296,7 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
     }
   });
 
-  it('F-0409 AC-43 (r43): Edit devcontainer.json Locally on that dialog reopens the folder locally and creates no file', async () => {
+  it('F-0409 AC-43 (r43): Edit devcontainer.json Locally on that dialog reopens the folder locally with an editor for the missing file, creates no file and leaves the container running', async () => {
     const folder = devContainerFolder('c52-config-gone-edit', {
       name: 'Config Gone Edit',
     });
@@ -249,6 +307,7 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
     );
     try {
       const name = await reopened(folder);
+      const containerId = await containerOf(folder);
       await settled(name);
       renameSync(configuration, `${configuration}.away`);
       await reloadWindow(name);
@@ -260,9 +319,27 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
         () => activations(name) > activated,
         30_000,
       );
+      await waitFor(
+        `window ${name} to show an editor for the missing file`,
+        async () =>
+          (await editorTabs(name)).some(
+            editor => editor.active && editor.label.startsWith('devcontainer'),
+          ),
+        30_000,
+      );
       deepStrictEqual(
-        [existsSync(configuration), (await windowState(name)).remoteName],
-        [false, null],
+        [
+          existsSync(configuration),
+          /file was not found/i.test(await pageText(name)),
+          (await windowState(name)).remoteName,
+          await docker(
+            'inspect',
+            '--format',
+            '{{.State.Running}}',
+            containerId,
+          ),
+        ],
+        [false, true, null, 'true'],
       );
       await closeWindow(name);
     } finally {
