@@ -72,7 +72,7 @@ F-0106.AC-44	deferred	containers release 1: increment 2 (authoring)
 F-0201.AC-1	acceptance	
 F-0201.AC-2	acceptance	
 F-0201.AC-3	unit	
-F-0201.AC-4	deferred	containers release 1: increment 2 (Podman)
+F-0201.AC-4	acceptance	
 F-0201.AC-5	deferred	containers release 1: later (Compose)
 F-0201.AC-6	deferred	containers release 1: later (Compose)
 F-0201.AC-7	unit	
