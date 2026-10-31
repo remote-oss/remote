@@ -1137,6 +1137,7 @@ describe('containerLifecycleOf', () => {
           ]),
         ),
       ],
+      'volume create vscode': [ran('vscode')],
     });
     const result = await prepared(engine);
     deepStrictEqual(
@@ -1321,6 +1322,27 @@ describe('containerLifecycleOf', () => {
         bridge.ups.length,
       ],
       [1, 1],
+    );
+  });
+
+  it('containers-101, F-0201 AC-4: Podman fails to create a volume that exists as Podman 5.8.9 words it, and the volume that is there is enough: nothing is logged, and up still runs', async () => {
+    const engine = freshEngine({
+      'volume create vscode': [
+        exited(
+          'Error: volume with name vscode already exists: volume already exists',
+        ),
+      ],
+      'volume inspect vscode': [ran('[{"Name":"vscode"}]')],
+    });
+    const bridge = fakeBridge();
+    const result = await prepared(engine, bridge);
+    deepStrictEqual(
+      [
+        result.lines.filter(line => line.includes('vscode volume')),
+        engine.commands.filter(command => command.startsWith('volume ')),
+        bridge.ups.length,
+      ],
+      [[], ['volume create vscode', 'volume inspect vscode'], 1],
     );
   });
 

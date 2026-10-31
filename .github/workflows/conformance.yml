@@ -158,9 +158,11 @@ jobs:
           for folder in tests/conformance/runner/*/; do
             [ ! -f "$folder/package.json" ] || (cd "$folder" && npm install --no-audit --no-fund)
           done
+      # xvfb-run's own screen is 640x480; the cases are recorded on a 1920x1080 display (:99), so the editor fixture and the
+      # replays get that size.
       - name: Fixtures (built once per runner; a fixture the local catalogue verifies is kept)
         run: |
-          display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
+          display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
           # the environment bin/conformance gives fixture.py, for its verify (bin/conformance runs only build and run)
           verified() {
             ( cd tests/conformance/runner/encode && ENCODE_ROOT="$CONFORMANCE_WORK" ENCODE_TESTS="$CONFORMANCE_SUITE/suite" ENCODE_FIXTURES="$CONFORMANCE_WORK/fixtures" \
@@ -187,7 +189,7 @@ jobs:
           args=""
           for feature in $FEATURES; do args="$args --feature $feature"; done
           for id in $IDS; do args="$args --case $id"; done
-          display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
+          display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
           # shellcheck disable=SC2086 # args is a list of options
           ENCODE_EXTENSION="$vsix" display tests/conformance/runner/bin/conformance run $args --slots "$ENCODE_SLOTS" || rc=$?
           echo "rc=${rc:-0}" >> "$GITHUB_ENV"

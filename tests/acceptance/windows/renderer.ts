@@ -645,6 +645,31 @@ export async function toggleRow(
 }
 
 /**
+ * The page's script for a right click on the row `rowLabel` of view `viewName`: it opens the context menu, leaves its
+ * item elements in `items` and runs `after`, which gives the script's value; it gives the JavaScript `missing` when the
+ * view has not one such row.
+ */
+function rowMenuScript(
+  viewName: string,
+  rowLabel: string,
+  missing: string,
+  after: string,
+): string {
+  return `(async () => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return ${missing};
+      }
+      const box = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const items = [...document.querySelectorAll('.context-view .monaco-menu .action-label')];
+      ${after}
+    })()`;
+}
+
+/**
  * The labels of the context menu that a right click on the row `rowLabel` of view `viewName` in window `name` opens, in
  * order; none when it opens no menu. The menu is closed again. It fails naming the row when the view has none by that
  * label.
@@ -656,21 +681,15 @@ export async function rowContextMenu(
 ): Promise<string[]> {
   const menu = await evaluate<string[] | null>(
     name,
-    `(async () => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      if (rows.length !== 1) {
-        return null;
-      }
-      const box = rows[0].getBoundingClientRect();
-      rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const labels = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '');
-      for (const type of ['keydown', 'keyup']) {
+    rowMenuScript(
+      viewName,
+      rowLabel,
+      'null',
+      `for (const type of ['keydown', 'keyup']) {
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
       }
-      return labels;
-    })()`,
+      return items.map(label => label.textContent ?? '');`,
+    ),
   );
   if (menu === null) {
     throw new Error(
@@ -678,6 +697,39 @@ export async function rowContextMenu(
     );
   }
   return menu;
+}
+
+/**
+ * Clicks the item `itemLabel` of the context menu that a right click on the row `rowLabel` of view `viewName` in
+ * window `name` opens. It fails naming the row, or the menu's items, when it finds no such row or item.
+ */
+export async function rowMenuAction(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+  itemLabel: string,
+): Promise<void> {
+  const outcome = await evaluate<string | null>(
+    name,
+    rowMenuScript(
+      viewName,
+      rowLabel,
+      `'no such row'`,
+      `const item = items.find(label => label.textContent === ${JSON.stringify(itemLabel)});
+      if (item === undefined) {
+        return 'no item ' + ${JSON.stringify(JSON.stringify(itemLabel))} + ' among ' + JSON.stringify(items.map(label => label.textContent));
+      }
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        (item.closest('li') ?? item).dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      return '';`,
+    ),
+  );
+  if (outcome !== '') {
+    throw new Error(
+      `window ${name}, view ${viewName}, row ${JSON.stringify(rowLabel)}: ${outcome ?? 'no reply'}`,
+    );
+  }
 }
 
 /** One section of the Extensions view: its title and the display names of its entries. */
@@ -1369,15 +1421,23 @@ const OPEN_CENTRE = '.notifications-center.visible';
 
 const CENTRE_BELL = '[id="status.notifications"] a';
 
+/** A notification of the centre: its text and the labels of its buttons. */
+export interface CentreNotification {
+  message: string;
+  buttons: string[];
+}
+
 /**
- * The text of each notification of window `name`, newest first, read in the notification centre, which this opens
- * when it is closed. Unlike the toasts, the centre holds a notification core did not raise as a toast.
+ * Each notification of window `name`, newest first, read in the notification centre, which this opens when it is
+ * closed. Unlike the toasts, the centre holds a notification core did not raise as a toast.
  */
-export async function notificationCentre(name: string): Promise<string[]> {
+export async function centreNotifications(
+  name: string,
+): Promise<CentreNotification[]> {
   return settled(
     () => `the notification centre of window ${name}`,
     async () =>
-      (await evaluate<string[] | null>(
+      (await evaluate<CentreNotification[] | null>(
         name,
         `(() => {
   const centre = document.querySelector('${OPEN_CENTRE}');
@@ -1385,10 +1445,18 @@ export async function notificationCentre(name: string): Promise<string[]> {
     document.querySelector('${CENTRE_BELL}')?.click();
     return null;
   }
-  return [...centre.querySelectorAll('.notification-list-item-message')].map(each => each.textContent ?? '');
+  return [...centre.querySelectorAll('.notification-list-item')].map(item => ({
+    message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+    buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => each.textContent ?? ''),
+  }));
 })()`,
       )) ?? undefined,
   );
+}
+
+/** The text of each notification of window `name`, newest first, read in the notification centre. */
+export async function notificationCentre(name: string): Promise<string[]> {
+  return (await centreNotifications(name)).map(each => each.message);
 }
 
 /** A link inside a notification's message: its words and the address it opens. */
@@ -1885,7 +1953,7 @@ export async function quickPickFacts(
           title: widget.querySelector('.quick-input-title')?.textContent ?? '',
           placeholder: widget.querySelector('.quick-input-box input')?.getAttribute('placeholder') ?? '',
           titleButtons: [...widget.querySelectorAll('.quick-input-titlebar .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
-          multiSelect: widget.querySelector('.quick-input-check-all') !== null,
+          multiSelect: widget.querySelector('.quick-input-list .monaco-list-row[role=checkbox]') !== null,
         };
       })()`,
     )) ?? undefined
@@ -1928,7 +1996,11 @@ export async function typeInQuickPick(
   name: string,
   text: string,
 ): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+  await settled(
+    () => `a quick pick in window ${name}`,
+    async () => ((await quickPickOf(name)) === undefined ? undefined : true),
+    30_000,
+  );
   await setQuickPickInput(name, text);
 }
 
@@ -2052,11 +2124,17 @@ interface KeyStroke {
   modifiers?: number;
 }
 
-/** Presses the `stroke` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
-async function pressStroke(
+/** One protocol input command. */
+interface InputEvent {
+  method: 'Input.dispatchKeyEvent' | 'Input.dispatchMouseEvent';
+  params: Record<string, unknown>;
+}
+
+/** Sends the input commands `events` one after the other to the page at protocol address `address`, each awaiting its answer. */
+async function dispatchInput(
   address: string,
   owner: string,
-  stroke: KeyStroke,
+  events: readonly InputEvent[],
 ): Promise<void> {
   const socket = new WebSocket(address);
   try {
@@ -2068,31 +2146,72 @@ async function pressStroke(
         reject(new Error(`no protocol connection to window ${owner}`));
       });
     });
-    for (const [index, type] of ['keyDown', 'keyUp'].entries()) {
+    for (const [index, event] of events.entries()) {
       const answered = new Promise<void>(resolve => {
         socket.addEventListener('message', function listener() {
           socket.removeEventListener('message', listener);
           resolve();
         });
       });
-      socket.send(
-        JSON.stringify({
-          id: index + 1,
-          method: 'Input.dispatchKeyEvent',
-          params: {
-            type,
-            ...stroke,
-            ...(type === 'keyDown' && stroke.text !== undefined
-              ? {text: stroke.text}
-              : {}),
-          },
-        }),
-      );
+      socket.send(JSON.stringify({id: index + 1, ...event}));
       await answered;
     }
   } finally {
     socket.close();
   }
+}
+
+/** Sends `stroke` to the page at protocol address `address`, with its key down and up. */
+async function pressStroke(
+  address: string,
+  owner: string,
+  stroke: KeyStroke,
+): Promise<void> {
+  await dispatchInput(
+    address,
+    owner,
+    ['keyDown', 'keyUp'].map(type => ({
+      method: 'Input.dispatchKeyEvent',
+      params: {
+        type,
+        ...stroke,
+        ...(type === 'keyDown' && stroke.text !== undefined
+          ? {text: stroke.text}
+          : {}),
+      },
+    })),
+  );
+}
+
+/** Clicks, with the mouse, the row of the open quick pick in window `name` whose label is `label`. */
+export async function clickQuickPickRow(
+  name: string,
+  label: string,
+): Promise<void> {
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
+      if (row === undefined) {
+        return null;
+      }
+      const box = row.getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}: no quick pick row ${JSON.stringify(label)}`,
+    );
+  }
+  await dispatchInput(
+    await pageOf(name),
+    name,
+    ['mousePressed', 'mouseReleased'].map(type => ({
+      method: 'Input.dispatchMouseEvent',
+      params: {type, ...point, button: 'left', clickCount: 1},
+    })),
+  );
 }
 
 /** The protocol virtual key codes of the keys the helpers press. */
@@ -2351,11 +2470,48 @@ export async function toggleQuickPickRow(
   await evaluate<null>(
     name,
     `(() => {
-      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.getAttribute('aria-label') === ${JSON.stringify(label)});
+      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)});
       row.querySelector('.monaco-custom-toggle').click();
       return null;
     })()`,
   );
+}
+
+/** What the chrome of the multi-select quick pick open in window `name` shows besides its rows: the counter and whether it has an OK button. */
+export async function quickPickChrome(
+  name: string,
+): Promise<{counter: string; okShown: boolean}> {
+  return evaluate<{counter: string; okShown: boolean}>(
+    name,
+    `(() => {
+      const widget = document.querySelector('${QUICK_WIDGET}');
+      const ok = widget?.querySelector('.quick-input-action .monaco-button');
+      return {
+        counter: widget?.querySelector('.quick-input-count')?.textContent?.trim() ?? '',
+        okShown: ok !== null && ok !== undefined && ok.getBoundingClientRect().width > 0,
+      };
+    })()`,
+  );
+}
+
+/** Clicks the title-bar button of the quick pick open in window `name` whose tooltip is `tooltip`. */
+export async function pressQuickPickTitleButton(
+  name: string,
+  tooltip: string,
+): Promise<void> {
+  const pressed = await evaluate<boolean>(
+    name,
+    `(() => {
+      const button = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-titlebar .action-label')].find(each => (each.getAttribute('aria-label') ?? each.getAttribute('title')) === ${JSON.stringify(tooltip)});
+      button?.click();
+      return button !== undefined;
+    })()`,
+  );
+  if (!pressed) {
+    throw new Error(
+      `window ${name}: no title-bar button ${JSON.stringify(tooltip)}`,
+    );
+  }
 }
 
 /** Clicks the OK button of the multi-select quick pick open in window `name`. */

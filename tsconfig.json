@@ -218,6 +218,9 @@
       "path": "tests/acceptance/containers-view"
     },
     {
+      "path": "tests/acceptance/containers-podman"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {

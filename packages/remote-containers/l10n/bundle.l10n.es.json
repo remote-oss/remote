@@ -137,5 +137,14 @@
   "The feature was not found either because it is no longer available or because of insufficient permissions to access it.": "The feature was not found either because it is no longer available or because of insufficient permissions to access it.",
   "Select Features": "Select Features",
   "Select additional features to install": "Select additional features to install",
-  "Finish": "Finish"
+  "Finish": "Finish",
+  "Error removing container: {0}": "Error removing container: {0}",
+  "Error starting container: {0}": "Error starting container: {0}",
+  "Error stopping container: {0}": "Error stopping container: {0}",
+  "Remove this container?": "Remove this container?",
+  "Stop Container": "Stop Container",
+  "Stop {0}?": "Stop {0}?",
+  "This action is not reversible and deletes the container permanently.": "This action is not reversible and deletes the container permanently.",
+  "This is the last container using '{0}'.": "This is the last container using '{0}'.",
+  "Remove": "Remove"
 }

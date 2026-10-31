@@ -108,6 +108,29 @@
         }
       },
       {
+        "command": "remote-containers.startContainer",
+        "title": "%commands.startContainer.title%",
+        "category": "Dev Containers",
+        "icon": {
+          "light": "resources/light/vm-start.svg",
+          "dark": "resources/dark/vm-start.svg"
+        }
+      },
+      {
+        "command": "remote-containers.stopContainer",
+        "title": "%commands.stopContainer.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.removeContainer",
+        "title": "%commands.removeContainer.title%",
+        "category": "Dev Containers",
+        "icon": {
+          "light": "resources/light/remove.svg",
+          "dark": "resources/dark/remove.svg"
+        }
+      },
+      {
         "command": "remote-containers.explorerDetailsRefresh",
         "title": "%commands.explorerDetailsRefresh.title%",
         "category": "Dev Containers",
@@ -154,6 +177,18 @@
         {
           "command": "remote-containers.explorerDetailsRefresh",
           "when": "false"
+        },
+        {
+          "command": "remote-containers.startContainer",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.stopContainer",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.removeContainer",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -183,6 +218,61 @@
           "command": "remote-containers.rebuildContainer",
           "group": "2_container@1",
           "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openFolderInContainerInCurrentWindow",
+          "group": "1_folder@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openFolderInContainerInNewWindow",
+          "group": "1_folder@2",
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.startContainer",
+          "group": "1_container@3",
+          "when": "view == targetsContainers && viewItem =~ /(^| )start( |$)/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.showDetails",
+          "group": "1_container@4",
+          "when": "view == targetsContainers && viewItem =~ /(^| )details( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.inspectDockerResource",
+          "group": "1_container@5",
+          "when": "view == targetsContainers && viewItem =~ /(^| )inspect( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.showContainerLog",
+          "group": "1_container@6",
+          "when": "view == targetsContainers && viewItem =~ /(^| )log( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.stopContainer",
+          "group": "2_container@2",
+          "when": "view == targetsContainers && viewItem =~ /(^| )stop( |$)/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.removeContainer",
+          "group": "2_container@3",
+          "when": "view == targetsContainers && viewItem =~ /(^| )remove( |$)/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openFolderInContainerInCurrentWindow",
+          "group": "inline@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openFolderInContainerInNewWindow",
+          "group": "inline@2",
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.removeContainer",
+          "group": "inline@3",
+          "when": "view == targetsContainers && viewItem =~ /(^| )remove( |$)/ && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [

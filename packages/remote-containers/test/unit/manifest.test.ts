@@ -96,6 +96,30 @@ const WELCOME_TEXTS = {
     "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
 };
 
+/** The `when` of a row action: the view's rows that carry `token`, with `extra` between it and the stand-down clause. */
+function rowWhen(token: string, extra = ''): string {
+  return `view == targetsContainers && viewItem =~ /(^| )${token}( |$)/${extra} && !remote-containers:standingDown`;
+}
+
+/** The entries slice B adds to the row menu, in the manifest's order; the five commands of later cards carry `false`. */
+const ROW_ACTION_ENTRIES = [
+  ['openFolderInContainerInCurrentWindow', '1_folder@1', 'openFolder', true],
+  ['openFolderInContainerInNewWindow', '1_folder@2', 'openFolder', true],
+  ['startContainer', '1_container@3', 'start', false],
+  ['showDetails', '1_container@4', 'details', true],
+  ['inspectDockerResource', '1_container@5', 'inspect', true],
+  ['showContainerLog', '1_container@6', 'log', true],
+  ['stopContainer', '2_container@2', 'stop', false],
+  ['removeContainer', '2_container@3', 'remove', false],
+  ['openFolderInContainerInCurrentWindow', 'inline@1', 'openFolder', true],
+  ['openFolderInContainerInNewWindow', 'inline@2', 'openFolder', true],
+  ['removeContainer', 'inline@3', 'remove', false],
+].map(([command, group, token, later]) => ({
+  command: `remote-containers.${String(command)}`,
+  group: String(group),
+  when: rowWhen(String(token), later === true ? ' && false' : ''),
+}));
+
 const TARGETS_TITLE_WHEN =
   'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
 
@@ -127,6 +151,9 @@ const ENGLISH = {
   'commands.Showreopenincontainernotificationreset.title':
     "Reset Don't Show Reopen Notification",
   'commands.explorerTargetsRefresh.title': 'Refresh',
+  'commands.startContainer.title': 'Start Container',
+  'commands.stopContainer.title': 'Stop Container',
+  'commands.removeContainer.title': 'Remove Container',
   'views.targetsContainers.name': 'Dev Containers',
   'commands.explorerDetailsRefresh.title': 'Refresh',
   'views.detailsContainers.name': 'Details (Containers)',
@@ -300,6 +327,29 @@ describe('the manifest', () => {
             },
           },
           {
+            command: 'remote-containers.startContainer',
+            title: '%commands.startContainer.title%',
+            category: 'Dev Containers',
+            icon: {
+              light: 'resources/light/vm-start.svg',
+              dark: 'resources/dark/vm-start.svg',
+            },
+          },
+          {
+            command: 'remote-containers.stopContainer',
+            title: '%commands.stopContainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.removeContainer',
+            title: '%commands.removeContainer.title%',
+            category: 'Dev Containers',
+            icon: {
+              light: 'resources/light/remove.svg',
+              dark: 'resources/dark/remove.svg',
+            },
+          },
+          {
             command: 'remote-containers.explorerDetailsRefresh',
             title: '%commands.explorerDetailsRefresh.title%',
             category: 'Dev Containers',
@@ -347,6 +397,9 @@ describe('the manifest', () => {
               command: 'remote-containers.explorerDetailsRefresh',
               when: 'false',
             },
+            {command: 'remote-containers.startContainer', when: 'false'},
+            {command: 'remote-containers.stopContainer', when: 'false'},
+            {command: 'remote-containers.removeContainer', when: 'false'},
           ],
           'view/title': [
             {
@@ -376,6 +429,7 @@ describe('the manifest', () => {
               group: '2_container@1',
               when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
             },
+            ...ROW_ACTION_ENTRIES,
           ],
           'statusBar/remoteIndicator': [
             {
@@ -932,7 +986,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [8, true, false],
+      [19, true, false],
     );
   });
 
@@ -996,7 +1050,7 @@ describe('the manifest', () => {
   });
 
   it('F-0901 3.3 #10, #21: Close Workspace is on the active folder row, and Rebuild Container on the window own dev container row, in the groups of the reference', () => {
-    deepStrictEqual(VIEW_PARTS.menus['view/item/context'], [
+    deepStrictEqual(VIEW_PARTS.menus['view/item/context']?.slice(0, 2), [
       {
         command: 'workbench.action.closeFolder',
         group: '1_folder@1',
@@ -1008,6 +1062,29 @@ describe('the manifest', () => {
         when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
       },
     ]);
+  });
+
+  it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the five commands of later cards stay shut with false', () => {
+    deepStrictEqual(
+      [
+        VIEW_PARTS.menus['view/item/context']?.slice(2),
+        VIEW_PARTS.commands
+          .map(entry => entry.command)
+          .filter(command =>
+            ['startContainer', 'stopContainer', 'removeContainer'].some(
+              name => command === `remote-containers.${name}`,
+            ),
+          ),
+      ],
+      [
+        ROW_ACTION_ENTRIES,
+        [
+          'remote-containers.startContainer',
+          'remote-containers.stopContainer',
+          'remote-containers.removeContainer',
+        ],
+      ],
+    );
   });
 
   it('F-1406.5: package.nls.json holds its keys, and every key package.json uses is one of them', () => {

@@ -25,6 +25,10 @@ export function runCommand(
   programArguments: readonly string[],
 ): CommandResult {
   const result = spawnSync(program, programArguments, {encoding: 'utf8'});
+  // A program that did not start (not installed, not executable) has no output at all: its error is the answer.
+  if (result.error !== undefined) {
+    return {status: 1, stdout: '', stderr: result.error.message};
+  }
   return {
     status: result.status ?? 1,
     stdout: result.stdout,
