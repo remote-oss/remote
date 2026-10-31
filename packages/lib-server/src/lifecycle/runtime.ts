@@ -8,7 +8,11 @@ import type {ChannelFailure, HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {ServerPolicyRecord} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
-import type {ResultBlock, ScriptStatus} from '../scripts/result-block.ts';
+import {
+  factOfLine,
+  type ResultBlock,
+  type ScriptStatus,
+} from '../scripts/result-block.ts';
 import {keptExtensions} from './extensions.ts';
 import {runStep, type StepRun} from './run-step.ts';
 
@@ -36,6 +40,8 @@ export interface RuntimeOptions {
   readySeconds: number;
   /** Whether the server listens on a socket in the host's temporary folder instead of a TCP port. */
   socketMode: boolean;
+  /** Called once, when the start script launches a server: never for a server that already ran. */
+  onLaunching?: () => void;
 }
 
 /** The server a start gave: where it listens, its process and its secret. */
@@ -374,13 +380,25 @@ export async function startOrReuse(
       socketMode: options.socketMode,
     },
   };
+  let launching = false;
+  function noteLaunching(line: string): void {
+    const fact = factOfLine(line.replace(/\r$/, ''));
+    if (
+      !launching &&
+      fact?.field === 'server.launching' &&
+      fact.value === 'yes'
+    ) {
+      launching = true;
+      options.onLaunching?.();
+    }
+  }
   const stepRun = await dependencies.lockLoop(
     () =>
       runStep(
         channel,
         {installMode: 'singleScript', step: 'start'},
         parameters,
-        {cancellation},
+        {cancellation, onLine: noteLaunching},
       ),
     cancellation,
   );

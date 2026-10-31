@@ -9,6 +9,7 @@ import {
   type HostLockLoop,
   isAcceptedBindHost,
   isExtensionIdentifier,
+  LAUNCHING_LINE,
   rangeProblem,
   RESULT_BEGIN,
   RESULT_END,
@@ -913,6 +914,62 @@ describe('serverPort (V7)', () => {
   });
 });
 
+describe('startOrReuse (V7), onLaunching (card server-26)', () => {
+  /** How many times `onLaunching` was called over a start whose script printed `output`. */
+  async function launchings(output: readonly string[]): Promise<number> {
+    let calls = 0;
+    await start(recording(output), {
+      onLaunching: () => {
+        calls += 1;
+      },
+    });
+    return calls;
+  }
+
+  it('server-26: it is called once for a start whose output carries the streamed line, and also when the block holds the fact', async () => {
+    deepStrictEqual(
+      [
+        await launchings([LAUNCHING_LINE, ...STARTED]),
+        await launchings([
+          LAUNCHING_LINE,
+          ...lines('Ok', 'server.launching=yes', 'server.port=4321'),
+        ]),
+        await launchings(
+          lines('Ok', 'server.launching=yes', 'server.port=4321'),
+        ),
+      ],
+      [1, 1, 1],
+    );
+  });
+
+  it('server-26: it is never called for a reuse, whose output has no launching line, nor when none is given', async () => {
+    deepStrictEqual(
+      [
+        await launchings(STARTED),
+        await start(recording(STARTED)).then(() => 0),
+      ],
+      [0, 0],
+    );
+  });
+
+  it('server-26: the start script prints the line only on the branch that launches a server, before the launch', async () => {
+    const channel = recording(STARTED);
+    await start(channel);
+    const script = scriptOf(channel);
+    const reuse = script.indexOf('LAUNCHED=no');
+    const line = script.indexOf(LAUNCHING_LINE);
+    deepStrictEqual(
+      [
+        script.split(LAUNCHING_LINE).length - 1,
+        reuse !== -1 && reuse < line,
+        line < script.indexOf('nohup "$INSTALL_DIR/$LAUNCHER"'),
+        script.includes('fact server.launching yes'),
+      ],
+      [1, true, true, true],
+    );
+  });
+});
+
 describe('startOrReuse (V7) over a real shell', () => {
   let host: FakeHost;
 
@@ -988,6 +1045,32 @@ describe('startOrReuse (V7) over a real shell', () => {
       [started[0]?.[0] === started[1]?.[0], started[0]?.[1], started[1]?.[1]],
       [true, false, true],
     );
+  });
+
+  it('server-26: over the real script the first start launches and says so once, and the second start, which reuses the server, says nothing', async () => {
+    const launchings: number[] = [];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let calls = 0;
+      await startOrReuse(
+        shellChannel(host),
+        parametersFor(),
+        {
+          ...OPTIONS,
+          onLaunching: () => {
+            calls += 1;
+          },
+        },
+        {
+          allowedExtraStartOptions: [],
+          extensionEntries: 'identifiersOnly',
+          requirementsCheck: 'none',
+        },
+        dependencies(),
+        NEVER_CANCELLED,
+      );
+      launchings.push(calls);
+    }
+    deepStrictEqual(launchings, [1, 0]);
   });
 
   it('F-0503 BR-18: the host-proxy option goes when the policy allows it', async () => {

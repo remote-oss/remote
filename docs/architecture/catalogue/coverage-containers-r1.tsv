@@ -419,7 +419,7 @@ F-0409.AC-47	acceptance
 F-0410.AC-1	acceptance	
 F-0410.AC-2	acceptance	
 F-0410.AC-3	acceptance	
-F-0410.AC-4	acceptance	
+F-0410.AC-4	todo	
 F-0410.AC-5	acceptance	
 F-0410.AC-6	acceptance	
 F-0410.AC-7	unit	
@@ -830,7 +830,7 @@ F-0501.AC-26	todo
 F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
 F-0502.AC-1	acceptance	
-F-0502.AC-2	todo	
+F-0502.AC-2	acceptance	
 F-0502.AC-3	todo	
 F-0502.AC-4	todo	
 F-0502.AC-5	todo	
@@ -843,7 +843,7 @@ F-0502.AC-11	deferred	containers release 1: later (the attach, Kubernetes and Ap
 F-0502.AC-12	todo	
 F-0502.AC-13	acceptance	
 F-0502.AC-14	todo	
-F-0502.AC-15	todo	
+F-0502.AC-15	acceptance	
 F-0502.AC-16	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-17	todo	
 F-0502.AC-18	todo	
@@ -870,7 +870,7 @@ F-0502.AC-38	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0502.AC-39	todo	
 F-0502.AC-40	todo	
 F-0502.AC-41	todo	
-F-0502.AC-42	todo	
+F-0502.AC-42	acceptance	
 F-0503.AC-1	acceptance	
 F-0503.AC-2	acceptance	
 F-0503.AC-3	acceptance	
