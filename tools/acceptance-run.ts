@@ -138,11 +138,12 @@ function labelledObjects(lines: string): LabelledObject[] {
 }
 
 /**
- * Removes the dev containers and their images that another run left: each with the dev container label, another run's
- * label and a creation time more than two hours before `nowSeconds`. Age is the key, not another run's id alone,
- * because two jobs may share a runner's daemon and a younger object belongs to a run that may still be going.
+ * Removes the containers of any other run, and the dev container images, each older than two hours: a container with
+ * another run's label, whatever else it carries, and an image with the dev container label and another run's label,
+ * each created more than two hours before `nowSeconds`. Age is the key, not another run's id alone, because two jobs
+ * may share a runner's daemon and a younger object belongs to a run that may still be going.
  */
-export function sweepStaleDevContainers(
+export function sweepStaleRunObjects(
   command: CommandRunner,
   runId: string,
   nowSeconds: number,
@@ -153,9 +154,14 @@ export function sweepStaleDevContainers(
       nowSeconds - object.createdSeconds > STALE_RUN_SECONDS
     );
   }
-  const filter = `label=${DEVCONTAINER_LABEL}=1`;
   const containers = idsOf(
-    checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
+    checked(command, 'docker', [
+      'ps',
+      '--all',
+      '--quiet',
+      '--filter',
+      `label=${RUN_LABEL}`,
+    ]),
   );
   if (containers.length > 0) {
     for (const stale of labelledObjects(
@@ -183,7 +189,7 @@ export function sweepStaleDevContainers(
       '--quiet',
       '--no-trunc',
       '--filter',
-      filter,
+      `label=${DEVCONTAINER_LABEL}=1`,
     ]),
   );
   if (images.length > 0) {
