@@ -1,9 +1,12 @@
-import {execFile} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
+import {chmodSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   containersLog,
   devContainerFolder,
   reopenInContainer,
+  variable,
   waitFor,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
@@ -154,4 +157,15 @@ export async function shownContaining(
     milliseconds,
   );
   return found;
+}
+
+/** A `docker` program for `dev.containers.dockerPath` whose engine endpoint answers nothing; its path. */
+export function noDaemonDocker(): string {
+  const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'docker-no-daemon');
+  writeFileSync(
+    wrapper,
+    `#!/bin/sh\nDOCKER_HOST=unix:///tmp/remote-oss-no-daemon.sock exec ${execFileSync('sh', ['-c', 'command -v docker']).toString().trim()} "$@"\n`,
+  );
+  chmodSync(wrapper, 0o755);
+  return wrapper;
 }
