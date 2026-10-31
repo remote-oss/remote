@@ -25,9 +25,9 @@ import {
   paletteRows,
   pressEscape,
   primaryButtonOf,
-  type QuickPickRow,
+  type DetailedQuickPickRow,
+  detailedQuickPickRows,
   quickPickOf,
-  quickPickRows,
   quickPickValue,
   rememberPage,
   typeInQuickPick,
@@ -90,10 +90,10 @@ async function answeredOverwrite(
 }
 
 /** Opens the screen in `window` and gives its rows, leaving it open. */
-async function screenOf(window: string): Promise<QuickPickRow[]> {
+async function screenOf(window: string): Promise<DetailedQuickPickRow[]> {
   await startCommand(window);
   await waitForQuickPick(window);
-  return quickPickRows(window);
+  return detailedQuickPickRows(window);
 }
 
 /** Closes the screen of `window` with Escape and waits until it is gone. */
@@ -107,14 +107,19 @@ async function closeScreen(window: string): Promise<void> {
 }
 
 /** Types `text` into the screen of `window` and gives the rows once the list has followed. */
-async function typed(window: string, text: string): Promise<QuickPickRow[]> {
+async function typed(
+  window: string,
+  text: string,
+): Promise<DetailedQuickPickRow[]> {
   await typeInQuickPick(window, text);
   await new Promise(resolve => setTimeout(resolve, 1000));
-  return quickPickRows(window);
+  return detailedQuickPickRows(window);
 }
 
 /** The label of the row that has the focus. */
-function focusedLabel(rows: readonly QuickPickRow[]): string | undefined {
+function focusedLabel(
+  rows: readonly DetailedQuickPickRow[],
+): string | undefined {
   return rows.find(each => each.focused)?.label;
 }
 
@@ -125,14 +130,14 @@ async function focusAfter(
 ): Promise<string | undefined> {
   await moveQuickPickFocus(window, key);
   await new Promise(resolve => setTimeout(resolve, 500));
-  return focusedLabel(await quickPickRows(window));
+  return focusedLabel(await detailedQuickPickRows(window));
 }
 
 /**
  * Whether the template rows follow F-0802 BR-5: a row shows the `codicon-verified` badge exactly when its description is
  * `devcontainers`, and none has the description `Unknown Publisher` or `community`.
  */
-function badgesFollowOwner(rows: readonly QuickPickRow[]): boolean {
+function badgesFollowOwner(rows: readonly DetailedQuickPickRow[]): boolean {
   return rows.every(
     each =>
       each.icons.includes('codicon-verified') ===
@@ -348,12 +353,12 @@ describe('the authoring wizard (card containers-80)', function () {
       await waitFor(
         'the whole list',
         async () =>
-          (await quickPickRows(window)).every(
+          (await detailedQuickPickRows(window)).every(
             each => each.label !== 'Show All Templates...',
           ),
         10_000,
       );
-      const all = (await quickPickRows(window)).map(each => each.label);
+      const all = (await detailedQuickPickRows(window)).map(each => each.label);
       await closeScreen(window);
       deepStrictEqual(
         [
@@ -600,7 +605,7 @@ describe('the authoring wizard (card containers-80)', function () {
       await waitFor(
         'the custom row',
         async () =>
-          (await quickPickRows(window)).some(each =>
+          (await detailedQuickPickRows(window)).some(each =>
             each.label.startsWith("Use '"),
           ),
         10_000,
@@ -622,7 +627,7 @@ describe('the authoring wizard (card containers-80)', function () {
       await waitFor(
         'the custom row',
         async () =>
-          (await quickPickRows(window)).some(each =>
+          (await detailedQuickPickRows(window)).some(each =>
             each.label.startsWith("Use '"),
           ),
         10_000,

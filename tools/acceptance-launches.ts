@@ -521,11 +521,13 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
- * installed and disabled as in `containers`;
+ * installed and disabled as in `containers`; `containers-killed-23`, `containers-killed-35` and
+ * `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in
+ * `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -798,11 +800,39 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...CONTAINERS_LAUNCH,
+      label: 'containers-features',
+      suite: 'containers-features',
+      registry: true,
+      templates: true,
+      // The other Dev Containers, installed and disabled, as in `containers`.
+      standIns: ['ms-vscode-remote.remote-containers'],
+      disabledExtensions: ['ms-vscode-remote.remote-containers'],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
       label: 'containers-shutdown',
       suite: 'containers-shutdown',
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-killed-23',
+      suite: 'containers-killed',
+      environment: {HARNESS_KILLED_CASE: '23'},
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-killed-35',
+      suite: 'containers-killed',
+      environment: {HARNESS_KILLED_CASE: '35'},
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-killed-43',
+      suite: 'containers-killed',
+      environment: {HARNESS_KILLED_CASE: '43'},
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({

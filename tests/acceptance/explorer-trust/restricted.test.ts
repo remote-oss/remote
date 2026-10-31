@@ -19,8 +19,16 @@ import {
   inWindow,
   isTrusted,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
-import {titleAction} from '../windows/renderer.ts';
+import {
+  extensionsViewSections,
+  extensionStatusShown,
+  titleAction,
+} from '../windows/renderer.ts';
+
+/** The display name of the explorer in the Extensions view. */
+const EXPLORER_NAME = 'Remote Explorer';
 
 describe('the explorer in Restricted Mode (card coverage-25c, part b)', function () {
   this.timeout(180_000);
@@ -37,6 +45,50 @@ describe('the explorer in Restricted Mode (card coverage-25c, part b)', function
       await rowsSettled(name, rowsOf(hostAliases(), undefined));
       await nothingFails(name);
       deepStrictEqual(trusted, false);
+    } finally {
+      await closeWindow(name);
+    }
+  });
+  it('F-5001 AC-9 (workspace-unsupported): in an untrusted folder core’s @workspaceUnsupported list does not hold the explorer, and its Extensions-view entry carries no Restricted-Mode marker', async () => {
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'restricted-list');
+    mkdirSync(folder, {recursive: true});
+    const name = await openFolderWindow(folder);
+    try {
+      const trusted = await isTrusted(name);
+      await inWindow(name, 'workbench.view.extensions');
+      await inWindow(
+        name,
+        'workbench.extensions.action.clearExtensionsSearchResults',
+      );
+      await waitFor(
+        'the Extensions view to list the explorer',
+        async () =>
+          (await extensionsViewSections(name)).some(section =>
+            section.entries.includes(EXPLORER_NAME),
+          ),
+        30_000,
+      );
+      const marker = await extensionStatusShown(name, EXPLORER_NAME);
+      // The command the Workspace Trust editor's extensions link runs.
+      await inWindow(
+        name,
+        'workbench.extensions.action.listWorkspaceUnsupportedExtensions',
+      );
+      await waitFor(
+        'the @workspaceUnsupported list',
+        async () =>
+          (await extensionsViewSections(name)).some(
+            section => section.title === 'Disabled in Restricted Mode',
+          ),
+        30_000,
+      );
+      const listed = (await extensionsViewSections(name)).flatMap(
+        section => section.entries,
+      );
+      deepStrictEqual(
+        [trusted, marker, listed.includes(EXPLORER_NAME), listed.length > 0],
+        [false, false, false, true],
+      );
     } finally {
       await closeWindow(name);
     }

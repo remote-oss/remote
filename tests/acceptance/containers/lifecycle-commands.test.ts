@@ -6,6 +6,8 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
@@ -453,10 +455,11 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
     }
   });
 
-  it('F-0415 AC-30 (c30): an array entry and an entry with spaces in its name run, with remoteEnv present, and empty commands cause no error while later commands still run', async () => {
+  it('F-0415 AC-30 (c30): an array entry run without a shell and an entry with spaces in its name run, with remoteEnv present and the entry named unchanged in the log, and an empty string, array and object cause no error and no Running line while a later command still runs', async () => {
     const folder = devContainerFolder('c44-odd-forms', {
       name: 'Odd Forms',
       remoteEnv: {C44_REMOTE_VAR: 'remote-value'},
+      onCreateCommand: '',
       updateContentCommand: {
         'spaced entry': mark('spaced'),
         listed: [
@@ -464,33 +467,63 @@ describe('F-0415 the command forms, the failures and the metadata (card containe
           '-c',
           'pwd > .c44-listed-pwd; echo $C44_REMOTE_VAR > .c44-listed-env',
         ],
+        unshelled: ['touch', 'literal*star30'],
       },
-      postCreateCommand: '',
+      postCreateCommand: [],
       postStartCommand: {},
-      postAttachCommand: [],
-      onCreateCommand: mark('onCreate'),
+      postAttachCommand: mark('after-empties'),
     });
     try {
+      const logMark = containersLog().length;
       const name = await openFolderWindow(folder);
       await reopenInContainer(name);
       const containerId = await containerOf(folder);
-      await untilLabels(containerId, folder, ['spaced']);
+      await untilLabels(containerId, folder, ['spaced', 'after-empties']);
       const labels = await labelsOf(containerId, folder);
+      const lines = containersLogSince(logMark);
       const listedIn = (
         await inWorkspace(containerId, folder, 'cat .c44-listed-pwd')
       ).trim();
       const listedEnv = (
         await inWorkspace(containerId, folder, 'cat .c44-listed-env')
       ).trim();
+      const literal = (
+        await inWorkspace(
+          containerId,
+          folder,
+          'ls -A | grep -c "^literal\\*star30$"',
+        )
+      ).trim();
       const dialog = await dialogOf(name);
       await closeWindow(name);
       deepStrictEqual(
-        {labels, listedIn, listedEnv, dialog},
         {
-          labels: ['onCreate', 'spaced'],
+          labels,
+          listedIn,
+          listedEnv,
+          literal,
+          dialog,
+          spacedEntry: lines.filter(line => line.includes('spaced entry')),
+          running: lines.filter(line => line.startsWith('Running ')).sort(),
+          failures: lines.filter(line => line.includes('commands failed')),
+        },
+        {
+          labels: ['spaced', 'after-empties'],
           listedIn: workspaceOf(folder),
           listedEnv: 'remote-value',
+          literal: '1',
           dialog: undefined,
+          spacedEntry: [
+            'Running spaced entry of updateContentCommand from devcontainer.json...',
+          ],
+          running: [
+            'Running the updateContentCommand from devcontainer.json...',
+            'Running spaced entry of updateContentCommand from devcontainer.json...',
+            'Running listed of updateContentCommand from devcontainer.json...',
+            'Running unshelled of updateContentCommand from devcontainer.json...',
+            'Running the postAttachCommand from devcontainer.json...',
+          ].sort(),
+          failures: [],
         },
       );
     } finally {
