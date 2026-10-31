@@ -2115,6 +2115,14 @@ export async function editorTabs(name: string): Promise<EditorTab[]> {
   );
 }
 
+/** The tab labels of each editor group of window `name`, the groups in the order shown. */
+export async function editorGroupLabels(name: string): Promise<string[][]> {
+  return evaluate<string[][]>(
+    name,
+    `[...document.querySelectorAll('.editor-group-container')].map(group => [...group.querySelectorAll('.tabs-container .tab')].map(tab => tab.querySelector('.label-name')?.textContent ?? ''))`,
+  );
+}
+
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
 export async function hasStatusItem(
   name: string,

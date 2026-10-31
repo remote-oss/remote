@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {chmodSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -38,6 +38,7 @@ import {
   waitForQuickPick,
 } from '../windows/renderer.ts';
 import {paletteItems} from '../windows/palette.ts';
+import {noDaemonDocker} from './resolve-support.ts';
 import {
   activations,
   openFolderWindow,
@@ -625,19 +626,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     const folder = devContainerFolder('rebuild-daemon');
     try {
       const kept = await containerLeftBy(folder);
-      const {stdout: docker} = await execFileAsync('sh', [
-        '-c',
-        'command -v docker',
-      ]);
-      const wrapper = path.join(
-        variable('HARNESS_RUN_FOLDER'),
-        'docker-no-daemon',
-      );
-      writeFileSync(
-        wrapper,
-        `#!/bin/sh\nDOCKER_HOST=unix:///tmp/remote-oss-no-daemon.sock exec ${docker.trim()} "$@"\n`,
-      );
-      chmodSync(wrapper, 0o755);
+      const wrapper = noDaemonDocker();
       deepStrictEqual(await rebuildCancelled(folder, wrapper), {
         dialog: [
           'Docker returned an error.',
