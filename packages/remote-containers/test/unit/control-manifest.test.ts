@@ -32,6 +32,7 @@ function sceneOf(options: {
   /** The download never answers, and rejects when it is aborted. */
   hang?: boolean;
   kept?: {text: string; keptAt: number};
+  keepFails?: boolean;
   now?: number;
   environment?: Record<string, string | undefined>;
 }) {
@@ -57,6 +58,9 @@ function sceneOf(options: {
     },
     kept: () => options.kept,
     keep: (text, keptAt) => {
+      if (options.keepFails === true) {
+        throw new Error('read-only storage');
+      }
       scene.keeps.push([text, keptAt]);
     },
     now: () => options.now ?? 1_000_000,
@@ -286,6 +290,18 @@ describe('the control manifest (card containers-94)', () => {
     deepStrictEqual(
       [scene.sink.lines.length, scene.stopped, scene.keeps],
       [0, 1, []],
+    );
+  });
+
+  it('#1307: a storage that cannot be written does not fail the fetch: the manifest comes back and the log says why', async () => {
+    const {scene, ports} = sceneOf({keepFails: true});
+    const manifest = await controlManifestOf(ports, NEVER);
+    deepStrictEqual(
+      [
+        manifest.disallowedFeatures.length,
+        scene.sink.lines.map(line => line.message),
+      ],
+      [2, ['the control manifest could not be kept: read-only storage']],
     );
   });
 });

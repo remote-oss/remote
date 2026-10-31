@@ -111,6 +111,17 @@ export interface ControlManifestPorts {
   logger: Logger;
 }
 
+/** Keeps `text` as the copy of now; a storage that cannot be written leaves the open going on, without a kept copy. */
+function keepQuietly(ports: ControlManifestPorts, text: string): void {
+  try {
+    ports.keep(text, ports.now());
+  } catch (caught) {
+    ports.logger.warn(
+      `the control manifest could not be kept: ${caught instanceof Error ? caught.message : String(caught)}`,
+    );
+  }
+}
+
 /** The manifest to check the Features against: fresh from the kept copy, else downloaded, else the kept copy, else empty. */
 export async function controlManifestOf(
   ports: ControlManifestPorts,
@@ -141,7 +152,7 @@ export async function controlManifestOf(
     if (manifest === undefined) {
       throw new Error('the manifest is no JSON');
     }
-    ports.keep(text, ports.now());
+    keepQuietly(ports, text);
     return manifest;
   } catch (caught) {
     if (cancellation.aborted) {
@@ -157,7 +168,7 @@ export async function controlManifestOf(
       ]),
     );
     if (kept !== undefined && keptManifest !== undefined) {
-      ports.keep(kept.text, ports.now());
+      keepQuietly(ports, kept.text);
     }
     return keptManifest ?? {disallowedFeatures: []};
   } finally {

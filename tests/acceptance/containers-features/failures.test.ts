@@ -433,7 +433,7 @@ describe('what a failed build with Features says (card containers-94)', function
     }
   });
 
-  it('F-0414 7.E11 (unreachable-then-step): with the manifest unreachable and no kept copy the local check lets the open go on, and the CLI’s refusal ends the build with S059', async () => {
+  it('#1307 7.E11 (unreachable-then-step): with the manifest unreachable and no kept copy the local check lets the open go on, and the CLI’s refusal ends the build with S059', async () => {
     await rm(manifestFile(), {force: true});
     const served = path.join(
       servedControlFolder(variable('HARNESS_RUN_FOLDER')),
