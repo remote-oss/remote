@@ -530,19 +530,25 @@ behaviour is chosen by the first segment of the path:
 
 | Segment | Answer |
 |---|---|
-| `ok` | 200 with the server archive, `Content-Length` set |
+| `ok` | 200 with the server archive of the platform the path names (see below), `Content-Length` set; 404 for a platform the run has no archive for |
 | `missing` | 404, empty |
 | `missing-cors` | 404, empty, with an `Access-Control-Allow-Origin: *` header |
 | `busy` | 503, empty |
 | `junk` | 200 with 64 KiB of random bytes |
 | `hang` | the request is accepted and never answered, until `GET /control/drop-hung` or the run's end |
-| `cut` | 200 with the archive's length, then the connection drops after 1 MiB |
-| `slow` | the archive, 64 KiB every 100 ms |
+| `cut` | 200 with the archive's length, then the connection drops after 1 MiB (the archive chosen as for `ok`) |
+| `slow` | the archive, 64 KiB every 100 ms (the archive chosen as for `ok`) |
 | `templates` | `/templates/devcontainer-index.json`: the run's template index once the run has written it (404 before); `/templates/broken-index.json`: an index cut off so it doesn't parse; `/templates/unreachable`: the connection dropped before any answer |
 | `control` | `/control/devcontainer-control-manifest.json`: the run's control manifest once the run has written it (404 before); `/control/unreachable`: the connection dropped before any answer |
 
-The archive is the VSCodium server for Alpine of the release the client is pinned to, cached under
-`.vscode-test/downloads/` and checked against its sha256 (`SERVER_ARCHIVE`). The HTTPS certificate is the run's own,
+The archives are the VSCodium servers of the release the client is pinned to, for this machine's architecture: the
+Alpine (musl) one and the glibc one. They're cached under `.vscode-test/downloads/` and checked against their sha256
+(`SERVER_ARCHIVE`, by platform).
+- A path segment `alpine-<arch>` (Remote - SSH's `${os}-${arch}` on a musl host), or the update service's
+  `server-linux-alpine` (Alpine on x64) or `server-alpine-<arch>`, gets the Alpine server.
+- `linux-<arch>` or `server-linux-<arch>` gets the glibc server, as for a Debian container (`GLIBC_IMAGE`).
+- A path that names no platform, such as `/ok/x`, gets the Alpine server.
+- A platform the run has no archive for, another architecture or another system, gets 404. The HTTPS certificate is the run's own,
 made in Node for `downloads` and `update.code.visualstudio.com` and kept in the run's folder; nothing trusts it. The
 host's BusyBox `wget` verifies certificates through `ssl_client`, so an HTTPS download from it fails unless
 `--no-check-certificate` is given (measured on the host's image).

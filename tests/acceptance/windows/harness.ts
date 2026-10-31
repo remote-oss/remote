@@ -833,6 +833,10 @@ export async function devContainersOf(folder: string): Promise<string[]> {
 export const OLD_GLIBC_IMAGE =
   'ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98';
 
+/** `debian:bookworm-slim`, whose glibc 2.36 is above the server's 2.28, pinned by digest as the Alpine base is. */
+export const GLIBC_IMAGE =
+  'debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587';
+
 /** The facts of the launch's editor that the server's names, paths and licence come from. */
 export interface EditorProduct {
   applicationName: string;
