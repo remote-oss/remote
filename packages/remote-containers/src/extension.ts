@@ -34,6 +34,7 @@ import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
+import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
 import {
   addConfiguration,
@@ -800,6 +801,35 @@ export async function activate(
           translate,
         },
         bridge,
+        problematic: {
+          manifest: {
+            environment: process.env,
+            download: downloadTextOver((address, init) => fetch(address, init)),
+            ...manifestStoreOf(context.globalStorageUri.fsPath),
+            now: Date.now,
+            setTimer: (milliseconds, callback) => {
+              const timer = setTimeout(callback, milliseconds);
+              return () => {
+                clearTimeout(timer);
+              };
+            },
+            translate,
+            logger: served.logger,
+          },
+          warn: async (message, detail, learnMore, cancel) => {
+            const chosen = await vscode.window.showWarningMessage(
+              message,
+              {modal: true, detail},
+              ...(learnMore === undefined ? [] : [{title: learnMore}]),
+              {title: cancel, isCloseAffordance: true},
+            );
+            return learnMore !== undefined && chosen?.title === learnMore
+              ? 'learnMore'
+              : 'cancel';
+          },
+          openExternal: address =>
+            vscode.env.openExternal(vscode.Uri.parse(address)),
+        },
         opener: {
           executeCommand: (command, ...parameters) =>
             vscode.commands.executeCommand(command, ...parameters),

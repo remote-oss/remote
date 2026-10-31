@@ -4,6 +4,7 @@
  * be downloaded. The download runs in the extension host, so the editor's proxy settings apply to it.
  */
 
+import {harnessUrlOf} from '../acceptance-switch.ts';
 import {isRecord} from '../extensions/extension-list.ts';
 import {linkedAbort} from '../linked-abort.ts';
 import {filled} from '../surfaces/filled.ts';
@@ -12,9 +13,6 @@ import type {Translate} from '../surfaces/engine-dialogs.ts';
 /** Where the published index is. */
 export const CATALOGUE_URL =
   'https://containers.dev/static/devcontainer-index.json';
-
-/** The variable whose value `1` switches the harness's adapters on. */
-const ACCEPTANCE_SWITCH = 'REMOTE_OSS_ACCEPTANCE';
 
 /** The variable that names the harness's own index; it counts only while the switch is on. */
 const INDEX_VARIABLE = 'REMOTE_OSS_TEMPLATE_INDEX';
@@ -67,12 +65,7 @@ function textOf(value: unknown): string | undefined {
 export function catalogueUrlOf(
   environment: Readonly<Record<string, string | undefined>>,
 ): string {
-  const own = environment[INDEX_VARIABLE];
-  return environment[ACCEPTANCE_SWITCH] === '1' &&
-    own !== undefined &&
-    own !== ''
-    ? own
-    : CATALOGUE_URL;
+  return harnessUrlOf(environment, INDEX_VARIABLE, CATALOGUE_URL);
 }
 
 /** The owner a collection's repository on `github.com` names: the first part of its path. */

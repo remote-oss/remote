@@ -7,6 +7,7 @@ import type {OpenerHost} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import type {SerializedUri} from '../authority/payload.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
+import type {ProblematicPorts} from '../features/problematic-check.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
@@ -61,6 +62,8 @@ export interface ReopenPorts extends AuthoringPort {
   /** The progress that shows while the checks before the reload take long. */
   progress: PreReloadProgressPorts;
   bridge: Pick<CliBridge, 'readConfiguration'>;
+  /** The check of the Features against the control manifest, once a configuration is chosen. */
+  problematic: ProblematicPorts;
   opener: OpenerHost;
   /** Tells the shutdown helper that this window leaves the container it holds, before the window reloads elsewhere. */
   shutdown: {leave(): Promise<void>};

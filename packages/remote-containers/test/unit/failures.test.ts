@@ -6,6 +6,7 @@ import {
   containerGone,
   containerSetupFailed,
   containerUnusable,
+  disallowedFeature,
   engineCheckFailed,
   malformedAuthority,
   noServerSource,
@@ -149,6 +150,27 @@ describe('the failures of the container connector (card containers-08)', () => {
         [[], []],
         [[], []],
         [[], []],
+      ],
+    );
+  });
+
+  it('F-0414 7.E10: a disallowed Feature has S059, or S060 when a running container was stopped, and keeps its address in a hint', () => {
+    deepStrictEqual(
+      [
+        disallowedFeature('ghcr.io/o/f:1', false, 'https://example.org/f'),
+        disallowedFeature('ghcr.io/o/f:1', true, undefined),
+      ].map(failed => [
+        failed.kind,
+        failed.reason,
+        failed.hints.map(hint => hint.resources),
+      ]),
+      [
+        [
+          'disallowedFeature',
+          {id: 'S059', values: ['ghcr.io/o/f:1']},
+          [['https://example.org/f']],
+        ],
+        ['disallowedFeature', {id: 'S060', values: ['ghcr.io/o/f:1']}, []],
       ],
     );
   });

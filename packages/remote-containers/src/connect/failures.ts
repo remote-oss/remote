@@ -5,6 +5,7 @@
 
 import type {FailureReason, Failed} from 'lib-authority';
 import type {DaemonRefusal} from '../cli/cli-lines.ts';
+import type {FeatureFailure} from '../cli/failing-feature.ts';
 
 /** The container a failed connect found, for the failure's recovery: its full id, and whether it was paused. */
 export interface FailedContainer {
@@ -69,6 +70,50 @@ export function containerSetupFailed(refusal?: DaemonRefusal): Failed {
     {},
     refusal === undefined ? GENERIC : REFUSAL_REASONS[refusal],
   );
+}
+
+/** The string of the detail of each way a Feature's key fails to resolve. */
+const FEATURE_REASONS: Record<FeatureFailure, FailureReason> = {
+  empty: {id: 'S163'},
+  legacy: {id: 'S220'},
+  notFound: {id: 'S357'},
+};
+
+/** The container could not be set up because a Feature's key could not be resolved; the dialog says how. */
+export function featureResolutionFailed(failureOfKey: FeatureFailure): Failed {
+  return failure('containerSetupFailed', {}, FEATURE_REASONS[failureOfKey]);
+}
+
+/**
+ * A Feature the control manifest disallows stopped the build. The dialog says S059, or S060 when the check stopped a
+ * running container, and its Learn More button opens `learnMoreUrl`, which a hint carries.
+ */
+export function disallowedFeature(
+  featureId: string,
+  stoppedContainer: boolean,
+  learnMoreUrl: string | undefined,
+): Failed {
+  return {
+    ...failure(
+      'disallowedFeature',
+      {},
+      {
+        id: stoppedContainer ? 'S060' : 'S059',
+        values: [featureId],
+      },
+    ),
+    hints:
+      learnMoreUrl === undefined
+        ? []
+        : [
+            {
+              status: 'disallowedFeature',
+              message: featureId,
+              mitigations: [],
+              resources: [learnMoreUrl],
+            },
+          ],
+  };
 }
 
 /** The configuration's image or Dockerfile entry has the wrong type; `configFile` is the configuration's path. */

@@ -67,6 +67,9 @@ export interface Setup {
   timers: Array<{milliseconds: number; callback: () => void}>;
   /** How many times the window told the shutdown helper that it leaves its container. */
   left: number;
+  /** The control manifest the download gives, and what the user answers to the warning about a Feature in it. */
+  manifest: string;
+  warnAnswer: 'learnMore' | 'cancel';
 }
 
 /** A setup of a trusted local window on the folder, with its configuration and a passing engine. */
@@ -101,6 +104,8 @@ export function setup(): Setup {
     order: [],
     timers: [],
     left: 0,
+    manifest: '{"disallowedFeatures":[]}',
+    warnAnswer: 'cancel',
   };
 }
 
@@ -239,6 +244,31 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         state.targets.push(target);
         state.calls.push(`readConfiguration ${target.workspaceFolder}`);
         return Promise.resolve(state.read);
+      },
+    },
+    problematic: {
+      manifest: {
+        environment: {},
+        download: () => {
+          state.calls.push('downloadManifest');
+          return Promise.resolve(state.manifest);
+        },
+        kept: () => undefined,
+        keep: () => undefined,
+        now: () => 0,
+        setTimer: () => () => undefined,
+        translate: template => template,
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      },
+      warn: (message, detail, learnMore, cancel) => {
+        state.calls.push(
+          `warn ${message}|${detail}|${learnMore ?? 'no Learn More'}|${cancel}`,
+        );
+        return Promise.resolve(state.warnAnswer);
+      },
+      openExternal: address => {
+        state.calls.push(`openExternal ${address}`);
+        return Promise.resolve(undefined);
       },
     },
     shutdown: {

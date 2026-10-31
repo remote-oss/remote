@@ -658,4 +658,110 @@ describe('Reopen in Container', () => {
       false,
     );
   });
+
+  describe('a Feature the control manifest disallows (card containers-94)', () => {
+    const DISALLOWED = JSON.stringify({
+      disallowedFeatures: [
+        {
+          featureIdPrefix: 'ghcr.io/o/features/bad',
+          documentationURL: 'https://example.org/bad',
+        },
+        {featureIdPrefix: 'ghcr.io/o/features/worse'},
+      ],
+    });
+
+    /** The configuration of the folder, asking for the Features `names`. */
+    function askingFor(...names: string[]): typeof CONFIGURATION {
+      return {
+        ...CONFIGURATION,
+        configuration: {
+          features: Object.fromEntries(names.map(name => [name, {}])),
+        },
+      };
+    }
+
+    it('F-0414 AC-17: a requested Feature the manifest disallows is told with S059 and S275, Cancel and Learn More, and the window is not reloaded', async () => {
+      const state = setup();
+      state.manifest = DISALLOWED;
+      state.read = askingFor('ghcr.io/o/features/bad:1');
+      await reopened(state);
+      deepStrictEqual(
+        [state.commands, state.calls.filter(call => call.startsWith('warn'))],
+        [
+          [],
+          [
+            "warn Cannot use the 'ghcr.io/o/features/bad:1' feature since it was reported to be problematic.|Please remove this feature from your devcontainer.json and rebuild the dev container before continuing.|Learn More|Cancel",
+          ],
+        ],
+      );
+    });
+
+    it('F-0414 AC-18: Learn More opens the entry’s address and still reloads nothing', async () => {
+      const state = setup();
+      state.manifest = DISALLOWED;
+      state.warnAnswer = 'learnMore';
+      state.read = askingFor('ghcr.io/o/features/bad');
+      await reopened(state);
+      deepStrictEqual(
+        [state.commands, state.calls.filter(call => call.startsWith('open'))],
+        [[], ['openExternal https://example.org/bad']],
+      );
+    });
+
+    it('F-0414 7.E10: an entry with no address offers Cancel alone', async () => {
+      const state = setup();
+      state.manifest = DISALLOWED;
+      state.read = askingFor('ghcr.io/o/features/worse@sha256:abc');
+      await reopened(state);
+      deepStrictEqual(
+        state.calls
+          .filter(call => call.startsWith('warn'))
+          .map(call => call.split('|').slice(2)),
+        [['no Learn More', 'Cancel']],
+      );
+    });
+
+    it('F-0414 7.E10: a Feature that only starts like a disallowed one goes on to the reload', async () => {
+      const state = setup();
+      state.manifest = DISALLOWED;
+      state.read = askingFor('ghcr.io/o/features/badge:1');
+      await reopened(state);
+      deepStrictEqual(
+        [
+          state.commands.length,
+          state.calls.some(call => call.startsWith('warn')),
+        ],
+        [1, false],
+      );
+    });
+
+    it('F-0414 AC-17: the always-installed Features are checked too', async () => {
+      const state = setup();
+      state.manifest = DISALLOWED;
+      const {ports} = portsOf(state);
+      await handlerOf({
+        ...ports,
+        settings: {
+          ...ports.settings,
+          defaultFeatures: () => ({'ghcr.io/o/features/bad:2': {}}),
+        },
+      })();
+      deepStrictEqual(
+        [
+          state.commands,
+          state.calls.filter(call => call.startsWith('warn')).length,
+        ],
+        [[], 1],
+      );
+    });
+
+    it('F-0414 7.E11: a configuration that asks for no Feature downloads no manifest', async () => {
+      const state = setup();
+      await reopened(state);
+      deepStrictEqual(
+        state.calls.filter(call => call === 'downloadManifest'),
+        [],
+      );
+    });
+  });
 });

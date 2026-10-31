@@ -15,6 +15,11 @@ import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import {featureSettingsOf} from '../connect/feature-settings.ts';
 import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
+import {
+  type ProblematicPorts,
+  problematicFeatureRefused,
+} from '../features/problematic-check.ts';
+import {requestedFeaturesOf} from '../cli/failing-feature.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
   type PreReloadProgress,
@@ -114,17 +119,20 @@ export interface CommandChecksPorts {
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   bridge: Pick<CliBridge, 'readConfiguration'>;
   progress: PreReloadProgressPorts;
+  /** The control manifest check of the Features, made once a configuration is chosen. */
+  problematic: ProblematicPorts;
   logger: Logger;
 }
 
 /** The checks before a reload of an open command, over `folder`, with the program the engine runs as `dockerPath`. */
-export function commandBeforeReload(
+export async function commandBeforeReload(
   ports: CommandChecksPorts,
   firstCheck: PreReloadPorts['firstCheck'],
   folder: string,
   dockerPath: string,
 ): ReturnType<typeof beforeReload> {
-  return beforeReload(
+  const cancellation = new AbortController().signal;
+  const result = await beforeReload(
     {
       firstCheck,
       dialogs: ports.dialogs,
@@ -142,7 +150,32 @@ export function commandBeforeReload(
         ports.settings.defaultFeatures(),
         ports.settings.lockfile(),
       ),
-      cancellation: new AbortController().signal,
+      cancellation,
     },
   );
+  if (result.choice.kind !== 'chosen') {
+    return result;
+  }
+  const requested = [
+    ...new Set([
+      ...result.choice.features,
+      ...requestedFeaturesOf(undefined, ports.settings.defaultFeatures()),
+    ]),
+  ];
+  try {
+    if (
+      await problematicFeatureRefused(
+        ports.problematic,
+        requested,
+        cancellation,
+      )
+    ) {
+      result.progress.close();
+      return {choice: {kind: 'rejected'}, progress: result.progress};
+    }
+  } catch (caught) {
+    result.progress.close();
+    throw caught;
+  }
+  return result;
 }

@@ -14,6 +14,7 @@ import {
   cliFailureText,
   type ConfigurationResult,
 } from '../cli/cli-lines.ts';
+import {requestedFeaturesOf} from '../cli/failing-feature.ts';
 import {ENGINE_TEMPLATES, type Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
@@ -110,7 +111,13 @@ export interface ConfigurationRequest {
 /** How choosing ended. */
 export type ConfigurationChoice =
   /** A configuration was chosen and read: the file and the folder to open in the container. */
-  | {kind: 'chosen'; configFile: string; workspaceFolder: string}
+  | {
+      kind: 'chosen';
+      configFile: string;
+      workspaceFolder: string;
+      /** The keys of the configuration's `features`, as written. */
+      features: string[];
+    }
   /** The folder holds no configuration. */
   | {kind: 'noConfiguration'}
   /** The user ended it: Escape, an empty filter, focus away, "Open File", or a cancelled CLI read. */
@@ -325,5 +332,6 @@ export async function chooseConfiguration(
     kind: 'chosen',
     configFile: candidate.file,
     workspaceFolder: read.workspaceFolder,
+    features: requestedFeaturesOf(read.configuration.features, undefined),
   };
 }

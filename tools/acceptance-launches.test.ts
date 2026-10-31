@@ -59,6 +59,8 @@ function labelsFromExplorer(): string[] {
     'containers-ports',
     'containers-features',
     'containers-shutdown',
+    'containers-index-broken',
+    'containers-index-down',
     'containers-killed-23',
     'containers-killed-35',
     'containers-killed-43',
@@ -292,6 +294,18 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
         ],
         [
+          'containers-index-broken',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-index-down',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
           'containers-killed-23',
           ['remote-oss.remote-containers'],
           true,
@@ -398,6 +412,20 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-index-broken',
+          'containers-index',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-index-down',
+          'containers-index',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
           'containers-killed-23',
           'containers-killed',
           shared,
@@ -447,6 +475,8 @@ describe('the launches of the VSCodium run', () => {
         'containers-ports',
         'containers-features',
         'containers-shutdown',
+        'containers-index-broken',
+        'containers-index-down',
         'containers-killed-23',
         'containers-killed-35',
         'containers-killed-43',
@@ -1280,7 +1310,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, the three killed launches name their cases, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80: containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, the three killed launches name their cases, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1291,6 +1321,23 @@ describe('the platform cases (card coverage-12)', () => {
         .filter(([, environment]) => environment !== undefined),
       [
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
+        ['containers-features', {PATH: '<run>/browser-bin:<path>'}],
+        [
+          'containers-index-broken',
+          {
+            REMOTE_OSS_TEMPLATE_INDEX:
+              '${HARNESS_DOWNLOADS_LOCAL}/templates/broken-index.json',
+            HARNESS_INDEX_CASE: 'broken',
+          },
+        ],
+        [
+          'containers-index-down',
+          {
+            REMOTE_OSS_TEMPLATE_INDEX:
+              '${HARNESS_DOWNLOADS_LOCAL}/templates/unreachable',
+            HARNESS_INDEX_CASE: 'down',
+          },
+        ],
         ['containers-killed-23', {HARNESS_KILLED_CASE: '23'}],
         ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
         ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],
@@ -1341,12 +1388,17 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('tooling-57: only the containers launch and containers-features ask for the run’s templates', () => {
+  it('tooling-57, containers-80: only the containers launch, containers-features and the two index launches ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
-      ['containers', 'containers-features'],
+      [
+        'containers',
+        'containers-features',
+        'containers-index-broken',
+        'containers-index-down',
+      ],
     );
   });
 });

@@ -382,6 +382,7 @@ Rules:
   Kill all use it.
 - The environment the helper hands to `ssh` is the editor's environment it was started with minus the helper's own parameter variable (`REMOTE_OSS_HELPER_PARAMETERS`: the nonce and the request); the askpass variables S3 sets are added on top (ruled 2026-10-09, #187 review).
 - The record is written only after the connection completes.
+- **A login wait that times out kills its attempt** (athena on #1221, F-2704 7.E1, AC-32): the window that owns the login sends `kill` at once, before the timeout reaches the dialog, so the probe and the install never run for it. A window waiting on another window's attempt sends nothing; the owner's kill ends the attempt for both. Retry starts a new one.
 - `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).
   The interim that failed such a connect at validate (ruled on #299; card connect-15) ended with T5 (#381): the
   connection step now runs the install terminal. What remains until T7b (#393) merges: the `secondSsh` and `socket`

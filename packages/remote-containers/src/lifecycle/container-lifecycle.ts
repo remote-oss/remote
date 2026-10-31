@@ -427,14 +427,17 @@ export function containerLifecycleOf(dependencies: {
       : decision.kind === 'use'
         ? decision.idLabels
         : idLabels(folder, configFile);
-    // a rebuild removes a legacy container the CLI's remove would miss: the CLI only finds the labels it's given
+    // a rebuild removes the folder's containers itself, whatever their labels: the CLI's remove would miss a legacy one
+    // (it only finds the labels it's given), and its check of the disallowed Features runs before its remove
     for (const container of discovery.containers) {
       if (
         rebuilding &&
-        isLegacy(folder, container) &&
         // a container that is already removing will be gone on its own, and the rm would only fail on it
         container.status !== 'removing'
       ) {
+        const kind = isLegacy(folder, container)
+          ? 'the legacy container'
+          : 'the container';
         const removed = await askEngine(
           engine,
           ['rm', '--force', container.id],
@@ -446,11 +449,11 @@ export function containerLifecycleOf(dependencies: {
         if (removed.kind === 'failed') {
           return {
             kind: 'discoveryFailed',
-            detail: `the legacy container ${container.id.slice(0, IDENTIFIER_LENGTH)} couldn't be removed: ${removed.detail}`,
+            detail: `${kind} ${container.id.slice(0, IDENTIFIER_LENGTH)} couldn't be removed: ${removed.detail}`,
           };
         }
         logger.info(
-          `rebuilding: removed the legacy container ${container.id.slice(0, IDENTIFIER_LENGTH)}`,
+          `rebuilding: removed ${kind} ${container.id.slice(0, IDENTIFIER_LENGTH)}`,
         );
       }
     }
