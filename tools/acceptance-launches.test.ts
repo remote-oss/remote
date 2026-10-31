@@ -615,6 +615,9 @@ describe('the launches of the VSCodium run', () => {
   });
 
   it('containers-101: only the containers-podman launch names an engine, and its user settings gain dev.containers.dockerPath podman while every other launch’s stay as they are', () => {
+    const podman = launches.find(
+      launch => launch.label === 'containers-podman',
+    );
     deepStrictEqual(
       [
         launches
@@ -623,12 +626,9 @@ describe('the launches of the VSCodium run', () => {
         launches
           .filter(launch => launch.engine === undefined)
           .every(launch => settingsOfLaunch(launch) === launch.settings),
-        settingsOfLaunch(
-          launches.find(launch => launch.label === 'containers-podman') ?? {
-            kind: 'plain',
-            suite: '',
-          },
-        )?.['dev.containers.dockerPath'],
+        podman === undefined
+          ? undefined
+          : settingsOfLaunch(podman)?.['dev.containers.dockerPath'],
         launches.find(launch => launch.label === 'containers')?.settings?.[
           'dev.containers.dockerPath'
         ],

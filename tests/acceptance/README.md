@@ -598,6 +598,21 @@ request log, one line per request: time, method, path and user agent, and `HARNE
 `<run>/downloads-tls.log` with one line per TLS handshake that names a server: time and server name. `startHost({downloads: true})` gives a host of
 the server suite the same names, and `server/downloads.test.ts` holds the rows that prove the capability.
 
+## Podman launch
+
+`containers-podman` is the `containers` launch with `dev.containers.dockerPath` set to `podman` (the launch's `engine`
+field), so only the extension's engine is Podman; the run's SSH host, registry and download host stay on Docker. It is
+named only: a run makes it when `--launches containers-podman` names it. The machine needs Podman 5 or later, and the
+run refuses without it (`acceptance: the containers-podman launch needs Podman 5 or later: <what podman printed>`).
+Rootless Podman needs `newuidmap` and `newgidmap` setuid and `/etc/subuid` and `/etc/subgid` entries for the user.
+
+The run copies its dev container image into Podman's storage (`docker save` into a file of the run's folder, then
+`podman load`) and gives the tests `HARNESS_ENGINE=podman` and `HARNESS_ENGINE_IMAGE`, the name Podman lists that image
+under (`docker.io/library/…`). The suite's rows spawn the engine through `engineCli()` of `windows/harness.ts`, never a
+literal `docker`. At its end the run removes its Podman containers (by the run's label), the loaded image and a `vscode`
+volume made after the run began; `pnpm acceptance:clean` removes the containers and the image of a run on a machine
+with a working Podman, and leaves the volume.
+
 ## Genuine VS Code launch
 
 The `genuine` launch starts VS Code at the recorded version of ADR-0007 as amended (`EDITOR_VERSION`, 1.139.1, downloaded under `.vscode-test/` on
