@@ -640,6 +640,13 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       await new Promise(resolve => setTimeout(resolve, 5000));
       const stopped = portsOf(await portsRows(window));
       await reloaded(window);
+      await execFileAsync('docker', [
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        `grep -qi ":$(printf '%04X' ${String(detected)}) " /proc/net/tcp /proc/net/tcp6`,
+      ]);
       await showPorts(window);
       const back = await rowsWhen(window, shown => shown.length > 0);
       await new Promise(resolve => setTimeout(resolve, 5000));

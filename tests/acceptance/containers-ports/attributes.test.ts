@@ -94,9 +94,12 @@ describe('the port attributes of the configuration (card containers-73)', functi
     await showPorts(window);
     const [containerId = ''] = await devContainersOf(folderOf(name));
     await listenIn(containerId, port);
-    await rowsWhen(window, shown =>
+    const seen = await rowsWhen(window, shown =>
       shown.some(each => each.runningProcess !== ''),
     );
+    if (!seen.some(each => each.runningProcess !== '')) {
+      throw new Error(`no row showed a process: ${JSON.stringify(seen)}`);
+    }
     await new Promise(resolve => setTimeout(resolve, 3000));
     return portsOf(await rowsWhen(window, () => true)).sort();
   }
