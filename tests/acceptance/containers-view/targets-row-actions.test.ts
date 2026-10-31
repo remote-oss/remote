@@ -294,7 +294,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
   });
 
-  it('F-0902 AC-4 (stop-other-window): Stop Container from another window gives the window connected to the target core’s Cannot reconnect dialog and the disconnected status', async () => {
+  it('F-0902 AC-4 (dev-container-half): Stop Container from another window gives the window connected to the target core’s Cannot reconnect dialog and the disconnected status', async () => {
     const base = 'ra-stop-other';
     const folder = devContainerFolder(base, {name: 'Stop Other'});
     const connected = await openFolderWindow(folder);
