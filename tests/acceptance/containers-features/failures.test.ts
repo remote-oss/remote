@@ -193,7 +193,9 @@ describe('what a failed build with Features says (card containers-94)', function
       kind: await dialogKindOf(window),
       window,
       folder,
-      toasts: await notifications(window),
+      toasts: (await notifications(window)).filter(
+        text => !text.startsWith('Connecting to Dev Container'),
+      ),
     };
   }
 
@@ -308,8 +310,13 @@ describe('what a failed build with Features says (card containers-94)', function
       } else {
         await answerDialog(window, answer);
       }
+      if (answer === 'Learn More') {
+        // Core asks before it opens an address of a domain it does not trust yet.
+        await waitForDialog(window, 30_000);
+        await answerDialog(window, 'Open');
+      }
       await waitFor(
-        'the dialog to close',
+        `the dialog to close after ${answer}`,
         async () => (await dialogOf(window)) === undefined,
         30_000,
       );
