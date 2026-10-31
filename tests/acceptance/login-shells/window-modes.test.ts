@@ -177,6 +177,31 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
     });
   });
 
+  it('F-2704 AC-30 (remote-command-on): a host with RemoteCommand exec zsh -l connects while remote.SSH.enableRemoteCommand is on, and the .zshenv export reaches a task', async () => {
+    await withRemoteCommands({'rc-zsh': 'exec zsh -l'}, async () => {
+      await freshServer('harness-bash');
+      await setting('remote.SSH.enableRemoteCommand', true);
+      await writeHomeFile('harness-bash', '.zshenv', 'export F2704_RCZSH=1\n');
+      try {
+        const mark = connectionLog().length;
+        const environment = await withWindow('rc-zsh', 'wm-ac30-on', () =>
+          taskEnvironment('wm-ac30-on', 'harness-bash', 'wm-ac30-on'),
+        );
+        deepStrictEqual(
+          [
+            environment.F2704_RCZSH,
+            connectionLog()
+              .slice(mark)
+              .filter(line => line.includes('login shell is')),
+          ],
+          ['1', ["the host's login shell is /bin/bash (bash)"]],
+        );
+      } finally {
+        await removeHomeFiles('harness-bash', '.zshenv');
+      }
+    });
+  });
+
   it('F-2704 AC-31 (remote-command-echo): a host with RemoteCommand echo hi and enableRemoteCommand on fails within 5 s with the dialog of AC-13 and no notice', async () => {
     await withRemoteCommands({'rc-end': 'echo hi'}, async () => {
       await freshServer('harness-bash');
