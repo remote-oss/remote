@@ -25,6 +25,8 @@ export interface OptionRow {
   value: string;
   /** The row that stands for the text the user typed. */
   custom?: true;
+  /** The editor's icon beside the label. */
+  iconPath?: unknown;
 }
 
 /** The members of the editor's quick pick the screens use. */
@@ -39,6 +41,7 @@ export interface OptionPicker {
   value: string;
   buttons: readonly unknown[];
   matchOnDescription: boolean;
+  matchOnDetail: boolean;
   ignoreFocusOut: boolean;
   onDidAccept(listener: () => void): unknown;
   onDidChangeValue(listener: (value: string) => void): unknown;
@@ -54,6 +57,10 @@ export interface QuickInputPorts {
   createQuickPick(): OptionPicker;
   /** The editor's Back button of a quick input's title bar. */
   backButton: unknown;
+  /** The title-bar button that finishes the wizard with the defaults, on the screens that have one. */
+  finishButton: unknown;
+  /** The editor's icon that marks a verified owner. */
+  verifiedIcon: unknown;
   translate: Translate;
 }
 
@@ -85,6 +92,8 @@ interface BooleanItem {
   label: string;
   description?: string;
   checked: boolean;
+  /** Carries the verified icon. */
+  verified?: boolean;
 }
 
 /** A screen for the booleans of a template or a Feature, all at once. */
@@ -92,11 +101,14 @@ export interface BooleanScreen {
   title: string;
   placeholder: string;
   items: readonly BooleanItem[];
+  /** True on Select Features: a title-bar button that finishes the wizard with what is checked. */
+  finishButton?: true;
 }
 
 /** What a boolean screen ends with. */
 export type BooleanAnswer =
   | {kind: 'values'; checked: ReadonlySet<string>}
+  | {kind: 'finish'; checked: ReadonlySet<string>}
   | {kind: 'back'}
   | {kind: 'escape'};
 
@@ -112,7 +124,12 @@ function text(
 function shown<Answer extends {kind: string}>(
   ports: QuickInputPorts,
   cancellation: AbortSignal,
-  ends: {escape: Answer; back: Answer},
+  ends: {
+    escape: Answer;
+    back: Answer;
+    /** The answer of the title-bar Finish button, from what the screen holds when it is pressed. */
+    finishing?: (picker: OptionPicker) => Answer;
+  },
   setUp: (picker: OptionPicker, finish: (answer: Answer) => void) => void,
 ): Promise<Answer> {
   return new Promise(resolve => {
@@ -126,11 +143,17 @@ function shown<Answer extends {kind: string}>(
       }
     }
     picker.matchOnDescription = false;
+    picker.matchOnDetail = false;
     picker.ignoreFocusOut = false;
-    picker.buttons = [ports.backButton];
+    picker.buttons =
+      ends.finishing === undefined
+        ? [ports.backButton]
+        : [ports.backButton, ports.finishButton];
     picker.onDidTriggerButton(button => {
       if (button === ports.backButton) {
         finish(ends.back);
+      } else if (ends.finishing !== undefined) {
+        finish(ends.finishing(picker));
       }
     });
     setUp(picker, finish);
@@ -227,13 +250,25 @@ export function pickBooleans(
   return shown<BooleanAnswer>(
     ports,
     cancellation,
-    {escape: {kind: 'escape'}, back: {kind: 'back'}},
+    {
+      escape: {kind: 'escape'},
+      back: {kind: 'back'},
+      ...(screen.finishButton === true
+        ? {
+            finishing: (picker: OptionPicker): BooleanAnswer => ({
+              kind: 'finish',
+              checked: new Set(picker.selectedItems.map(entry => entry.value)),
+            }),
+          }
+        : {}),
+    },
     (picker, finish) => {
       const rows = screen.items.map((item): OptionRow => ({
         label: item.label,
         ...(item.description === undefined
           ? {}
           : {description: item.description}),
+        ...(item.verified === true ? {iconPath: ports.verifiedIcon} : {}),
         value: item.key,
       }));
       picker.title = screen.title;

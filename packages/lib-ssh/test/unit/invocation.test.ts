@@ -388,6 +388,39 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     strictEqual(invocation.arguments.includes('RemoteCommand=none'), false);
   });
 
+  it('F-2704 AC-30: a connection without a RemoteCommand in effect ends with the remote program and says RemoteCommand=none when the host has one', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        remoteProgram: 'sh -c prog',
+        effective: {remoteCommand: 'exec zsh -l'},
+        remoteCommandInEffect: false,
+      }),
+    );
+    deepStrictEqual(
+      [
+        hasPair(invocation, '-o', 'RemoteCommand=none'),
+        invocation.arguments.at(-1),
+      ],
+      [true, 'sh -c prog'],
+    );
+  });
+
+  it('F-2704 AC-30: a connection with a RemoteCommand in effect has no RemoteCommand=none and ends with the host', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        effective: {remoteCommand: 'exec zsh -l'},
+        remoteCommandInEffect: true,
+      }),
+    );
+    deepStrictEqual(
+      [
+        invocation.arguments.includes('RemoteCommand=none'),
+        invocation.arguments.at(-1),
+      ],
+      [false, 'alias'],
+    );
+  });
+
   it('F-2107.BR-1: no remote command adds no RemoteCommand', () => {
     const invocation = buildInvocation(
       makeRequest({remoteCommandInEffect: false}),

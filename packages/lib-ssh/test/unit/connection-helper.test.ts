@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
@@ -213,6 +213,42 @@ describe('connection helper', () => {
     await ended;
     return argumentsOfSsh?.at(-1);
   }
+
+  it('F-2704 AC-30: with a RemoteCommand in effect ssh gets no program after the host, and the first write to the session is the exec line', async () => {
+    const ended = start({
+      ...REQUEST,
+      settings: {...REQUEST.settings, remoteCommandInEffect: true},
+    });
+    const connection = await join();
+    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+    await settled();
+    const programArguments = spawner.started[0]?.specification.programArguments;
+    const input = spawner.started[0]?.inputText();
+    connection.send({type: 'stop'});
+    await ended;
+    deepStrictEqual(
+      [
+        programArguments?.at(-1),
+        programArguments?.includes('RemoteCommand=none'),
+        input?.startsWith('exec sh -c '),
+      ],
+      ['h.invalid', false, true],
+    );
+  });
+
+  it('F-2704 AC-30: a request that carries a remote program while a RemoteCommand is in effect is refused', async () => {
+    await rejects(
+      start({
+        ...REQUEST,
+        remoteProgram: 'sh',
+        settings: {...REQUEST.settings, remoteCommandInEffect: true},
+      }),
+      {
+        message:
+          'a shared connection whose RemoteCommand is in effect takes no remote program',
+      },
+    );
+  });
 
   it('#443: the remote command is the session start of the effective connect timeout', async () => {
     deepStrictEqual(

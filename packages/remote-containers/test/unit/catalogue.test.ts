@@ -238,9 +238,107 @@ describe('the template catalogue (card containers-77)', () => {
         parseCatalogue('{"collections": [3, {"templates": 4}]}'),
       ],
       [
-        {kind: 'catalogue', templates: []},
-        {kind: 'catalogue', templates: []},
+        {kind: 'catalogue', templates: [], features: []},
+        {kind: 'catalogue', templates: [], features: []},
       ],
+    );
+  });
+
+  it('F-0804 BR-3, AC-2: a Feature has the owner of its collection’s repository on github.com, and none from any other host or from no repository', () => {
+    const feature = {id: 'ghcr.io/x/features/f', version: '1.2.3', name: 'F'};
+    const result = parseCatalogue(
+      JSON.stringify({
+        collections: [
+          {
+            sourceInformation: {
+              repository: 'https://github.com/devcontainers/features',
+            },
+            features: [feature],
+          },
+          {
+            sourceInformation: {
+              repository: 'https://gitlab.com/someone/features',
+            },
+            features: [feature],
+          },
+          {features: [feature]},
+        ],
+      }),
+    );
+    deepStrictEqual(
+      result.kind === 'catalogue'
+        ? result.features.map(each => each.owner)
+        : [],
+      ['devcontainers', undefined, undefined],
+    );
+  });
+
+  it('F-0804 BR-1: one index gives the templates and the Features, in the index’s order, and an entry without a text id, name and version is skipped', () => {
+    const result = parseCatalogue(
+      JSON.stringify({
+        collections: [
+          {
+            templates: [{id: 'ghcr.io/x/templates/t', version: '1', name: 'T'}],
+            features: [
+              {
+                id: 'ghcr.io/x/features/b',
+                version: '2.0.0',
+                name: 'B',
+                options: {level: {type: 'string'}},
+              },
+              {id: 'ghcr.io/x/features/skipped', version: '1'},
+              {name: 'No id', version: '1'},
+              {id: 'ghcr.io/x/features/no-version', name: 'No version'},
+              3,
+            ],
+          },
+          {
+            features: [
+              {id: 'ghcr.io/x/features/a', version: '1.0.0', name: 'A'},
+            ],
+          },
+        ],
+      }),
+    );
+    deepStrictEqual(
+      result.kind === 'catalogue'
+        ? [
+            result.templates.map(each => each.name),
+            result.features.map(each => [
+              each.id,
+              each.version,
+              each.name,
+              each.options,
+            ]),
+          ]
+        : [],
+      [
+        ['T'],
+        [
+          ['ghcr.io/x/features/b', '2.0.0', 'B', {level: {type: 'string'}}],
+          ['ghcr.io/x/features/a', '1.0.0', 'A', {}],
+        ],
+      ],
+    );
+  });
+
+  it('F-0804 BR-2: within a collection the Features keep the order of its features list', () => {
+    const result = parseCatalogue(
+      JSON.stringify({
+        collections: [
+          {
+            features: ['c', 'a', 'b'].map(name => ({
+              id: `ghcr.io/x/features/${name}`,
+              version: '1',
+              name,
+            })),
+          },
+        ],
+      }),
+    );
+    deepStrictEqual(
+      result.kind === 'catalogue' ? result.features.map(each => each.name) : [],
+      ['c', 'a', 'b'],
     );
   });
 

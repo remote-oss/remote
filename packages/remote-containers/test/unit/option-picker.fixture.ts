@@ -13,6 +13,12 @@ import type {
 /** The Back button of the fakes' title bar. */
 export const BACK_BUTTON = {name: 'back'};
 
+/** The Finish button of the fakes' title bar. */
+export const FINISH_BUTTON = {name: 'finish'};
+
+/** The verified icon of the fakes. */
+export const VERIFIED_ICON = {name: 'verified'};
+
 /** What a script step does with the screen that has been shown. */
 export type Step = (picker: FakeOptionPicker) => void;
 
@@ -22,6 +28,7 @@ export class FakeOptionPicker
   implements OptionPicker
 {
   canSelectMany = false;
+  matchOnDetail = true;
   buttons: readonly unknown[] = [];
   private readonly triggering: Array<(button: unknown) => void> = [];
   /** Records the listener of the title-bar buttons. */
@@ -68,6 +75,8 @@ export function scriptedInput(steps: Step[]): {
     pickers,
     ports: {
       backButton: BACK_BUTTON,
+      finishButton: FINISH_BUTTON,
+      verifiedIcon: VERIFIED_ICON,
       createQuickPick: () => {
         const picker = new FakeOptionPicker();
         pickers.push(picker);
@@ -131,6 +140,8 @@ export function takeDefaults(picker: FakeOptionPicker): void {
 export function repeatedInput(step: Step): Omit<QuickInputPorts, 'translate'> {
   return {
     backButton: BACK_BUTTON,
+    finishButton: FINISH_BUTTON,
+    verifiedIcon: VERIFIED_ICON,
     createQuickPick: () => {
       const picker = new FakeOptionPicker();
       picker.show = () => {

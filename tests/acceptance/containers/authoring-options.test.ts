@@ -21,6 +21,7 @@ import {
 import {
   CONFIGURATION,
   startCommand,
+  takeFeatureScreen,
   withWindow,
   written,
 } from './authoring-support.ts';
@@ -36,8 +37,9 @@ interface Written {
   containerEnv: Record<string, string>;
 }
 
-/** The configuration the wizard wrote into `folder`, once it is there. */
-async function writtenIn(folder: string): Promise<Written> {
+/** The configuration the wizard wrote into `folder`, once Select Features is taken with nothing checked and the file is there. */
+async function writtenIn(window: string, folder: string): Promise<Written> {
+  await takeFeatureScreen(window);
   const file = path.join(folder, CONFIGURATION);
   await written(file);
   await new Promise(resolve => setTimeout(resolve, 1000));
@@ -142,7 +144,7 @@ describe('the template’s options in the wizard (card containers-87)', function
       await toggleQuickPickRow(window, 'With tests');
       await toggleQuickPickRow(window, 'With docs');
       await pressQuickPickOk(window);
-      const configuration = await writtenIn(folder);
+      const configuration = await writtenIn(window, folder);
       deepStrictEqual(
         [
           configuration.name,
@@ -170,7 +172,7 @@ describe('the template’s options in the wizard (card containers-87)', function
       await acceptQuickPick(window);
       await screenWith(window, BOOLEAN_SCREEN);
       await pressQuickPickOk(window);
-      const configuration = await writtenIn(folder);
+      const configuration = await writtenIn(window, folder);
       deepStrictEqual(
         [configuration.containerEnv.CHANNEL, configuration.containerEnv.MOTTO],
         ['edge2', 'my motto'],
@@ -219,7 +221,7 @@ describe('the template’s options in the wizard (card containers-87)', function
       await takenThrough(window, STRING_SCREENS);
       await screenWith(window, BOOLEAN_SCREEN);
       await pressEscape(window);
-      const configuration = await writtenIn(folder);
+      const configuration = await writtenIn(window, folder);
       deepStrictEqual(
         [
           configuration.containerEnv.WITH_DOCS,
@@ -285,7 +287,7 @@ describe('the template’s options in the wizard (card containers-87)', function
       await takenThrough(window, ['Channel:', 'Motto:']);
       await screenWith(window, BOOLEAN_SCREEN);
       await pressQuickPickOk(window);
-      const configuration = await writtenIn(folder);
+      const configuration = await writtenIn(window, folder);
       deepStrictEqual(
         [
           rows.length,
