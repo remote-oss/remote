@@ -1135,6 +1135,15 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
+          {
+            folder: path.join('/run', 'extensions-containers-podman'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
@@ -1636,6 +1645,118 @@ describe('acceptance', () => {
         [1, true],
         [3, true],
       ]);
+    });
+
+    /** The name Podman lists the run's loaded dev container image under. */
+    const PODMAN_IMAGE = `docker.io/library/remote-oss-acceptance-devcontainer:${acceptanceRunId(process.env, process.pid)}`;
+
+    /** Runs the launch `label` with a Podman that answers as `version` says, and what it printed. */
+    async function podmanRun(
+      label: string,
+      version: string,
+    ): Promise<{status: number; lines: string[]}> {
+      harness.answers.set('podman version', {
+        status: 0,
+        stdout: version,
+        stderr: '',
+      });
+      harness.answers.set('podman image', {
+        status: 0,
+        stdout: `alpine:3\n${PODMAN_IMAGE}\n`,
+        stderr: '',
+      });
+      const lines: string[] = [];
+      const previousError = console.error;
+      console.error = (line: unknown) => lines.push(String(line));
+      try {
+        const status = await runAcceptance(
+          workspace.root,
+          harness,
+          'vscodium',
+          [label],
+        );
+        return {status, lines};
+      } finally {
+        console.error = previousError;
+      }
+    }
+
+    it('containers-101: the containers-podman launch with a Podman older than 5 refuses the run before it starts a host, naming what podman printed', async () => {
+      const {status, lines} = await podmanRun('containers-podman', '4.9.3\n');
+      deepStrictEqual(
+        [
+          status,
+          lines.filter(line => line.startsWith('acceptance: the containers')),
+          harness.calls.some(call => call.startsWith('docker run')),
+        ],
+        [
+          1,
+          [
+            'acceptance: the containers-podman launch needs Podman 5 or later: 4.9.3',
+          ],
+          false,
+        ],
+      );
+    });
+
+    it('containers-101: the containers-podman launch copies the run’s dev container image into Podman, and its tests get the engine and the name Podman lists the image under', async () => {
+      const {status} = await podmanRun('containers-podman', '5.8.9\n');
+      const saved = harness.calls.findIndex(call =>
+        call.startsWith('docker save --output'),
+      );
+      const loaded = harness.calls.findIndex(call =>
+        call.startsWith('podman load --input'),
+      );
+      deepStrictEqual(
+        [
+          status,
+          saved >= 0 && saved < loaded,
+          harness.variables?.HARNESS_ENGINE,
+          harness.variables?.HARNESS_ENGINE_IMAGE,
+        ],
+        [0, true, 'podman', PODMAN_IMAGE],
+      );
+    });
+
+    it('containers-101: a run of another launch needs no Podman: it asks nothing of it and sets no engine', async () => {
+      const {status} = await podmanRun('containers', '4.9.3\n');
+      deepStrictEqual(
+        [
+          status,
+          harness.calls.filter(call => call.startsWith('podman ')),
+          harness.variables?.HARNESS_ENGINE,
+          harness.variables?.HARNESS_ENGINE_IMAGE,
+        ],
+        [0, [], undefined, undefined],
+      );
+    });
+
+    it('containers-101: a containers-podman run removes what it left in Podman after the clean-up of Docker, and a Podman container that stays fails the run', async () => {
+      const clean = await podmanRun('containers-podman', '5.8.9\n');
+      const docker = harness.calls.indexOf(RUN_CONTAINERS);
+      const podman = harness.calls.indexOf(
+        RUN_CONTAINERS.replace('docker ps', 'podman ps'),
+      );
+      harness.calls.length = 0;
+      harness.answers.set('podman ps', {
+        status: 0,
+        stdout: 'c9\n',
+        stderr: '',
+      });
+      const stuck = await podmanRun('containers-podman', '5.8.9\n');
+      deepStrictEqual(
+        [
+          clean.status,
+          docker >= 0 && docker < podman,
+          stuck.status,
+          stuck.lines.some(line =>
+            /^acceptance: the run .+ still owns podman containers after the clean-up: c9/.test(
+              line,
+            ),
+          ),
+        ],
+        [0, true, 1, true],
+      );
     });
 
     it('prints the cause of an empty error and returns 1', async () => {

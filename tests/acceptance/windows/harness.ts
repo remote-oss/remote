@@ -170,6 +170,12 @@ export function variable(name: string): string {
   return value;
 }
 
+/** The engine CLI the launch's extension uses: `HARNESS_ENGINE`, or `docker`. */
+export function engineCli(): string {
+  const engine = process.env.HARNESS_ENGINE;
+  return engine === undefined || engine === '' ? 'docker' : engine;
+}
+
 /** The lines of a JSON-lines file; a file not written yet is empty. */
 function linesOf<Line>(file: string): Line[] {
   return existsSync(file)
