@@ -58,6 +58,7 @@ import {
   sweepStaleDevContainers,
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
+import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {
   agentSocketPath,
   controlFolderOf,
@@ -117,9 +118,6 @@ import {
 export {mappedPort} from './acceptance-run.ts';
 export {runCommand} from './command-runner.ts';
 export type {CommandResult} from './command-runner.ts';
-
-/** The editor version the tests run on: the floor of ADR-0007. */
-const EDITOR_VERSION = '1.139.1';
 
 /**
  * How long the run waits before a launch whose resolve must find no live helper: the extension's helper outlives
@@ -203,8 +201,12 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_LOG: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
-  /** The VS Code executable at the floor of ADR-0007, only when a chosen launch starts it. */
+  /** The version of the editor the tests run on: the recorded version, or the job's for a genuine launch. */
+  HARNESS_EDITOR_VERSION: string;
+  /** The VS Code executable of the genuine version, only when a chosen launch starts it. */
   HARNESS_VSCODE_EXECUTABLE?: string;
+  /** The version of VS Code the genuine launches run, only when a chosen launch starts it. */
+  HARNESS_GENUINE_VERSION?: string;
   /** The download host's bases and request log (`tools/acceptance-downloads.ts`), in the VSCodium run only. */
   HARNESS_DOWNLOADS_HTTP?: string;
   HARNESS_DOWNLOADS_HTTPS?: string;
@@ -230,8 +232,8 @@ export interface HarnessDependencies {
   editorCli: () => Promise<string>;
   /** The VSCodium executable at the pinned release, downloading and unpacking it when it is missing. */
   vscodiumExecutable: () => Promise<string>;
-  /** The VS Code executable at the version under test, downloading the editor when it is missing. */
-  vscodeExecutable: () => Promise<string>;
+  /** The VS Code executable of `version`, downloading the editor when it is missing. */
+  vscodeExecutable: (version: string) => Promise<string>;
   /**
    * Starts test-cli with the harness variables and returns its exit code and its output; `label` picks one of the
    * configurations, and none runs the only one.
@@ -698,32 +700,24 @@ export function installsOf(
       if (launch.kind !== 'plain') {
         return [];
       }
-      if (launch.client !== undefined) {
-        return [
-          {
-            folder: extensionsFolderOf(runFolder, launch),
-            files: [...vsixFiles],
-            client: launch.client,
-          },
-        ];
+      if (launch.client === undefined && launch.withExtensions === undefined) {
+        return [];
       }
-      return launch.withExtensions === undefined
-        ? []
-        : [
-            {
-              folder: extensionsFolderOf(runFolder, launch),
-              files: [
-                ...vsixFiles,
-                ...packagedExtensions(
-                  root,
-                  launch.withExtensions.flatMap(
-                    extensionId => LAUNCH_EXTENSIONS.get(extensionId) ?? [],
-                  ),
-                ),
-              ],
-              client: 'vscodium',
-            },
-          ];
+      return [
+        {
+          folder: extensionsFolderOf(runFolder, launch),
+          files: [
+            ...vsixFiles,
+            ...packagedExtensions(
+              root,
+              (launch.withExtensions ?? []).flatMap(
+                extensionId => LAUNCH_EXTENSIONS.get(extensionId) ?? [],
+              ),
+            ),
+          ],
+          client: launch.client ?? 'vscodium',
+        },
+      ];
     }),
   ];
 }
@@ -736,6 +730,7 @@ async function prepare(
   editor: EditorChoice,
   stops: Array<() => Promise<void>>,
   chosen: readonly Launch[],
+  genuineVersion: string,
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
   const runId = acceptanceRunId(process.env, process.pid);
@@ -786,7 +781,7 @@ async function prepare(
   const vscode = chosen.some(
     launch => launch.kind === 'plain' && launch.client === 'vscode',
   )
-    ? await dependencies.vscodeExecutable()
+    ? await dependencies.vscodeExecutable(genuineVersion)
     : undefined;
   const installs = installsOf(
     root,
@@ -869,7 +864,13 @@ async function prepare(
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
-    ...(vscode === undefined ? {} : {HARNESS_VSCODE_EXECUTABLE: vscode}),
+    HARNESS_EDITOR_VERSION: EDITOR_VERSION,
+    ...(vscode === undefined
+      ? {}
+      : {
+          HARNESS_VSCODE_EXECUTABLE: vscode,
+          HARNESS_GENUINE_VERSION: genuineVersion,
+        }),
     ...downloads?.variables,
     ...(keys === undefined
       ? {}
@@ -1098,6 +1099,21 @@ export async function runAcceptance(
       return 0;
     }
   }
+  const genuine = genuineVersionIn(process.env);
+  if (typeof genuine === 'object') {
+    console.error(`acceptance: ${genuine.problem}`);
+    return 2;
+  }
+  const genuineVersion = genuine;
+  if (
+    genuineVersion !== EDITOR_VERSION &&
+    chosen.some(launch => launch.label === 'ssh-no-proposals')
+  ) {
+    console.error(
+      'acceptance: ssh-no-proposals runs at the recorded version only',
+    );
+    return 2;
+  }
   // The run id in the name lets the clean-up find the editor of a run that was killed.
   const runFolder = mkdtempSync(
     path.join(
@@ -1116,6 +1132,7 @@ export async function runAcceptance(
       editor,
       stops,
       chosen,
+      genuineVersion,
     );
     const exitCodes: number[] = [];
     for (const failure of editor === 'vscodium' ? failureCases(root) : []) {
@@ -1208,6 +1225,22 @@ export async function runAcceptance(
     rmSync(runFolder, {recursive: true, force: true});
     removeBundles(root);
   }
+}
+
+/**
+ * The version of VS Code the genuine launches run: the job's `HARNESS_GENUINE_VERSION`, the recorded version when it
+ * is unset, or the problem when it names a version the run does not take.
+ */
+export function genuineVersionIn(
+  environment: Readonly<Record<string, string | undefined>>,
+): string | {problem: string} {
+  const named = environment.HARNESS_GENUINE_VERSION;
+  const version = named === undefined || named === '' ? EDITOR_VERSION : named;
+  return GENUINE_VERSIONS.includes(version)
+    ? version
+    : {
+        problem: `HARNESS_GENUINE_VERSION must be ${GENUINE_VERSIONS.join(' or ')}`,
+      };
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
@@ -1395,13 +1428,15 @@ async function bundleFolder(
  * extensions folder, the one the editor is started with; test-cli's own install would use its default folder.
  */
 async function editorCli(): Promise<string> {
-  return resolveCliPathFromVSCodeExecutablePath(await vscodeExecutable());
+  return resolveCliPathFromVSCodeExecutablePath(
+    await vscodeExecutable(EDITOR_VERSION),
+  );
 }
 
 /** The VS Code executable at the version under test, downloaded when it is missing, with one retry. */
-async function vscodeExecutable(): Promise<string> {
+async function vscodeExecutable(version: string): Promise<string> {
   return await withOneRetry(
-    () => downloadAndUnzipVSCode(EDITOR_VERSION),
+    () => downloadAndUnzipVSCode(version),
     delay,
     console.log.bind(console),
   );

@@ -435,6 +435,11 @@ export async function runPlainLaunch(
     ),
     REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
     HARNESS_EDITOR_EXECUTABLE: session.executable,
+    ...(launch.kind === 'plain' &&
+    launch.client === 'vscode' &&
+    session.environment.HARNESS_GENUINE_VERSION !== undefined
+      ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
+      : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
     ...withRunTokens(
       launch.environment,

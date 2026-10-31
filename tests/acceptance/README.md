@@ -557,10 +557,10 @@ the server suite the same names, and `server/downloads.test.ts` holds the rows t
 
 ## Genuine VS Code launch
 
-The `genuine` launch starts VS Code at the floor of ADR-0007 (`EDITOR_VERSION`, downloaded under `.vscode-test/` on
+The `genuine` launch starts VS Code at the recorded version of ADR-0007 as amended (`EDITOR_VERSION`, 1.139.1, downloaded under `.vscode-test/` on
 first use) instead of the run's VSCodium, with the extensions installed in a folder of its own, `<run>/extensions-genuine`,
 by VS Code's CLI. Two launch fields do it: `client: 'vscode'` names the editor, and `namedOnly: true` keeps the launch
-out of a run that names no launches, so only `--launches genuine` makes it (it comes after every VSCodium launch, and only `ssh-no-proposals` comes after it). The launch
+out of a run that names no launches, so only `--launches genuine` makes it (it comes after every VSCodium launch, and only `ssh-no-proposals` and `genuine-floor` come after it). The launch
 sets `REMOTE_OSS_ACCEPTANCE_SCRIPT` to the empty string, so the extension shows its real dialogs, which the rows read and
 answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settingsEditorOf`); `localServerDownload` is off,
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
@@ -584,6 +584,15 @@ removes both in its `finally`. The container's removal at the end of the run is 
 a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's rows never reaches it:
 
     node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
+
+The genuine launches run the recorded version unless the job names the floor: the variable `HARNESS_GENUINE_VERSION` is
+`1.139.1` (the default when it is unset) or `1.125.0`, and any other value fails the run before it starts. The run
+downloads that version, installs the family's extensions into it, and gives the tests the version as
+`HARNESS_EDITOR_VERSION`. `ssh-no-proposals` runs at the recorded version only: at the floor the editor lets Remote - SSH resolve without the proposals, so a run that names the floor and that launch fails before it starts. The `genuine` launch also installs Remote Explorer, so its suite shows the Remotes view's SSH
+group at either version with no connect (a genuine editor cannot connect to the run's host: its install of the run's
+VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the declined licence). CI runs both versions:
+
+    HARNESS_GENUINE_VERSION=1.125.0 node tools/acceptance.ts --editor vscodium --launches genuine
 
 ## The host's other accounts (D-85)
 

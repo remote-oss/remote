@@ -649,6 +649,28 @@ describe('runPlainLaunch', () => {
     );
   });
 
+  it('tooling-69: a genuine launch’s tests get the version the job named as the editor version, and any other launch keeps the recorded one', async () => {
+    const seen: Array<string | undefined> = [];
+    for (const label of ['genuine', 'windows']) {
+      const {steps, programs} = recordingSteps('pass');
+      await runPlainLaunch(
+        '/repo',
+        {
+          ...PLAIN_RUN,
+          environment: {
+            ...PLAIN_RUN.environment,
+            HARNESS_EDITOR_VERSION: '1.139.1',
+            HARNESS_GENUINE_VERSION: '1.125.0',
+          },
+        },
+        launchLabelled(launchesOf(REPOSITORY_ROOT), label),
+        steps,
+      );
+      seen.push(programs[1]?.environment.HARNESS_EDITOR_VERSION);
+    }
+    deepStrictEqual(seen, ['1.125.0', '1.139.1']);
+  });
+
   const GENUINE = launchLabelled(launchesOf(REPOSITORY_ROOT), 'genuine');
 
   it('tooling-51: the genuine launch’s editor is the executable given, and its editor and tests get the empty script and the executable that was started', async () => {

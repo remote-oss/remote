@@ -40,7 +40,7 @@ on:
         type: string
         default: all
       genuine:
-        description: Also run the genuine launch, VS Code 1.139.1 with our VSIX, on X64
+        description: Also run the genuine launches, VS Code 1.139.1 (the recorded version) and 1.125.0 (the floor), with our VSIX, on X64
         type: boolean
         default: false
   # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
