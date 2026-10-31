@@ -83,6 +83,10 @@ const IMPOSED_PROPERTY_KEYS = [
   'get',
   // The environment: the `CI` flag every runner sets, which the package run's mode reads (tooling-46).
   'CI',
+  // portsAttributes: the regex keys the containers ports row writes, imposed by the NUL-separated command line
+  // the editor matches them against (it reads a detected process cmdline as-is).
+  'lk',
+  'cat',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an
