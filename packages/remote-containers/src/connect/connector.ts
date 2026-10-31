@@ -24,6 +24,7 @@ import type {CliBridge} from '../cli/cli-bridge.ts';
 import {
   type ConfigurationResult,
   type CliEvent,
+  cliFailureText,
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
@@ -792,7 +793,7 @@ export function containerConnectorOf(
         if (result.kind !== 'configuration') {
           reads.delete(payload);
           logger.warn(
-            `the configuration of ${folder.hostPath} could not be read: ${result.kind}`,
+            `the configuration of ${folder.hostPath} could not be read: ${cliFailureText(result)}`,
           );
           return undefined;
         }
@@ -1016,7 +1017,7 @@ export function containerConnectorOf(
       name = typeof written === 'string' ? written : undefined;
     } else {
       logger.warn(
-        `the configuration's name could not be read: ${configuration.kind}`,
+        `the configuration's name could not be read: ${cliFailureText(configuration)}`,
       );
     }
     const channel = execChannelOf(

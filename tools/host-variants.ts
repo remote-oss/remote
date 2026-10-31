@@ -1,6 +1,6 @@
 /**
  * @fileoverview The host variants of the acceptance tests: the login shells and the download tools a host may have,
- * and the one this process runs, named by the harness variable of the run.
+ * and the image the host starts from; and the one this process runs, named by the harness variable of the run.
  */
 
 /** The login shells of `HOST_SHELL`, by the path `usermod -s` takes, in the order the variant run goes through them. */
@@ -87,4 +87,32 @@ export function fetchVariantsToRun(
 ): readonly FetchVariant[] {
   const named = fetchVariantOf(environment);
   return named === undefined ? FETCH_VARIANTS : [named];
+}
+
+/** The bases of `HARNESS_HOST_BASE`: the image the run starts its SSH host from, Alpine's (the default) or Ubuntu's. */
+export const HOST_BASE_VARIANTS = ['alpine', 'ubuntu-26.04'] as const;
+
+/** One base of the SSH host. */
+export type HostBase = (typeof HOST_BASE_VARIANTS)[number];
+
+/** Whether `value` names a base of the SSH host. */
+function isHostBase(value: string): value is HostBase {
+  return (HOST_BASE_VARIANTS as readonly string[]).includes(value);
+}
+
+/**
+ * The base this process starts its SSH host from, from `HARNESS_HOST_BASE`; `alpine` when it is unset. A name that is
+ * none of the bases throws.
+ */
+export function hostBaseOf(
+  environment: Readonly<Record<string, string | undefined>>,
+): HostBase {
+  const named = environment.HARNESS_HOST_BASE;
+  if (named === undefined || named === '') {
+    return 'alpine';
+  }
+  if (!isHostBase(named)) {
+    throw new Error(`HARNESS_HOST_BASE names no host base: ${named}`);
+  }
+  return named;
 }

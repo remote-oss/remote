@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {chmodSync, existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
+import {chmodSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
@@ -36,6 +36,8 @@ import {
 } from '../windows/renderer.ts';
 import {
   CONFIGURATION,
+  closeScreen,
+  existing,
   startCommand,
   takeOptionScreen,
   withWindow,
@@ -53,11 +55,6 @@ async function pickTemplate(window: string, label: string): Promise<void> {
   await waitForQuickPick(window);
   await chooseQuickPickRow(window, label);
   await takeOptionScreen(window, ALPINE_OPTION);
-}
-
-/** The files named `relatives` under `folder`, those that exist. */
-function existing(folder: string, ...relatives: string[]): string[] {
-  return relatives.filter(relative => existsSync(path.join(folder, relative)));
 }
 
 /** The S182 question for an existing configuration, answered `answer`: whether the file stayed the user's. */
@@ -99,16 +96,6 @@ async function screenOf(window: string): Promise<DetailedQuickPickRow[]> {
   await startCommand(window);
   await waitForQuickPick(window);
   return detailedQuickPickRows(window);
-}
-
-/** Closes the screen of `window` with Escape and waits until it is gone. */
-async function closeScreen(window: string): Promise<void> {
-  await pressEscape(window);
-  await waitFor(
-    'the pick to close',
-    async () => (await quickPickOf(window)) === undefined,
-    30_000,
-  );
 }
 
 /** Types `text` into the screen of `window` and gives the rows once the list has followed. */

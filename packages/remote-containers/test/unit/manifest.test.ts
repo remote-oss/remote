@@ -235,7 +235,7 @@ describe('the manifest', () => {
         directory: 'packages/remote-containers',
       },
       bugs: {url: 'https://github.com/remote-oss/remote/issues'},
-      engines: {vscode: '^1.139.0'},
+      engines: {vscode: '^1.125.0'},
       categories: ['Other'],
       main: './dist/extension.js',
       keywords: [

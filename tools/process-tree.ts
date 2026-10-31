@@ -89,6 +89,39 @@ export function descendantRootOf(
   }
 }
 
+/** The victims a kill must refuse: the harness's own process, its process group, or any of its ancestors. */
+export function refusedTargets(
+  tree: Map<number, ProcessStat>,
+  own: {processId: number; group: number},
+  target:
+    | {kind: 'group'; group: number}
+    | {kind: 'processes'; processIds: readonly number[]},
+): string[] {
+  if (target.kind === 'group') {
+    return target.group === own.group
+      ? [`the process group ${String(target.group)} is the harness's own`]
+      : [];
+  }
+  const ancestors = new Set<number>([own.processId]);
+  let current = tree.get(own.processId)?.parent;
+  while (current !== undefined && current >= 1) {
+    ancestors.add(current);
+    if (current === 1) {
+      break;
+    }
+    current = tree.get(current)?.parent;
+  }
+  const refused: string[] = [];
+  for (const processId of target.processIds) {
+    if (ancestors.has(processId)) {
+      refused.push(
+        `the process ${String(processId)} is the harness itself or one of its ancestors`,
+      );
+    }
+  }
+  return refused;
+}
+
 /** The whole tree of a root: the root itself, and every process whose parent chain leads to it, in id order. */
 export function treeOf(tree: Map<number, ProcessStat>, root: number): number[] {
   const children = new Map<number, number[]>();

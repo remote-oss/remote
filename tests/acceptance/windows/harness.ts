@@ -31,6 +31,7 @@ import {
   descendantRootOf,
   processStatOf,
   processTreeOf,
+  refusedTargets,
   treeOf,
 } from '../../../tools/process-tree.ts';
 import {
@@ -88,6 +89,8 @@ export interface AgentEvent {
   extensionId?: string;
   present?: boolean;
   extensionActive?: boolean;
+  /** The version of the editor an `extension` event came from. */
+  editorVersion?: string;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
   /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
@@ -929,30 +932,50 @@ function processIsGone(processId: number): boolean {
  * Kills window `name`'s processes at once (SIGKILL): its process group, its main process, or its whole
  * tree. The main process is the editor process the run started: the run is this test's own parent, so the
  * parent-field walk up from the window stops at the process it started. The tree is that process's whole
- * tree, read from /proc before any of it is killed. Afterwards it waits, at most 5 s, until none of the
- * killed processes is left.
+ * tree, read from /proc before any of it is killed. A target that is the harness's own group, process or an
+ * ancestor of it is refused without killing anything (tooling-67). Afterwards it waits, at most 5 s, until
+ * none of the killed processes is left.
  */
 export async function killWindow(
   name: string,
   reach: 'processGroup' | 'mainProcess' | 'tree',
 ): Promise<void> {
   const processId = windowProcessId(name);
+  const tree = processTreeOf('/proc');
+  const own = {
+    processId: process.pid,
+    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
+      .group,
+  };
+  function refuse(
+    target:
+      | {kind: 'group'; group: number}
+      | {kind: 'processes'; processIds: readonly number[]},
+  ): void {
+    const refused = refusedTargets(tree, own, target);
+    if (refused.length > 0) {
+      throw new Error(`killWindow(${name}) refused: ${refused.join('; ')}`);
+    }
+  }
   let killed: number[];
   if (reach === 'processGroup') {
     const line = readFileSync(`/proc/${String(processId)}/stat`, 'utf8');
-    process.kill(-processStatOf(processId, line).group, 'SIGKILL');
+    const group = processStatOf(processId, line).group;
+    refuse({kind: 'group', group});
+    process.kill(-group, 'SIGKILL');
     killed = [processId];
   } else {
-    const tree = processTreeOf('/proc');
     const main = descendantRootOf(tree, processId, process.ppid);
-    killed = reach === 'mainProcess' ? [main] : treeOf(tree, main);
-    for (const victim of killed) {
+    const victims = reach === 'mainProcess' ? [main] : treeOf(tree, main);
+    refuse({kind: 'processes', processIds: victims});
+    for (const victim of victims) {
       try {
         process.kill(victim, 'SIGKILL');
       } catch {
         // The process ended between the read and the kill; nothing is left of it to kill.
       }
     }
+    killed = victims;
   }
   const deadline = Date.now() + 5_000;
   for (;;) {
@@ -1027,6 +1050,13 @@ export async function extensionActive(
   extensionId: string,
 ): Promise<boolean> {
   return (await extensionReport(name, extensionId))?.extensionActive === true;
+}
+
+/** The version of the editor of window `name`, as its agent reports it with its answer about an extension. */
+export async function editorVersionOf(name: string): Promise<string> {
+  return (
+    (await extensionReport(name, 'remote-oss.remote-ssh'))?.editorVersion ?? ''
+  );
 }
 
 /** What window `name` reports of the extension `extensionId`: whether its editor has it, and whether it is active. */
