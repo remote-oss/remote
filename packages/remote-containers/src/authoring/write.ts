@@ -30,6 +30,8 @@ export interface WriteRequest {
   templateArgs: TemplateRequest['templateArgs'];
   features: TemplateRequest['features'];
   omitPaths: readonly string[];
+  /** How a target-relative path is named in the question about an existing file; `./<relative>` when none. */
+  displayPath?: (relative: string) => string;
   /** Changes the applied files in the scratch folder, before the questions; a failure writes nothing. */
   adjust?: (scratchFolder: string) => Promise<void>;
 }
@@ -69,7 +71,7 @@ interface WriteFiles {
 interface WriteDialogs {
   /** Shows a modal with the buttons; gives the one chosen, or nothing for Escape. */
   show(
-    severity: 'error' | 'warning',
+    severity: 'error' | 'info',
     message: string,
     detail: string,
     buttons: readonly string[],
@@ -147,15 +149,18 @@ export async function writeTemplate(
         continue;
       }
       const answer = await dialogs.show(
-        'warning',
-        text(WRITE_TEMPLATES.overwritePrompt, [`./${relative}`]),
+        'info',
+        text(WRITE_TEMPLATES.overwritePrompt, [
+          request.displayPath?.(relative) ?? `./${relative}`,
+        ]),
         ports.hasUnsavedChanges(target)
           ? text(WRITE_TEMPLATES.unsavedChangesNote)
           : '',
+        // the first button is the primary one: Skip, which leaves the file as it is
         [
+          text(WRITE_TEMPLATES.skip),
           text(WRITE_TEMPLATES.overwrite),
           text(WRITE_TEMPLATES.cancel),
-          text(WRITE_TEMPLATES.skip),
         ],
       );
       if (answer === text(WRITE_TEMPLATES.overwrite)) {

@@ -109,6 +109,14 @@ export function setup(): Setup {
   };
 }
 
+/** What the wizard gives when it wrote the configuration `CONFIG` into the folder. */
+export const WRITTEN_IN_FOLDER: WizardOutcome = {
+  kind: 'written',
+  files: ['.devcontainer/devcontainer.json'],
+  target: '/w/p',
+  place: 'workspace',
+};
+
 /** The ports over a setup; each call that reaches a port is recorded in `calls`. */
 export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
   const sink = new MemorySink();

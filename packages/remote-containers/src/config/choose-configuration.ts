@@ -99,9 +99,12 @@ export interface ConfigurationRequest {
   mountGitWorktreeCommonDir: boolean;
   /** The Feature settings, which the CLI's read of the configuration takes. */
   features: FeatureSettings;
-  /** The configuration to work on, absolute: with it nothing is discovered and no picker shows. */
-  configFile?: string;
   cancellation: AbortSignal;
+  /**
+   * A configuration file to use instead of the folder's own, absolute, such as the one a row's container was made from
+   * or one newly written to the store of user data: with it nothing is discovered and no picker shows.
+   */
+  configFile?: string;
   /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
    * ends `stopped`, nothing more is shown and the answer is `stopped`. The work (discovery, reads, the CLI) doesn't

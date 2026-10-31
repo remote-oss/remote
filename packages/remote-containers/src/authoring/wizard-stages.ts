@@ -19,6 +19,7 @@ import {
   isSpecificationTemplate,
 } from './curated-templates.ts';
 import type {WalkFiles} from './folder-facts.ts';
+import {askLocation, type LocationPorts} from './location.ts';
 import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
 import {askFeatures, type FeatureChoice} from './select-features.ts';
@@ -47,7 +48,14 @@ export interface WizardState {
 
 /** How the wizard ends. */
 export type WizardOutcome =
-  | {kind: 'written'; files: string[]; target: string}
+  | {
+      kind: 'written';
+      files: string[];
+      /** The folder the files are in. */
+      target: string;
+      /** Whether that is the workspace or a slot of the store. */
+      place: WizardTarget['kind'];
+    }
   | {kind: 'cancelled'}
   | {kind: 'failed'; detail: string};
 
@@ -99,6 +107,8 @@ export interface WizardPorts {
   files: WizardFiles;
   /** The folder of a slot of the extension's own store. */
   slotFolder(slot: string): string;
+  /** The location pick and the store behind it; without it the configuration goes to the workspace. */
+  location?: LocationPorts;
   /** Writes a line to the Dev Containers log. */
   record(line: string): void;
   translate: Translate;
@@ -217,6 +227,37 @@ function templatePickStage(
   };
 }
 
+/** The stage that asks where the configuration goes. */
+function locationStage(
+  location: LocationPorts,
+  ports: StagePorts,
+): WizardStage {
+  return {
+    name: 'location',
+    execute: async (state, previous, cancellation) => {
+      const choice = await askLocation(
+        location,
+        {
+          title: ports.title,
+          folder: state.folder,
+          facts: ports.facts,
+          files: ports.files,
+          translate: ports.translate,
+        },
+        cancellation,
+      );
+      if (choice.kind === 'cancelled') {
+        return {kind: 'done', outcome: {kind: 'cancelled'}};
+      }
+      const target: WizardTarget =
+        choice.kind === 'workspace'
+          ? choice
+          : {kind: 'userData', slot: choice.slot};
+      return {kind: 'next', state: {...state, target}, shown: true};
+    },
+  };
+}
+
 /** The stage that asks for the template's options. */
 function templateOptionsStage(ports: StagePorts): WizardStage {
   return {
@@ -285,9 +326,12 @@ export function stagesOf(
   catalogue: CatalogueResult & {kind: 'catalogue'},
   ports: StagePorts,
 ): readonly WizardStage[] {
-  return [
+  const rest = [
     templatePickStage(catalogue.templates, ports),
     templateOptionsStage(ports),
     selectFeaturesStage(catalogue.features, ports),
   ];
+  return ports.location === undefined
+    ? rest
+    : [locationStage(ports.location, ports), ...rest];
 }
