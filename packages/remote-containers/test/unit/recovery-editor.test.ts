@@ -40,6 +40,7 @@ function editor(answer?: string) {
     },
   };
   const ports = recoveryPortsOf(fake, {
+    writeAttemptLog: () => Promise.resolve(undefined),
     keepEdit: () => Promise.resolve(),
     storePausedRetry: () => Promise.resolve(),
     rebuildContainer: () => Promise.resolve(),

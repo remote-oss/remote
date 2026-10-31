@@ -55,8 +55,14 @@ export interface RecoveryPorts {
     placeholder: string,
     labels: readonly string[],
   ): PromiseLike<string | undefined>;
-  /** Keeps the configuration file for the window that opens `folder` next. */
-  keepEdit(folder: string, configFile: string): PromiseLike<void>;
+  /** Writes the failed attempt's log to a file and gives its path; none when it could not be written. */
+  writeAttemptLog(): PromiseLike<string | undefined>;
+  /** Keeps the configuration file, and the attempt's log file when there is one, for the window that opens `folder` next. */
+  keepEdit(
+    folder: string,
+    configFile: string,
+    logFile: string | undefined,
+  ): PromiseLike<void>;
   /** Reopens the folder on this machine, in this window. */
   openLocally(folder: string): PromiseLike<unknown>;
   reloadWindow(): PromiseLike<unknown>;
@@ -81,12 +87,16 @@ export function recoveryPresenterOf(
   failedContainer: () => FailedContainer | undefined,
   translate: Translate,
 ): FailurePresenter {
+  /** The log file of the attempt whose dialog shows now. */
+  let attemptFile: string | undefined;
+
   /** Keeps the configuration file for the next window, then reopens the folder here; a failed keep is only logged. */
   async function editLocally(folder: DevContainerFolder): Promise<void> {
     try {
       await ports.keepEdit(
         folder.hostPath,
         folder.configFile.fsPath ?? folder.configFile.path,
+        attemptFile,
       );
     } catch (caught) {
       ports.logger.warn(
@@ -157,6 +167,14 @@ export function recoveryPresenterOf(
         return presentNoServerSource(failed);
       }
       const folder = target();
+      try {
+        attemptFile = await ports.writeAttemptLog();
+      } catch (caught) {
+        attemptFile = undefined;
+        ports.logger.warn(
+          `the log of the attempt could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
+        );
+      }
       const dialog = failureDialogOf(failed, folder, translate);
       const chosen = await ports.showError(
         dialog.message,

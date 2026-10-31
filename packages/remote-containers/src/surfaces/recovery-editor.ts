@@ -33,7 +33,11 @@ export function recoveryPortsOf<Address>(
   editor: RecoveryEditor<Address>,
   own: Pick<
     RecoveryPorts,
-    'keepEdit' | 'storePausedRetry' | 'rebuildContainer' | 'logger'
+    | 'keepEdit'
+    | 'writeAttemptLog'
+    | 'storePausedRetry'
+    | 'rebuildContainer'
+    | 'logger'
   >,
 ): Omit<RecoveryPorts, 'disconnected'> {
   return {

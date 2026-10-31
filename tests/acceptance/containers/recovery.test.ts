@@ -22,6 +22,7 @@ import {
   answerDialog,
   dialogDetailLines,
   dialogOf,
+  editorGroups,
   pressEscape,
   primaryButtonOf,
   type ShownDialog,
@@ -330,10 +331,31 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
       async () => (await activeEditorOf(name)) === configuration,
       EDIT_MILLISECONDS,
     );
+    await waitFor(
+      `window ${name} to show the failed attempt's log beside the configuration`,
+      async () => (await editorGroups(name)).length === 2,
+      EDIT_MILLISECONDS,
+    );
     const state = await windowState(name);
+    const [first = [], second = []] = await editorGroups(name);
     deepStrictEqual(
-      {remoteName: state.remoteName, folders: state.folders},
-      {remoteName: null, folders: [pathToFileURL(folder).href]},
+      {
+        remoteName: state.remoteName,
+        folders: state.folders,
+        active: await activeEditorOf(name),
+        first: first.map(entry => [entry.label, entry.preview]),
+        second: second.map(entry => [
+          entry.label.startsWith('dev-containers-attempt-'),
+          entry.preview,
+        ]),
+      },
+      {
+        remoteName: null,
+        folders: [pathToFileURL(folder).href],
+        active: configuration,
+        first: [['devcontainer.json', false]],
+        second: [[true, true]],
+      },
     );
   });
 

@@ -28,6 +28,7 @@ function memento(initial?: unknown): {
 }
 
 const CONFIG = '/w/proj/.devcontainer/devcontainer.json';
+const LOG_FILE = '/logs/dev-containers-attempt-20261101T120000.log';
 
 describe('the pending edit (card containers-11)', () => {
   it('F-0410 AC-4: a stored edit is taken once for the same folder', async () => {
@@ -83,19 +84,34 @@ describe('the pending edit at activation (card containers-11)', () => {
       remoteName?: string;
       folders?: Array<{scheme: string; fsPath: string}>;
       openFails?: unknown;
+      logFile?: string;
+      logExists?: boolean;
     } = {},
   ) {
     const store = memento();
-    await storePendingEdit(store.port, '/w/proj', CONFIG, 1000);
+    await storePendingEdit(
+      store.port,
+      '/w/proj',
+      CONFIG,
+      1000,
+      options.logFile,
+    );
     const opened: string[] = [];
+    const events: string[] = [];
     const sink = new MemorySink();
     await openPendingEdit({
       memento: store.port,
       remoteName: () => options.remoteName,
       folders: () => options.folders ?? [{scheme: 'file', fsPath: '/w/proj'}],
       now: () => 2000,
+      openLog: file => {
+        events.push(`openLog ${file}`);
+        return Promise.resolve();
+      },
+      exists: () => Promise.resolve(options.logExists ?? true),
       open: file => {
         opened.push(file);
+        events.push(`open ${file}`);
         return 'openFails' in options
           ? // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
             Promise.reject(options.openFails)
@@ -105,6 +121,7 @@ describe('the pending edit at activation (card containers-11)', () => {
     });
     return {
       opened,
+      events,
       lines: sink.lines.map(line => `${line.level}: ${line.message}`),
       left: store.held(),
     };
@@ -156,5 +173,79 @@ describe('the pending edit at activation (card containers-11)', () => {
     deepStrictEqual(seen.lines, [
       'warn: the configuration file could not be opened: refused',
     ]);
+  });
+  it('F-0410 AC-4, F-0502 AC-29: the configuration opens first and the attempt’s log after it', async () => {
+    const seen = await activated({logFile: LOG_FILE});
+    deepStrictEqual(seen.events, [`open ${CONFIG}`, `openLog ${LOG_FILE}`]);
+  });
+
+  it('F-0410 5.0: a log file that is gone is skipped, and the configuration still opens', async () => {
+    const seen = await activated({logFile: LOG_FILE, logExists: false});
+    deepStrictEqual(seen.events, [`open ${CONFIG}`]);
+  });
+
+  it('F-0410 5.0: a configuration that cannot be opened is logged, and the log still opens', async () => {
+    const seen = await activated({
+      logFile: LOG_FILE,
+      openFails: new Error('gone'),
+    });
+    deepStrictEqual(
+      [seen.events, seen.lines],
+      [
+        [`open ${CONFIG}`, `openLog ${LOG_FILE}`],
+        ['warn: the configuration file could not be opened: gone'],
+      ],
+    );
+  });
+
+  it('F-0410 5.0: an edit with no log file opens the configuration only', async () => {
+    const seen = await activated();
+    deepStrictEqual(seen.events, [`open ${CONFIG}`]);
+  });
+
+  it('F-0410 AC-4: the log file is stored with the configuration and comes back with it, an old record without one still parses, and a log file that is no text is dropped', async () => {
+    const store = memento();
+    await storePendingEdit(store.port, '/w/a', CONFIG, 1000, LOG_FILE);
+    const earlier = memento({
+      '/w/b': {storedAt: 1000, value: {configFile: CONFIG}},
+    });
+    const malformed = memento({
+      '/w/c': {storedAt: 1000, value: {configFile: CONFIG, logFile: 3}},
+    });
+    deepStrictEqual(
+      [
+        await takePendingEdit(store.port, '/w/a', 1000),
+        await takePendingEdit(earlier.port, '/w/b', 1000),
+        await takePendingEdit(malformed.port, '/w/c', 1000),
+      ],
+      [
+        {configFile: CONFIG, logFile: LOG_FILE},
+        {configFile: CONFIG},
+        undefined,
+      ],
+    );
+  });
+
+  it('contracts: a pending edit that cannot be read is logged, and the activation goes on', async () => {
+    const sink = new MemorySink();
+    await openPendingEdit({
+      memento: {
+        get: () => {
+          throw new Error('unreadable store');
+        },
+        update: () => Promise.resolve(),
+      },
+      remoteName: () => undefined,
+      folders: () => [{scheme: 'file', fsPath: '/w/proj'}],
+      now: () => 2000,
+      open: () => Promise.resolve(),
+      openLog: () => Promise.resolve(),
+      exists: () => Promise.resolve(true),
+      logger: createLogger(sink, {minimumLevel: () => 'info'}),
+    });
+    deepStrictEqual(
+      sink.lines.map(line => `${line.level}: ${line.message}`),
+      ['warn: the pending edit could not be read: unreadable store'],
+    );
   });
 });

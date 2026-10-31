@@ -98,6 +98,8 @@ export interface Scene {
   /** The `DOCKER_HOST` of the editor's environment; unset when undefined. */
   dockerHost: string | undefined;
   connector: ContainerConnector;
+  /** How many connect attempts began their log. */
+  attemptsBegun: number;
   engineCalls: EngineCall[];
   engineFiles: string[];
   cliEnvironments: Array<Readonly<Record<string, string | undefined>>>;
@@ -223,6 +225,7 @@ export function sceneOf(
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
     dockerHost: undefined,
+    attemptsBegun: 0,
     engineCalls: [],
     engineFiles: [],
     cliEnvironments: [],
@@ -520,6 +523,9 @@ export function sceneOf(
       return scene.declinedFails
         ? Promise.reject(new Error('the modal failed'))
         : Promise.resolve();
+    },
+    beginAttempt: () => {
+      scene.attemptsBegun += 1;
     },
     reopenLocally: hostPath => {
       scene.trustCalls.push(`reopenLocally ${hostPath}`);
