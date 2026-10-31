@@ -160,6 +160,9 @@ async function storedOf() {
         '-not',
         '-path',
         '*server*/data*',
+        '-not',
+        '-path',
+        '*/.local/state/VSCodium*',
       )
     )
       .split('\n')
