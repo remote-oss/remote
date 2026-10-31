@@ -20,7 +20,7 @@
     "dead": "node tools/identifiers.ts && knip --no-progress --no-config-hints",
     "coverage": "node tools/identifiers.ts && node tools/coverage.ts",
     "coverage:update": "node tools/identifiers.ts && node tools/coverage.ts --update",
-    "lint:shell": "shellcheck tools/check-layout tools/spec-watch tests/acceptance/host/start-sshd",
+    "lint:shell": "shellcheck tools/check-layout tools/spec-watch tests/acceptance/host/start-sshd tests/acceptance/host-ubuntu/start-sshd",
     "check-licences": "node tools/licences.ts",
     "identifiers": "node tools/identifiers.ts",
     "check-identifiers": "node tools/identifiers.ts --check",

@@ -59,6 +59,7 @@ import {
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
+import type {HostBase} from './host-variants.ts';
 import {
   agentSocketPath,
   controlFolderOf,
@@ -169,6 +170,8 @@ export interface HarnessVariables {
   HARNESS_SSH_CONFIG: string;
   /** The container id, for `docker exec` checks on the host. */
   HARNESS_CONTAINER: string;
+  /** The container id of the run's Ubuntu 26.04 host, when a launch of the run connects to one (`hostBase`). */
+  HARNESS_HOST_UBUNTU_CONTAINER?: string;
   /** The host's address on the run network, which the `routed` alias names; a route cut is scoped to it. */
   HARNESS_ROUTED_ADDRESS: string;
   /** The run's folder: user data, extensions, keys. */
@@ -285,6 +288,17 @@ function masterAlias(
     `ControlPath ${path.join(controlFolder, socket)}`,
     'ControlPersist 600',
   ]);
+}
+
+/** The ssh_config of the run's host of `base`: the run's own for Alpine's host, `ssh_config-<base>` beside it otherwise. */
+export function sshConfigOf(
+  runFolder: string,
+  base: HostBase = 'alpine',
+): string {
+  return path.join(
+    runFolder,
+    base === 'alpine' ? 'ssh_config' : `ssh_config-${base}`,
+  );
 }
 
 /**
@@ -755,7 +769,7 @@ async function prepare(
   started.push(host.container);
   const port = host.port;
   const routedAddress = connectRunNetwork(command, runId, host.container);
-  const configFile = path.join(runFolder, 'ssh_config');
+  const configFile = sshConfigOf(runFolder);
   writeFileSync(
     configFile,
     harnessSshConfig(
@@ -768,6 +782,36 @@ async function prepare(
   );
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
+  // A launch whose window connects to a host of another base gets that host beside the run's, with the same key and
+  // password, the same download names and its own ssh_config.
+  const ubuntuHost = chosen.some(launch => launch.hostBase === 'ubuntu-26.04')
+    ? startHostContainer(
+        command,
+        root,
+        runId,
+        runFolder,
+        [
+          ...(downloads === undefined ? [] : downloadHostArguments()),
+          ...(keys?.hostArguments ?? []),
+        ],
+        'ubuntu-26.04',
+      )
+    : undefined;
+  if (ubuntuHost !== undefined) {
+    started.push(ubuntuHost.container);
+    const ubuntuConfig = sshConfigOf(runFolder, 'ubuntu-26.04');
+    writeFileSync(
+      ubuntuConfig,
+      harnessSshConfig(
+        ubuntuHost.port,
+        runFolder,
+        agentSocket,
+        connectRunNetwork(command, runId, ubuntuHost.container),
+        controlFolderOf(runFolder),
+      ),
+    );
+    await waitForHost(dependencies, ubuntuConfig);
+  }
   await dependencies.bundleSuite(root);
   const vscodium =
     editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
@@ -842,6 +886,9 @@ async function prepare(
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
+    ...(ubuntuHost === undefined
+      ? {}
+      : {HARNESS_HOST_UBUNTU_CONTAINER: ubuntuHost.container}),
     HARNESS_ROUTED_ADDRESS: routedAddress,
     HARNESS_RUN_FOLDER: runFolder,
     HARNESS_RUN_ID: runId,
@@ -1024,7 +1071,9 @@ export async function runLaunches(
         }
         writeUserSettings(
           runFolder,
-          configFile,
+          launch.hostBase === undefined
+            ? configFile
+            : sshConfigOf(runFolder, launch.hostBase),
           withRunTokens(
             withHarnessBases(launch.settings, bases),
             runFolder,
@@ -1290,6 +1339,13 @@ export function vscodiumConfiguration(
       'pids',
     ),
     HARNESS_USER_DATA: userDataFolderOf(runFolder),
+    // A launch on a host of another base checks that host, through its own ssh_config.
+    ...(launch.hostBase === undefined
+      ? {}
+      : {
+          HARNESS_CONTAINER: environment.HARNESS_HOST_UBUNTU_CONTAINER ?? '',
+          HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
+        }),
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,

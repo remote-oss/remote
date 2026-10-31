@@ -5,12 +5,18 @@
  *     node tools/acceptance-variants.ts
  *
  * Each login shell of tools/host-variants.ts gets its own mocha run of the shell-sensitive rows, on a host started
- * with that shell (`HARNESS_HOST_SHELL`), and each download tool one of the download rows (`HARNESS_HOST_FETCH`). A run that fails does not stop the others; the exit status is the
- * first failure's. The rest of the server rows run once, on the default host, in `pnpm test:acceptance:server`.
+ * with that shell (`HARNESS_HOST_SHELL`), and each download tool one of the download rows (`HARNESS_HOST_FETCH`). The
+ * Ubuntu 26.04 host (`HARNESS_HOST_BASE`) gets one run of the shell-sensitive rows and the install and probe rows. A run
+ * that fails does not stop the others; the exit status is the first failure's. The rest of the server rows run once,
+ * on the default host, in `pnpm test:acceptance:server`.
  */
 
 import {spawn} from 'node:child_process';
-import {FETCH_VARIANTS, SHELL_VARIANTS} from './host-variants.ts';
+import {
+  FETCH_VARIANTS,
+  HOST_BASE_VARIANTS,
+  SHELL_VARIANTS,
+} from './host-variants.ts';
 import {isMainModule, REPOSITORY_ROOT, resolveBinary} from './repository.ts';
 
 /** One mocha run of the variant rows: its label, the test files, and the variables that choose the host. */
@@ -28,7 +34,17 @@ const SHELL_ROWS: readonly string[] = [
   'tests/acceptance/server/shared-session.test.ts',
 ];
 
-/** The runs of the login-shell rows, one per shell, then the download rows, one per download tool. */
+/** The rows a host base other than Alpine's goes through: the shell-sensitive ones, the install and the probe. */
+const HOST_BASE_ROWS: readonly string[] = [
+  ...SHELL_ROWS,
+  'tests/acceptance/server/install.test.ts',
+  'tests/acceptance/server/probe.test.ts',
+];
+
+/**
+ * The runs of the login-shell rows, one per shell, then the download rows, one per download tool, then the host-base
+ * rows, one per base other than Alpine's (the default host of every other run).
+ */
 export function variantRuns(): VariantRun[] {
   return [
     ...SHELL_VARIANTS.map(shell => ({
@@ -40,6 +56,11 @@ export function variantRuns(): VariantRun[] {
       label: `download tool ${variant}`,
       testFiles: ['tests/acceptance/server/fetch-tools.test.ts'],
       environment: {HARNESS_HOST_FETCH: variant},
+    })),
+    ...HOST_BASE_VARIANTS.filter(base => base !== 'alpine').map(base => ({
+      label: `host base ${base}`,
+      testFiles: HOST_BASE_ROWS,
+      environment: {HARNESS_HOST_BASE: base},
     })),
   ];
 }

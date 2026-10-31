@@ -109,6 +109,22 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
+  it('tooling-70: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and no launch on another host has a host setup', () => {
+    const remote = launches.find(launch => launch.label === 'remote');
+    deepStrictEqual(
+      [
+        launches.find(launch => launch.label === 'remote-ubuntu'),
+        launches
+          .filter(
+            launch =>
+              launch.hostBase !== undefined && launch.hostSetup !== undefined,
+          )
+          .map(launch => launch.label),
+      ],
+      [{...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'}, []],
+    );
+  });
+
   it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
@@ -125,6 +141,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal',
         'socket',
         'slow',
+        'remote-ubuntu',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',

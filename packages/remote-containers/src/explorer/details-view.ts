@@ -87,7 +87,6 @@ export async function showDetails(
   const {editor, logger} = ports;
   const commands = await editor.commandIds();
   if (!commands.includes(`${views.detailsContainers}.focus`)) {
-    logger.info('the Details view is not registered, so it is not shown');
     return undefined;
   }
   const listeners = new Set<() => void>();
