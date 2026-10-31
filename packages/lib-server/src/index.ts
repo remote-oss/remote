@@ -27,6 +27,8 @@ export {
   type ResultBlock,
   type ScriptStatus,
   parseResult,
+  factOfLine,
+  LAUNCHING_LINE,
   RESULT_BEGIN,
   RESULT_END,
 } from './scripts/result-block.ts';

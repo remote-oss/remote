@@ -149,9 +149,11 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
     }
   });
 
-  it.skip('F-0502 AC-2 (c43-reload-phase): a reload logs no Starting VS Code Server phase, which waits for the product change that starts the phase only when a server is started', async () => {
+  it('F-0502 AC-2 (c43-reload-phase): a reload logs no Starting VS Code Server phase, only the reuse line, and the same server port as before', async () => {
+    const connectMark = containersLog().length;
     const {name, folder} = await connectedWindow('c43-reload-phase');
     try {
+      const firstPorts = serverPortsOf(logSince(connectMark));
       const logMark = containersLog().length;
       await reloadWindow(name);
       await connectedToContainer(name);
@@ -161,8 +163,9 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
         [
           lines.includes('Starting VS Code Server'),
           lines.includes('reusing the running server'),
+          [...new Set([...firstPorts, ...serverPortsOf(lines)])].length,
         ],
-        [false, true],
+        [false, true, 1],
       );
     } finally {
       await removeContainers(folder);

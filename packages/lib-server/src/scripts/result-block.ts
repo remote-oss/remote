@@ -1,3 +1,6 @@
+/** The line a start script prints, outside any result block, when it launches a server: a reuse prints none. */
+export const LAUNCHING_LINE = 'server.launching=yes';
+
 /** The marker line that opens a result block; it must be a whole line, exactly. */
 export const RESULT_BEGIN = 'remote-oss-server-result-begin';
 
@@ -82,17 +85,29 @@ function isScriptStatus(word: string): word is ScriptStatus {
 }
 
 /**
+ * The field and the value of a `field=value` line, split at the first `=`, with neither trimmed; none for a line
+ * without one. Both the lines of a result block and the lines a script streams before it are read with it.
+ */
+export function factOfLine(
+  line: string,
+): {field: string; value: string} | undefined {
+  const separator = line.indexOf('=');
+  return separator === -1
+    ? undefined
+    : {field: line.slice(0, separator), value: line.slice(separator + 1)};
+}
+
+/**
  * Record one line of a result block. A line without `=` is ignored; the key and the value are not
  * trimmed; a repeated key keeps the last value; a timing that is not a non-negative integer is
  * dropped.
  */
 function recordLine(block: RawBlock, line: string): void {
-  const separator = line.indexOf('=');
-  if (separator === -1) {
+  const fact = factOfLine(line);
+  if (fact === undefined) {
     return;
   }
-  const field = line.slice(0, separator);
-  const value = line.slice(separator + 1);
+  const {field, value} = fact;
   if (field === 'status') {
     block.statusWord = value;
   } else if (field.startsWith(HOST_PREFIX)) {
