@@ -624,6 +624,7 @@ describe('containerLifecycleOf', () => {
         [LISTING]: [ran(`${OLD}\n`)],
         [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
+        [`rm --force ${OLD}`]: [ran('')],
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
         ],
@@ -653,6 +654,7 @@ describe('containerLifecycleOf', () => {
         ],
         true,
         [
+          'info: rebuilding: removed the container aaaaaaaaaaaa',
           'info: rebuilding: the dev container CLI removes aaaaaaaaaaaa first',
           'info: the lifecycle commands finished',
         ],
@@ -808,6 +810,7 @@ describe('containerLifecycleOf', () => {
     const rebuilt = await prepared(
       scriptedEngine({
         ...standardListing('paused'),
+        [`rm --force ${OLD}`]: [ran('')],
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
         ],
@@ -878,6 +881,7 @@ describe('containerLifecycleOf', () => {
     };
     const removed = {
       ...standardListing('exited'),
+      [`rm --force ${OLD}`]: [ran('')],
       [LISTING]: [ran(`${OLD}\n`), ran('')],
     };
     const unreadable: Record<string, EngineRunOutcome[]> = {
@@ -1428,7 +1432,7 @@ describe('containerLifecycleOf', () => {
     );
   });
 
-  it('F-0405: a rebuild with no legacy container removes nothing itself', async () => {
+  it('F-0405: a rebuild with no container to replace removes nothing itself', async () => {
     const engine = scriptedEngine(EMPTY_LISTING);
     const result = await rebuilt(engine);
     deepStrictEqual(
@@ -1439,6 +1443,59 @@ describe('containerLifecycleOf', () => {
       ['ready', []],
     );
   });
+
+  it('F-0405 5.0 step 3, #1307: a rebuild removes the folder’s container itself before it calls the CLI, so that the CLI’s check of the Features stops nothing', async () => {
+    const order: string[] = [];
+    const engine = scriptedEngine({
+      [LISTING]: [ran(`${OLD}\n`)],
+      [LEGACY_LISTING]: [ran('')],
+      [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, 'running']]))],
+      [`rm --force ${OLD}`]: [ran('')],
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
+      'volume create vscode': [ran('vscode')],
+    });
+    const bridge = fakeBridge();
+    const up = bridge.up.bind(bridge);
+    bridge.up = (...parameters) => {
+      order.push(
+        ...engine.commands.filter(command => command.startsWith('rm ')),
+        'up',
+      );
+      return up(...parameters);
+    };
+    await prepared(engine, bridge, new AbortController().signal, {
+      ...REQUEST,
+      rebuild: {buildNoCache: false},
+    });
+    deepStrictEqual(order, [`rm --force ${OLD}`, 'up']);
+  });
+
+  it('F-0405 5.0 step 3, #1307: a failed removal of a container that is not legacy stops the rebuild before the CLI', async () => {
+    const result = await prepared(
+      scriptedEngine({
+        [LISTING]: [ran(`${OLD}\n`)],
+        [LEGACY_LISTING]: [ran('')],
+        [`inspect --type container ${OLD}`]: [
+          ran(inspected([[OLD, 'running']])),
+        ],
+        [`rm --force ${OLD}`]: [exited('device or resource busy')],
+      }),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, rebuild: {buildNoCache: false}},
+    );
+    deepStrictEqual(
+      [result.outcome, result.bridge.ups.length],
+      [
+        {
+          kind: 'discoveryFailed',
+          detail: `the container ${OLD.slice(0, 12)} couldn't be removed: device or resource busy`,
+        },
+        0,
+      ],
+    );
+  });
+
   it('F-0415 BR-8: only channel postCreate reaches the presenter, and the log keeps every event', async () => {
     const bridge = fakeBridge();
     bridge.upEvents = [
