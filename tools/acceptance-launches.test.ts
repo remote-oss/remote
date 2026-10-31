@@ -1259,7 +1259,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70: containers-ports puts a recording xdg-open of the run’s folder first on the editor’s PATH, the three killed launches name their cases, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70: containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the three killed launches name their cases, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1270,6 +1270,7 @@ describe('the platform cases (card coverage-12)', () => {
         .filter(([, environment]) => environment !== undefined),
       [
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
+        ['containers-features', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-killed-23', {HARNESS_KILLED_CASE: '23'}],
         ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
         ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],

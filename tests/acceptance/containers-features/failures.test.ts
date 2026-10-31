@@ -3,12 +3,8 @@ import {execFile} from 'node:child_process';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {rm} from 'node:fs/promises';
-import {
-  openFolderWindow,
-  removeContainers,
-  setUserSetting,
-} from '../windows/folder-windows.ts';
+import {readFile, rm, writeFile} from 'node:fs/promises';
+import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   containersLog,
@@ -32,6 +28,7 @@ import {
   removeControlManifest,
   seedControlManifest,
 } from '../windows/control-manifest.ts';
+import {servedControlFolder} from '../../../tools/acceptance-templates.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 import {
   featureBuilds,
@@ -98,7 +95,7 @@ const NOT_FOUND =
 /** How long a build with Features may take before its dialog, in milliseconds. */
 const DIALOG_MILLISECONDS = 600_000;
 
-describe.only('what a failed build with Features says (card containers-94)', function () {
+describe('what a failed build with Features says (card containers-94)', function () {
   this.timeout(1_800_000);
 
   const {build, closeNow} = featureBuilds();
@@ -300,9 +297,14 @@ describe.only('what a failed build with Features says (card containers-94)', fun
     );
   });
 
-  it('F-0414 AC-22 (manifest-unreachable): with the manifest unreachable and no kept copy the local check lets the open go on, the log says so, and the CLI’s refusal ends the build with S059', async () => {
+  it('F-0414 AC-22 (manifest-unreachable): with the served manifest gone and no kept copy the local check lets the open go on, the log says so, and the CLI’s refusal ends the build with S059', async () => {
     await rm(manifestFile(), {force: true});
-    await setUserSetting('http.proxy', 'http://127.0.0.1:1');
+    const served = path.join(
+      servedControlFolder(variable('HARNESS_RUN_FOLDER')),
+      'devcontainer-control-manifest.json',
+    );
+    const text = await readFile(served, 'utf8');
+    await rm(served);
     try {
       const mark = containersLog().length;
       const dialog = await failed('c94-unreachable', {
@@ -323,7 +325,58 @@ describe.only('what a failed build with Features says (card containers-94)', fun
         ],
       );
     } finally {
-      await setUserSetting('http.proxy', undefined);
+      await writeFile(served, text);
     }
+  });
+
+  it('F-0414 AC-24 (advisory): a Feature the manifest advises against is built, and the CLI’s warning with the Feature, its version and the advisory reaches the log', async () => {
+    const mark = containersLog().length;
+    const built = await build('c94-advisory', {
+      features: {[runFeature('lab-advised')]: {}},
+    });
+    const logged = containersLogSince(mark).join('\n');
+    deepStrictEqual(
+      [
+        logged.includes(
+          `${runFeature('lab-advised').replace(/:1$/u, '')}:1.0.0`,
+        ),
+        logged.includes('The run’s advisory for lab-advised.'),
+        logged.includes('introduced in 1.0.0, fixed in 1.0.1'),
+        built.containerId === '',
+      ],
+      [true, true, true, false],
+    );
+  });
+
+  it('F-0414 AC-23 (lockfile-gone): a lockfile whose digest the registry lacks ends the build of a new container with the dialog', async () => {
+    const built = await build('c94-lockfile', {
+      features: {[runFeature('lab-plain')]: {}},
+    });
+    await closeNow(built.window);
+    await removeContainers(built.folder);
+    const file = path.join(
+      built.folder,
+      '.devcontainer',
+      'devcontainer-lock.json',
+    );
+    writeFileSync(
+      file,
+      readFileSync(file, 'utf8').replaceAll(
+        /sha256:[0-9a-f]{64}/gu,
+        `sha256:${'0'.repeat(64)}`,
+      ),
+    );
+    const window = await openFolderWindow(built.folder);
+    windows.push(window);
+    await reopenStarted(window);
+    const dialog = await waitForDialog(window, DIALOG_MILLISECONDS);
+    deepStrictEqual(
+      [dialog.message, dialog.details, dialog.buttons],
+      [
+        '',
+        NOT_FOUND,
+        ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+      ],
+    );
   });
 });
