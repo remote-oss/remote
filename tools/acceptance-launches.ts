@@ -386,6 +386,15 @@ export interface HostCaseSuite {
   removed: readonly string[];
 }
 
+/**
+ * The two ways the template catalogue fails on the download host (tooling-57): an index that does not parse and an
+ * address whose connection is dropped. Each is a launch of `containers-index`, whose index address is that path.
+ */
+const INDEX_CASES = [
+  {label: 'broken', path: 'broken-index.json'},
+  {label: 'down', path: 'unreachable'},
+] as const;
+
 /** The host-case suites, in the order the run makes their launches. */
 export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
   {
@@ -528,7 +537,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown` and `containers-view` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -830,6 +839,16 @@ export function launchesOf(root: string): Launch[] {
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
     },
+    ...INDEX_CASES.map((indexCase): Launch => ({
+      ...CONTAINERS_LAUNCH,
+      label: `containers-index-${indexCase.label}`,
+      suite: 'containers-index',
+      templates: true,
+      environment: {
+        REMOTE_OSS_TEMPLATE_INDEX: `\${HARNESS_DOWNLOADS_LOCAL}/templates/${indexCase.path}`,
+        HARNESS_INDEX_CASE: indexCase.label,
+      },
+    })),
     {
       ...CONTAINERS_LAUNCH,
       label: 'containers-killed-23',
