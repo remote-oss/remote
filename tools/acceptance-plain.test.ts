@@ -54,6 +54,7 @@ describe('the editor arguments of a run', () => {
       '--enable-proposed-api=remote-oss.remote-ssh',
       '--enable-proposed-api=remote-oss.acceptance-window-agent',
       '--disable-workspace-trust',
+      '--disable-crash-reporter',
     ]);
   });
 });
@@ -193,8 +194,8 @@ describe('the explorer and trust launches (cards tooling-30, tooling-33)', () =>
         editorArguments('/run'),
         editorArguments('/run', true, launchNamed('windows')),
         editorArguments('/run', true, launchNamed('explorer')),
-      ].map(list => list.at(-1)),
-      Array.from({length: 3}, () => '--disable-workspace-trust'),
+      ].map(list => list.includes('--disable-workspace-trust')),
+      [true, true, true],
     );
   });
 
@@ -650,6 +651,21 @@ describe('runPlainLaunch', () => {
   });
 
   const GENUINE = launchLabelled(launchesOf(REPOSITORY_ROOT), 'genuine');
+
+  it('tooling-73: every editor the run starts, genuine VS Code and VSCodium, plain or under the runner, has its crash reporter off', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [undefined, ...launches]
+        .filter(
+          launch =>
+            !editorArguments('/run', true, launch).includes(
+              '--disable-crash-reporter',
+            ),
+        )
+        .map(launch => launch?.label),
+      [],
+    );
+  });
 
   it('tooling-51: the genuine launch’s editor is the executable given, and its editor and tests get the empty script and the executable that was started', async () => {
     const {steps, programs} = recordingSteps('pass');

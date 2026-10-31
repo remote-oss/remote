@@ -114,8 +114,8 @@ export function writeStandIns(
 
 /**
  * What every run's editor is started with: the launch's user-data and extensions folders and the run's shared-data
- * folder, the proposed API of the extensions unless a launch turns it off, and workspace trust off unless a plain
- * launch turns it on. A launch's own extensions bring their proposed API.
+ * folder, the proposed API of the extensions unless a launch turns it off, workspace trust off unless a plain launch
+ * turns it on, and no crash reports. A launch's own extensions bring their proposed API.
  */
 export function editorArguments(
   runFolder: string,
@@ -137,6 +137,9 @@ export function editorArguments(
     ...(launch?.kind === 'plain' && launch.workspaceTrust === true
       ? []
       : ['--disable-workspace-trust']),
+    // VS Code reports crashes to its publisher when ~/.vscode/argv.json enables it, as its first run writes; the switch
+    // wins over the file, which stays the user's own. VSCodium's build has no reporter and accepts the switch.
+    '--disable-crash-reporter',
   ];
 }
 

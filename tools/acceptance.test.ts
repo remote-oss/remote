@@ -2110,6 +2110,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
             '--enable-proposed-api=remote-oss.acceptance-window-agent',
             '--disable-workspace-trust',
+            '--disable-crash-reporter',
           ],
         ],
       );
