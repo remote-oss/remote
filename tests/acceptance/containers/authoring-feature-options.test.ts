@@ -6,6 +6,7 @@ import {
   acceptQuickPick,
   chooseQuickPickRow,
   clearQuickPickInput,
+  moveQuickPickFocus,
   pressEscape,
   pressQuickPickBack,
   pressQuickPickOk,
@@ -118,20 +119,6 @@ async function entriesIn(folder: string): Promise<Record<string, unknown>> {
   );
 }
 
-/** Waits until the wizard has ended with nothing written. */
-async function endedWithNothing(
-  window: string,
-  folder: string,
-): Promise<unknown[]> {
-  await waitFor(
-    'the pick to close',
-    async () => (await quickPickOf(window)) === undefined,
-    30_000,
-  );
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  return [existing(folder, '.devcontainer'), await devContainersOf(folder)];
-}
-
 describe('the Features’ options in the wizard (card containers-89)', function () {
   this.timeout(600_000);
 
@@ -145,9 +132,9 @@ describe('the Features’ options in the wizard (card containers-89)', function 
     });
   });
 
-  it('F-0803 AC-10, AC-11 (gate): OK with a Feature that declares options gives the gate, a single-select with Keep Defaults first and focused and Configure Options second, and no placeholder or title button; Keep Defaults writes {}', async () => {
+  it('F-0803 AC-10, AC-11 (gate): OK with two Features, one declaring options, gives one gate, a single-select with Keep Defaults first and focused and Configure Options second, and no placeholder or title button; Keep Defaults writes every Feature as {} with no further prompt', async () => {
     await withWindow('o89-gate', {}, async (window, folder) => {
-      await atGate(window, [LAB_OPTIONS]);
+      await atGate(window, [LAB_OPTIONS, LAB_PLAIN]);
       const facts = await quickPickFacts(window);
       const rows = (await quickPickRows(window)).map(each => [
         each.label,
@@ -167,7 +154,7 @@ describe('the Features’ options in the wizard (card containers-89)', function 
             ['Keep Defaults', true],
             ['Configure Options', false],
           ],
-          {'lab-options:1': {}},
+          {'lab-options:1': {}, 'lab-plain:1': {}},
         ],
       );
     });
@@ -212,7 +199,7 @@ describe('the Features’ options in the wizard (card containers-89)', function 
     });
   });
 
-  it('F-0803 AC-15, AC-32 (value-screens): after the booleans each string option that offers values gets a screen, Level: with low (default) and high in the schema order, then Tone: with calm (default) and loud, and the plain string gets none', async () => {
+  it('F-0803 AC-15 (value-screens): after the booleans each string option that offers values gets a screen of the same title, Level: with low (default) and high in the schema order, then Tone: with calm (default) and loud, and the plain string gets none', async () => {
     await withWindow('o89-values', {}, async window => {
       await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
       await pastBooleans(window);
@@ -220,13 +207,16 @@ describe('the Features’ options in the wizard (card containers-89)', function 
       const levelTitle = await quickPickTitle(window);
       await acceptQuickPick(window);
       const tone = await screenWith(window, 'Tone:');
+      const toneTitle = await quickPickTitle(window);
       deepStrictEqual(
         [
           levelTitle,
+          toneTitle,
           level.map(each => [each.label, each.description, each.focused]),
           tone.map(each => [each.label, each.description]),
         ],
         [
+          valueTitle(LAB_OPTIONS),
           valueTitle(LAB_OPTIONS),
           [
             ['low', '(default)', true],
@@ -267,59 +257,156 @@ describe('the Features’ options in the wizard (card containers-89)', function 
     });
   });
 
-  it('F-0803 AC-21 (escape-value): Escape on a value screen ends the wizard and writes nothing', async () => {
-    await withWindow('o89-escape-value', {}, async (window, folder) => {
-      await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
+  /** Walks Lab Options to the boolean screen, or past it to the first value screen. */
+  async function walkedTo(
+    window: string,
+    screen: 'booleans' | 'values',
+  ): Promise<void> {
+    await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
+    if (screen === 'values') {
       await pastBooleans(window);
-      await clearQuickPickInput(window);
-      await pressEscape(window);
-      deepStrictEqual(await endedWithNothing(window, folder), [[], []]);
-    });
+    }
+  }
+
+  it('F-0803 AC-21 (escape-walk): Escape on the boolean screen and on a value screen ends the wizard and leaves the configuration the folder had unchanged', async () => {
+    const left: unknown[] = [];
+    for (const screen of ['booleans', 'values'] as const) {
+      await withWindow(
+        `o89-escape-${screen}`,
+        {[CONFIGURATION]: 'mine'},
+        async (window, folder) => {
+          await walkedTo(window, screen);
+          await clearQuickPickInput(window);
+          await pressEscape(window);
+          await waitFor(
+            'the pick to close',
+            async () => (await quickPickOf(window)) === undefined,
+            30_000,
+          );
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          left.push([
+            readFileSync(path.join(folder, CONFIGURATION), 'utf8'),
+            await devContainersOf(folder),
+          ]);
+        },
+      );
+    }
+    deepStrictEqual(left, [
+      ['mine', []],
+      ['mine', []],
+    ]);
   });
 
-  it('F-0803 AC-25 (back-value): Back on a value screen opens Select Features again with 0 Selected', async () => {
-    await withWindow('o89-back', {}, async window => {
-      await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
-      await pastBooleans(window);
-      await pressQuickPickBack(window);
-      await screenWith(window, FEATURES_PLACEHOLDER);
-      deepStrictEqual(
-        [
+  it('F-0803 AC-25 (back-walk): Back on the boolean screen and on a value screen opens Select Features again with 0 Selected and nothing checked', async () => {
+    const reopened: unknown[] = [];
+    for (const screen of ['booleans', 'values'] as const) {
+      await withWindow(`o89-back-${screen}`, {}, async window => {
+        await walkedTo(window, screen);
+        await pressQuickPickBack(window);
+        await screenWith(window, FEATURES_PLACEHOLDER);
+        reopened.push([
           (await quickPickChrome(window)).counter,
           (await quickPickChecks(window)).filter(each => each.checked),
-        ],
-        ['0 Selected', []],
-      );
-    });
+        ]);
+      });
+    }
+    deepStrictEqual(reopened, [
+      ['0 Selected', []],
+      ['0 Selected', []],
+    ]);
   });
 
-  it('F-0803 AC-26, AC-27 (finish-mid-walk): Finish on the first value screen of Git counts that value, leaves Git’s later options out and goes on to Lab Options', async () => {
+  it('F-0803 AC-10, AC-26, AC-27 (finish-mid-walk): with Git and Lab Options the gate shows once for the batch, Finish on the version screen of Git counts that value, and the walk goes on with the boolean and value screens of Lab Options', async () => {
     await withWindow('o89-finish', {}, async (window, folder) => {
+      const titles: string[] = [];
       await walkingTo(
         window,
         [GIT_FEATURE, LAB_OPTIONS],
         booleanScreen(GIT_FEATURE).title,
       );
+      titles.push(await quickPickTitle(window));
       await pressQuickPickOk(window);
       await titled(window, valueTitle(GIT_FEATURE));
+      titles.push(await quickPickTitle(window));
       const version = (await quickPickRows(window)).find(
         each => each.focused,
       )?.label;
       await pressQuickPickTitleButton(window, 'Finish');
       await titled(window, LAB_BOOLEANS.title);
+      titles.push(await quickPickTitle(window));
       await pastBooleans(window);
+      titles.push(await quickPickTitle(window));
       await acceptQuickPick(window);
       await screenWith(window, 'Tone:');
+      titles.push(await quickPickTitle(window));
       await acceptQuickPick(window);
+      deepStrictEqual(
+        [titles, await entriesIn(folder)],
+        [
+          [
+            booleanScreen(GIT_FEATURE).title,
+            valueTitle(GIT_FEATURE),
+            LAB_BOOLEANS.title,
+            valueTitle(LAB_OPTIONS),
+            valueTitle(LAB_OPTIONS),
+          ],
+          {
+            'git:1': {['ppa']: true, version},
+            'lab-options:1': {enabled: true, level: 'low', tone: 'calm'},
+          },
+        ],
+      );
+    });
+  });
+
+  it('F-0803 AC-26 (finish-level): Finish on Level: writes the booleans and the focused value of Level: and leaves out Tone:, which was not shown, even at its default', async () => {
+    await withWindow('o89-finish-level', {}, async (window, folder) => {
+      await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
+      await pastBooleans(window);
+      await moveQuickPickFocus(window, 'ArrowDown');
+      await pressQuickPickTitleButton(window, 'Finish');
       deepStrictEqual(await entriesIn(folder), {
-        'git:1': {['ppa']: true, version},
-        'lab-options:1': {enabled: true, level: 'low', tone: 'calm'},
+        'lab-options:1': {enabled: true, level: 'high'},
       });
     });
   });
 
-  it('F-0803 AC-29 (strict-enter): Enter on Level: with text that matches no value keeps the screen open', async () => {
-    await withWindow('o89-strict', {}, async window => {
+  it('F-0803 AC-26 (finish-typed): Finish on Tone: with text typed and never confirmed writes the typed text', async () => {
+    await withWindow('o89-finish-typed', {}, async (window, folder) => {
+      await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
+      await pastBooleans(window);
+      await acceptQuickPick(window);
+      await screenWith(window, 'Tone:');
+      await typeInQuickPick(window, 'breezy');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await pressQuickPickTitleButton(window, 'Finish');
+      deepStrictEqual(await entriesIn(folder), {
+        'lab-options:1': {enabled: true, level: 'low', tone: 'breezy'},
+      });
+    });
+  });
+
+  it('F-0803 AC-32 (feature-order): on a Feature’s value screen the values keep the schema order and the default is tagged where it stands, not listed first', async () => {
+    await withWindow('o89-git-order', {}, async window => {
+      await walkingTo(window, [GIT_FEATURE], booleanScreen(GIT_FEATURE).title);
+      await pressQuickPickOk(window);
+      await titled(window, valueTitle(GIT_FEATURE));
+      deepStrictEqual(
+        (await quickPickRows(window)).map(each => [
+          each.label,
+          each.description,
+        ]),
+        [
+          ['latest', ''],
+          ['system', ''],
+          ['os-provided', '(default)'],
+        ],
+      );
+    });
+  });
+
+  it('F-0803 AC-29 (strict-enter): Enter on Level: with text that matches no value keeps the screen open and writes nothing, and the walk then completes with a listed value and none of the text', async () => {
+    await withWindow('o89-strict', {}, async (window, folder) => {
       await walkingTo(window, [LAB_OPTIONS], LAB_BOOLEANS.title);
       await pastBooleans(window);
       await typeInQuickPick(window, 'zzz');
@@ -327,9 +414,21 @@ describe('the Features’ options in the wizard (card containers-89)', function 
       const rows = await quickPickRows(window);
       await acceptQuickPick(window);
       await new Promise(resolve => setTimeout(resolve, 1500));
+      const stillOpen = (await quickPickOf(window))?.placeholder;
+      const before = existing(folder, '.devcontainer');
+      await clearQuickPickInput(window);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await acceptQuickPick(window);
+      await screenWith(window, 'Tone:');
+      await acceptQuickPick(window);
       deepStrictEqual(
-        [rows.length, (await quickPickOf(window))?.placeholder],
-        [0, 'Level:'],
+        [rows.length, stillOpen, before, await entriesIn(folder)],
+        [
+          0,
+          'Level:',
+          [],
+          {'lab-options:1': {enabled: true, level: 'low', tone: 'calm'}},
+        ],
       );
     });
   });
@@ -400,7 +499,7 @@ describe('the Features’ options in the wizard (card containers-89)', function 
             .split('\n')
             .filter(line => line.trim().startsWith('//')),
           keys: Object.keys(configuration),
-          features: Object.values(configuration.features ?? {}),
+          features: Object.entries(configuration.features ?? {}),
         });
       });
     }
@@ -411,7 +510,12 @@ describe('the Features’ options in the wizard (card containers-89)', function 
         written[1]?.features,
         written[0]?.keys.includes('features'),
       ],
-      [written[0]?.lines, ['name', 'image', 'features'], [{}], false],
+      [
+        written[0]?.lines,
+        ['name', 'image', 'features'],
+        [['ghcr.io/devcontainers/features/common-utils:2', {}]],
+        false,
+      ],
     );
   });
 });
