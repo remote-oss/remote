@@ -13,11 +13,11 @@ import {
   devContainersOf,
   inWindow,
   isOpen,
-  settingIn,
   variable,
   waitFor,
   windowEvents,
   windowNames,
+  writeUserSetting,
 } from './harness.ts';
 
 const execFileAsync = promisify(execFile);
@@ -67,19 +67,12 @@ export function openWorkspaceWindow(workspaceFile: string): Promise<string> {
   );
 }
 
-/** Sets a user setting from the local window and waits until the local window reads it back. */
+/** Sets a user setting from the local window, or removes it for `undefined`, and waits until the local window reads the result. */
 export async function setUserSetting(
   settingId: string,
   value: unknown,
 ): Promise<void> {
-  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
-  await waitFor(
-    `${settingId} to read back as ${JSON.stringify(value)}`,
-    async () =>
-      JSON.stringify((await settingIn('local', settingId)) ?? null) ===
-      JSON.stringify(value ?? null),
-    30_000,
-  );
+  await writeUserSetting(settingId, value, 'local', 30_000);
 }
 
 /** Removes every container of the run made for `folder`. */

@@ -10,7 +10,7 @@
  */
 
 import {randomInt} from 'node:crypto';
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {stopRunHelpers} from './acceptance-helper-stop.ts';
@@ -502,12 +502,129 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   }
 }
 
+/** The first Podman release the `containers-podman` launch runs on. */
+const PODMAN_MAJOR = 5;
+
+/** Throws unless the `podman` on the machine is release 5 or later, naming what `podman version` printed. */
+export function requirePodman(command: CommandRunner): void {
+  const result = command('podman', [
+    'version',
+    '--format',
+    '{{.Client.Version}}',
+  ]);
+  const printed = (result.status === 0 ? result.stdout : result.stderr).trim();
+  const major = result.status === 0 ? Number.parseInt(printed, 10) : Number.NaN;
+  if (Number.isNaN(major) || major < PODMAN_MAJOR) {
+    throw new Error(
+      `the containers-podman launch needs Podman ${String(PODMAN_MAJOR)} or later: ${printed}`,
+    );
+  }
+}
+
+/**
+ * Copies the run's dev container image from Docker's storage into Podman's (`docker save` into a file of the run's
+ * folder, then `podman load`), and returns the name Podman lists it under: Podman prefixes a bare name with
+ * `docker.io/library/`.
+ */
+export function loadImageIntoPodman(
+  command: CommandRunner,
+  runId: string,
+  runFolder: string,
+): string {
+  const image = devContainerImageOf(runId);
+  const archive = path.join(runFolder, 'engine-image.tar');
+  checked(command, 'docker', ['save', '--output', archive, image]);
+  try {
+    checked(command, 'podman', ['load', '--input', archive]);
+  } finally {
+    rmSync(archive, {force: true});
+  }
+  const listed = idsOf(
+    checked(command, 'podman', [
+      'image',
+      'ls',
+      '--format',
+      '{{.Repository}}:{{.Tag}}',
+    ]),
+  ).find(reference => reference === image || reference.endsWith(`/${image}`));
+  if (listed === undefined) {
+    throw new Error(`podman lists no image ${image} after loading it`);
+  }
+  return listed;
+}
+
+/**
+ * `cleanRun`'s twin for the Podman a `containers-podman` run drove: removes the run's containers (by the run's label,
+ * forced), the images of those containers and the run's loaded image, and the `vscode` volume when it was created at
+ * or after `volumeSince` (in seconds), so one that was there before the run stays. A container that still carries the
+ * run's label afterwards makes it throw, as `cleanRun` does.
+ */
+export function cleanPodmanRun(
+  command: CommandRunner,
+  runId: string,
+  volumeSince: number,
+): void {
+  const filter = `label=${RUN_LABEL}=${runId}`;
+  const images = idsOf(
+    checked(command, 'podman', [
+      'ps',
+      '--all',
+      '--filter',
+      filter,
+      '--format',
+      '{{.Image}}',
+    ]),
+  );
+  for (const containerId of idsOf(
+    checked(command, 'podman', ['ps', '--all', '--quiet', '--filter', filter]),
+  )) {
+    checked(command, 'podman', ['rm', '--force', containerId]);
+  }
+  const loaded = idsOf(
+    checked(command, 'podman', [
+      'image',
+      'ls',
+      '--format',
+      '{{.Repository}}:{{.Tag}}',
+    ]),
+  ).filter(reference => reference.endsWith(devContainerImageOf(runId)));
+  // The images may already be gone: their removal's status is ignored.
+  for (const image of new Set([...images, ...loaded])) {
+    command('podman', ['image', 'rm', '--force', image]);
+  }
+  const created = command('podman', [
+    'volume',
+    'inspect',
+    'vscode',
+    '--format',
+    '{{.CreatedAt}}',
+  ]);
+  if (
+    created.status === 0 &&
+    Date.parse(created.stdout.trim()) / 1000 >= volumeSince
+  ) {
+    command('podman', ['volume', 'rm', 'vscode']);
+  }
+  const remaining = idsOf(
+    checked(command, 'podman', ['ps', '--all', '--quiet', '--filter', filter]),
+  );
+  if (remaining.length > 0) {
+    throw new Error(
+      `the run ${runId} still owns podman containers after the clean-up: ${remaining.join(', ')}`,
+    );
+  }
+}
+
 if (isMainModule(import.meta.url)) {
   const runId = acceptanceRunId(process.env, process.pid);
   try {
     // A helper that left a killed run's editor still runs: it is stopped before the editors and containers go.
     stopRunHelpers(tmpdir(), runId);
     cleanRun(runCommand, runId);
+    // The Podman a `containers-podman` run drove, when the machine has a working one; its `vscode` volume stays.
+    if (runCommand('podman', ['ps', '--quiet']).status === 0) {
+      cleanPodmanRun(runCommand, runId, Number.POSITIVE_INFINITY);
+    }
   } catch (error) {
     console.error(`acceptance: ${messageOf(error)}`);
     process.exitCode = 1;

@@ -64,6 +64,9 @@ const CLEAN = [
   'octocat/Hello-World/foo',
 ];
 
+/** How many flagged keys a folder of AC-10 holds: the Problems panel of a small window draws about this many rows. */
+const KEYS_PER_FOLDER = 4;
+
 /** The line of the first key in the text `featuresText` makes. */
 const FIRST_KEY_LINE = 4;
 
@@ -125,14 +128,25 @@ describe('the Problems panel flags malformed Feature ids (card containers-95)', 
   });
 
   it('F-0414 AC-10 (table): each key of BR-18’s table earns exactly its message, and the others none', async () => {
-    const problems = await problemsAfterOpening(
-      folderOf('c95-ac10', [...FLAGGED.map(([key]) => key), ...CLEAN]),
-      FLAGGED.length,
-    );
-    deepStrictEqual(
-      problems.map(each => [each.line, each.message]),
-      FLAGGED.map(([, message], index) => [FIRST_KEY_LINE + index, message]),
-    );
+    // The panel draws only the rows that fit its window, and CI's window is small, so a folder holds a few flagged
+    // keys and all the clean ones.
+    const results: unknown[] = [];
+    const expected: unknown[] = [];
+    for (let first = 0; first < FLAGGED.length; first += KEYS_PER_FOLDER) {
+      const chunk = FLAGGED.slice(first, first + KEYS_PER_FOLDER);
+      const problems = await problemsAfterOpening(
+        folderOf(`c95-ac10-${String(first)}`, [
+          ...chunk.map(([key]) => key),
+          ...CLEAN,
+        ]),
+        chunk.length,
+      );
+      results.push(problems.map(each => [each.line, each.message]));
+      expected.push(
+        chunk.map(([, message], index) => [FIRST_KEY_LINE + index, message]),
+      );
+    }
+    deepStrictEqual(results, expected);
   });
 
   it('F-0414 AC-11 (covered-files): the files in a subfolder of .devcontainer and a root .devcontainer.json are diagnosed, and the same keys in defaultFeatures are not', async () => {

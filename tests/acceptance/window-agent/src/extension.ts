@@ -275,6 +275,8 @@ export function activate(context: vscode.ExtensionContext): void {
           settingId,
           value: configuration.get(settingId) ?? null,
           defaultValue: configuration.inspect(settingId)?.defaultValue ?? null,
+          inUserScope:
+            configuration.inspect(settingId)?.globalValue !== undefined,
         });
       },
     ),
@@ -332,6 +334,13 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.workspace
           .getConfiguration()
           .update(settingId, value, vscode.ConfigurationTarget.Global),
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.removeSetting',
+      (settingId: string) =>
+        vscode.workspace
+          .getConfiguration()
+          .update(settingId, undefined, vscode.ConfigurationTarget.Global),
     ),
     vscode.commands.registerCommand(
       'acceptance.agent.forwardPort',

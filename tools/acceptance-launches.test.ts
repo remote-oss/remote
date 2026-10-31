@@ -15,6 +15,7 @@ import {
   hostCases,
   hostSetupOf,
   runnerLaunches,
+  settingsOfLaunch,
   suitesOf,
   withHarnessBases,
   withRunTokens,
@@ -64,6 +65,7 @@ function labelsFromExplorer(): string[] {
     'containers-killed-23',
     'containers-killed-35',
     'containers-killed-43',
+    'containers-podman',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
@@ -126,7 +128,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the two genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -323,6 +325,12 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        [
+          'containers-podman',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
         ['containers-view', ['remote-oss.remote-containers'], true, undefined],
@@ -446,6 +454,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-podman',
+          'containers-podman',
+          shared,
+          undefined,
+          undefined,
+        ],
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -480,6 +495,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-killed-23',
         'containers-killed-35',
         'containers-killed-43',
+        'containers-podman',
         'containers-view',
       ],
     );
@@ -598,7 +614,30 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84: only the two genuine launches are named only or start VS Code', () => {
+  it('containers-101: only the containers-podman launch names an engine, and its user settings gain dev.containers.dockerPath podman while every other launch’s stay as they are', () => {
+    const podman = launches.find(
+      launch => launch.label === 'containers-podman',
+    );
+    deepStrictEqual(
+      [
+        launches
+          .filter(launch => launch.engine !== undefined)
+          .map(launch => [launch.label, launch.engine]),
+        launches
+          .filter(launch => launch.engine === undefined)
+          .every(launch => settingsOfLaunch(launch) === launch.settings),
+        podman === undefined
+          ? undefined
+          : settingsOfLaunch(podman)?.['dev.containers.dockerPath'],
+        launches.find(launch => launch.label === 'containers')?.settings?.[
+          'dev.containers.dockerPath'
+        ],
+      ],
+      [[['containers-podman', 'podman']], true, 'podman', undefined],
+    );
+  });
+
+  it('tooling-51, connect-84, containers-101: the containers-podman launch and the two genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -607,7 +646,7 @@ describe('the launches of the VSCodium run', () => {
             (launch.kind === 'plain' && launch.client !== undefined),
         )
         .map(launch => launch.label),
-      ['genuine', 'ssh-no-proposals'],
+      ['containers-podman', 'genuine', 'ssh-no-proposals'],
     );
   });
 

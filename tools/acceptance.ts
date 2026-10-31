@@ -53,8 +53,11 @@ import {
 import {
   acceptanceRunId,
   buildDevContainerImage,
+  cleanPodmanRun,
   cleanRun,
   connectRunNetwork,
+  loadImageIntoPodman,
+  requirePodman,
   startHostContainer,
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
@@ -85,6 +88,7 @@ import {
   LAUNCH_EXTENSIONS,
   LAUNCH_GROUPS,
   launchGroupOf,
+  settingsOfLaunch,
   type HostSetupEntry,
   type Launch,
   type RunnerLaunch,
@@ -181,6 +185,10 @@ export interface HarnessVariables {
   HARNESS_RUN_ID: string;
   /** The run's dev container image tag, when a launch of the run installs Dev Containers; VSCodium run only. */
   HARNESS_DEVCONTAINER_IMAGE?: string;
+  /** The engine CLI the extension drives instead of `docker`, when a chosen launch names one. */
+  HARNESS_ENGINE?: 'podman';
+  /** The name that engine lists the run's dev container image under, once loaded into its storage. */
+  HARNESS_ENGINE_IMAGE?: string;
   /** The address (`host:port`) of the run's registry, when a chosen launch asks for one; VSCodium run only. */
   HARNESS_REGISTRY?: string;
   /** The run's registry as its templates' ids name it (`localhost:<port>`), when a chosen launch asks for templates. */
@@ -749,6 +757,10 @@ async function prepare(
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
   const runId = acceptanceRunId(process.env, process.pid);
+  const podman = chosen.some(launch => launch.engine === 'podman');
+  if (podman) {
+    requirePodman(command);
+  }
   const downloads =
     editor === 'vscodium'
       ? await dependencies.startDownloads(root, runFolder)
@@ -883,6 +895,10 @@ async function prepare(
   const devContainerImage = launches.some(needsDevContainerImage)
     ? devContainerImageFor(command, root, runId)
     : undefined;
+  const engineImage =
+    podman && devContainerImage !== undefined
+      ? loadImageIntoPodman(command, runId, runFolder)
+      : undefined;
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
@@ -896,6 +912,8 @@ async function prepare(
     ...(devContainerImage === undefined
       ? {}
       : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
+    ...(podman ? {HARNESS_ENGINE: 'podman' as const} : {}),
+    ...(engineImage === undefined ? {} : {HARNESS_ENGINE_IMAGE: engineImage}),
     ...(registry === undefined ? {} : {HARNESS_REGISTRY: registry.address}),
     ...(templateRegistry === undefined || templateIndex === undefined
       ? {}
@@ -1076,7 +1094,7 @@ export async function runLaunches(
             ? configFile
             : sshConfigOf(runFolder, launch.hostBase),
           withRunTokens(
-            withHarnessBases(launch.settings, bases),
+            withHarnessBases(settingsOfLaunch(launch), bases),
             runFolder,
             process.env.PATH ?? '',
           ),
@@ -1169,6 +1187,7 @@ export async function runAcceptance(
   const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
   const started: string[] = [];
   const stops: Array<() => Promise<void>> = [];
+  const startedSeconds = Date.now() / 1000;
   let exitCode = 1;
   try {
     const variables = await prepare(
@@ -1271,11 +1290,25 @@ export async function runAcceptance(
     }
     // What the rows made under the run's label goes too, before the run folder, since it also ends an editor still on
     // one of the run's user-data folders. A failed clean-up fails the run, and an earlier failure keeps its code.
-    try {
-      cleanRun(dependencies.command, runId);
-    } catch (error) {
-      console.error(`acceptance: ${failureText(error)}`);
-      exitCode = exitCode === 0 ? 1 : exitCode;
+    const cleanUps = [
+      () => {
+        cleanRun(dependencies.command, runId);
+      },
+      ...(chosen.some(launch => launch.engine === 'podman')
+        ? [
+            () => {
+              cleanPodmanRun(dependencies.command, runId, startedSeconds);
+            },
+          ]
+        : []),
+    ];
+    for (const cleanUp of cleanUps) {
+      try {
+        cleanUp();
+      } catch (error) {
+        console.error(`acceptance: ${failureText(error)}`);
+        exitCode = exitCode === 0 ? 1 : exitCode;
+      }
     }
     rmSync(runFolder, {recursive: true, force: true});
     removeBundles(root);
