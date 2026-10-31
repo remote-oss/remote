@@ -121,11 +121,17 @@ class FakeHarness implements HarnessDependencies {
     settings: string;
   }> = [];
 
+  /** The `XDG_STATE_HOME` in effect at each install of an extension. */
+  readonly installState: Array<string | undefined> = [];
+
   readonly command = (
     program: string,
     programArguments: readonly string[],
   ): CommandResult => {
     this.calls.push([program, ...programArguments].join(' '));
+    if (programArguments.includes('--install-extension')) {
+      this.installState.push(process.env.XDG_STATE_HOME);
+    }
     const answer = this.answers.get(`${program} ${programArguments[0] ?? ''}`);
     if (answer !== undefined) {
       return answer;
@@ -2488,6 +2494,17 @@ describe('acceptance', () => {
       );
     });
 
+    it("tooling-79: the floor editor keeps its state, logs included, in the folder runner/state of the run's", () => {
+      const {XDG_STATE_HOME, HARNESS_EDITOR_LOGS} = acceptanceConfiguration(
+        '/repo',
+        {HARNESS_RUN_FOLDER: '/run'},
+      ).env;
+      deepStrictEqual(
+        [XDG_STATE_HOME, HARNESS_EDITOR_LOGS],
+        ['/run/runner/state', '/run/runner/state'],
+      );
+    });
+
     it("tooling-66: tells the extension host the run's user-data folder, the one its editor starts on", () => {
       strictEqual(
         acceptanceConfiguration('/repo', {HARNESS_RUN_FOLDER: '/run'}).env
@@ -2786,6 +2803,19 @@ describe('acceptance', () => {
       );
     });
 
+    it("tooling-79: the installs run with the editor's state in a folder of the run's, and the variable is back as it was after", async () => {
+      workspace.write('dist/remote-ssh-0.0.0.vsix', '');
+      const before = process.env.XDG_STATE_HOME;
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        [
+          [...new Set(harness.installState)],
+          process.env.XDG_STATE_HOME === before,
+        ],
+        [[path.join(harness.runFolder, 'install', 'state')], true],
+      );
+    });
+
     it('#253 Q14: the VSIX files are installed with the command-line wrapper in the bin folder beside the executable', async () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness, 'vscodium');
@@ -3076,6 +3106,30 @@ describe('acceptance', () => {
       );
     });
 
+    it("tooling-79: a runner launch's editor keeps its state in a folder of its own in the run's, which is the folder the rows read for its logs; its own XDG_STATE_HOME wins", () => {
+      function state(
+        environment: Record<string, string>,
+      ): Array<string | undefined> {
+        const {XDG_STATE_HOME, HARNESS_EDITOR_LOGS} = vscodiumConfiguration(
+          workspace.root,
+          CONFIGURATION_ENVIRONMENT,
+          EXECUTABLE,
+          {...LAUNCH, environment},
+        ).env;
+        return [XDG_STATE_HOME, HARNESS_EDITOR_LOGS];
+      }
+      deepStrictEqual(
+        [state({}), state({XDG_STATE_HOME: '<run>/xdg/state'})],
+        [
+          [
+            path.join('/run', LAUNCH.label, 'state'),
+            path.join('/run', LAUNCH.label, 'state'),
+          ],
+          ['/run/xdg/state', '/run/xdg/state'],
+        ],
+      );
+    });
+
     it('D-85: a launch with further extensions loads them after the runner', () => {
       deepStrictEqual(
         vscodiumConfiguration(
@@ -3105,7 +3159,7 @@ describe('acceptance', () => {
       );
     });
 
-    it("D-85, tooling-66: a launch with no environment adds its log file, its windows folder and the run's user-data folder to the harness variables", () => {
+    it("D-85, tooling-66, tooling-79: a launch with no environment adds its log file, its windows folder, the run's user-data folder and its state folder to the harness variables", () => {
       deepStrictEqual(
         vscodiumConfiguration(
           workspace.root,
@@ -3123,6 +3177,8 @@ describe('acceptance', () => {
             'pids',
           ),
           HARNESS_USER_DATA: path.join('/run', 'user-data'),
+          XDG_STATE_HOME: path.join('/run', 'extra', 'state'),
+          HARNESS_EDITOR_LOGS: path.join('/run', 'extra', 'state'),
         },
       );
     });
