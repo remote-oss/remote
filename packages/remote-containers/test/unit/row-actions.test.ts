@@ -327,12 +327,13 @@ describe('the row actions of the Dev Containers view (card containers-102)', () 
     );
   });
 
-  it('F-0902 AC-24: the vscode volume, a mount of another kind and a container with no mounts add no line', async () => {
+  it('F-0902 AC-24: the vscode volume, an anonymous volume, a mount of another kind and a container with no mounts add no line', async () => {
     deepStrictEqual(
       [
         await detailOf(
           mountsScript([
             {Type: 'volume', Name: 'vscode'},
+            {Type: 'volume', Name: 'a'.repeat(64)},
             {Type: 'tmpfs', Destination: '/tmp'},
             {Type: 'volume'},
             {Type: 'bind'},

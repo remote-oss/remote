@@ -14,14 +14,16 @@ import {
   runScopedName,
   variable,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {
   answerDialog,
   dialogDetailLines,
   dialogKindOf,
   dialogOf,
-  notificationCentre,
+  centreNotifications,
   notifications,
+  toastDetails,
   rowContextMenu,
   rowDetails,
   rowMenuAction,
@@ -29,6 +31,7 @@ import {
   waitForDialog,
 } from '../windows/renderer.ts';
 import {
+  activations,
   clearEarlierRows,
   openFolderWindow,
   removeContainers,
@@ -143,18 +146,29 @@ function chosen(label: string, item: string): Promise<void> {
   return rowMenuAction('local', VIEW, label, item);
 }
 
-/** The notifications of window `name` once there are `count` of them. */
-async function notified(name: string, count: number): Promise<string[]> {
-  let texts: string[] = [];
+/** The toasts of window `name` in the order shown, once there are `count` of them. */
+async function notified(
+  name: string,
+  count: number,
+): Promise<Array<{message: string; buttons: string[]}>> {
+  let shownToasts: Awaited<ReturnType<typeof toastDetails>> = [];
   await waitFor(
     `${String(count)} notifications in window ${name}`,
     async () => {
-      texts = await notifications(name);
-      return texts.length >= count;
+      shownToasts = await toastDetails(name);
+      return shownToasts.length >= count;
     },
     30_000,
   );
-  return texts;
+  return shownToasts.map(({message, buttons}) => ({message, buttons}));
+}
+
+/** The ids `docker <listing>` prints, sorted: the containers, images or volumes the engine holds. */
+async function idsOf(...listing: string[]): Promise<string[]> {
+  return (await docker(...listing))
+    .split('\n')
+    .filter(line => line !== '')
+    .sort();
 }
 
 describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container (card containers-102)', function () {
@@ -173,6 +187,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     const asked = await shown('local');
     await answerDialog('local', 'Cancel');
     const afterCancel = [await stateOf(container), await iconOf('local', base)];
+    const windows = [activations('local'), windowNames().length];
     await chosen(base, 'Remove Container');
     await waitForDialog('local', 30_000);
     await answerDialog('local', 'Remove');
@@ -184,6 +199,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
         await stateOf(container),
         await notifications('local'),
         await dialogOf('local'),
+        [activations('local'), windowNames().length],
       ],
       [
         {
@@ -196,6 +212,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
         'gone',
         [],
         undefined,
+        windows,
       ],
     );
   });
@@ -242,6 +259,39 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
         'running',
       ],
     );
+  });
+
+  it('F-0902 AC-3 (stop-from-connected): Stop Container from a window connected to another container shows the same dialog, and Cancel leaves the target running', async () => {
+    const base = 'ra-stop-from';
+    const folder = devContainerFolder('ra-stop-from-window', {
+      name: 'Stop From',
+    });
+    const connected = await openFolderWindow(folder);
+    try {
+      await reopenInContainer(connected);
+      const container = await made(base, ['sleep', '600']);
+      await inWindow(connected, 'workbench.view.remote');
+      await rowsWhen(connected, rows => rows.some(each => each.label === base));
+      await rowMenuAction(connected, VIEW, base, 'Stop Container');
+      const asked = await shown(connected);
+      await answerDialog(connected, 'Cancel');
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+      deepStrictEqual(
+        [asked, await stateOf(container)],
+        [
+          {
+            message: '',
+            details: `Stop ${base}?`,
+            buttons: ['Cancel', 'Stop Container'],
+            kind: 'warning',
+          },
+          'running',
+        ],
+      );
+    } finally {
+      await closeWindow(connected).catch(() => undefined);
+      await removeContainers(folder);
+    }
   });
 
   it('F-0902 AC-4 (stop-other-window): Stop Container from another window gives the window connected to the target core’s Cannot reconnect dialog and the disconnected status', async () => {
@@ -297,12 +347,20 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     );
   });
 
-  it('F-0902 AC-24 (last-user): the Remove confirmation adds S373 for each volume and folder no other container uses, in mount order, and not for one another container mounts', async () => {
+  it('F-0902 AC-24 (last-user): the Remove confirmation adds S373 for each volume and folder no other container uses, in mount order, not for one another container mounts and not for the vscode volume', async () => {
     const base = 'ra-last-user';
     const volume = runScopedName('ra-last-volume');
     const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'ra-last-folder');
     mkdirSync(folder, {recursive: true});
-    const mounts = ['-v', `${volume}:/data`, '-v', `${folder}:/mnt`];
+    await docker('volume', 'create', 'vscode');
+    const mounts = [
+      '-v',
+      `${volume}:/data`,
+      '-v',
+      'vscode:/vscode',
+      '-v',
+      `${folder}:/mnt`,
+    ];
     try {
       await made(base, ['sleep', '600'], {extra: mounts});
       await viewed(base);
@@ -334,38 +392,45 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
   });
 
-  it('F-0902 AC-25 (start-fails): Start Container on a row whose host port another running container publishes shows the error S170 with no buttons, and the row stays exited', async () => {
+  it('F-0902 AC-25 (start-fails): Start Container on an exited row whose host port another running container publishes shows the error S170 with no buttons, and the row stays exited', async () => {
     const base = 'ra-start-fails';
-    const holder = await made('ra-start-holder', ['sleep', '600'], {
+    const probe = await made('ra-start-probe', ['sleep', '600'], {
       extra: ['-p', '127.0.0.1::80'],
     });
-    const published = (await docker('port', holder, '80/tcp')).split(':').pop();
-    const container = await made(base, ['sleep', '600'], {
-      started: false,
+    const published = (await docker('port', probe, '80/tcp')).split(':').pop();
+    await docker('rm', '-f', probe);
+    const container = await made(base, ['true'], {
+      extra: ['-p', `127.0.0.1:${String(published)}:80`],
+    });
+    await made('ra-start-holder', ['sleep', '600'], {
       extra: ['-p', `127.0.0.1:${String(published)}:80`],
     });
     await viewed(base);
+    await iconReaches('local', base, 'vm');
     await chosen(base, 'Start Container');
-    const texts = await notified('local', 1);
+    const toasts = await notified('local', 1);
     deepStrictEqual(
       [
-        texts,
+        toasts,
         await dialogOf('local'),
         await stateOf(container),
         await iconOf('local', base),
       ],
       [
         [
-          `Error starting container: Command failed: docker start ${await idOf(container)}`,
+          {
+            message: `Error starting container: Command failed: docker start ${await idOf(container)}`,
+            buttons: [],
+          },
         ],
         undefined,
-        'created',
+        'exited',
         'vm',
       ],
     );
   });
 
-  it('F-0902 AC-36 (stop-fails): a Stop Container whose docker stop fails shows the error S171 naming the command, and the container and its row stay running', async () => {
+  it('F-0902 AC-36 (stop-fails): a Stop Container whose docker stop fails shows the error S171 naming the command with no buttons, and the container and its row stay running', async () => {
     const base = 'ra-stop-fails';
     const wrapper = dockerWrapper(
       'fail-stop',
@@ -378,12 +443,15 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       await chosen(base, 'Stop Container');
       await waitForDialog('local', 30_000);
       await answerDialog('local', 'Stop Container');
-      const texts = await notified('local', 1);
+      const toasts = await notified('local', 1);
       deepStrictEqual(
-        [texts, await stateOf(container), await iconOf('local', base)],
+        [toasts, await stateOf(container), await iconOf('local', base)],
         [
           [
-            `Error stopping container: Command failed: ${wrapper} stop ${await idOf(container)}`,
+            {
+              message: `Error stopping container: Command failed: ${wrapper} stop ${await idOf(container)}`,
+              buttons: [],
+            },
           ],
           'running',
           'vm-running',
@@ -394,41 +462,94 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
   });
 
-  it('F-0902 AC-37 (remove-fails): a Remove whose docker rm fails shows the error S168 and keeps the container; a running target whose stop fails shows S171 and S168 and keeps running', async () => {
-    const base = 'ra-remove-fails';
-    const wrapper = dockerWrapper(
-      'fail-rm-stop',
-      'if [ "$1" = rm ] || [ "$1" = stop ]; then exit 1; fi',
+  /** Clicks Remove Container on the row `label` and Remove on its dialog. */
+  async function removed(label: string): Promise<void> {
+    await chosen(label, 'Remove Container');
+    await waitForDialog('local', 30_000);
+    await answerDialog('local', 'Remove');
+  }
+
+  it('F-0902 AC-37 (remove-fails): a failed rm shows the error S168 and keeps the container and its row, exited if it was stopped first; a failed stop shows S171 then S168 and keeps it running; none has buttons', async () => {
+    const failRm = dockerWrapper(
+      'fail-rm',
+      'if [ "$1" = rm ]; then exit 1; fi',
     );
-    await setUserSetting('dev.containers.dockerPath', wrapper);
+    const failStop = dockerWrapper(
+      'fail-stop-remove',
+      'if [ "$1" = stop ]; then exit 1; fi',
+    );
+    /** What the window shows after a failed Remove of the row `label` of container `container`. */
+    async function afterFailure(
+      label: string,
+      container: string,
+      count: number,
+    ): Promise<unknown> {
+      const toasts = await notified('local', count);
+      return {
+        messages: toasts.map(toast => toast.message),
+        buttons: toasts.map(toast => toast.buttons),
+        state: await stateOf(container),
+        icon: await iconOf('local', label),
+      };
+    }
     try {
-      const exited = await made(base, ['true']);
-      const running = await made('ra-remove-fails-up', ['sleep', '600']);
-      await viewed(base);
-      await chosen(base, 'Remove Container');
-      await waitForDialog('local', 30_000);
-      await answerDialog('local', 'Remove');
-      const first = await notified('local', 1);
+      await setUserSetting('dev.containers.dockerPath', failRm);
+      const exited = await made('ra-remove-exited-rm', ['true']);
+      const stopped = await made('ra-remove-stopped-rm', ['sleep', '600']);
+      await viewed('ra-remove-stopped-rm');
       const exitedId = await idOf(exited);
-      const runningId = await idOf(running);
-      await chosen('ra-remove-fails-up', 'Remove Container');
-      await waitForDialog('local', 30_000);
-      await answerDialog('local', 'Remove');
-      const second = (await notified('local', 3)).filter(
-        text => !first.includes(text),
+      const stoppedId = await idOf(stopped);
+      await removed('ra-remove-exited-rm');
+      const afterExited = await afterFailure('ra-remove-exited-rm', exited, 1);
+      await inWindow('local', 'notifications.clearAll');
+      await removed('ra-remove-stopped-rm');
+      await waitFor(
+        'the container to have been stopped first',
+        async () => (await stateOf(stopped)) === 'exited',
+        40_000,
       );
+      const afterStopped = await afterFailure(
+        'ra-remove-stopped-rm',
+        stopped,
+        1,
+      );
+      await inWindow('local', 'notifications.clearAll');
+      await setUserSetting('dev.containers.dockerPath', failStop);
+      const running = await made('ra-remove-fails-up', ['sleep', '600']);
+      await rowsWhen('local', rows =>
+        rows.some(each => each.label === 'ra-remove-fails-up'),
+      );
+      const runningId = await idOf(running);
+      await removed('ra-remove-fails-up');
+      const afterRunning = await afterFailure('ra-remove-fails-up', running, 2);
       deepStrictEqual(
-        [first, second.sort(), await stateOf(exited), await stateOf(running)],
+        [afterExited, afterStopped, afterRunning],
         [
-          [
-            `Error removing container: Command failed: ${wrapper} rm ${exitedId}`,
-          ],
-          [
-            `Error removing container: Command failed: ${wrapper} stop ${runningId}`,
-            `Error stopping container: Command failed: ${wrapper} stop ${runningId}`,
-          ],
-          'exited',
-          'running',
+          {
+            messages: [
+              `Error removing container: Command failed: ${failRm} rm ${exitedId}`,
+            ],
+            buttons: [[]],
+            state: 'exited',
+            icon: 'vm',
+          },
+          {
+            messages: [
+              `Error removing container: Command failed: ${failRm} rm ${stoppedId}`,
+            ],
+            buttons: [[]],
+            state: 'exited',
+            icon: 'vm',
+          },
+          {
+            messages: [
+              `Error removing container: Command failed: ${failStop} stop ${runningId}`,
+              `Error stopping container: Command failed: ${failStop} stop ${runningId}`,
+            ],
+            buttons: [[], []],
+            state: 'running',
+            icon: 'vm-running',
+          },
         ],
       );
     } finally {
@@ -436,7 +557,7 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
   });
 
-  it('F-0902 AC-51 (stale-remove): a Remove confirmed after another window removed the container shows the error S168 and the stale row goes', async () => {
+  it('F-0902 AC-51 (stale-remove): a Remove confirmed after another window removed the container shows the error S168 with no buttons and the stale row goes', async () => {
     const base = 'ra-stale';
     const container = await made(base, ['true']);
     const other = await openFolderWindow(devContainerFolder('ra-stale-window'));
@@ -457,29 +578,53 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       );
       await answerDialog('local', 'Remove');
       // The window is not the one in front, so the editor keeps the notice in its centre instead of a toast.
-      let texts: string[] = [];
+      let centre: Awaited<ReturnType<typeof centreNotifications>> = [];
       await waitFor(
         'the error in the centre of the first window',
         async () => {
-          texts = await notificationCentre('local');
-          return texts.length > 0;
+          centre = await centreNotifications('local');
+          return centre.length > 0;
         },
         30_000,
       );
       await iconReaches('local', base, undefined);
-      deepStrictEqual(texts, [
-        `Error removing container: Command failed: docker rm ${removedId}`,
+      deepStrictEqual(centre, [
+        {
+          message: `Error removing container: Command failed: docker rm ${removedId}`,
+          buttons: [],
+        },
       ]);
     } finally {
       await closeWindow(other).catch(() => undefined);
     }
   });
 
-  it('F-0902 AC-56 (no-row): Start, Stop and Remove called with no row change no container and show no dialog and no notification', async () => {
-    const exited = await made('ra-none-exited', ['true']);
-    const running = await made('ra-none-running', ['sleep', '600']);
+  it('F-0902 AC-56 (no-row): Start, Stop and Remove called with no row create, change and remove no container, image or volume, and show no dialog and no notification', async () => {
+    await made('ra-none-exited', ['true']);
+    await made('ra-none-running', ['sleep', '600']);
     await viewed('ra-none-running');
-    const before = [await stateOf(exited), await stateOf(running)];
+    /** The ids the engine holds of containers, images and volumes, and the state of the two containers. */
+    async function held(): Promise<string[][]> {
+      return [
+        await idsOf('ps', '-a', '-q'),
+        await idsOf('image', 'ls', '-q'),
+        await idsOf('volume', 'ls', '-q'),
+        [
+          await stateOf(runScopedName('ra-none-exited')),
+          await stateOf(runScopedName('ra-none-running')),
+        ],
+      ];
+    }
+    // Something else may still be removing what an earlier row left, so the engine is read until it holds still.
+    let before = await held();
+    for (let tries = 0; tries < 10; tries += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      const again = await held();
+      if (JSON.stringify(again) === JSON.stringify(before)) {
+        break;
+      }
+      before = again;
+    }
     for (const command of [
       'remote-containers.startContainer',
       'remote-containers.stopContainer',
@@ -489,13 +634,8 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
     }
     await new Promise(resolve => setTimeout(resolve, 3_000));
     deepStrictEqual(
-      [
-        before,
-        [await stateOf(exited), await stateOf(running)],
-        await dialogOf('local'),
-        await notifications('local'),
-      ],
-      [['exited', 'running'], ['exited', 'running'], undefined, []],
+      [await held(), await dialogOf('local'), await notifications('local')],
+      [before, undefined, []],
     );
   });
 

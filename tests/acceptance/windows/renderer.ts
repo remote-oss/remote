@@ -1421,15 +1421,23 @@ const OPEN_CENTRE = '.notifications-center.visible';
 
 const CENTRE_BELL = '[id="status.notifications"] a';
 
+/** A notification of the centre: its text and the labels of its buttons. */
+export interface CentreNotification {
+  message: string;
+  buttons: string[];
+}
+
 /**
- * The text of each notification of window `name`, newest first, read in the notification centre, which this opens
- * when it is closed. Unlike the toasts, the centre holds a notification core did not raise as a toast.
+ * Each notification of window `name`, newest first, read in the notification centre, which this opens when it is
+ * closed. Unlike the toasts, the centre holds a notification core did not raise as a toast.
  */
-export async function notificationCentre(name: string): Promise<string[]> {
+export async function centreNotifications(
+  name: string,
+): Promise<CentreNotification[]> {
   return settled(
     () => `the notification centre of window ${name}`,
     async () =>
-      (await evaluate<string[] | null>(
+      (await evaluate<CentreNotification[] | null>(
         name,
         `(() => {
   const centre = document.querySelector('${OPEN_CENTRE}');
@@ -1437,10 +1445,18 @@ export async function notificationCentre(name: string): Promise<string[]> {
     document.querySelector('${CENTRE_BELL}')?.click();
     return null;
   }
-  return [...centre.querySelectorAll('.notification-list-item-message')].map(each => each.textContent ?? '');
+  return [...centre.querySelectorAll('.notification-list-item')].map(item => ({
+    message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+    buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => each.textContent ?? ''),
+  }));
 })()`,
       )) ?? undefined,
   );
+}
+
+/** The text of each notification of window `name`, newest first, read in the notification centre. */
+export async function notificationCentre(name: string): Promise<string[]> {
+  return (await centreNotifications(name)).map(each => each.message);
 }
 
 /** A link inside a notification's message: its words and the address it opens. */

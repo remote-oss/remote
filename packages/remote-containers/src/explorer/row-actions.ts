@@ -64,6 +64,9 @@ export interface RowActions {
   remove(argument: unknown): Promise<void>;
 }
 
+/** The name Docker gives a volume nobody named: 64 hex digits. Such a volume belongs to its one container, so it is no news. */
+const ANONYMOUS_VOLUME = /^[0-9a-f]{64}$/;
+
 /** A mount of a container that no other container may share: what it is, and how the user knows it. */
 interface Mount {
   key: string;
@@ -87,7 +90,7 @@ function mountsOf(inspected: unknown): Mount[] {
   return (Array.isArray(mounts) ? (mounts as unknown[]) : []).flatMap(each => {
     const mount = recordOf(each);
     if (mount?.Type === 'volume' && typeof mount.Name === 'string') {
-      return mount.Name === SHARED_VOLUME
+      return mount.Name === SHARED_VOLUME || ANONYMOUS_VOLUME.test(mount.Name)
         ? []
         : [{key: `volume ${mount.Name}`, shown: mount.Name}];
     }
