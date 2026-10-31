@@ -12,7 +12,7 @@ and does not re-decide it.
 | [0004](0004-ssh-transport-native-openssh.md) | The SSH transport is the native OpenSSH client | accepted (D-51) |
 | [0005](0005-reuse-of-open-source-components.md) | Reuse existing open-source components (dev container CLI, the editor CLI) | accepted (R-76) |
 | [0006](0006-product-driven-artefact-resolution.md) | The running editor's product.json drives server and CLI resolution | accepted |
-| [0007](0007-editor-version-floor.md) | The editor version floor is 1.139, and proposed API is pinned to it | accepted |
+| [0007](0007-editor-version-floor.md) | The editor version floor is 1.125, the recorded version stays 1.139.1, and proposed API is pinned to the floor | accepted (amended 2026-10-20, D-102) |
 | [0008](0008-public-surface-and-voice.md) | The public surface speaks as a product and carries nothing of the process | accepted (D-59, R-85) |
 | [0009](0009-dev-container-cli-bridge.md) | Drive the dev container CLI as a pinned, spawned program, and bend it without forking | accepted |
 | [0010](0010-output-read-only-through-markers.md) | What we read from a shell or a program is read only through our markers or its documented form | accepted |

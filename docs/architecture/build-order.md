@@ -91,7 +91,7 @@ small recorded set for the P0 rows (20 for 0.2), recorded by the kit on pull whe
 
 The harness, `tests/acceptance/`:
 
-- **Editor under test:** the floor's VS Code (1.139.1, ADR-0007) downloaded by `@vscode/test-electron` into a
+- **Editor under test:** the recorded VS Code (1.139.1, ADR-0007; the floor 1.125 has its own smoke run) downloaded by `@vscode/test-electron` into a
   cache, started headless under `xvfb` in CI, with a fresh user-data and extensions folder per run, our VSIX
   installed by file, `--enable-proposed-api remote-oss.remote-ssh` passed on the command line (F-1403's argv route
   is what the product does; the harness is allowed the switch because it is not the product).
