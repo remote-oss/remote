@@ -52,6 +52,14 @@ const LAB_OPTIONS = 'Lab Options';
 
 const DOCKER_IN_DOCKER = 'Docker (Docker-in-Docker)';
 
+/** What the frame of Select Features shows. */
+const FEATURES_SCREEN = {
+  title: 'Select Features',
+  placeholder: FEATURES,
+  titleButtons: ['Back (Ctrl+Alt+-)', 'Finish'],
+  multiSelect: true,
+};
+
 /** The configuration a row's wizard wrote into `folder`, once it is there. */
 async function configurationOf(
   folder: string,
@@ -104,28 +112,29 @@ describe('Select Features in the wizard (card containers-88)', function () {
   it('F-0802 AC-7, F-0803 AC-3, F-0804 AC-26 (features-after-options): after the last option screen comes Select Features, with Back and Finish in the title bar, a bottom OK and 0 Selected', async () => {
     await withWindow('f88-after', {}, async window => {
       await startedWith(window, 'paths-free-lab');
-      await takeOptionScreen(window, 'Size:');
+      await screenWith(window, 'Size:');
+      const optionChrome = await quickPickChrome(window);
+      await acceptQuickPick(window);
       await screenWith(window, FEATURES);
       deepStrictEqual(
-        [await quickPickFacts(window), await quickPickChrome(window)],
         [
-          {
-            title: 'Select Features',
-            placeholder: FEATURES,
-            titleButtons: ['Back (Ctrl+Alt+-)', 'Finish'],
-            multiSelect: true,
-          },
-          {counter: '0 Selected', okShown: true},
+          optionChrome.okShown,
+          await quickPickFacts(window),
+          await quickPickChrome(window),
         ],
+        [false, FEATURES_SCREEN, {counter: '0 Selected', okShown: true}],
       );
     });
   });
 
-  it('F-0803 AC-7 (bare-features): a template with no option goes straight from the pick to Select Features', async () => {
+  it('F-0802 AC-7, F-0803 AC-7 (bare-features): a template with no option goes straight from the pick to Select Features, with its title-bar buttons, its OK and 0 Selected', async () => {
     await withWindow('f88-bare', {}, async window => {
       await startedWith(window, 'bare-lab');
       await screenWith(window, FEATURES);
-      deepStrictEqual((await quickPickFacts(window))?.title, 'Select Features');
+      deepStrictEqual(
+        [await quickPickFacts(window), await quickPickChrome(window)],
+        [FEATURES_SCREEN, {counter: '0 Selected', okShown: true}],
+      );
     });
   });
 
@@ -240,14 +249,22 @@ describe('Select Features in the wizard (card containers-88)', function () {
     await withWindow('f88-order', {}, async window => {
       await startedWith(window, 'bare-lab');
       await screenWith(window, FEATURES);
-      const community = (await listedLabels(window)).filter(label =>
+      const everything = await listedLabels(window);
+      const collator = new Intl.Collator('en', {sensitivity: 'base'});
+      const sorted = everything.every(
+        (label, index) =>
+          index === 0 ||
+          collator.compare(everything[index - 1] ?? '', label) <= 0,
+      );
+      const community = everything.filter(label =>
         ['add-community', 'Add Community Tool', 'Adobe Community Kit'].includes(
           label,
         ),
       );
       deepStrictEqual(
-        [community, community.toSorted()],
+        [sorted, community, community.toSorted()],
         [
+          true,
           ['Add Community Tool', 'add-community', 'Adobe Community Kit'],
           ['Add Community Tool', 'Adobe Community Kit', 'add-community'],
         ],
@@ -267,27 +284,43 @@ describe('Select Features in the wizard (card containers-88)', function () {
         30_000,
       );
       await new Promise(resolve => setTimeout(resolve, 2000));
-      deepStrictEqual(existing(folder, '.devcontainer'), []);
+      deepStrictEqual(
+        [existing(folder, '.devcontainer'), await devContainersOf(folder)],
+        [[], []],
+      );
     });
   });
 
-  it('F-0801 AC-40 (template-then-feature): a template that carries a Feature and a picked Feature are both written, the template’s first, with no dialog', async () => {
+  it('F-0801 AC-40 (template-then-feature): Select Features opens with 0 Selected after the template with its defaults, and a template that carries a Feature and a picked Feature are both written, the template’s first, the picked one with no options, and no dialog shows', async () => {
     await withWindow('f88-dind', {}, async (window, folder) => {
       await startCommand(window);
       await waitForQuickPick(window);
       await chooseQuickPickRow(window, 'Docker in Docker');
       await takenUntil(window, FEATURES);
+      const arrival = await quickPickChrome(window);
+      const nothingChecked = (await quickPickChecks(window)).filter(
+        each => each.checked,
+      );
       await toggleQuickPickRow(window, DOCKER_IN_DOCKER);
       await pressQuickPickTitleButton(window, 'Finish');
       const configuration = await configurationOf(folder);
       deepStrictEqual(
         [
+          arrival.counter,
+          nothingChecked,
           Object.keys(configuration.features ?? {}).map(key =>
             key.split('/').slice(-1).join(''),
           ),
+          Object.values(configuration.features ?? {}).slice(1),
           await dialogOf(window),
         ],
-        [['docker-in-docker:2', 'docker-in-docker:4'], undefined],
+        [
+          '0 Selected',
+          [],
+          ['docker-in-docker:2', 'docker-in-docker:4'],
+          [{}],
+          undefined,
+        ],
       );
     });
   });
