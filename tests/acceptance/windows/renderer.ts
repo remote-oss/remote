@@ -1544,17 +1544,36 @@ export async function quickPickOf(
 export interface QuickPickRow {
   label: string;
   description: string;
+  buttons: string[];
+  focused: boolean;
+}
+
+/** A row of a quick pick as {@link detailedQuickPickRows} reads it: also its second line and its codicons. */
+export interface DetailedQuickPickRow extends QuickPickRow {
   /** The second line of the row, the hover text the pick shows beside the label. */
   detail: string;
   /** The codicon classes the row carries, such as `codicon-verified`. */
   icons: string[];
-  buttons: string[];
-  focused: boolean;
 }
 
 /** The rows of the quick pick open in window `name`, with what each shows; none when no quick pick is open. */
 export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
   return evaluate<QuickPickRow[]>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      description: row.querySelector('.label-description')?.textContent ?? '',
+      buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+      focused: row.classList.contains('focused'),
+    }))`,
+  );
+}
+
+/** The rows of the quick pick open in window `name` with their second lines and codicons as well; none when no quick pick is open. */
+export async function detailedQuickPickRows(
+  name: string,
+): Promise<DetailedQuickPickRow[]> {
+  return evaluate<DetailedQuickPickRow[]>(
     name,
     `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
       label: row.querySelector('.label-name')?.textContent ?? '',
@@ -1607,24 +1626,6 @@ export async function waitForQuickPick(
         : shown;
     },
     milliseconds,
-  );
-}
-
-/** Types `text` into the input of the quick pick open in window `name`, in place of what it holds; its list follows. */
-export async function typeInQuickPick(
-  name: string,
-  text: string,
-): Promise<void> {
-  await evaluate<null>(
-    name,
-    `(() => {
-      const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
-      input.focus();
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      setter.call(input, ${JSON.stringify(text)});
-      input.dispatchEvent(new Event('input', {bubbles: true}));
-      return null;
-    })()`,
   );
 }
 
