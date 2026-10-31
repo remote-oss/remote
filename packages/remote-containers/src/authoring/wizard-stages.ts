@@ -134,7 +134,10 @@ function customTemplateOf(
   return {
     id: templateId,
     version: '',
-    name: templateId,
+    name:
+      typeof metadata?.name === 'string' && metadata.name !== ''
+        ? metadata.name
+        : templateId,
     owner: '',
     options: recordOf(metadata?.options),
     optionalPaths: paths,

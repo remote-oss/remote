@@ -1674,12 +1674,8 @@ export async function moveQuickPickFocus(
   await pressKey(await pageOf(name), name, key);
 }
 
-/** Types `text` into the input of the quick pick open in window `name`, replacing what is there, and leaves it open. */
-export async function typeInQuickPick(
-  name: string,
-  text: string,
-): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+/** Sets the input of the quick pick open in window `name` to `text`, whether or not the list has a row. */
+async function setQuickPickInput(name: string, text: string): Promise<void> {
   await evaluate<null>(
     name,
     `(() => {
@@ -1691,6 +1687,20 @@ export async function typeInQuickPick(
       return null;
     })()`,
   );
+}
+
+/** Types `text` into the input of the quick pick open in window `name`, replacing what is there, and leaves it open. */
+export async function typeInQuickPick(
+  name: string,
+  text: string,
+): Promise<void> {
+  await waitForQuickPick(name, 30_000);
+  await setQuickPickInput(name, text);
+}
+
+/** Empties the input of the quick pick open in window `name`, which brings back the rows a typed text had filtered out. */
+export async function clearQuickPickInput(name: string): Promise<void> {
+  await setQuickPickInput(name, '');
 }
 
 /** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
@@ -2015,4 +2025,62 @@ export async function typeInTerminal(
       await pressCharacter(address, name, character);
     }
   }
+}
+
+/** The title the quick pick open in window `name` shows in its title bar. */
+export async function quickPickTitle(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `document.querySelector('${QUICK_WIDGET} .quick-input-title')?.textContent ?? ''`,
+  );
+}
+
+/** Presses the Back button of the title bar of the quick pick open in window `name`. */
+export async function pressQuickPickBack(name: string): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      document.querySelector('${QUICK_WIDGET} .quick-input-titlebar .codicon-quick-input-back').click();
+      return null;
+    })()`,
+  );
+}
+
+/** The rows of the multi-select quick pick open in window `name` with the state of each one's checkbox. */
+export async function quickPickChecks(
+  name: string,
+): Promise<Array<{label: string; checked: boolean}>> {
+  return evaluate<Array<{label: string; checked: boolean}>>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].map(row => ({
+      label: row.getAttribute('aria-label') ?? '',
+      checked: row.getAttribute('aria-checked') === 'true',
+    }))`,
+  );
+}
+
+/** Clicks the checkbox of the row labelled `label` of the multi-select quick pick open in window `name`. */
+export async function toggleQuickPickRow(
+  name: string,
+  label: string,
+): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      const row = [...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row[role=checkbox]')].find(each => each.getAttribute('aria-label') === ${JSON.stringify(label)});
+      row.querySelector('.monaco-custom-toggle').click();
+      return null;
+    })()`,
+  );
+}
+
+/** Clicks the OK button of the multi-select quick pick open in window `name`. */
+export async function pressQuickPickOk(name: string): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      document.querySelector('${QUICK_WIDGET} .quick-input-action .monaco-button').click();
+      return null;
+    })()`,
+  );
 }

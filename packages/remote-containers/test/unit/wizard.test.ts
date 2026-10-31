@@ -382,6 +382,26 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  it('F-0803 AC-4: the boolean screen of a custom template names it by its metadata’s name, or by its id when the metadata has none', async () => {
+    const placeholders: Array<string | undefined> = [];
+    for (const metadata of [
+      {name: 'Lab', options: {flag: {type: 'boolean'}}},
+      {options: {flag: {type: 'boolean'}}},
+    ]) {
+      const scene = sceneOf();
+      const input = scriptedInput([takeDefaults]);
+      scene.ports.options = input.ports;
+      scene.ports.pick.templateMetadata = () =>
+        Promise.resolve({kind: 'metadata', metadata});
+      await customWritten(scene);
+      placeholders.push(input.pickers[0]?.placeholder);
+    }
+    deepStrictEqual(placeholders, [
+      "Select the options for the 'Lab' dev container",
+      "Select the options for the 'a/b/c' dev container",
+    ]);
+  });
+
   it('F-0803 AC-20: Escape on the first option screen cancels the wizard and writes nothing', async () => {
     const scene = sceneOf();
     scene.ports.options = scriptedInput([pressEscape]).ports;
