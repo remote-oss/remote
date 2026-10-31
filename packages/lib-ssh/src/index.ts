@@ -116,6 +116,7 @@ export {
   bootstrapEventOf,
   bootstrapLogLine,
   connectionStart,
+  tunnelStart,
   sessionStart,
   sessionStartFor,
 } from './connection-server/session-bootstrap.ts';

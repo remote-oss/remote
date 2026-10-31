@@ -138,7 +138,10 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   }
   argumentList.push(...targetArguments(request.target));
   if (request.purpose === 'tunnel') {
-    argumentList.push(TUNNEL_COMMAND);
+    // With the host's RemoteCommand in effect the command goes in on the session's input instead (`tunnelStart`)
+    if (!request.settings.remoteCommandInEffect) {
+      argumentList.push(TUNNEL_COMMAND);
+    }
   } else if (request.remoteProgram !== undefined) {
     argumentList.push(request.remoteProgram);
   }

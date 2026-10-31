@@ -810,6 +810,32 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     ]);
   });
 
+  it('F-2107 BR-1: a tunnel run with a RemoteCommand in effect has no remote command and ends with the host, and with none in effect it ends with its own command and RemoteCommand=none', () => {
+    const inEffect = buildInvocation(
+      makeRequest({
+        purpose: 'tunnel',
+        effective: {remoteCommand: 'exec zsh -l'},
+        remoteCommandInEffect: true,
+      }),
+    );
+    const disabled = buildInvocation(
+      makeRequest({
+        purpose: 'tunnel',
+        effective: {remoteCommand: 'exec zsh -l'},
+        remoteCommandInEffect: false,
+      }),
+    );
+    deepStrictEqual(
+      [
+        inEffect.arguments.at(-1),
+        inEffect.arguments.includes('RemoteCommand=none'),
+        disabled.arguments.at(-1) === TUNNEL_COMMAND,
+        disabled.arguments.includes('RemoteCommand=none'),
+      ],
+      ['alias', false, true, true],
+    );
+  });
+
   it('brief, #299: a tunnel run ignores a remoteProgram', () => {
     const invocation = buildInvocation(
       makeRequest({purpose: 'tunnel', remoteProgram: 'uname -s'}),
