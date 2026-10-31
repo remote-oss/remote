@@ -127,31 +127,6 @@ describe('the port attributes of the configuration (card containers-73)', functi
     );
   });
 
-  it.skip('F-1101 AC-21 (overlap-regexes): of two regex keys that both match the listening process the one listed first wins', async () => {
-    const port = await freePort();
-    const first = await connectedWith('c73-ac21c', {
-      forwardPorts: [port],
-      portsAttributes: {
-        'nc -lk': {label: 'FirstRegex'},
-        cat$: {label: 'SecondRegex'},
-      },
-    });
-    const second = await connectedWith('c73-ac21d', {
-      forwardPorts: [port],
-      portsAttributes: {
-        cat$: {label: 'SecondRegex'},
-        'nc -lk': {label: 'FirstRegex'},
-      },
-    });
-    deepStrictEqual(
-      [
-        await columnWithProcess(first, port, 'c73-ac21c'),
-        await columnWithProcess(second, port, 'c73-ac21d'),
-      ],
-      [[`FirstRegex (${String(port)})`], [`SecondRegex (${String(port)})`]],
-    );
-  });
-
   it('F-1101 AC-21 (range-and-regex): a range key’s label wins over a regex key in either order, and keeps winning once the process matches the regex', async () => {
     const port = await freePort();
     const range = `${String(port - 5)}-${String(port + 5)}`;

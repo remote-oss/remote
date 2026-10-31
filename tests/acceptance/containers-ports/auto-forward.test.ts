@@ -660,4 +660,40 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       await stopDetected();
     }
   });
+
+  it.skip('F-1101 AC-21 (overlap-regexes): of two regex keys that both match a detected listener’s command line, the one listed first gives the row its label', async () => {
+    const outcomes: string[][] = [];
+    for (const [name, attributes] of [
+      [
+        'c73-ac21c',
+        {'nc -lk': {label: 'FirstRegex'}, cat$: {label: 'SecondRegex'}},
+      ],
+      [
+        'c73-ac21d',
+        {cat$: {label: 'SecondRegex'}, 'nc -lk': {label: 'FirstRegex'}},
+      ],
+    ] as const) {
+      const port = await freePort();
+      const {window, containerId} = await plainWindow(name, {
+        portsAttributes: attributes,
+      });
+      const stop = await listenInTerminal(window, containerId, port);
+      try {
+        await showPorts(window);
+        await rowsWhen(window, shown => shown.length > 0);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        outcomes.push(
+          portsOf(await portsRows(window)).map(text =>
+            text.replace(String(port), '<port>'),
+          ),
+        );
+      } finally {
+        await stop();
+      }
+    }
+    deepStrictEqual(outcomes, [
+      ['FirstRegex (<port>)'],
+      ['SecondRegex (<port>)'],
+    ]);
+  });
 });
