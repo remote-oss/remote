@@ -63,7 +63,7 @@ async function failedSetup(folder: string): Promise<string> {
   return name;
 }
 
-describe.only('F-0502 the failures of the resolution (card containers-43)', function () {
+describe('F-0502 the failures of the resolution (card containers-43)', function () {
   this.timeout(900_000);
 
   it('F-0502 AC-18 (c43-no-daemon): Reopen in Container with a Docker endpoint that does not answer shows the engine error with Cancel and Show Log, and either leaves the local folder window and creates no container', async () => {
@@ -153,7 +153,7 @@ describe.only('F-0502 the failures of the resolution (card containers-43)', func
     }
   });
 
-  it.only('F-0502 AC-30 (c43-rebuild-item): after a setup that fails with a container, More Actions... Rebuild Container removes the old container and makes a new one before the resolution runs again, and Open Recent... opens the Open Recent picker', async () => {
+  it('F-0502 AC-30 (c43-rebuild-item): after a setup that fails with a container, More Actions... Rebuild Container removes the old container and makes a new one before the resolution runs again, and Open Recent... opens the Open Recent picker', async () => {
     const folder = devContainerFolder('c43-has-container', {
       name: 'Has Container',
       containerUser: 'doesnotexist123',
