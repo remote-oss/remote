@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  activeEditorOf,
   closeWindow,
   connectedToContainer,
   devContainerFolder,
@@ -17,6 +18,8 @@ import {
   dialogOf,
   notificationCentre,
   chooseQuickPickRow,
+  editorGroupLabels,
+  editorTabs,
   quickPickFacts,
   quickPickRows,
   waitForDialog,
@@ -226,6 +229,48 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
           afterTheCommand: true,
           timeout: false,
           dialog: undefined,
+        },
+      );
+    } finally {
+      await closeWindow(name);
+      await removeContainers(folder);
+    }
+  });
+
+  it.skip('F-0502 AC-29 (c43-edit-locally): Edit devcontainer.json Locally after a failed setup reloads the same window as the local folder with devcontainer.json open and focused, and the failed attempt’s log in a second editor group as a preview tab (skipped until #1479)', async () => {
+    const folder = failingBuildFolder('c43-edit-locally');
+    const name = await failedSetup(folder);
+    try {
+      await answerDialog(name, 'Edit devcontainer.json Locally');
+      const configuration = path.join(
+        folder,
+        '.devcontainer',
+        'devcontainer.json',
+      );
+      await waitFor(
+        'the configuration to be the active editor',
+        async () =>
+          (await activeEditorOf(name).catch(() => null)) === configuration,
+        30_000,
+      );
+      const groups = await editorGroupLabels(name);
+      const logTab = (await editorTabs(name)).find(entry =>
+        entry.label.startsWith('dev-containers-attempt-'),
+      );
+      deepStrictEqual(
+        {
+          remoteName: (await windowState(name)).remoteName,
+          groups: groups.length,
+          logInSecond: groups[1]?.[0]?.startsWith('dev-containers-attempt-'),
+          logPreview: logTab?.preview,
+          focused: await activeEditorOf(name),
+        },
+        {
+          remoteName: null,
+          groups: 2,
+          logInSecond: true,
+          logPreview: true,
+          focused: configuration,
         },
       );
     } finally {
