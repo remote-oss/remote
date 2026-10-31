@@ -322,6 +322,26 @@ describe('the template catalogue (card containers-77)', () => {
     );
   });
 
+  it('F-0804 BR-2: within a collection the Features keep the order of its features list', () => {
+    const result = parseCatalogue(
+      JSON.stringify({
+        collections: [
+          {
+            features: ['c', 'a', 'b'].map(name => ({
+              id: `ghcr.io/x/features/${name}`,
+              version: '1',
+              name,
+            })),
+          },
+        ],
+      }),
+    );
+    deepStrictEqual(
+      result.kind === 'catalogue' ? result.features.map(each => each.name) : [],
+      ['c', 'a', 'b'],
+    );
+  });
+
   it('F-0802 BR-1: the index is the published one', () => {
     deepStrictEqual(
       catalogueUrlOf({}),

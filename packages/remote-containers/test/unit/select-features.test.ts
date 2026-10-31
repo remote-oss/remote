@@ -41,6 +41,7 @@ const FEATURES = [
   featureOf('Docker (Docker-in-Docker)', 'devcontainers', '2.12.0'),
   featureOf('Lab Plain', 'remote-oss-run'),
   featureOf('Unowned', undefined, '10.1.0'),
+  featureOf('Lookalike', 'devcontainers-community'),
 ];
 
 /** The step that checks `labels` and presses the title-bar Finish. */
@@ -146,6 +147,7 @@ describe('Select Features (card containers-88)', () => {
         ['Git', 'devcontainers', VERIFIED_ICON],
         ['Lab Options', 'remote-oss-run', undefined],
         ['Lab Plain', 'remote-oss-run', undefined],
+        ['Lookalike', 'devcontainers-community', undefined],
         ['Unowned', undefined, undefined],
       ],
     );
