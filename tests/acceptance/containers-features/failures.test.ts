@@ -1,37 +1,44 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {readFileSync, writeFileSync} from 'node:fs';
+import {readFile, rm, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {readFile, rm, writeFile} from 'node:fs/promises';
+import {servedControlFolder} from '../../../tools/acceptance-templates.ts';
+import {
+  removeControlManifest,
+  seedControlManifest,
+} from '../windows/control-manifest.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   containersLog,
   containersLogSince,
   devContainerFolder,
-  reloadingCommand,
   devContainersOf,
+  reloadingCommand,
   reopenStarted,
   startInWindow,
   variable,
+  waitFor,
   windowState,
 } from '../windows/harness.ts';
 import {
+  answerDialog,
+  type DialogKind,
+  dialogKindOf,
   dialogOf,
+  notifications,
   pressEscape,
   primaryButtonOf,
   type ShownDialog,
   waitForDialog,
 } from '../windows/renderer.ts';
-import {
-  removeControlManifest,
-  seedControlManifest,
-} from '../windows/control-manifest.ts';
-import {servedControlFolder} from '../../../tools/acceptance-templates.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
+import {installBrowser, openedUrls} from '../windows/web-ui-support.ts';
 import {
   featureBuilds,
+  imagesOf,
   runFeature,
   writeLocalFeature,
 } from './features-support.ts';
@@ -51,16 +58,15 @@ function askForFeatures(
   writeFileSync(file, JSON.stringify({...configuration, features}));
 }
 
-/** The Feature of the run's manifest that is disallowed with a documentation address. */
+/** The Feature of the run's manifest that is disallowed with a documentation address, and the address. */
 const DISALLOWED = 'ghcr.io/devcontainers/features/disallowed-feature:1';
+const DOCUMENTATION =
+  'https://github.com/devcontainers/features/tree/main/src/disallowed-feature#readme';
 
 /** The same, with no address. */
 function disallowedWithoutAddress(): string {
   return runFeature('lab-banned-nodoc');
 }
-
-/** S060's ending: the CLI's check stopped the running container. */
-const STOPPED = 'The existing dev container was stopped.';
 
 /** The kept copy of the control manifest, in the extension's global storage. */
 function manifestFile(): string {
@@ -73,14 +79,17 @@ function manifestFile(): string {
   );
 }
 
-/** S275, the detail of both dialogs about a problematic Feature. */
+/** S275, the detail of the dialogs about a problematic Feature. */
 const REMOVE =
   'Please remove this feature from your devcontainer.json and rebuild the dev container before continuing.';
 
-/** S059 for a Feature, the message of both dialogs. */
+/** S059 for a Feature, the message of the dialogs about it. */
 function problematic(featureId: string): string {
   return `Cannot use the '${featureId}' feature since it was reported to be problematic.`;
 }
+
+/** S060's ending: the CLI's check stopped the running container. */
+const STOPPED = 'The existing dev container was stopped.';
 
 /** The detail of the dialog of a build that fails for a reason that is not a Feature's resolution (F-0410). */
 const GENERIC = 'An error occurred setting up the container.';
@@ -92,8 +101,31 @@ const LEGACY =
 const NOT_FOUND =
   'The feature was not found either because it is no longer available or because of insufficient permissions to access it.';
 
+/** The buttons of the dialog of a failed build, as the page holds them: Retry is the primary one, the last. */
+const BUILD_BUTTONS = [
+  'Edit devcontainer.json Locally',
+  'More Actions...',
+  'Retry',
+];
+
+/** The buttons of the dialog about a disallowed Feature caught by the build step, with an address. */
+const STEP_BUTTONS = [
+  'Edit devcontainer.json Locally',
+  'More Actions...',
+  'Learn More',
+];
+
 /** How long a build with Features may take before its dialog, in milliseconds. */
 const DIALOG_MILLISECONDS = 600_000;
+
+/** What a row reads of the dialog its open ends in. */
+interface Failure extends ShownDialog {
+  primary: string | undefined;
+  kind: DialogKind | undefined;
+  window: string;
+  folder: string;
+  toasts: string[];
+}
 
 describe('what a failed build with Features says (card containers-94)', function () {
   this.timeout(1_800_000);
@@ -105,26 +137,44 @@ describe('what a failed build with Features says (card containers-94)', function
 
   const windows: string[] = [];
   const folders: string[] = [];
-  const foldersOpened = folders;
   afterEach(async () => {
     for (const window of windows.splice(0)) {
-      if ((await dialogOf(window).catch(() => undefined)) !== undefined) {
-        await pressEscape(window);
-      }
-      await closeWindow(window);
+      await release(window);
     }
     for (const folder of folders.splice(0)) {
       await removeContainers(folder);
     }
   });
 
-  /** Opens the folder of `name` and runs Reopen in Container, and gives the dialog that the build ends in. */
+  /** Dismisses the dialog window `window` has open, if any, and closes the window. */
+  async function release(window: string): Promise<void> {
+    if ((await dialogOf(window).catch(() => undefined)) !== undefined) {
+      await pressEscape(window);
+    }
+    await closeWindow(window);
+  }
+
+  /** Whether the folder has a container, and the images its build made. */
+  async function leftBy(
+    folder: string,
+    name: string,
+  ): Promise<{containers: string[]; images: string[]}> {
+    return {
+      containers: await devContainersOf(folder),
+      images: await imagesOf(`vsc-${name}`),
+    };
+  }
+
+  /**
+   * Opens the folder of `name` and runs Reopen in Container, and gives the dialog that it ends in. With `reloads` false
+   * the command ends in a dialog of the local window, and the window does not reload.
+   */
   async function failed(
     name: string,
     configuration: Readonly<Record<string, unknown>>,
     prepare?: (folder: string) => void,
     reloads = true,
-  ): Promise<ShownDialog & {primary: string | undefined; window: string}> {
+  ): Promise<Failure> {
     await runTemplatesReady();
     const folder = devContainerFolder(name, configuration);
     folders.push(folder);
@@ -137,88 +187,159 @@ describe('what a failed build with Features says (card containers-94)', function
       await startInWindow(window, 'remote-containers.reopenInContainer');
     }
     const dialog = await waitForDialog(window, DIALOG_MILLISECONDS);
-    return {...dialog, primary: await primaryButtonOf(window), window};
+    return {
+      ...dialog,
+      primary: await primaryButtonOf(window),
+      kind: await dialogKindOf(window),
+      window,
+      folder,
+      toasts: await notifications(window),
+    };
   }
 
-  it('F-0414 7.E6 (empty-key): a Feature whose key is the empty string ends the build with the dialog of F-0410 and the detail S163', async () => {
-    const dialog = await failed('c94-empty-key', {features: {'': {}}});
+  /** The dialog a failed build of `key` ends in, and what the build left, closed after. */
+  async function failedWith(
+    name: string,
+    key: string,
+  ): Promise<Failure & {left: {containers: string[]; images: string[]}}> {
+    const seen = await failed(name, {features: {[key]: {}}});
+    const left = await leftBy(seen.folder, name);
+    windows.splice(windows.indexOf(seen.window), 1);
+    await release(seen.window);
+    return {...seen, left};
+  }
+
+  it('F-0414 AC-12 (unresolvable-keys): each key that cannot be resolved ends Reopen in Container with an error modal with Edit, More Actions and Retry (primary), no notification, and no container or image', async () => {
+    const keys = [
+      '/etc/foo',
+      'http://example.invalid/x',
+      'owner/repo',
+      'owner/repo/bad id!',
+      'ghcr.io/owner/bad id!',
+      runFeature('absent-feature'),
+    ];
+    const seen: unknown[] = [];
+    for (const [index, key] of keys.entries()) {
+      const dialog = await failedWith(`c94-ac12-${String(index)}`, key);
+      seen.push([
+        dialog.kind,
+        dialog.buttons,
+        dialog.primary,
+        dialog.toasts,
+        dialog.left,
+      ]);
+    }
     deepStrictEqual(
-      [dialog.details, dialog.buttons],
-      [EMPTY, ['Edit devcontainer.json Locally', 'More Actions...', 'Retry']],
+      seen,
+      keys.map(() => [
+        'error',
+        BUILD_BUTTONS,
+        'Retry',
+        [],
+        {containers: [], images: []},
+      ]),
     );
   });
 
-  it('F-0414 7.E6 (bare-word): a bare word the CLI does not rewrite ends the build with the detail S220', async () => {
+  it('F-0414 AC-13 (nonexistent-oci-id): a well-formed OCI id the registry lacks ends the build with the detail S357', async () => {
     deepStrictEqual(
-      (await failed('c94-bare-word', {features: {fish: {}}})).details,
-      LEGACY,
-    );
-  });
-
-  it('F-0414 7.E6 (not-found): a registry Feature the run’s registry lacks ends the build with the detail S357', async () => {
-    deepStrictEqual(
-      (
-        await failed('c94-not-found', {
-          features: {[runFeature('absent-feature')]: {}},
-        })
-      ).details,
+      (await failedWith('c94-ac13', runFeature('absent-feature'))).details,
       NOT_FOUND,
     );
   });
 
-  it('F-0414 7.E6 (script-exit): a Feature whose script exits 1 keeps the generic detail of F-0410', async () => {
+  it('F-0414 AC-14 (bare-words): fish and myrandomfeature end the build with the detail S220', async () => {
     deepStrictEqual(
-      (
-        await failed('c94-script-exit', {features: {'./fexit': {}}}, folder => {
-          writeLocalFeature(folder, 'fexit', {script: 'exit 1'});
-        })
-      ).details,
-      GENERIC,
+      [
+        (await failedWith('c94-ac14-fish', 'fish')).details,
+        (await failedWith('c94-ac14-random', 'myrandomfeature')).details,
+      ],
+      [LEGACY, LEGACY],
     );
   });
 
-  it('F-0414 AC-17 (local-modal): a disallowed Feature in a local window is refused before the reload with S059 and S275, Cancel and Learn More, and nothing is created', async () => {
+  it('F-0414 AC-15 (empty-key): the empty key ends the build with the detail S163', async () => {
+    deepStrictEqual((await failedWith('c94-ac15', '')).details, EMPTY);
+  });
+
+  it('F-0414 AC-17 (local-modal): a disallowed Feature in a local window is refused before the reload with a warning modal with S059 and S275, Cancel and Learn More (primary), and nothing is created', async () => {
     const dialog = await failed(
-      'c94-local-modal',
+      'c94-ac17',
       {features: {[DISALLOWED]: {}}},
       undefined,
       false,
     );
     deepStrictEqual(
       [
+        dialog.kind,
         dialog.message,
         dialog.details,
         dialog.buttons,
         dialog.primary,
         (await windowState(dialog.window)).remoteName,
-        await devContainersOf(foldersOpened[0] ?? ''),
+        await leftBy(dialog.folder, 'c94-ac17'),
       ],
       [
+        'warning',
         problematic(DISALLOWED),
         REMOVE,
         ['Cancel', 'Learn More'],
         'Learn More',
         null,
-        [],
+        {containers: [], images: []},
       ],
     );
   });
 
-  it('F-0414 7.E10 (local-no-address): a disallowed Feature whose entry has no address offers Cancel alone', async () => {
-    const dialog = await failed(
-      'c94-local-nodoc',
-      {features: {[disallowedWithoutAddress()]: {}}},
-      undefined,
-      false,
-    );
+  it('F-0414 AC-18 (learn-more): Learn More opens the entry’s address, and Cancel and Escape open nothing and leave the window local', async () => {
+    installBrowser();
+    const folder = devContainerFolder('c94-ac18', {
+      features: {[DISALLOWED]: {}},
+    });
+    folders.push(folder);
+    const window = await openFolderWindow(folder);
+    windows.push(window);
+    const opened: string[][] = [];
+    for (const answer of ['Escape', 'Cancel', 'Learn More']) {
+      await startInWindow(window, 'remote-containers.reopenInContainer');
+      await waitForDialog(window, DIALOG_MILLISECONDS);
+      if (answer === 'Escape') {
+        await pressEscape(window);
+      } else {
+        await answerDialog(window, answer);
+      }
+      await waitFor(
+        'the dialog to close',
+        async () => (await dialogOf(window)) === undefined,
+        30_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      opened.push(openedUrls());
+    }
     deepStrictEqual(
-      [dialog.message, dialog.buttons],
-      [problematic(disallowedWithoutAddress()), ['Cancel']],
+      [opened, (await windowState(window)).remoteName],
+      [[[], [], [DOCUMENTATION]], null],
     );
   });
 
-  it('F-0414 AC-20 (container-stays-up): a refusal before the reload leaves a running container of the folder running', async () => {
-    const built = await build('c94-stays-up', {});
+  it('F-0414 AC-19 (build-step): a rebuild that the CLI refuses ends in an error modal with the buttons Edit, More Actions and Learn More (primary)', async () => {
+    const built = await build('c94-ac19', {});
+    askForFeatures(built.folder, {[DISALLOWED]: {}});
+    await reloadingCommand(built.window, 'remote-containers.rebuildContainer');
+    const dialog = await waitForDialog(built.window, DIALOG_MILLISECONDS);
+    deepStrictEqual(
+      [
+        await dialogKindOf(built.window),
+        dialog.details,
+        dialog.buttons,
+        await primaryButtonOf(built.window),
+      ],
+      ['error', REMOVE, STEP_BUTTONS, 'Learn More'],
+    );
+  });
+
+  it('F-0414 AC-20 (container-stays-up): a refusal before the reload leaves a running container of the folder running, with S059 and not S060', async () => {
+    const built = await build('c94-ac20', {});
     await closeNow(built.window);
     askForFeatures(built.folder, {[DISALLOWED]: {}});
     const window = await openFolderWindow(built.folder);
@@ -237,67 +358,18 @@ describe('what a failed build with Features says (card containers-94)', function
     );
   });
 
-  /** A running container built from `name`, its window ending in the dialog of a rebuild that asks for `featureId`. */
-  async function rebuiltWith(
-    name: string,
-    featureId: string,
-  ): Promise<{
-    dialog: ShownDialog;
-    primary: string | undefined;
-    status: string;
-  }> {
-    const built = await build(name, {});
-    askForFeatures(built.folder, {[featureId]: {}});
+  it('F-0414 AC-21 (stopped-by-check): when the CLI’s check stopped a running container the message is S060, with the buttons of the variant', async () => {
+    const built = await build('c94-ac21', {});
+    askForFeatures(built.folder, {[DISALLOWED]: {}});
     await reloadingCommand(built.window, 'remote-containers.rebuildContainer');
     const dialog = await waitForDialog(built.window, DIALOG_MILLISECONDS);
-    const {stdout} = await execFileAsync('docker', [
-      'inspect',
-      '-f',
-      '{{.State.Status}}',
-      built.containerId,
-    ]);
-    return {
-      dialog,
-      primary: await primaryButtonOf(built.window),
-      status: stdout.trim(),
-    };
-  }
-
-  it('F-0414 AC-19, AC-21 (build-step): a rebuild in the container window that the CLI refuses stops the running container and ends in the error dialog with S060 and S275 and the buttons Edit, More Actions and Learn More', async () => {
-    const seen = await rebuiltWith('c94-build-step', DISALLOWED);
     deepStrictEqual(
-      [
-        seen.dialog.message,
-        seen.dialog.details,
-        seen.dialog.buttons,
-        seen.primary,
-        seen.status,
-      ],
-      [
-        `${problematic(DISALLOWED)} ${STOPPED}`,
-        REMOVE,
-        ['Edit devcontainer.json Locally', 'More Actions...', 'Learn More'],
-        'Learn More',
-        'exited',
-      ],
+      [dialog.message, dialog.buttons],
+      [`${problematic(DISALLOWED)} ${STOPPED}`, STEP_BUTTONS],
     );
   });
 
-  it('F-0414 AC-49 (build-step-no-address): the same refusal for an entry with no address has the buttons More Actions and Edit, the second primary', async () => {
-    const seen = await rebuiltWith(
-      'c94-build-nodoc',
-      disallowedWithoutAddress(),
-    );
-    deepStrictEqual(
-      [seen.dialog.buttons, seen.primary],
-      [
-        ['More Actions...', 'Edit devcontainer.json Locally'],
-        'Edit devcontainer.json Locally',
-      ],
-    );
-  });
-
-  it('F-0414 AC-22 (manifest-unreachable): with the served manifest gone and no kept copy the local check lets the open go on, the log says so, and the CLI’s refusal ends the build with S059', async () => {
+  it('F-0414 AC-22 (manifest-unreachable): with the manifest fetch failing and no kept copy a build with a local feature completes and connects, the log has the S177 line, and no dialog or notification appears', async () => {
     await rm(manifestFile(), {force: true});
     const served = path.join(
       servedControlFolder(variable('HARNESS_RUN_FOLDER')),
@@ -307,31 +379,80 @@ describe('what a failed build with Features says (card containers-94)', function
     await rm(served);
     try {
       const mark = containersLog().length;
-      const dialog = await failed('c94-unreachable', {
-        features: {[DISALLOWED]: {}},
-      });
+      const built = await build(
+        'c94-ac22',
+        {features: {'./plain': {}}},
+        folder => {
+          writeLocalFeature(folder, 'plain');
+        },
+      );
       deepStrictEqual(
         [
-          dialog.message,
-          dialog.buttons,
           containersLogSince(mark).filter(line =>
             line.startsWith('Failed to fetch control manifest: '),
           ).length,
+          await dialogOf(built.window),
+          await notifications(built.window),
         ],
-        [
-          problematic(DISALLOWED),
-          ['Edit devcontainer.json Locally', 'More Actions...', 'Learn More'],
-          1,
-        ],
+        [1, undefined, []],
       );
     } finally {
       await writeFile(served, text);
     }
   });
 
-  it('F-0414 AC-24 (advisory): a Feature the manifest advises against is built, and the CLI’s warning with the Feature, its version and the advisory reaches the log', async () => {
+  it('F-0414 7.E11 (unreachable-then-step): with the manifest unreachable and no kept copy the local check lets the open go on, and the CLI’s refusal ends the build with S059', async () => {
+    await rm(manifestFile(), {force: true});
+    const served = path.join(
+      servedControlFolder(variable('HARNESS_RUN_FOLDER')),
+      'devcontainer-control-manifest.json',
+    );
+    const text = await readFile(served, 'utf8');
+    await rm(served);
+    try {
+      const dialog = await failed('c94-711', {features: {[DISALLOWED]: {}}});
+      deepStrictEqual(
+        [dialog.message, dialog.buttons],
+        [problematic(DISALLOWED), STEP_BUTTONS],
+      );
+    } finally {
+      await writeFile(served, text);
+    }
+  });
+
+  it('F-0414 AC-23 (lockfile-gone): a lockfile entry pinned to a digest the registry lacks ends Rebuild Container Without Cache with the 7.E6 dialog, an unchanged lockfile and no previous container', async () => {
+    const built = await build('c94-ac23', {
+      features: {[runFeature('lab-plain')]: {}},
+    });
+    const file = path.join(
+      built.folder,
+      '.devcontainer',
+      'devcontainer-lock.json',
+    );
+    const pinned = readFileSync(file, 'utf8').replaceAll(
+      /sha256:[0-9a-f]{64}/gu,
+      `sha256:${'0'.repeat(64)}`,
+    );
+    writeFileSync(file, pinned);
+    await reloadingCommand(
+      built.window,
+      'remote-containers.rebuildContainerNoCache',
+    );
+    const dialog = await waitForDialog(built.window, DIALOG_MILLISECONDS);
+    deepStrictEqual(
+      [
+        dialog.details,
+        dialog.buttons,
+        readFileSync(file, 'utf8') === pinned,
+        await devContainersOf(built.folder),
+      ],
+      [NOT_FOUND, BUILD_BUTTONS, true, []],
+    );
+  });
+
+  it('F-0414 AC-24 (advisory): a Feature the manifest advises against is built, and the log has a warning naming the Feature, its version and the advisory', async () => {
     const mark = containersLog().length;
-    const built = await build('c94-advisory', {
+    const built = await build('c94-ac24', {
       features: {[runFeature('lab-advised')]: {}},
     });
     const logged = containersLogSince(mark).join('\n');
@@ -348,34 +469,92 @@ describe('what a failed build with Features says (card containers-94)', function
     );
   });
 
-  it('F-0414 AC-23 (lockfile-gone): a lockfile whose digest the registry lacks ends the build of a new container with the dialog', async () => {
-    const built = await build('c94-lockfile', {
-      features: {[runFeature('lab-plain')]: {}},
-    });
-    await closeNow(built.window);
-    await removeContainers(built.folder);
-    const file = path.join(
-      built.folder,
-      '.devcontainer',
-      'devcontainer-lock.json',
+  it('F-0414 AC-26 (dependency-cycle): two local Features that depend on each other end the build with the generic detail and no container or image', async () => {
+    const dialog = await failed(
+      'c94-ac26',
+      {features: {'./feature-a': {}}},
+      folder => {
+        writeLocalFeature(folder, 'feature-a', {
+          metadata: {dependsOn: {'./feature-b': {}}},
+        });
+        writeLocalFeature(folder, 'feature-b', {
+          metadata: {dependsOn: {'./feature-a': {}}},
+        });
+      },
     );
-    writeFileSync(
-      file,
-      readFileSync(file, 'utf8').replaceAll(
-        /sha256:[0-9a-f]{64}/gu,
-        `sha256:${'0'.repeat(64)}`,
-      ),
-    );
-    const window = await openFolderWindow(built.folder);
-    windows.push(window);
-    await reopenStarted(window);
-    const dialog = await waitForDialog(window, DIALOG_MILLISECONDS);
     deepStrictEqual(
-      [dialog.message, dialog.details, dialog.buttons],
+      [dialog.details, await leftBy(dialog.folder, 'c94-ac26')],
+      [GENERIC, {containers: [], images: []}],
+    );
+  });
+
+  it('F-0414 AC-38 (github-release-key): octocat/Hello-World/foo ends a build attempt with the 7.E6 dialog and no container or image', async () => {
+    const dialog = await failedWith('c94-ac38', 'octocat/Hello-World/foo');
+    deepStrictEqual(
+      [dialog.details, dialog.buttons, dialog.left],
+      [NOT_FOUND, BUILD_BUTTONS, {containers: [], images: []}],
+    );
+  });
+
+  it('F-0414 AC-39 (script-exit): a local Feature whose script exits 1 ends the build with the generic detail, an empty Notification Center, the Feature and its documentation address in the log, and no container or image', async () => {
+    const mark = containersLog().length;
+    const dialog = await failed(
+      'c94-ac39',
+      {features: {'./fexit': {}}},
+      folder => {
+        writeLocalFeature(folder, 'fexit', {
+          metadata: {documentationURL: 'https://example.org/fexit'},
+          script: 'exit 1',
+        });
+      },
+    );
+    const logged = containersLogSince(mark).join('\n');
+    deepStrictEqual(
       [
-        '',
-        NOT_FOUND,
-        ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+        dialog.details,
+        dialog.toasts,
+        logged.includes('fexit'),
+        logged.includes('https://example.org/fexit'),
+        await leftBy(dialog.folder, 'c94-ac39'),
+      ],
+      [GENERIC, [], true, true, {containers: [], images: []}],
+    );
+  });
+
+  it('F-0414 AC-42 (order-string): overrideFeatureInstallOrder as a string ends the build with the generic detail and no container', async () => {
+    const dialog = await failed(
+      'c94-ac42',
+      {
+        features: {'./plain': {}},
+        overrideFeatureInstallOrder: 'ghcr.io/devcontainers/features/node',
+      },
+      folder => {
+        writeLocalFeature(folder, 'plain');
+      },
+    );
+    deepStrictEqual(
+      [dialog.details, await devContainersOf(dialog.folder)],
+      [GENERIC, []],
+    );
+  });
+
+  it('F-0414 AC-49 (build-step-no-address): the CLI’s refusal of an entry with no address has the buttons More Actions and Edit, the second primary, without Learn More', async () => {
+    const built = await build('c94-ac49', {});
+    askForFeatures(built.folder, {[disallowedWithoutAddress()]: {}});
+    await reloadingCommand(built.window, 'remote-containers.rebuildContainer');
+    const dialog = await waitForDialog(built.window, DIALOG_MILLISECONDS);
+    deepStrictEqual(
+      [
+        await dialogKindOf(built.window),
+        dialog.details,
+        dialog.buttons,
+        await primaryButtonOf(built.window),
+      ],
+      [
+        'error',
+        REMOVE,
+        ['More Actions...', 'Edit devcontainer.json Locally'],
+        'Edit devcontainer.json Locally',
       ],
     );
   });
