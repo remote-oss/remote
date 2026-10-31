@@ -65,6 +65,7 @@ function labelsFromExplorer(): string[] {
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
+    'containers-view',
   ];
 }
 
@@ -123,7 +124,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -310,6 +311,7 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
+        ['containers-view', ['remote-oss.remote-containers'], true, undefined],
       ],
     );
   });
@@ -416,6 +418,7 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
   });
@@ -447,6 +450,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-killed-23',
         'containers-killed-35',
         'containers-killed-43',
+        'containers-view',
       ],
     );
   });
@@ -1323,12 +1327,17 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59, tooling-56: only the containers launch, containers-ports and containers-features ask for the run’s registry', () => {
+  it('containers-59, tooling-56, tooling-74: only the containers launch, containers-ports, containers-features and containers-view ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
-      ['containers', 'containers-ports', 'containers-features'],
+      [
+        'containers',
+        'containers-ports',
+        'containers-features',
+        'containers-view',
+      ],
     );
   });
 
