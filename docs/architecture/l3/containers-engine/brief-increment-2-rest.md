@@ -56,14 +56,17 @@ CLI. So Podman is **one measured launch, and a product change only where a measu
 
 ## 3. The extension cache (after #92's review)
 
-**What it is:** the server's extensions are kept in a shared `/vscode/vscode-server/extensionsCache` on the `vscode`
-volume, with per-container symlinks, so a second container with the same extension list doesn't download them again.
+**What it is:** the server's extensions are kept in a shared extensions cache on the `vscode` volume, with
+per-container symlinks, so a second container with the same extension list doesn't download them again. The folder is
+`cacheFolders`' `extensionsCache` (for VSCodium `/vscode/extensionsCache-codium`), our product-specific name, not
+F-0419's observed `vscode-server/extensionsCache` (contracts.md, corrected 2026-10-14 on #925; transport contracts #279).
 
 **The ruling on who writes it:** C10, not the server.
 - **What C10 does:** before the server's first start in a container, C10 links the container's extension folder entries
   to the shared cache, over C11. After the start, it adds what the server installed to the cache.
-- **Why C10:** the server we install is VSCodium's REH, unchanged, and we don't patch it (R-76, the same rule as
-  ADR-0009's for the CLI).
+- **Why C10:** the server we install is VSCodium's REH, used as published. This brief rules that it isn't patched, by
+  the same reasoning as ADR-0009's rule for the CLI: what we bend, we bend from outside, so a server upgrade is a
+  version change and not a merge.
 - **Writes:** they go through lib-server's lock (V5), so two containers can't write the cache at once.
 
 **Card it with:** the rows for AC-4, 5, 39, 41 and 42 once #92 is reviewed. Their `deferred` reason is removed then.
@@ -71,7 +74,7 @@ volume, with per-container symlinks, so a second container with the same extensi
 ## 4. Docker hosts and contexts from settings (after #84's review)
 
 Release 1 passes the editor's own environment through, `DOCKER_HOST` and the current context included (brief-release-1
-ruling 3), and F-0501's payload carries `settings.context` when a non-default context is current. F-0205 adds the
+ruling 10), and F-0501's payload carries `settings.context` when a non-default context is current. F-0205 adds the
 settings that choose a host or a context.
 
 **The ruling:**
