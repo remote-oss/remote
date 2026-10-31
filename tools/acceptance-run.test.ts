@@ -848,6 +848,22 @@ describe('cleanRun (card tooling-10)', () => {
     strictEqual(scripted.calls.length, 10);
   });
 
+  it('tooling-74: a daemon the rows emptied, with no host, registry, network or image left, is clean and nothing is removed', () => {
+    const scripted = scriptedCommands();
+    scriptCleanRun(scripted, {imageGone: true});
+
+    cleanRun(scripted, RUN_ID);
+
+    deepStrictEqual(
+      scripted.calls.filter(
+        call =>
+          call.argv[0] === 'rm' ||
+          (call.argv[0] === 'network' && call.argv[1] === 'rm'),
+      ),
+      [],
+    );
+  });
+
   it("throws naming the container when one still carries the run's label", () => {
     const scripted = scriptedCommands();
     scriptCleanRun(scripted, {leftContainers: 'c9\n'});

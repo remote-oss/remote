@@ -137,6 +137,24 @@ describe('the run’s registry (card containers-59)', () => {
     ]);
   });
 
+  it('tooling-74: stopping the registry after the rows emptied the daemon removes nothing and does not fail', async () => {
+    const {command, calls} = recording('127.0.0.1:49200\n', {
+      running: '',
+      existing: '',
+    });
+    const registry = await startRunRegistry(
+      command,
+      clockOf([200]).clock,
+      RUN_ID,
+    );
+    const before = calls.length;
+    await registry.stop();
+    deepStrictEqual(
+      calls.slice(before).filter(call => call[1] === 'rm'),
+      [],
+    );
+  });
+
   it('fails naming the registry when /v2/ never answers, and removes the container', async () => {
     const {command, calls} = recording();
     const failure = await startRunRegistry(
