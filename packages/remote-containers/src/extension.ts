@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {appendFileSync} from 'node:fs';
+import {appendFileSync, readFileSync} from 'node:fs';
 import {
   access,
   constants as fileConstants,
@@ -110,6 +110,7 @@ import {
 } from './explorer/row-actions.ts';
 import {rowOpenOf} from './explorer/row-open.ts';
 import {sharedContainerEvents} from './explorer/targets-events.ts';
+import {registeredNameOf} from './explorer/view-name.ts';
 import {
   engineOfWindow,
   showTargetsWhenRegistered,
@@ -170,8 +171,8 @@ interface TreeProvider<Node> {
 
 /**
  * The tree view of the editor for `provider`, with each node's item made from what the provider says of it. Its title
- * is set through a cast, since exact optional types do not let a plain assignment give back the registered name with
- * none.
+ * is set through a cast, since exact optional types do not let a plain assignment clear it; giving none leaves the
+ * header blank, so none brings back the name the manifest gives the view.
  */
 function treeViewOf<Node>(
   viewId: string,
@@ -182,6 +183,14 @@ function treeViewOf<Node>(
   const subscription = provider.onDidChangeTreeData(() => {
     emitter.fire(undefined);
   });
+  /** The text of the strings file `file` of the extension, or none when it can't be read. */
+  function readStrings(file: string): string | undefined {
+    try {
+      return readFileSync(path.join(extensionUri.fsPath, file), 'utf8');
+    } catch {
+      return undefined;
+    }
+  }
   const treeView = vscode.window.createTreeView<Node>(viewId, {
     treeDataProvider: {
       onDidChangeTreeData: emitter.event,
@@ -196,7 +205,8 @@ function treeViewOf<Node>(
         listener(event.visible);
       }),
     setTitle: (title: string | undefined) => {
-      (treeView as {title: string | undefined}).title = title;
+      (treeView as {title: string | undefined}).title =
+        title ?? registeredNameOf(readStrings, vscode.env.language, viewId);
     },
     dispose: () => {
       treeView.dispose();

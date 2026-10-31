@@ -404,6 +404,44 @@ export async function paneFocused(
   );
 }
 
+/** Whether the pane whose header title is `viewName` in window `name` is expanded; none when no pane has that title. */
+export async function paneExpanded(
+  name: string,
+  viewName: string,
+): Promise<boolean | undefined> {
+  return (
+    (await evaluate<boolean | null>(
+      name,
+      `(() => {
+        const pane = ${paneExpression(viewName)};
+        const header = pane?.querySelector('.pane-header');
+        return header === undefined || header === null ? null : header.classList.contains('expanded');
+      })()`,
+    )) ?? undefined
+  );
+}
+
+/** Clicks the header of the pane titled `viewName` in window `name`, which collapses or expands it as a user's click does. */
+export async function togglePane(
+  name: string,
+  viewName: string,
+): Promise<void> {
+  const missing = await evaluate<boolean>(
+    name,
+    `(() => {
+      const title = ${paneExpression(viewName)}?.querySelector('.pane-header .title');
+      if (title === undefined || title === null) {
+        return true;
+      }
+      title.click();
+      return false;
+    })()`,
+  );
+  if (missing) {
+    throw new Error(`window ${name}: no pane titled ${viewName}`);
+  }
+}
+
 /** A row of a view as the list renders it now, with the size of the set it belongs to. */
 export interface RenderedRow {
   label: string;
