@@ -12,6 +12,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   commandsOf,
+  editorLogsFolder,
   extensionActive,
   hostAliases,
   inWindow,
@@ -161,6 +162,20 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
     }
   });
 
+  it('tooling-79 (editor-logs): while the launch runs, main.log is somewhere under the launch’s own state folder, which holds the sessions the editor wrote', () => {
+    const logs = editorLogsFolder();
+    const files = readdirSync(logs, {recursive: true, encoding: 'utf8'});
+    deepStrictEqual(
+      [
+        logs.includes(
+          path.join(variable('HARNESS_RUN_FOLDER'), 'explorer-rows'),
+        ),
+        files.some(file => path.basename(file) === 'main.log'),
+      ],
+      [true, true],
+    );
+  });
+
   it('F-5001 AC-13, F-5101 AC-23, F-5102 AC-29, F-5103 AC-21, F-5901 AC-18 (nothing-left): after the view was shown, refreshed and its connects used, the profile holds no folder, log folder, state key or output channel of the explorer', async () => {
     const userData = variable('HARNESS_USER_DATA');
     const name = await folderWindow('activation-traces');
@@ -171,7 +186,7 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
       deepStrictEqual(
         [
           explorerFolders(path.join(userData, 'User', 'globalStorage')),
-          explorerFolders(path.join(userData, 'logs')),
+          explorerFolders(editorLogsFolder()),
           explorerStateKeys(userData),
           await commandsOf(
             name,

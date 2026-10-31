@@ -41,6 +41,26 @@ export function userDataFolderOf(runFolder: string, launch?: Launch): string {
     : path.join(runFolder, 'user-data');
 }
 
+/**
+ * The state folder of the editor of a launch, which the editor reads from `XDG_STATE_HOME` and writes its logs under:
+ * the launch's own in the run's folder, so no two runs share one.
+ */
+export function stateFolderOf(runFolder: string, label: string): string {
+  return path.join(runFolder, label, 'state');
+}
+
+/**
+ * The variables that put the logs of an editor in a folder of the run: `XDG_STATE_HOME`, the launch's own state folder
+ * unless the launch's `environment` names one, and `HARNESS_EDITOR_LOGS`, the one in effect, which the rows read.
+ */
+export function editorLogsEnvironment(
+  stateFolder: string,
+  launchEnvironment: Readonly<Record<string, string | undefined>> | undefined,
+): {XDG_STATE_HOME: string; HARNESS_EDITOR_LOGS: string} {
+  const state = launchEnvironment?.XDG_STATE_HOME ?? stateFolder;
+  return {XDG_STATE_HOME: state, HARNESS_EDITOR_LOGS: state};
+}
+
 /** An entry of an extensions folder's `extensions.json`, as far as a stand-in's copy reads it. */
 interface ExtensionEntry {
   identifier: {id: string};
@@ -346,6 +366,11 @@ export function startDetached(
   program: Program,
   timing: StopTiming = STOP_TIMING,
 ): Started {
+  // The editor's state folder exists before it starts.
+  const logsFolder = program.environment.HARNESS_EDITOR_LOGS;
+  if (logsFolder !== undefined) {
+    mkdirSync(logsFolder, {recursive: true});
+  }
   const child = spawn(program.file, program.programArguments, {
     env: program.environment,
     detached: true,
@@ -423,8 +448,18 @@ export async function runPlainLaunch(
   steps: PlainSteps,
 ): Promise<{exitCode: number; output: string}> {
   const files = launchFiles(session.runFolder, launch.label);
+  const launchEnvironment = withRunTokens(
+    withHarnessBases(launch.environment, session.environment),
+    session.runFolder,
+    session.environment.PATH ?? '',
+  );
+  const logs = editorLogsEnvironment(
+    stateFolderOf(session.runFolder, launch.label),
+    launchEnvironment,
+  );
   const environment = {
     ...session.environment,
+    ...logs,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
     REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
@@ -445,11 +480,7 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
-    ...withRunTokens(
-      withHarnessBases(launch.environment, session.environment),
-      session.runFolder,
-      session.environment.PATH ?? '',
-    ),
+    ...launchEnvironment,
   };
   // A port file an earlier attempt left would name a port nobody listens on.
   rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
