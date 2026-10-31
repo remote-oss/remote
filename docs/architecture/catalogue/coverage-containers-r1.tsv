@@ -829,7 +829,7 @@ F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-26	todo	
 F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
-F-0502.AC-1	todo	
+F-0502.AC-1	acceptance	
 F-0502.AC-2	todo	
 F-0502.AC-3	todo	
 F-0502.AC-4	todo	
@@ -841,14 +841,14 @@ F-0502.AC-9	todo
 F-0502.AC-10	todo	
 F-0502.AC-11	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-12	todo	
-F-0502.AC-13	todo	
+F-0502.AC-13	acceptance	
 F-0502.AC-14	todo	
 F-0502.AC-15	todo	
 F-0502.AC-16	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-17	todo	
 F-0502.AC-18	todo	
-F-0502.AC-19	todo	
-F-0502.AC-20	todo	
+F-0502.AC-19	acceptance	
+F-0502.AC-20	acceptance	
 F-0502.AC-21	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-22	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-23	todo	
@@ -859,9 +859,9 @@ F-0502.AC-27	deferred	containers release 1: later (the attach, Kubernetes and Ap
 F-0502.AC-28	todo	
 F-0502.AC-29	todo	
 F-0502.AC-30	todo	
-F-0502.AC-31	todo	
-F-0502.AC-32	todo	
-F-0502.AC-33	todo	
+F-0502.AC-31	acceptance	
+F-0502.AC-32	acceptance	
+F-0502.AC-33	acceptance	
 F-0502.AC-34	deferred	containers release 1: the full contribution set comes with later increments
 F-0502.AC-35	deferred	containers release 1: increment 2 (shutdown)
 F-0502.AC-36	deferred	containers release 1: later (the attach, Kubernetes and Apple families)

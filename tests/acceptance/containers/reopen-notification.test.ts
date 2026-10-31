@@ -7,7 +7,6 @@ import {
   devContainerFolder,
   inWindow,
   variable,
-  waitFor,
   windowState,
 } from '../windows/harness.ts';
 import {
@@ -18,47 +17,17 @@ import {
   notificationLinks,
 } from '../windows/renderer.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
+import {NOTICE_START, showsNotice} from './resolve-support.ts';
 
 /** The notification's message as the window shows it, the link as its words (F-0402 S426 with S186). */
 const NOTICE =
   'Folder contains a Dev Container configuration file. Reopen folder to develop in a container (learn more).';
-
-/** The start of the notification's message, to find it by. */
-const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
 /** The page the link opens: the extension's introduction. */
 const INTRODUCTION =
   'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
 
 const FOLLOW_UP = "Don't show again for the current folder or for any folder?";
-
-/** How long a folder window may take to show the notification, from its agent's activation. */
-const SHOWN_MILLISECONDS = 10_000;
-
-/** Whether window `name` shows the reopen notification within `milliseconds`. */
-async function showsNotice(
-  name: string,
-  milliseconds = SHOWN_MILLISECONDS,
-): Promise<boolean> {
-  try {
-    await waitFor(
-      `the reopen notification in window ${name}`,
-      async () => {
-        try {
-          return (await notificationCentre(name)).some(text =>
-            text.startsWith(NOTICE_START),
-          );
-        } catch {
-          return false;
-        }
-      },
-      milliseconds,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 describe('the reopen notification (card containers-23, F-0402)', function () {
   this.timeout(600_000);
