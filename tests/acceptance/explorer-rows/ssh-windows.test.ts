@@ -13,10 +13,14 @@ import {
   hostAliases,
   inWindow,
   isOpen,
+  readUserSettings,
+  restoreUserSettings,
+  userSettings,
   nextEmptyWindow,
   onHost,
   openWindow,
   recordLines,
+  reloadingCommand,
   userSettingsFile,
   variable,
   waitFor,
@@ -26,7 +30,10 @@ import {
 import {
   extensionContextMenu,
   extensionsViewSections,
+  notifications,
   rememberPage,
+  renderedRows,
+  type RenderedRow,
   rowAction,
   rowDetails,
   statusItem,
@@ -146,6 +153,107 @@ describe('the view in SSH windows and its connect actions (card coverage-25c, pa
       );
     } finally {
       await closeWindow(name);
+    }
+  });
+
+  it('F-5902 AC-31 (workspace-folders): as folders are added to a connected SSH window and one is removed, the view lists the hosts with harness marked connected on its first render, and no notification appears', async () => {
+    const name = 'xp-ssh-workspace';
+    const savedSettings = readUserSettings();
+    // Closing an untitled workspace otherwise asks, in a dialog of the main process, whether to save it.
+    await userSettings({'window.confirmSaveUntitledWorkspace': false});
+    const second = 'xp-ssh-workspace-second';
+    const third = 'xp-ssh-workspace-third';
+    await onHost(
+      'mkdir',
+      '-p',
+      `/home/harness/${second}`,
+      `/home/harness/${third}`,
+    );
+    await openWindow('harness', name);
+    function remote(folder: string): string {
+      return `vscode-remote://ssh-remote+harness/home/harness/${folder}`;
+    }
+    /** The host rows of the first render after the view is shown. */
+    async function firstRender(): Promise<RenderedRow[]> {
+      await inWindow(name, SHOW_REMOTE_EXPLORER);
+      let rows: RenderedRow[] = [];
+      await waitFor(
+        `window ${name} to render its hosts`,
+        async () => {
+          rows = (await renderedRows(name, VIEW)).filter(
+            rendered => rendered.level === 2,
+          );
+          return rows.length > 0;
+        },
+        30_000,
+      );
+      return rows;
+    }
+    const seen: unknown[] = [];
+    let failure: Error | undefined;
+    try {
+      await connectedTo(name, 'harness');
+      const steps: ReadonlyArray<readonly [number, number, string[], number]> =
+        [
+          [1, 0, [remote(second)], 2],
+          [2, 0, [remote(third)], 3],
+          [1, 1, [], 2],
+        ];
+      for (const [start, deleteCount, uris, folders] of steps) {
+        if (folders === 2 && deleteCount === 0) {
+          await reloadingCommand(
+            name,
+            'acceptance.agent.updateWorkspaceFolders',
+            start,
+            deleteCount,
+            uris,
+          );
+          await connectedTo(name, 'harness');
+        } else {
+          await inWindow(
+            name,
+            'acceptance.agent.updateWorkspaceFolders',
+            start,
+            deleteCount,
+            uris,
+          );
+        }
+        await waitFor(
+          `window ${name} to hold ${String(folders)} folders`,
+          async () => (await windowState(name)).folders.length === folders,
+          60_000,
+        );
+        const first = await firstRender();
+        await rowsSettled(name, rowsOf(HOSTS, 'harness'));
+        seen.push([
+          folders,
+          first.find(each => each.label === 'harness')?.description,
+          await notifications(name),
+          recordLines('notice', name),
+        ]);
+      }
+      deepStrictEqual(seen, [
+        [2, 'connected', [], []],
+        [3, 'connected', [], []],
+        [2, 'connected', [], []],
+      ]);
+    } catch (caught) {
+      failure =
+        caught instanceof Error
+          ? caught
+          : new Error('the row failed', {cause: caught});
+    }
+    try {
+      await closeWindow(name);
+    } catch (caught) {
+      failure ??=
+        caught instanceof Error
+          ? caught
+          : new Error('the close failed', {cause: caught});
+    }
+    restoreUserSettings(savedSettings);
+    if (failure !== undefined) {
+      throw failure;
     }
   });
 

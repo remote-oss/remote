@@ -116,7 +116,7 @@ function workspaceTitleName(workspaceFile: string): string {
   return `${folderName(workspaceFile).replace(/\.code-workspace$/, '')} (Workspace)`;
 }
 
-/** The test of a title for a window of this state: the workspace's name, the folder name in brackets, or `[]`. */
+/** The test of a title for a window of this state: the workspace's name, the folder name in brackets (a remote window's followed by its remote name), or `[]`. */
 function titleMatcher(state: PageState): (title: string) => boolean {
   const folder = state.folders[0];
   const workspaceFile = state.workspaceFile ?? null;
@@ -131,7 +131,9 @@ function titleMatcher(state: PageState): (title: string) => boolean {
       ? state.remoteName === null
         ? title === '[]'
         : title.startsWith('[]') && title !== '[]'
-      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`);
+      : title === `[${bracketed}]` ||
+        title.startsWith(`[${bracketed} [`) ||
+        (state.remoteName !== null && title.startsWith(`[${bracketed}]`));
 }
 
 /**
@@ -391,6 +393,7 @@ function paneExpression(viewName: string): string {
 /** A row of a view as the list renders it now, with the size of the set it belongs to. */
 export interface RenderedRow {
   label: string;
+  description: string;
   level: number;
   setSize: number;
 }
@@ -412,6 +415,7 @@ export async function renderedRows(
         .filter(row => row.getAttribute('aria-level') !== null)
         .map(row => ({
           label: row.querySelector('.label-name')?.textContent ?? '',
+          description: row.querySelector('.label-description')?.textContent ?? '',
           level: Number(row.getAttribute('aria-level')),
           setSize: Number(row.getAttribute('aria-setsize')),
         }));

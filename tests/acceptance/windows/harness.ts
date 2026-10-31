@@ -696,9 +696,10 @@ export async function reopenStarted(name: string): Promise<void> {
 export async function reloadingCommand(
   name: string,
   command: string,
+  ...parameters: unknown[]
 ): Promise<void> {
   const before = countOf(name, 'activated');
-  send(name, command, []);
+  send(name, command, parameters);
   await waitUntil(
     `window ${name} to activate again after ${command}`,
     () => countOf(name, 'activated') > before,
