@@ -5,8 +5,6 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createLogger} from 'lib-log';
 import {
-  ATTEMPT_FILE_LIMIT,
-  ATTEMPT_LINE_LIMIT,
   createAttemptLog,
   writeAttemptLog,
 } from '../../src/connect/attempt-log.ts';
@@ -67,15 +65,15 @@ describe('the log of a connect attempt (card containers-111)', () => {
   it('F-0410 5.0: only the newest 5000 lines of an attempt are kept', () => {
     const {attempt, logger} = loggedOver();
     attempt.begin();
-    for (let line = 0; line < ATTEMPT_LINE_LIMIT + 3; line += 1) {
+    for (let line = 0; line < 5003; line += 1) {
       logger.info(`line ${String(line)}`);
     }
     deepStrictEqual(
       [attempt.lines().length, attempt.lines()[0], attempt.lines().at(-1)],
       [
-        ATTEMPT_LINE_LIMIT,
+        5000,
         '2026-11-01T12:00:00.000Z [info] line 3',
-        `2026-11-01T12:00:00.000Z [info] line ${String(ATTEMPT_LINE_LIMIT + 2)}`,
+        `2026-11-01T12:00:00.000Z [info] line 5002`,
       ],
     );
   });
@@ -94,13 +92,13 @@ describe('the log of a connect attempt (card containers-111)', () => {
   it('F-0410 5.0, condition 2: after an eleventh write the folder holds ten attempt files and the oldest is gone', async () => {
     const {attempt} = loggedOver();
     await inFolder(async folder => {
-      for (let write = 0; write <= ATTEMPT_FILE_LIMIT; write += 1) {
+      for (let write = 0; write <= 10; write += 1) {
         await writeAttemptLog(attempt, folder, STARTED + write * 1000);
       }
       const names = readdirSync(folder).sort();
       deepStrictEqual(
         [names.length, names[0]],
-        [ATTEMPT_FILE_LIMIT, 'dev-containers-attempt-20261101T120001.log'],
+        [10, 'dev-containers-attempt-20261101T120001.log'],
       );
     });
   });
@@ -111,7 +109,7 @@ describe('the log of a connect attempt (card containers-111)', () => {
       await writeAttemptLog(attempt, folder, STARTED);
       const other = path.join(folder, 'remoteagent.log');
       await writeFile(other, 'x');
-      for (let write = 1; write <= ATTEMPT_FILE_LIMIT; write += 1) {
+      for (let write = 1; write <= 10; write += 1) {
         await writeAttemptLog(attempt, folder, STARTED + write * 1000);
       }
       deepStrictEqual(
@@ -119,7 +117,7 @@ describe('the log of a connect attempt (card containers-111)', () => {
           readdirSync(folder).includes('remoteagent.log'),
           readdirSync(folder).length,
         ],
-        [true, ATTEMPT_FILE_LIMIT + 1],
+        [true, 11],
       );
     });
   });

@@ -9,10 +9,10 @@ import path from 'node:path';
 import {defaultFormat, type LogLine, type Sink} from 'lib-log';
 
 /** How many lines of an attempt are kept: the newest. */
-export const ATTEMPT_LINE_LIMIT = 5000;
+const ATTEMPT_LINE_LIMIT = 5000;
 
 /** How many attempt files stay in the folder: the newest. */
-export const ATTEMPT_FILE_LIMIT = 10;
+const ATTEMPT_FILE_LIMIT = 10;
 
 const FILE_PREFIX = 'dev-containers-attempt-';
 const FILE_SUFFIX = '.log';

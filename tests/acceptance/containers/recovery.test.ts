@@ -353,7 +353,7 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
         remoteName: null,
         folders: [pathToFileURL(folder).href],
         active: configuration,
-        first: [['devcontainer.json', false]],
+        first: [['devcontainer', true]],
         second: [[true, true]],
       },
     );
