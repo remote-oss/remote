@@ -5,6 +5,7 @@
 
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import type {HostBase} from './host-variants.ts';
 
 /** The window the remote launches open: the harness host's home folder over `ssh-remote`. */
 const REMOTE_FOLDER_URI = 'vscode-remote://ssh-remote+harness/home/harness';
@@ -37,6 +38,11 @@ interface LaunchCommon {
   templates?: true;
   /** Whether the run makes the launch only when `--launches` names it. */
   namedOnly?: true;
+  /**
+   * The base of the SSH host the launch's window connects to, when it is not Alpine's: the run starts a host of that
+   * base beside its own, and the launch's ssh_config, settings and harness variables name it.
+   */
+  hostBase?: Exclude<HostBase, 'alpine'>;
 }
 
 /** One command of a launch's host setup, run on the host container through `docker exec`, in order. */
@@ -163,6 +169,7 @@ const GENUINE_LAUNCH: PlainLaunch = {
   suite: 'genuine',
   client: 'vscode',
   namedOnly: true,
+  withExtensions: ['remote-oss.remote-explorer'],
   settings: {
     ...RENDERER_LAUNCH.settings,
     'window.dialogStyle': 'custom',
@@ -521,7 +528,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown` and `containers-view` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -593,6 +600,13 @@ export function launchesOf(root: string): Launch[] {
       hostExtensions: ['slow-remote'],
       // Without commands the entry still makes the run wait out the previous launch's helper, so the resolve is fresh.
       hostSetup: [],
+    },
+    {
+      label: 'remote-ubuntu',
+      runner: 'runner-remote',
+      suite: 'suite-remote',
+      folderUri: REMOTE_FOLDER_URI,
+      hostBase: 'ubuntu-26.04',
     },
     ...clientCases(root).map((each): Launch => ({
       label: each.label,
@@ -853,6 +867,13 @@ export function launchesOf(root: string): Launch[] {
     ),
     GENUINE_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
+    // Last: its rows remove every container of the run, the run's host and registry included.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-view',
+      suite: 'containers-view',
+      registry: true,
+    },
   ];
   return launches;
 }

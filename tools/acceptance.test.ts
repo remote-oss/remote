@@ -31,10 +31,12 @@ import {
   chosenLaunches,
   selectionLine,
   editorExecutableOf,
+  genuineVersionIn,
   runArgumentsOf,
   type CommandResult,
   failureText,
   harnessSshConfig,
+  sshConfigOf,
   type HarnessDependencies,
   type HarnessVariables,
   mappedPort,
@@ -264,8 +266,8 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('codium-insiders');
   };
 
-  readonly vscodeExecutable = (): Promise<string> => {
-    this.calls.push('vscode executable');
+  readonly vscodeExecutable = (version: string): Promise<string> => {
+    this.calls.push(`vscode executable ${version}`);
     return Promise.resolve('/vscode/code');
   };
 
@@ -362,7 +364,7 @@ const FAILURE = {
   dialog: 'Could not establish connection to "refused".',
 };
 
-/** The labels a run launches with the fixture's cases, in order: the ports case last. */
+/** The labels a run launches with the fixture's cases, in order: the ports cases, then containers-view last. */
 const LAUNCH_ORDER = [
   'local',
   'remote',
@@ -374,6 +376,7 @@ const LAUNCH_ORDER = [
   'terminal',
   'socket',
   'slow',
+  'remote-ubuntu',
   'client-unset',
   'terminal-pick',
   'windows',
@@ -408,6 +411,7 @@ const LAUNCH_ORDER = [
   'ports-probe',
   'install-probe',
   'platform-probe',
+  'containers-view',
 ];
 
 const CLIENT_CASE = {
@@ -1125,9 +1129,22 @@ describe('acceptance', () => {
           },
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
-            files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
             client: 'vscode',
           })),
+          {
+            folder: path.join('/run', 'extensions-containers-view'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
         ],
       );
     });
@@ -1226,7 +1243,8 @@ describe('acceptance', () => {
       deepStrictEqual(
         [
           harness.launched,
-          harness.calls.filter(call => call === 'vscode executable').length,
+          harness.calls.filter(call => call === 'vscode executable 1.139.1')
+            .length,
           harness.calls.filter(
             call =>
               call.startsWith('/vscode/bin/code ') &&
@@ -1240,12 +1258,87 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-69: the genuine launches run the version the job names, the recorded one when it names none, and the rows read it', async () => {
+      const seen: Array<[string | undefined, string[], string | undefined]> =
+        [];
+      for (const named of [undefined, '', '1.125.0']) {
+        const before = process.env.HARNESS_GENUINE_VERSION;
+        if (named === undefined) {
+          delete process.env.HARNESS_GENUINE_VERSION;
+        } else {
+          process.env.HARNESS_GENUINE_VERSION = named;
+        }
+        try {
+          const fake = new FakeHarness();
+          await runAcceptance(workspace.root, fake, 'vscodium', ['genuine']);
+          seen.push([
+            named,
+            fake.calls.filter(call => call.startsWith('vscode executable')),
+            fake.variables?.HARNESS_GENUINE_VERSION,
+          ]);
+        } finally {
+          if (before === undefined) {
+            delete process.env.HARNESS_GENUINE_VERSION;
+          } else {
+            process.env.HARNESS_GENUINE_VERSION = before;
+          }
+        }
+      }
+      deepStrictEqual(seen, [
+        [undefined, ['vscode executable 1.139.1'], '1.139.1'],
+        ['', ['vscode executable 1.139.1'], '1.139.1'],
+        ['1.125.0', ['vscode executable 1.125.0'], '1.125.0'],
+      ]);
+    });
+
+    it('tooling-69: ssh-no-proposals selected with the floor version fails the run before anything starts, and runs with the recorded one', async () => {
+      const before = process.env.HARNESS_GENUINE_VERSION;
+      try {
+        const outcomes: Array<[string, number, Array<string | undefined>]> = [];
+        for (const named of ['1.125.0', '1.139.1']) {
+          process.env.HARNESS_GENUINE_VERSION = named;
+          const fake = new FakeHarness();
+          const code = await runAcceptance(workspace.root, fake, 'vscodium', [
+            'ssh-no-proposals',
+          ]);
+          outcomes.push([named, code, fake.launched]);
+        }
+        deepStrictEqual(outcomes, [
+          ['1.125.0', 2, []],
+          ['1.139.1', 0, ['ssh-no-proposals']],
+        ]);
+      } finally {
+        if (before === undefined) {
+          delete process.env.HARNESS_GENUINE_VERSION;
+        } else {
+          process.env.HARNESS_GENUINE_VERSION = before;
+        }
+      }
+    });
+
+    it('tooling-69: a version the job names that is neither the recorded one nor the floor fails the run before anything starts', () => {
+      deepStrictEqual(
+        [
+          genuineVersionIn({HARNESS_GENUINE_VERSION: '1.130.0'}),
+          genuineVersionIn({HARNESS_GENUINE_VERSION: '1.125.0'}),
+          genuineVersionIn({}),
+        ],
+        [
+          {
+            problem: 'HARNESS_GENUINE_VERSION must be 1.139.1 or 1.125.0',
+          },
+          '1.125.0',
+          '1.139.1',
+        ],
+      );
+    });
+
     it('tooling-51: a run that does not name the genuine label never downloads VS Code, installs for it or makes it', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
       deepStrictEqual(
         [
           harness.launched,
-          harness.calls.filter(call => call === 'vscode executable'),
+          harness.calls.filter(call => call.startsWith('vscode executable')),
           harness.calls.filter(call => call.includes('extensions-genuine')),
           harness.variables?.HARNESS_VSCODE_EXECUTABLE,
         ],
@@ -1354,6 +1447,7 @@ describe('acceptance', () => {
         REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(harness.runFolder, 'signals'),
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
+        HARNESS_EDITOR_VERSION: '1.139.1',
         REMOTE_OSS_ACCEPTANCE_LOG: path.join(harness.runFolder, 'log.txt'),
       });
     });
@@ -1386,6 +1480,22 @@ describe('acceptance', () => {
       deepStrictEqual(
         [harness.calls.at(-1), existsSync(harness.runFolder)],
         [`docker rm --force ${CONTAINER}`, false],
+      );
+    });
+
+    it('tooling-74: a host container the rows already removed is done at the end of the run, and the tests’ exit code stands', async () => {
+      harness.answers.set('docker rm', {
+        status: 1,
+        stdout: '',
+        stderr: `Error response from daemon: No such container: ${CONTAINER}`,
+      });
+      harness.testResult = {exitCode: 0, output: ''};
+      deepStrictEqual(
+        [
+          await runAcceptance(workspace.root, harness),
+          existsSync(harness.runFolder),
+        ],
+        [0, false],
       );
     });
 
@@ -1656,6 +1766,26 @@ describe('acceptance', () => {
           ownStop,
           'ran remote',
           sharedStop,
+        ],
+      );
+    });
+
+    it("tooling-70: a launch on the Ubuntu host is given that host's ssh_config as remote.SSH.configFile, the others the run's", async () => {
+      const seen = await settingsSeen(REMOTE, {
+        ...REMOTE,
+        label: 'remote-ubuntu',
+        hostBase: 'ubuntu-26.04',
+      });
+      deepStrictEqual(
+        ['remote', 'remote-ubuntu'].map(
+          label =>
+            (seen.get(label) as Record<string, unknown> | undefined)?.[
+              'remote.SSH.configFile'
+            ],
+        ),
+        [
+          '/run/ssh_config',
+          path.join(workspace.root, 'ssh_config-ubuntu-26.04'),
         ],
       );
     });
@@ -2633,7 +2763,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 14}, () => EXECUTABLE),
+        Array.from({length: 15}, () => EXECUTABLE),
       );
     });
 
@@ -2644,7 +2774,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 14}, () => true),
+        Array.from({length: 15}, () => true),
       );
     });
 
@@ -2665,6 +2795,7 @@ describe('acceptance', () => {
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
+          ['remote-ubuntu', 'dist-remote/**/*.test.cjs'],
           ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
           ['install-probe', 'dist-install/**/*.test.cjs'],
@@ -2759,6 +2890,31 @@ describe('acceptance', () => {
       );
     });
 
+    it("tooling-70: a launch on the Ubuntu host checks that host: its container and its ssh_config stand for the run's", () => {
+      const {env} = vscodiumConfiguration(
+        workspace.root,
+        {
+          ...CONFIGURATION_ENVIRONMENT,
+          HARNESS_CONTAINER: 'alpine-host',
+          HARNESS_SSH_CONFIG: '/run/ssh_config',
+          HARNESS_HOST_UBUNTU_CONTAINER: 'ubuntu-host',
+        },
+        EXECUTABLE,
+        {...LAUNCH, hostBase: 'ubuntu-26.04'},
+      );
+      deepStrictEqual(
+        [env.HARNESS_CONTAINER, env.HARNESS_SSH_CONFIG],
+        ['ubuntu-host', path.join('/run', 'ssh_config-ubuntu-26.04')],
+      );
+    });
+
+    it("tooling-70: the run's own ssh_config is ssh_config, and another base's sits beside it", () => {
+      deepStrictEqual(
+        [sshConfigOf('/run'), sshConfigOf('/run', 'ubuntu-26.04')],
+        ['/run/ssh_config', '/run/ssh_config-ubuntu-26.04'],
+      );
+    });
+
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
         configurations()[9]?.launchArgs.filter(argument =>
@@ -2814,6 +2970,7 @@ describe('acceptance', () => {
           'terminal',
           'socket',
           'slow',
+          'remote-ubuntu',
           'client-unset',
           'ports-probe',
           'install-probe',
@@ -2838,6 +2995,7 @@ describe('acceptance', () => {
           'terminal',
           'socket',
           'slow',
+          'remote-ubuntu',
           'client-unset',
           'ports-probe',
           'install-probe',
@@ -2853,7 +3011,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 13}, () =>
+        Array.from({length: 14}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -3088,12 +3246,44 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51, connect-84: the genuine-client launches are the last of the table', () => {
+    it('tooling-51, connect-84, tooling-74: the genuine-client launches are the last of the table but one, and containers-view is the last, because its rows empty the run’s daemon', () => {
       deepStrictEqual(
         launchesOf(REPOSITORY_ROOT)
-          .slice(-2)
+          .slice(-3)
           .map(launch => launch.label),
-        ['genuine', 'ssh-no-proposals'],
+        ['genuine', 'ssh-no-proposals', 'containers-view'],
+      );
+    });
+
+    it('tooling-74: every selection that names containers-view runs it last, the groups, the dispatch lists and the scheduled split’s parts included, and only one part of the split has it', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const workflow = readFileSync(
+        path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+        'utf8',
+      );
+      const parts = JSON.parse(
+        /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
+      ) as string[];
+      const selections = [
+        ['@containers'],
+        ['containers-view', 'containers'],
+        ['@ssh', 'containers-view', '@explorer'],
+        ...parts.map(part => part.split(',')),
+      ];
+      deepStrictEqual(
+        [
+          parts.length > 0,
+          selections.map(selected => {
+            const labels = chosenLabels(launches, selected);
+            return labels.includes('containers-view')
+              ? labels.at(-1)
+              : 'containers-view';
+          }),
+          parts.filter(part =>
+            chosenLabels(launches, part.split(',')).includes('containers-view'),
+          ).length,
+        ],
+        [true, selections.map(() => 'containers-view'), 1],
       );
     });
 
@@ -3419,6 +3609,7 @@ describe('acceptance', () => {
       (
         await runTestCli(workspace.root, {
           REMOTE_OSS_ACCEPTANCE: '1',
+          HARNESS_EDITOR_VERSION: '',
           HARNESS_SSH_CONFIG: '',
           HARNESS_CONTAINER: '',
           HARNESS_ROUTED_ADDRESS: '',

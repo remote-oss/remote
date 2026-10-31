@@ -20,7 +20,7 @@
     "ssh"
   ],
   "engines": {
-    "vscode": "^1.139.0"
+    "vscode": "^1.125.0"
   },
   "extensionKind": [
     "ui"

@@ -3,8 +3,8 @@ import * as vscode from 'vscode';
 import {onHost, overSsh} from './harness.ts';
 
 describe('the acceptance harness', () => {
-  it('runs the editor under test at the version floor', () => {
-    strictEqual(vscode.version, '1.139.1');
+  it('runs the editor version the launch names', () => {
+    strictEqual(vscode.version, process.env.HARNESS_EDITOR_VERSION);
   });
 
   it('loads the packaged SSH config editing extension', () => {

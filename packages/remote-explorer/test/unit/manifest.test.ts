@@ -182,7 +182,7 @@ describe('the manifest of the Remote Explorer package', () => {
             directory: 'packages/remote-explorer',
           },
           {url: 'https://github.com/remote-oss/remote/issues'},
-          {vscode: '^1.139.0'},
+          {vscode: '^1.125.0'},
           ['Other'],
           ['remote development', 'remote', 'explorer'],
         ],
