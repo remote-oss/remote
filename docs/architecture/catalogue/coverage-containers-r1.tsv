@@ -381,7 +381,7 @@ F-0409.AC-8	acceptance
 F-0409.AC-9	acceptance	
 F-0409.AC-10	acceptance	
 F-0409.AC-11	todo	
-F-0409.AC-12	todo	
+F-0409.AC-12	acceptance	
 F-0409.AC-13	todo	
 F-0409.AC-14	todo	
 F-0409.AC-15	unit	
@@ -411,7 +411,7 @@ F-0409.AC-39	todo
 F-0409.AC-40	acceptance	
 F-0409.AC-41	deferred	containers 0.4: F-0407 later
 F-0409.AC-42	todo	
-F-0409.AC-43	todo	
+F-0409.AC-43	acceptance	
 F-0409.AC-44	acceptance	
 F-0409.AC-45	acceptance	
 F-0409.AC-46	acceptance	
@@ -879,17 +879,17 @@ F-0503.AC-5	acceptance
 F-0503.AC-6	acceptance	
 F-0503.AC-7	acceptance	
 F-0503.AC-8	deferred	containers release 1: later (Compose)
-F-0503.AC-9	todo	
+F-0503.AC-9	acceptance	
 F-0503.AC-10	acceptance	
 F-0503.AC-11	acceptance	
 F-0503.AC-12	acceptance	
-F-0503.AC-13	todo	
+F-0503.AC-13	acceptance	
 F-0503.AC-14	acceptance	
 F-0503.AC-15	todo	
-F-0503.AC-16	todo	
+F-0503.AC-16	acceptance	
 F-0503.AC-17	acceptance	
 F-0503.AC-18	acceptance	
-F-0503.AC-19	todo	
+F-0503.AC-19	acceptance	
 F-0503.AC-20	acceptance	
 F-0503.AC-21	todo	
 F-0503.AC-22	deferred	containers release 1: later (attach)
@@ -913,7 +913,7 @@ F-0503.AC-39	unit
 F-0503.AC-40	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0503.AC-41	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0503.AC-42	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0503.AC-43	todo	
+F-0503.AC-43	acceptance	
 F-0503.AC-44	acceptance	
 F-0503.AC-45	acceptance	
 F-0503.AC-46	deferred	containers release 1: later (attach)

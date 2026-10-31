@@ -768,6 +768,8 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers',
       registry: true,
       templates: true,
+      // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
+      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

@@ -1526,6 +1526,22 @@ export async function dialogKindOf(
   );
 }
 
+/** The label of the primary button of the dialog open in window `name`, the one that has the focus; `undefined` when none is open or none is focused. */
+export async function dialogPrimaryOf(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `(() => {
+  const box = document.querySelector('${DIALOG_BOX}');
+  const focused = document.activeElement;
+  return box !== null && focused !== null && box.contains(focused) ? (focused.textContent ?? null) : null;
+})()`,
+    )) ?? undefined
+  );
+}
+
 /** The whole text of the dialog open in window `name`, the markdown details included, or `undefined` when none is. */
 export async function dialogText(name: string): Promise<string | undefined> {
   return (
