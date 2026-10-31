@@ -45,7 +45,9 @@ export function controlManifestUrlOf(
 }
 
 /** The manifest of a text; none when the text is no JSON. An entry without a text prefix is skipped. */
-export function parseControlManifest(text: string): ControlManifest | undefined {
+export function parseControlManifest(
+  text: string,
+): ControlManifest | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
