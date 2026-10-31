@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {activations, openFolderWindow} from '../windows/folder-windows.ts';
 import {
@@ -11,6 +11,7 @@ import {
   inWindow,
   reloadWindow,
   waitFor,
+  variable,
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
@@ -18,12 +19,28 @@ import {
   answerNotification,
   notificationButtons,
   notificationCentre,
+  remoteExplorerOptions,
+  remoteExplorerSections,
   viewRows,
   windowTitle,
 } from '../windows/renderer.ts';
 
 /** The window the rows open: a `dev-container` authority whose payload is the hex of `{}`, which only activates the package. */
 const WINDOW = 'gate-setup';
+
+/** The titles of the sections our views would add to the Remote Explorer. */
+const OUR_SECTIONS = ['Dev Containers', 'Details', 'Dev Volumes'];
+
+/** The lines of the run editor's window logs that name the remote view container and the contribViewsRemote proposal. */
+function proposalWarnings(): string[] {
+  const logs = path.join(variable('HARNESS_USER_DATA'), 'logs');
+  return readdirSync(logs, {recursive: true, encoding: 'utf8'})
+    .filter(file => file.endsWith('renderer.log'))
+    .flatMap(file => readFileSync(path.join(logs, file), 'utf8').split('\n'))
+    .filter(
+      line => line.includes('contribViewsRemote') && line.includes('remote'),
+    );
+}
 
 /** The package's own file `name`, parsed. */
 function packageFile(name: string): unknown {
@@ -135,6 +152,27 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
         ),
       },
       {view: undefined, errors: []},
+    );
+  });
+
+  it.skip('F-0906 AC-16 (whole): the Remote Explorer has no section and no dropdown option of ours, no error notification shows, and core logs the remote view container’s proposal warning', async () => {
+    await inWindow(WINDOW, 'workbench.view.remote');
+    await new Promise(resolve => setTimeout(resolve, 5_000));
+    deepStrictEqual(
+      {
+        view: await viewRows(WINDOW, 'Dev Containers'),
+        sections: (await remoteExplorerSections(WINDOW)).filter(title =>
+          OUR_SECTIONS.includes(title),
+        ),
+        options: (await remoteExplorerOptions(WINDOW)).filter(
+          option => option === 'Dev Containers',
+        ),
+        errors: (await notificationCentre(WINDOW)).filter(text =>
+          text.includes('No view is registered'),
+        ),
+        warned: proposalWarnings().length > 0,
+      },
+      {view: undefined, sections: [], options: [], errors: [], warned: true},
     );
   });
 
