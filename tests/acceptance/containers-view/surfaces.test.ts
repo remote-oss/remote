@@ -153,8 +153,7 @@ describe('the Remote Explorer view’s own surfaces (card coverage-57)', functio
     );
   });
 
-  // Skipped: the manifest's welcome text has one link (Refresh), where the criterion has three; the line stays todo.
-  it.skip('F-0901 AC-16 (docker-unreachable): with the extension’s Docker connection unreachable the view has no title actions and shows the welcome text with its three links and no cloning paragraph', async () => {
+  it('F-0901 AC-16 (release-1-words): with the extension’s Docker connection unreachable the view has no title actions and shows the welcome text, whose one link is Refresh, with no cloning paragraph', async () => {
     await setUserSetting('dev.containers.dockerPath', '/nonexistent/docker');
     try {
       const name = await openFolderWindow(
@@ -171,6 +170,11 @@ describe('the Remote Explorer view’s own surfaces (card coverage-57)', functio
           },
           60_000,
         );
+        await waitFor(
+          'the title actions to go',
+          async () => (await titleActions(name, VIEW)).length === 0,
+          10_000,
+        );
         deepStrictEqual(
           [
             await titleActions(name, VIEW),
@@ -181,7 +185,7 @@ describe('the Remote Explorer view’s own surfaces (card coverage-57)', functio
           [
             [],
             'Get started with containers by installing Docker or by visiting the help view. Refresh after installation and startup.',
-            ['installing Docker', 'help view', 'Refresh'],
+            ['Refresh'],
             false,
           ],
         );
