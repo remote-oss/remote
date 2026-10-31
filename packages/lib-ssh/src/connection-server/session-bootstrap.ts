@@ -109,6 +109,23 @@ export function sessionStartFor(settings: ConnectWaitSettings): {
   );
 }
 
+/**
+ * The start of the connection's session: `start` as it is, or, with the host's RemoteCommand in effect, no remote
+ * program (ssh refuses one beside it) and the program as the first line of the prelude, `exec <program>`, which the
+ * shell the RemoteCommand starts reads from standard input.
+ */
+export function connectionStart(
+  start: {remoteProgram: string; prelude: string},
+  remoteCommandInEffect: boolean,
+): {remoteProgram: string | undefined; prelude: string} {
+  return remoteCommandInEffect
+    ? {
+        remoteProgram: undefined,
+        prelude: `exec ${start.remoteProgram}\n${start.prelude}`,
+      }
+    : start;
+}
+
 /** What the first lines of a session's output say about the bootstrap. */
 export type BootstrapEvent =
   | {kind: 'ready'}

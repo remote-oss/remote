@@ -14,11 +14,43 @@ import {withNoise} from 'lib-host/testing/noise';
 import {
   bootstrapEventOf,
   bootstrapLogLine,
+  connectionStart,
   preludeProgram,
   sessionStart,
   sessionStartFor,
 } from '../../src/index.ts';
 import {planScript} from '../../src/process/remote-program.ts';
+
+describe('the connection start (card connect-92, #1407)', () => {
+  it('F-2704 AC-30: with no RemoteCommand in effect the start is returned as it is', () => {
+    const start = sessionStart(15);
+    deepStrictEqual(connectionStart(start, false), start);
+  });
+
+  it('F-2704 AC-30: with one in effect there is no remote program, and the prelude is the exec line followed by the original prelude, byte for byte', () => {
+    const start = sessionStart(15);
+    const connection = connectionStart(start, true);
+    deepStrictEqual(connection, {
+      remoteProgram: undefined,
+      prelude: `exec ${start.remoteProgram}\n${start.prelude}`,
+    });
+  });
+
+  it('F-2704 AC-30: the exec line is not part of the prelude the program counts', () => {
+    const start = sessionStart(15);
+    const connection = connectionStart(start, true);
+    deepStrictEqual(
+      [
+        connection.prelude.endsWith(start.prelude),
+        connection.prelude.split('\n')[0]?.startsWith('exec sh -c '),
+        start.remoteProgram.includes(
+          String(Buffer.byteLength(start.prelude, 'utf8')),
+        ),
+      ],
+      [true, true, true],
+    );
+  });
+});
 
 describe('the session start (card ssh-34, #443)', () => {
   it('#443: the prelude starts with the bound and ends with exec sh', () => {
