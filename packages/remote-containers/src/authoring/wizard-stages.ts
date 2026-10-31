@@ -22,7 +22,12 @@ import type {WalkFiles} from './folder-facts.ts';
 import {askLocation, type LocationPorts} from './location.ts';
 import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
-import {askFeatures, type FeatureChoice} from './select-features.ts';
+import {askFeatureOptions} from './feature-options.ts';
+import {
+  askFeatures,
+  type FeatureChoice,
+  featureKeyOf,
+} from './select-features.ts';
 import {askTemplateOptions} from './template-options.ts';
 import type {WriteOutcome, WriteRequest} from './write.ts';
 
@@ -321,6 +326,45 @@ function selectFeaturesStage(
   };
 }
 
+/** The stage that asks for the options of the Features chosen. */
+function featureOptionsStage(
+  features: readonly CatalogueFeature[],
+  ports: StagePorts,
+): WizardStage {
+  return {
+    name: 'featureOptions',
+    execute: async (state, previous, cancellation) => {
+      const chosen = state.features.map(choice => ({
+        choice,
+        feature: features.find(each => featureKeyOf(each) === choice.id) ?? {
+          id: choice.id,
+          version: '',
+          name: choice.id,
+          options: {},
+        },
+      }));
+      const answer = await askFeatureOptions(
+        chosen,
+        state.featureMode === 'configure',
+        {...ports.options, translate: ports.translate},
+        cancellation,
+      );
+      switch (answer.kind) {
+        case 'chosen':
+          return {
+            kind: 'next',
+            state: {...state, features: answer.features},
+            shown: answer.shown,
+          };
+        case 'back':
+          return {kind: 'back', keep: false};
+        default:
+          return {kind: 'cancelled'};
+      }
+    },
+  };
+}
+
 /** The stages of the wizard, in order, made once the catalogue is read. */
 export function stagesOf(
   catalogue: CatalogueResult & {kind: 'catalogue'},
@@ -330,6 +374,7 @@ export function stagesOf(
     templatePickStage(catalogue.templates, ports),
     templateOptionsStage(ports),
     selectFeaturesStage(catalogue.features, ports),
+    featureOptionsStage(catalogue.features, ports),
   ];
   return ports.location === undefined
     ? rest

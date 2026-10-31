@@ -3,7 +3,13 @@
  * names, the wizard's command started without waiting for it, and the waits on its screen and its files.
  */
 
-import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
@@ -115,7 +121,7 @@ export async function takeOptionScreen(
 export const ALPINE_OPTION = 'Alpine version:';
 
 /** The placeholder of the Select Features screen. */
-const FEATURES_PLACEHOLDER = 'Select additional features to install';
+export const FEATURES_PLACEHOLDER = 'Select additional features to install';
 
 /** Waits for Select Features and presses OK with nothing checked. */
 export async function takeFeatureScreen(window: string): Promise<void> {
@@ -134,6 +140,26 @@ export async function withWindow(
   } finally {
     await closeWindow(window).catch(() => undefined);
   }
+}
+
+/** What a written configuration holds that the rows read: its Features, and its keys in the order written. */
+export type WrittenConfiguration = Record<string, unknown> & {
+  features?: Record<string, unknown>;
+};
+
+/** The configuration a row's wizard wrote into `folder`, once it is there, its commented lines and trailing commas dropped. */
+export async function configurationOf(
+  folder: string,
+): Promise<WrittenConfiguration> {
+  const file = path.join(folder, CONFIGURATION);
+  await written(file);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const text = readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(line => !line.trim().startsWith('//'))
+    .join('\n')
+    .replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(text) as WrittenConfiguration;
 }
 
 /** Waits until `file` exists. */
