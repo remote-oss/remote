@@ -15,6 +15,13 @@ import type {
 } from '../../src/authoring/wizard-stages.ts';
 import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
+import {
+  pressBack,
+  pressEscape,
+  repeatedInput,
+  scriptedInput,
+  takeDefaults,
+} from './option-picker.fixture.ts';
 import {FakePicker} from './template-picker.fixture.ts';
 
 const NEVER = new AbortController().signal;
@@ -190,8 +197,6 @@ const ALPINE = templateOf(
   {
     imageVariant: {type: 'string', default: '3.23'},
     flag: {type: 'boolean', default: false},
-    free: {type: 'string'},
-    object: {default: {}},
   },
   ['.github/dependabot.yml'],
 );
@@ -274,10 +279,14 @@ function sceneOf(
       templateMetadata: () =>
         Promise.resolve({
           kind: 'metadata',
-          metadata: {options: {size: {default: 3}}, optionalPaths: ['a', 2]},
+          metadata: {
+            options: {size: {type: 'string', default: '3'}},
+            optionalPaths: ['a', 2],
+          },
         }),
       translate: template => template,
     },
+    options: repeatedInput(takeDefaults),
     write: async request => {
       scene.written.push(request);
       await request.adjust?.('/scratch');
@@ -370,6 +379,52 @@ describe('the wizard (card containers-80)', () => {
           },
         ],
       ],
+    );
+  });
+
+  it('F-0803 AC-4: the boolean screen of a custom template names it by its metadata’s name, or by its id when the metadata has none', async () => {
+    const placeholders: Array<string | undefined> = [];
+    for (const metadata of [
+      {name: 'Lab', options: {flag: {type: 'boolean'}}},
+      {options: {flag: {type: 'boolean'}}},
+    ]) {
+      const scene = sceneOf();
+      const input = scriptedInput([takeDefaults]);
+      scene.ports.options = input.ports;
+      scene.ports.pick.templateMetadata = () =>
+        Promise.resolve({kind: 'metadata', metadata});
+      await customWritten(scene);
+      placeholders.push(input.pickers[0]?.placeholder);
+    }
+    deepStrictEqual(placeholders, [
+      "Select the options for the 'Lab' dev container",
+      "Select the options for the 'a/b/c' dev container",
+    ]);
+  });
+
+  it('F-0803 AC-20: Escape on the first option screen cancels the wizard and writes nothing', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([pressEscape]).ports;
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    deepStrictEqual([await result, scene.written], [{kind: 'cancelled'}, []]);
+  });
+
+  it('F-0803 BR-14: Back from the first option screen runs the template pick again, and the template chosen again is written with the new answers', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([
+      pressBack,
+      takeDefaults,
+      takeDefaults,
+    ]).ports;
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.pickers[1]?.accept('Alpine');
+    await result;
+    deepStrictEqual(
+      [scene.pickers.length, scene.written.map(each => each.templateArgs)],
+      [2, [{imageVariant: '3.23', flag: 'false'}]],
     );
   });
 
@@ -509,7 +564,7 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list of this card is the template pick alone', () => {
+  it('F-0801 BR-5: the stage list is the template pick and the template’s options', () => {
     const scene = sceneOf();
     const stages = stagesOf({kind: 'catalogue', templates: [ALPINE]}, {
       ...scene.ports,
@@ -518,7 +573,7 @@ describe('the wizard (card containers-80)', () => {
     } satisfies StagePorts);
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick'],
+      ['templatePick', 'templateOptions'],
     );
   });
 
