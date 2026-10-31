@@ -1108,6 +1108,62 @@ export async function welcomeText(
   );
 }
 
+/** The words of the links in the welcome text of view `viewName` in window `name`, in order; none when it shows none. */
+export async function welcomeLinks(
+  name: string,
+  viewName: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      return [...(pane?.querySelectorAll('.welcome-view-content a') ?? [])].map(link => link.textContent ?? '');
+    })()`,
+  );
+}
+
+/** What the Extensions view shows of one extension's card. */
+export interface ExtensionCard {
+  name: string;
+  publisher: string;
+  description: string;
+  /** The address of the card's icon image, empty when it shows core's default icon. */
+  iconSource: string;
+  /** The activation time core shows on the card (`12ms`); none when it shows none. */
+  badge: string | undefined;
+}
+
+/** The card of the Extensions entry `displayName` in window `name`; it fails when the view lists it not once. */
+export async function extensionCard(
+  name: string,
+  displayName: string,
+): Promise<ExtensionCard> {
+  const card = await evaluate<ExtensionCard | null>(
+    name,
+    `(() => {
+      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const row = rows[0];
+      const icon = row.querySelector('img.icon');
+      return {
+        name: row.querySelector('.name')?.textContent ?? '',
+        publisher: row.querySelector('.publisher-name')?.textContent ?? '',
+        description: row.querySelector('.description')?.textContent ?? '',
+        iconSource: icon !== null && icon.style.display !== 'none' ? icon.getAttribute('src') ?? '' : '',
+        badge: row.querySelector('.activationTime')?.textContent ?? undefined,
+      };
+    })()`,
+  );
+  if (card === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return card;
+}
+
 /** Clicks the link of the welcome text of view `viewName` whose words are `linkText`; it fails naming what it did not find. */
 export async function welcomeLink(
   name: string,
