@@ -3,6 +3,7 @@
  * screen sets and lets a script play the user.
  */
 
+import {FakeQuickPick} from './quick-pick.fixture.ts';
 import type {
   OptionPicker,
   OptionRow,
@@ -12,73 +13,20 @@ import type {
 /** The Back button of the fakes' title bar. */
 export const BACK_BUTTON = {name: 'back'};
 
-/** What a script step does with the screen that was just shown. */
+/** What a script step does with the screen that has been shown. */
 export type Step = (picker: FakeOptionPicker) => void;
 
 /** A quick pick that records what the screen sets and lets a row play the user. */
-export class FakeOptionPicker implements OptionPicker {
-  items: readonly OptionRow[] = [];
-  activeItems: readonly OptionRow[] = [];
-  selectedItems: readonly OptionRow[] = [];
+export class FakeOptionPicker
+  extends FakeQuickPick<OptionRow>
+  implements OptionPicker
+{
   canSelectMany = false;
-  title: string | undefined = undefined;
-  placeholder: string | undefined = undefined;
-  value = '';
   buttons: readonly unknown[] = [];
-  matchOnDescription = true;
-  ignoreFocusOut = true;
-  shown = false;
-  hidden = false;
-  disposed = false;
-  private readonly accepting: Array<() => void> = [];
-  private readonly changing: Array<(value: string) => void> = [];
   private readonly triggering: Array<(button: unknown) => void> = [];
-  private readonly hiding: Array<() => void> = [];
-  /** Records the accept listener. */
-  onDidAccept(listener: () => void): void {
-    this.accepting.push(listener);
-  }
-  /** Records the listener of typing. */
-  onDidChangeValue(listener: (value: string) => void): void {
-    this.changing.push(listener);
-  }
   /** Records the listener of the title-bar buttons. */
   onDidTriggerButton(listener: (button: unknown) => void): void {
     this.triggering.push(listener);
-  }
-  /** Records the hide listener. */
-  onDidHide(listener: () => void): void {
-    this.hiding.push(listener);
-  }
-  /** Marks the screen shown. */
-  show(): void {
-    this.shown = true;
-  }
-  /** Hides the screen and tells the listeners once. */
-  hide(): void {
-    if (!this.hidden) {
-      this.hidden = true;
-      this.hiding.forEach(listener => {
-        listener();
-      });
-    }
-  }
-  /** Marks the screen disposed. */
-  dispose(): void {
-    this.disposed = true;
-  }
-  /** The user types `value`. */
-  type(value: string): void {
-    this.value = value;
-    this.changing.forEach(listener => {
-      listener(value);
-    });
-  }
-  /** The user accepts the row with `label`: it becomes the only selected one. */
-  accept(label: string): void {
-    const found = this.items.find(each => each.label === label);
-    this.selectedItems = found === undefined ? [] : [found];
-    this.press();
   }
   /** The user accepts with the rows whose labels are `labels` checked. */
   acceptChecked(labels: readonly string[]): void {
@@ -104,11 +52,6 @@ export class FakeOptionPicker implements OptionPicker {
   /** The labels of the rows shown. */
   labels(): string[] {
     return this.items.map(each => each.label);
-  }
-  private press(): void {
-    this.accepting.forEach(listener => {
-      listener();
-    });
   }
 }
 
@@ -166,23 +109,23 @@ export function checking(labels: readonly string[]): Step {
 }
 
 /** The step that presses Back. */
-export const PRESS_BACK: Step = picker => {
+export function pressBack(picker: FakeOptionPicker): void {
   picker.trigger(BACK_BUTTON);
-};
+}
 
 /** The step that closes the screen without an answer, as Escape does. */
-export const PRESS_ESCAPE: Step = picker => {
+export function pressEscape(picker: FakeOptionPicker): void {
   picker.hide();
-};
+}
 
-/** The step that takes what a screen offers as it is: the focused row, or the rows already checked. */
-export const TAKE_DEFAULTS: Step = picker => {
+/** The step that takes what a screen starts with: the focused row, or the rows already checked. */
+export function takeDefaults(picker: FakeOptionPicker): void {
   if (picker.canSelectMany) {
     picker.acceptChecked(picker.selectedItems.map(each => each.label));
   } else {
     picker.acceptFocused();
   }
-};
+}
 
 /** The quick input over fakes whose every screen is played by `step`. */
 export function repeatedInput(step: Step): Omit<QuickInputPorts, 'translate'> {

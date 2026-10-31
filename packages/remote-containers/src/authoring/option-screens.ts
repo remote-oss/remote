@@ -80,7 +80,7 @@ export type ValueAnswer =
   | {kind: 'finish'; value: string};
 
 /** One boolean of a multi-select screen. */
-export interface BooleanItem {
+interface BooleanItem {
   key: string;
   label: string;
   description?: string;
@@ -157,15 +157,15 @@ function valueRows(screen: ValueScreen, ports: QuickInputPorts): OptionRow[] {
       : {}),
     value,
   }));
-  const tagged = rows.filter(row => row.value === screen.defaultValue);
+  const tagged = rows.filter(entry => entry.value === screen.defaultValue);
   return screen.defaultFirst
-    ? [...tagged, ...rows.filter(row => row.value !== screen.defaultValue)]
+    ? [...tagged, ...rows.filter(entry => entry.value !== screen.defaultValue)]
     : rows;
 }
 
 /** Whether a listed value shows for the typed text: the editor's filter, as a plain substring. */
-function matches(row: OptionRow, typed: string): boolean {
-  return row.label.toLowerCase().includes(typed.toLowerCase());
+function matches(entry: OptionRow, typed: string): boolean {
+  return entry.label.toLowerCase().includes(typed.toLowerCase());
 }
 
 /**
@@ -185,7 +185,7 @@ export function pickValue(
     {escape: {kind: 'escape'}, back: {kind: 'back'}},
     (picker, finish) => {
       function show(typed: string): void {
-        const showing = listed.filter(row => matches(row, typed));
+        const showing = listed.filter(entry => matches(entry, typed));
         const customised =
           !screen.strict && typed !== '' && !screen.values.includes(typed);
         const custom: OptionRow[] = customised
@@ -241,12 +241,12 @@ export function pickBooleans(
       picker.canSelectMany = true;
       picker.items = rows;
       picker.selectedItems = rows.filter(
-        (row, index) => screen.items[index]?.checked === true,
+        (entry, index) => screen.items[index]?.checked === true,
       );
       picker.onDidAccept(() => {
         finish({
           kind: 'values',
-          checked: new Set(picker.selectedItems.map(row => row.value)),
+          checked: new Set(picker.selectedItems.map(entry => entry.value)),
         });
       });
     },

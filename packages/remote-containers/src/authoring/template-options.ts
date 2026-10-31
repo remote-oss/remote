@@ -13,18 +13,27 @@ import {
   type QuickInputPorts,
   type ValueScreen,
 } from './option-screens.ts';
-import type {
-  StagePorts,
-  WizardStage,
-  WizardState,
-  StageResult,
-} from './wizard-stages.ts';
+import type {CatalogueTemplate} from './catalogue.ts';
 
 /** The English template of each text of the stage, by its string id. */
 const OPTION_TEMPLATES = {
   S307: 'Select a value',
   S317: "Select the options for the '{0}' dev container",
 } as const;
+
+/** What the stage needs: the wizard's title and the quick input the screens are made with. */
+export interface OptionsPorts {
+  title: string;
+  quick: QuickInputPorts;
+}
+
+/** How the stage ends. */
+export type OptionsAnswer =
+  /** `shown` false: the template declares nothing to ask and no screen was shown. */
+  | {kind: 'chosen'; templateArgs: Record<string, string>; shown: boolean}
+  /** Back from the first screen. */
+  | {kind: 'back'}
+  | {kind: 'cancelled'};
 
 /** A screen of the stage, with the option or options it sets. */
 type Screen =
@@ -85,9 +94,9 @@ function stringScreen(
 }
 
 /** The screens of a template's options: every string option first, then the booleans on one screen. */
-function screensOf(state: WizardState, ports: StagePorts): Screen[] {
-  const quick: QuickInputPorts = {...ports.options, translate: ports.translate};
-  const options = Object.entries(state.template.options).map(
+function screensOf(template: CatalogueTemplate, ports: OptionsPorts): Screen[] {
+  const {quick} = ports;
+  const options = Object.entries(template.options).map(
     ([name, option]) => [name, recordOf(option)] as const,
   );
   const strings = options
@@ -103,8 +112,8 @@ function screensOf(state: WizardState, ports: StagePorts): Screen[] {
           kind: 'booleans',
           screen: {
             title: ports.title,
-            placeholder: filled(ports.translate, OPTION_TEMPLATES.S317, [
-              state.template.name,
+            placeholder: filled(quick.translate, OPTION_TEMPLATES.S317, [
+              template.name,
             ]),
             items: booleans.map(([name, option]) => ({
               key: name,
@@ -120,74 +129,68 @@ function screensOf(state: WizardState, ports: StagePorts): Screen[] {
       ];
 }
 
-/** The stage that asks for the template's options. */
-export function templateOptionsStage(ports: StagePorts): WizardStage {
-  const quick: QuickInputPorts = {...ports.options, translate: ports.translate};
+/** Asks for the options of `template`, one screen at a time, and gives the arguments the CLI takes. */
+export async function askTemplateOptions(
+  template: CatalogueTemplate,
+  ports: OptionsPorts,
+  cancellation: AbortSignal,
+): Promise<OptionsAnswer> {
+  const {quick} = ports;
+  const screens = screensOf(template, ports);
+  if (screens.length === 0) {
+    return {kind: 'chosen', templateArgs: {}, shown: false};
+  }
+  const answers = new Map<number, Record<string, string>>();
+  let index = 0;
+  for (
+    let current = screens[index];
+    current !== undefined;
+    current = screens[index]
+  ) {
+    if (current.kind === 'string') {
+      const answer = await pickValue(current.screen, quick, cancellation);
+      if (answer.kind === 'escape') {
+        return {kind: 'cancelled'};
+      }
+      if (answer.kind === 'back') {
+        if (index === 0) {
+          return {kind: 'back'};
+        }
+        index -= 1;
+        answers.delete(index);
+        continue;
+      }
+      answers.set(index, {[current.name]: answer.value});
+    } else {
+      const answer = await pickBooleans(current.screen, quick, cancellation);
+      if (answer.kind === 'back') {
+        if (index === 0) {
+          return {kind: 'back'};
+        }
+        index -= 1;
+        answers.delete(index);
+        continue;
+      }
+      const checked =
+        answer.kind === 'values' ? answer.checked : new Set<string>();
+      answers.set(
+        index,
+        Object.fromEntries(
+          current.screen.items.map(item => [
+            item.key,
+            checked.has(item.key) ? 'true' : 'false',
+          ]),
+        ),
+      );
+    }
+    index += 1;
+  }
   return {
-    name: 'templateOptions',
-    execute: async (state, previous, cancellation): Promise<StageResult> => {
-      const screens = screensOf(state, ports);
-      if (screens.length === 0) {
-        return {
-          kind: 'next',
-          state: {...state, templateArgs: {}},
-          shown: false,
-        };
-      }
-      const answers = new Map<number, Record<string, string>>();
-      let index = 0;
-      while (index < screens.length) {
-        const current = screens[index];
-        if (current === undefined) {
-          break;
-        }
-        if (current.kind === 'string') {
-          const answer = await pickValue(current.screen, quick, cancellation);
-          if (answer.kind === 'escape') {
-            return {kind: 'cancelled'};
-          }
-          if (answer.kind === 'back') {
-            if (index === 0) {
-              return {kind: 'back', keep: false};
-            }
-            index -= 1;
-            answers.delete(index);
-            continue;
-          }
-          answers.set(index, {[current.name]: answer.value});
-        } else {
-          const answer = await pickBooleans(
-            current.screen,
-            quick,
-            cancellation,
-          );
-          if (answer.kind === 'back') {
-            if (index === 0) {
-              return {kind: 'back', keep: false};
-            }
-            index -= 1;
-            answers.delete(index);
-            continue;
-          }
-          const checked =
-            answer.kind === 'values' ? answer.checked : new Set<string>();
-          answers.set(
-            index,
-            Object.fromEntries(
-              current.screen.items.map(item => [
-                item.key,
-                checked.has(item.key) ? 'true' : 'false',
-              ]),
-            ),
-          );
-        }
-        index += 1;
-      }
-      const templateArgs = Object.assign({}, ...answers.values()) as Record<
-        string,
-        string
-      >;
-      return {kind: 'next', state: {...state, templateArgs}, shown: true};
-    },
+    kind: 'chosen',
+    templateArgs: Object.assign({}, ...answers.values()) as Record<
+      string,
+      string
+    >,
+    shown: true,
   };
 }

@@ -15,7 +15,13 @@ import type {
 } from '../../src/authoring/wizard-stages.ts';
 import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
-import {repeatedInput, TAKE_DEFAULTS} from './option-picker.fixture.ts';
+import {
+  pressBack,
+  pressEscape,
+  repeatedInput,
+  scriptedInput,
+  takeDefaults,
+} from './option-picker.fixture.ts';
 import {FakePicker} from './template-picker.fixture.ts';
 
 const NEVER = new AbortController().signal;
@@ -280,7 +286,7 @@ function sceneOf(
         }),
       translate: template => template,
     },
-    options: repeatedInput(TAKE_DEFAULTS),
+    options: repeatedInput(takeDefaults),
     write: async request => {
       scene.written.push(request);
       await request.adjust?.('/scratch');
@@ -373,6 +379,32 @@ describe('the wizard (card containers-80)', () => {
           },
         ],
       ],
+    );
+  });
+
+  it('F-0803 AC-20: Escape on the first option screen cancels the wizard and writes nothing', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([pressEscape]).ports;
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    deepStrictEqual([await result, scene.written], [{kind: 'cancelled'}, []]);
+  });
+
+  it('F-0803 BR-14: Back from the first option screen runs the template pick again, and the template chosen again is written with the new answers', async () => {
+    const scene = sceneOf();
+    scene.ports.options = scriptedInput([
+      pressBack,
+      takeDefaults,
+      takeDefaults,
+    ]).ports;
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.pickers[1]?.accept('Alpine');
+    await result;
+    deepStrictEqual(
+      [scene.pickers.length, scene.written.map(each => each.templateArgs)],
+      [2, [{imageVariant: '3.23', flag: 'false'}]],
     );
   });
 

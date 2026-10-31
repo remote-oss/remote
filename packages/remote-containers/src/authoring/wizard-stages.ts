@@ -20,7 +20,7 @@ import {
 import type {WalkFiles} from './folder-facts.ts';
 import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
-import {templateOptionsStage} from './template-options.ts';
+import {askTemplateOptions} from './template-options.ts';
 import type {WriteOutcome, WriteRequest} from './write.ts';
 
 /** Where the configuration is written: the workspace folder, or a slot of the extension's own store. */
@@ -214,6 +214,35 @@ function templatePickStage(
             kind: 'done',
             outcome: {kind: 'failed', detail: choice.cause},
           };
+      }
+    },
+  };
+}
+
+/** The stage that asks for the template's options. */
+function templateOptionsStage(ports: StagePorts): WizardStage {
+  return {
+    name: 'templateOptions',
+    execute: async (state, previous, cancellation) => {
+      const answer = await askTemplateOptions(
+        state.template,
+        {
+          title: ports.title,
+          quick: {...ports.options, translate: ports.translate},
+        },
+        cancellation,
+      );
+      switch (answer.kind) {
+        case 'chosen':
+          return {
+            kind: 'next',
+            state: {...state, templateArgs: answer.templateArgs},
+            shown: answer.shown,
+          };
+        case 'back':
+          return {kind: 'back', keep: false};
+        default:
+          return {kind: 'cancelled'};
       }
     },
   };

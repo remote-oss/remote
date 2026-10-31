@@ -65,14 +65,14 @@ describe('the value screen of an option (card containers-87)', () => {
     deepStrictEqual(
       [
         screen.labels(),
-        screen.items.map(row => row.description),
-        screen.activeItems.map(row => row.label),
+        screen.items.map(entry => entry.description),
+        screen.activeItems.map(entry => entry.label),
       ],
       [['b', 'a', 'c'], ['(default)', undefined, undefined], ['b']],
     );
   });
 
-  it('F-0803 BR-4: on a Feature’s screen the default is tagged where the schema has it, and the first row is focused', () => {
+  it('F-0803 BR-4: on a Feature’s screen the default is tagged where the schema has it, and the first entry is focused', () => {
     const {quick, picker} = sceneOf();
     pickValue(screenOf({defaultFirst: false}), quick, NEVER).catch(
       () => undefined,
@@ -81,25 +81,25 @@ describe('the value screen of an option (card containers-87)', () => {
     deepStrictEqual(
       [
         screen.labels(),
-        screen.items.map(row => row.description),
-        screen.activeItems.map(row => row.label),
+        screen.items.map(entry => entry.description),
+        screen.activeItems.map(entry => entry.label),
       ],
       [['a', 'b', 'c'], [undefined, '(default)', undefined], ['a']],
     );
   });
 
-  it('F-0803 5.0 step 3: accepting a row gives its value', async () => {
+  it('F-0803 5.0 step 3: accepting a entry gives its value', async () => {
     const {quick, picker} = sceneOf();
     const answer = pickValue(screenOf(), quick, NEVER);
     picker().accept('c');
     deepStrictEqual(await answer, {kind: 'value', value: 'c'});
   });
 
-  it('F-0803 AC-30: of values that all match, typed text that is not one adds the Use row after them, and the first match stays focused', () => {
+  it('F-0803 AC-30: of values that all match, typed text that is not one adds the Use entry after them, and the first match stays focused', () => {
     const {quick, picker} = sceneOf();
     const screen = screenOf({
       values: ['3.10', '3.11', '3.12'],
-      defaultValue: undefined,
+      defaultValue: '3.10',
       strict: false,
     });
     pickValue(screen, quick, NEVER).catch(() => undefined);
@@ -107,23 +107,26 @@ describe('the value screen of an option (card containers-87)', () => {
     deepStrictEqual(
       [
         picker().labels(),
-        picker().items.map(row => row.description),
-        picker().activeItems.map(row => row.label),
+        picker().items.map(entry => entry.description),
+        picker().activeItems.map(entry => entry.label),
       ],
       [
         ['3.10', '3.11', '3.12', 'Use: 3.1'],
-        [undefined, undefined, undefined, '(custom)'],
+        ['(default)', undefined, undefined, '(custom)'],
         ['3.10'],
       ],
     );
   });
 
-  it('F-0803 AC-30: typed text that matches no value focuses the Use row alone', () => {
+  it('F-0803 AC-30: typed text that matches no value focuses the Use entry alone', () => {
     const {quick, picker} = sceneOf();
     pickValue(screenOf({strict: false}), quick, NEVER).catch(() => undefined);
     picker().type('zz');
     deepStrictEqual(
-      [picker().labels().at(-1), picker().activeItems.map(row => row.label)],
+      [
+        picker().labels().at(-1),
+        picker().activeItems.map(entry => entry.label),
+      ],
       ['Use: zz', ['Use: zz']],
     );
   });
@@ -142,7 +145,7 @@ describe('the value screen of an option (card containers-87)', () => {
     );
   });
 
-  it('F-0803 AC-18: accepting the Use row gives the typed text verbatim', async () => {
+  it('F-0803 AC-18: accepting the Use entry gives the typed text verbatim', async () => {
     const {quick, picker} = sceneOf();
     const answer = pickValue(screenOf({strict: false}), quick, NEVER);
     picker().type('my motto');
@@ -150,12 +153,12 @@ describe('the value screen of an option (card containers-87)', () => {
     deepStrictEqual(await answer, {kind: 'value', value: 'my motto'});
   });
 
-  it('F-0803 AC-29: a strict screen has no Use row, and Enter with no row to take keeps it open', async () => {
+  it('F-0803 AC-29: a strict screen has no Use entry, and Enter with no entry to take keeps it open', async () => {
     const {quick, picker} = sceneOf();
     const answer = pickValue(screenOf(), quick, NEVER);
     picker().type('zzz');
     picker().acceptNothing();
-    const stillOpen = picker().hidden === false;
+    const stillOpen = !picker().hidden;
     picker().accept('c');
     deepStrictEqual(
       [picker().labels(), stillOpen, await answer],
@@ -167,7 +170,7 @@ describe('the value screen of an option (card containers-87)', () => {
     const {quick, picker} = sceneOf();
     const answer = pickValue(screenOf(), quick, NEVER);
     picker().trigger({name: 'other'});
-    const stillOpen = picker().hidden === false;
+    const stillOpen = !picker().hidden;
     picker().trigger(BACK_BUTTON);
     deepStrictEqual([stillOpen, await answer], [true, {kind: 'back'}]);
   });
@@ -208,8 +211,8 @@ describe('the boolean screen of a template (card containers-87)', () => {
         screen.buttons,
         screen.placeholder,
         screen.labels(),
-        screen.items.map(row => row.description),
-        screen.selectedItems.map(row => row.label),
+        screen.items.map(entry => entry.description),
+        screen.selectedItems.map(entry => entry.label),
       ],
       [
         true,
@@ -219,6 +222,29 @@ describe('the boolean screen of a template (card containers-87)', () => {
         [undefined, undefined],
         ['With docs'],
       ],
+    );
+  });
+
+  it('F-0803 6.3 step 2: an item’s own description is shown beside its label', () => {
+    const {quick, picker} = sceneOf();
+    pickBooleans(
+      {
+        ...BOOLEANS,
+        items: [
+          {
+            key: 'verbose',
+            label: 'verbose',
+            description: 'Print more',
+            checked: false,
+          },
+        ],
+      },
+      quick,
+      NEVER,
+    ).catch(() => undefined);
+    deepStrictEqual(
+      picker().items.map(entry => [entry.label, entry.description]),
+      [['verbose', 'Print more']],
     );
   });
 
