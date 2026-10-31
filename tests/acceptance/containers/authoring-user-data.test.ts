@@ -15,6 +15,7 @@ import {activations, openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
   inWindow,
+  reloadWindow,
   variable,
   waitFor,
   windowState,
@@ -611,6 +612,27 @@ function noticeShown(window: string, start: string): Promise<void> {
   );
 }
 
+/** The reopen notices `window` shows when it opens again: S186 for the folder's own configuration, S368 for a stored one. */
+async function noticesAfterReload(window: string): Promise<string[]> {
+  await inWindow(window, 'notifications.clearAll');
+  await reloadWindow(window);
+  await waitFor(
+    'a reopen notice',
+    async () =>
+      (await notificationCentre(window)).some(
+        text =>
+          text.startsWith(FOLDER_NOTICE_START) || text.startsWith(NOTICE_START),
+      ),
+    60_000,
+  );
+  return (await notificationCentre(window))
+    .filter(
+      text =>
+        text.startsWith(FOLDER_NOTICE_START) || text.startsWith(NOTICE_START),
+    )
+    .map(text => (text.startsWith(FOLDER_NOTICE_START) ? 'S186' : 'S368'));
+}
+
 describe('a stored configuration is found, picked and copied to the workspace (card containers-92)', function () {
   this.timeout(900_000);
 
@@ -643,6 +665,7 @@ describe('a stored configuration is found, picked and copied to the workspace (c
           identical,
           slots: slotNames(),
           preview: [active?.label, active?.preview],
+          nextOpen: await noticesAfterReload(window),
         },
         {
           rows: [
@@ -665,6 +688,7 @@ describe('a stored configuration is found, picked and copied to the workspace (c
           identical: true,
           slots: [],
           preview: ['devcontainer', true],
+          nextOpen: ['S186'],
         },
       );
     });
@@ -699,11 +723,17 @@ describe('a stored configuration is found, picked and copied to the workspace (c
           ),
         ]);
       }
-      deepStrictEqual(outcomes, [
-        [true, true, ['c92-keep'], false],
-        [true, true, ['c92-keep'], false],
-        [true, true, ['c92-keep'], false],
-      ]);
+      deepStrictEqual(
+        [outcomes, await noticesAfterReload(window)],
+        [
+          [
+            [true, true, ['c92-keep'], false],
+            [true, true, ['c92-keep'], false],
+            [true, true, ['c92-keep'], false],
+          ],
+          ['S368'],
+        ],
+      );
     });
   });
 
