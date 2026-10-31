@@ -7,6 +7,7 @@ import {
   closeWindow,
   connectionLog,
   emptyWindows,
+  onHostAs,
   openWindow,
   recordLines,
   variable,
@@ -245,5 +246,50 @@ describe('login shells that do not finish or end early: the connect fails or wai
       {remote: state.remoteName, folders: state.folders},
       {remote: null, folders: []},
     );
+  });
+
+  it('F-2704 AC-32 (timeout-close-remote): after the timeout dialog’s Close Remote no sshd-session of the user remains and no server folder exists 30 s later', async () => {
+    await setting('remote.SSH.connectTimeout', 10);
+    await freshServer('harness-bash');
+    await onHostAs(
+      'harness-bash',
+      'sh',
+      '-c',
+      'pkill -f \'[.]vscodium-server-insiders/\' || true; rm -rf "$HOME/.vscodium-server-insiders"',
+    );
+    await writeHomeFile('harness-bash', '.bash_profile', 'sleep 60\n');
+    const window = 'to-ac32';
+    appendScript([
+      {
+        surface: 'failureDialog',
+        match: 'Could not establish connection',
+        answer: {button: 'Close Remote'},
+        window,
+      },
+    ] satisfies AppendedEntry[]);
+    const known = emptyWindows();
+    await openWindow('harness-bash', window);
+    await waitFor(
+      'the dialog',
+      () => recordLines('failureDialog', window).length > 0,
+      120_000,
+    );
+    await new Promise(resolve => setTimeout(resolve, 30_000));
+    const sessions = await onHostAs(
+      'harness-bash',
+      'sh',
+      '-c',
+      'pgrep -u "$(id -u)" -x sshd-session || true',
+    );
+    const folder = await onHostAs(
+      'harness-bash',
+      'sh',
+      '-c',
+      'test -e "$HOME/.vscodium-server-insiders" && echo present || echo absent',
+    );
+    for (const local of emptyWindows().filter(each => !known.includes(each))) {
+      await closeWindow(local);
+    }
+    deepStrictEqual([sessions.trim(), folder.trim()], ['', 'absent']);
   });
 });
