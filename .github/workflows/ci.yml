@@ -162,7 +162,7 @@ jobs:
         shard: [1, 2, 3, 4] # coverage.ts --shard: each unit in one shard, the four at once (2026-10-20)
     # the unit tests under coverage need no Docker and no display either: a GitHub runner, as checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20 # shard 2 outgrew 10 minutes by 2026-10-31; the shard rebalance (#1383) sets it back
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
