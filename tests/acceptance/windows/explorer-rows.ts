@@ -201,3 +201,7 @@ export async function pressRefreshKey(name: string): Promise<KeyEffects> {
     sideBarSwitched: (await activeSideBar(name)) !== sideBar,
   };
 }
+
+/** The coexistence warning the explorer shows beside the stand-in, as explorer-03b publishes it. */
+export const STAND_DOWN_WARNING =
+  'Remote Explorer stays inactive in this window because another Remote Explorer extension is enabled. Both use the same commands, settings and views. Disable one of the two and reload the window.';
