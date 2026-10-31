@@ -1,6 +1,16 @@
 import {deepStrictEqual} from 'node:assert';
-import {isTrusted, openWindow, recordLines} from '../windows/harness.ts';
-import {waitForDialog} from '../windows/renderer.ts';
+import type {AppendedEntry} from '../../../tools/script-file.ts';
+import {
+  appendScript,
+  connectedWithin,
+  isTrusted,
+  openWindow,
+  recordLines,
+  signal,
+  waitFor,
+} from '../windows/harness.ts';
+import {INSTALL_MILLISECONDS, setting} from '../windows/maintenance.ts';
+import {answerDialog, waitForDialog} from '../windows/renderer.ts';
 
 /** The buttons of core's trust request, in the order the page holds them (measured on the run's build). */
 const REQUEST_BUTTONS = ['Manage', 'Cancel', 'Trust Folder & Continue'];
@@ -28,5 +38,51 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
         false,
       ],
     );
+  });
+
+  it('F-2704 AC-21 (trust-retry): in the terminal mode with the trust question left open the connect times out and waits, and after the folder is trusted Retry asks for the platform again and connects', async () => {
+    const window = 'tt21';
+    await setting('remote.SSH.connectTimeout', 10);
+    try {
+      appendScript([
+        {surface: 'platformPick', match: 'platform', answer: 'linux', window},
+        {
+          surface: 'failureDialog',
+          match: 'Could not establish connection',
+          answer: {button: 'Retry'},
+          window,
+          after: 'tt21-retry',
+        },
+        {surface: 'platformPick', match: 'platform', answer: 'linux', window},
+      ] satisfies AppendedEntry[]);
+      await openWindow('harness-bash', window);
+      await waitFor(
+        'the timeout dialog, held',
+        () => recordLines('failureDialog', window).length > 0,
+        120_000,
+      );
+      const dialogLine = recordLines('failureDialog', window)[0];
+      const choiceLine = recordLines('platformPick', window)[0];
+      const timedOut = dialogLine?.question;
+      // The platform choice starts the connect wait: 10 s here, and the dialog follows it by 2 s.
+      const afterChoice = (dialogLine?.time ?? 0) - (choiceLine?.time ?? 0);
+      await answerDialog(window, 'Trust Folder & Continue');
+      signal('tt21-retry');
+      await waitFor(
+        'the platform pick again',
+        () => recordLines('platformPick', window).length >= 2,
+        120_000,
+      );
+      await connectedWithin(window, INSTALL_MILLISECONDS);
+      deepStrictEqual(
+        [
+          timedOut?.startsWith('Could not establish connection'),
+          afterChoice >= 10_000 && afterChoice < 14_000,
+        ],
+        [true, true],
+      );
+    } finally {
+      await setting('remote.SSH.connectTimeout', undefined);
+    }
   });
 });
