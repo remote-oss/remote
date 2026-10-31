@@ -94,7 +94,10 @@ function listing(scene: Scene): Record<string, Array<[string, string]>> {
   return tree;
 }
 
-async function choose(scene: Scene): Promise<ConfigurationChoice> {
+async function choose(
+  scene: Scene,
+  configFile?: string,
+): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
     {
@@ -104,6 +107,7 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
       features: {defaultFeatures: {}, lockfile: true},
       cancellation: NEVER,
       engineCheck: scene.engineCheck,
+      ...(configFile === undefined ? {} : {configFile}),
     },
     {
       files: {
@@ -261,6 +265,47 @@ describe('choosing the configuration (card containers-13)', () => {
             undefined,
           ],
         ],
+      ],
+    );
+  });
+
+  it('F-0902 BR-7: a configuration file the caller names is chosen and read with no discovery and no picker, though the folder holds two', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    const choice = await choose(scene, `${FOLDER}/${BETA}`);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.filter(call => call !== 'readConfiguration'),
+        scene.targets.map(
+          target => (target as [{configFile: string}])[0].configFile,
+        ),
+      ],
+      [
+        {
+          kind: 'chosen',
+          configFile: `${FOLDER}/${BETA}`,
+          workspaceFolder: '/workspaces/p',
+          features: [],
+        },
+        [`read ${BETA}`],
+        [`${FOLDER}/${BETA}`],
+      ],
+    );
+  });
+
+  it('F-0902 BR-7: a configuration file the caller names that cannot be read shows the dialog with its path relative to the folder, and no picker', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE});
+    const choice = await choose(scene, `${FOLDER}/${BETA}`);
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.includes('pick'),
+        scene.calls.filter(call => call.startsWith('showError')),
+      ],
+      [
+        {kind: 'rejected'},
+        false,
+        [`showError ${JSON.stringify(['', S181(BETA), ['Show Log']])}`],
       ],
     );
   });

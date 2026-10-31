@@ -77,6 +77,7 @@ export function reopenHandlersOf(
       }
       await reloadIntoContainer(ports, {
         title,
+        target: 'current',
         folder,
         dockerFile: executable.file,
         chosen: choice,

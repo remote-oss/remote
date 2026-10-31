@@ -99,6 +99,8 @@ export interface ConfigurationRequest {
   mountGitWorktreeCommonDir: boolean;
   /** The Feature settings, which the CLI's read of the configuration takes. */
   features: FeatureSettings;
+  /** The configuration to work on, absolute: with it nothing is discovered and no picker shows. */
+  configFile?: string;
   cancellation: AbortSignal;
   /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
@@ -136,7 +138,16 @@ function textOf(
   return filled(translate, template, values);
 }
 
-/** Chooses the configuration of `request.folder`. */
+/** The candidate for a configuration file the caller names, whatever its place in the folder. */
+function namedCandidate(folder: string, file: string): Candidate {
+  return {
+    file,
+    relative: path.relative(folder, file).split(path.sep).join('/'),
+    place: {kind: 'main'},
+  };
+}
+
+/** Chooses the configuration of `request.folder`, or reads the one `request.configFile` names. */
 export async function chooseConfiguration(
   request: ConfigurationRequest,
   ports: ConfigurationPorts,
@@ -242,7 +253,10 @@ export async function chooseConfiguration(
     return chosen;
   }
 
-  const candidates = await discoverConfigurations(folder, files, ports.compare);
+  const candidates =
+    request.configFile === undefined
+      ? await discoverConfigurations(folder, files, ports.compare)
+      : [namedCandidate(folder, request.configFile)];
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
     if (!(await engineAllows())) {

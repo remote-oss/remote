@@ -112,6 +112,7 @@ export function openFolderInContainer(
         return;
       }
       await reloadIntoContainer(ports, {
+        target: 'current',
         title: TITLE,
         folder,
         dockerFile: executable.file,

@@ -131,6 +131,18 @@
         }
       },
       {
+        "command": "remote-containers.openFolderInContainerInCurrentWindow",
+        "title": "%commands.openFolderInContainerInCurrentWindow.title%",
+        "category": "Dev Containers",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "remote-containers.openFolderInContainerInNewWindow",
+        "title": "%commands.openFolderInContainerInNewWindow.title%",
+        "category": "Dev Containers",
+        "icon": "$(empty-window)"
+      },
+      {
         "command": "remote-containers.explorerDetailsRefresh",
         "title": "%commands.explorerDetailsRefresh.title%",
         "category": "Dev Containers",
@@ -189,6 +201,14 @@
         {
           "command": "remote-containers.removeContainer",
           "when": "false"
+        },
+        {
+          "command": "remote-containers.openFolderInContainerInCurrentWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.openFolderInContainerInNewWindow",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -222,12 +242,12 @@
         {
           "command": "remote-containers.openFolderInContainerInCurrentWindow",
           "group": "1_folder@1",
-          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.openFolderInContainerInNewWindow",
           "group": "1_folder@2",
-          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.startContainer",
@@ -262,12 +282,12 @@
         {
           "command": "remote-containers.openFolderInContainerInCurrentWindow",
           "group": "inline@1",
-          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.openFolderInContainerInNewWindow",
           "group": "inline@2",
-          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && false && !remote-containers:standingDown"
+          "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.removeContainer",

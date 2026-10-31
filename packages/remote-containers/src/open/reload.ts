@@ -36,6 +36,8 @@ export interface ReloadPorts {
 export interface ReloadRequest {
   /** The title of the command, which the log names. */
   title: string;
+  /** The window the container opens in: this one, which leaves the container it holds, or a new one. */
+  target: 'current' | 'new';
   /** The host folder the container is for. */
   folder: string;
   /** The Docker executable the context is asked of. */
@@ -78,7 +80,9 @@ export async function reloadIntoContainer(
     }
   }
   request.progress.close();
-  await ports.shutdown.leave();
+  if (request.target === 'current') {
+    await ports.shutdown.leave();
+  }
   const opened = await openRemote(
     ports.opener,
     encodeAuthority({
@@ -86,7 +90,11 @@ export async function reloadIntoContainer(
       target: {payload},
       rawHostString: payload,
     }),
-    {path: chosen.workspaceFolder, pathKind: 'folder', target: 'current'},
+    {
+      path: chosen.workspaceFolder,
+      pathKind: 'folder',
+      target: request.target,
+    },
   );
   if (opened.kind === 'rejected') {
     logger.warn(`${title} was refused: ${opened.reason}`);
