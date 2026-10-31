@@ -50,7 +50,10 @@ on:
   schedule:
     - cron: '17 */2 * * *'
     - cron: '43 4 * * *'
+  # Each merge to main runs checks, unit and coverage, on GitHub's runners and not the lab's. Two pull requests that pass
+  # alone can break each other once both are in: main shows it within minutes, not at the next pull request's run.
   push:
+    branches: [main]
     tags: ['*-v*']
 
 permissions:
@@ -186,7 +189,8 @@ jobs:
     name: acceptance (slice 1)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
@@ -225,7 +229,8 @@ jobs:
     name: acceptance (server lifecycle)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'pr-pool')) || 'ubuntu-latest' }}
