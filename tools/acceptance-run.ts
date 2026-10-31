@@ -67,6 +67,16 @@ const HOST_FOLDERS: Readonly<Record<HostBase, string>> = {
   'ubuntu-26.04': 'host-ubuntu',
 };
 
+/** The `docker build` arguments that give a base's Dockerfile the Alpine host's folder as `alpine-host`, for its scripts. */
+function hostBuildContexts(root: string, base: HostBase): string[] {
+  return base === 'alpine'
+    ? []
+    : [
+        '--build-context',
+        `alpine-host=${path.join(root, 'tests', 'acceptance', HOST_FOLDERS.alpine)}`,
+      ];
+}
+
 /** The image tag of the run's host: `remote-oss-acceptance-host:<run id>`, and `-<base>` after it for another base. */
 export function hostImageOf(runId: string, base: HostBase = 'alpine'): string {
   return base === 'alpine'
@@ -354,6 +364,7 @@ export function startHostContainer(
     '--progress=plain', // as the dev container image's build: a failed step's error reaches the thrown message
     '--tag',
     hostImageOf(runId, base),
+    ...hostBuildContexts(root, base),
     path.join(root, 'tests', 'acceptance', HOST_FOLDERS[base]),
   ]);
   const keyFile = path.join(runFolder, 'id_ed25519');

@@ -299,7 +299,7 @@ describe('startHostContainer (card tooling-10)', () => {
 });
 
 describe('the Ubuntu host (card tooling-70)', () => {
-  it('builds from host-ubuntu under its own tag, and a second start in the run folder keeps the run key and password', () => {
+  it("builds from host-ubuntu under its own tag, with the Alpine host's folder as alpine-host (tooling-75), and a second start in the run folder keeps the run key and password", () => {
     const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
     try {
       const alpine = startHostContainer(
@@ -326,7 +326,7 @@ describe('the Ubuntu host (card tooling-70)', () => {
           second
             .callsOf('docker')
             .find(argv => argv[0] === 'build')
-            ?.slice(-2),
+            ?.slice(-4),
           second.callsOf('ssh-keygen').length,
           readFileSync(ubuntu.passwordFile, 'utf8') === password,
           second
@@ -338,6 +338,8 @@ describe('the Ubuntu host (card tooling-70)', () => {
         [
           [
             'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+            '--build-context',
+            `alpine-host=${path.join('/root', 'tests', 'acceptance', 'host')}`,
             path.join('/root', 'tests', 'acceptance', 'host-ubuntu'),
           ],
           0,

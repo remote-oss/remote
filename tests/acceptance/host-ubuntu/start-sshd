@@ -1,14 +1,16 @@
 #!/bin/sh
 # Installs the run's public key, given in AUTHORIZED_KEY, and the further keys of AUTHORIZED_KEYS_FURTHER (one per line,
-# may be empty) for the user harness, writes CA_PUBLIC_KEY (may be empty) to /etc/ssh/ca.pub, forgets HOST_PASSWORD
-# (its user is the Alpine host's only), leaves the host with the download tool HOST_FETCH names (gnu-wget, the
-# default; curl; none; BusyBox's wget is the Alpine host's), sets HOST_SHELL as harness's login shell when given, then
-# runs sshd in the foreground. It is the Alpine host's start-sshd for the one account this image has.
+# may be empty) for the users harness and harness-mute, writes CA_PUBLIC_KEY (may be empty) to /etc/ssh/ca.pub, forgets
+# HOST_PASSWORD (its user is the Alpine host's only), leaves the host with the download tool HOST_FETCH names (gnu-wget,
+# the default; curl; none; BusyBox's wget is the Alpine host's), sets HOST_SHELL as harness's login shell when given,
+# then runs sshd in the foreground. It is the Alpine host's start-sshd for the two accounts this image has.
 set -eu
-install -d -m 700 -o harness -g harness /home/harness/.ssh
-printf '%s\n' "$AUTHORIZED_KEY" "${AUTHORIZED_KEYS_FURTHER:-}" > /home/harness/.ssh/authorized_keys
-chown harness:harness /home/harness/.ssh/authorized_keys
-chmod 600 /home/harness/.ssh/authorized_keys
+for account in harness harness-mute; do
+  install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
+  printf '%s\n' "$AUTHORIZED_KEY" "${AUTHORIZED_KEYS_FURTHER:-}" > "/home/$account/.ssh/authorized_keys"
+  chown "$account:$account" "/home/$account/.ssh/authorized_keys"
+  chmod 600 "/home/$account/.ssh/authorized_keys"
+done
 printf '%s\n' "${CA_PUBLIC_KEY:-}" > /etc/ssh/ca.pub
 unset HOST_PASSWORD
 case "${HOST_FETCH:-gnu-wget}" in
