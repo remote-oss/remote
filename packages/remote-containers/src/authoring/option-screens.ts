@@ -77,6 +77,8 @@ export interface ValueScreen {
   defaultFirst: boolean;
   /** A Feature's screens only: a button that finishes the walk. */
   finishButton: boolean;
+  /** True for a choice between two actions: the screen has no title-bar button. */
+  bare?: true;
 }
 
 /** What a value screen ends with. */
@@ -84,6 +86,7 @@ export type ValueAnswer =
   | {kind: 'value'; value: string}
   | {kind: 'back'}
   | {kind: 'escape'}
+  /** `value` is the focused item's, or the typed text; empty when nothing is focused. */
   | {kind: 'finish'; value: string};
 
 /** One boolean of a multi-select screen. */
@@ -120,6 +123,19 @@ function text(
   return filled(ports.translate, SCREEN_TEMPLATES[name], values);
 }
 
+/** The title-bar buttons of a screen: none for a bare one, Back, and Finish where the screen has an answer for it. */
+function titleButtonsOf(
+  ports: QuickInputPorts,
+  ends: {finishing?: unknown; bare?: true},
+): unknown[] {
+  if (ends.bare === true) {
+    return [];
+  }
+  return ends.finishing === undefined
+    ? [ports.backButton]
+    : [ports.backButton, ports.finishButton];
+}
+
 /** A screen that ends when its answer is given, Back is pressed or it is hidden. */
 function shown<Answer extends {kind: string}>(
   ports: QuickInputPorts,
@@ -129,6 +145,8 @@ function shown<Answer extends {kind: string}>(
     back: Answer;
     /** The answer of the title-bar Finish button, from what the screen holds when it is pressed. */
     finishing?: (picker: OptionPicker) => Answer;
+    /** True for a screen with no title-bar button at all. */
+    bare?: true;
   },
   setUp: (picker: OptionPicker, finish: (answer: Answer) => void) => void,
 ): Promise<Answer> {
@@ -145,10 +163,7 @@ function shown<Answer extends {kind: string}>(
     picker.matchOnDescription = false;
     picker.matchOnDetail = false;
     picker.ignoreFocusOut = false;
-    picker.buttons =
-      ends.finishing === undefined
-        ? [ports.backButton]
-        : [ports.backButton, ports.finishButton];
+    picker.buttons = titleButtonsOf(ports, ends);
     picker.onDidTriggerButton(button => {
       if (button === ports.backButton) {
         finish(ends.back);
@@ -205,7 +220,19 @@ export function pickValue(
   return shown<ValueAnswer>(
     ports,
     cancellation,
-    {escape: {kind: 'escape'}, back: {kind: 'back'}},
+    {
+      escape: {kind: 'escape'},
+      back: {kind: 'back'},
+      ...(screen.bare === true ? {bare: true as const} : {}),
+      ...(screen.finishButton
+        ? {
+            finishing: (picker: OptionPicker): ValueAnswer => ({
+              kind: 'finish',
+              value: picker.activeItems[0]?.value ?? '',
+            }),
+          }
+        : {}),
+    },
     (picker, finish) => {
       function show(typed: string): void {
         const showing = listed.filter(entry => matches(entry, typed));
