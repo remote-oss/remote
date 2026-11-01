@@ -22,6 +22,7 @@ import {
   viewed,
 } from '../windows/dev-containers-view.ts';
 import {
+  type RowDetails,
   paneFocused,
   remoteExplorerSections,
   rowActionTitles,
@@ -360,6 +361,18 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
           ).exec(value)?.[0] ?? value
         );
       }
+      // The view section the row labelled `label` sits under: the last section header before it.
+      function groupOf(rows: readonly RowDetails[], label: string): string {
+        const rowAt = rows.findIndex(each => each.label === label);
+        return (
+          rows
+            .slice(0, rowAt)
+            .reverse()
+            .find(
+              each => each.label === VIEW || each.label === 'Other Containers',
+            )?.label ?? ''
+        );
+      }
       const beforeMenu = await cleaned(base);
       renameSync(folder, away);
       movedAway = true;
@@ -375,9 +388,8 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
       ];
       await rebuilt(base, withoutOpen);
       const withoutMenu = await cleaned(base);
-      const afterMove = (await rowDetails('local', VIEW))?.find(
-        entry => entry.label === base,
-      );
+      const rowsAfterMove = await rowDetails('local', VIEW);
+      const afterMove = rowsAfterMove?.find(entry => entry.label === base);
       renameSync(away, folder);
       movedAway = false;
       await titleAction('local', VIEW, 'Refresh');
@@ -391,6 +403,7 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
         'Remove Container',
       ];
       await rebuilt(base, withOpen);
+      const restoredRows = await rowDetails('local', VIEW);
       const restoredMenu = await cleaned(base);
       await docker('start', container);
       await iconReaches('local', base, 'vm-running');
@@ -419,6 +432,10 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
             tooltipState(afterMove?.ariaLabel ?? '') ===
               tooltipState(before?.ariaLabel ?? ''),
           ],
+          [
+            groupOf(rowsAfterMove ?? [], base),
+            groupOf(restoredRows ?? [], base),
+          ],
           hasOpen(restoredMenu),
           await rowActionTitles('local', VIEW, base),
           runningMenu,
@@ -434,6 +451,7 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
             'Remove Container',
           ],
           [true, true, 'vm', true, true],
+          [VIEW, VIEW],
           true,
           ['Remove Container'],
           [
