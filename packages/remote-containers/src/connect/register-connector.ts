@@ -30,6 +30,8 @@ import {
 } from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
+import type {IntentMemento} from '../state/timed-store.ts';
+import {knownName, recordKnownName} from './known-names.ts';
 import {type RecentLabelPorts, storeRecentLabel} from './recent-label.ts';
 import {workspaceSuffixOf} from './window-identity.ts';
 
@@ -52,9 +54,16 @@ export interface ConnectorRegistrationHost {
   presenter: Omit<RecoveryPorts, 'disconnected'>;
   /** The Open Recent entry of the window, which gets its label once the window first connects. */
   recentLabel: RecentLabelPorts;
+  /** The profile's global state, which keeps the names of the folders it connected. */
+  knownNames: IntentMemento;
   translate: Translate;
   /** Opens the forwards the connection declares, once core has the connection. */
   forwarder: Forwarder;
+}
+
+/** The path of the configuration file a folder's target names. */
+function configFileOf(folder: DevContainerFolder): string {
+  return folder.configFile.fsPath ?? folder.configFile.path;
 }
 
 /** What the activation hands over: whether the proposed resolvers API is there, and the log to reveal. */
@@ -82,16 +91,25 @@ export async function registerContainerResolver(
   let disposed = false;
   let recentLabelStored = false;
   let dialogs = 0;
-  /** The label with no name, for a window that is disconnected and has none yet; never while a dialog is open. */
-  function registerUnnamedLabel(): void {
+  /**
+   * The label of a window that is disconnected and has none yet: the name this profile last connected the folder with,
+   * else none; never while a dialog is open.
+   */
+  function registerDisconnectedLabel(): void {
     const target = handle?.currentConnection()?.decodedTarget;
     if (target === undefined || label !== undefined || disposed) {
       return;
     }
+    const folder = decodedFolderOf(target);
     label = registerAuthorityLabel(
       host.labels,
       target,
-      workspaceSuffixOf(undefined, translate),
+      workspaceSuffixOf(
+        folder === undefined
+          ? undefined
+          : knownName(host.knownNames, folder.hostPath, configFileOf(folder)),
+        translate,
+      ),
     );
   }
   // First, before anything that can fail: the command only shows the log, so it works without the proposals.
@@ -102,7 +120,7 @@ export async function registerContainerResolver(
     },
   );
   const dialogPresenter = recoveryPresenterOf(
-    {...host.presenter, disconnected: registerUnnamedLabel},
+    {...host.presenter, disconnected: registerDisconnectedLabel},
     () => currentTarget(),
     () => connector.failedContainer(),
     translate,
@@ -157,6 +175,18 @@ export async function registerContainerResolver(
           workspaceSuffixOf(connector.heldIdentity(), translate),
         );
         const folder = decodedFolderOf(connection.decodedTarget);
+        if (folder !== undefined) {
+          void recordKnownName(
+            host.knownNames,
+            folder.hostPath,
+            configFileOf(folder),
+            connector.heldIdentity() ?? {name: undefined, context: undefined},
+          ).catch((caught: unknown) => {
+            served.logger.warn(
+              `the name of the connection could not be kept: ${caught instanceof Error ? caught.message : String(caught)}`,
+            );
+          });
+        }
         if (folder !== undefined && !recentLabelStored) {
           recentLabelStored = true;
           void storeRecentLabel(
@@ -169,7 +199,7 @@ export async function registerContainerResolver(
       } else {
         queueMicrotask(() => {
           if (dialogs === 0) {
-            registerUnnamedLabel();
+            registerDisconnectedLabel();
           }
         });
       }
