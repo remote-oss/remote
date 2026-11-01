@@ -158,4 +158,54 @@ describe('the code command opens host files in the window (card coverage-80)', f
       await closeWindow('c80-new-window').catch(() => undefined);
     }
   });
+
+  it('F-2508 AC-6 (c80-commit): with EDITOR set to code --wait, git commit opens COMMIT_EDITMSG in the window, and saving and closing it creates the commit on the host', async () => {
+    await windowWithTerminal('c80-commit');
+    try {
+      await onHost(
+        'sh',
+        '-c',
+        'cd /home/harness/c80-commit && git init -q && git config user.email c80@example.test && git config user.name c80 && echo x > file.txt && git add file.txt',
+      );
+      await typeInTerminal(
+        'c80-commit',
+        `export EDITOR="${command} --wait"; git commit; echo EXIT_$?\n`,
+      );
+      await waitFor(
+        'COMMIT_EDITMSG to be the active editor',
+        async () =>
+          (await activeEditorOf('c80-commit'))?.endsWith('COMMIT_EDITMSG') ===
+          true,
+        30_000,
+      );
+      await inWindow(
+        'c80-commit',
+        'acceptance.agent.writeActiveEditor',
+        'c80 commit message\n',
+      );
+      await inWindow('c80-commit', 'workbench.action.closeActiveEditor').catch(
+        () => undefined,
+      );
+      const lines = await linesUntil('c80-commit', each =>
+        each.some(line => /^EXIT_\d/.test(line)),
+      );
+      deepStrictEqual(
+        [
+          lines.find(line => /^EXIT_\d/.test(line)),
+          (
+            await onHost(
+              'git',
+              '-C',
+              '/home/harness/c80-commit',
+              'log',
+              '--format=%s',
+            )
+          ).trim(),
+        ],
+        ['EXIT_0', 'c80 commit message'],
+      );
+    } finally {
+      await closeWindow('c80-commit').catch(() => undefined);
+    }
+  });
 });
