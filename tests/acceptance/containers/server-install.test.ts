@@ -14,6 +14,7 @@ import {
   devContainersOf,
   editorProduct,
   OLD_GLIBC_IMAGE,
+  reloadingCommand,
   reopenInContainer,
   reopenStarted,
   runLabelArguments,
@@ -527,6 +528,42 @@ describe('F-0503 server install (card containers-41)', function () {
       logNamesUrl: containersLogSince(mark).some(line => line.includes(url)),
     };
   }
+
+  it('F-0503 AC-33 (s33): a named volume on a root user’s server folder keeps the machine settings files as they were when Rebuild Container replaces the container', async () => {
+    const volume = `c78-root-${variable('HARNESS_RUN_ID')}`;
+    const product = editorProduct();
+    const folder = folderOf('c78-root-volume', {
+      portsAttributes: {'3000': {label: 'App'}},
+      mounts: [
+        {
+          type: 'volume',
+          source: volume,
+          target: `/root/${product.serverDataFolderName}`,
+        },
+      ],
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      opened.push(name);
+      await reopenInContainer(name);
+      const first = (await devContainersOf(folder))[0] ?? '';
+      const listing = `stat -c '%n %Y' /root/${product.serverDataFolderName}/data/Machine/* | sort`;
+      const before = await inContainer(first, listing);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      await connectedToContainer(name, 300_000);
+      const second = (await devContainersOf(folder))[0] ?? '';
+      const after = await inContainer(second, listing);
+      deepStrictEqual(
+        [first !== second, before !== '', after],
+        [true, true, before],
+      );
+    } finally {
+      await removeContainers(folder);
+      await execFileAsync('docker', ['volume', 'rm', '--force', volume]);
+      await removeImagesOf('c78-root-volume');
+    }
+  });
 
   it('F-0503 AC-19 (s9): a source that answers 404 shows the generic dialog with Retry primary, no S157 notification, the container running and the URL in the log', async () => {
     await withFailingSource(async folder => {

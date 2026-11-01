@@ -54,7 +54,7 @@ F-0106.AC-26	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0106.AC-27	acceptance	
 F-0106.AC-28	deferred	containers release 1: later (Try a Sample, F-0808)
 F-0106.AC-29	core	core: the workspace wording of the Workspace Trust dialog
-F-0106.AC-30	todo	
+F-0106.AC-30	acceptance	
 F-0106.AC-31	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
 F-0106.AC-32	unit	
 F-0106.AC-33	unit	
@@ -226,7 +226,7 @@ F-0302.AC-29	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0302.AC-30	acceptance	
 F-0302.AC-31	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-32	deferred	containers release 1: later (repository configuration folders)
-F-0302.AC-33	todo	
+F-0302.AC-33	acceptance	
 F-0302.AC-34	acceptance	
 F-0302.AC-35	todo	
 F-0302.AC-36	deferred	containers release 1: later (repository configuration folders)
@@ -549,7 +549,7 @@ F-0414.AC-5	acceptance
 F-0414.AC-6	acceptance	
 F-0414.AC-7	acceptance	
 F-0414.AC-8	acceptance	
-F-0414.AC-9	todo	
+F-0414.AC-9	acceptance	
 F-0414.AC-10	acceptance	
 F-0414.AC-11	acceptance	
 F-0414.AC-12	acceptance	
@@ -903,7 +903,7 @@ F-0503.AC-29	acceptance
 F-0503.AC-30	acceptance	
 F-0503.AC-31	unit	
 F-0503.AC-32	unit	
-F-0503.AC-33	todo	
+F-0503.AC-33	acceptance	
 F-0503.AC-34	acceptance	
 F-0503.AC-35	unit	
 F-0503.AC-36	unit	
@@ -1141,7 +1141,7 @@ F-0805.AC-3	acceptance
 F-0805.AC-4	acceptance	
 F-0805.AC-5	acceptance	
 F-0805.AC-6	acceptance	
-F-0805.AC-7	todo	
+F-0805.AC-7	acceptance	
 F-0805.AC-8	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-9	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-10	deferred	containers release 1: later (New Dev Container, F-0806)

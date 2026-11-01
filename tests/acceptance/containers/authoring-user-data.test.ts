@@ -14,6 +14,7 @@ import {promisify} from 'node:util';
 import {activations, openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectedToContainer,
   inWindow,
   reloadWindow,
   variable,
@@ -31,6 +32,9 @@ import {
   notificationCentre,
   notificationLinks,
   pressEscape,
+  pressQuickPickOk,
+  pressQuickPickTitleButton,
+  toggleQuickPickRow,
   pressQuickPickRowButton,
   primaryButtonOf,
   quickPickFacts,
@@ -39,9 +43,16 @@ import {
   waitForDialog,
   waitForQuickPick,
   acceptQuickPick,
+  windowTitle,
 } from '../windows/renderer.ts';
 import {
   ALPINE_OPTION,
+  BOOLEAN_SCREEN,
+  FEATURES_PLACEHOLDER,
+  labId,
+  screenWith,
+  STRING_SCREENS,
+  takenThrough,
   chooseWorkspace,
   CONFIGURATION,
   closeScreen,
@@ -80,6 +91,8 @@ const TEMPLATE_PLACEHOLDER =
   'Select a container configuration template or enter a custom template id';
 
 /** The start of the notification for a configuration in the store of user data, to find it by. */
+const OPTIONAL_PLACEHOLDER = 'Include the following optional files/directories';
+
 const NOTICE_START =
   'There is a Dev Container configuration available for this repository.';
 
@@ -274,7 +287,7 @@ describe('the location pick and the store of user data (card containers-91)', fu
     });
   });
 
-  it('F-0801 AC-5, F-0302 AC-4, AC-5 (u2): Alpine to the user data folder writes the configuration and its marker into the folder’s slot and nothing into the workspace, opens it in a preview and offers the reopen notification with both links, without a reload; run again, the row says the configuration exists and goes straight to the templates', async () => {
+  it('F-0801 AC-5, F-0302 AC-4, AC-5, AC-33 (u2): Alpine to the user data folder writes the configuration and its marker into the folder’s slot and nothing into the workspace, opens it in a preview and offers the reopen notification with both links, without a reload; run again, the row says the configuration exists and goes straight to the templates', async () => {
     await withWindow('u2', {}, async (window, folder) => {
       const activated = activations(window);
       await writeToStore(window);
@@ -344,6 +357,60 @@ describe('the location pick and the store of user data (card containers-91)', fu
           ],
           TEMPLATE_PLACEHOLDER,
         ],
+      );
+    });
+  });
+
+  it('F-0805 AC-7 (u-optional): the user data branch with an optional file checked writes the base configuration and that file into the folder’s slot under our extension id, the marker with its comment and rootFolder beside it, and offers the reopen notification with its Dev Container configuration link', async () => {
+    await withWindow('c78-optional', {}, async (window, folder) => {
+      await startCommand(window);
+      await chooseUserData(window);
+      await typeInQuickPick(window, labId('options-lab'));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await acceptQuickPick(window);
+      await takenThrough(window, STRING_SCREENS);
+      await screenWith(window, BOOLEAN_SCREEN);
+      await pressQuickPickOk(window);
+      await screenWith(window, FEATURES_PLACEHOLDER);
+      await pressQuickPickTitleButton(window, 'Finish');
+      await screenWith(window, OPTIONAL_PLACEHOLDER);
+      await toggleQuickPickRow(window, 'alpha.txt');
+      await pressQuickPickOk(window);
+      const slot = path.join(storeRoot(), 'c78-optional');
+      await written(path.join(slot, CONFIGURATION));
+      await waitFor(
+        'the reopen notification',
+        async () =>
+          (await notificationCentre(window)).some(text =>
+            text.startsWith(NOTICE_START),
+          ),
+        30_000,
+      );
+      deepStrictEqual(
+        {
+          slot: readdirSync(slot, {recursive: true}).map(String).sort(),
+          marker: readFileSync(path.join(slot, MARKER), 'utf8'),
+          workspace: existing(folder, '.devcontainer', '.devcontainer.json'),
+          notice: (await notificationCentre(window)).filter(text =>
+            text.startsWith(NOTICE_START),
+          ),
+          links: await notificationLinks(window, NOTICE_START),
+        },
+        {
+          slot: ['.devcontainer', MARKER, CONFIGURATION, 'alpha.txt'].sort(),
+          marker: markerText(folder),
+          workspace: [],
+          notice: [
+            `${NOTICE_START} Reopen folder to develop in a container (learn more).`,
+          ],
+          links: [
+            {
+              text: 'Dev Container configuration',
+              href: 'command:remote-containers.openDevContainerFile',
+            },
+            {text: 'learn more', href: INTRODUCTION},
+          ],
+        },
       );
     });
   });
@@ -526,12 +593,16 @@ describe('the location pick and the store of user data (card containers-91)', fu
         await waitForPickAfterLocation(window);
         await chooseMini(window);
         await containerMade(folder);
+        await connectedToContainer(name);
         seen.push([
           dialog,
           placeholder,
           await labelOfContainer(folder, 'devcontainer.config_file'),
           existing(folder, '.devcontainer').length,
           slotNames().includes(name),
+          /^\[u8-[a-z-]+ \[Dev Container: .+\]\]$/.test(
+            await windowTitle(name),
+          ),
         ]);
       } finally {
         await closeWindow(name).catch(() => undefined);
@@ -551,12 +622,14 @@ describe('the location pick and the store of user data (card containers-91)', fu
         ),
         1,
         false,
+        true,
       ],
       [
         undefined,
         LOCATION.placeholder,
         path.join(storeRoot(), 'u8-user-data', CONFIGURATION),
         0,
+        true,
         true,
       ],
     ]);

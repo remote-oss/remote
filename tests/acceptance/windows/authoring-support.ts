@@ -204,7 +204,7 @@ export async function closeScreen(window: string): Promise<void> {
 }
 
 /** The id that names one of the run's own templates in its registry, which the wizard takes as a custom id. */
-function labId(name: string): string {
+export function labId(name: string): string {
   return `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/custom/${name}:1`;
 }
 
