@@ -72,6 +72,7 @@ import {
   RESOLVER_EDITOR_OPTIONS,
 } from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
+import {folderDialogOptions} from './open/folder-dialog.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
@@ -973,9 +974,7 @@ export async function activate(
         pickFolder: async start => {
           const [picked] =
             (await vscode.window.showOpenDialog({
-              canSelectFiles: false,
-              canSelectFolders: true,
-              canSelectMany: false,
+              ...folderDialogOptions(translate),
               defaultUri: vscode.Uri.file(start),
             })) ?? [];
           return picked === undefined
