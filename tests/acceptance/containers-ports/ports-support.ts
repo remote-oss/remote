@@ -265,6 +265,43 @@ export async function listeningPorts(containerId: string): Promise<string[]> {
 }
 
 /**
+ * The command line of the process lib-server's bootstrap started in container `containerId`, as its argument list,
+ * read from its command line file.
+ */
+async function serverArgumentsOf(containerId: string): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'sh',
+    '-c',
+    'grep -al -- --start-server /proc/[0-9]*/cmdline 2>/dev/null | head -n 1',
+  ]);
+  const file = stdout.trim();
+  if (file === '') {
+    throw new Error(`container ${containerId}: no server process`);
+  }
+  const {stdout: commandLine} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'cat',
+    file,
+  ]);
+  return commandLine.split('\0').filter(text => text !== '');
+}
+
+/**
+ * The TCP port the server process lib-server started in container `containerId` listens on; `undefined` when it was
+ * started on a socket.
+ */
+export async function serverPortOf(
+  containerId: string,
+): Promise<string | undefined> {
+  const options = await serverArgumentsOf(containerId);
+  const index = options.indexOf('--port');
+  return index === -1 ? undefined : options[index + 1];
+}
+
+/**
  * Runs `start`, which gives the way to end the listener, until `port` is among the container's listening ports,
  * starting it again when a start never ran. Throws when it never did.
  */
