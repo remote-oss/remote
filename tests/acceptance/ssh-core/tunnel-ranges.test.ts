@@ -204,6 +204,8 @@ describe('the local port range of a window (card coverage-79)', function () {
           () => recordLines('mitigationPick', name).length > 0,
           300_000,
         );
+        // Escape answered the pick: the record must not gain a dialog or a pick afterwards, as it would if they reopened.
+        await new Promise(resolve => setTimeout(resolve, 5000));
         const lines = recordLines(undefined, name);
         deepStrictEqual(
           {
