@@ -131,6 +131,8 @@ const MICROSOFT_HOSTS = [
 interface Manifest {
   [field: string]: unknown;
   name: string;
+  publisher: string;
+  version: string;
   displayName: string;
   description: string;
   license: string;
@@ -493,5 +495,66 @@ describe('the pack’s package (card pack-01)', () => {
       ),
       [],
     );
+  });
+
+  it('F-9001 AC-15 (version): the version is a release number a gallery lists, and the engine floor is a caret range of the editor floor', () => {
+    const manifest = manifestOf();
+    deepStrictEqual(
+      [
+        /^\d+\.\d+\.\d+$/.test(String(manifest.version)),
+        manifest.engines.vscode.startsWith('^'),
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-9002 AC-18 (license): the licence field is MIT and the package ships the licence text the gallery links', () => {
+    deepStrictEqual(
+      [
+        manifestOf().license,
+        textOf('LICENSE').includes('MIT License'),
+        manifestOf().bugs.url,
+      ],
+      ['MIT', true, 'https://github.com/remote-oss/remote/issues'],
+    );
+  });
+
+  it('F-9101 AC-11 (name, publisher): the pack’s id is remote-oss.vscode-remote-extensionpack', () => {
+    const manifest = manifestOf();
+    strictEqual(
+      `${String(manifest.publisher)}.${manifest.name}`,
+      'remote-oss.vscode-remote-extensionpack',
+    );
+  });
+
+  it('F-9101 AC-29 (extensionPack): every entry is a publisher.name id of the family, and none is listed twice', () => {
+    const entries = manifestOf().extensionPack;
+    deepStrictEqual(
+      [
+        entries.every(entry => /^remote-oss\.[a-z0-9-]+$/.test(entry)),
+        new Set(entries).size === entries.length,
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-9901 AC-3 (extensionPack): Remote - SSH brings Remote Explorer and the SSH configuration editor, and Dev Containers brings nothing, so the first release installs the pack plus four', () => {
+    const packOf = (folder: string): string[] =>
+      (
+        JSON.parse(
+          readFileSync(
+            path.join(PACKAGE_FOLDER, '..', folder, 'package.json'),
+            'utf8',
+          ),
+        ) as {extensionPack?: string[]}
+      ).extensionPack ?? [];
+    deepStrictEqual(
+      [packOf('remote-containers'), [...packOf('remote-ssh')].sort()],
+      [[], ['remote-oss.remote-explorer', 'remote-oss.remote-ssh-edit']],
+    );
+  });
+
+  it('F-9901 AC-9 (publisher): the publisher is remote-oss', () => {
+    strictEqual(manifestOf().publisher, 'remote-oss');
   });
 });
