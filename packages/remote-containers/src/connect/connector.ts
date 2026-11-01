@@ -147,6 +147,8 @@ export interface ContainerConnector extends Connector {
   failedContainer(): FailedContainer | undefined;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
+  /** The identity read from the configuration in the latest attempt, failed or not; none before a read. */
+  attemptIdentity(): WindowIdentity | undefined;
   /** The ports the connection the window holds declared; nothing before the first connect. */
   heldPorts(): DeclaredPorts | undefined;
   /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
@@ -443,6 +445,8 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
+  /** The identity the latest attempt read from the configuration, failed or not; nothing before a read. */
+  let attemptIdentity: WindowIdentity | undefined;
   /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
   let shutdownConnection: string | undefined;
   let checking = false;
@@ -980,6 +984,7 @@ export function containerConnectorOf(
   ): Promise<Connected | Failed> {
     const cancellation = controller.signal;
     failedContainer = undefined;
+    attemptIdentity = undefined;
     if (!(await dependencies.folderExists(folder.hostPath))) {
       logger.info(`the folder ${folder.hostPath} doesn't exist`);
       return containerSetupFailed();
@@ -992,6 +997,13 @@ export function containerConnectorOf(
       registerWithShutdown(folder, tools);
     }
     const read = await readWithinCap(payload, folder, tools);
+    if (read !== undefined) {
+      const readName = read.configuration.name;
+      attemptIdentity = {
+        name: typeof readName === 'string' ? readName : undefined,
+        context: folder.context,
+      };
+    }
     if (!(await trustedFolder(folder, cancellation, trustedAtStart))) {
       return trustDeclined();
     }
@@ -1285,6 +1297,7 @@ export function containerConnectorOf(
     },
     failedContainer: () => failedContainer,
     heldIdentity: () => held?.identity,
+    attemptIdentity: () => attemptIdentity,
     heldPorts: () => held?.ports,
     heldConnection: () =>
       held === undefined

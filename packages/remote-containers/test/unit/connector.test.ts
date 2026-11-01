@@ -620,6 +620,25 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(scene.connector.failedContainer(), undefined);
   });
 
+  it('F-0503 AC-15: a failure after the read keeps the identity the read gave, and a new attempt clears it before its read', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {name: 'Proj', image: 42},
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const readIdentity = scene.connector.attemptIdentity();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [readIdentity, scene.connector.attemptIdentity()],
+      [{name: 'Proj', context: undefined}, undefined],
+    );
+  });
+
   it('F-0409: an ordinary open hands C7 no rebuild', async () => {
     const scene = sceneOf();
     await connected(scene);
