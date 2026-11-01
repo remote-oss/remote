@@ -537,33 +537,76 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     }
   });
 
-  /** What window `name` showed while `connecting` ran: the Connecting toast, any quick pick and every dialog message. */
+  /**
+   * What window `name` showed while `connecting` ran: whether the Connecting toast showed in it or in a window of `also`,
+   * any quick pick, every dialog message, the titles and remote indicators seen, and whether the Restricted Mode item did.
+   */
   async function watchConnect(
     name: string,
     connecting: Promise<unknown>,
-  ): Promise<{toast: boolean; pick: boolean; dialogs: string[]}> {
-    const seen = {toast: false, pick: false, dialogs: [] as string[]};
+    also: string[] = [],
+  ): Promise<{
+    toast: boolean;
+    pick: boolean;
+    dialogs: string[];
+    titles: string[];
+    indicators: string[];
+    restricted: boolean;
+  }> {
+    const seen = {
+      toast: false,
+      pick: false,
+      dialogs: [] as string[],
+      titles: [] as string[],
+      indicators: [] as string[],
+      restricted: false,
+    };
     const state = {running: true};
     const ended = connecting.finally(() => {
       state.running = false;
     });
     ended.catch(() => undefined);
     while (state.running) {
-      const toast = await notificationProgress(
-        name,
-        'Connecting to Dev Container',
-      ).catch(() => undefined);
-      seen.toast ||= toast?.message === CONNECTING;
+      for (const window of [name, ...also]) {
+        const toast = await notificationProgress(
+          window,
+          'Connecting to Dev Container',
+        ).catch(() => undefined);
+        seen.toast ||= toast?.message === CONNECTING;
+      }
       seen.pick ||=
         (await quickPickOf(name).catch(() => undefined)) !== undefined;
       const dialog = await dialogOf(name).catch(() => undefined);
       if (dialog !== undefined) {
         seen.dialogs.push(dialog.message);
       }
+      const title = await windowTitle(name).catch(() => undefined);
+      if (title !== undefined) {
+        seen.titles.push(title);
+      }
+      const indicator = await statusBarText(name, 'status.host').catch(
+        () => undefined,
+      );
+      if (indicator !== undefined) {
+        seen.indicators.push(indicator);
+      }
+      seen.restricted ||= await hasStatusItem(
+        name,
+        'status.workspaceTrust',
+      ).catch(() => false);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     await ended;
     return seen;
+  }
+
+  /** The part of a {@link watchConnect} result that says how the connect went: the toast, any quick pick and the dialogs. */
+  function connectOutcomeOf(seen: {
+    toast: boolean;
+    pick: boolean;
+    dialogs: string[];
+  }) {
+    return {toast: seen.toast, pick: seen.pick, dialogs: seen.dialogs};
   }
 
   /** Trusts `folder` through a container window, waits until that window holds the trust, and closes it. */
@@ -619,7 +662,10 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       connectedToContainer('c69-accept'),
     );
     deepStrictEqual(
-      {seen, remoteName: (await windowState('c69-accept')).remoteName},
+      {
+        seen: connectOutcomeOf(seen),
+        remoteName: (await windowState('c69-accept')).remoteName,
+      },
       {
         seen: {toast: true, pick: false, dialogs: []},
         remoteName: 'dev-container',
@@ -668,44 +714,64 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(from);
   });
 
-  it('F-0106 AC-7a (c69-7a): Escape on core’s dialog shows S360 with S377 and one OK, and OK leaves the window on the new folder, local and restricted', async () => {
-    const folder = devContainerFolder('c69-escape', {name: 'C69 Escape'});
-    const from = await openFolderWindow(devContainerFolder('c69-escape-from'));
+  /** Declines core's dialog for a new folder with `decline`, presses OK, and gives what the window is after. */
+  async function declinedOpenOf(
+    key: string,
+    decline: (name: string) => Promise<void>,
+  ) {
+    const name = `c69-${key}`;
+    const folder = devContainerFolder(name, {name: `C69 ${key}`});
+    const from = await openFolderWindow(devContainerFolder(`${name}-from`));
     await openFolderFrom(from, folder);
-    await waitForDialog('c69-escape');
-    await pressEscape('c69-escape');
-    const declined = await waitForDialog('c69-escape');
-    const declinedText = await dialogText('c69-escape');
-    await answerDialog('c69-escape', 'OK');
+    await waitForDialog(name);
+    await decline(name);
+    const declined = await waitForDialog(name);
+    const declinedText = await dialogText(name);
+    await answerDialog(name, 'OK');
     await waitFor(
       'the window to be the local folder again',
-      async () => (await windowState('c69-escape')).remoteName === null,
+      async () => (await windowState(name)).remoteName === null,
       60_000,
     );
-    deepStrictEqual(
-      {
-        declined: [
-          declined.message,
-          declinedText?.includes(S377),
-          declined.buttons,
-        ],
-        folders: (await windowState('c69-escape')).folders.map(entry =>
-          decodeURIComponent(entry),
-        ),
-        remoteName: (await windowState('c69-escape')).remoteName,
-        trusted: await trustSettled('c69-escape', false),
-      },
-      {
-        declined: [S360, true, ['OK']],
-        folders: [`file://${folder}`],
-        remoteName: null,
-        trusted: false,
-      },
-    );
-    await closeWindow('c69-escape');
+    const observed = {
+      declined: [
+        declined.message,
+        declinedText?.includes(S377),
+        declined.buttons,
+      ],
+      folders: (await windowState(name)).folders.map(entry =>
+        decodeURIComponent(entry),
+      ),
+      remoteName: (await windowState(name)).remoteName,
+      trusted: await trustSettled(name, false),
+    };
+    await closeWindow(name);
+    return {observed, folder};
+  }
+
+  /** What {@link declinedOpenOf} gives for a decline of core's dialog, for the new folder `folder`. */
+  function declinedOpenExpected(folder: string) {
+    return {
+      declined: [S360, true, ['OK']],
+      folders: [`file://${folder}`],
+      remoteName: null,
+      trusted: false,
+    };
+  }
+
+  it('F-0106 AC-7a (c69-7a): Escape on core’s dialog shows S360 with S377 and one OK, and OK leaves the window on the new folder, local and restricted', async () => {
+    const {observed, folder} = await declinedOpenOf('escape', pressEscape);
+    deepStrictEqual(observed, declinedOpenExpected(folder));
   });
 
-  it('F-0106 AC-8a (c69-8a): opening the [Dev Container] recent entry from another window reattaches with no dialog and no local window', async () => {
+  it('F-0106 AC-7a (c69-7b): Cancel on core’s dialog shows S360 with S377 and one OK, and OK leaves the window on the new folder, local and restricted', async () => {
+    const {observed, folder} = await declinedOpenOf('cancel', name =>
+      answerDialog(name, 'Cancel'),
+    );
+    deepStrictEqual(observed, declinedOpenExpected(folder));
+  });
+
+  it('F-0106 AC-8a (c69-8a): opening the [Dev Container] recent entry from another window reattaches with no dialog, and the title and indicator never show a local or Restricted Mode window', async () => {
     const folder = devContainerFolder('c69-recent', {name: 'C69 Recent'});
     await closeWindow(await trustedContainerWindow(folder));
     const from = await openFolderWindow(devContainerFolder('c69-recent-from'));
@@ -722,18 +788,32 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     deepStrictEqual(
       {
         entry: entry?.label?.endsWith('[Dev Container]'),
-        seen: {pick: seen.pick, dialogs: seen.dialogs},
+        seen: {
+          pick: seen.pick,
+          dialogs: seen.dialogs,
+          restricted: seen.restricted,
+          localTitles: seen.titles.filter(
+            title =>
+              title.includes('c69-recent') && !title.includes('Dev Container'),
+          ),
+          localIndicators: seen.indicators.filter(
+            text =>
+              !text.startsWith('Opening Remote') &&
+              !text.startsWith('Dev Container'),
+          ),
+        },
         remoteName: (await windowState('c69-recent')).remoteName,
-        restrictedItem: await hasStatusItem(
-          'c69-recent',
-          'status.workspaceTrust',
-        ),
       },
       {
         entry: true,
-        seen: {pick: false, dialogs: []},
+        seen: {
+          pick: false,
+          dialogs: [],
+          restricted: false,
+          localTitles: [],
+          localIndicators: [],
+        },
         remoteName: 'dev-container',
-        restrictedItem: false,
       },
     );
     await closeWindow('c69-recent');
@@ -789,7 +869,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       );
       deepStrictEqual(
         {
-          reopened,
+          reopened: connectOutcomeOf(reopened),
           opened: {pick: opened.pick, dialogs: opened.dialogs},
           containers: (await devContainersOf(openFolder)).length,
         },

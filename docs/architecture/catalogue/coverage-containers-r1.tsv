@@ -54,7 +54,7 @@ F-0106.AC-26	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0106.AC-27	acceptance	
 F-0106.AC-28	deferred	containers release 1: later (Try a Sample, F-0808)
 F-0106.AC-29	core	core: the workspace wording of the Workspace Trust dialog
-F-0106.AC-30	acceptance	
+F-0106.AC-30	todo	
 F-0106.AC-31	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
 F-0106.AC-32	unit	
 F-0106.AC-33	unit	
