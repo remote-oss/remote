@@ -4,6 +4,7 @@ import {
   type DefaultReadEvents,
   READ_BOUND_MILLISECONDS,
   type ReadSignal,
+  SETTLE_MILLISECONDS,
   waitForDefaultRead,
 } from '../../src/forwarding/default-forwards-timing.ts';
 
@@ -35,23 +36,69 @@ function started(events: FakeEvents, clock: FakeClock) {
 }
 
 describe('the wait before the default forwards are read (card connect-99)', () => {
-  it('F-2507 BR-4: a change that reaches the setting ends the wait, and the other listeners and the timer are removed', async () => {
-    const events = new FakeEvents();
-    const clock = new FakeClock();
-    const outcome = started(events, clock);
+  /** Fires every setting listener, as a change reaching the setting does. */
+  function changed(events: FakeEvents): void {
     for (const listener of events.settingListeners) {
       listener();
     }
+  }
+
+  it('F-2507 BR-4: a change that reaches the setting ends the wait once the setting has stayed unchanged for the settle time, and the listeners and the timers are removed', async () => {
+    const events = new FakeEvents();
+    const clock = new FakeClock();
+    const outcome = started(events, clock);
+    changed(events);
+    clock.advance(SETTLE_MILLISECONDS - 1);
+    await Promise.resolve();
+    const early = outcome.signal;
+    clock.advance(1);
     await Promise.resolve();
     clock.advance(READ_BOUND_MILLISECONDS);
     await Promise.resolve();
     deepStrictEqual(
       [
+        early,
         outcome.signal,
         events.settingListeners.size,
         events.trustListeners.size,
       ],
-      ['configuration', 0, 0],
+      [undefined, 'configuration', 0, 0],
+    );
+  });
+
+  it('F-2507 BR-6: a second change within the settle time of the first (a folder layer after the Machine layer) restarts it, so the read comes the settle time after the last', async () => {
+    const events = new FakeEvents();
+    const clock = new FakeClock();
+    const outcome = started(events, clock);
+    changed(events);
+    clock.advance(300);
+    changed(events);
+    clock.advance(SETTLE_MILLISECONDS - 1);
+    await Promise.resolve();
+    const early = outcome.signal;
+    clock.advance(1);
+    await Promise.resolve();
+    deepStrictEqual([early, outcome.signal], [undefined, 'configuration']);
+  });
+
+  it('F-2507 BR-4: the bound caps the settle time: a change that comes late is read at the bound', async () => {
+    const events = new FakeEvents();
+    const clock = new FakeClock();
+    const outcome = started(events, clock);
+    clock.advance(READ_BOUND_MILLISECONDS - 500);
+    changed(events);
+    clock.advance(499);
+    await Promise.resolve();
+    const early = outcome.signal;
+    clock.advance(1);
+    await Promise.resolve();
+    deepStrictEqual([early, outcome.signal], [undefined, 'bound']);
+  });
+
+  it('F-2507 BR-4: the bound is 3 s and the settle time 1 s', () => {
+    deepStrictEqual(
+      [READ_BOUND_MILLISECONDS, SETTLE_MILLISECONDS],
+      [3000, 1000],
     );
   });
 
@@ -96,10 +143,10 @@ describe('the wait before the default forwards are read (card connect-99)', () =
 
   it('F-2507 BR-5, 7.E10: a change after the wait ended is not heard', async () => {
     const events = new FakeEvents();
-    const outcome = started(events, new FakeClock());
-    for (const listener of events.settingListeners) {
-      listener();
-    }
+    const clock = new FakeClock();
+    const outcome = started(events, clock);
+    changed(events);
+    clock.advance(SETTLE_MILLISECONDS);
     await Promise.resolve();
     deepStrictEqual(
       [outcome.signal, events.settingListeners.size],

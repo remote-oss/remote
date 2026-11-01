@@ -2,7 +2,7 @@
  * @fileoverview When the default forwards are read. The setting is read once per connect or reload, and later than
  * the connect's end: at that moment the window has the user value only, and the remote folder's `.vscode/settings.json`
  * and the remote Machine settings are in a moment after (measured: 164 and 501 ms on a fresh connect).
- * The read waits for the first signal that the settings changed or that the folder was trusted, or for a bound.
+ * The read waits until the settings have changed and stayed unchanged for a moment, or the folder was trusted, or a bound passed.
  */
 
 import type {Scheduler} from 'lib-helper';
@@ -18,23 +18,33 @@ export interface DefaultReadEvents {
 }
 
 /**
- * The longest the read waits for a signal. The window's settings arrive within about half a second of the connect's
- * end when there are any, and a change that never comes (the layers were there from the start, as after a reload) must
- * not hold the forwards back for more than BR-4's window of two to eight seconds after the resolve.
+ * The longest the read waits for a signal. It is BR-4's window: the forwards are opened about two to three seconds after
+ * the resolve on a reload. The window's settings arrive within about half a second of the connect's end when there are
+ * any, and a change that never comes (the layers were there from the start, as after a reload) must not hold the
+ * forwards back longer than this.
  */
-export const READ_BOUND_MILLISECONDS = 5_000;
+export const READ_BOUND_MILLISECONDS = 3_000;
+
+/**
+ * How long the setting must stay unchanged after a change before it is read. The folder's layer and the Machine
+ * layer arrive in no guaranteed order, and the most specific one wins (BR-6), so a read at the first change could
+ * miss the later layer. The bound still ends the wait.
+ */
+export const SETTLE_MILLISECONDS = 1_000;
 
 /** What ended the wait. */
 export type ReadSignal = 'trust' | 'configuration' | 'bound';
 
 /**
- * Resolves with the first of: the folder being trusted (only when it is not trusted yet), a change reaching the
- * setting, and the bound. The listeners and the timer are removed once one of them has fired.
+ * Resolves with the first of: the folder being trusted (only when it is not trusted yet), the setting staying
+ * unchanged for `settle` after a change reached it, and the bound. The listeners and the timers are removed once one
+ * of them has fired.
  */
 export function waitForDefaultRead(
   events: DefaultReadEvents,
   scheduler: Scheduler,
   bound = READ_BOUND_MILLISECONDS,
+  settle = SETTLE_MILLISECONDS,
 ): Promise<ReadSignal> {
   return new Promise(resolve => {
     const waits: Array<{dispose(): void}> = [];
@@ -61,11 +71,20 @@ export function waitForDefaultRead(
         }),
       );
     }
+    let cancelSettle: (() => void) | undefined;
     keep(
       events.onSettingChanged(() => {
-        fire('configuration');
+        cancelSettle?.();
+        cancelSettle = scheduler.setTimer(settle, () => {
+          fire('configuration');
+        });
       }),
     );
+    keep({
+      dispose: () => {
+        cancelSettle?.();
+      },
+    });
     const cancel = scheduler.setTimer(bound, () => {
       fire('bound');
     });
