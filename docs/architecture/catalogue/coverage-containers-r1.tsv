@@ -926,7 +926,7 @@ F-0503.AC-52	unit
 F-0503.AC-53	unit	
 F-0503.AC-54	unit	
 F-0504.AC-1	acceptance	
-F-0504.AC-2	todo	
+F-0504.AC-2	acceptance	
 F-0504.AC-3	unit	
 F-0504.AC-4	deferred	containers release 1: the full contribution set comes with later increments
 F-0504.AC-5	deferred	containers release 1: the full contribution set comes with later increments
@@ -952,7 +952,7 @@ F-0504.AC-24	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0504.AC-25	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0504.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0504.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0504.AC-28	todo	
+F-0504.AC-28	acceptance	
 F-0504.AC-29	unit	
 F-0504.AC-30	unit	
 F-0504.AC-31	unit	
