@@ -46,6 +46,7 @@ describe('string-tables', () => {
       displayName: 'Name',
     });
     write('package.nls.json', {description: 'Edits files'});
+    write('l10n/bundle.l10n.json', {Label: 'Label', Text: 'Text'});
     for (const locale of LOCALES) {
       write(`package.nls.${locale}.json`, {description: 'Bearbeitet Dateien'});
       write(`l10n/bundle.l10n.${locale}.json`, {
@@ -289,10 +290,12 @@ describe('string-tables', () => {
       ]);
     });
 
-    it('ignores the source of a package without a default bundle', () => {
+    it('reports a bundle folder without a default bundle, and reads no source against it', () => {
       remove('l10n/bundle.l10n.json');
       source('src/extension.ts', "l10n.t('Missing');\n");
-      deepStrictEqual(problems(), []);
+      deepStrictEqual(problems(), [
+        'packages/remote-x/l10n/bundle.l10n.json: missing',
+      ]);
     });
 
     it('passes a package with a default bundle and no src folder', () => {

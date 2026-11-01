@@ -24,7 +24,7 @@ Rules for every component:
 | `identifiers.command-registry` | Registers a package's commands from its table. Every command gets a handler, and each handler runs behind the R-46 out-of-context guard its spec chooses (silent, or the R-46 info line) | none (contributor) | every package with commands |
 | `identifiers.settings-reader` | Reads settings through the table with declared legacy pairs and their precedence (F-0102 BR-4) | none (contributor; F-0102 is area C) | containers, ssh, wsl, server |
 | `identifiers.context-keys` | Sets only the context keys the table declares as extension-set | none (contributor) | containers, ssh, wsl, explorer, server |
-| `identifiers.string-tables` | Key parity of `package.nls*.json` and `l10n/bundle.l10n.*.json` across the 14 locales, as a build check over each package's files. The bundles themselves belong to the package | none (contributor) | every package |
+| `identifiers.string-tables` | Key parity of `package.nls*.json` and `l10n/bundle.l10n.*.json` across the 14 locales, as a build check over each package's files. The locale tables are generated from the default tables and `translations/`; the default tables and the translations belong to the package | none (contributor) | every package |
 
 ### lib-standdown
 

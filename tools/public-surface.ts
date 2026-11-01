@@ -22,7 +22,7 @@ const PACKAGE_FILES =
   /^(README.*|CHANGELOG.*|package(\.nls.*)?\.json|language-configuration\.json)$/;
 
 /** The folders of a package whose files all ship. */
-const PACKAGE_FOLDERS = ['l10n', 'syntaxes'];
+const PACKAGE_FOLDERS = ['l10n', 'syntaxes', 'translations'];
 
 /** The fixtures of a package that ship with it (ADR-0008: the stripped identifier inventories of the fidelity tests). */
 const FIXTURE_FOLDER = path.join('test', 'fixtures');
