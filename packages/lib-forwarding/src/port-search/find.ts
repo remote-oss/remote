@@ -78,8 +78,8 @@ async function searchRange(
 }
 
 /**
- * Probes up to ten random candidates; the first refusal wins; a port that doesn't answer in time ends the search;
- * open and error continue.
+ * Probes up to ten random candidates; the first refusal wins; open, error and a port that doesn't answer in time
+ * are each one more candidate that is not free, so the search goes on to the next one.
  */
 async function searchRandom(
   prober: PortProber,
@@ -94,9 +94,6 @@ async function searchRandom(
     const answer = await prober.probe(candidate);
     if (answer === 'refused') {
       return {port: candidate};
-    }
-    if (answer === 'timedOut') {
-      return {failure: 'noFreePort'};
     }
   }
   return {failure: 'noFreePort'};

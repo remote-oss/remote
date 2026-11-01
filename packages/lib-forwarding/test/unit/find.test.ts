@@ -83,6 +83,18 @@ describe('findFreePort (card forwarding-01 table)', () => {
     deepStrictEqual([outcome, prober.probed], [{port: 50001}, [50000, 50001]]);
   });
 
+  it('no range, random sequence [52000 timedOut, 52001 refused] -> port 52001: a stalling candidate is one more port that is not free', async () => {
+    const prober = new FakeProber({52000: 'timedOut', 52001: 'refused'});
+    const candidates = [52000, 52001];
+    const options: FindOptions = {
+      timeBudgetMilliseconds: 3000,
+      now: () => 0,
+      randomPort: () => candidates.shift() ?? 59999,
+    };
+    const outcome = await findFreePort(prober, undefined, options);
+    deepStrictEqual([outcome, prober.probed], [{port: 52001}, [52000, 52001]]);
+  });
+
   it('no range, ten opens -> noFreePort; exactly ten probes', async () => {
     const prober = new FakeProber({});
     const options: FindOptions = {
