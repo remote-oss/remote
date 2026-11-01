@@ -42,6 +42,9 @@ import {
 } from '../windows/sampling.ts';
 
 const CONNECTING = 'Connecting to Dev Container (show log)';
+
+/** How long a progress toast that has been closed may stay on screen. */
+const TOAST_LEAVES_MILLISECONDS = 1000;
 const LOG_LINK = 'command:remote-containers.revealLogTerminal';
 
 /** The strings F-0408 says never reach the user (BR-4, AC-12). */
@@ -314,7 +317,18 @@ describe('F-0408 the connect progress (card containers-53)', function () {
       await startInWindow(name, 'remote-containers.reopenInContainer');
       const dialog = await waitForDialog(name, 300_000);
       const samples = await sampler.stop();
-      const atDialog = await toastDetails(name);
+      // The progress closes before the dialog is asked for, and the editor takes the toast away a moment later: a connect
+      // that fails soon after the half second leaves it up for some tens of milliseconds.
+      let atDialog = await toastDetails(name);
+      for (
+        let waited = 0;
+        waited < TOAST_LEAVES_MILLISECONDS &&
+        atDialog.some(toast => toast.message.startsWith('Connecting'));
+        waited += 50
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        atDialog = await toastDetails(name);
+      }
       const centre = await notificationCentre(name);
       await answerDialog(name, 'Cancel').catch(() => undefined);
       deepStrictEqual(

@@ -179,6 +179,14 @@ async function printed(
   return values;
 }
 
+/** Runs the task `probe` of window `name` and gives the text it printed after `task:`. */
+async function taskOutput(name: string): Promise<string> {
+  void inWindow(name, 'workbench.action.tasks.runTask', 'probe').catch(
+    () => undefined,
+  );
+  return resultAfter(name, 'task');
+}
+
 describe('F-0416 the remote environment (card containers-42, group B)', function () {
   this.timeout(900_000);
 
@@ -547,6 +555,129 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
         [['profile'], [''], containerId, imagesBefore],
       );
       await closeWindow(name);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+  it('F-0416 AC-27 (c74-task-probe): a shell task prints neither probe variable for none, only the interactive one for interactiveShell, only the login one for loginShell, and both by default', async () => {
+    const cases: Array<[string | undefined, string]> = [
+      ['none', '|'],
+      ['interactiveShell', '|bashrc'],
+      ['loginShell', 'profile|'],
+      [undefined, 'profile|bashrc'],
+    ];
+    const seen: Array<[string, string]> = [];
+    for (const [mode] of cases) {
+      const folder = envFolder(
+        `c74-task-${mode ?? 'default'}`,
+        profileLines(
+          'export PROBE_PROFILE=profile\\n',
+          'export PROBE_BASHRC=bashrc\\n',
+        ),
+        mode === undefined ? {} : {userEnvProbe: mode},
+        `printf 'task:%s|%s\\n' "$PROBE_PROFILE" "$PROBE_BASHRC"`,
+      );
+      try {
+        const name = await reopened(folder);
+        seen.push([mode ?? 'default', await taskOutput(name)]);
+        await closeWindow(name);
+      } finally {
+        await cleanUp(folder);
+      }
+    }
+    deepStrictEqual(
+      seen,
+      cases.map(([mode, printedText]) => [mode ?? 'default', printedText]),
+    );
+  });
+
+  it('F-0416 AC-42 (c74-task-remote-env): remoteEnv wins over the probe for a variable both set, and a PATH built from the container’s own has the container’s PATH and the extra folder but not the login file’s', async () => {
+    const folder = envFolder(
+      'c74-task-remote',
+      profileLines(
+        'export REMOTE_WINS=probe\\nexport PATH=/profile-bin:$PATH\\n',
+      ),
+      {
+        remoteEnv: {
+          REMOTE_WINS: 'remote',
+          PATH: '${containerEnv:PATH}:/remote-extra',
+        },
+      },
+      `printf 'task:%s|%s\\n' "$REMOTE_WINS" "$PATH"`,
+    );
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const containerPath = await execEnvOf(containerId, 'PATH');
+      const [wins = '', taskPath = ''] = (await taskOutput(name)).split('|');
+      await closeWindow(name);
+      deepStrictEqual(
+        [
+          wins,
+          taskPath.includes(containerPath),
+          taskPath.endsWith(':/remote-extra'),
+          taskPath.includes('/profile-bin'),
+        ],
+        ['remote', true, true, false],
+      );
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0416 AC-44 (c74-null-remote-env): a remoteEnv null unsets an image variable in a task and in the terminal, and a plain docker exec still has it', async () => {
+    const folder = envFolder(
+      'c74-null-env',
+      'ENV NULL_VAR=x\n',
+      {remoteEnv: {NULL_VAR: null}},
+      `printf 'task:%s\\n' "\${NULL_VAR-unset}"`,
+    );
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const task = await taskOutput(name);
+      await inWindow(name, 'workbench.action.terminal.new');
+      await typeInTerminal(name, `printf 'term:%s\\n' "\${NULL_VAR-unset}"\n`);
+      const terminal = await resultAfter(name, 'term');
+      const plain = await execEnvOf(containerId, 'NULL_VAR');
+      await closeWindow(name);
+      deepStrictEqual([task, terminal, plain], ['unset', 'unset', 'x']);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0416 AC-47 (c74-missing-shell): a remoteUser whose passwd shell is not in the image connects with no dialog, and opening a terminal shows the editor’s message about the missing shell', async () => {
+    const folder = envFolder(
+      'c74-missing-shell',
+      'RUN adduser -D -s /bin/zsh zshuser\n',
+      {remoteUser: 'zshuser'},
+    );
+    const said =
+      'The terminal process failed to launch: Path to shell executable "/bin/zsh" does not exist.';
+    try {
+      const name = await reopened(folder);
+      const atConnect = {
+        dialog: await dialogOf(name),
+        notices: await notifications(name),
+      };
+      await inWindow(name, 'workbench.action.terminal.new');
+      await waitFor(
+        'the notice about the missing shell',
+        async () => (await notifications(name)).includes(said),
+        60_000,
+      );
+      const state = {
+        atConnect,
+        dialog: await dialogOf(name),
+        notices: await notifications(name),
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        atConnect: {dialog: undefined, notices: []},
+        dialog: undefined,
+        notices: [said],
+      });
     } finally {
       await cleanUp(folder);
     }
