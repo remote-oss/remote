@@ -68,12 +68,10 @@ function withMerged(extensions: string[]): Scene['configuration'] {
 }
 
 describe('the container connector: the connect (card containers-08)', () => {
-  it('contracts §2 step 1: a malformed payload, a legacy one and an outer hop fail at once, with no engine call', async () => {
+  it('contracts §2 step 1: a malformed payload and an outer hop fail at once, with no engine call', async () => {
     const scene = sceneOf();
-    const legacy = Buffer.from('/work/proj').toString('hex');
     const results = [
       await scene.connector.connect(inputOf('zz')),
-      await scene.connector.connect(inputOf(legacy)),
       await scene.connector.connect({
         ...inputOf(PAYLOAD),
         target: {
@@ -88,7 +86,71 @@ describe('the container connector: the connect (card containers-08)', () => {
     ];
     deepStrictEqual(
       [results.map(failedKind), scene.engineCalls, scene.engineFiles],
-      [['malformedAuthority', 'malformedAuthority', 'remoteEngine'], [], []],
+      [['malformedAuthority', 'remoteEngine'], [], []],
+    );
+  });
+
+  const LEGACY = Buffer.from('/work/proj').toString('hex');
+
+  it('F-0501 AC-7: a legacy host-path payload with one configuration connects as the folder target a Reopen carries, with that configuration', async () => {
+    const scene = sceneOf();
+    scene.candidates = [{file: '/work/proj/.devcontainer/devcontainer.json'}];
+    const result = await scene.connector.connect(inputOf(LEGACY));
+    deepStrictEqual(
+      [
+        'connectionToken' in result,
+        scene.prepared.map(request => [request.folder, request.configFile]),
+      ],
+      [true, [['/work/proj', '/work/proj/.devcontainer/devcontainer.json']]],
+    );
+  });
+
+  it('F-0501 AC-7: a legacy payload whose folder has several configurations takes the first and logs the choice', async () => {
+    const scene = sceneOf();
+    scene.candidates = [
+      {file: '/work/proj/.devcontainer.json'},
+      {file: '/work/proj/.devcontainer/devcontainer.json'},
+    ];
+    await scene.connector.connect(inputOf(LEGACY));
+    deepStrictEqual(
+      [
+        scene.prepared.map(request => request.configFile),
+        messages(scene).filter(line => line.includes('names no configuration')),
+      ],
+      [
+        ['/work/proj/.devcontainer.json'],
+        [
+          "the stored folder's entry names no configuration; using /work/proj/.devcontainer.json",
+        ],
+      ],
+    );
+  });
+
+  it('F-0501 AC-7: a legacy payload whose folder has no configuration is the setup failure, logged, with nothing prepared', async () => {
+    const scene = sceneOf();
+    const result = await scene.connector.connect(inputOf(LEGACY));
+    deepStrictEqual(
+      [
+        failedKind(result),
+        scene.prepared.length,
+        messages(scene).filter(line => line.includes('no dev container')),
+      ],
+      [
+        'containerSetupFailed',
+        0,
+        ['the folder /work/proj has no dev container configuration'],
+      ],
+    );
+  });
+
+  it('F-0501 AC-7: a legacy payload whose folder is gone is the setup failure before any discovery', async () => {
+    const scene = sceneOf();
+    scene.folderExists = false;
+    scene.candidates = [{file: '/work/proj/.devcontainer.json'}];
+    const result = await scene.connector.connect(inputOf(LEGACY));
+    deepStrictEqual(
+      [failedKind(result), scene.prepared.length],
+      ['containerSetupFailed', 0],
     );
   });
 
@@ -2230,6 +2292,20 @@ describe('the container connector: the canonical path (card containers-22)', () 
           'the configuration of /work/proj could not be read: configurationFailed: x',
         ],
       ],
+    );
+  });
+
+  it('F-0501 AC-7: the canonical path of a legacy authority reads the first configuration of its folder; a folder with none gives nothing', async () => {
+    const legacy = `dev-container+${Buffer.from('/work/proj').toString('hex')}`;
+    const withConfig = sceneOf();
+    withConfig.candidates = [{file: '/work/proj/.devcontainer.json'}];
+    const without = sceneOf();
+    deepStrictEqual(
+      [
+        await pathsOf(withConfig, ['/workspaces/proj'], legacy),
+        await pathsOf(without, ['/workspaces/proj'], legacy),
+      ],
+      [['/work/proj'], [undefined]],
     );
   });
 

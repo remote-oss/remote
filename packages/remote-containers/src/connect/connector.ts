@@ -17,7 +17,9 @@ import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
 import {
   type DevContainerFolder,
+  type DevContainerTarget,
   devContainerTargetOf,
+  folderTargetOf,
 } from '../authority/payload.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
@@ -166,6 +168,10 @@ export interface ContainerConnector extends Connector {
 export interface ContainerConnectorDependencies {
   /** Whether a folder exists on this machine. */
   folderExists(folder: string): Promise<boolean>;
+  /** The configuration files of a folder, in the order of the picker. */
+  discoverConfigurations(
+    folder: string,
+  ): Promise<ReadonlyArray<{file: string}>>;
   /** The engine for the program a connect will spawn. */
   engineFor(file: string): EngineHost;
   /** The CLI bridge for the environment its processes get. */
@@ -848,6 +854,37 @@ export function containerConnectorOf(
     });
   }
 
+  /**
+   * The folder a decoded payload names: itself for a folder target, and for the legacy host path the target that a
+   * fresh Reopen of the folder would carry (the first configuration, since a resolve shows no picker). Nothing when the
+   * folder doesn't exist or has no configuration.
+   */
+  async function folderOf(
+    target: DevContainerTarget,
+  ): Promise<DevContainerFolder | undefined> {
+    if (target.kind === 'folder') {
+      return target;
+    }
+    if (!(await dependencies.folderExists(target.hostPath))) {
+      logger.info(`the folder ${target.hostPath} doesn't exist`);
+      return undefined;
+    }
+    const candidates = await dependencies.discoverConfigurations(
+      target.hostPath,
+    );
+    const folder = folderTargetOf(target, candidates);
+    if (folder === undefined) {
+      logger.info(
+        `the folder ${target.hostPath} has no dev container configuration`,
+      );
+    } else if (candidates.length > 1) {
+      logger.info(
+        `the stored folder's entry names no configuration; using ${folder.configFile.path}`,
+      );
+    }
+    return folder;
+  }
+
   /** The local path of `path` in the window of `authority`, which core keys the window's trust on. */
   async function canonicalPathOf(
     authority: string,
@@ -857,8 +894,13 @@ export function containerConnectorOf(
       return undefined;
     }
     const payload = authority.slice(AUTHORITY_PREFIX.length);
-    const decoded = devContainerTargetOf(payload);
-    if ('malformed' in decoded || decoded.kind === 'legacy') {
+    const target = devContainerTargetOf(payload);
+    if ('malformed' in target) {
+      return undefined;
+    }
+    // A folder target is read at once: the timer of its read starts in this tick.
+    const decoded = target.kind === 'folder' ? target : await folderOf(target);
+    if (decoded === undefined) {
       return undefined;
     }
     const connection = held?.payload === payload ? held : undefined;
@@ -1206,9 +1248,13 @@ export function containerConnectorOf(
         if (target.outer !== undefined) {
           return remoteEngine();
         }
-        const decoded = devContainerTargetOf(target.payload);
-        if ('malformed' in decoded || decoded.kind === 'legacy') {
+        const stored = devContainerTargetOf(target.payload);
+        if ('malformed' in stored) {
           return malformedAuthority();
+        }
+        const decoded = await folderOf(stored);
+        if (decoded === undefined) {
+          return containerSetupFailed();
         }
         const result = await connectFresh(
           target.payload,
