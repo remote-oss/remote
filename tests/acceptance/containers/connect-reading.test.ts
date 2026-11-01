@@ -40,6 +40,9 @@ const CONNECTING = 'Connecting to Dev Container (show log)';
 const LOG_LINK = 'command:remote-containers.revealLogTerminal';
 const DISCOVERY = 'Folder contains a Dev Container configuration file.';
 
+/** What athena ruled (#1204) for the spec's 1 s of a connect to a running container and of its S087. */
+const TOLERANCE_MILLISECONDS = 1500;
+
 /** The pause between two readings of the rows that time the progress. */
 const FAST_SAMPLE_MILLISECONDS = 25;
 
@@ -86,7 +89,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     }
   });
 
-  it('F-0408 AC-14 (c68-running-reuse): reopening a folder whose container runs connects with no Starting container and no Starting VS Code Server in the log, and S087 is on screen for less than a second (the connect time of under a second is not asserted: it measures 0.87 to 1.05 s)', async () => {
+  it('F-0408 AC-14 (ruling-1557-tolerance): reopening a folder whose container runs connects, by the log’s Resolving Remote, and shows S087, each within 1.5 s (athena’s ruling on #1204 for the spec’s 1 s), with no Starting container and no Starting VS Code Server in the log', async () => {
     const folder = devContainerFolder('c68-running', {
       name: 'Running Reuse',
       shutdownAction: 'none',
@@ -113,6 +116,14 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
             (shown[0]?.takenAt ?? 0) +
             FAST_SAMPLE_MILLISECONDS;
       const lines = containersLogSince(mark);
+      const connectMilliseconds = Number(
+        lines
+          .map(line => /^Resolving Remote: (\d+) ms$/.exec(line)?.[1])
+          .find(each => each !== undefined) ?? Infinity,
+      );
+      console.log(
+        `F-0408 AC-14: connect ${String(connectMilliseconds)} ms, S087 on screen ${String(onScreen)} ms`,
+      );
       deepStrictEqual(
         {
           already: lines.some(line => line.endsWith('was already running')),
@@ -121,12 +132,14 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
               line === 'Starting container' ||
               line === 'Starting VS Code Server',
           ),
-          underOneSecond: onScreen < 1000,
+          connectWithin: connectMilliseconds < TOLERANCE_MILLISECONDS,
+          shownWithin: onScreen < TOLERANCE_MILLISECONDS,
         },
         {
           already: true,
           steps: [],
-          underOneSecond: true,
+          connectWithin: true,
+          shownWithin: true,
         },
       );
       await closeWindow(again);
