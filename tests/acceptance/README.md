@@ -111,6 +111,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
+- `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
+
 - `no-proposals`: the same without the proposed API.
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.

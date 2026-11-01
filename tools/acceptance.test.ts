@@ -417,6 +417,7 @@ const LAUNCH_ORDER = [
   'preconnect',
   'config-files',
   'default-ports',
+  'ssh-core',
   'no-proposals',
   'explorer',
   'explorer-alone',
