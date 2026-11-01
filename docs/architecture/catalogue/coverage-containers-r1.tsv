@@ -280,7 +280,7 @@ F-0402.AC-14	unit
 F-0402.AC-15	deferred	containers 0.4: workspace files and multi-root windows later
 F-0402.AC-16	deferred	containers 0.4: Reopen from a Remote-SSH window later
 F-0403.AC-1	acceptance	
-F-0403.AC-2	todo	
+F-0403.AC-2	acceptance	
 F-0403.AC-3	core	core: the folder dialog's typing, descending, .. and confirming are core's file dialog
 F-0403.AC-4	deferred	containers 0.4: C12 attach later
 F-0403.AC-5	deferred	containers release 1: increment 2 (authoring)
