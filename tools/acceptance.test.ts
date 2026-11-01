@@ -1298,19 +1298,21 @@ describe('acceptance', () => {
             ],
             client: 'vscode',
           })),
-          ...[
-            'genuine-containers',
-            'genuine-containers-accept-a',
-            'genuine-containers-accept-b',
-          ].map(label => ({
-            folder: path.join('/run', `extensions-${label}`),
-            files: [
-              '/dist/remote-ssh.vsix',
-              '/run/window-agent.vsix',
-              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
-            ],
-            client: 'vscode',
-          })),
+          ...['genuine-containers', 'genuine-accept-a', 'genuine-accept-b'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(
+                  workspace.root,
+                  'dist',
+                  'remote-containers-0.1.0.vsix',
+                ),
+              ],
+              client: 'vscode',
+            }),
+          ),
           {
             folder: path.join('/run', 'extensions-containers-view'),
             files: [
@@ -3866,8 +3868,8 @@ describe('acceptance', () => {
         [
           'ssh-no-proposals',
           'genuine-containers',
-          'genuine-containers-accept-a',
-          'genuine-containers-accept-b',
+          'genuine-accept-a',
+          'genuine-accept-b',
           'containers-view',
         ],
       );
@@ -3994,8 +3996,8 @@ describe('acceptance', () => {
             'genuine',
             'ssh-no-proposals',
             'genuine-containers',
-            'genuine-containers-accept-a',
-            'genuine-containers-accept-b',
+            'genuine-accept-a',
+            'genuine-accept-b',
           ],
           ['containers'],
         ],

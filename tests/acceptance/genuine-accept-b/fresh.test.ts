@@ -27,7 +27,7 @@ async function requireServerInVolume(): Promise<void> {
   const commit = editorProduct().commit;
   if (!(await volumeCommits()).some(each => path.basename(each) === commit)) {
     throw new Error(
-      'the vscode volume holds no server of the client: run genuine-containers-accept-a first, in the same run',
+      'the vscode volume holds no server of the client: run genuine-accept-a first, in the same run',
     );
   }
 }

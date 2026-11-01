@@ -2,7 +2,7 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node", "mocha"],
-    "tsBuildInfoFile": "${configDir}/.tsc/genuine-containers-accept-a.tsbuildinfo"
+    "tsBuildInfoFile": "${configDir}/.tsc/genuine-accept-a.tsbuildinfo"
   },
   "include": ["${configDir}"],
   "references": [

@@ -141,8 +141,8 @@ function labelsFromExplorer(): string[] {
     'genuine',
     'ssh-no-proposals',
     'genuine-containers',
-    'genuine-containers-accept-a',
-    'genuine-containers-accept-b',
+    'genuine-accept-a',
+    'genuine-accept-b',
     'containers-view',
   ];
 }
@@ -441,16 +441,9 @@ describe('the launches of the VSCodium run', () => {
         ]),
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
-        ...[
-          'genuine-containers',
-          'genuine-containers-accept-a',
-          'genuine-containers-accept-b',
-        ].map(label => [
-          label,
-          ['remote-oss.remote-containers'],
-          true,
-          undefined,
-        ]),
+        ...['genuine-containers', 'genuine-accept-a', 'genuine-accept-b'].map(
+          label => [label, ['remote-oss.remote-containers'], true, undefined],
+        ),
         ['containers-view', ['remote-oss.remote-containers'], true, undefined],
       ],
     );
@@ -627,8 +620,8 @@ describe('the launches of the VSCodium run', () => {
         'extensionpack-lp-de',
         'extensionpack-lp-hu',
         'genuine-containers',
-        'genuine-containers-accept-a',
-        'genuine-containers-accept-b',
+        'genuine-accept-a',
+        'genuine-accept-b',
         'containers-view',
       ],
     );
@@ -784,8 +777,8 @@ describe('the launches of the VSCodium run', () => {
         'genuine',
         'ssh-no-proposals',
         'genuine-containers',
-        'genuine-containers-accept-a',
-        'genuine-containers-accept-b',
+        'genuine-accept-a',
+        'genuine-accept-b',
       ],
     );
   });
