@@ -4,6 +4,7 @@
  * loop that answer at once.
  */
 
+import type {DefaultReadEvents} from '../../src/forwarding/default-forwards-timing.ts';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -28,6 +29,13 @@ import type {ConnectSurfaces} from '../../src/connect-ports.ts';
 import type {ServerStepDependencies} from '../../src/pipeline/server-steps.ts';
 import type {ConnectionLease} from '../../src/pipeline/steps.ts';
 import {SILENT_PROGRESS, SILENT_PROMPTS} from './pipeline.fixture.ts';
+
+/** Events of a trusted window that never change a setting. */
+export const QUIET_READ_EVENTS: DefaultReadEvents = {
+  isTrusted: () => true,
+  onTrustGranted: () => ({dispose: () => undefined}),
+  onSettingChanged: () => ({dispose: () => undefined}),
+};
 
 /** A product whose server is `fixture-server` at commit `abc123`. */
 export const PROFILE: ProductProfile = {
@@ -238,5 +246,6 @@ export function surfacesOf(
     linkTerminals: {runProgram: () => Promise.resolve()},
     applyTerminalEnvironment: () => undefined,
     tunnels: {openTunnel: () => Promise.resolve({})},
+    defaultReadEvents: QUIET_READ_EVENTS,
   };
 }

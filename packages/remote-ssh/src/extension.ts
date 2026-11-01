@@ -456,6 +456,19 @@ async function registerConnectOf(
       ),
       // The tunnel service is a proposed API the manifest enables; a window without it logs the failure of each forward.
       tunnels: vscode.workspace,
+      defaultReadEvents: {
+        isTrusted: () => vscode.workspace.isTrusted,
+        onTrustGranted: listener =>
+          vscode.workspace.onDidGrantWorkspaceTrust(() => {
+            listener();
+          }),
+        onSettingChanged: listener =>
+          vscode.workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration(settings.defaultForwardedPorts.id)) {
+              listener();
+            }
+          }),
+      },
     },
   );
   const machine = nodeMachineOf(

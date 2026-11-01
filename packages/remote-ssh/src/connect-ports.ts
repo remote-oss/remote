@@ -5,6 +5,10 @@
  */
 
 import type {TunnelOpener} from './forwarding/default-forwards.ts';
+import {
+  type DefaultReadEvents,
+  waitForDefaultRead,
+} from './forwarding/default-forwards-timing.ts';
 import type {
   DecodedTarget,
   FailurePresenter,
@@ -152,6 +156,8 @@ export interface ConnectSurfaces {
   ) => void;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
+  /** The editor's events that tell the default forwards' read that the window has its remote settings. */
+  defaultReadEvents: DefaultReadEvents;
 }
 
 /** Where the extension runs and what it may use there. */
@@ -301,6 +307,8 @@ export function wiringPortsOf(
       defaultForwards: () => defaultForwardsOf(settings),
     },
     tunnels: surfaces.tunnels,
+    defaultRead: () =>
+      waitForDefaultRead(surfaces.defaultReadEvents, machine.scheduler),
     terms: {
       settings: () => termsSettingsOf(settings),
       pickPlatform: surfaces.pickPlatform,

@@ -9,6 +9,7 @@ import {
   applyDefaults as applyDefaultForwards,
   type TunnelOpener,
 } from '../forwarding/default-forwards.ts';
+import type {ReadSignal} from '../forwarding/default-forwards-timing.ts';
 import type {FailurePresenter} from 'lib-authority';
 import {environmentTunnels, type LocalPort} from 'lib-forwarding';
 import type {Scheduler} from 'lib-helper';
@@ -142,6 +143,8 @@ export interface WiringPorts {
   settings: WiringSettings;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
+  /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
+  defaultRead(): Promise<ReadSignal>;
   terms: TermsStepDependencies;
   /** The client step's dependencies, apart from this connect's state and what the settings give. */
   locate: Omit<
@@ -570,11 +573,14 @@ export function stepsOf(
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,
     rememberPlatform: terms.rememberPlatform,
-    applyDefaults: () =>
-      applyDefaultForwards(
+    applyDefaults: async () => {
+      const signal = await ports.defaultRead();
+      ports.logger.info(`the default forwards are read after ${signal}`);
+      await applyDefaultForwards(
         ports.settings.defaultForwards(),
         ports.tunnels,
         ports.logger,
-      ),
+      );
+    },
   };
 }

@@ -242,9 +242,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
     }
   });
 
-  // Skipped: the extension forwards the entries of the user value and ignores the remote folder's .vscode/settings.json:
-  // with the user value 8647 and the folder's 8648, it forwards 8647 and never 8648; posted on #1603.
-  it.skip('F-2507 AC-11 (c83-folder-settings): a value in the remote folder’s .vscode/settings.json wins over the user value, and only its entry is forwarded', async () => {
+  it('F-2507 AC-11 (c83-folder-settings): a value in the remote folder’s .vscode/settings.json wins over the user value, and only its entry is forwarded', async () => {
     await listenOnHost(8647, 'c83-8647');
     await listenOnHost(8648, 'c83-8648');
     await userSettings({
@@ -274,9 +272,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
     }
   });
 
-  // Skipped: the extension forwards the entries of the user value and ignores the remote machine settings: with the user
-  // value 8649 and the machine's 8650, it forwards 8649 and never 8650; posted on #1603.
-  it.skip('F-2507 AC-12 (c83-machine-settings): a value in the remote machine settings wins over the user value, and only its entry is forwarded', async () => {
+  it('F-2507 AC-12 (c83-machine-settings): a value in the remote machine settings wins over the user value, and only its entry is forwarded', async () => {
     const machine = `${DATA_FOLDER}/data/Machine/settings.json`;
     await listenOnHost(8649, 'c83-8649');
     await listenOnHost(8650, 'c83-8650');
@@ -315,8 +311,8 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
     }
   });
 
-  // Skipped: the new window's forward is reported on the same local port as the first window's (18652 for both), where the
-  // criterion has it on another one (18653); posted on #1603.
+  // Skipped: the editor's shared tunnel service hands a second window of the host the first window's tunnel for the same
+  // remote port (18652 for both), which dies with the first window; ruled on #1626 (connect-98): AC-29 stays todo.
   it.skip('F-2507 AC-29 (c83-new-window): New Window on Active Host forwards the same entry to another local port in the new window, and both work', async () => {
     await listenOnHost(8652, 'c83-8652');
     await userSettings({

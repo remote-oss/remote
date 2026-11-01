@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {QUIET_READ_EVENTS} from './server-steps.fixture.ts';
 import type {Failed} from 'lib-authority';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -122,6 +123,7 @@ function surfacesWith(
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
     applyTerminalEnvironment: () => undefined,
     tunnels: {openTunnel: () => Promise.resolve({})},
+    defaultReadEvents: QUIET_READ_EVENTS,
   };
   return {surfaces: editorSurfacesOf(adapters, operations, context), calls};
 }
