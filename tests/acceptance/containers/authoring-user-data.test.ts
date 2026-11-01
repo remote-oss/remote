@@ -3,6 +3,7 @@ import {execFile} from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
