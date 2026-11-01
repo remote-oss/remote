@@ -245,6 +245,28 @@ describe('the download host', function () {
     strictEqual(received.body.equals(archive), true);
   });
 
+  it('tooling-35: under /machine/, a platform of another architecture gets the run’s archive of its system, and a system the run has none of, or no platform, gives 404', async () => {
+    const answers = await Promise.all(
+      [
+        '/machine/linux-arm64/abc',
+        '/machine/linux-armhf/abc',
+        '/machine/commit:abc/server-linux-arm64/stable',
+        '/machine/alpine-arm64/abc',
+        '/machine/darwin-x64/abc',
+        '/machine/size/check',
+      ].map(async pathName => {
+        const received = await get('http', host.httpPort, pathName);
+        if (received.status !== 200) {
+          return received.status;
+        }
+        return received.body.equals(archive)
+          ? 'alpine'
+          : received.body.equals(glibcArchive) && 'glibc';
+      }),
+    );
+    deepStrictEqual(answers, ['glibc', 'glibc', 'glibc', 'alpine', 404, 404]);
+  });
+
   it('tooling-68: a platform the run serves no archive for gives 404, from ok, cut and slow alike', async () => {
     const answers = await Promise.all(
       [

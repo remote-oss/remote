@@ -65,16 +65,28 @@ export function acceptanceRunId(
 const HOST_FOLDERS: Readonly<Record<HostBase, string>> = {
   alpine: 'host',
   'ubuntu-26.04': 'host-ubuntu',
+  'ubuntu-18.04': 'host-ubuntu-18.04',
+  'debian-12': 'host-debian-12',
 };
 
-/** The `docker build` arguments that give a base's Dockerfile the Alpine host's folder as `alpine-host`, for its scripts. */
+/**
+ * The `docker build` arguments that give another base's Dockerfile the Alpine host's folder as `alpine-host` (its
+ * mute-shell) and the Ubuntu 26.04 host's as `apt-host` (the start-sshd of the apt-based hosts), so no script is copied.
+ */
 function hostBuildContexts(root: string, base: HostBase): string[] {
   return base === 'alpine'
     ? []
     : [
         '--build-context',
-        `alpine-host=${path.join(root, 'tests', 'acceptance', HOST_FOLDERS.alpine)}`,
+        `alpine-host=${hostFolderOf(root, 'alpine')}`,
+        '--build-context',
+        `apt-host=${hostFolderOf(root, 'ubuntu-26.04')}`,
       ];
+}
+
+/** The folder under tests/acceptance that holds the Dockerfile of a base's host. */
+function hostFolderOf(root: string, base: HostBase): string {
+  return path.join(root, 'tests', 'acceptance', HOST_FOLDERS[base]);
 }
 
 /** The image tag of the run's host: `remote-oss-acceptance-host:<run id>`, and `-<base>` after it for another base. */
@@ -371,7 +383,7 @@ export function startHostContainer(
     '--tag',
     hostImageOf(runId, base),
     ...hostBuildContexts(root, base),
-    path.join(root, 'tests', 'acceptance', HOST_FOLDERS[base]),
+    hostFolderOf(root, base),
   ]);
   const keyFile = path.join(runFolder, 'id_ed25519');
   if (!existsSync(keyFile)) {

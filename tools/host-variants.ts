@@ -89,11 +89,25 @@ export function fetchVariantsToRun(
   return named === undefined ? FETCH_VARIANTS : [named];
 }
 
-/** The bases of `HARNESS_HOST_BASE`: the image the run starts its SSH host from, Alpine's (the default) or Ubuntu's. */
-export const HOST_BASE_VARIANTS = ['alpine', 'ubuntu-26.04'] as const;
+/**
+ * The bases of `HARNESS_HOST_BASE`: the image the run starts its SSH host from. Alpine's is the default; Ubuntu 26.04's
+ * has uutils, Ubuntu 18.04's a glibc (2.27) below the server's, and Debian 12's a glibc (2.36) above it.
+ */
+export const HOST_BASE_VARIANTS = [
+  'alpine',
+  'ubuntu-26.04',
+  'ubuntu-18.04',
+  'debian-12',
+] as const;
 
 /** One base of the SSH host. */
 export type HostBase = (typeof HOST_BASE_VARIANTS)[number];
+
+/**
+ * The bases the variant run takes the host-base rows (the shell-sensitive, install and probe rows) to: Ubuntu 18.04's
+ * glibc is below the server's, so its rows are the prerequisite rows of their own, and Debian 12's rows are its own.
+ */
+export const VARIANT_HOST_BASES: readonly HostBase[] = ['ubuntu-26.04'];
 
 /** Whether `value` names a base of the SSH host. */
 function isHostBase(value: string): value is HostBase {

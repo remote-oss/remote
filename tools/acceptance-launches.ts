@@ -24,7 +24,10 @@ interface LaunchCommon {
   environment?: Readonly<Record<string, string>>;
   /** Whether the editor is started with the proposed API enabled for the extensions under test; true when absent. */
   proposedApi?: boolean;
-  /** Commands the run runs on the host container, as root, before each attempt of the launch, in order. */
+  /**
+   * Commands the run runs on the launch's own host container (the harness host's, or its `hostBase`'s), as root, before
+   * each attempt of the launch, in order.
+   */
   hostSetup?: readonly HostSetupEntry[];
   /** Ports of the client's loopback the run listens on while each attempt of the launch runs, to make a configured range busy. */
   clientListeners?: readonly number[];
