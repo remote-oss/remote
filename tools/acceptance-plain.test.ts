@@ -509,6 +509,30 @@ describe('runPlainLaunch', () => {
     );
   });
 
+  it("tooling-96: the launch's editor and tests are told its extensions folder, its own when it has one and the run's otherwise", async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    await runPlainLaunch(
+      '/repo',
+      PLAIN_RUN,
+      {
+        ...LAUNCH,
+        label: 'containers-a',
+        withExtensions: ['remote-oss.remote-containers'],
+      },
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(program => program.environment.HARNESS_EXTENSIONS_FOLDER),
+      [
+        '/run/extensions',
+        '/run/extensions',
+        '/run/extensions-containers-a',
+        '/run/extensions-containers-a',
+      ],
+    );
+  });
+
   it("tooling-79: each launch's editor and tests get a state folder of their own in the run's, and HARNESS_EDITOR_LOGS names it", async () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);

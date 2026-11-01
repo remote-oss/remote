@@ -41,6 +41,7 @@ The extension host sees these variables:
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
 | `HARNESS_USER_DATA` | The launch's user-data folder, the one its editor starts on: `<run>/user-data-<label>` for a plain launch, `<run>/user-data` for the others. A test reads the editor's settings, state and logs there. |
+| `HARNESS_EXTENSIONS_FOLDER` | A plain launch's extensions folder, the one its editor runs with: `<run>/extensions-<label>` when the launch has extensions of its own or starts VS Code, `<run>/extensions` otherwise. A test reads it by this name, never by the launch's label, so a launch run in parts finds its own. |
 | `HARNESS_VSIX_FILES` | The VSIX files installed, separated by the platform's path delimiter. |
 | `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. An entry with an `after` is a held one: it answers only after the signal file of that name in `REMOTE_OSS_ACCEPTANCE_SIGNALS` exists. |
 | `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`, a held entry's waiting line is `held` and its withdrawal `withdrawn`) and whether an entry matched. |

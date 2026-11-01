@@ -686,6 +686,8 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
+    // The extensions folder the editor runs with, which a row reads by this name rather than by the launch's label.
+    HARNESS_EXTENSIONS_FOLDER: extensionsFolderOf(session.runFolder, launch),
     REMOTE_OSS_ACCEPTANCE_RELAUNCH: relaunchFolderOf(
       session.runFolder,
       launch.label,

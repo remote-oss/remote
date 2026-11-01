@@ -120,7 +120,7 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
   it('F-0401 AC-3, AC-15, F-0504 AC-1 (gate-row-1): Reopen in Container on an image configuration connects, and the title and indicator name the container; with the other Dev Containers installed but disabled, ours works and warns of nothing (F-0101 AC-18)', async () => {
     // The other Dev Containers is installed in this launch's extensions folder, and disabled, so the API doesn't see it.
     const otherInstalled = readdirSync(
-      path.join(variable('HARNESS_RUN_FOLDER'), 'extensions-containers'),
+      variable('HARNESS_EXTENSIONS_FOLDER'),
     ).some(entry => entry.startsWith('ms-vscode-remote.remote-containers'));
     const otherEnabled = await extensionPresent(
       'local',
