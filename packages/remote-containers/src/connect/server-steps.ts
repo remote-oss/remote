@@ -249,6 +249,90 @@ function parametersOf(
   };
 }
 
+/** Where the client keeps the archive of the server for `platform`: the cache folder of the resolved source, then the archive's name. */
+function cachedArchivePathOf(
+  dependencies: ServerStepDependencies,
+  platform: ReturnType<typeof templatePlatformOf>,
+  resolution: Extract<ArchiveResolution, {kind: 'resolved'}>,
+): string {
+  const {profile} = dependencies;
+  return `${clientArchiveFolder(
+    cacheRootOf(dependencies),
+    profile,
+    archiveKeyOf(resolution.step, profile),
+  )}/${archiveNameOf(profile, platform)}`;
+}
+
+/**
+ * The fixed script that checks the server folder `SERVER_FOLDER_1` (the volume's tree, else the home's entry) and removes
+ * the folders `SERVER_FOLDER_1` and `SERVER_FOLDER_2` when its `node` cannot run in this container: the server was then
+ * installed for another platform, and no other window can use it either. A `node` that runs leaves them, since a start
+ * can fail for a reason that is not the folder. It prints `result=kept`, `result=removed` or `result=failed`.
+ */
+const DROP_SCRIPT = [
+  'if "$SERVER_FOLDER_1/node" --version >/dev/null 2>&1; then',
+  '  echo result=kept',
+  '  exit 0',
+  'fi',
+  'status=0',
+  'for folder in "$SERVER_FOLDER_1" "$SERVER_FOLDER_2"; do',
+  '  [ -n "$folder" ] || continue',
+  '  rm -rf -- "$folder" || status=1',
+  'done',
+  'if [ $status = 0 ]; then echo result=removed; else echo result=failed; fi',
+  '',
+].join('\n');
+
+/**
+ * Drops what a server that would not start was installed from, when that was not this connect's own download: the
+ * archive in the client's cache, and, when the folder's own `node` cannot run in the container, the server folders (the
+ * volume's tree and the home's entry), so that the next connect finds neither and downloads the archive again. It logs
+ * each step and never fails the connect.
+ */
+async function dropInstall(
+  channel: HostChannel,
+  files: ClientFilePort,
+  archivePath: string,
+  primaryFolder: string,
+  secondaryFolder: string,
+  logger: Logger,
+  cancellation: AbortSignal,
+): Promise<void> {
+  if (await files.exists(archivePath)) {
+    await files.remove(archivePath);
+    logger.info(
+      `the cached server archive ${archivePath} was removed: the server didn't start from it`,
+    );
+  }
+  const lines: string[] = [];
+  await channel.runScript(
+    {
+      script: DROP_SCRIPT,
+      interpreter: 'posixShell',
+      environment: {
+        SERVER_FOLDER_1: primaryFolder,
+        SERVER_FOLDER_2: secondaryFolder,
+      },
+      input: {kind: 'text', text: ''},
+      cancellation,
+    },
+    line => {
+      lines.push(line);
+    },
+  );
+  const result = lines.find(line => line.startsWith('result='));
+  const folders = [primaryFolder, secondaryFolder]
+    .filter(folder => folder !== '')
+    .join(', ');
+  logger.info(
+    result === 'result=kept'
+      ? `the server folders were kept: node runs from ${primaryFolder}`
+      : result === 'result=removed'
+        ? `the server folders ${folders} were removed: node cannot run from them`
+        : `the server folders ${folders} were not all removed`,
+  );
+}
+
 /** The client's cache root: the setting's folder when it is a non-empty text, else the temporary folder's own one. */
 function cacheRootOf(dependencies: ServerStepDependencies): string {
   const {downloadFolder} = dependencies;
@@ -453,26 +537,31 @@ export async function runServerSteps(
   }
   const nodeFolder =
     installTree === '' ? `${dataFolder}/bin/${profile.commit}` : installTree;
+  // Only a resolved source gives the archive a place in the client's cache; a reuse of an installed server needs none.
+  const archivePath =
+    resolution.kind === 'resolved'
+      ? cachedArchivePathOf(dependencies, platform, resolution)
+      : undefined;
+  const homeEntry = `${dataFolder}/bin/${profile.commit}`;
+  // The server comes from this connect's own download only when the archive was fetched now and not found in the cache.
+  let freshlyDownloaded = false;
   if (chosen.kind === 'download') {
     request.onPhase('installing');
     const downloading = chosen;
     const address = downloading.address;
-    const archivePath = `${clientArchiveFolder(
-      cacheRootOf(dependencies),
-      profile,
-      archiveKeyOf(
-        // A plan that downloads has a source, so its resolution resolved.
-        (resolution as Extract<ArchiveResolution, {kind: 'resolved'}>).step,
-        profile,
-      ),
-    )}/${archiveNameOf(profile, platform)}`;
+    // A plan that downloads has a source, so its resolution resolved and the archive has a place in the cache.
+    const keptArchive = cachedArchivePathOf(
+      dependencies,
+      platform,
+      resolution as Extract<ArchiveResolution, {kind: 'resolved'}>,
+    );
     function attempt(): ReturnType<typeof transfer> {
       return transfer(
         {
           plan: downloading,
           parameters: parametersOf(dependencies, request, installTree, address),
           clientFolder: dependencies.temporaryFolder,
-          cache: {kind: 'kept', archivePath},
+          cache: {kind: 'kept', archivePath: keptArchive},
           downloadBounds: CLIENT_DOWNLOAD_BOUNDS,
           temporaryToken: dependencies.newTemporaryToken(),
           verification: CONTAINERS_POLICY.verification,
@@ -508,7 +597,7 @@ export async function runServerSteps(
       transferred.failure.kind === 'localDownload' &&
       transferred.failure.cause !== 'unauthorized'
     ) {
-      logger.info(retryLine(transferred.failure, address, archivePath));
+      logger.info(retryLine(transferred.failure, address, keptArchive));
       transferred = await attempt();
     }
     if (transferred.kind === 'failed') {
@@ -524,6 +613,7 @@ export async function runServerSteps(
         `the server ${profile.commit} was installed by another window; this one reuses it`,
       );
     }
+    freshlyDownloaded = transferred.fromCache !== true;
   }
   const started = await startOrReuse(
     channel,
@@ -559,6 +649,21 @@ export async function runServerSteps(
   );
   if (started.kind === 'failed') {
     logger.info(`the server was not started: ${started.failure.kind}`);
+    if (
+      started.failure.kind === 'serverStart' &&
+      !freshlyDownloaded &&
+      archivePath !== undefined
+    ) {
+      await dropInstall(
+        channel,
+        dependencies.files,
+        archivePath,
+        installTree === '' ? homeEntry : installTree,
+        installTree === '' ? '' : homeEntry,
+        logger,
+        cancellation,
+      );
+    }
     return failedWith(
       started.failure.kind === 'prerequisitesMissing'
         ? requirementsNotMet(started.failure.detail)
