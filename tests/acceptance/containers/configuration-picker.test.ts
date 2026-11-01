@@ -30,6 +30,21 @@ import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 
 const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
+/**
+ * The text of the remote indicator of window `name` once it is a Dev Container one and has stayed the same for three
+ * seconds, so that a name the connection learns late is read; it fails after 30 s without a Dev Container text.
+ */
+async function settledIndicator(name: string): Promise<string> {
+  await waitFor(
+    `the indicator of window ${name} to read Dev Container`,
+    async () =>
+      (await statusItem(name, 'status.host')).text.startsWith('Dev Container'),
+    30_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  return (await statusItem(name, 'status.host')).text;
+}
+
 describe('F-0301 configuration discovery and picker (card containers-50)', function () {
   this.timeout(900_000);
   const opened: string[] = [];
@@ -137,7 +152,7 @@ describe('F-0301 configuration discovery and picker (card containers-50)', funct
         configFolder(name, {'.devcontainer.json': content}),
       );
       await reopenInContainer(window);
-      reads.push((await statusItem(window, 'status.host')).text);
+      reads.push(await settledIndicator(window));
     }
     deepStrictEqual(reads, ['Dev Container: Dotted', 'Dev Container']);
   });
