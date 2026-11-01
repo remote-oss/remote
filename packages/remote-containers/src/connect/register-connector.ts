@@ -35,6 +35,9 @@ import {knownName, recordKnownName} from './known-names.ts';
 import {type RecentLabelPorts, storeRecentLabel} from './recent-label.ts';
 import {workspaceSuffixOf} from './window-identity.ts';
 
+/** How long a connect runs before its progress shows, so that a connect to a running container shows none. */
+const PROGRESS_DELAY_MILLISECONDS = 500;
+
 /**
  * What the extension decides about its editor adapter: the details link and nothing about ports. The resolver then
  * gives core no tunnel factory, no tunnel features and no candidate port source, so core's own detection and forwards
@@ -145,6 +148,7 @@ export async function registerContainerResolver(
       allowsTrust: false,
       titleOf: phase => phaseTitleOf(phase, translate),
       startTitle: () => startTitleOf(translate),
+      progressDelayMilliseconds: PROGRESS_DELAY_MILLISECONDS,
       canonical: {
         pathOf: uri => connector.canonicalPathOf(uri.authority, uri.path),
         warn: message => {
