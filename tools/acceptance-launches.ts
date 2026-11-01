@@ -103,6 +103,8 @@ export interface PlainLaunch extends LaunchCommon {
    * code and no contribution, carrying the id it stands for.
    */
   standIns?: readonly string[];
+  /** The display language the editor starts in, as its `--locale` switch takes it. */
+  locale?: string;
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -201,6 +203,24 @@ const GENUINE_LAUNCH: PlainLaunch = {
   },
   // The empty script makes the extension show its real dialogs.
   environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+};
+
+/**
+ * The genuine client with our Dev Containers and Docker: the server comes from the run's stand-in licensed host, so the
+ * licence question of a server under terms of its own is asked and nothing reaches the editor's publisher. The other
+ * Dev Containers extension is never installed.
+ */
+const GENUINE_CONTAINERS_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'genuine-containers',
+  suite: 'genuine-containers',
+  withExtensions: ['remote-oss.remote-containers'],
+  settings: {
+    ...GENUINE_LAUNCH.settings,
+    // The folder dialog is the in-window one, which the renderer helpers can type into.
+    'files.simpleDialog.enable': true,
+    'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LICENSED}',
+  },
 };
 
 /** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
@@ -553,7 +573,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view`, `containers-context` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -901,6 +921,13 @@ export function launchesOf(root: string): Launch[] {
       engine: 'podman',
       namedOnly: true,
     },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-context',
+      suite: 'containers-context',
+      // A Docker configuration of its own, so that a row can create, use and delete a context without touching the machine's.
+      environment: {DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`},
+    },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
     {
       ...RENDERER_LAUNCH,
@@ -912,6 +939,19 @@ export function launchesOf(root: string): Launch[] {
         'remote-oss.vscode-remote-extensionpack',
       ],
       environment: UNREACHABLE_GALLERY,
+    },
+    // The same, in German, with no language pack: the display language the pack's strings are read for.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'extensionpack-german',
+      suite: 'extensionpack-german',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-ssh',
+        'remote-oss.vscode-remote-extensionpack',
+      ],
+      environment: UNREACHABLE_GALLERY,
+      locale: 'de',
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
@@ -932,6 +972,7 @@ export function launchesOf(root: string): Launch[] {
     ),
     GENUINE_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
+    GENUINE_CONTAINERS_LAUNCH,
     // Last: its rows remove every container of the run, the run's host and registry included.
     {
       ...CONTAINERS_LAUNCH,

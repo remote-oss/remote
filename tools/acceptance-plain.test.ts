@@ -82,6 +82,17 @@ describe('the explorer and trust launches (cards tooling-30, tooling-33)', () =>
     return found;
   }
 
+  it('tooling-87: only a launch with a locale starts the editor in that display language', () => {
+    deepStrictEqual(
+      ['windows', 'extensionpack', 'extensionpack-german'].map(label =>
+        editorArguments('/run', true, launchNamed(label)).filter(argument =>
+          argument.startsWith('--locale'),
+        ),
+      ),
+      [[], [], ['--locale=de']],
+    );
+  });
+
   it('tooling-30: a launch without extensions of its own uses the run’s folder and the run’s two proposals only', () => {
     deepStrictEqual(
       [

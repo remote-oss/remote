@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync, readdirSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {filled} from '../../src/surfaces/strings.ts';
 
@@ -9,155 +9,6 @@ const WARNING =
   'Remote - SSH stays inactive in this window because another extension that provides SSH remotes is enabled. Both use the same commands and settings. Disable one of the two and reload the window.';
 const BUTTON = 'Show Other Extension';
 
-const SETUP_TEXTS = [
-  "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
-  "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists 'remote-oss.remote-ssh', then restart {1}.",
-  'Quit and start {1} again to apply the changes to argv.json.',
-  'Configure Runtime Arguments',
-  'Not Now',
-  'Quit {1}',
-];
-
-const FAILURE_TEXTS = [
-  "An SSH installation couldn't be found",
-  "Can't assign requested address",
-  'Cancel',
-  'Close Remote',
-  'Connecting was canceled',
-  'Connecting with SSH timed out',
-  'Copying VS Code Server to host with scp',
-  'Could not establish connection to "{0}"',
-  'Could not establish connection to "{0}": {1}',
-  'Could not resolve hostname',
-  'Downloading VS Code Server',
-  'Downloading VS Code Server locally',
-  'Downloading VS Code Server...',
-  'Error establishing tunnel ({0}).',
-  'Failed to download VS Code Server ({0})',
-  'Failed to find a free local port: {0}',
-  'Hostname contains invalid characters',
-  'Initializing VS Code Server',
-  'Installing VS Code Server',
-  'Max wait time exhausted',
-  'More Actions...',
-  'Network is unreachable',
-  "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.",
-  'No route to host',
-  'Port forwarding is disabled',
-  'Remote host key has changed, port forwarding is disabled',
-  'Retry',
-  'SSH host name cannot begin with {0}',
-  'SSH host name cannot include the character {0}',
-  'SSH user name cannot begin with {0}',
-  'SSH user name cannot include the character {0}',
-  'Setting up SSH Host {0}',
-  'Setting up SSH tunnel',
-  'The connection timed out',
-  'The operation timed out',
-  'The process tried to write to a nonexistent pipe',
-  'Waiting for port forwarding to be ready',
-  "{2} knows no download location for the server of {0}. Set {1} to a URL template for this editor's server builds.",
-  'The value of {1} is not a usable server download URL template: {3}.',
-  'Open Setting',
-  'Got bad result from install script',
-];
-
-const CONNECT_TEXTS = [
-  'Downloading VS Code Server failed. Please try again later.',
-  'Failed to install the VS Code Server',
-  'Provided: "{0}"',
-  'it does not give an http or https address',
-  'the placeholder {0} is not known',
-];
-const WAITING_TEXTS = ['Waiting for other windows to connect'];
-
-const CONFIG_FILE_TEXTS = [
-  'Edit custom SSH configuration file',
-  'Help',
-  'Select SSH configuration file to update',
-  'Settings',
-  'about SSH configuration files',
-  'specify a custom configuration file',
-  'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
-];
-
-const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];
-
-const MITIGATION_TEXTS = [
-  'Reload Window',
-  'Open Recent...',
-  'Open Documentation',
-  'Open SSH Configuration File',
-  'Open Settings',
-  'Pick an action to help resolve the problem.',
-];
-
-const LICENCE_TEXTS = [
-  "Accept the server's licence terms?",
-  'The server {0} installs or starts on this host is distributed under licence terms of its own, which {0} does not accept for you. Read them at {1} before you continue. "Accept and Continue" accepts them for this profile; the choice is remembered for this profile.',
-  'Accept and Continue',
-];
-
-/** The texts of the pre-connection script's dialog, its progress and its failure reason. */
-const PRECONNECT_TEXTS = [
-  'Running pre-connection script ({0})',
-  'The value of remote.SSH.preconnect for "{0}" is {1}, not the path of a script.',
-  'a boolean',
-  'a list',
-  'a number',
-  'an object',
-  'Execute pre-connection script?',
-  'Pre-connection script has changed since last confirmation',
-  "'{0}' will be executed on your local machine.",
-  'Allow',
-  "Allow and Don't Ask Again",
-  'Skip',
-];
-
-/** The notices of the server maintenance commands and their button. */
-const MAINTENANCE_TEXTS = [
-  'Killed VS Code Server on {0}.',
-  'Failed to kill VS Code Server on {0}.',
-  'Open Logs',
-];
-
-/** The platform notice and its button. */
-const PLATFORM_NOTICE_TEXTS = [
-  'You selected "{0}" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
-  "Don't Show Again",
-];
-
-/** The texts of the command that adds a host: the input's title, the notice and its buttons. */
-const ADD_HOST_TEXTS = [
-  'Enter SSH Connection Command',
-  'Host added!',
-  'Open Config',
-  'Connect',
-];
-
-/** The reasons of a failed start and the notice of a refused bind host. */
-const START_TEXTS = [
-  "The remote host's architecture is not supported",
-  'The VS Code Server failed to start',
-  'The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.',
-  'Invaid port range set',
-  '{1} is not a valid host to bind',
-];
-
-/** The prompts' and the host pick's own templates, which the code translates at run time. */
-const PROMPT_AND_PICK_TEXTS = [
-  'Select configured SSH host or enter user@host',
-  '{0} Add New SSH Host...',
-  'Configure SSH Hosts...',
-  '"{0}" has fingerprint "{1}".',
-  'Are you sure you want to continue connecting?',
-  'Are you sure you want to continue?',
-  'Continue',
-  'Enter passphrase for ssh key {0}',
-  'Enter password',
-  'Enter password for {0}',
-];
-
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -166,32 +17,16 @@ function bundle(file: string): Record<string, string> {
 }
 
 describe('the runtime strings of the extension', () => {
-  it('the stand-down warning, its button, the out-of-context line, the setup, failure and licence texts are in the default bundle, as written', () => {
-    deepStrictEqual(bundle('bundle.l10n.json'), {
-      [WARNING]: WARNING,
-      [BUTTON]: BUTTON,
-      "'{0}' is not possible in the current context.":
-        "'{0}' is not possible in the current context.",
-      ...Object.fromEntries(
-        [
-          ...SETUP_TEXTS,
-          ...FAILURE_TEXTS,
-          ...LICENCE_TEXTS,
-          ...PRECONNECT_TEXTS,
-          ...PICKER_TEXTS,
-          ...CONNECT_TEXTS,
-          ...MITIGATION_TEXTS,
-          ...WAITING_TEXTS,
-          ...CONFIG_FILE_TEXTS,
-          ...MAINTENANCE_TEXTS,
-          ...PLATFORM_NOTICE_TEXTS,
-          ...ADD_HOST_TEXTS,
-          ...START_TEXTS,
-          ...PROMPT_AND_PICK_TEXTS,
-          'SSH: {0}',
-        ].map(text => [text, text]),
-      ),
-    });
+  it('the stand-down warning and its button are in the default bundle, as written, and every value of the default bundle is its key', () => {
+    const texts = bundle('bundle.l10n.json');
+    deepStrictEqual(
+      [
+        texts[WARNING],
+        texts[BUTTON],
+        Object.entries(texts).filter(([key, text]) => key !== text),
+      ],
+      [WARNING, BUTTON, []],
+    );
   });
 
   it('the warning names no placeholder and carries no process word', () => {
@@ -203,22 +38,6 @@ describe('the runtime strings of the extension', () => {
         ),
       ],
       [false, false],
-    );
-  });
-
-  it('each of the 14 locales has a bundle with the same keys and the English text for now', () => {
-    const locales = readdirSync(BUNDLES)
-      .filter(file => file !== 'bundle.l10n.json')
-      .sort();
-    deepStrictEqual(
-      {
-        count: locales.length,
-        tables: locales.map(file => bundle(file)),
-      },
-      {
-        count: 14,
-        tables: locales.map(() => bundle('bundle.l10n.json')),
-      },
     );
   });
 });

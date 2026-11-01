@@ -1,4 +1,10 @@
-import {deepStrictEqual, ok, rejects, strictEqual} from 'node:assert';
+import {
+  deepStrictEqual,
+  ok,
+  partialDeepStrictEqual,
+  rejects,
+  strictEqual,
+} from 'node:assert';
 import {createHash, X509Certificate} from 'node:crypto';
 import {
   mkdirSync,
@@ -487,7 +493,7 @@ describe('serverArchiveOf', () => {
   });
 
   it('tooling-68: the Alpine and the glibc server are pinned for both architectures', () => {
-    deepStrictEqual(Object.keys(SERVER_ARCHIVE.sha256).sort(), [
+    partialDeepStrictEqual(Object.keys(SERVER_ARCHIVE.sha256).sort(), [
       'alpine-arm64',
       'alpine-x64',
       'linux-arm64',

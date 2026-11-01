@@ -54,6 +54,10 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     new window's resolve, after the window has switched (athena on #1464, ruling-1464; spec question on
     remote-oss/remote-containers#80).
 
+- **The Ports view never lists the editor server's own port, which the reference labels `Other (<port>)`.**
+  - F-1101 AC-3 has "whether a genuine user process or VS Code's own internal port — then it is labelled `Other
+    (<port>)`" (athena on #1558, ruling-1558-own-port; spec question on remote-oss/remote-containers#42).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild

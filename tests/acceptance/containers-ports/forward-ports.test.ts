@@ -1,13 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {
-  chmodSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import {promisify} from 'node:util';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
@@ -19,25 +12,36 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {
+  answerDialog,
   dialogOf,
+  editorTabs,
   notificationCentre,
   portRowAction,
   portsRows,
   statusItem,
+  waitForDialog,
 } from '../windows/renderer.ts';
 import {
+  browserOpens,
   echoes,
   editConfiguration,
   folderOf,
   freePort,
+  forwardByHand,
+  localPortOf,
+  occupy,
   portsOf,
   portsWindows,
   reloaded,
+  recordBrowserOpens,
   rowsWhen,
   showPorts,
 } from './ports-support.ts';
 
 const execFileAsync = promisify(execFile);
+
+/** How long after its start a window's tunnel model may show the could-not-be-used dialog again (core's 10 s), plus a margin. */
+const MISMATCH_COOLDOWN_MILLISECONDS = 12_000;
 
 describe('the declared forwardPorts (card containers-72)', function () {
   this.timeout(900_000);
@@ -122,15 +126,7 @@ describe('the declared forwardPorts (card containers-72)', function () {
     const window = await connectedWith('c72-ac18', {
       forwardPorts: [443, 8443, other],
     });
-    const binFolder = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-bin');
-    const logFile = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-open.log');
-    mkdirSync(binFolder, {recursive: true});
-    writeFileSync(
-      path.join(binFolder, 'xdg-open'),
-      `#!/bin/sh\nprintf '%s\\n' "$1" >> '${logFile}'\n`,
-    );
-    chmodSync(path.join(binFolder, 'xdg-open'), 0o755);
-    rmSync(logFile, {force: true});
+    const logFile = recordBrowserOpens();
     await showPorts(window);
     await rowsWhen(window, shown => shown.length > 2);
     for (const port of ['443', '8443', String(other)]) {
@@ -316,6 +312,141 @@ describe('the declared forwardPorts (card containers-72)', function () {
     deepStrictEqual(
       [rows.length, new Set(rows.map(shown => shown.forwardedAddress)).size],
       [2, 2],
+    );
+  });
+
+  it('F-1101 AC-7 (declared-taken): a declared port whose local port is taken is silently forwarded to a different local port, with no dialog and no notification', async () => {
+    const port = await freePort();
+    const release = await occupy(port);
+    try {
+      const window = await connectedWith('c73b-ac7', {
+        forwardPorts: [port],
+        portsAttributes: {[String(port)]: {requireLocalPort: true}},
+      });
+      await showPorts(window);
+      await rowsWhen(window, shown => shown.length > 0);
+      const local = await localPortOf(window, port);
+      const status = await statusItem(window, 'status.forwardedPorts');
+      deepStrictEqual(
+        [
+          local === port,
+          await dialogOf(window),
+          (await notificationCentre(window)).filter(text =>
+            text.includes(String(port)),
+          ),
+          status.ariaLabel,
+        ],
+        [false, undefined, [], `Forwarded Ports: ${String(port)}`],
+      );
+    } finally {
+      await release();
+    }
+  });
+
+  it('F-1101 AC-8 (manual-taken): a manually forwarded port whose local port is taken shows the core could-not-be-used modal with OK only, and the row takes the fallback local port', async () => {
+    const port = await freePort();
+    const release = await occupy(port);
+    try {
+      const window = await connectedWith('c73b-ac8', {
+        otherPortsAttributes: {requireLocalPort: true},
+      });
+      // Core shows this dialog at most once in 10 s, counted from when the window's tunnel model began, so a forward
+      // made in the first seconds of the window gets the fallback port and no dialog.
+      await new Promise(resolve =>
+        setTimeout(resolve, MISMATCH_COOLDOWN_MILLISECONDS),
+      );
+      await forwardByHand(window, port);
+      const dialog = await waitForDialog(window, 30_000).catch(() => undefined);
+      if (dialog !== undefined) {
+        await answerDialog(window, 'OK');
+      }
+      const local = await localPortOf(window, port);
+      const entry = (
+        await rowsWhen(window, shown =>
+          shown.some(each => each.port === String(port)),
+        )
+      ).find(each => each.port === String(port));
+      const message =
+        dialog === undefined ? undefined : dialog.message + dialog.details;
+      // The spec (6.3 step 3) records the rendering with or without the spaces between the three sentences.
+      const expected =
+        `Local port ${String(port)} could not be used for forwarding to remote port ${String(port)}` +
+        `.This usually happens when there is already another process using local port ${String(port)}` +
+        `.Port number ${String(local)} has been used instead.`;
+      deepStrictEqual(
+        {
+          buttons: dialog?.buttons ?? [],
+          message:
+            message === undefined ? undefined : message.replace(/\. /g, '.'),
+          fallbackTaken: local !== port,
+          origin: entry?.origin,
+        },
+        {
+          buttons: ['OK'],
+          message: expected,
+          fallbackTaken: true,
+          origin: 'User Forwarded',
+        },
+      );
+    } finally {
+      await release();
+    }
+  });
+
+  it('F-1101 AC-9 (elevate-silent): with elevateIfNeeded on privileged ports, neither the declared batch nor the manual path prompts, and both fall back to an unprivileged local port', async function () {
+    const unprivileged = Number(
+      readFileSync('/proc/sys/net/ipv4/ip_unprivileged_port_start', 'utf8'),
+    );
+    if (unprivileged <= 82) {
+      // The host binds every port here, so the condition cannot be made.
+      this.skip();
+    }
+    const window = await connectedWith('c73b-ac9', {
+      forwardPorts: [81],
+      portsAttributes: {'81': {elevateIfNeeded: true}},
+      otherPortsAttributes: {elevateIfNeeded: true},
+    });
+    await showPorts(window);
+    await rowsWhen(window, shown => shown.length > 0);
+    await forwardByHand(window, 82);
+    await rowsWhen(window, shown => shown.length > 1);
+    deepStrictEqual(
+      [
+        (await localPortOf(window, 81)) >= unprivileged,
+        (await localPortOf(window, 82)) >= unprivileged,
+        await dialogOf(window),
+        (await portsRows(window)).map(shown => shown.origin).sort(),
+      ],
+      [true, true, undefined, ['Dev Containers', 'User Forwarded']],
+    );
+  });
+
+  it('F-1101 AC-15 (protocol-https): Open in Browser on a port with protocol https opens the https scheme', async () => {
+    const port = await freePort();
+    const logFile = recordBrowserOpens();
+    const window = await connectedWith('c73b-ac15', {
+      forwardPorts: [port],
+      portsAttributes: {[String(port)]: {protocol: 'https'}},
+    });
+    await showPorts(window);
+    await rowsWhen(window, shown => shown.length > 0);
+    await portRowAction(window, String(port), 'Open in Browser');
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+    deepStrictEqual(
+      {
+        opens: browserOpens(logFile),
+        tabs: (await editorTabs(window))
+          .map(entry => entry.label)
+          .filter(label => label.startsWith('localhost:')),
+        rows: (await portsRows(window))
+          .map(shown => [shown.port, shown.origin])
+          .sort(),
+      },
+      {
+        opens: [`https://localhost:${String(port)}/`],
+        tabs: [],
+        rows: [[String(port), 'Dev Containers']],
+      },
     );
   });
 });

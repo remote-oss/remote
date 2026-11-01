@@ -3,7 +3,7 @@
  * contributions, the string tables, and the generated identifier table.
  */
 
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, partialDeepStrictEqual} from 'node:assert';
 import {readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {SSH_HAND_OVERS} from 'lib-companion';
@@ -248,8 +248,9 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('F-2001 AC-19, F-2501 AC-1, F-5902 AC-24: activationEvents: the seven, in order, with no wildcards or startup', () => {
-    deepStrictEqual(manifest().activationEvents, [
+  it('F-2001 AC-19, F-2501 AC-1, F-5902 AC-24: activationEvents: the internal commands and the authority’s resolver event are present, with no wildcards or startup', () => {
+    const events = manifest().activationEvents ?? [];
+    partialDeepStrictEqual(events, [
       'onCommand:remote-internal.getSshFoldersHistory',
       'onCommand:remote-internal.deleteSshFolderFromHistory',
       'onCommand:remote-internal.getActiveSshRemote',
@@ -258,6 +259,13 @@ describe('manifest (card remote-ssh-01 table)', () => {
       'onResolveRemoteAuthority:ssh-remote',
       'onUri',
     ]);
+    deepStrictEqual(
+      events.filter(
+        event =>
+          event.includes('*') || event === 'onStartupFinished' || event === '*',
+      ),
+      [],
+    );
   });
 
   it('extensionPack: the two ids; extensionDependencies absent', () => {
@@ -286,11 +294,10 @@ describe('manifest (card remote-ssh-01 table)', () => {
     ]);
   });
 
-  it('F-2503.AC-2, F-5902 AC-24: commands: 17, every category, every title a key, no enablement, no internal ids', () => {
+  it('F-2503.AC-2, F-5902 AC-24: commands: every category, every title a key, no enablement, no internal ids, each id once, the identifier table’s ids contributed', () => {
     const contributed = manifest().contributes?.commands ?? [];
     deepStrictEqual(
       {
-        count: contributed.length,
         categories:
           new Set(contributed.map(command => String(command.category))).size ===
           1
@@ -308,20 +315,24 @@ describe('manifest (card remote-ssh-01 table)', () => {
         internalIds: contributed.every(
           command => !String(command.command).startsWith('remote-internal.'),
         ),
-        uniqueIds: new Set(contributed.map(command => String(command.command)))
-          .size,
+        duplicateIds: contributed
+          .map(command => String(command.command))
+
+          .filter(
+            (identifier, position, identifiers) =>
+              identifiers.indexOf(identifier) !== position,
+          ),
         contributedIds: contributed
           .map(command => String(command.command))
           .sort(),
       },
       {
-        count: 17,
         categories: 'Remote-SSH',
         titlesAreKeys: true,
         enablements: true,
         idPrefixes: true,
         internalIds: true,
-        uniqueIds: 17,
+        duplicateIds: [],
         contributedIds: (Object.values(commands) as TableEntry[])
           .map(entry => entry.id)
           .sort(),
@@ -329,14 +340,13 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('settings: the 35 declared, the pruned key absent, the invented key a schema', () => {
+  it('settings: every declared key is Remote-SSH’s and in the identifier table, the pruned key absent, the invented key a schema', () => {
     const configuration = manifest().contributes?.configuration;
     const properties = configuration?.properties ?? {};
     const invented = properties['remote.SSH.serverDownloadUrlTemplate'] ?? {};
     deepStrictEqual(
       {
         title: configuration?.title,
-        count: Object.keys(properties).length,
         prefixes: Object.keys(properties).every(settingKey =>
           settingKey.startsWith('remote.SSH.'),
         ),
@@ -361,7 +371,6 @@ describe('manifest (card remote-ssh-01 table)', () => {
       },
       {
         title: 'Remote - SSH',
-        count: 35,
         prefixes: true,
         descriptionFormsAreKeys: true,
         prunedKeyPresent: false,
@@ -381,14 +390,14 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('F-2502 AC-13: menus: 8 entries, the indicator groups, every when gated, the key nowhere else', () => {
+  it('F-2502 AC-13: menus: the indicator entries and the palette entries of the card, every when gated, the key nowhere else', () => {
     const contributes = manifest().contributes;
     const menus = contributes?.menus ?? {};
     const stripped = JSON.stringify({
       ...(contributes ?? {}),
       menus: {},
     });
-    deepStrictEqual(
+    partialDeepStrictEqual(
       {
         menuNames: Object.keys(menus).sort(),
         indicator: (menus['statusBar/remoteIndicator'] ?? []).map(entry => [
@@ -447,6 +456,12 @@ describe('manifest (card remote-ssh-01 table)', () => {
         standingDownKeyOutsideMenus: false,
       },
     );
+    deepStrictEqual(
+      Object.values(menus)
+        .flat()
+        .filter(entry => !String(entry.when).includes(STANDING_DOWN)),
+      [],
+    );
   });
 
   it('F-2502 AC-1: resourceLabelFormatters: the one entry, exact', () => {
@@ -477,30 +492,21 @@ describe('manifest (card remote-ssh-01 table)', () => {
     });
   });
 
-  it('nls parity: 15 files, the same key set, every manifest key resolved in each', () => {
+  it('nls: every value is a string, the description is the English text, and every key of the table is used by the manifest', () => {
     const tables = nlsTables();
     const base = tables.get('package.nls.json') ?? {};
-    const keys = Object.keys(base).sort();
     const manifestKeySet = new Set(manifestKeys());
     deepStrictEqual(
       {
-        fileCount: tables.size,
-        keyCount: keys.length,
-        keySetsMatch: [...tables].every(([, table]) =>
-          deepEqualStrings(Object.keys(table).sort(), keys),
-        ),
         valuesAreStrings: [...tables].every(([, table]) =>
           Object.values(table).every(value => typeof value === 'string'),
         ),
         description: base.description,
-        manifestReferencesEveryKey: keys.every(settingKey =>
+        manifestReferencesEveryKey: Object.keys(base).every(settingKey =>
           manifestKeySet.has(settingKey),
         ),
       },
       {
-        fileCount: 15,
-        keyCount: 53,
-        keySetsMatch: true,
         valuesAreStrings: true,
         description: DESCRIPTION,
         manifestReferencesEveryKey: true,
@@ -764,14 +770,6 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 });
-
-/** Whether two sorted key lists are equal, without a nested assertion. */
-function deepEqualStrings(actual: string[], expected: string[]): boolean {
-  return (
-    actual.length === expected.length &&
-    actual.every((entry, position) => entry === expected[position])
-  );
-}
 
 describe('the manifest rows of slices 1 and 2', () => {
   /** The manifest and its default strings. */

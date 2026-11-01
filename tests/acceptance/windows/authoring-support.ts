@@ -6,6 +6,7 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -16,12 +17,16 @@ import {closeWindow, startInWindow, variable, waitFor} from './harness.ts';
 import {
   acceptQuickPick,
   chooseQuickPickRow,
+  type DetailedQuickPickRow,
+  detailedQuickPickRows,
+  moveQuickPickFocus,
   pressEscape,
   quickPickFacts,
   quickPickOf,
   quickPickRows,
   type QuickPickRow,
   typeInQuickPick,
+  waitForQuickPick,
 } from './renderer.ts';
 import {runTemplatesReady} from './run-templates.ts';
 
@@ -248,3 +253,101 @@ export const STRING_SCREENS = ['Flavour:', 'Channel:', 'Motto:'] as const;
 /** The placeholder of the boolean option screen of the options-lab template. */
 export const BOOLEAN_SCREEN =
   "Select the options for the 'Options Lab' dev container";
+
+/** The store of the launch's profile: where the extension keeps the configurations that are not in a workspace. */
+export function storeRoot(): string {
+  return path.join(
+    variable('HARNESS_USER_DATA'),
+    'User',
+    'globalStorage',
+    'remote-oss.remote-containers',
+    'configs',
+  );
+}
+
+/** Removes the slots of the run, so that a row starts with no configuration in the store. */
+export function emptyStore(): void {
+  rmSync(storeRoot(), {recursive: true, force: true});
+}
+
+/** The names of the slots in the store. */
+export function slotNames(): string[] {
+  return existsSync(storeRoot()) ? readdirSync(storeRoot()).sort() : [];
+}
+
+/** The rows of the pick open in `window` as the rows of this card are compared: label, description, second line. */
+export async function rowsOf(
+  window: string,
+): Promise<Array<[string, string, string, boolean]>> {
+  return (await detailedQuickPickRows(window)).map(each => [
+    each.label,
+    each.description,
+    each.detail,
+    each.focused,
+  ]);
+}
+
+/** Answers the location pick of `window` with the user data row and waits for the pick that follows it. */
+export async function chooseUserData(window: string): Promise<void> {
+  await waitForQuickPick(window);
+  await chooseQuickPickRow(window, USER_DATA_ROW);
+  await waitForPickAfterLocation(window);
+}
+
+/** Runs the command in `window` for the user data folder and picks the template labelled `label`. */
+export async function writeToStore(
+  window: string,
+  label = 'Alpine',
+): Promise<void> {
+  await startCommand(window);
+  await chooseUserData(window);
+  await chooseQuickPickRow(window, label);
+  await takeOptionScreen(window, ALPINE_OPTION);
+  await takeFeatureScreen(window);
+}
+
+/** The files under `folder`, relative and sorted. */
+export function filesIn(folder: string): string[] {
+  return readdirSync(folder, {recursive: true, withFileTypes: true})
+    .filter(entry => entry.isFile())
+    .map(entry =>
+      path.relative(folder, path.join(entry.parentPath, entry.name)),
+    )
+    .sort();
+}
+
+/** Opens the screen in `window` and gives its rows, leaving it open. */
+export async function screenOf(
+  window: string,
+): Promise<DetailedQuickPickRow[]> {
+  await startCommand(window);
+  await chooseWorkspace(window);
+  return detailedQuickPickRows(window);
+}
+
+/** Types `text` into the screen of `window` and gives the rows once the list has followed. */
+export async function typed(
+  window: string,
+  text: string,
+): Promise<DetailedQuickPickRow[]> {
+  await typeInQuickPick(window, text);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  return detailedQuickPickRows(window);
+}
+
+/** The label of the row that has the focus. */
+export function focusedLabel(
+  rows: readonly DetailedQuickPickRow[],
+): string | undefined {
+  return rows.find(each => each.focused)?.label;
+}
+
+/** The label of the row with the focus after the arrow key `key` was pressed in `window`. */
+export async function focusAfter(
+  window: string,
+  key: 'ArrowUp' | 'ArrowDown',
+): Promise<string | undefined> {
+  await moveQuickPickFocus(window, key);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return focusedLabel(await detailedQuickPickRows(window));
+}

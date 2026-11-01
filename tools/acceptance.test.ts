@@ -425,7 +425,9 @@ const LAUNCH_ORDER = [
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
   ...['containers-killed-23', 'containers-killed-35', 'containers-killed-43'],
+  'containers-context',
   'extensionpack',
+  'extensionpack-german',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1171,7 +1173,16 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           {
-            folder: path.join('/run', 'extensions-extensionpack'),
+            folder: path.join('/run', 'extensions-containers-context'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          ...['extensionpack', 'extensionpack-german'].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',
@@ -1183,7 +1194,7 @@ describe('acceptance', () => {
               ),
             ],
             client: 'vscodium',
-          },
+          })),
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
@@ -1193,6 +1204,15 @@ describe('acceptance', () => {
             ],
             client: 'vscode',
           })),
+          {
+            folder: path.join('/run', 'extensions-genuine-containers'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscode',
+          },
           {
             folder: path.join('/run', 'extensions-containers-view'),
             files: [
@@ -3571,7 +3591,7 @@ describe('acceptance', () => {
         launchesOf(REPOSITORY_ROOT)
           .slice(-3)
           .map(launch => launch.label),
-        ['genuine', 'ssh-no-proposals', 'containers-view'],
+        ['ssh-no-proposals', 'genuine-containers', 'containers-view'],
       );
     });
 
@@ -3669,7 +3689,7 @@ describe('acceptance', () => {
             )
             .map(launch => launch.label),
           [],
-          ['genuine', 'ssh-no-proposals'],
+          ['genuine', 'ssh-no-proposals', 'genuine-containers'],
           ['containers'],
         ],
       );

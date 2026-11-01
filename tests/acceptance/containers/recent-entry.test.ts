@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {rmSync} from 'node:fs';
 import {
   closeWindow,
+  connectedToContainer,
   containersLog,
   devContainerFolder,
   devContainersOf,
@@ -156,6 +157,36 @@ describe('The Open Recent entry and the label of a connected window (cards conta
         containers: [before],
       });
     } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0501 AC-7 (c74-legacy-payload): a dev-container URI whose authority is the hex of the plain host path opens the folder in its dev container', async () => {
+    const folder = devContainerFolder('c74-legacy', {name: 'Legacy Payload'});
+    const starter = await openFolderWindow(
+      devContainerFolder('c74-legacy-starter'),
+    );
+    try {
+      const authority = Buffer.from(folder).toString('hex');
+      void inWindow(
+        starter,
+        'acceptance.agent.openWindow',
+        `vscode-remote://dev-container%2B${authority}/workspaces/c74-legacy`,
+      );
+      await connectedToContainer('c74-legacy');
+      const state = {
+        title: await windowTitle('c74-legacy'),
+        indicator: (await statusItem('c74-legacy', 'status.host')).text,
+        containers: (await devContainersOf(folder)).length,
+      };
+      await closeWindow('c74-legacy');
+      deepStrictEqual(state, {
+        title: '[c74-legacy [Dev Container: Legacy Payload]]',
+        indicator: 'Dev Container: Legacy Payload',
+        containers: 1,
+      });
+    } finally {
+      await closeWindow(starter).catch(() => undefined);
       await removeContainers(folder);
     }
   });

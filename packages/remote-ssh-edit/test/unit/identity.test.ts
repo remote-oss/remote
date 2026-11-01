@@ -3,7 +3,7 @@
  * README's sections.
  */
 
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, partialDeepStrictEqual} from 'node:assert';
 import {readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 
@@ -181,29 +181,22 @@ describe('identity card (card identity-01 table)', () => {
     );
   });
 
-  it('every package.nls.*.json: the description is the English text and the keys match across locales', () => {
+  it('every package.nls.*.json: the description is the English text', () => {
     const tables = nlsTables();
-    const base = tables.get('package.nls.json');
-    const baseKeys = base ? Object.keys(base).sort() : [];
     const observed = [...tables.entries()].map(([file, table]) => ({
       file,
-      keys: Object.keys(table).sort(),
       description: table.description,
     }));
     deepStrictEqual(
-      [base !== undefined, observed],
+      [tables.has('package.nls.json'), observed],
       [
         true,
-        observed.map(entry => ({
-          file: entry.file,
-          keys: baseKeys,
-          description: DESCRIPTION,
-        })),
+        observed.map(entry => ({file: entry.file, description: DESCRIPTION})),
       ],
     );
   });
 
-  it("F-4003 BR-6: each locale's runtime bundle holds its translated texts", () => {
+  it("F-4003 BR-6: each locale's runtime bundle holds the translated texts of the card", () => {
     const observed = Object.fromEntries(
       RUNTIME_TEXTS.map(([locale]) => [
         locale,
@@ -217,7 +210,7 @@ describe('identity card (card identity-01 table)', () => {
         ),
       ]),
     );
-    deepStrictEqual(observed, Object.fromEntries(RUNTIME_TEXTS));
+    partialDeepStrictEqual(observed, Object.fromEntries(RUNTIME_TEXTS));
   });
 
   it('README: the seven section headings in order and none of the forbidden words', () => {

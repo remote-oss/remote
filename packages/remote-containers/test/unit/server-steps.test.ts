@@ -14,6 +14,7 @@ import {
   type DownloadPort,
   type DownloadRequest,
   type DownloadResult,
+  type AcceptanceStore,
   type LicenceModal,
   LAUNCHING_LINE,
   RESULT_BEGIN,
@@ -220,6 +221,8 @@ function dependenciesOf(
     downloadFolder?: unknown;
     downloads?: DownloadResult[];
     modal?: LicenceModal;
+    /** The record of acceptances, shared by the runs of a profile; none remembers by default. */
+    store?: AcceptanceStore;
     /** The percents the download reports while the body arrives. */
     percents?: number[];
     /** The clock of the lock waits; a fake one that no row advances by default. */
@@ -258,7 +261,7 @@ function dependenciesOf(
     override: 'override' in options ? options.override : OVERRIDE,
     downloadFolder: options.downloadFolder,
     temporaryFolder: '/tmp',
-    store: {
+    store: options.store ?? {
       isAccepted: () => false,
       accept: () => Promise.resolve(),
     },
@@ -1002,6 +1005,70 @@ describe('the server steps of a connect (card containers-08)', () => {
         "'--accept-server-license-terms'",
       ),
       true,
+    );
+  });
+
+  /** A record of acceptances in memory: what a profile remembers. */
+  function profileStore(): AcceptanceStore {
+    const accepted = new Set<string>();
+    return {
+      isAccepted: key => accepted.has(key),
+      accept: key => {
+        accepted.add(key);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  const LICENSED_OPTIONS = {
+    profile: {...PROFILE, serverLicense: ['terms']},
+    override: {
+      value: 'https://update.code.visualstudio.com/x/${os}-${arch}.tar.gz',
+      layer: 'defaultProfileUser',
+    },
+  } as const;
+
+  it('F-1402 AC-3: an acceptance is remembered for the profile, so the next connect asks nothing, and another profile is asked again', async () => {
+    const store = profileStore();
+    const first = await runSteps(channelOf(), {...LICENSED_OPTIONS, store});
+    const second = await runSteps(channelOf(), {...LICENSED_OPTIONS, store});
+    const other = await runSteps(channelOf(), {
+      ...LICENSED_OPTIONS,
+      store: profileStore(),
+    });
+    deepStrictEqual(
+      [
+        first.seen.asked.length,
+        second.seen.asked.length,
+        other.seen.asked.length,
+      ],
+      [1, 0, 1],
+    );
+  });
+
+  it('F-1402 AC-5: on a volume that holds the server, the licence is asked before any start, an acceptance starts the server that is there without a transfer, and the next connect asks nothing', async () => {
+    const store = profileStore();
+    const channel = channelOf({volume: true, treeComplete: true});
+    const first = await runSteps(channel, {
+      ...LICENSED_OPTIONS,
+      volume: true,
+      store,
+    });
+    const next = await runSteps(channelOf({volume: true, treeComplete: true}), {
+      ...LICENSED_OPTIONS,
+      volume: true,
+      store,
+    });
+    deepStrictEqual(
+      [
+        first.seen.asked.length,
+        first.seen.downloads,
+        (scriptsOf(channel).find(isStart) ?? '').includes(
+          "'--accept-server-license-terms'",
+        ),
+        next.seen.asked.length,
+      ],
+      [1, [], true, 0],
     );
   });
 

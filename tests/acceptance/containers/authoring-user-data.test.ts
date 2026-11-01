@@ -3,7 +3,6 @@ import {execFile} from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -45,14 +44,20 @@ import {
   chooseWorkspace,
   CONFIGURATION,
   closeScreen,
+  emptyStore,
   existing,
   startCommand,
   takeFeatureScreen,
   takeOptionScreen,
+  rowsOf,
+  slotNames,
+  storeRoot,
   USER_DATA_ROW,
   waitForPickAfterLocation,
   withWindow,
   WORKSPACE_ROW,
+  writeToStore,
+  chooseUserData,
   written,
 } from '../windows/authoring-support.ts';
 
@@ -87,17 +92,6 @@ const NOTICE_START =
 const INTRODUCTION =
   'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
 
-/** The store of the launch's profile: where the extension keeps the configurations that are not in a workspace. */
-function storeRoot(): string {
-  return path.join(
-    variable('HARNESS_USER_DATA'),
-    'User',
-    'globalStorage',
-    'remote-oss.remote-containers',
-    'configs',
-  );
-}
-
 /** The text of the marker of a slot that belongs to `folder`. */
 function markerText(folder: string): string {
   return `// Maintained by the Dev Container extension\n${JSON.stringify({rootFolder: folder})}\n`;
@@ -111,16 +105,6 @@ function tilde(file: string): string {
     : path.join('~', relative);
 }
 
-/** Removes the slots of the run, so that a row starts with no configuration in the store. */
-function emptyStore(): void {
-  rmSync(storeRoot(), {recursive: true, force: true});
-}
-
-/** The names of the slots in the store. */
-function slotNames(): string[] {
-  return existsSync(storeRoot()) ? readdirSync(storeRoot()).sort() : [];
-}
-
 /** Starts the command in `window`, waits for the location pick and gives its rows. */
 async function locationRowsOf(
   window: string,
@@ -128,34 +112,6 @@ async function locationRowsOf(
   await startCommand(window);
   await waitForQuickPick(window);
   return rowsOf(window);
-}
-
-/** The rows of the pick open in `window` as the rows of this card are compared: label, description, second line. */
-async function rowsOf(
-  window: string,
-): Promise<Array<[string, string, string, boolean]>> {
-  return (await detailedQuickPickRows(window)).map(each => [
-    each.label,
-    each.description,
-    each.detail,
-    each.focused,
-  ]);
-}
-
-/** Answers the location pick of `window` with the user data row and waits for the pick that follows it. */
-async function chooseUserData(window: string): Promise<void> {
-  await waitForQuickPick(window);
-  await chooseQuickPickRow(window, USER_DATA_ROW);
-  await waitForPickAfterLocation(window);
-}
-
-/** Runs the command in `window` for the user data folder and picks the template labelled `label`. */
-async function writeToStore(window: string, label = 'Alpine'): Promise<void> {
-  await startCommand(window);
-  await chooseUserData(window);
-  await chooseQuickPickRow(window, label);
-  await takeOptionScreen(window, ALPINE_OPTION);
-  await takeFeatureScreen(window);
 }
 
 /** Picks the custom template `mini` of the run's registry in the pick open in `window`. */

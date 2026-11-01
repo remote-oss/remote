@@ -1,10 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
+import path from 'node:path';
 import {
   closeWindow,
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
   inWindow,
+  reopenInContainer,
   variable,
   windowState,
 } from '../windows/harness.ts';
@@ -129,6 +131,60 @@ describe('Open Folder in Container (card containers-17)', function () {
       await closeWindow(empty);
     } finally {
       await setUserSetting('dev.containers.dockerPath', undefined);
+    }
+  });
+  it('F-0201 AC-56 (c74-docker-removed): in a connected window, with dockerPath changed to a missing executable, Open Folder in Container for another folder shows the Docker dialog before the picker and creates nothing, the window stays connected, and after the setting is restored the same command connects to the other folder', async () => {
+    const connected = devContainerFolder('c74-removed-a', {name: 'Removed A'});
+    const other = devContainerFolder('c74-removed-b', {name: 'Removed B'});
+    const bogus = path.join(variable('HARNESS_RUN_FOLDER'), 'c74-removed-bin');
+    const name = await openFolderWindow(connected);
+    try {
+      await reopenInContainer(name);
+      await setUserSetting('dev.containers.dockerPath', bogus);
+      void startOpenFolder(name);
+      const dialog = await waitForDialog(name, 60_000);
+      const whileOpen = {
+        dialog: [dialog.message, dialog.details],
+        picker: await folderDialogOpen(name),
+      };
+      await answerDialog(name, 'Cancel');
+      const refused = {
+        ...whileOpen,
+        remoteName: (await windowState(name)).remoteName,
+        created: (await devContainersOf(other)).length,
+      };
+      await setUserSetting('dev.containers.dockerPath', undefined);
+      void startOpenFolder(name);
+      await answerFolderDialog(name, other);
+      await connectedToContainer('c74-removed-b');
+      const restored = {
+        remoteName: (await windowState('c74-removed-b')).remoteName,
+        title: await windowTitle('c74-removed-b'),
+        created: (await devContainersOf(other)).length,
+      };
+      await closeWindow('c74-removed-b');
+      deepStrictEqual(
+        {refused, restored},
+        {
+          refused: {
+            dialog: [
+              'Docker version 17.12.0 or later required.',
+              `Command not found: '${bogus}'. Check the license for details.`,
+            ],
+            picker: false,
+            remoteName: 'dev-container',
+            created: 0,
+          },
+          restored: {
+            remoteName: 'dev-container',
+            title: '[c74-removed-b [Dev Container: Removed B]]',
+            created: 1,
+          },
+        },
+      );
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+      await closeWindow(name).catch(() => undefined);
     }
   });
 });

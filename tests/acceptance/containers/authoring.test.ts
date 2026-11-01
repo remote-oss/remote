@@ -39,6 +39,10 @@ import {
   CONFIGURATION,
   closeScreen,
   existing,
+  focusAfter,
+  focusedLabel,
+  screenOf,
+  typed,
   startCommand,
   takeFeatureScreen,
   takeOptionScreen,
@@ -89,40 +93,6 @@ async function answeredOverwrite(
       );
     },
   );
-}
-
-/** Opens the screen in `window` and gives its rows, leaving it open. */
-async function screenOf(window: string): Promise<DetailedQuickPickRow[]> {
-  await startCommand(window);
-  await chooseWorkspace(window);
-  return detailedQuickPickRows(window);
-}
-
-/** Types `text` into the screen of `window` and gives the rows once the list has followed. */
-async function typed(
-  window: string,
-  text: string,
-): Promise<DetailedQuickPickRow[]> {
-  await typeInQuickPick(window, text);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  return detailedQuickPickRows(window);
-}
-
-/** The label of the row that has the focus. */
-function focusedLabel(
-  rows: readonly DetailedQuickPickRow[],
-): string | undefined {
-  return rows.find(each => each.focused)?.label;
-}
-
-/** The label of the row with the focus after the arrow key `key` was pressed in `window`. */
-async function focusAfter(
-  window: string,
-  key: 'ArrowUp' | 'ArrowDown',
-): Promise<string | undefined> {
-  await moveQuickPickFocus(window, key);
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return focusedLabel(await detailedQuickPickRows(window));
 }
 
 /**
@@ -524,6 +494,7 @@ describe('the authoring wizard (card containers-80)', function () {
         await waitForDialog(window);
         const said = await dialogText(window);
         await pressEscape(window);
+        const leftOpen = await quickPickOf(window);
         const kept = readFileSync(path.join(folder, '.devcontainer'), 'utf8');
         rmSync(path.join(folder, '.devcontainer'));
         await pickTemplate(window, 'Alpine');
@@ -532,9 +503,11 @@ describe('the authoring wizard (card containers-80)', function () {
           [
             said?.includes("The configuration couldn't be written to "),
             said?.includes(folder),
+            /ENOTDIR|EEXIST|not a directory|file exists/i.test(said ?? ''),
+            leftOpen,
             kept,
           ],
-          [true, true, 'a file'],
+          [true, true, true, undefined, 'a file'],
         );
       },
     );
@@ -548,6 +521,7 @@ describe('the authoring wizard (card containers-80)', function () {
         await waitForDialog(window);
         const said = await dialogText(window);
         await pressEscape(window);
+        const leftOpen = await quickPickOf(window);
         const created = existing(folder, '.devcontainer');
         chmodSync(folder, 0o755);
         await pickTemplate(window, 'Alpine');
@@ -556,9 +530,11 @@ describe('the authoring wizard (card containers-80)', function () {
           [
             said?.includes("The configuration couldn't be written to "),
             said?.includes(folder),
+            /EACCES|permission denied|EROFS/i.test(said ?? ''),
+            leftOpen,
             created,
           ],
-          [true, true, []],
+          [true, true, true, undefined, []],
         );
       } finally {
         chmodSync(folder, 0o755);

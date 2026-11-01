@@ -162,6 +162,9 @@ export function editorArguments(
           extensionId => `--enable-proposed-api=${extensionId}`,
         )
       : []),
+    ...(launch?.kind === 'plain' && launch.locale !== undefined
+      ? [`--locale=${launch.locale}`]
+      : []),
     ...(launch?.kind === 'plain' && launch.workspaceTrust === true
       ? []
       : ['--disable-workspace-trust']),
