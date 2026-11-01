@@ -437,14 +437,20 @@ describe('the manifest of the Remote Explorer package', () => {
     const english = jsonOf('package.nls.json');
     const texts = Object.keys(jsonOf('l10n/bundle.l10n.json'));
     deepStrictEqual(
-      locales.map(locale => [
-        jsonOf(`package.nls.${locale}.json`),
-        jsonOf(`l10n/bundle.l10n.${locale}.json`),
-      ]),
-      locales.map(() => [
-        english,
-        Object.fromEntries(texts.map(text => [text, text])),
-      ]),
+      [
+        locales.length > 0,
+        locales.map(locale => [
+          jsonOf(`package.nls.${locale}.json`),
+          jsonOf(`l10n/bundle.l10n.${locale}.json`),
+        ]),
+      ],
+      [
+        true,
+        locales.map(() => [
+          english,
+          Object.fromEntries(texts.map(text => [text, text])),
+        ]),
+      ],
     );
   });
 

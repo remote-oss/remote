@@ -1188,6 +1188,27 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values', () => {
+    const locales = (readJson('identifiers.json').locales ?? []) as string[];
+    const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
+    deepStrictEqual(
+      [
+        locales.length > 0,
+        locales.map(locale => [
+          readJson(`package.nls.${locale}.json`),
+          readJson(`l10n/bundle.l10n.${locale}.json`),
+        ]),
+      ],
+      [
+        true,
+        locales.map(() => [
+          readJson('package.nls.json'),
+          Object.fromEntries(bundle.map(text => [text, text])),
+        ]),
+      ],
+    );
+  });
+
   it('F-1406.5: identifiers.json names the identity of the family and the identifiers the card lists', () => {
     partialDeepStrictEqual(readJson('identifiers.json'), {
       source: 'remote-oss/remote-containers#107 (F-1406)',
