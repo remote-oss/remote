@@ -246,6 +246,7 @@ const GENUINE_CONTAINERS_ACCEPT_A_LAUNCH: PlainLaunch = {
   ...GENUINE_CONTAINERS_LAUNCH,
   label: 'genuine-containers-accept-a',
   suite: 'genuine-containers-accept-a',
+  publisherDownloads: true,
   settings: {
     ...GENUINE_CONTAINERS_LAUNCH.settings,
     'remote.serverDownloadBaseUrl': 'https://update.code.visualstudio.com',
