@@ -1,4 +1,5 @@
 import {deepStrictEqual, throws} from 'node:assert';
+import {READ_BOUND_MILLISECONDS} from '../../src/forwarding/default-forwards-timing.ts';
 import type {ConnectPhase, DecodedTarget, Failed} from 'lib-authority';
 import {FakeProber} from 'lib-forwarding/testing/fake-prober';
 import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
@@ -456,6 +457,17 @@ describe("the assembled ports' settings", () => {
       [settings.agentForwarding(), settings.x11Forwarding()],
       [false, true],
     );
+  });
+
+  it('F-2507 BR-4: the default forwards are read on the machine’s scheduler and the surfaces’ events, and with no change to the setting at the bound', async () => {
+    const {surfaces, machine, clock, recorded} = assemblyInputs();
+    const waiting = wiringPortsOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).defaultRead();
+    clock.advance(READ_BOUND_MILLISECONDS);
+    deepStrictEqual(await waiting, 'bound');
   });
 
   it('F-2108: remote.SSH.preconnect is passed on as written', () => {
