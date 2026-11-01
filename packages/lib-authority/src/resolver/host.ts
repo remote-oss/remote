@@ -383,6 +383,9 @@ export async function registerResolver(
       unreported = 0;
       return increment;
     }
+    // The title and details link the progress shows now, so that a stage that says the same adds no report, unless it
+    // carries an increment of the bar.
+    let reported: {title: string; details: boolean} | undefined;
     let opened = false;
     let progressDone: Promise<void> | undefined;
     const releases: Array<() => void> = [];
@@ -410,6 +413,7 @@ export async function registerResolver(
           async update => {
             report = update;
             if (shown !== undefined) {
+              reported = {title: shown.title, details: shown.details};
               update(shown.title, shown.details, incrementOf());
             }
             await settled;
@@ -436,7 +440,15 @@ export async function registerResolver(
         downloaded = Math.max(downloaded, percent);
       }
       if (report !== undefined) {
-        report(shown.title, shown.details, incrementOf());
+        const increment = incrementOf();
+        if (
+          reported?.title !== shown.title ||
+          reported.details !== shown.details ||
+          increment !== undefined
+        ) {
+          reported = {title: shown.title, details: shown.details};
+          report(shown.title, shown.details, increment);
+        }
       } else if (
         phase.quiet !== true &&
         options.progressDelayMilliseconds === undefined

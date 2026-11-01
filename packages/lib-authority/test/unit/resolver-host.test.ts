@@ -804,6 +804,23 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     deepStrictEqual(context.editor.progressRuns.length, 0);
   });
 
+  it('connect-106: two stages that say the same give one report, and a stage that says another gives its own', async () => {
+    const context = await setup({
+      progressAtStart: true,
+      titleOf: phase => (phase.name === 'downloading' ? 'second' : 'same'),
+    });
+    context.connector.phases = [
+      {name: 'initializing', details: true},
+      {name: 'settingUpTunnel', details: true},
+      {name: 'downloading'},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      'same (details)',
+      'second',
+    ]);
+  });
+
   it('contracts §3.2: once open, a quiet phase updates the progress', async () => {
     const context = await setup();
     context.connector.phases = [
