@@ -282,7 +282,7 @@ F-0402.AC-16	deferred	containers 0.4: Reopen from a Remote-SSH window later
 F-0403.AC-1	acceptance	
 F-0403.AC-2	todo	
 F-0403.AC-3	core	core: the folder dialog's typing, descending, .. and confirming are core's file dialog
-F-0403.AC-4	todo	
+F-0403.AC-4	deferred	containers 0.4: C12 attach later
 F-0403.AC-5	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-6	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-7	deferred	containers release 1: increment 2 (authoring)
@@ -296,7 +296,7 @@ F-0403.AC-14	acceptance
 F-0403.AC-15	core	core: the folder dialog's message for a file
 F-0403.AC-16	core	core: the folder dialog's create-folder confirmation
 F-0403.AC-17	acceptance	
-F-0403.AC-18	todo	
+F-0403.AC-18	deferred	containers 0.4: C12 attach later
 F-0403.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-20	acceptance	
 F-0403.AC-21	deferred	containers release 1: later (the log terminal, F-0104)
@@ -306,7 +306,7 @@ F-0403.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-25	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-27	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0403.AC-28	todo	
+F-0403.AC-28	acceptance	
 F-0405.AC-1	acceptance	
 F-0405.AC-2	deferred	containers release 1: the full contribution set comes with later increments
 F-0405.AC-3	deferred	containers release 1: the full contribution set comes with later increments
