@@ -11,6 +11,10 @@ import {dialogText, notifications, waitForDialog} from '../windows/renderer.ts';
 /** The text of STR:S121, which only the Problems panel shows. */
 const S121 = 'Direct tarball references must be served over HTTPS.';
 
+/** The detail of the dialog a Feature key that cannot be resolved gives. */
+const FEATURE_NOT_FOUND =
+  'The feature was not found either because it is no longer available or because of insufficient permissions to access it.';
+
 describe('half-done rows of the container flows (card coverage-78)', function () {
   this.timeout(600_000);
 
@@ -31,13 +35,9 @@ describe('half-done rows of the container flows (card coverage-78)', function ()
         ...(await notifications(name)),
         ...containersLog().slice(mark),
       ];
-      console.log(
-        'SHOWN',
-        JSON.stringify([dialog.message, dialog.details, dialog.buttons]),
-      );
       deepStrictEqual(
-        shown.filter(text => text.includes(S121)),
-        [],
+        [dialog.details, shown.filter(text => text.includes(S121))],
+        [FEATURE_NOT_FOUND, []],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
