@@ -313,6 +313,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
             ...makeCertificate(folder),
             templatesFolder: path.join(folder, 'templates'),
             controlFolder: path.join(folder, 'control'),
+            featuresFolder: path.join(folder, 'features'),
             logFile: path.join(folder, 'requests.log'),
             tlsLogFile: path.join(folder, 'tls.log'),
           });

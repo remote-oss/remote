@@ -60,6 +60,7 @@ describe('the download host as the harness host reaches it (tooling-27)', functi
       ...makeCertificate(folder),
       templatesFolder: path.join(folder, 'templates'),
       controlFolder: path.join(folder, 'control'),
+      featuresFolder: path.join(folder, 'features'),
       logFile,
       tlsLogFile: path.join(folder, 'tls.log'),
     });
