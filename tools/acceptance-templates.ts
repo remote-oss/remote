@@ -75,8 +75,14 @@ const METADATA_ANNOTATION = 'dev.containers.metadata';
 /** The namespace of the run's own Features, which are published; the second owner's are listed only. */
 export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
 
-/** The image the run's `mini` template names in its fixture; packaging replaces it with the run's dev container image. */
+/** The image the run's `mini` and `no-metadata-lab` templates name in their fixtures; packaging replaces it with the run's dev container image. */
 export const RUN_IMAGE_PLACEHOLDER = 'remote-oss-acceptance-run-image';
+
+/** The run's own templates whose configuration names the run's dev container image. */
+export const RUN_IMAGE_TEMPLATES: readonly string[] = [
+  'mini',
+  'no-metadata-lab',
+];
 
 /** Fetches the layer of a mirrored template; the run's goes to `ghcr.io`, a test's is a fake. */
 export type LayerFetch = (template: MirroredTemplate) => Promise<Uint8Array>;
@@ -298,7 +304,7 @@ export function featureMetadataText(text: string, registry: string): string {
 
 /**
  * Prepares the run's templates: the layer of each of `templates` from the cache under `root` (fetched by `fetchLayer` when it is
- * missing) unpacked, the run's own templates and Features copied with the run's `mini` naming `devContainerImage`, all published
+ * missing) unpacked, the run's own templates and Features copied with the run's `mini` and `no-metadata-lab` naming `devContainerImage`, all published
  * into the registry at `registryAddress` with the dev container CLI the package bundles, and the run's index and control manifest
  * written where the download host serves them. Gives the registry as the templates' ids name it.
  */
@@ -313,7 +319,7 @@ export async function prepareRunTemplates(
 ): Promise<string> {
   if (devContainerImage === undefined) {
     throw new Error(
-      'the run dev container image is missing, and the mini template names it',
+      'the run dev container image is missing, and the mini and no-metadata-lab templates name it',
     );
   }
   const registry = templateRegistryOf(registryAddress);
@@ -334,23 +340,25 @@ export async function prepareRunTemplates(
   cpSync(path.join(fixtures, 'custom', 'src'), customSources, {
     recursive: true,
   });
-  const mini = path.join(
-    customSources,
-    'mini',
-    '.devcontainer',
-    'devcontainer.json',
-  );
   const placeholder = `"${RUN_IMAGE_PLACEHOLDER}"`;
-  const text = readFileSync(mini, 'utf8');
-  if (!text.includes(placeholder)) {
-    throw new Error(
-      'the mini template no longer names the run image placeholder',
+  for (const name of RUN_IMAGE_TEMPLATES) {
+    const configuration = path.join(
+      customSources,
+      name,
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    const text = readFileSync(configuration, 'utf8');
+    if (!text.includes(placeholder)) {
+      throw new Error(
+        `the ${name} template no longer names the run image placeholder`,
+      );
+    }
+    writeFileSync(
+      configuration,
+      text.replace(placeholder, JSON.stringify(devContainerImage)),
     );
   }
-  writeFileSync(
-    mini,
-    text.replace(placeholder, JSON.stringify(devContainerImage)),
-  );
   const bundledCli = path.join(
     root,
     'packages',

@@ -797,6 +797,9 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-trust',
       suite: 'containers-trust',
       workspaceTrust: true,
+      // The run's registry and templates, as in `containers`: the wizard's rows run in an untrusted folder too.
+      registry: true,
+      templates: true,
       settings: {
         ...CONTAINERS_LAUNCH.settings,
         // A folder opens untrusted and silent, so the only trust dialog is the one Reopen asks for.

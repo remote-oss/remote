@@ -31,6 +31,7 @@ import {
   prepareRunTemplates,
   publishArguments,
   RUN_IMAGE_PLACEHOLDER,
+  RUN_IMAGE_TEMPLATES,
   runIndexText,
   servedTemplatesFolder,
   templateLayerOf,
@@ -653,7 +654,7 @@ describe('the run templates', () => {
       );
     });
 
-    it('tooling-81: the packaged mini names the run dev container image, and the fixture names only the placeholder', async () => {
+    it('tooling-81: the packaged mini and no-metadata-lab name the run dev container image, and the fixtures name only the placeholder', async () => {
       const {root, runFolder, command} = preparedRun();
       const imageTag = 'remote-oss-acceptance-devcontainer:run-1';
       await prepareRunTemplates(
@@ -665,32 +666,35 @@ describe('the run templates', () => {
         [],
         imageTag,
       );
-      const fixture = path.join(
-        REPOSITORY_ROOT,
-        SNAPSHOT_FOLDER,
-        'custom',
-        'src',
-        'mini',
-        '.devcontainer',
-        'devcontainer.json',
-      );
-      const packaged = path.join(
-        runFolder,
-        'templates',
-        'custom',
-        'src',
-        'mini',
-        '.devcontainer',
-        'devcontainer.json',
-      );
-      deepStrictEqual(
-        [
+      const seen = RUN_IMAGE_TEMPLATES.map(name => {
+        const fixture = path.join(
+          REPOSITORY_ROOT,
+          SNAPSHOT_FOLDER,
+          'custom',
+          'src',
+          name,
+          '.devcontainer',
+          'devcontainer.json',
+        );
+        const packaged = path.join(
+          runFolder,
+          'templates',
+          'custom',
+          'src',
+          name,
+          '.devcontainer',
+          'devcontainer.json',
+        );
+        return [
           readFileSync(packaged, 'utf8').includes(`"image": "${imageTag}"`),
           readFileSync(packaged, 'utf8').includes(RUN_IMAGE_PLACEHOLDER),
           readFileSync(fixture, 'utf8').includes(`"${RUN_IMAGE_PLACEHOLDER}"`),
-        ],
+        ];
+      });
+      deepStrictEqual(seen, [
         [true, false, true],
-      );
+        [true, false, true],
+      ]);
     });
 
     it('tooling-81: a publish without the run image fails before running anything, so a republish cannot name the placeholder', async () => {
@@ -706,7 +710,7 @@ describe('the run templates', () => {
       deepStrictEqual(
         [error instanceof Error && error.message, calls],
         [
-          'the run dev container image is missing, and the mini template names it',
+          'the run dev container image is missing, and the mini and no-metadata-lab templates name it',
           [],
         ],
       );
