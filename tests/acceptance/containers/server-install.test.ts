@@ -929,7 +929,7 @@ describe('F-0503 server install (card containers-41)', function () {
     );
   });
 
-  it.skip('F-0503 AC-15 (s15-learn): Learn More on the requirements dialog opens the project’s own requirements page, leaves the status bar on Disconnected from Dev Container: <name>, and goes on to the five-item recovery quick pick of ruling 14 with Reload Window focused (skipped until the name reaches the failed window, containers-128)', async () => {
+  it('F-0503 AC-15 (s15-learn): Learn More on the requirements dialog opens the project’s own requirements page, leaves the status bar on Disconnected from Dev Container: Old Glibc, and goes on to the five-item recovery quick pick of ruling 14 with Reload Window focused', async () => {
     const urlsBefore = openedUrls().length;
     const window = await requirementsDialog('c78-requirements-learn', {
       name: 'Old Glibc',
