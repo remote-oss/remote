@@ -122,15 +122,21 @@ describe('the tunnel of a window under the default settings and their combinatio
       const tunnel = connected.sequence.indexOf(
         'progress:Setting up SSH tunnel',
       );
+      const waiting = connected.sequence.indexOf(
+        'progress:Waiting for port forwarding to be ready',
+      );
       deepStrictEqual(
         [
           connected.prompts,
           connected.logins,
-          tunnel >= 0 && second !== undefined && second > tunnel,
-          connected.sequence.at(-2),
+          tunnel >= 0 &&
+            second !== undefined &&
+            waiting >= 0 &&
+            tunnel < second &&
+            second < waiting,
           portsOf(connected.added, 'ssh').length,
         ],
-        [2, 2, true, 'progress:Waiting for port forwarding to be ready', 1],
+        [2, 2, true, 1],
       );
     });
   });
