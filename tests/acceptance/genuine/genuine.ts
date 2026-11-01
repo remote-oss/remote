@@ -1,5 +1,5 @@
 import {readFileSync} from 'node:fs';
-import path from 'node:path';
+import {DISPLAY_NAME} from '../windows/licence-texts.ts';
 import {
   closeWindow,
   isOpen,
@@ -7,24 +7,6 @@ import {
   variable,
   windowNames,
 } from '../windows/harness.ts';
-
-/** The display name of Remote - SSH, as its manifest gives it. */
-export const DISPLAY_NAME = (
-  JSON.parse(
-    readFileSync(
-      path.join(
-        import.meta.dirname,
-        '..',
-        '..',
-        '..',
-        'packages',
-        'remote-ssh',
-        'package.json',
-      ),
-      'utf8',
-    ),
-  ) as {displayName: string}
-).displayName;
 
 /** The setting that names where the server comes from. */
 export const TEMPLATE_SETTING = 'remote.SSH.serverDownloadUrlTemplate';

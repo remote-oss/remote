@@ -356,6 +356,12 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it('connect-104, F-2104 AC-42: ssh-remote opens its progress at the resolve’s start', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(options.progressAtStart, true);
+  });
+
   /** The connector's and the client check's answers on the mode, for the user's `written` settings. */
   function modesFor(written: Written): [boolean | undefined, string] {
     const {surfaces, machine, recorded} = assemblyInputs(written);

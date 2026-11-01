@@ -137,6 +137,9 @@
       "path": "tests/acceptance/config-files"
     },
     {
+      "path": "tests/acceptance/secrets"
+    },
+    {
       "path": "tests/acceptance/no-proposals"
     },
     {
@@ -182,7 +185,16 @@
       "path": "tests/acceptance/genuine"
     },
     {
+      "path": "tests/acceptance/genuine-licensed"
+    },
+    {
       "path": "tests/acceptance/genuine-containers"
+    },
+    {
+      "path": "tests/acceptance/genuine-accept-a"
+    },
+    {
+      "path": "tests/acceptance/genuine-accept-b"
     },
     {
       "path": "tests/acceptance/ssh-no-proposals"

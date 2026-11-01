@@ -26,6 +26,8 @@ import {
   type RouteCut,
 } from '../../../tools/acceptance-network.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
+import {oneTimeCode} from '../../../tools/one-time-code.ts';
+import {filesHolding} from '../../../tools/secret-search.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
   descendantRootOf,
@@ -302,6 +304,82 @@ export async function onHostAs(
 /** The output of a command run in the host container as the user harness. */
 export function onHost(...command: string[]): Promise<string> {
   return onHostAs('harness', ...command);
+}
+
+/** The one-time code of the Ubuntu 26.04 host's user `harness-2fa` at `moment` (now by default), from the run's secret. */
+export function totpCode(moment = Date.now()): string {
+  return oneTimeCode(
+    readFileSync(variable('HARNESS_TOTP_FILE'), 'utf8'),
+    moment,
+  );
+}
+
+/** A place a secret search looks in: a client folder or file, a host folder (searched as root), or the host's log. */
+export type SecretPlace =
+  | {client: string; accepted?: (file: string) => boolean}
+  | {host: string; excluded?: readonly string[]}
+  | {hostLog: true};
+
+/** One file a secret search found a value in: the place, and the file under it. Never the value. */
+export interface SecretHit {
+  place: string;
+  file: string;
+}
+
+/**
+ * The files of `places` that hold any of `values`. A client place is read in Node, following no link; a host folder is
+ * searched as root with `grep -rlF` (no hit is grep's status 1; another failure throws with grep's error), skipping
+ * devices and pipes and the file names `excluded`; the host's log is both streams of `docker logs`.
+ */
+export function secretHits(
+  values: readonly string[],
+  places: readonly SecretPlace[],
+): SecretHit[] {
+  return places.flatMap(place => {
+    if ('client' in place) {
+      return filesHolding(values, place.client, place.accepted).map(file => ({
+        place: place.client,
+        file,
+      }));
+    }
+    if ('host' in place) {
+      const searched = runCommand('docker', [
+        'exec',
+        '--user',
+        'root',
+        variable('HARNESS_CONTAINER'),
+        'grep',
+        '-rlF',
+        '-D',
+        'skip',
+        ...(place.excluded ?? []).map(name => `--exclude=${name}`),
+        ...values.flatMap(value => ['-e', value]),
+        '--',
+        place.host,
+      ]);
+      if (searched.status === 1) {
+        return [];
+      }
+      if (searched.status !== 0) {
+        throw new Error(
+          `the search of ${place.host} failed: ${searched.stderr.trim()}`,
+        );
+      }
+      return searched.stdout
+        .split('\n')
+        .filter(file => file !== '')
+        .map(file => ({place: place.host, file}));
+    }
+    const logged = runCommand('docker', [
+      'logs',
+      variable('HARNESS_CONTAINER'),
+    ]);
+    return values.some(value =>
+      `${logged.stdout}\n${logged.stderr}`.includes(value),
+    )
+      ? [{place: 'the host container', file: 'docker logs'}]
+      : [];
+  });
 }
 
 /** The bare password of the host's user `harness-pw`, from the run's file. */
@@ -602,10 +680,17 @@ export async function terminalNamed(
   return named;
 }
 
-/** Opens window `folder` (a folder of the user harness's home, made first) on `alias`, from the local window. */
-export async function openWindow(alias: string, folder: string): Promise<void> {
-  const home = `/home/harness/${folder}`;
-  await onHost('mkdir', '-p', home);
+/**
+ * Opens window `folder` (a folder of the home of `user`, harness by default, made first as that user) on `alias`, from
+ * the local window.
+ */
+export async function openWindow(
+  alias: string,
+  folder: string,
+  user = 'harness',
+): Promise<void> {
+  const home = `/home/${user}/${folder}`;
+  await onHostAs(user, 'mkdir', '-p', home);
   await inWindow(
     'local',
     'acceptance.agent.openWindow',
@@ -1674,28 +1759,35 @@ export function messagesSince(mark: number): string[] {
     .map(line => `${line.window}: ${line.surface}: ${line.question}`);
 }
 
-/** Whether window `name` is connected: it is on the remote and a file it writes reaches the host. */
-export async function connected(name: string): Promise<boolean> {
+/**
+ * Whether window `name`, opened in the home of `user` (harness by default), is connected: it is on the remote and a
+ * file it writes reaches the host.
+ */
+export async function connected(
+  name: string,
+  user = 'harness',
+): Promise<boolean> {
   try {
     const state = await windowState(name);
     await inWindow(name, 'acceptance.agent.writeFile', 'probe.txt', name);
     return (
       state.remoteName === 'ssh-remote' &&
-      (await onHost('cat', `/home/harness/${name}/probe.txt`)) === name
+      (await onHostAs(user, 'cat', `/home/${user}/${name}/probe.txt`)) === name
     );
   } catch {
     return false;
   }
 }
 
-/** Waits until window `name` is connected, for up to `milliseconds`. */
+/** Waits until window `name`, opened in the home of `user` (harness by default), is connected, for up to `milliseconds`. */
 export function connectedWithin(
   name: string,
   milliseconds: number,
+  user = 'harness',
 ): Promise<void> {
   return waitFor(
     `${name} to be connected`,
-    () => connected(name),
+    () => connected(name, user),
     milliseconds,
   );
 }

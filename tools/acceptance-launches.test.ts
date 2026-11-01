@@ -139,8 +139,11 @@ function labelsFromExplorer(): string[] {
     'extensionpack-lp-hu',
     ...hostLaunchLabels(),
     'genuine',
+    'genuine-licensed',
     'ssh-no-proposals',
     'genuine-containers',
+    'genuine-accept-a',
+    'genuine-accept-b',
     'containers-view',
   ];
 }
@@ -184,7 +187,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('tooling-70: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and no launch on another host has a host setup', () => {
+  it('tooling-70, tooling-34: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and secrets is the one launch on another host with a host setup', () => {
     const remote = launches.find(launch => launch.label === 'remote');
     deepStrictEqual(
       [
@@ -196,11 +199,33 @@ describe('the launches of the VSCodium run', () => {
           )
           .map(launch => launch.label),
       ],
-      [{...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'}, []],
+      [
+        {...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'},
+        ['secrets'],
+      ],
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the three genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('tooling-34: the secrets launch is a plain launch on the Ubuntu 26.04 host with a HOME of its own, whose host setup gives both keyboard-interactive accounts the run password again and expires harness-expired’s', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'secrets'),
+      {
+        label: 'secrets',
+        kind: 'plain',
+        suite: 'secrets',
+        hostBase: 'ubuntu-26.04',
+        environment: {HOME: '<run>/home-secrets'},
+        hostSetup: [
+          {
+            command:
+              'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired',
+          },
+        ],
+      },
+    );
+  });
+
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -223,6 +248,7 @@ describe('the launches of the VSCodium run', () => {
         'login-shells',
         'preconnect',
         'config-files',
+        'secrets',
         'default-ports',
         'ssh-core',
         'no-proposals',
@@ -438,13 +464,11 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ]),
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
+        ['genuine-licensed', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
-        [
-          'genuine-containers',
-          ['remote-oss.remote-containers'],
-          true,
-          undefined,
-        ],
+        ...['genuine-containers', 'genuine-accept-a', 'genuine-accept-b'].map(
+          label => [label, ['remote-oss.remote-containers'], true, undefined],
+        ),
         ['containers-view', ['remote-oss.remote-containers'], true, undefined],
       ],
     );
@@ -621,6 +645,8 @@ describe('the launches of the VSCodium run', () => {
         'extensionpack-lp-de',
         'extensionpack-lp-hu',
         'genuine-containers',
+        'genuine-accept-a',
+        'genuine-accept-b',
         'containers-view',
       ],
     );
@@ -762,7 +788,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101: the containers-podman launch and the three genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101: the containers-podman launch and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -774,8 +800,11 @@ describe('the launches of the VSCodium run', () => {
       [
         'containers-podman',
         'genuine',
+        'genuine-licensed',
         'ssh-no-proposals',
         'genuine-containers',
+        'genuine-accept-a',
+        'genuine-accept-b',
       ],
     );
   });

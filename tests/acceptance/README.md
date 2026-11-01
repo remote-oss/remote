@@ -109,6 +109,14 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the launch's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
 
+- `secrets`: a plain launch on the Ubuntu 26.04 host (`hostBase`) with a `HOME` of its own, `<run>/home-secrets`, for
+  F-2306 AC-27. Its rows log in by keyboard-interactive on the host's two PAM accounts: `twofactor` (`harness-2fa`, a
+  password and then a one-time code of the run's secret, `HARNESS_TOTP_FILE`, from `totpCode`) and `expired`
+  (`harness-expired`, whose password `start-sshd` marks expired, so the login asks for the current one and a new one
+  twice). Some logins succeed and some fail. Then `secretHits` searches the client's and the host's files for every typed
+  value and gives the files, never the values. Its host setup gives both accounts the run's password again and expires
+  `harness-expired`'s again before each attempt, as a forced change gives it a new one.
+
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
@@ -655,6 +663,8 @@ to reach the download host: as root on the harness host it adds `<gateway> githu
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
 
+The `genuine-licensed` launch is the one with `publisherDownloads`: it connects Remote - SSH to the run's host in a profile of its own, answers the licence question with Accept and Continue, and checks the server of the client's commit, the remote indicator, a terminal on the host and that a reload asks nothing (`tests/acceptance/genuine-licensed/`). Its template names the update service's Alpine server, as the run's SSH host is Alpine.
+
 A launch with `publisherDownloads: true` takes its server from Microsoft's update service, the server of the genuine
 client's own commit, and its rows accept the licence in the product's own modal, as the user decided on 2026-11-01
 (D-104, the genuine job only). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:
@@ -688,6 +698,10 @@ a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's r
 
     node tools/acceptance.ts --editor vscodium --launches genuine-containers
 
+`genuine-accept-a` and `genuine-accept-b` are `genuine-containers` with the editor's publisher as the server's address (`https://update.code.visualstudio.com`), the only launches whose rows accept the server's licence and download the server from the publisher, which the genuine job allows for them. Each launch has a profile of its own and the two share the run's `vscode` volume, so they run in this order: profile A accepts and installs the server of the client's commit into the volume and is asked nothing after a reload, for another container or after the editor restarts; profile B asks again, leaves no server process when it cancels, and when it accepts connects with the server already in the volume. Profile B's rows fail with what to run first when the volume holds no server of the client:
+
+    node tools/acceptance.ts --editor vscodium --launches genuine-accept-a,genuine-accept-b
+
 The genuine launches run the recorded version unless the job names the floor: the variable `HARNESS_GENUINE_VERSION` is
 `1.139.1` (the default when it is unset) or `1.125.0`, and any other value fails the run before it starts. The run
 downloads that version, installs the family's extensions into it, and gives the tests the version as
@@ -706,6 +720,8 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | Alias | User | What it is for |
 |---|---|---|
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
+| `twofactor` | `harness-2fa` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password and then a one-time code of the run's secret (`HARNESS_TOTP_FILE`; RFC 6238, six digits, a window of three steps) |
+| `expired` | `harness-expired` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password, marked expired, so the login asks for the current password and a new one twice |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |

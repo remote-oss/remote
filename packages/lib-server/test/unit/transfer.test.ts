@@ -1048,6 +1048,17 @@ describe('the kept cache (F-6301.BR-4, BR-5, BR-14)', () => {
     deepStrictEqual(downloads, []);
   });
 
+  it('containers-130: an entry already in the cache is told in the outcome, and a download is not', async () => {
+    const found = await runTransfer({...KEEP, existing: [KEPT]});
+    const downloaded = await runTransfer(KEEP);
+    deepStrictEqual(
+      [found.outcome, downloaded.outcome].map(outcome =>
+        outcome.kind === 'transferred' ? outcome.fromCache : 'failed',
+      ),
+      [true, undefined],
+    );
+  });
+
   it('F-6301.BR-4: an entry already in the cache is copied to the host', async () => {
     const {channel} = await runTransfer({...KEEP, existing: [KEPT]});
     deepStrictEqual(copiesOf(channel), [`${KEPT} -> ${REMOTE_COPY}`]);

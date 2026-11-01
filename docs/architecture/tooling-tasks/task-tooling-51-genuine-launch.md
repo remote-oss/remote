@@ -10,6 +10,8 @@ with the run's own stand-in download host. **Nothing reaches Microsoft or GitHub
 `update.code.visualstudio.com` gets through, no Microsoft server is downloaded, nothing clicks "Accept and Continue",
 and every case sets `remote.SSH.localServerDownload: "off"`. Without that last setting, a failed host download falls
 back to a local one on the runner, where github.com is the real GitHub.
+The `genuine-licensed` launch is the one exception: its rows accept the licence in the product's own modal and its server
+comes from the publisher (card tooling-97, #1630).
 
 ## 1. What's on main (checked by daedalus, 2026-10-20)
 

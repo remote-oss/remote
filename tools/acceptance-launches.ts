@@ -237,6 +237,47 @@ const GENUINE_CONTAINERS_LAUNCH: PlainLaunch = {
   },
 };
 
+/**
+ * The genuine client with our Dev Containers and Docker and the editor's publisher as the server's address, so the licence
+ * question is asked and an acceptance downloads the server from there, which the genuine job allows for these launches
+ * only. Profile A accepts and installs into the run's `vscode` volume.
+ */
+const GENUINE_CONTAINERS_ACCEPT_A_LAUNCH: PlainLaunch = {
+  ...GENUINE_CONTAINERS_LAUNCH,
+  label: 'genuine-accept-a',
+  suite: 'genuine-accept-a',
+  publisherDownloads: true,
+  settings: {
+    ...GENUINE_CONTAINERS_LAUNCH.settings,
+    'remote.serverDownloadBaseUrl': 'https://update.code.visualstudio.com',
+  },
+};
+
+/** The same in a fresh profile (a launch has a user-data folder of its own), which meets profile A's volume. */
+const GENUINE_CONTAINERS_ACCEPT_B_LAUNCH: PlainLaunch = {
+  ...GENUINE_CONTAINERS_ACCEPT_A_LAUNCH,
+  label: 'genuine-accept-b',
+  suite: 'genuine-accept-b',
+};
+
+/**
+ * The genuine client with Remote - SSH and the editor's publisher as the server's source: the licence question is asked
+ * in a profile of its own, and Accept and Continue takes the server of the client's commit from the publisher, which
+ * the genuine job allows for this launch alone. The template names the update service's Alpine server, since the
+ * run's SSH host is Alpine.
+ */
+const GENUINE_LICENSED_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'genuine-licensed',
+  suite: 'genuine-licensed',
+  publisherDownloads: true,
+  settings: {
+    ...GENUINE_LAUNCH.settings,
+    'remote.SSH.serverDownloadUrlTemplate':
+      'https://update.code.visualstudio.com/commit:${commit}/server-linux-alpine/${quality}',
+  },
+};
+
 /** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
 const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   ...GENUINE_LAUNCH,
@@ -244,6 +285,14 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   suite: 'ssh-no-proposals',
   proposedApi: false,
 };
+
+/**
+ * The host setup of the secrets launch: both keyboard-interactive accounts get the run's password again, and
+ * harness-expired's is marked expired again. `docker exec` sees the container's `HOST_PASSWORD`, which `start-sshd` only
+ * unsets in its own shell.
+ */
+const SECRETS_ACCOUNTS_RESET =
+  'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -721,6 +770,16 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      // Keyboard-interactive logins on the Ubuntu 26.04 host's two PAM accounts, then a search for what was typed.
+      label: 'secrets',
+      kind: 'plain',
+      suite: 'secrets',
+      hostBase: 'ubuntu-26.04',
+      environment: {HOME: '<run>/home-secrets'},
+      // Each attempt starts from the same accounts: a forced change gives harness-expired a new password.
+      hostSetup: [{command: SECRETS_ACCOUNTS_RESET}],
+    },
+    {
       ...RENDERER_LAUNCH,
       label: 'default-ports',
       suite: 'default-ports',
@@ -1015,8 +1074,11 @@ export function launchesOf(root: string): Launch[] {
       })),
     ),
     GENUINE_LAUNCH,
+    GENUINE_LICENSED_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
     GENUINE_CONTAINERS_LAUNCH,
+    GENUINE_CONTAINERS_ACCEPT_A_LAUNCH,
+    GENUINE_CONTAINERS_ACCEPT_B_LAUNCH,
     // Last: its rows remove every container of the run, the run's host and registry included.
     {
       ...CONTAINERS_LAUNCH,

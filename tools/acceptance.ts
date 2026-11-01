@@ -209,6 +209,8 @@ export interface HarnessVariables {
   REMOTE_OSS_CONTROL_MANIFEST?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
+  /** The file with the base32 one-time-code secret of the Ubuntu 26.04 host's user `harness-2fa`, mode 600. */
+  HARNESS_TOTP_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
   HARNESS_VSIX_FILES: string;
   /** The file the scripted adapters read their script from, in the run's folder. */
@@ -331,6 +333,24 @@ export function baseContainersOf(
     : (JSON.parse(named) as Partial<Record<HostBase, string>>);
 }
 
+/**
+ * What the rows of a launch on a host of another base see in place of the run's own host: that host's container and
+ * ssh_config, and its base; nothing for a launch on the harness host.
+ */
+export function hostBaseVariables(
+  launch: Launch,
+  environment: Readonly<Record<string, string | undefined>>,
+  runFolder: string,
+): Record<string, string> {
+  return launch.hostBase === undefined
+    ? {}
+    : {
+        HARNESS_CONTAINER: baseContainersOf(environment)[launch.hostBase] ?? '',
+        HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
+        HARNESS_HOST_BASE: launch.hostBase,
+      };
+}
+
 /** The ssh_config of the run's host of `base`: the run's own for Alpine's host, `ssh_config-<base>` beside it otherwise. */
 export function sshConfigOf(
   runFolder: string,
@@ -418,6 +438,9 @@ export function harnessSshConfig(
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
+    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, and a forced change.
+    ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
+    ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
     'Host password-ask',
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
@@ -634,6 +657,12 @@ const PASSWORD_LINES = [
   'PubkeyAuthentication no',
   'PreferredAuthentications password,keyboard-interactive',
   'NumberOfPasswordPrompts 1',
+];
+
+/** The lines of an alias whose account logs in by keyboard-interactive only, every prompt asked of the user. */
+const KBD_LINES = [
+  'PubkeyAuthentication no',
+  'PreferredAuthentications keyboard-interactive',
 ];
 
 /** The lines of an alias that logs in with the run's key and never prompts. */
@@ -1033,6 +1062,7 @@ async function prepare(
           REMOTE_OSS_CONTROL_MANIFEST: `${templateIndex}/control/devcontainer-control-manifest.json`,
         }),
     HARNESS_PASSWORD_FILE: host.passwordFile,
+    HARNESS_TOTP_FILE: host.totpFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
     REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(runFolder, 'signals'),
@@ -1389,7 +1419,18 @@ export async function runAcceptance(
         dependencies.sleep,
         launch =>
           launch?.kind === 'plain'
-            ? dependencies.runPlain(root, variables, launch)
+            ? dependencies.runPlain(
+                root,
+                {
+                  ...variables,
+                  ...hostBaseVariables(
+                    launch,
+                    {...variables},
+                    variables.HARNESS_RUN_FOLDER,
+                  ),
+                },
+                launch,
+              )
             : dependencies.runTests(root, variables, launch?.label),
         async launch => {
           if (launch.label.startsWith('client-')) {
@@ -1562,15 +1603,7 @@ export function vscodiumConfiguration(
       'pids',
     ),
     HARNESS_USER_DATA: userDataFolderOf(runFolder),
-    // A launch on a host of another base checks that host, through its own ssh_config, and its rows know its base.
-    ...(launch.hostBase === undefined
-      ? {}
-      : {
-          HARNESS_CONTAINER:
-            baseContainersOf(environment)[launch.hostBase] ?? '',
-          HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
-          HARNESS_HOST_BASE: launch.hostBase,
-        }),
+    ...hostBaseVariables(launch, environment, runFolder),
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,

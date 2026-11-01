@@ -133,6 +133,8 @@ export type TransferOutcome =
       installFolder: string;
       /** Set when the step found the server installed by another under the same lock, and unpacked nothing. */
       installedByAnother?: true;
+      /** Set when the archive was an entry of the client's cache that an earlier connect left, not a download of this one. */
+      fromCache?: true;
     }
   | {kind: 'failed'; failure: TransferFailure};
 
@@ -592,7 +594,7 @@ async function viaClient(
   ) {
     const found = await deliver(input, dependencies, cache.archivePath);
     if (!unpackFailed(found)) {
-      return found;
+      return found.kind === 'transferred' ? {...found, fromCache: true} : found;
     }
     await removeQuietly(dependencies.files, cache.archivePath);
   }

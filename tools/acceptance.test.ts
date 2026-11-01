@@ -35,6 +35,7 @@ import {
   baseContainersOf,
   publisherDownloadsRefusal,
   GENUINE_JOB,
+  hostBaseVariables,
   runArgumentsOf,
   type CommandResult,
   failureText,
@@ -423,6 +424,7 @@ const LAUNCH_ORDER = [
   'login-shells',
   'preconnect',
   'config-files',
+  'secrets',
   'default-ports',
   'ssh-core',
   'no-proposals',
@@ -724,6 +726,22 @@ describe('acceptance', () => {
       accountBlock('password'),
       [...sharedLines('password', 'harness-pw'), ...PASSWORD_ALIAS_LINES].join(
         '\n',
+      ),
+    );
+  });
+
+  it('tooling-34: Host twofactor and Host expired log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
+    deepStrictEqual(
+      [accountBlock('twofactor'), accountBlock('expired')],
+      [
+        ['twofactor', 'harness-2fa'],
+        ['expired', 'harness-expired'],
+      ].map(([name = '', user = '']) =>
+        [
+          ...sharedLines(name, user),
+          '  PubkeyAuthentication no',
+          '  PreferredAuthentications keyboard-interactive',
+        ].join('\n'),
       ),
     );
   });
@@ -1289,7 +1307,7 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           })),
-          ...['genuine', 'ssh-no-proposals'].map(label => ({
+          ...['genuine', 'genuine-licensed', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
@@ -1298,15 +1316,21 @@ describe('acceptance', () => {
             ],
             client: 'vscode',
           })),
-          {
-            folder: path.join('/run', 'extensions-genuine-containers'),
-            files: [
-              '/dist/remote-ssh.vsix',
-              '/run/window-agent.vsix',
-              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
-            ],
-            client: 'vscode',
-          },
+          ...['genuine-containers', 'genuine-accept-a', 'genuine-accept-b'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(
+                  workspace.root,
+                  'dist',
+                  'remote-containers-0.1.0.vsix',
+                ),
+              ],
+              client: 'vscode',
+            }),
+          ),
           {
             folder: path.join('/run', 'extensions-containers-view'),
             files: [
@@ -1668,6 +1692,7 @@ describe('acceptance', () => {
         HARNESS_RUN_FOLDER: harness.runFolder,
         HARNESS_RUN_ID: acceptanceRunId(process.env, process.pid),
         HARNESS_PASSWORD_FILE: path.join(harness.runFolder, 'password'),
+        HARNESS_TOTP_FILE: path.join(harness.runFolder, 'totp-secret'),
         REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(
           harness.runFolder,
           'script.json',
@@ -3239,9 +3264,9 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11: the run waits for the helper of the launch before to end: the grace before the slow launch and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets launch and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000]);
+      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -3500,6 +3525,41 @@ describe('acceptance', () => {
             path.join('/run', 'ssh_config-debian-12'),
             'debian-12',
           ],
+        ],
+      );
+    });
+
+    it('tooling-34: the rows of a launch on a host of another base, plain or not, see that host’s container and ssh_config and its base, and a launch on the harness host sees nothing new', () => {
+      const environment = {
+        HARNESS_HOST_CONTAINERS: JSON.stringify({
+          'ubuntu-26.04': 'ubuntu-host',
+        }),
+      };
+      deepStrictEqual(
+        [
+          hostBaseVariables(
+            {
+              label: 'secrets',
+              kind: 'plain',
+              suite: 'secrets',
+              hostBase: 'ubuntu-26.04',
+            },
+            environment,
+            '/run',
+          ),
+          hostBaseVariables(
+            {label: 'windows', kind: 'plain', suite: 'windows'},
+            environment,
+            '/run',
+          ),
+        ],
+        [
+          {
+            HARNESS_CONTAINER: 'ubuntu-host',
+            HARNESS_SSH_CONFIG: path.join('/run', 'ssh_config-ubuntu-26.04'),
+            HARNESS_HOST_BASE: 'ubuntu-26.04',
+          },
+          {},
         ],
       );
     });
@@ -3857,9 +3917,15 @@ describe('acceptance', () => {
     it('tooling-51, connect-84, tooling-74: the genuine-client launches are the last of the table but one, and containers-view is the last, because its rows empty the run’s daemon', () => {
       deepStrictEqual(
         launchesOf(REPOSITORY_ROOT)
-          .slice(-3)
+          .slice(-5)
           .map(launch => launch.label),
-        ['ssh-no-proposals', 'genuine-containers', 'containers-view'],
+        [
+          'ssh-no-proposals',
+          'genuine-containers',
+          'genuine-accept-a',
+          'genuine-accept-b',
+          'containers-view',
+        ],
       );
     });
 
@@ -3980,7 +4046,14 @@ describe('acceptance', () => {
             )
             .map(launch => launch.label),
           [],
-          ['genuine', 'ssh-no-proposals', 'genuine-containers'],
+          [
+            'genuine',
+            'genuine-licensed',
+            'ssh-no-proposals',
+            'genuine-containers',
+            'genuine-accept-a',
+            'genuine-accept-b',
+          ],
           ['containers'],
         ],
       );
@@ -4247,6 +4320,7 @@ describe('acceptance', () => {
           HARNESS_RUN_FOLDER: '',
           HARNESS_RUN_ID: '',
           HARNESS_PASSWORD_FILE: '',
+          HARNESS_TOTP_FILE: '',
           REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
           REMOTE_OSS_ACCEPTANCE_SIGNALS: '',

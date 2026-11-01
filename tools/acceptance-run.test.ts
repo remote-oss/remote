@@ -266,6 +266,7 @@ describe('startHostContainer (card tooling-10)', () => {
             port: 49153,
             keyFile: path.join(runFolder, 'id_ed25519'),
             passwordFile: path.join(runFolder, 'password'),
+            totpFile: path.join(runFolder, 'totp-secret'),
           },
           build: [
             [
@@ -395,6 +396,36 @@ describe('newPassword (card tooling-17)', () => {
   });
 });
 
+describe('the one-time-code secret of the start (card tooling-34)', () => {
+  it('is 32 characters of base32 in its file, mode 600, and a second start in the run folder keeps it', () => {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
+    try {
+      const first = startHostContainer(
+        startingCommands(),
+        '/root',
+        RUN_ID,
+        runFolder,
+      );
+      const secret = readFileSync(first.totpFile, 'utf8');
+      const again = scriptedCommands();
+      again.passes(); // docker build
+      again.passes('c456\n'); // docker run, the run's key kept
+      again.passes('127.0.0.1:49154\n'); // docker port
+      const second = startHostContainer(again, '/root', RUN_ID, runFolder);
+      deepStrictEqual(
+        [
+          /^[A-Z2-7]{32}$/.test(secret),
+          statSync(first.totpFile).mode & 0o777,
+          readFileSync(second.totpFile, 'utf8'),
+        ],
+        [true, 0o600, secret],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+});
+
 describe('the password of the start (card tooling-17)', () => {
   /** Starts a host in a fresh run folder and gives back the folder, the host and the docker run call. */
   function started(): {
@@ -412,13 +443,14 @@ describe('the password of the start (card tooling-17)', () => {
     };
   }
 
-  it('is the one line of the env file, HOST_PASSWORD=<password>', () => {
+  it('tooling-34: is the first of the two lines of the env file, HOST_PASSWORD=<password> and HOST_TOTP_SECRET=<secret>', () => {
     const {runFolder, host} = started();
     try {
       const password = readFileSync(host.passwordFile, 'utf8');
+      const secret = readFileSync(host.totpFile, 'utf8');
       strictEqual(
         readFileSync(path.join(runFolder, 'host.env'), 'utf8'),
-        `HOST_PASSWORD=${password}\n`,
+        `HOST_PASSWORD=${password}\nHOST_TOTP_SECRET=${secret}\n`,
       );
     } finally {
       rmSync(runFolder, {recursive: true, force: true});

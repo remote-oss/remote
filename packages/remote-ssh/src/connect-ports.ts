@@ -514,6 +514,7 @@ export function connectAssemblyOf(
       presenter: surfaces.presenter,
       cancellable: false,
       allowsTrust: false,
+      progressAtStart: true,
       startTitle: target => {
         // A new connect starts here: a stage without a message of its own has nothing before it to keep.
         shownTitle = '';
