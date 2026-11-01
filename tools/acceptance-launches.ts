@@ -260,6 +260,24 @@ const GENUINE_CONTAINERS_ACCEPT_B_LAUNCH: PlainLaunch = {
   suite: 'genuine-accept-b',
 };
 
+/**
+ * The genuine client with Remote - SSH and the editor's publisher as the server's source: the licence question is asked
+ * in a profile of its own, and Accept and Continue takes the server of the client's commit from the publisher, which
+ * the genuine job allows for this launch alone. The template names the update service's Alpine server, since the
+ * run's SSH host is Alpine.
+ */
+const GENUINE_LICENSED_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'genuine-licensed',
+  suite: 'genuine-licensed',
+  publisherDownloads: true,
+  settings: {
+    ...GENUINE_LAUNCH.settings,
+    'remote.SSH.serverDownloadUrlTemplate':
+      'https://update.code.visualstudio.com/commit:${commit}/server-linux-alpine/${quality}',
+  },
+};
+
 /** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
 const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   ...GENUINE_LAUNCH,
@@ -1056,6 +1074,7 @@ export function launchesOf(root: string): Launch[] {
       })),
     ),
     GENUINE_LAUNCH,
+    GENUINE_LICENSED_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
     GENUINE_CONTAINERS_LAUNCH,
     GENUINE_CONTAINERS_ACCEPT_A_LAUNCH,

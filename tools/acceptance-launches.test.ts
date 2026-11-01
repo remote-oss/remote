@@ -139,6 +139,7 @@ function labelsFromExplorer(): string[] {
     'extensionpack-lp-hu',
     ...hostLaunchLabels(),
     'genuine',
+    'genuine-licensed',
     'ssh-no-proposals',
     'genuine-containers',
     'genuine-accept-a',
@@ -224,7 +225,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the five genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -463,6 +464,7 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ]),
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
+        ['genuine-licensed', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
         ...['genuine-containers', 'genuine-accept-a', 'genuine-accept-b'].map(
           label => [label, ['remote-oss.remote-containers'], true, undefined],
@@ -786,7 +788,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101: the containers-podman launch and the five genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101: the containers-podman launch and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -798,6 +800,7 @@ describe('the launches of the VSCodium run', () => {
       [
         'containers-podman',
         'genuine',
+        'genuine-licensed',
         'ssh-no-proposals',
         'genuine-containers',
         'genuine-accept-a',

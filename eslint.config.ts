@@ -132,6 +132,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/trust/tsconfig.json',
   './tests/acceptance/trust-terminal/tsconfig.json',
   './tests/acceptance/genuine/tsconfig.json',
+  './tests/acceptance/genuine-licensed/tsconfig.json',
   './tests/acceptance/genuine-containers/tsconfig.json',
   './tests/acceptance/genuine-accept-a/tsconfig.json',
   './tests/acceptance/genuine-accept-b/tsconfig.json',

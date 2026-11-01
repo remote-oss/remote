@@ -27,7 +27,6 @@ import {
   waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
-  DISPLAY_NAME,
   downloadLogsText,
   freshHost,
   homeNames,
@@ -37,6 +36,11 @@ import {
   TEMPLATE_SETTING,
   tlsNamesSince,
 } from './genuine.ts';
+import {
+  drawn,
+  LICENCE_MESSAGE,
+  licenceDetail,
+} from '../windows/licence-texts.ts';
 
 /** The server template the run's download host answers: its own base, and the product's placeholders as they are. */
 function hostTemplate(): string {
@@ -45,21 +49,9 @@ function hostTemplate(): string {
   );
 }
 
-/** The buttons of a dialog as core's custom dialog draws them on Linux: in the reverse of the order of its items, core's own Cancel being the last item. */
-function drawn(items: readonly string[]): string[] {
-  return [...items].reverse();
-}
-
 /** The dialog of a message with no detail: core draws the message in the detail element and leaves the message element empty. */
 function plainDialog(text: string, items: readonly string[]) {
   return {message: '', details: text, buttons: drawn(items)};
-}
-
-/** The licence modal's message, and its detail with the display name and the terms' address (§5a). */
-const LICENCE_MESSAGE = "Accept the server's licence terms?";
-
-function licenceDetail(termsUrl: string): string {
-  return `The server ${DISPLAY_NAME} installs or starts on this host is distributed under licence terms of its own, which ${DISPLAY_NAME} does not accept for you. Read them at ${termsUrl} before you continue. "Accept and Continue" accepts them for this profile; the choice is remembered for this profile.`;
 }
 
 describe('where the server comes from, in genuine VS Code (card tooling-51, F-3902)', function () {
