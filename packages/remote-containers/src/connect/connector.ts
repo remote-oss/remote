@@ -1064,6 +1064,7 @@ export function containerConnectorOf(
         defaultExtensions,
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
+        created: prepared.created,
         onPhase: phase => {
           phases.tell({name: phase});
         },

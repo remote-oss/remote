@@ -1223,6 +1223,7 @@ export async function activate(
             newTemporaryToken: () =>
               `${String(process.pid)}-${String(clock.now())}`,
             logger,
+            translate,
           },
           request,
         ),
