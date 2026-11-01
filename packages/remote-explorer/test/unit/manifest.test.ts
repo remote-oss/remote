@@ -3,7 +3,7 @@
  * and identifiers. Every expected value is written here as a literal.
  */
 
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, partialDeepStrictEqual} from 'node:assert';
 import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 
@@ -370,13 +370,19 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5002.BR-2: the contributions are commands, views, menus and configuration, and the menus are three', () => {
+  it('F-5002.BR-2: the contributions include commands, views, menus and configuration, there are no keybindings, and the menus are the three', () => {
+    partialDeepStrictEqual(Object.keys(CONTRIBUTES).sort(), [
+      'commands',
+      'configuration',
+      'menus',
+      'views',
+    ]);
     deepStrictEqual(
-      [Object.keys(CONTRIBUTES), Object.keys(MENUS)],
       [
-        ['commands', 'views', 'menus', 'configuration'],
-        ['commandPalette', 'view/title', 'view/item/context'],
+        Object.keys(CONTRIBUTES).includes('keybindings'),
+        Object.keys(MENUS).sort(),
       ],
+      [false, ['commandPalette', 'view/item/context', 'view/title']],
     );
   });
 

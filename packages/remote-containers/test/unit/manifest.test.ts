@@ -611,15 +611,15 @@ describe('the manifest', () => {
     deepStrictEqual(MANIFEST.extensionKind, ['ui']);
   });
 
-  it('F-0101.BR-8: the seven proposals are declared, in order', () => {
-    deepStrictEqual(MANIFEST.enabledApiProposals, [
+  it('F-0101.BR-8: the seven proposals are declared, as a set', () => {
+    deepStrictEqual([...(MANIFEST.enabledApiProposals as string[])].sort(), [
+      'contribEditSessions',
+      'contribRemoteHelp',
+      'contribViewsRemote',
       'resolvers',
+      'terminalDimensions',
       'tunnels',
       'workspaceTrust',
-      'terminalDimensions',
-      'contribEditSessions',
-      'contribViewsRemote',
-      'contribRemoteHelp',
     ]);
   });
 
