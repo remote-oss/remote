@@ -1,0 +1,9 @@
+{
+  "id": "no-metadata-lab",
+  "version": "1.0.0",
+  "name": "No Metadata Lab",
+  "description": "The acceptance run's own template, published and then re-pushed without its metadata annotation: one optional directory the wizard cannot resolve.",
+  "options": {},
+  "optionalPaths": ["extra/"],
+  "platforms": ["Any"]
+}

@@ -35,6 +35,8 @@ export async function runTemplatesReady(): Promise<void> {
       variable('HARNESS_RUN_FOLDER'),
       address,
       ghcrLayer,
+      undefined,
+      variable('HARNESS_DEVCONTAINER_IMAGE'),
     );
   }
 }
