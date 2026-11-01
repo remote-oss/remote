@@ -66,6 +66,7 @@ function labelsFromExplorer(): string[] {
     'containers-killed-35',
     'containers-killed-43',
     'containers-podman',
+    'containers-context',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
@@ -331,6 +332,12 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        [
+          'containers-context',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
         ['containers-view', ['remote-oss.remote-containers'], true, undefined],
@@ -461,6 +468,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-context',
+          'containers-context',
+          shared,
+          undefined,
+          undefined,
+        ],
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -496,6 +510,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-killed-35',
         'containers-killed-43',
         'containers-podman',
+        'containers-context',
         'containers-view',
       ],
     );
@@ -1349,7 +1364,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, the three killed launches name their cases, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context gives the Docker configuration of its own, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1381,6 +1396,7 @@ describe('the platform cases (card coverage-12)', () => {
         ['containers-killed-23', {HARNESS_KILLED_CASE: '23'}],
         ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
         ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],
+        ['containers-context', {DOCKER_CONFIG: '<run>/docker-config'}],
       ],
     );
   });

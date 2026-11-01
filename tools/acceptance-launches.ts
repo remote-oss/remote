@@ -543,7 +543,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view`, `containers-context` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -888,6 +888,13 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers-podman',
       engine: 'podman',
       namedOnly: true,
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-context',
+      suite: 'containers-context',
+      // A Docker configuration of its own, so that a row can create, use and delete a context without touching the machine's.
+      environment: {DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`},
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
