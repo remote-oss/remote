@@ -41,20 +41,24 @@ async function windowWithTerminal(folder: string): Promise<void> {
 describe('the terminal in an SSH window (card coverage-80)', function () {
   this.timeout(300_000);
 
-  it('F-2508 AC-1 (c80-shell): a new terminal runs a shell on the host, as the SSH user, in the remote folder', async () => {
+  it('F-2508 AC-1 (c80-shell): a new terminal runs a shell on the host, as the SSH user in the remote folder, using the user’s login shell', async () => {
     await windowWithTerminal('c80-shell');
     try {
-      const [user, host] = [
+      const [user, host, shell] = [
         (await onHost('whoami')).trim(),
         (await onHost('hostname')).trim(),
+        (
+          await onHost('sh', '-c', 'getent passwd harness | cut -d: -f7')
+        ).trim(),
       ];
       deepStrictEqual(
         [
           await printedAfter('c80-shell', 'USER1', '$(whoami)'),
           await printedAfter('c80-shell', 'HOST1', '$(hostname)'),
           await printedAfter('c80-shell', 'DIR1', '$PWD'),
+          await printedAfter('c80-shell', 'SHELL1', '$SHELL'),
         ],
-        [user, host, '/home/harness/c80-shell'],
+        [user, host, '/home/harness/c80-shell', shell],
       );
     } finally {
       await closeWindow('c80-shell').catch(() => undefined);
