@@ -23,7 +23,7 @@ import {
   COMMAND,
   startCommand,
   withWindow,
-} from './authoring-support.ts';
+} from '../windows/authoring-support.ts';
 
 const REOPEN = 'remote-containers.reopenInContainer';
 

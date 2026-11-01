@@ -40,7 +40,7 @@ import {
   startedWith,
   takeOptionalScreen,
   withWindow,
-} from './authoring-support.ts';
+} from '../windows/authoring-support.ts';
 
 const execFileAsync = promisify(execFile);
 

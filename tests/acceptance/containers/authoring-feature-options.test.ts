@@ -34,7 +34,7 @@ import {
   takeOptionScreen,
   takenThrough,
   withWindow,
-} from './authoring-support.ts';
+} from '../windows/authoring-support.ts';
 
 const GATE_TITLE = 'Keep Feature defaults or configure options?';
 

@@ -1146,14 +1146,14 @@ F-0805.AC-8	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-9	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-10	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-11	acceptance	
-F-0805.AC-12	todo	
+F-0805.AC-12	acceptance	
 F-0805.AC-13	acceptance	
 F-0805.AC-14	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0805.AC-15	acceptance	
 F-0805.AC-16	acceptance	
 F-0805.AC-17	acceptance	
 F-0805.AC-18	acceptance	
-F-0805.AC-19	todo	
+F-0805.AC-19	acceptance	
 F-0805.AC-20	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0805.AC-21	core	core's quick-input focus after a mouse OK: the first Escape clears the focus ring on 1.139.1 and doesn't on the pinned VSCodium 1.140; our stage handles every Escape the same
 F-0901.AC-1	deferred	containers 0.4: F-0806 later
