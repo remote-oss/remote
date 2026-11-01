@@ -5,6 +5,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
+- **The Extensions view's "Install Local Extensions in …" action names the host by its label, "SSH: <host>"**; the
+  reference shows the raw authority "ssh-remote+<host>".
+  - F-2508 AC-30 records the action's text with the raw authority as observed. Ours registers the host label at the
+    first resolve's start, so that a failed first connect's indicator reads "Disconnected from SSH: <host>" (F-2410 AC-12
+    and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
+    remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
+
 - **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
   - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
     family's floor (ADR-0007 as amended, the user's decision D-102 on #1368). The proposed APIs it uses read the same

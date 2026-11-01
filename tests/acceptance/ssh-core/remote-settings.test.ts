@@ -177,14 +177,23 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
     }
   });
 
-  it.skip('F-2508 AC-30 (c80-install-local): the host section’s action is named for the raw authority, Install Local Extensions in ssh-remote+harness (skipped: with the host label registered core titles it Install Local Extensions in SSH: harness, which conflicts with the criterion’s text; asked on #1600)', async () => {
+  it('F-2508 AC-30 (ruling-1656-host-label): the host section’s action names the host by its label, Install Local Extensions in SSH: harness, and the section says No extensions found', async () => {
     await labelledWindow('c80-install-local');
     try {
+      await inWindow('c80-install-local', 'workbench.view.extensions');
+      await waitFor(
+        'the host section',
+        async () =>
+          /SSH: Harness - Installed\n\d+\nNo extensions found\./.test(
+            await pageText('c80-install-local'),
+          ),
+        30_000,
+      );
       deepStrictEqual(
         (
           await paletteItems('c80-install-local', 'Install Local Extensions')
         ).filter(title => title.includes('Install Local Extensions')),
-        ["Remote: Install Local Extensions in 'ssh-remote+harness'..."],
+        ["Remote: Install Local Extensions in 'SSH: harness'..."],
       );
     } finally {
       await closeWindow('c80-install-local').catch(() => undefined);
