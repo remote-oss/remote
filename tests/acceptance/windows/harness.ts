@@ -1085,6 +1085,8 @@ export interface EditorProduct {
   serverApplicationName: string;
   serverDataFolderName: string;
   serverLicenseUrl: string;
+  /** The editor's version, as its `product.json` has it. */
+  version: string;
 }
 
 /** The facts of the launch's editor, read from its product.json. */
