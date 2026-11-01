@@ -233,6 +233,9 @@
       "path": "tests/acceptance/extensionpack-german"
     },
     {
+      "path": "tests/acceptance/extensionpack-language"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {

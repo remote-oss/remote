@@ -105,6 +105,11 @@ export interface PlainLaunch extends LaunchCommon {
   standIns?: readonly string[];
   /** The display language the editor starts in, as its `--locale` switch takes it. */
   locale?: string;
+  /**
+   * The language id of a fixture language pack the launch installs, packaged from the language suite's fixtures: an
+   * extension that contributes a display language and translates nothing.
+   */
+  languagePack?: string;
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -953,6 +958,20 @@ export function launchesOf(root: string): Launch[] {
       environment: UNREACHABLE_GALLERY,
       locale: 'de',
     },
+    // The same with a fixture language pack active: the display language the pack's strings are read for.
+    ...['de', 'hu'].map((language): PlainLaunch => ({
+      ...RENDERER_LAUNCH,
+      label: `extensionpack-lp-${language}`,
+      suite: 'extensionpack-language',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-ssh',
+        'remote-oss.vscode-remote-extensionpack',
+      ],
+      environment: UNREACHABLE_GALLERY,
+      locale: language,
+      languagePack: language,
+    })),
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
         label: hostCaseLabel(suite, hostCase),

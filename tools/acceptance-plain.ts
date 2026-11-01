@@ -6,7 +6,7 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
-import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {cpSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {
@@ -230,7 +230,11 @@ export async function packageWindowAgent(
     ),
   );
   writeFileSync(path.join(folder, 'LICENSE'), 'MIT\n');
-  const vsix = path.join(runFolder, 'window-agent.vsix');
+  return packedVsix(folder, path.join(runFolder, 'window-agent.vsix'));
+}
+
+/** Packages the folder with `vsce` into the VSIX file `vsix`, and gives the file; it fails with what `vsce` said. */
+function packedVsix(folder: string, vsix: string): string {
   const result = spawnSync(
     process.execPath,
     [
@@ -246,10 +250,79 @@ export async function packageWindowAgent(
   );
   if (result.status !== 0) {
     throw new Error(
-      `vsce package of the window agent failed: ${result.stderr.trim()}`,
+      `vsce package of ${path.basename(folder)} failed: ${result.stderr.trim()}`,
     );
   }
   return vsix;
+}
+
+/** The VSIX file of the fixture language pack for `language` that a launch with a `languagePack` installs. */
+export function languagePackVsixOf(
+  runFolder: string,
+  language: string,
+): string {
+  return path.join(runFolder, `language-pack-${language}.vsix`);
+}
+
+/**
+ * Registers the fixture language pack for `language` the way a running editor does when it installs one: the
+ * `languagepacks.json` of the launch's user-data folder names the pack's translations, which the editor reads at start.
+ * The command-line install, which the harness uses, leaves the file unwritten.
+ */
+export function registerLanguagePack(
+  runFolder: string,
+  launch: Launch,
+  language: string,
+): void {
+  const extensionId = `remote-oss-test.language-pack-${language}`;
+  const userData = userDataFolderOf(runFolder, launch);
+  mkdirSync(userData, {recursive: true});
+  writeFileSync(
+    path.join(userData, 'languagepacks.json'),
+    JSON.stringify({
+      [language]: {
+        hash: `fixture-${language}`,
+        extensions: [
+          {extensionIdentifier: {id: extensionId}, version: '0.0.1'},
+        ],
+        translations: {
+          vscode: path.join(
+            extensionsFolderOf(runFolder, launch),
+            `${extensionId}-0.0.1`,
+            'translations',
+            'main.i18n.json',
+          ),
+        },
+        label: language,
+      },
+    }),
+  );
+}
+
+/**
+ * Packages the fixture language pack for `language`, which carries no translation, from the language suite's fixtures
+ * into a VSIX file in the run's folder. Returns the file.
+ */
+export function packageLanguagePack(
+  root: string,
+  runFolder: string,
+  language: string,
+): string {
+  const folder = path.join(runFolder, `language-pack-${language}`);
+  cpSync(
+    path.join(
+      root,
+      'tests',
+      'acceptance',
+      'extensionpack-language',
+      'fixtures',
+      `language-pack-${language}`,
+    ),
+    folder,
+    {recursive: true},
+  );
+  writeFileSync(path.join(folder, 'LICENSE'), 'MIT\n');
+  return packedVsix(folder, languagePackVsixOf(runFolder, language));
 }
 
 /** A program to start: its file, its arguments and its environment. */

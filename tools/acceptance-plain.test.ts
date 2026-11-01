@@ -7,7 +7,10 @@ import {
   editorLogsEnvironment,
   extensionsFolderOf,
   launchFiles,
+  languagePackVsixOf,
+  packageLanguagePack,
   packageWindowAgent,
+  registerLanguagePack,
   type PlainSteps,
   plainEditorOf,
   plainTestsOf,
@@ -1018,6 +1021,68 @@ describe('packageWindowAgent', () => {
     deepStrictEqual(
       [vsix, existsSync(vsix)],
       [path.join(workspace.root, 'window-agent.vsix'), true],
+    );
+  });
+});
+
+describe('the fixture language packs (card coverage-76)', () => {
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('language-pack');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  it('coverage-76: a language pack is packaged into a VSIX of the run’s folder, named by its language', () => {
+    const vsix = packageLanguagePack(REPOSITORY_ROOT, workspace.root, 'de');
+    deepStrictEqual(
+      [vsix, existsSync(vsix)],
+      [languagePackVsixOf(workspace.root, 'de'), true],
+    );
+  });
+
+  it('coverage-76: registering a language pack writes the record the editor reads, naming the translations the install leaves in the launch’s extensions folder', () => {
+    const launch: PlainLaunch = {
+      label: 'packed',
+      kind: 'plain',
+      suite: 'packed',
+      withExtensions: ['remote-oss.remote-containers'],
+    };
+    registerLanguagePack(workspace.root, launch, 'hu');
+    deepStrictEqual(
+      JSON.parse(
+        readFileSync(
+          path.join(
+            userDataFolderOf(workspace.root, launch),
+            'languagepacks.json',
+          ),
+          'utf8',
+        ),
+      ),
+      {
+        ['hu']: {
+          hash: 'fixture-hu',
+          extensions: [
+            {
+              extensionIdentifier: {id: 'remote-oss-test.language-pack-hu'},
+              version: '0.0.1',
+            },
+          ],
+          translations: {
+            vscode: path.join(
+              workspace.root,
+              'extensions-packed',
+              'remote-oss-test.language-pack-hu-0.0.1',
+              'translations',
+              'main.i18n.json',
+            ),
+          },
+          label: 'hu',
+        },
+      },
     );
   });
 });

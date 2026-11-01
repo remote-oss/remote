@@ -69,6 +69,8 @@ function labelsFromExplorer(): string[] {
     'containers-context',
     'extensionpack',
     'extensionpack-german',
+    'extensionpack-lp-de',
+    'extensionpack-lp-hu',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
@@ -341,7 +343,12 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
-        ...['extensionpack', 'extensionpack-german'].map(label => [
+        ...[
+          'extensionpack',
+          'extensionpack-german',
+          'extensionpack-lp-de',
+          'extensionpack-lp-hu',
+        ].map(label => [
           label,
           [
             'remote-oss.remote-containers',
@@ -532,6 +539,8 @@ describe('the launches of the VSCodium run', () => {
         'containers-context',
         'extensionpack',
         'extensionpack-german',
+        'extensionpack-lp-de',
+        'extensionpack-lp-hu',
         'genuine-containers',
         'containers-view',
       ],

@@ -1,0 +1,29 @@
+{
+  "name": "language-pack-hu",
+  "displayName": "Hungarian test language pack",
+  "description": "A language pack for the Hungarian display language that translates nothing, for the rows of the extension pack.",
+  "version": "0.0.1",
+  "publisher": "remote-oss-test",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Language Packs"
+  ],
+  "contributes": {
+    "localizations": [
+      {
+        "languageId": "hu",
+        "languageName": "Hungarian",
+        "localizedLanguageName": "Magyar",
+        "translations": [
+          {
+            "id": "vscode",
+            "path": "./translations/main.i18n.json"
+          }
+        ]
+      }
+    ]
+  }
+}
