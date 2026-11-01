@@ -176,6 +176,17 @@ export function pageTitleFor(
 }
 
 /**
+ * Of pages whose titles all fit one folder, those of a remote window when `remote`, else those of a local one: a remote
+ * window's title has the remote name after the folder's, so two windows on one folder, one connected, differ by it.
+ */
+export function pagesOfRemoteness(
+  candidates: readonly DebugTarget[],
+  remote: boolean,
+): DebugTarget[] {
+  return candidates.filter(page => page.title.includes(' [') === remote);
+}
+
+/**
  * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
  * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
  * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
@@ -302,7 +313,14 @@ export async function pageOf(
         workspaceFile: state.workspaceFile,
       });
       const candidates = found.filter(page => matches(page.title));
-      const chosen = pageAmong(candidates, name, REMEMBERED_PAGES, isOpen);
+      const chosen =
+        pageAmong(candidates, name, REMEMBERED_PAGES, isOpen) ??
+        pageAmong(
+          pagesOfRemoteness(candidates, state.remoteName !== null),
+          name,
+          REMEMBERED_PAGES,
+          isOpen,
+        );
       if (chosen === undefined && candidates.length > 1) {
         throw new Error(
           `two pages match the window's state: ${JSON.stringify(candidates.map(page => page.title))}`,
