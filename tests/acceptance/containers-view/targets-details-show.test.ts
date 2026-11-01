@@ -335,10 +335,12 @@ describe('Show Details and the Details section’s single slot (card containers-
       await waitFor(
         'the section of the window’s own container',
         async () => {
-          const unrelated = await sectionsTitled(connected, 'ds-unrelated');
-          const own = await sectionsTitled(connected, base);
-          seen.push(unrelated + own);
-          return own === 1 && unrelated === 0;
+          // One reading, so that a revert between two readings cannot count the old section and the new one together
+          const titles = await remoteExplorerSections(connected);
+          const unrelated = titles.filter(each => each === 'ds-unrelated');
+          const own = titles.filter(each => each === base);
+          seen.push(unrelated.length + own.length);
+          return own.length === 1 && unrelated.length === 0;
         },
         REVERT_MILLISECONDS,
       );
