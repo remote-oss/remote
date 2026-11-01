@@ -483,6 +483,44 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
+  it('F-9002 AC-12: the getting-started list links each member into its remote-oss folder, and the commands section names each member’s category and the remote indicator', () => {
+    const started = sectionOf('Getting started');
+    const commands = flat(sectionOf('Where the commands are'));
+    deepStrictEqual(
+      [
+        started.includes(
+          '(https://github.com/remote-oss/remote/tree/main/packages/remote-containers#readme)',
+        ),
+        started.includes(
+          '(https://github.com/remote-oss/remote/tree/main/packages/remote-ssh#readme)',
+        ),
+        commands.includes('"Dev Containers"'),
+        commands.includes('"Remote-SSH"'),
+        commands.includes('remote indicator'),
+        /WSL|Tunnels/.test(commands),
+      ],
+      [true, true, true, true, true, false],
+    );
+  });
+
+  it('F-9002 AC-13: the readme has the release notes linking the releases page, the feedback linking the issues page, the telemetry statement and the MIT licence', () => {
+    deepStrictEqual(
+      [
+        sectionOf('Release notes').includes(
+          '(https://github.com/remote-oss/remote/releases)',
+        ),
+        sectionOf('Feedback').includes(
+          '(https://github.com/remote-oss/remote/issues)',
+        ),
+        sectionOf('Telemetry').includes(
+          'Neither this pack nor its members collect or send telemetry.',
+        ),
+        sectionOf('License').includes('MIT License'),
+      ],
+      [true, true, true, true],
+    );
+  });
+
   it('F-9002 AC-14, F-9901 AC-5: every link is an absolute https or mailto address, none is Microsoft’s or an editor scheme or a fragment, and the licence is MIT', () => {
     const targets = linkTargets();
     deepStrictEqual(

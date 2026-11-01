@@ -103,6 +103,8 @@ export interface PlainLaunch extends LaunchCommon {
    * code and no contribution, carrying the id it stands for.
    */
   standIns?: readonly string[];
+  /** The display language the editor starts in, as its `--locale` switch takes it. */
+  locale?: string;
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -937,6 +939,19 @@ export function launchesOf(root: string): Launch[] {
         'remote-oss.vscode-remote-extensionpack',
       ],
       environment: UNREACHABLE_GALLERY,
+    },
+    // The same, in German, with no language pack: the display language the pack's strings are read for.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'extensionpack-german',
+      suite: 'extensionpack-german',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-ssh',
+        'remote-oss.vscode-remote-extensionpack',
+      ],
+      environment: UNREACHABLE_GALLERY,
+      locale: 'de',
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
