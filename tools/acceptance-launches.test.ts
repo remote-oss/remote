@@ -1,4 +1,6 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   bundleFolderOf,
   clientCases,
@@ -14,14 +16,77 @@ import {
   type HostCase,
   hostCases,
   hostSetupOf,
+  type Launch,
+  launchLabelled,
   runnerLaunches,
   settingsOfLaunch,
   suitesOf,
   withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
+import {UPDATE_SERVICE_NAME} from './acceptance-downloads.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
+
+/** The editor publisher's download hosts: its update service, and the host the service sends a server download to. */
+const PUBLISHER_HOSTS: readonly string[] = [
+  UPDATE_SERVICE_NAME,
+  'vscode.download.prss.microsoft.com',
+];
+
+/** A call that answers a dialog with the licence's Accept and Continue, by its text or by a name for it. */
+const ACCEPT_ANSWER = /answerDialog\(\s*[^,()]+,\s*[^)]*accept/i;
+
+/** Whether a file of the suite folder `suite` under `root`'s tests/acceptance answers a dialog with Accept and Continue. */
+function suiteAccepts(root: string, suite: string): boolean {
+  const folder = path.join(root, 'tests', 'acceptance', suite);
+  return (
+    existsSync(folder) &&
+    readdirSync(folder, {recursive: true, encoding: 'utf8'})
+      .filter(file => file.endsWith('.ts'))
+      .some(file =>
+        ACCEPT_ANSWER.test(readFileSync(path.join(folder, file), 'utf8')),
+      )
+  );
+}
+
+/**
+ * What breaks D-104's terms in `table`, one line per launch and term: a launch that names a publisher host or whose
+ * suite under `root` accepts the licence without `publisherDownloads`, a launch with it outside the genuine group or on
+ * a host base of its own (the run unpins the harness host only), and a genuine launch whose telemetry or update check
+ * is on.
+ */
+function publisherBreaches(
+  table: readonly Launch[],
+  root = REPOSITORY_ROOT,
+): string[] {
+  return table.flatMap(launch => {
+    const named = PUBLISHER_HOSTS.filter(host =>
+      JSON.stringify(launch).includes(host),
+    );
+    const genuine = launchGroupOf(launch) === 'genuine';
+    const settings = settingsOfLaunch(launch) ?? {};
+    return [
+      ...(named.length > 0 && launch.publisherDownloads !== true
+        ? [`${launch.label} names ${named.join(', ')}`]
+        : []),
+      ...(launch.publisherDownloads !== true && suiteAccepts(root, launch.suite)
+        ? [`${launch.label} accepts the licence`]
+        : []),
+      ...(launch.publisherDownloads === true && !genuine
+        ? [`${launch.label} is no genuine launch`]
+        : []),
+      ...(launch.publisherDownloads === true && launch.hostBase !== undefined
+        ? [`${launch.label} has a host base`]
+        : []),
+      ...(genuine &&
+      (settings['telemetry.telemetryLevel'] !== 'off' ||
+        settings['update.mode'] !== 'none')
+        ? [`${launch.label} keeps telemetry or the update check on`]
+        : []),
+    ];
+  });
+}
 
 const [PORTS_SUITE, INSTALL_SUITE] = HOST_CASE_SUITES as [
   (typeof HOST_CASE_SUITES)[number],
@@ -713,6 +778,117 @@ describe('the launches of the VSCodium run', () => {
         'genuine-containers',
       ],
     );
+  });
+
+  it('tooling-99, D-104: only a genuine launch with publisherDownloads names the publisher’s download hosts, and every genuine launch keeps telemetry and the update check off', () => {
+    deepStrictEqual(publisherBreaches(launches), []);
+  });
+
+  it('tooling-99: the D-104 check finds each breach of a table that has them', () => {
+    const genuine = launchLabelled(launches, 'genuine');
+    const template = {
+      'remote.SSH.serverDownloadUrlTemplate': `https://${UPDATE_SERVICE_NAME}/commit:\${commit}/server-\${os}-\${arch}/stable`,
+    };
+    const based: Launch = {
+      ...genuine,
+      label: 'genuine-based',
+      publisherDownloads: true,
+      hostBase: 'ubuntu-26.04',
+    };
+    const marked: Launch = {
+      ...genuine,
+      label: 'genuine-marked',
+      publisherDownloads: true,
+      settings: {...genuine.settings, ...template},
+    };
+    const broken: Launch[] = [
+      {
+        label: 'ssh-named',
+        runner: 'runner-remote',
+        suite: 's',
+        settings: template,
+      },
+      {
+        label: 'ssh-redirect',
+        runner: 'runner-remote',
+        suite: 's',
+        hostSetup: [
+          {command: 'wget https://vscode.download.prss.microsoft.com/x'},
+        ],
+      },
+      {
+        label: 'ssh-marked',
+        runner: 'runner-remote',
+        suite: 's',
+        publisherDownloads: true,
+      },
+      {
+        ...genuine,
+        label: 'genuine-unmarked',
+        settings: {...genuine.settings, ...template},
+      },
+      based,
+      {
+        ...genuine,
+        label: 'genuine-telemetry',
+        settings: {...genuine.settings, 'telemetry.telemetryLevel': 'all'},
+      },
+      marked,
+    ];
+    deepStrictEqual(publisherBreaches(broken), [
+      'ssh-named names update.code.visualstudio.com',
+      'ssh-redirect names vscode.download.prss.microsoft.com',
+      'ssh-marked is no genuine launch',
+      'genuine-unmarked names update.code.visualstudio.com',
+      'genuine-based has a host base',
+      'genuine-telemetry keeps telemetry or the update check on',
+    ]);
+  });
+
+  it('tooling-99, D-104: a launch whose suite answers a dialog with Accept and Continue needs publisherDownloads, and a suite that only reads the buttons or cancels does not', () => {
+    const workspace = new TemporaryWorkspace('launches');
+    try {
+      workspace.write(
+        'tests/acceptance/accepts/accept.test.ts',
+        "await answerDialog(name, 'Accept and Continue');\n",
+      );
+      workspace.write(
+        'tests/acceptance/accepts-by-name/rows/accept.test.ts',
+        'await answerDialog(\n  name,\n  LICENCE.accept,\n);\n',
+      );
+      workspace.write(
+        'tests/acceptance/cancels/cancel.test.ts',
+        "await answerDialog(name, 'Cancel');\n" +
+          "deepStrictEqual(buttons, ['Cancel', 'Accept and Continue']);\n",
+      );
+      function plain(label: string, suite: string): Launch {
+        return {
+          label,
+          kind: 'plain',
+          suite,
+          client: 'vscode',
+          settings: {
+            'telemetry.telemetryLevel': 'off',
+            'update.mode': 'none',
+          },
+        };
+      }
+      deepStrictEqual(
+        publisherBreaches(
+          [
+            plain('accepts', 'accepts'),
+            plain('accepts-by-name', 'accepts-by-name'),
+            plain('cancels', 'cancels'),
+            plain('missing', 'missing'),
+            {...plain('marked', 'accepts'), publisherDownloads: true},
+          ],
+          workspace.root,
+        ),
+        ['accepts accepts the licence', 'accepts-by-name accepts the licence'],
+      );
+    } finally {
+      workspace.remove();
+    }
   });
 
   it('D-85: no launch outside the list sets remote.SSH.configFile', () => {

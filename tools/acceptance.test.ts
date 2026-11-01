@@ -33,6 +33,8 @@ import {
   editorExecutableOf,
   genuineVersionIn,
   baseContainersOf,
+  publisherDownloadsRefusal,
+  GENUINE_JOB,
   runArgumentsOf,
   type CommandResult,
   failureText,
@@ -60,7 +62,10 @@ import {
   markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
-import type {RunDownloads} from './acceptance-downloads.ts';
+import {
+  type RunDownloads,
+  updateServicePinCommand,
+} from './acceptance-downloads.ts';
 import type {Started} from './acceptance-plain.ts';
 import {
   failureCases,
@@ -457,6 +462,20 @@ const CLIENT_CASE = {
 };
 
 /** The labels of the launches `selected` chooses from `launches`, or the error text alone when it names an unknown one. */
+/** The repository's `ci.yml`, and the launch selections of its scheduled VSCodium split. */
+function workflowParts(): {workflow: string; parts: string[]} {
+  const workflow = readFileSync(
+    path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+    'utf8',
+  );
+  return {
+    workflow,
+    parts: JSON.parse(
+      /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
+    ) as string[],
+  };
+}
+
 function chosenLabels(
   launches: readonly Launch[],
   selected: string[] | undefined,
@@ -1477,6 +1496,48 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-99, D-104: a launch whose server comes from the publisher is refused outside the genuine CI job, Actions, its job id and the version all named, and a run without one is never refused', () => {
+      const publisher: Launch = {
+        label: 'publisher-probe',
+        kind: 'plain',
+        suite: 'genuine',
+        client: 'vscode',
+        publisherDownloads: true,
+      };
+      const plain: Launch = {label: 'local', runner: 'runner', suite: 'suite'};
+      const genuineJob = {
+        GITHUB_ACTIONS: 'true',
+        GITHUB_JOB: 'acceptance-genuine',
+        HARNESS_GENUINE_VERSION: '1.125.0',
+      };
+      const refused =
+        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB acceptance-genuine and HARNESS_GENUINE_VERSION set";
+      deepStrictEqual(
+        [
+          publisherDownloadsRefusal([plain, publisher], genuineJob),
+          publisherDownloadsRefusal([plain, publisher], {}),
+          publisherDownloadsRefusal([publisher], {
+            HARNESS_GENUINE_VERSION: '1.125.0',
+          }),
+          publisherDownloadsRefusal([publisher], {
+            CI: 'true',
+            ...genuineJob,
+            GITHUB_ACTIONS: 'false',
+          }),
+          publisherDownloadsRefusal([publisher], {
+            ...genuineJob,
+            GITHUB_JOB: 'acceptance-vscodium',
+          }),
+          publisherDownloadsRefusal([publisher], {
+            ...genuineJob,
+            HARNESS_GENUINE_VERSION: '',
+          }),
+          publisherDownloadsRefusal([plain], {}),
+        ],
+        [undefined, refused, refused, refused, refused, refused, undefined],
+      );
+    });
+
     it('tooling-51: a run that does not name the genuine label never downloads VS Code, installs for it or makes it', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium', ['local']);
       deepStrictEqual(
@@ -2404,6 +2465,58 @@ describe('acceptance', () => {
           recordingCommand().command,
         ),
         /ports-debian: the run started no host of base ubuntu-18.04/,
+      );
+    });
+
+    it('tooling-99: a launch whose server comes from the publisher unpins the update service’s name on the harness host once before it, and the next launch without it pins the name again', async () => {
+      const publisher: Launch = {
+        label: 'publisher-probe',
+        kind: 'plain',
+        suite: 'genuine',
+        client: 'vscode',
+        publisherDownloads: true,
+      };
+      const {calls: order, command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      function noPorts(): ReturnType<PortHolder> {
+        return Promise.resolve({release: () => Promise.resolve()});
+      }
+      function note(line: string): void {
+        order.push(line);
+      }
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [REMOTE, publisher, {...publisher, label: 'publisher-two'}, REMOTE],
+        command,
+        'c0ffee',
+        sleep,
+        launch => {
+          note(`launch:${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+        () => Promise.resolve(),
+        {},
+        noPorts,
+        note,
+      );
+      deepStrictEqual(
+        order.filter(
+          entry =>
+            entry.startsWith('docker exec') ||
+            entry.startsWith('launch:') ||
+            entry.startsWith('acceptance: the harness host'),
+        ),
+        [
+          'launch:remote',
+          `docker exec --user root c0ffee sh -c ${updateServicePinCommand(false)}`,
+          'acceptance: the harness host resolves update.code.visualstudio.com through DNS',
+          'launch:publisher-probe',
+          'launch:publisher-two',
+          `docker exec --user root c0ffee sh -c ${updateServicePinCommand(true)}`,
+          'acceptance: the harness host resolves update.code.visualstudio.com to the download host',
+          'launch:remote',
+        ],
       );
     });
 
@@ -3736,15 +3849,38 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-99, D-104: the VSCodium job’s parts make no genuine launch, and the genuine job’s lists make only genuine launches, each run naming the genuine version', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const {workflow, parts} = workflowParts();
+      const genuineJob =
+        new RegExp(`\\n {2}${GENUINE_JOB}:\\n(?:(?: {4}.*)?\\n)*`).exec(
+          workflow,
+        )?.[0] ?? '';
+      const lists = [...genuineJob.matchAll(/^ +launches: (\S+)$/gm)].map(
+        match => match[1] ?? '',
+      );
+      /** The groups of the launches a selection makes, each once. */
+      function groupsOf(selection: string): string[] {
+        const chosen = chosenLaunches(launches, selection.split(','));
+        return typeof chosen === 'string'
+          ? [chosen]
+          : [...new Set(chosen.map(launch => launchGroupOf(launch)))];
+      }
+      deepStrictEqual(
+        [
+          parts.length > 0,
+          parts.flatMap(groupsOf).includes('genuine'),
+          lists.length,
+          lists.map(groupsOf),
+          genuineJob.includes('HARNESS_GENUINE_VERSION: ${{ matrix.version }}'),
+        ],
+        [true, false, 2, [['genuine'], ['genuine']], true],
+      );
+    });
+
     it('tooling-74: every selection that names containers-view runs it last, the groups, the dispatch lists and the scheduled split’s parts included, and only one part of the split has it', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
-      const workflow = readFileSync(
-        path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
-        'utf8',
-      );
-      const parts = JSON.parse(
-        /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
-      ) as string[];
+      const {parts} = workflowParts();
       const selections = [
         ['@containers'],
         ['containers-view', 'containers'],
