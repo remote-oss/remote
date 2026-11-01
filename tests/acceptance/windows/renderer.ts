@@ -2400,16 +2400,17 @@ export function combineQuickPickReads(
 }
 
 /**
- * The whole quick pick open in window `name`, in list order, however many rows its virtualized list renders at once:
- * the list is read, wheeled to its end collecting every row it shows, and wheeled back where it was for the next user
- * action, so a later read or click sees the list as it opened. None when no quick pick is open.
+ * The whole quick pick open in window `name`, in list order, however many rows its virtualized list renders at once.
+ * The list reveals its rows only to the pick's arrow key (a wheel moves it not at all), so the read walks the focus
+ * down to the set's `aria-setsize` and back to the row the pick opened on, keeping the focus where the next action
+ * of the test expects it. None when no quick pick is open.
  */
 export async function allQuickPickRows(
   name: string,
 ): Promise<DetailedQuickPickRow[]> {
   const reads = await evaluate<QuickPickRead[] | null>(
     name,
-    `(async () => {
+    `{(async () => {
       const widget = document.querySelector('${QUICK_WIDGET}');
       if (widget === null || widget.style.display === 'none') {
         return null;
@@ -2418,71 +2419,75 @@ export async function allQuickPickRows(
       if (list === null) {
         return null;
       }
-      const read = () => {
-        const rows = [...list.querySelectorAll('.monaco-list-row')].map(row => ({
-          position: Number(row.getAttribute('aria-posinset')),
-          setSize: Number(row.getAttribute('aria-setsize')),
-          label: row.querySelector('.label-name')?.textContent ?? '',
-          description: row.querySelector('.label-description')?.textContent ?? '',
-          detail: [...row.querySelectorAll('.quick-input-list-label-meta .monaco-icon-label')].filter(each => each.style.display !== 'none').map(each => each.textContent).join(''),
-          icons: [...row.querySelectorAll('.codicon')].flatMap(each => [...each.classList].filter(name => name.startsWith('codicon-'))),
-          buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
-          focused: row.classList.contains('focused'),
-        }));
-        return {rows, setSize: rows[0]?.setSize ?? 0};
+      const rowOf = row => ({
+        position: Number(row.getAttribute('aria-posinset')),
+        setSize: Number(row.getAttribute('aria-setsize')),
+        label: row.querySelector('.label-name')?.textContent ?? '',
+        description: row.querySelector('.label-description')?.textContent ?? '',
+        detail: [...row.querySelectorAll('.quick-input-list-label-meta .monaco-icon-label')].filter(each => each.style.display !== 'none').map(each => each.textContent).join(''),
+        icons: [...row.querySelectorAll('.codicon')].flatMap(each => [...each.classList].filter(name => name.startsWith('codicon-'))),
+        buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+        focused: row.classList.contains('focused'),
+      });
+      const focusOf = () => {
+        const focused = list.querySelector('.monaco-list-row.focused');
+        return focused ? Number(focused.getAttribute('aria-posinset')) : null;
       };
-      // The innermost element that overflows and holds the rows: a wheel on it reaches the list's scroller.
-      const overflow = [...list.querySelectorAll('*')].filter(el =>
-        el.scrollHeight > el.clientHeight + 1 &&
-        el.querySelector('.monaco-list-row') !== null
-      );
-      const scroller = overflow.find(el =>
-        overflow.every(other => other === el || other.contains(el))
-      );
-      const reads = [read()];
-      if (scroller !== undefined) {
-        const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-        const first = () => {
-          const rows = [...list.querySelectorAll('.monaco-list-row')];
-          const label = row => row?.querySelector('.label-name')?.textContent ?? '';
-          return label(rows[0]) + '\\u0000' + label(rows.at(-1));
-        };
-        // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
-        const move = async delta => {
-          const before = first();
-          scroller.dispatchEvent(
-            new WheelEvent('wheel', {bubbles: true, cancelable: true, deltaY: delta, deltaMode: 0}),
-          );
-          await wait(600);
-          return first() !== before;
-        };
-        const topFirst = first();
-        let down = 0;
-        if (await move(-400)) {
-          down = -400;
-        } else if (await move(400)) {
-          down = 400;
+      const read = () => {
+        const rows = [...list.querySelectorAll('.monaco-list-row')].map(rowOf);
+        return {rows, setSize: rows[0]?.setSize ?? 0, focus: focusOf()};
+      };
+      // The list reveals its next rows to the pick's arrow key; a synthetic wheel moves it not at all.
+      const key = name => list.dispatchEvent(new KeyboardEvent('keydown', {
+        key: name,
+        code: name,
+        keyCode: name === 'ArrowDown' ? 40 : 38,
+        which: name === 'ArrowDown' ? 40 : 38,
+        bubbles: true,
+        cancelable: true,
+      }));
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const settled = async before => {
+        for (let tick = 0; tick < 40 && focusOf() === before; tick += 1) {
+          await wait(16);
         }
-        let steps = 0;
-        while (down !== 0 && steps < 200) {
-          if (!(await move(down))) {
-            break;
-          }
-          reads.push(read());
-          steps += 1;
-        }
-        while (down !== 0 && steps < 400) {
-          await move(-down);
-          if (first() === topFirst) {
-            break;
-          }
-          steps += 1;
-        }
-        await wait(200);
-        reads.push(read());
+        await wait(16);
+      };
+      const first = read();
+      const setSize = first.setSize;
+      if (setSize <= 1 || first.rows.length >= setSize) {
+        return [first];
       }
+      const startFocus = first.focus;
+      const reads = [first];
+      const seen = new Set(first.rows.map(row => row.position));
+      let guard = 0;
+      while (seen.size < setSize && guard < setSize + 20) {
+        const before = focusOf() ?? startFocus;
+        key('ArrowDown');
+        await settled(before);
+        const step = read();
+        reads.push(step);
+        for (const row of step.rows) {
+          seen.add(row.position);
+        }
+        guard += 1;
+      }
+      // Restore the row the pick opened on: the test's next action moves from it, so it meets the pick as it did.
+      if (startFocus !== null) {
+        const now = focusOf() ?? startFocus;
+        const down = (startFocus - now + setSize) % setSize;
+        const up = (now - startFocus + setSize) % setSize;
+        const useDown = down <= up;
+        for (let step = 0; step < (useDown ? down : up); step += 1) {
+          const before = focusOf();
+          key(useDown ? 'ArrowDown' : 'ArrowUp');
+          await settled(before);
+        }
+      }
+      reads.push(read());
       return reads;
-    })()`,
+    })()}`,
   );
   return reads === null ? [] : combineQuickPickReads(reads);
 }

@@ -375,8 +375,8 @@ export async function startFromPalette(window: string): Promise<void> {
 }
 
 /**
- * Opens the screen in `window` and gives its whole rows, leaving it open at the top as it opened: the screen's list
- * is virtualized, so the rows are read back from the list wheeled to its end.
+ * Opens the screen in `window` and gives its whole rows, leaving it open with its focus as it opened: the screen's
+ * list is virtualized, so the rows are read back from the list walked by the pick's focus.
  */
 export async function screenOf(
   window: string,
