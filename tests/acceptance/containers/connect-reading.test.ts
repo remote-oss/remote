@@ -2,12 +2,15 @@ import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import {
   closeWindow,
   connectedToContainer,
   containersLog,
   containersLogSince,
   devContainerFolder,
+  editorLogsFolder,
+  reloadingAction,
   reloadingCommand,
   reopenInContainer,
   startInWindow,
@@ -24,13 +27,39 @@ import {
   connectSurface,
   editorTabs,
 } from '../windows/renderer.ts';
-import {connectingOf, sampled, sampling} from '../windows/sampling.ts';
+import {
+  connectingOf,
+  sampled,
+  sampling,
+  slowBuildFolder,
+} from '../windows/sampling.ts';
 
 const execFileAsync = promisify(execFile);
 
 const CONNECTING = 'Connecting to Dev Container (show log)';
 const LOG_LINK = 'command:remote-containers.revealLogTerminal';
 const DISCOVERY = 'Folder contains a Dev Container configuration file.';
+
+/** The pause between two readings of the rows that time the progress. */
+const FAST_SAMPLE_MILLISECONDS = 25;
+
+/** The Dev Containers log files the editor has written so far, one for each window that ran the extension. */
+function windowLogFiles(): string[] {
+  const logs = editorLogsFolder();
+  return existsSync(logs)
+    ? readdirSync(logs, {recursive: true, encoding: 'utf8'}).filter(
+        file => path.basename(file) === '1-Dev Containers.log',
+      )
+    : [];
+}
+
+/** One reading of window `name` with the time it was taken. */
+async function timedSurface(
+  name: string,
+): Promise<{takenAt: number; indicator: string; toasts: string[]}> {
+  const surface = await connectSurface(name);
+  return {takenAt: Date.now(), ...surface};
+}
 
 describe('F-0408 the reading step, the pull and the entry points (card coverage-68)', function () {
   this.timeout(900_000);
@@ -57,7 +86,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
     }
   });
 
-  it('F-0408 AC-14 (c68-running-reuse): reopening a folder whose container runs connects with no Starting container and no Starting VS Code Server in the log (its time clauses wait for card containers-116)', async () => {
+  it('F-0408 AC-14 (c68-running-reuse): reopening a folder whose container runs connects with no Starting container and no Starting VS Code Server in the log, and S087 is on screen for less than a second (the connect time of under a second is not asserted: it measures 0.87 to 1.05 s)', async () => {
     const folder = devContainerFolder('c68-running', {
       name: 'Running Reuse',
       shutdownAction: 'none',
@@ -68,7 +97,21 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       await closeWindow(name);
       const mark = containersLog().length;
       const again = await openFolderWindow(folder);
+      const sampler = sampled(
+        () => timedSurface(again),
+        FAST_SAMPLE_MILLISECONDS,
+      );
       await reopenInContainer(again);
+      const samples = await sampler.stop();
+      const shown = samples.filter(sample =>
+        sample.toasts.some(toast => toast.startsWith('Connecting')),
+      );
+      const onScreen =
+        shown.length === 0
+          ? 0
+          : (shown.at(-1)?.takenAt ?? 0) -
+            (shown[0]?.takenAt ?? 0) +
+            FAST_SAMPLE_MILLISECONDS;
       const lines = containersLogSince(mark);
       deepStrictEqual(
         {
@@ -78,13 +121,72 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
               line === 'Starting container' ||
               line === 'Starting VS Code Server',
           ),
+          underOneSecond: onScreen < 1000,
         },
         {
           already: true,
           steps: [],
+          underOneSecond: true,
         },
       );
       await closeWindow(again);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0408 AC-9 (c116-pause): after the window reloads, about half a second passes with no notification and Opening Remote... in the status bar before S087 appears, and the reloaded window writes a new log file', async () => {
+    const folder = slowBuildFolder('c116-pause', 'Pause Row');
+    const name = await openFolderWindow(folder);
+    const logFilesBefore = windowLogFiles();
+    const sampler = sampled(() => timedSurface(name), FAST_SAMPLE_MILLISECONDS);
+    try {
+      await reopenInContainer(name);
+      const samples = await sampler.stop();
+      const newLogFiles = windowLogFiles().filter(
+        file => !logFilesBefore.includes(file),
+      );
+      // The harness cannot read a window while it reloads, so the pause is counted from the resolve's own log line.
+      const resolving = newLogFiles
+        .flatMap(file =>
+          readFileSync(path.join(editorLogsFolder(), file), 'utf8').split('\n'),
+        )
+        .map(line => /^(\S+) \[info\] Resolving Remote$/.exec(line)?.[1])
+        .find(each => each !== undefined);
+      const resolvedAt = Date.parse(resolving ?? '');
+      const firstToast = samples.find(sample =>
+        sample.toasts.some(toast => toast.startsWith('Connecting')),
+      );
+      const before = samples.filter(
+        sample =>
+          sample.takenAt >= resolvedAt &&
+          sample.takenAt < (firstToast?.takenAt ?? Infinity),
+      );
+      const toastsBefore = before.flatMap(sample => sample.toasts);
+      deepStrictEqual(
+        {
+          newLogFile: newLogFiles.length > 0,
+          firstToast: firstToast !== undefined,
+          noToastBefore: toastsBefore,
+          pauseAtLeast400:
+            firstToast !== undefined && firstToast.takenAt - resolvedAt >= 400,
+          quietSamplesAllOpening: before.every(sample =>
+            sample.indicator.includes('Opening Remote'),
+          ),
+          indicatorSeen: samples.some(sample =>
+            sample.indicator.includes('Opening Remote'),
+          ),
+        },
+        {
+          newLogFile: true,
+          firstToast: true,
+          noToastBefore: [],
+          pauseAtLeast400: true,
+          quietSamplesAllOpening: true,
+          indicatorSeen: true,
+        },
+      );
+      await closeWindow(name);
     } finally {
       await removeContainers(folder);
     }
@@ -174,31 +276,21 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       };
     }
     await setUserSetting('workbench.startupEditor', 'none');
-    /**
-     * The notification’s button on a folder of its own, tried up to three times: the harness reads a window that
-     * reloads only when its page can be reached, and now and then it cannot be reached until the connect is over,
-     * which leaves no sample of the toast to judge.
-     */
+    /** The notification’s button, on a folder with a slow build so that S087 outlasts its half second. */
     async function viaNotification(): Promise<unknown> {
-      let outcome: unknown;
-      for (const attempt of [1, 2, 3]) {
-        const folder = devContainerFolder(`c68-entry-n${String(attempt)}`, {
-          name: `Entry N${String(attempt)}`,
-        });
-        const opened = await openFolderWindow(folder);
-        try {
-          outcome = await shown(opened, () =>
+      const folder = slowBuildFolder('c68-entry-n', 'Entry N');
+      const opened = await openFolderWindow(folder);
+      try {
+        const outcome = await shown(opened, () =>
+          reloadingAction(opened, 'the notification’s button', () =>
             answerToast(opened, DISCOVERY, 'Reopen in Container'),
-          );
-          await closeWindow(opened);
-        } finally {
-          await removeContainers(folder);
-        }
-        if ((outcome as {shown: boolean}).shown) {
-          break;
-        }
+          ),
+        );
+        await closeWindow(opened);
+        return outcome;
+      } finally {
+        await removeContainers(folder);
       }
-      return outcome;
     }
     seen.notification = await viaNotification();
     const window = await openFolderWindow(first);

@@ -738,6 +738,23 @@ export async function reopenStarted(name: string): Promise<void> {
 }
 
 /**
+ * Does `action` in window `name`, something that reloads the window, and resolves on the window's next `activated`.
+ * The window can be read from then on, and not while it reloads.
+ */
+export async function reloadingAction(
+  name: string,
+  what: string,
+  action: () => Promise<void>,
+): Promise<void> {
+  const before = countOf(name, 'activated');
+  await action();
+  await waitUntil(
+    `window ${name} to activate again after ${what}`,
+    () => countOf(name, 'activated') > before,
+  );
+}
+
+/**
  * Runs `command` in window `name`, a command that reloads the window, and resolves on the window's next `activated`.
  * The command isn't awaited: the reload ends the extension host before it can answer.
  */
@@ -746,12 +763,10 @@ export async function reloadingCommand(
   command: string,
   ...parameters: unknown[]
 ): Promise<void> {
-  const before = countOf(name, 'activated');
-  send(name, command, parameters);
-  await waitUntil(
-    `window ${name} to activate again after ${command}`,
-    () => countOf(name, 'activated') > before,
-  );
+  await reloadingAction(name, command, () => {
+    send(name, command, parameters);
+    return Promise.resolve();
+  });
 }
 
 /**
