@@ -26,9 +26,10 @@ interface Scene {
 function sceneOf(
   outcome: WizardOutcome,
   answer: string | null = null,
-  folders: Array<{scheme: string; fsPath: string}> = [
+  folders: Array<{scheme: string; fsPath: string; path?: string}> = [
     {scheme: 'file', fsPath: '/w/p'},
   ],
+  remoteName?: string,
 ): Scene {
   const calls: string[] = [];
   const sink = new MemorySink();
@@ -36,7 +37,11 @@ function sceneOf(
     calls,
     sink,
     ports: {
-      window: {folders: () => folders},
+      window: {
+        folders: () =>
+          folders.map(folder => ({path: folder.fsPath, ...folder})),
+        remoteName: () => remoteName,
+      },
       showModal: (message, buttons) => {
         calls.push(`modal ${message} ${buttons.join('|')}`);
         return Promise.resolve(answer ?? undefined);
@@ -156,6 +161,34 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
       [several.calls, remote.calls, linesOf(several.sink).length],
       [[], [], 1],
     );
+  });
+
+  it('F-0801 AC-14: a dev container window runs the wizard with its folder’s path in the container', async () => {
+    const scene = sceneOf(
+      WRITTEN,
+      null,
+      [
+        {
+          scheme: 'vscode-remote',
+          fsPath: '/x/workspaces/p',
+          path: '/workspaces/p',
+        },
+      ],
+      'dev-container',
+    );
+    await createDevContainerFile(scene.ports)();
+    deepStrictEqual(scene.calls[0], 'wizard /workspaces/p');
+  });
+
+  it('F-0801 AC-14: a vscode-remote folder of another kind of remote does nothing', async () => {
+    const scene = sceneOf(
+      WRITTEN,
+      null,
+      [{scheme: 'vscode-remote', fsPath: '/a', path: '/a'}],
+      'ssh-remote',
+    );
+    await createDevContainerFile(scene.ports)();
+    deepStrictEqual(scene.calls, []);
   });
 
   it('F-0801 BR-1: a call made while another runs returns at once', async () => {

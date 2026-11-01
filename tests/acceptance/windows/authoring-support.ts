@@ -13,7 +13,13 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from './folder-windows.ts';
-import {closeWindow, startInWindow, variable, waitFor} from './harness.ts';
+import {
+  closeWindow,
+  inWindow,
+  startInWindow,
+  variable,
+  waitFor,
+} from './harness.ts';
 import {
   acceptQuickPick,
   chooseQuickPickRow,
@@ -312,4 +318,55 @@ export function filesIn(folder: string): string[] {
       path.relative(folder, path.join(entry.parentPath, entry.name)),
     )
     .sort();
+}
+
+/** The item of the command in the remote indicator's menu and the palette. */
+export const ADD_ITEM = 'Add Dev Container Configuration Files...';
+
+/** The labels of the remote indicator's menu in window `name`. */
+export async function indicatorMenu(name: string): Promise<string[]> {
+  void inWindow(name, 'workbench.action.remote.showMenu').catch(
+    () => undefined,
+  );
+  await waitFor(
+    'the indicator menu',
+    async () => (await quickPickRows(name).catch(() => [])).length > 0,
+    30_000,
+  );
+  const labels = (await quickPickRows(name)).map(entry => entry.label);
+  await pressEscape(name);
+  return labels;
+}
+
+/** Where `ADD_ITEM` is in `menu`, between which neighbours. */
+export function neighboursOf(
+  menu: readonly string[],
+): Array<string | undefined> {
+  const index = menu.indexOf(ADD_ITEM);
+  return index < 0 ? [] : [menu[index - 1], menu[index + 1]];
+}
+
+/**
+ * Runs the command in `window` as a user does, from the command palette: core then shows its own dialog when the
+ * command fails, which a command started through the harness's agent does not (the agent receives the error).
+ */
+export async function startFromPalette(window: string): Promise<void> {
+  const item = `Dev Containers: ${ADD_ITEM}`;
+  await startInWindow(window, 'workbench.action.showCommands');
+  await waitForQuickPick(window, 30_000);
+  await typeInQuickPick(window, `>${item}`);
+  await waitFor(
+    'the command in the palette',
+    async () => ((await quickPickOf(window))?.items ?? [])[0] === item,
+    30_000,
+  );
+  await acceptQuickPick(window);
+  await waitFor(
+    'the location pick',
+    async () =>
+      (await quickPickRows(window).catch(() => [])).some(
+        entry => entry.label === WORKSPACE_ROW,
+      ),
+    30_000,
+  );
 }

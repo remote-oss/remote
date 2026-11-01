@@ -4,6 +4,7 @@
  * written, and a failure leaves nothing partial.
  */
 
+import type {AuthoringFiles, EntryKind} from './window-files.ts';
 import path from 'node:path';
 import type {TemplateRequest} from '../cli/cli-arguments.ts';
 import type {ApplyTemplateResult, CliFailure} from '../cli/cli-lines.ts';
@@ -46,25 +47,21 @@ export type WriteOutcome =
   | {kind: 'failed'; detail: string};
 
 /** What an entry of the file system is. */
-export type EntryKind = 'file' | 'folder' | 'missing';
+export type {EntryKind};
 
-/** The file system the write uses. */
-interface WriteFiles {
+/** The file system the write uses: the files of the authoring command, and a scratch folder of the host's. */
+interface WriteFiles extends Pick<
+  AuthoringFiles,
+  | 'kindOf'
+  | 'read'
+  | 'write'
+  | 'makeFolder'
+  | 'removeFile'
+  | 'removeFolder'
+  | 'creationProblem'
+> {
   /** A new folder under the extension's storage, for one run. */
   makeScratchFolder(): Promise<string>;
-  /** What is at the path. */
-  kindOf(file: string): Promise<EntryKind>;
-  read(file: string): Promise<Uint8Array>;
-  /** Writes the bytes, replacing the file. */
-  write(file: string, bytes: Uint8Array): Promise<void>;
-  /** Creates the folder and the ones above it that are missing. */
-  makeFolder(folder: string): Promise<void>;
-  /** Removes the file. */
-  removeFile(file: string): Promise<void>;
-  /** Removes the folder and what is in it; none if it is not there. */
-  removeFolder(folder: string): Promise<void>;
-  /** Why files could not be created in the folder (it may not exist yet): the file system's words; none when they can. */
-  creationProblem(folder: string): Promise<string | undefined>;
 }
 
 /** The modal dialogs of the write. */

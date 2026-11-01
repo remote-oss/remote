@@ -137,10 +137,10 @@ const DETAILS_REBUILD_WHEN =
   '!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown';
 
 const CREATE_FILE_WHEN =
-  '!remoteName && !virtualWorkspace && !remote-containers:standingDown';
+  'remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 const CREATE_FILE_INDICATOR_WHEN =
-  'workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+  'workspaceFolderCount != 0 && remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 const ENGLISH = {
   description:
@@ -909,7 +909,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and the indicator item only in a window with a folder', () => {
+  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and of a dev container window, and the indicator item only in a window with a folder', () => {
     deepStrictEqual(
       [
         menusOf(['remote-containers.createDevContainerFile']),

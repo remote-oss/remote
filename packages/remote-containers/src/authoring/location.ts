@@ -35,6 +35,12 @@ export interface LocationPorts {
   store: StoreFiles;
   /** The user's home folder, which the dialogs write as `~`. */
   home: string;
+  /**
+   * The error that refuses a write to the store, given the slot's folder; unset where the store may be written. A
+   * dev container window sets it: the store is on the host, and a window whose folder is in a container must not
+   * create it from there.
+   */
+  refuseStore?: (slotFolder: string) => Error;
 }
 
 /** The names the folder's own configuration files can have, relative to it. */
