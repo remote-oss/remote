@@ -1,5 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
+import {readFileSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   openFolderWindow,
@@ -8,10 +10,12 @@ import {
 } from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectedToContainer,
   devContainerFolder,
   devContainersOf,
   editorProduct,
   inWindow,
+  reloadingCommand,
   reopenInContainer,
   waitFor,
 } from '../windows/harness.ts';
@@ -296,6 +300,92 @@ describe('the configuration’s extensions in the container (card containers-16)
       );
     } finally {
       await setUserSetting('dev.containers.defaultExtensions', undefined);
+      await removeContainers(folder);
+    }
+  });
+
+  /**
+   * Makes the container of `folder` with dracula installed, closes its window, edits the list to the YAML extension and
+   * reopens the folder in a container, which is the existing one. By brief-release-1 ruling 15 no prompt is looked for.
+   */
+  async function reopenedAfterEdit(
+    folder: string,
+  ): Promise<{name: string; before: string; containerId: string}> {
+    const first = await connected(folder);
+    await installedWhen(
+      first.containerId,
+      folders => startingWith(folders, DRACULA_PREFIX).length > 0,
+    );
+    await closeWindow(first.name);
+    const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...(JSON.parse(readFileSync(file, 'utf8')) as object),
+        customizations: {vscode: {extensions: [YAML_ID]}},
+      }),
+    );
+    const second = await connected(folder);
+    return {
+      name: second.name,
+      before: first.containerId,
+      containerId: second.containerId,
+    };
+  }
+
+  it('F-0505 AC-14 (c66-ignore): by ruling 15, a reopen after the extension list was edited, with no rebuild, reuses the container and adds, removes and changes no extension', async () => {
+    const folder = devContainerFolder('c66-ignore', {
+      customizations: {vscode: {extensions: [DRACULA_ID]}},
+    });
+    try {
+      const {name, before, containerId} = await reopenedAfterEdit(folder);
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      const installed = await installedIn(containerId);
+      await closeWindow(name);
+      deepStrictEqual(
+        [
+          containerId === before,
+          startingWith(installed, YAML_PREFIX),
+          startingWith(installed, DRACULA_PREFIX).length,
+        ],
+        [true, [], 1],
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0505 AC-15 (c66-rebuild): by ruling 15, rebuilding the container after the extension list was edited makes a new container that installs the current list and not dracula', async () => {
+    const folder = devContainerFolder('c66-rebuild', {
+      customizations: {vscode: {extensions: [DRACULA_ID]}},
+    });
+    try {
+      const {name, before} = await reopenedAfterEdit(folder);
+      await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      let rebuilt = '';
+      await waitFor(
+        'the rebuild to make a new container',
+        async () => {
+          const containerIds = await devContainersOf(folder);
+          rebuilt = containerIds.find(each => each !== before) ?? '';
+          return rebuilt !== '' && containerIds.length === 1;
+        },
+        240_000,
+      );
+      await connectedToContainer(name, 240_000);
+      const installed = await installedWhen(
+        rebuilt,
+        folders => startingWith(folders, YAML_PREFIX).length > 0,
+      );
+      await closeWindow(name);
+      deepStrictEqual(
+        [
+          startingWith(installed, DRACULA_PREFIX),
+          startingWith(installed, YAML_PREFIX).length,
+        ],
+        [[], 1],
+      );
+    } finally {
       await removeContainers(folder);
     }
   });
