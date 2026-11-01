@@ -10,7 +10,7 @@ pnpm test:acceptance    # on Linux without a display: xvfb-run --auto-servernum 
 
 The command packages the extensions, then `tools/acceptance.ts`:
 
-1. builds the host image from `host/` (Alpine with OpenSSH's server and libstdc++, key login only, the user `harness` with the
+1. builds the host image from `host/` (Alpine with OpenSSH's server, libstdc++ and git, key login only, the user `harness` with the
    POSIX `sh` login shell, TCP forwarding allowed);
 2. makes an Ed25519 key pair for the run and starts the host with its public key on a free local port;
 3. writes an `ssh_config` whose `Host harness` reaches the host with that key, its own known-hosts file and no agent (and whose `Host 127.0.0.1` block reaches it by the address as typed),
@@ -645,7 +645,7 @@ answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settings
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
 executable the launch started, and `editorProduct()` reads the `product.json` beside it.
 
-Nothing reaches Microsoft or GitHub from the rows, in two ways. The host's side is shown by the download host: it
+Nothing reaches Microsoft or GitHub from the rows, other than a launch with `publisherDownloads` (below), in two ways. The host's side is shown by the download host: it
 answers for `update.code.visualstudio.com`, its request log shows what the host asked for, and its TLS log shows which
 names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
 built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
@@ -654,6 +654,26 @@ built-in chat) is not seen there, so the launch turns each off in its settings: 
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
+
+A launch with `publisherDownloads: true` takes its server from Microsoft's update service, the server of the genuine
+client's own commit, and its rows accept the licence in the product's own modal, as the user decided on 2026-11-01
+(D-104, the genuine job only). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:
+before the launch the run moves the host's line for that name out of `/etc/hosts` into `/etc/hosts.update-service`
+(rewriting the file in place, as it is a bind mount), and before the next launch without the field it puts the line
+back. The log says each change (`acceptance: the harness host resolves update.code.visualstudio.com through DNS`, then
+`… to the download host`). The client's download, as Dev Containers makes it, needs nothing from the run: the runner
+resolves the name itself.
+
+These launches run only in the genuine CI job (D-104; a run on any other machine is outside the user's decision until
+they rule on it). The field also marks every launch whose rows click "Accept and Continue", whether or not its server
+comes from the publisher, so all of them pass the same gate: the run refuses such a launch unless `GITHUB_ACTIONS` is
+`true`, `GITHUB_JOB` is `acceptance-genuine` and `HARNESS_GENUINE_VERSION` is set (`acceptance: <label>: a launch that
+takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): …`). Anyone
+can set those three variables, so the gate guards against an accident, not against intent. The tools rows check the
+rest: every launch whose suite answers a dialog with "Accept and Continue" has the field, only such a launch names
+`update.code.visualstudio.com` or `vscode.download.prss.microsoft.com`, only a genuine launch on the harness host has
+the field, every genuine launch keeps `telemetry.telemetryLevel` off and `update.mode` none, no part of the VSCodium
+job makes a genuine launch, and the genuine job's lists make only genuine launches.
 
     node tools/acceptance.ts --editor vscodium --launches genuine
 
@@ -690,6 +710,7 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
+| `fwd-busy`, `fwd-busy-exit`, `fwd-static`, `fwd-gateway`, `fwd-remote`, `fwd-dynamic`, `fwd-open`, `fwd-noopen` | `harness` | the run's key; each adds forwards to the client's configuration: `LocalForward 13020 127.0.0.1:8660` (`fwd-busy`, and `fwd-busy-exit` with `ExitOnForwardFailure yes`), `LocalForward 13010 127.0.0.1:8657` (`fwd-static`), `GatewayPorts yes` with `LocalForward 13001 127.0.0.1:8661` (`fwd-gateway`), `RemoteForward 19000 127.0.0.1:19101` (`fwd-remote`), `DynamicForward 11080` (`fwd-dynamic`) and a dynamic `RemoteForward` with `PermitRemoteOpen any` (`fwd-open`, port 19201) or `none` (`fwd-noopen`, port 19200) |
 | `i686` | `harness-i686` | the run's key; its `~/.profile` puts a folder first on `PATH` whose `uname -m` prints `i686` (the connect's shell is a login shell) |
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |

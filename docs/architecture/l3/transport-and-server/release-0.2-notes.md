@@ -5,6 +5,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
+- **The Extensions view's "Install Local Extensions in …" action names the host by its label, "SSH: <host>"**; the
+  reference shows the raw authority "ssh-remote+<host>".
+  - F-2508 AC-30 records the action's text with the raw authority as observed. Ours registers the host label at the
+    first resolve's start, so that a failed first connect's indicator reads "Disconnected from SSH: <host>" (F-2410 AC-12
+    and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
+    remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
+
 - **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
   - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
     family's floor (ADR-0007 as amended, the user's decision D-102 on #1368). The proposed APIs it uses read the same
@@ -62,3 +69,10 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     CLI layer (BR-6, BR-9). Ours runs one socket-mode server per host and commit, reused by later connects (T6 ruling
     on #299, 2026-10-12; `ruling-299-socket-reuse`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-299-socket-reuse)
+- **With the server on a socket, a host key that is not yet known is asked as a question of Remote - SSH, not in the
+  install terminal.** The progress notification shows first, and then the question with the key's fingerprint.
+  - F-2410 AC-24 describes nothing but the progress notification showing while ssh waits, with the question in the
+    install terminal behind "details". Ours asks it the way terminal mode does with `remote.SSH.showLoginTerminal` off
+    (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
+    on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
+    Rows: (ruling-1601-host-key-pick)

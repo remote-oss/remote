@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {onHost, openWindow} from '../windows/harness.ts';
+import {closeWindow, onHost, openWindow} from '../windows/harness.ts';
 import {greetingOf} from './greeting.ts';
 
 /** The port the host listener answers on, and the greeting it gives. */
@@ -47,6 +47,11 @@ describe('the default forwarded ports of a launch (card connect-40)', function (
 
   it('F-2507 AC-2: a default forwarded port listens after the window connects', async () => {
     await openWindow('harness', 'dp1');
-    deepStrictEqual(await greetingWithin15Seconds(), GREETING);
+    try {
+      deepStrictEqual(await greetingWithin15Seconds(), GREETING);
+    } finally {
+      // An open window keeps its forwards, and the rows after this one read the same local ports.
+      await closeWindow('dp1');
+    }
   });
 });

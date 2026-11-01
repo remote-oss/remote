@@ -49,6 +49,8 @@ import {
   downloadHostArguments,
   type RunDownloads,
   startRunDownloads,
+  UPDATE_SERVICE_NAME,
+  updateServicePinCommand,
 } from './acceptance-downloads.ts';
 import {
   acceptanceRunId,
@@ -447,6 +449,12 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
+    ...FORWARD_ALIASES.flatMap(([alias, user, lines]) =>
+      accountAlias(alias, user, port, runFolder, [
+        ...keyLines(runFolder),
+        ...lines,
+      ]),
+    ),
     ...accountAlias(
       'mute',
       'harness-mute',
@@ -636,6 +644,34 @@ function keyLines(runFolder: string): string[] {
     'BatchMode yes',
   ];
 }
+
+/**
+ * The aliases whose configuration forwards ports: `fwd-busy` and `fwd-busy-exit` (a `LocalForward` for a port the row
+ * holds, without and with `ExitOnForwardFailure`), `fwd-static` (a `LocalForward` for the host's port 8657),
+ * `fwd-gateway` (`GatewayPorts yes` with a `LocalForward`), `fwd-remote` (a `RemoteForward` to a port of the client),
+ * `fwd-dynamic` (a `DynamicForward`), and `fwd-open` and `fwd-noopen` (a dynamic `RemoteForward` with `PermitRemoteOpen`
+ * `any` and `none`, an option of the client's configuration). Each is the alias's name, its account and its lines.
+ */
+export const FORWARD_ALIASES: ReadonlyArray<
+  readonly [string, string, readonly string[]]
+> = [
+  ['fwd-busy', 'harness', ['LocalForward 13020 127.0.0.1:8660']],
+  [
+    'fwd-busy-exit',
+    'harness',
+    ['LocalForward 13020 127.0.0.1:8660', 'ExitOnForwardFailure yes'],
+  ],
+  ['fwd-static', 'harness', ['LocalForward 13010 127.0.0.1:8657']],
+  [
+    'fwd-gateway',
+    'harness',
+    ['GatewayPorts yes', 'LocalForward 13001 127.0.0.1:8661'],
+  ],
+  ['fwd-remote', 'harness', ['RemoteForward 19000 127.0.0.1:19101']],
+  ['fwd-dynamic', 'harness', ['DynamicForward 11080']],
+  ['fwd-open', 'harness', ['RemoteForward 19201', 'PermitRemoteOpen any']],
+  ['fwd-noopen', 'harness', ['RemoteForward 19200', 'PermitRemoteOpen none']],
+];
 
 /**
  * One alias of the host's other accounts: the lines every one shares, its own known-hosts file, then `further`. Its
@@ -1130,6 +1166,8 @@ export async function runLaunches(
   baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
 ): Promise<number[]> {
   const exitCodes: number[] = [];
+  // The harness host starts with the update service's name pinned to the download host.
+  let pinned = true;
   for (const launch of launches) {
     if (launch !== undefined) {
       // The line a log reader splits the run's output at: tools/flake-ledger.ts reads each launch's rows after it.
@@ -1175,6 +1213,16 @@ export async function runLaunches(
     return runWithRetry(async () => {
       // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
       if (launch !== undefined) {
+        const wanted = launch.publisherDownloads !== true;
+        if (wanted !== pinned) {
+          runHostSetup(command, container, [
+            {command: updateServicePinCommand(wanted)},
+          ]);
+          pinned = wanted;
+          report(
+            `acceptance: the harness host resolves ${UPDATE_SERVICE_NAME} ${wanted ? 'to the download host' : 'through DNS'}`,
+          );
+        }
         if (launch.hostSetup !== undefined) {
           runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
         }
@@ -1270,6 +1318,11 @@ export async function runAcceptance(
     console.error(
       'acceptance: ssh-no-proposals runs at the recorded version only',
     );
+    return 2;
+  }
+  const refusal = publisherDownloadsRefusal(chosen, process.env);
+  if (refusal !== undefined) {
+    console.error(`acceptance: ${refusal}`);
     return 2;
   }
   const runId = acceptanceRunId(process.env, process.pid);
@@ -1421,6 +1474,32 @@ export function genuineVersionIn(
     : {
         problem: `HARNESS_GENUINE_VERSION must be ${GENUINE_VERSIONS.join(' or ')}`,
       };
+}
+
+/** The id of the workflow job that alone makes a launch with `publisherDownloads`, as Actions gives it in `GITHUB_JOB`. */
+export const GENUINE_JOB = 'acceptance-genuine';
+
+/**
+ * Why the run refuses its launches, when one of them takes its server from the editor's publisher or accepts its
+ * licence outside the genuine job: the run takes such a launch only under Actions, in that job, with the version named.
+ * Anyone can set the three variables, so this guards against an accident, not against intent.
+ */
+export function publisherDownloadsRefusal(
+  launches: readonly Launch[],
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const named = environment.HARNESS_GENUINE_VERSION;
+  const labels = launches
+    .filter(launch => launch.publisherDownloads === true)
+    .map(launch => launch.label);
+  const genuineJob =
+    environment.GITHUB_ACTIONS === 'true' &&
+    environment.GITHUB_JOB === GENUINE_JOB &&
+    named !== undefined &&
+    named !== '';
+  return labels.length === 0 || genuineJob
+    ? undefined
+    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB ${GENUINE_JOB} and HARNESS_GENUINE_VERSION set`;
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */

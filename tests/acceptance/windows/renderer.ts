@@ -1309,6 +1309,24 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
   return rows;
 }
 
+/** The count badge on the tab titled `title` of the panel in window `name`: its text, or nothing when it has none. */
+export async function panelBadge(
+  name: string,
+  title: string,
+): Promise<string | undefined> {
+  const found = await evaluate<string | null>(
+    name,
+    `(() => {
+      const tab = [...document.querySelectorAll('.part.panel .composite-bar .action-item')].find(each => (each.querySelector('.action-label')?.textContent ?? '').trim().startsWith(${JSON.stringify(title)}));
+      return tab === undefined ? null : (tab.querySelector('.badge-content')?.textContent ?? '');
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name} has no panel tab ${title}`);
+  }
+  return found === '' ? undefined : found;
+}
+
 /** The titles of the columns of core's Ports view in window `name`, in order. */
 export async function portsColumns(name: string): Promise<string[]> {
   return evaluate<string[]>(
@@ -2527,6 +2545,39 @@ export async function editorGroupLabels(name: string): Promise<string[][]> {
 /** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
 export async function editorTabs(name: string): Promise<EditorTab[]> {
   return (await editorGroups(name)).flat();
+}
+
+/** Whether the keyboard focus of window `name` is inside a text editor. */
+export async function editorHasFocus(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    "document.activeElement?.closest('.monaco-editor') != null",
+  );
+}
+
+/** One scope tab of the Settings editor: its label and whether it is the selected one. */
+export interface SettingsTab {
+  label: string;
+  selected: boolean;
+}
+
+/** The scope tabs of the Settings editor open in window `name`, in the order shown. */
+export async function settingsTabs(name: string): Promise<SettingsTab[]> {
+  return evaluate<SettingsTab[]>(
+    name,
+    `(() => {
+      const root = document.querySelector('.settings-editor');
+      const wanted = [...(root?.querySelectorAll('*') ?? [])].filter(each => each.children.length === 0 && /^(User|Remote \\[.*\\]|Workspace)$/.test((each.textContent ?? '').trim()) && each.closest('.settings-header') !== null);
+      return wanted.map(each => {
+        const holder = each.closest('.action-item, [role="tab"]') ?? each;
+        const classes = holder.className + ' ' + each.className;
+        return {
+          label: (each.textContent ?? '').trim(),
+          selected: /checked|selected|active/.test(classes) || holder.getAttribute('aria-selected') === 'true' || holder.getAttribute('aria-checked') === 'true',
+        };
+      });
+    })()`,
+  );
 }
 
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
