@@ -254,6 +254,17 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     );
   });
 
+  it('F-2410 AC-32: with the login terminal setting off the install terminal is opened hidden and a password question never reveals it', async () => {
+    const made = fixture();
+    const {terminal} = await started(made);
+    terminal.write("alex@dev's password: ");
+    made.clock.advance(100);
+    deepStrictEqual(
+      [terminal.revealedAtOpen, terminal.revealCount, made.questions.length],
+      [false, 0, 1],
+    );
+  });
+
   it('F-2101 AC-30: the connection in terminal mode adds no variable to the editor environment, so no SSH_ASKPASS', async () => {
     const {terminal} = await started(fixture());
     deepStrictEqual(terminal.invocation.environment, {});

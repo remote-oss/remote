@@ -62,3 +62,10 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     CLI layer (BR-6, BR-9). Ours runs one socket-mode server per host and commit, reused by later connects (T6 ruling
     on #299, 2026-10-12; `ruling-299-socket-reuse`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-299-socket-reuse)
+- **With the server on a socket, a host key that is not yet known is asked as a question of Remote - SSH, not in the
+  install terminal.** The progress notification shows first, and then the question with the key's fingerprint.
+  - F-2410 AC-24 describes nothing but the progress notification showing while ssh waits, with the question in the
+    install terminal behind "details". Ours asks it the way terminal mode does with `remote.SSH.showLoginTerminal` off
+    (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
+    on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
+    Rows: (ruling-1601-host-key-pick)
