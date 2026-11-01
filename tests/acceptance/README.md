@@ -688,6 +688,10 @@ a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's r
 
     node tools/acceptance.ts --editor vscodium --launches genuine-containers
 
+`genuine-accept-a` and `genuine-accept-b` are `genuine-containers` with the editor's publisher as the server's address (`https://update.code.visualstudio.com`), the only launches whose rows accept the server's licence and download the server from the publisher, which the genuine job allows for them. Each launch has a profile of its own and the two share the run's `vscode` volume, so they run in this order: profile A accepts and installs the server of the client's commit into the volume and is asked nothing after a reload, for another container or after the editor restarts; profile B asks again, leaves no server process when it cancels, and when it accepts connects with the server already in the volume. Profile B's rows fail with what to run first when the volume holds no server of the client:
+
+    node tools/acceptance.ts --editor vscodium --launches genuine-accept-a,genuine-accept-b
+
 The genuine launches run the recorded version unless the job names the floor: the variable `HARNESS_GENUINE_VERSION` is
 `1.139.1` (the default when it is unset) or `1.125.0`, and any other value fails the run before it starts. The run
 downloads that version, installs the family's extensions into it, and gives the tests the version as

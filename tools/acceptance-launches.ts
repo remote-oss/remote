@@ -237,6 +237,29 @@ const GENUINE_CONTAINERS_LAUNCH: PlainLaunch = {
   },
 };
 
+/**
+ * The genuine client with our Dev Containers and Docker and the editor's publisher as the server's address, so the licence
+ * question is asked and an acceptance downloads the server from there, which the genuine job allows for these launches
+ * only. Profile A accepts and installs into the run's `vscode` volume.
+ */
+const GENUINE_CONTAINERS_ACCEPT_A_LAUNCH: PlainLaunch = {
+  ...GENUINE_CONTAINERS_LAUNCH,
+  label: 'genuine-accept-a',
+  suite: 'genuine-accept-a',
+  publisherDownloads: true,
+  settings: {
+    ...GENUINE_CONTAINERS_LAUNCH.settings,
+    'remote.serverDownloadBaseUrl': 'https://update.code.visualstudio.com',
+  },
+};
+
+/** The same in a fresh profile (a launch has a user-data folder of its own), which meets profile A's volume. */
+const GENUINE_CONTAINERS_ACCEPT_B_LAUNCH: PlainLaunch = {
+  ...GENUINE_CONTAINERS_ACCEPT_A_LAUNCH,
+  label: 'genuine-accept-b',
+  suite: 'genuine-accept-b',
+};
+
 /** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
 const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   ...GENUINE_LAUNCH,
@@ -1017,6 +1040,8 @@ export function launchesOf(root: string): Launch[] {
     GENUINE_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
     GENUINE_CONTAINERS_LAUNCH,
+    GENUINE_CONTAINERS_ACCEPT_A_LAUNCH,
+    GENUINE_CONTAINERS_ACCEPT_B_LAUNCH,
     // Last: its rows remove every container of the run, the run's host and registry included.
     {
       ...CONTAINERS_LAUNCH,

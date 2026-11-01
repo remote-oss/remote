@@ -185,6 +185,12 @@
       "path": "tests/acceptance/genuine-containers"
     },
     {
+      "path": "tests/acceptance/genuine-accept-a"
+    },
+    {
+      "path": "tests/acceptance/genuine-accept-b"
+    },
+    {
       "path": "tests/acceptance/ssh-no-proposals"
     },
     {

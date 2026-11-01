@@ -1298,15 +1298,21 @@ describe('acceptance', () => {
             ],
             client: 'vscode',
           })),
-          {
-            folder: path.join('/run', 'extensions-genuine-containers'),
-            files: [
-              '/dist/remote-ssh.vsix',
-              '/run/window-agent.vsix',
-              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
-            ],
-            client: 'vscode',
-          },
+          ...['genuine-containers', 'genuine-accept-a', 'genuine-accept-b'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(
+                  workspace.root,
+                  'dist',
+                  'remote-containers-0.1.0.vsix',
+                ),
+              ],
+              client: 'vscode',
+            }),
+          ),
           {
             folder: path.join('/run', 'extensions-containers-view'),
             files: [
@@ -3857,9 +3863,15 @@ describe('acceptance', () => {
     it('tooling-51, connect-84, tooling-74: the genuine-client launches are the last of the table but one, and containers-view is the last, because its rows empty the run’s daemon', () => {
       deepStrictEqual(
         launchesOf(REPOSITORY_ROOT)
-          .slice(-3)
+          .slice(-5)
           .map(launch => launch.label),
-        ['ssh-no-proposals', 'genuine-containers', 'containers-view'],
+        [
+          'ssh-no-proposals',
+          'genuine-containers',
+          'genuine-accept-a',
+          'genuine-accept-b',
+          'containers-view',
+        ],
       );
     });
 
@@ -3980,7 +3992,13 @@ describe('acceptance', () => {
             )
             .map(launch => launch.label),
           [],
-          ['genuine', 'ssh-no-proposals', 'genuine-containers'],
+          [
+            'genuine',
+            'ssh-no-proposals',
+            'genuine-containers',
+            'genuine-accept-a',
+            'genuine-accept-b',
+          ],
           ['containers'],
         ],
       );
