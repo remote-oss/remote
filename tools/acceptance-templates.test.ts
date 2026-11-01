@@ -422,11 +422,13 @@ describe('the run templates', () => {
 
   describe('the template without metadata', () => {
     it('tooling-82: a manifest without its metadata annotation keeps its config and layers, and an annotation of the layer, and loses the annotations object when that was its only key', () => {
-      const without = JSON.parse(manifestWithoutMetadata(MANIFEST)) as {
+      interface Manifest {
         annotations?: unknown;
         config: unknown;
         layers: unknown;
-      };
+      }
+      const original = JSON.parse(MANIFEST) as Manifest;
+      const without = JSON.parse(manifestWithoutMetadata(MANIFEST)) as Manifest;
       const other = JSON.parse(
         manifestWithoutMetadata(
           JSON.stringify({
@@ -442,12 +444,7 @@ describe('the run templates', () => {
           without.layers,
           other.annotations,
         ],
-        [
-          undefined,
-          JSON.parse(MANIFEST).config,
-          JSON.parse(MANIFEST).layers,
-          {'other.key': 'y'},
-        ],
+        [undefined, original.config, original.layers, {'other.key': 'y'}],
       );
     });
 

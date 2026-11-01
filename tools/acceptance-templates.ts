@@ -57,8 +57,8 @@ export const CUSTOM_NAMESPACE = 'remote-oss-run/custom';
 
 /**
  * The run's own templates that are published but not listed in the index, each re-pushed without the annotation that
- * holds its metadata: the manifest of `templates publish` carries it, and a template whose artifact does not is the
- * case of F-0805 AC-12.
+ * holds its metadata: the manifest of `templates publish` carries it, and a template whose artifact does not has no
+ * metadata for the wizard to read.
  */
 export const UNLISTED_TEMPLATES: readonly string[] = ['no-metadata-lab'];
 
@@ -69,13 +69,13 @@ export const UNLISTED_TEMPLATES: readonly string[] = ['no-metadata-lab'];
 export const ORAS_IMAGE =
   'ghcr.io/oras-project/oras:v1.2.2@sha256:cd549d80c4aa89638aea5964a3cd8193a6dd8abf939a43b5d562c24dbab08ff1';
 
-/** The annotation of a template's manifest that holds its metadata, as the dev container spec names it. */
+/** The annotation of a template's manifest that holds its metadata, as the dev container's manifest format names it. */
 const METADATA_ANNOTATION = 'dev.containers.metadata';
 
 /** The namespace of the run's own Features, which are published; the second owner's are listed only. */
 export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
 
-/** The image the run's `mini` and `no-metadata-lab` templates name in their fixtures; packaging replaces it with the run's dev container image. */
+/** The image the run's `mini` and its template without metadata name in their fixtures; packaging replaces it with the run's dev container image. */
 export const RUN_IMAGE_PLACEHOLDER = 'remote-oss-acceptance-run-image';
 
 /** The run's own templates whose configuration names the run's dev container image. */
@@ -304,7 +304,7 @@ export function featureMetadataText(text: string, registry: string): string {
 
 /**
  * Prepares the run's templates: the layer of each of `templates` from the cache under `root` (fetched by `fetchLayer` when it is
- * missing) unpacked, the run's own templates and Features copied with the run's `mini` and `no-metadata-lab` naming `devContainerImage`, all published
+ * missing) unpacked, the run's own templates and Features copied with the run's `mini` and its template without metadata naming `devContainerImage`, all published
  * into the registry at `registryAddress` with the dev container CLI the package bundles, and the run's index and control manifest
  * written where the download host serves them. Gives the registry as the templates' ids name it.
  */
