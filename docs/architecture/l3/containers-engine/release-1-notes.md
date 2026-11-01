@@ -59,6 +59,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-0503 AC-21 and AC-23 describe a `vscode-server-{platform}.tar.gz_{epoch-ms}` file per failed attempt and a
     `{commit}_{epoch-ms}` directory on the volume, both left behind (athena on #1591: `ruling-1591-no-partials`; spec
     question on remote-oss/remote-containers#34).
+- **The Ports view never lists the editor server's own port, which the reference labels `Other (<port>)`.**
+  - F-1101 AC-3 has "whether a genuine user process or VS Code's own internal port — then it is labelled `Other
+    (<port>)`" (athena on #1558, ruling-1558-own-port; spec question on remote-oss/remote-containers#42).
 
 ## Interim behaviour
 

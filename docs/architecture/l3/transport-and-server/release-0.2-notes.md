@@ -56,3 +56,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     dialog is AC-13's, and the log's cause line is "the SSH session ended before the host reported its platform" (athena
     on #1221; spec question on remote-oss/remote-ssh#77). A startup file that sleeps past the connect timeout still gets
     the timeout dialog.
+- **Remote - SSH's socket mode keeps one server socket per host and reuses it across reloads and windows**; the
+  reference creates a new `/tmp/code-<uuid>` socket per connect.
+  - F-2410 AC-8, AC-11, AC-26 and AC-27 describe the per-connect socket, which belongs to the reference's per-connect
+    CLI layer (BR-6, BR-9). Ours runs one socket-mode server per host and commit, reused by later connects (T6 ruling
+    on #299, 2026-10-12; `ruling-299-socket-reuse`, athena on #1601; spec question on remote-oss/remote-ssh#55).
+    Rows: (ruling-299-socket-reuse)

@@ -9,11 +9,16 @@ import {
   restoreUserSettings,
   userSettings,
 } from '../windows/harness.ts';
+import {dialogOf, notificationCentre} from '../windows/renderer.ts';
 import {
   editConfiguration,
+  ensureListening,
   folderOf,
   freePort,
+  listenInTerminal,
+  listeningPorts,
   portsOf,
+  serverPortOf,
   portsWindows,
   reloaded,
   rowsWhen,
@@ -273,5 +278,80 @@ describe('the port attributes of the configuration (card containers-73)', functi
       [afterReload, afterRebuild],
       [[`Before (${String(port)})`], [`After (${String(port)})`]],
     );
+  });
+
+  it("F-1101 AC-3 (ruling-1558-own-port): a detected port no key matches is labelled Other (<port>) with no notice, and the server's own listening port gets no row", async () => {
+    const userPort = await freePort();
+    const window = await connectedWith('c73b-ac3', {
+      otherPortsAttributes: {label: 'Other', onAutoForward: 'silent'},
+    });
+    const [containerId = ''] = await devContainersOf(folderOf('c73b-ac3'));
+    const stop = await ensureListening(containerId, userPort, () =>
+      listenInTerminal(window, containerId, userPort),
+    );
+    try {
+      await showPorts(window);
+      const rows = await rowsWhen(window, shown =>
+        shown.some(each => each.port === `Other (${String(userPort)})`),
+      );
+      const listening = await listeningPorts(containerId);
+      const ownPort = await serverPortOf(containerId);
+      deepStrictEqual(
+        {
+          ownListening:
+            ownPort === undefined ? undefined : listening.includes(ownPort),
+          ownRow: rows.some(
+            shown =>
+              ownPort !== undefined &&
+              (shown.port === ownPort || shown.port === `Other (${ownPort})`),
+          ),
+          rows: rows.map(shown => [shown.port, shown.origin]).sort(),
+          notice: (await notificationCentre(window)).filter(text =>
+            text.includes(String(userPort)),
+          ),
+          dialog: await dialogOf(window),
+        },
+        {
+          ownListening: true,
+          ownRow: false,
+          rows: [[`Other (${String(userPort)})`, 'Auto Forwarded']],
+          notice: [],
+          dialog: undefined,
+        },
+      );
+    } finally {
+      await stop();
+    }
+  });
+
+  it('F-1101 AC-39 (regex-spaces): a regex key with spaces between the arguments does not label the row, and the same key with a dot for each space does', async () => {
+    const port = await freePort();
+    const window = await connectedWith('c73b-ac39', {
+      portsAttributes: {
+        [`.*-p ${String(port)} -e cat.*`]: {label: 'Spaced'},
+        [`.*-p.${String(port)}.-e.cat.*`]: {label: 'Dotted'},
+      },
+    });
+    const [containerId = ''] = await devContainersOf(folderOf('c73b-ac39'));
+    const stop = await ensureListening(containerId, port, () =>
+      listenInTerminal(window, containerId, port),
+    );
+    try {
+      await showPorts(window);
+      const rows = await rowsWhen(window, shown =>
+        shown.some(each => each.port.endsWith(`(${String(port)})`)),
+      );
+      deepStrictEqual(
+        [
+          portsOf(rows),
+          (await notificationCentre(window)).filter(text =>
+            text.includes(String(port)),
+          ),
+        ],
+        [[`Dotted (${String(port)})`], []],
+      );
+    } finally {
+      await stop();
+    }
   });
 });

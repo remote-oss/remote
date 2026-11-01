@@ -95,6 +95,17 @@ describe('the port attributes as machine settings (card containers-73)', () => {
     );
   });
 
+  it('containers-123, F-1101 AC-39: a regular-expression key that holds a dash after its start reaches the setting unchanged, with the spaced and the dotted forms side by side', () => {
+    const keys = {
+      '.*-p 33243 -e cat.*': {label: 'Spaced'},
+      '.*-p.33243.-e.cat.*': {label: 'Dotted'},
+      'nc -lk': {label: 'Regexed'},
+    };
+    deepStrictEqual(portAttributeSettings(merged({portsAttributes: keys})), {
+      'remote.portsAttributes': keys,
+    });
+  });
+
   it('F-1101 BR-24: values that are not objects, layers that are not objects and a missing configuration give nothing', () => {
     deepStrictEqual(
       [

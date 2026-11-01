@@ -857,6 +857,11 @@ export async function extensionsViewSections(
   );
 }
 
+/** The page-side list of the actions that `container` shows and has not disabled, by their labels. */
+function actionsExpression(container: string): string {
+  return `[...(${container}?.querySelectorAll('.monaco-action-bar .action-label') ?? [])].filter(each => !each.classList.contains('hide') && !each.classList.contains('disabled') && each.getAttribute('aria-disabled') !== 'true').map(each => each.getAttribute('aria-label') || each.textContent || '').filter(label => label !== '' && label !== 'More Actions...')`;
+}
+
 /** The page-side lookup of the Extensions view entries named `displayName`. */
 function extensionRowsExpression(displayName: string): string {
   return `[...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)})`;
@@ -895,17 +900,116 @@ export async function extensionContextMenu(
   return menu;
 }
 
+/** The display language window `name` runs in, as its page reports it: the one the editor was started with (`--locale`). */
+export async function displayLanguageOf(name: string): Promise<string> {
+  return evaluate<string>(name, 'navigator.language');
+}
+
+/** The language the editor's own strings of window `name` are in: the one an installed language pack gave it, else `en`. */
+export async function nlsLanguageOf(name: string): Promise<string> {
+  return evaluate<string>(name, 'window._VSCODE_NLS_LANGUAGE ?? ""');
+}
+
+/** The size of window `name`'s page, as `<width>x<height>`. */
+export async function windowSizeOf(name: string): Promise<string> {
+  return evaluate<string>(name, '`${window.innerWidth}x${window.innerHeight}`');
+}
+
+/** What an Extensions view row shows. */
+export interface ExtensionRow {
+  name: string;
+  description: string;
+  publisher: string;
+  /** The count on the row's icon, as a pack shows its members; empty for an extension that has none. */
+  badge: string;
+  /** The actions the row offers: those shown and not disabled, such as Manage or Install. */
+  actions: string[];
+}
+
+/** The row of the entry `displayName` of the Extensions view in window `name`; it fails naming the entry when the view lists it not once. */
+export async function extensionRowOf(
+  name: string,
+  displayName: string,
+): Promise<ExtensionRow> {
+  const found = await evaluate<ExtensionRow | null>(
+    name,
+    `(() => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return null;
+      }
+      return {
+        name: rows[0].querySelector('.name')?.textContent ?? '',
+        description: rows[0].querySelector('.description')?.textContent ?? '',
+        publisher: rows[0].querySelector('.publisher-name')?.textContent ?? '',
+        badge: rows[0].querySelector('.extension-pack-badge')?.textContent ?? '',
+        actions: ${actionsExpression('rows[0]')},
+      };
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return found;
+}
+
+/** The lines of the hover that the mouse resting on the entry `displayName` of the Extensions view in window `name` shows, without the empty ones. */
+export async function extensionHoverOf(
+  name: string,
+  displayName: string,
+): Promise<string[]> {
+  const lines = await evaluate<string[] | null>(
+    name,
+    `(async () => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return null;
+      }
+      rows[0].scrollIntoView();
+      const box = rows[0].getBoundingClientRect();
+      for (const type of ['mouseover', 'mouseenter', 'mousemove']) {
+        rows[0].dispatchEvent(new MouseEvent(type, {bubbles: true, clientX: box.left + 30, clientY: box.top + 10}));
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const text = [...document.querySelectorAll('.monaco-hover, .workbench-hover')].map(hover => hover.innerText).join('\\n');
+      rows[0].dispatchEvent(new MouseEvent('mouseleave', {bubbles: true}));
+      return text.split('\\n').map(line => line.trim()).filter(line => line !== '');
+    })()`,
+  );
+  if (lines === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return lines;
+}
+
 /** What the details page of an extension shows. */
 export interface ExtensionPage {
   title: string;
+  publisher: string;
   description: string;
+  /** The tabs of the page, in order. */
+  tabs: string[];
+  /** The category chips of the page's side column, in order. */
+  categories: string[];
+  /** The titles of the side column's blocks, such as Installation and Marketplace. */
+  blocks: string[];
+  /** The heading above the pack's members, such as `Extension Pack (2)`; empty for an extension that is no pack. */
+  packHeader: string;
   /** The names the page lists under Extension Pack, in order; none for an extension that is no pack. */
   pack: string[];
+  /** Whether the Extension Pack block comes above the rendered README. */
+  packAboveReadme: boolean;
+  /** The actions the page's header offers: those shown and not disabled, such as Disable, Uninstall and Manage. */
+  actions: string[];
 }
 
 /**
- * Opens the details page of the entry `displayName` of the Extensions view in window `name`, and reads its title, its
- * description and the names it lists under Extension Pack. It fails naming the entry when the view lists it not once.
+ * Opens the details page of the entry `displayName` of the Extensions view in window `name`, and reads what it shows.
+ * It fails naming the entry when the view lists it not once.
  */
 export async function extensionPageOf(
   name: string,
@@ -921,12 +1025,20 @@ export async function extensionPageOf(
       for (const type of ['mousedown', 'mouseup', 'click']) {
         rows[0].dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
       }
+      const text = (element, selector) => element?.querySelector(selector)?.textContent ?? '';
       const read = () => {
         const editor = document.querySelector('.extension-editor');
         return {
-          title: editor?.querySelector('.header .details .title .name')?.textContent ?? '',
-          description: editor?.querySelector('.header .details > .description')?.textContent ?? '',
+          title: text(editor, '.header .details .title .name'),
+          publisher: text(editor, '.header .details .subtitle .publisher-name'),
+          description: text(editor, '.header .details > .description'),
+          tabs: [...(editor?.querySelectorAll('.body .navbar .action-label') ?? [])].map(each => each.textContent ?? ''),
+          categories: [...(editor?.querySelectorAll('.categories-container .category, .categories .category') ?? [])].map(each => each.textContent ?? ''),
+          blocks: [...(editor?.querySelectorAll('.extension-editor .more-info-container .more-info-title, .additional-details-title') ?? [])].map(each => each.textContent ?? ''),
+          packHeader: text(editor, '.extension-pack .header'),
           pack: [...(editor?.querySelectorAll('.extension-pack .extensions-grid-view .extension-list-item .name') ?? [])].map(each => each.textContent ?? ''),
+          actions: ${actionsExpression("editor?.querySelector('.header')")},
+          packAboveReadme: (editor?.querySelector('.extension-pack')?.compareDocumentPosition(editor?.querySelector('.readme-content') ?? document.body) ?? 0) === Node.DOCUMENT_POSITION_FOLLOWING,
         };
       };
       // The page opens at once; the pack list is read in after it, so the read ends when it shows or after 5 s.
@@ -946,6 +1058,107 @@ export async function extensionPageOf(
     );
   }
   return page;
+}
+
+/** What the README of an extension's details page renders, read in its webview. */
+export interface RenderedReadme {
+  /** The headings in order, each as its level and text. */
+  headings: Array<[number, string]>;
+  /** The links in order, each as its text and its address. */
+  links: Array<[string, string]>;
+  /** The addresses of the images, in order. */
+  images: string[];
+  /** The text of each list item, in order, with its white space collapsed. */
+  items: string[];
+  /** For each table, code block and image in order, whether it fits the width of the README column. */
+  widths: Array<[string, boolean]>;
+}
+
+/**
+ * The README that the details page open in window `name` renders. The page's webview is a target of its own, so the
+ * README is read there; it fails when no webview holds a rendered README.
+ */
+export async function extensionReadmeOf(name: string): Promise<RenderedReadme> {
+  const address = await pageOf(name);
+  const answer = await fetch(
+    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
+  );
+  const targets = (await answer.json()) as DebugTarget[];
+  for (const target of targets.flatMap(each =>
+    each.type === 'iframe' && each.webSocketDebuggerUrl !== undefined
+      ? [each.webSocketDebuggerUrl]
+      : [],
+  )) {
+    const readme = await evaluateAt<RenderedReadme | null>(
+      target,
+      `a webview of window ${name} (${address})`,
+      `(() => {
+        const body = document.getElementById('active-frame')?.contentDocument?.body;
+        if (body === undefined || body === null || body.querySelector('h1') === null) {
+          return null;
+        }
+        const collapse = text => (text ?? '').replace(/\\s+/g, ' ').trim();
+        return {
+          headings: [...body.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(each => [Number(each.tagName.slice(1)), collapse(each.textContent)]),
+          links: [...body.querySelectorAll('a[href]:not([href^="#"])')].map(each => [collapse(each.textContent), each.getAttribute('href')]),
+          images: [...body.querySelectorAll('img')].map(each => each.getAttribute('src')),
+          items: [...body.querySelectorAll('li')].map(each => collapse(each.textContent)),
+          widths: [...body.querySelectorAll('table, pre, img')].map(each => [each.tagName.toLowerCase(), each.getBoundingClientRect().right <= body.clientWidth && each.scrollWidth <= each.clientWidth + 1]),
+        };
+      })()`,
+    );
+    if (readme !== null) {
+      return readme;
+    }
+  }
+  throw new Error(`window ${name}: no webview holds a rendered README`);
+}
+
+/**
+ * The extensions the Issue Reporter window offers once its source is "A VS Code extension". The window must be open,
+ * as `workbench.action.openIssueReporter` opens it; it is closed again. It fails when no such window opens.
+ */
+export async function issueReporterExtensions(): Promise<string[]> {
+  const address = await settled(
+    () => 'the Issue Reporter window',
+    async () => {
+      const answer = await fetch(
+        `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
+      );
+      return ((await answer.json()) as DebugTarget[]).find(
+        target => target.type === 'page' && target.title === 'Issue Reporter',
+      )?.webSocketDebuggerUrl;
+    },
+  );
+  const names = await evaluateAt<string[]>(
+    address,
+    'the Issue Reporter window',
+    `(async () => {
+      const source = document.getElementById('issue-source');
+      source.value = [...source.options].find(option => /extension/i.test(option.text)).value;
+      source.dispatchEvent(new Event('change', {bubbles: true}));
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const names = [...document.getElementById('extension-selector').options].map(option => option.text).filter(text => text !== 'Select extension');
+      setTimeout(() => window.close(), 100);
+      return names;
+    })()`,
+  );
+  return names;
+}
+
+/** The text of the FEATURES tab of the details page open in window `name`, which the call selects. */
+export async function extensionFeaturesOf(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `(async () => {
+      const tab = [...document.querySelectorAll('.extension-editor .body .navbar .action-label')].find(each => each.textContent === 'Features');
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        tab?.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return document.querySelector('.extension-editor .feature-contributions')?.textContent?.trim() ?? '';
+    })()`,
+  );
 }
 
 /**
@@ -1742,6 +1955,21 @@ export async function answerToast(
   );
 }
 
+/** Whether the toast of window `name` whose message starts with `messageStart` shows an indeterminate progress bar (core draws it beside the notification, in its list row); none when no such toast has a bar. */
+export async function toastProgressIndeterminate(
+  name: string,
+  messageStart: string,
+): Promise<boolean | undefined> {
+  return evaluate<boolean | undefined>(
+    name,
+    `(() => {
+      const item = [...document.querySelectorAll('.notifications-toasts .notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+      const bar = item?.closest('.monaco-list-row')?.querySelector('.monaco-progress-container');
+      return bar === undefined || bar === null ? undefined : bar.classList.contains('infinite');
+    })()`,
+  );
+}
+
 /** The labels of the buttons of window `name`'s notification whose message starts with `messageStart`, from the centre. */
 export async function notificationButtons(
   name: string,
@@ -2243,6 +2471,8 @@ export interface EditorTab {
   label: string;
   active: boolean;
   preview: boolean;
+  /** Whether the tab shows unsaved changes. */
+  dirty: boolean;
 }
 
 /** The editor tabs of window `name` by editor group, in the order the groups are shown; read from the page, so it works while a modal dialog is open. */
@@ -2253,6 +2483,7 @@ export async function editorGroups(name: string): Promise<EditorTab[][]> {
       label: tab.querySelector('.label-name')?.textContent ?? '',
       active: tab.classList.contains('active'),
       preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
+      dirty: tab.classList.contains('dirty'),
     })))`,
   );
 }

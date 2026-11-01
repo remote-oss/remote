@@ -131,6 +131,8 @@ const MICROSOFT_HOSTS = [
 interface Manifest {
   [field: string]: unknown;
   name: string;
+  publisher: string;
+  version: string;
   displayName: string;
   description: string;
   license: string;
@@ -206,6 +208,20 @@ function sectionOf(heading: string): string {
 function linkTargets(): string[] {
   return [...readme().matchAll(/\]\(([^)\s]+)\)/g)].map(
     match => match[1] ?? '',
+  );
+}
+
+/** The `extensionPack` list of the manifest of the family package in `folder`, empty when it has none. */
+function packOf(folder: string): string[] {
+  return (
+    (
+      JSON.parse(
+        readFileSync(
+          path.join(PACKAGE_FOLDER, '..', folder, 'package.json'),
+          'utf8',
+        ),
+      ) as {extensionPack?: string[]}
+    ).extensionPack ?? []
   );
 }
 
@@ -467,6 +483,44 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
+  it('F-9002 AC-12: the getting-started list links each member into its remote-oss folder, and the commands section names each member’s category and the remote indicator', () => {
+    const started = sectionOf('Getting started');
+    const commands = flat(sectionOf('Where the commands are'));
+    deepStrictEqual(
+      [
+        started.includes(
+          '(https://github.com/remote-oss/remote/tree/main/packages/remote-containers#readme)',
+        ),
+        started.includes(
+          '(https://github.com/remote-oss/remote/tree/main/packages/remote-ssh#readme)',
+        ),
+        commands.includes('"Dev Containers"'),
+        commands.includes('"Remote-SSH"'),
+        commands.includes('remote indicator'),
+        /WSL|Tunnels/.test(commands),
+      ],
+      [true, true, true, true, true, false],
+    );
+  });
+
+  it('F-9002 AC-13: the readme has the release notes linking the releases page, the feedback linking the issues page, the telemetry statement and the MIT licence', () => {
+    deepStrictEqual(
+      [
+        sectionOf('Release notes').includes(
+          '(https://github.com/remote-oss/remote/releases)',
+        ),
+        sectionOf('Feedback').includes(
+          '(https://github.com/remote-oss/remote/issues)',
+        ),
+        sectionOf('Telemetry').includes(
+          'Neither this pack nor its members collect or send telemetry.',
+        ),
+        sectionOf('License').includes('MIT License'),
+      ],
+      [true, true, true, true],
+    );
+  });
+
   it('F-9002 AC-14, F-9901 AC-5: every link is an absolute https or mailto address, none is Microsoft’s or an editor scheme or a fragment, and the licence is MIT', () => {
     const targets = linkTargets();
     deepStrictEqual(
@@ -486,6 +540,23 @@ describe('the pack’s package (card pack-01)', () => {
     deepStrictEqual(readme().match(/!\[[^\]]*\]\([^)]*\)|<img /g) ?? [], []);
   });
 
+  it('F-9901 AC-17: the requirements link each member to its own readme in its remote-oss folder, and WSL and Remote - Tunnels are named as not part of this release with no promise of a later one', () => {
+    const members = flat(sectionOf('The members'));
+    deepStrictEqual(
+      [
+        sectionOf('Requirements').match(
+          /\]\(https:\/\/github\.com\/remote-oss\/remote\/tree\/main\/packages\/[a-z-]+#readme\)/g,
+        )?.length,
+        members.includes('WSL: not part of this release.'),
+        members.includes('Remote - Tunnels: not part of this release.'),
+        /later|soon|will|plan|upcoming|20\d\d/i.test(
+          members.slice(members.indexOf('WSL:')),
+        ),
+      ],
+      [2, true, true, false],
+    );
+  });
+
   it('F-9901 AC-8: the readme and the package present no release of the reference as the project’s own history', () => {
     deepStrictEqual(
       [readme(), textOf('package.json')].filter(text =>
@@ -493,5 +564,57 @@ describe('the pack’s package (card pack-01)', () => {
       ),
       [],
     );
+  });
+
+  it('F-9001 AC-15 (version): the version is a release number a gallery lists, and the engine floor is a caret range of the editor floor', () => {
+    const manifest = manifestOf();
+    deepStrictEqual(
+      [
+        /^\d+\.\d+\.\d+$/.test(manifest.version),
+        manifest.engines.vscode.startsWith('^'),
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-9002 AC-18 (license): the licence field is MIT and the package ships the licence text the gallery links', () => {
+    deepStrictEqual(
+      [
+        manifestOf().license,
+        textOf('LICENSE').includes('MIT License'),
+        manifestOf().bugs.url,
+      ],
+      ['MIT', true, 'https://github.com/remote-oss/remote/issues'],
+    );
+  });
+
+  it('F-9101 AC-11 (name, publisher): the pack’s id is remote-oss.vscode-remote-extensionpack', () => {
+    const manifest = manifestOf();
+    strictEqual(
+      `${manifest.publisher}.${manifest.name}`,
+      'remote-oss.vscode-remote-extensionpack',
+    );
+  });
+
+  it('F-9101 AC-29 (extensionPack): every entry is a publisher.name id of the family, and none is listed twice', () => {
+    const entries = manifestOf().extensionPack;
+    deepStrictEqual(
+      [
+        entries.every(entry => /^remote-oss\.[a-z0-9-]+$/.test(entry)),
+        new Set(entries).size === entries.length,
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-9901 AC-3 (extensionPack): Remote - SSH brings Remote Explorer and the SSH configuration editor, and Dev Containers brings nothing, so the first release installs the pack plus four', () => {
+    deepStrictEqual(
+      [packOf('remote-containers'), [...packOf('remote-ssh')].sort()],
+      [[], ['remote-oss.remote-explorer', 'remote-oss.remote-ssh-edit']],
+    );
+  });
+
+  it('F-9901 AC-9 (publisher): the publisher is remote-oss', () => {
+    strictEqual(manifestOf().publisher, 'remote-oss');
   });
 });

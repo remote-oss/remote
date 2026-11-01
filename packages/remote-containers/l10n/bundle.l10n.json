@@ -92,7 +92,7 @@
   "Don't show again for the current folder or for any folder?": "Don't show again for the current folder or for any folder?",
   "Any Folder": "Any Folder",
   "Current Folder": "Current Folder",
-  "{0} Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).{1}": "{0} Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).{1}",
+  "{0} Reopen folder to develop in a container ([learn more]({2})).{1}": "{0} Reopen folder to develop in a container ([learn more]({2})).{1}",
   "The local folder is currently not trusted.": "The local folder is currently not trusted.",
   "Trust is required to build a dev container from it. The folder will now reopen locally.": "Trust is required to build a dev container from it. The folder will now reopen locally.",
   "\"{0}\" does not exist.": "\"{0}\" does not exist.",

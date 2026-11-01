@@ -143,6 +143,9 @@
       "path": "tests/acceptance/default-ports"
     },
     {
+      "path": "tests/acceptance/ssh-core"
+    },
+    {
       "path": "tests/acceptance/terminal-pick"
     },
     {
@@ -179,6 +182,9 @@
       "path": "tests/acceptance/genuine"
     },
     {
+      "path": "tests/acceptance/genuine-containers"
+    },
+    {
       "path": "tests/acceptance/ssh-no-proposals"
     },
     {
@@ -192,6 +198,9 @@
     },
     {
       "path": "tests/acceptance/containers-trust"
+    },
+    {
+      "path": "tests/acceptance/containers-context"
     },
     {
       "path": "tests/acceptance/containers-index"
@@ -222,6 +231,15 @@
     },
     {
       "path": "tests/acceptance/extensionpack"
+    },
+    {
+      "path": "tests/acceptance/extensionpack-german"
+    },
+    {
+      "path": "tests/acceptance/extensionpack-partial"
+    },
+    {
+      "path": "tests/acceptance/extensionpack-language"
     },
     {
       "path": "tests/acceptance/web-ui"

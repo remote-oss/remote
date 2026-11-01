@@ -258,6 +258,17 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     deepStrictEqual([scene.shown, scene.asked], [[], []]);
   });
 
+  it('F-0801 AC-14: in a dev container window a configuration written to the workspace is not offered for reopening', async () => {
+    const scene = sceneOf();
+    scene.window = {
+      remote: true,
+      workspaceFile: false,
+      folders: [{scheme: 'vscode-remote', fsPath: '/workspaces/p'}],
+    };
+    await offered(scene, 1000, 'folder');
+    deepStrictEqual([scene.shown, scene.asked], [[], []]);
+  });
+
   it('brief: a .code-workspace, two folders, no folder and a folder that is not a file one show nothing', async () => {
     const windows: Array<ReopenNotificationPorts['window']> = [
       {

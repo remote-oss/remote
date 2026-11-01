@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {rmSync} from 'node:fs';
 import path from 'node:path';
-import {REPOSITORY_ROOT} from './repository.ts';
+import {packageFolders, REPOSITORY_ROOT} from './repository.ts';
 import {checkStringTables} from './string-tables.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -202,6 +202,11 @@ describe('string-tables', () => {
   describe('the strings the code translates', () => {
     beforeEach(() => {
       write('l10n/bundle.l10n.json', {Label: 'Label', Text: 'Text'});
+      // The package's own code translates both keys, so a row sees only the problem it sets up.
+      write(
+        'src/base.ts',
+        "export const BASE_TEMPLATES = {label: 'Label', text: 'Text'} as const;\n",
+      );
     });
 
     function source(file: string, text: string): void {
@@ -299,13 +304,94 @@ describe('string-tables', () => {
     });
 
     it('passes a package with a default bundle and no src folder', () => {
+      remove('src');
       deepStrictEqual(problems(), []);
+    });
+
+    /** Writes the library `folder` with its dependencies and one source file that translates `texts`. */
+    function library(
+      folder: string,
+      dependencies: readonly string[],
+      texts: readonly string[],
+    ): void {
+      workspace.writeManifest(folder, {
+        dependencies: Object.fromEntries(
+          dependencies.map(name => [name, 'workspace:*']),
+        ),
+      });
+      workspace.write(
+        `packages/${folder}/src/texts.ts`,
+        `${texts.map(text => `l10n.t(${JSON.stringify(text)});`).join('\n')}\n`,
+      );
+    }
+
+    /** Makes the package depend on `names`. */
+    function dependOn(...names: string[]): void {
+      workspace.writeManifest('remote-x', {
+        description: '%description%',
+        displayName: 'Name',
+        dependencies: Object.fromEntries(
+          names.map(name => [name, 'workspace:*']),
+        ),
+      });
+    }
+
+    const NEVER_TRANSLATED = [
+      'packages/remote-x/l10n/bundle.l10n.json: "Text" is never translated',
+    ];
+
+    it('reports a key of the default bundle that no source translates', () => {
+      remove('src/base.ts');
+      source('src/texts.ts', "l10n.t('Label');\n");
+      deepStrictEqual(problems(), NEVER_TRANSLATED);
+    });
+
+    it('passes a key only a direct dependency library translates', () => {
+      remove('src/base.ts');
+      source('src/texts.ts', "l10n.t('Label');\n");
+      library('lib-a', [], ['Text']);
+      dependOn('lib-a');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('passes a key only a library reached through another library translates', () => {
+      remove('src/base.ts');
+      source('src/texts.ts', "l10n.t('Label');\n");
+      library('lib-a', ['lib-b'], []);
+      library('lib-b', [], ['Text']);
+      dependOn('lib-a');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('reports a key only a library outside the closure translates', () => {
+      remove('src/base.ts');
+      source('src/texts.ts', "l10n.t('Label');\n");
+      library('lib-a', [], []);
+      library('lib-c', [], ['Text']);
+      dependOn('lib-a');
+      deepStrictEqual(problems(), NEVER_TRANSLATED);
+    });
+
+    it('does not take a dependency that is no workspace package for a library', () => {
+      remove('src/base.ts');
+      source('src/texts.ts', "l10n.t('Label');\n");
+      dependOn('left-pad');
+      deepStrictEqual(problems(), NEVER_TRANSLATED);
+    });
+
+    it('reports a string the package translates and its bundle lacks, and not one only a library translates', () => {
+      library('lib-a', [], ['Only the library']);
+      dependOn('lib-a');
+      source('src/extension.ts', "l10n.t('Missing');\n");
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:1: "Missing" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
     });
   });
 
-  it('#680: the packages of the repository translate nothing their bundle lacks', () => {
+  it('#680: the packages of the repository translate nothing their bundle lacks, and their bundles hold nothing no code translates', () => {
     deepStrictEqual(
-      ['remote-ssh', 'remote-explorer', 'remote-ssh-edit'].flatMap(folder =>
+      packageFolders(REPOSITORY_ROOT).flatMap(folder =>
         checkStringTables(REPOSITORY_ROOT, folder),
       ),
       [],

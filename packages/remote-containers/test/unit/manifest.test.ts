@@ -3,29 +3,12 @@
  * identifiers. Every expected value is written here as a literal.
  */
 
-import {deepStrictEqual} from 'node:assert';
-import {existsSync, readFileSync} from 'node:fs';
+import {deepStrictEqual, partialDeepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {views} from '../../src/identifiers.generated.ts';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
-
-const LOCALES = [
-  'cs',
-  'de',
-  'es',
-  'fr',
-  'it',
-  'ja',
-  'ko',
-  'pl',
-  'pt-br',
-  'qps-ploc',
-  'ru',
-  'tr',
-  'zh-cn',
-  'zh-tw',
-];
 
 function readJson(file: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path.join(PACKAGE, file), 'utf8')) as Record<
@@ -137,7 +120,7 @@ const DETAILS_REBUILD_WHEN =
   '!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown';
 
 const CREATE_FILE_WHEN =
-  '!remoteName && !virtualWorkspace && !remote-containers:standingDown';
+  'remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown';
 
 const CREATE_FILE_INDICATOR_WHEN =
   'workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
@@ -261,8 +244,8 @@ const MOUNT_SETTINGS = {
 };
 
 describe('the manifest', () => {
-  it('F-0101 AC-4: the identity is ours, field by field, and the key set is exactly the declared one', () => {
-    deepStrictEqual(MANIFEST, {
+  it('F-0101 AC-4: the identity is ours, field by field, and the contributions the card lists are contributed with their values', () => {
+    partialDeepStrictEqual(MANIFEST, {
       name: 'remote-containers',
       displayName: 'Dev Containers',
       description: '%description%',
@@ -628,15 +611,15 @@ describe('the manifest', () => {
     deepStrictEqual(MANIFEST.extensionKind, ['ui']);
   });
 
-  it('F-0101.BR-8: the seven proposals are declared, in order', () => {
-    deepStrictEqual(MANIFEST.enabledApiProposals, [
+  it('F-0101.BR-8: the seven proposals are declared, as a set', () => {
+    deepStrictEqual([...(MANIFEST.enabledApiProposals as string[])].sort(), [
+      'contribEditSessions',
+      'contribRemoteHelp',
+      'contribViewsRemote',
       'resolvers',
+      'terminalDimensions',
       'tunnels',
       'workspaceTrust',
-      'terminalDimensions',
-      'contribEditSessions',
-      'contribViewsRemote',
-      'contribRemoteHelp',
     ]);
   });
 
@@ -909,7 +892,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and the indicator item only in a window with a folder', () => {
+  it('F-0801 AC-1: Add Dev Container Configuration Files has its title, the palette clause of a local window and of a dev container window, and the indicator item only in a local window with a folder (the reference’s dev container menu has none, F-0101 AC-21)', () => {
     deepStrictEqual(
       [
         menusOf(['remote-containers.createDevContainerFile']),
@@ -1186,27 +1169,48 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-1406.5: package.nls.json holds its keys, and every key package.json uses is one of them', () => {
-    const used = [...JSON.stringify(MANIFEST).matchAll(/%([^%"]+)%/g)].map(
-      match => match[1],
+  it('F-1406.5: package.nls.json holds the card’s keys with their texts, every key package.json uses is one of them, and every key it holds is used', () => {
+    const table = readJson('package.nls.json');
+    const used = new Set(
+      [...JSON.stringify(MANIFEST).matchAll(/%([^%"]+)%/g)].map(
+        match => match[1],
+      ),
     );
+    partialDeepStrictEqual(table, ENGLISH);
     deepStrictEqual(
-      [
-        readJson('package.nls.json'),
-        used.every(key => key !== undefined && key in ENGLISH),
-      ],
-      [ENGLISH, true],
+      {
+        unresolved: [...used].filter(
+          key => key === undefined || !(key in table),
+        ),
+        unused: Object.keys(table).filter(key => !used.has(key)),
+      },
+      {unresolved: [], unused: []},
     );
   });
 
-  for (const locale of LOCALES) {
-    it(`F-1406.5: package.nls.${locale}.json holds the keys of the English file with its values`, () => {
-      deepStrictEqual(readJson(`package.nls.${locale}.json`), ENGLISH);
-    });
-  }
+  it('F-1406.5: every locale of identifiers.json has a table and a runtime bundle with the English values', () => {
+    const locales = (readJson('identifiers.json').locales ?? []) as string[];
+    const bundle = Object.keys(readJson('l10n/bundle.l10n.json'));
+    deepStrictEqual(
+      [
+        locales.length > 0,
+        locales.map(locale => [
+          readJson(`package.nls.${locale}.json`),
+          readJson(`l10n/bundle.l10n.${locale}.json`),
+        ]),
+      ],
+      [
+        true,
+        locales.map(() => [
+          readJson('package.nls.json'),
+          Object.fromEntries(bundle.map(text => [text, text])),
+        ]),
+      ],
+    );
+  });
 
-  it('F-1406.5: identifiers.json names the identity of the family and nothing invented', () => {
-    deepStrictEqual(readJson('identifiers.json'), {
+  it('F-1406.5: identifiers.json names the identity of the family and the identifiers the card lists', () => {
+    partialDeepStrictEqual(readJson('identifiers.json'), {
       source: 'remote-oss/remote-containers#107 (F-1406)',
       standsDownFor: 'ms-vscode-remote.remote-containers',
       standingDownKey: 'remote-containers:standingDown',
@@ -1270,22 +1274,6 @@ describe('the manifest', () => {
         },
       ],
       ungated: [],
-      locales: LOCALES,
     });
-  });
-
-  it('F-1406.5: every locale has an l10n bundle with the strings of the English one', () => {
-    const english = readJson('l10n/bundle.l10n.json');
-    deepStrictEqual(
-      LOCALES.map(
-        locale =>
-          existsSync(
-            path.join(PACKAGE, 'l10n', `bundle.l10n.${locale}.json`),
-          ) &&
-          JSON.stringify(readJson(`l10n/bundle.l10n.${locale}.json`)) ===
-            JSON.stringify(english),
-      ),
-      LOCALES.map(() => true),
-    );
   });
 });

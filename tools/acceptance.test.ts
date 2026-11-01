@@ -250,6 +250,15 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('window-agent.vsix');
   };
 
+  readonly languagePackVsix = (
+    root: string,
+    runFolder: string,
+    language: string,
+  ): string => {
+    this.calls.push(`language pack vsix ${language} of ${root}`);
+    return path.join(runFolder, `language-pack-${language}.vsix`);
+  };
+
   readonly runPlain = (
     root: string,
     variables: HarnessVariables,
@@ -408,6 +417,7 @@ const LAUNCH_ORDER = [
   'preconnect',
   'config-files',
   'default-ports',
+  'ssh-core',
   'no-proposals',
   'explorer',
   'explorer-alone',
@@ -425,7 +435,12 @@ const LAUNCH_ORDER = [
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
   ...['containers-killed-23', 'containers-killed-35', 'containers-killed-43'],
+  'containers-context',
   'extensionpack',
+  'extensionpack-german',
+  'extensionpack-partial',
+  'extensionpack-lp-de',
+  'extensionpack-lp-hu',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1171,7 +1186,16 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           {
-            folder: path.join('/run', 'extensions-extensionpack'),
+            folder: path.join('/run', 'extensions-containers-context'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          ...['extensionpack', 'extensionpack-german'].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',
@@ -1183,7 +1207,38 @@ describe('acceptance', () => {
               ),
             ],
             client: 'vscodium',
+          })),
+          {
+            folder: path.join('/run', 'extensions-extensionpack-partial'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(
+                workspace.root,
+                'dist',
+                'vscode-remote-extensionpack-0.1.0.vsix',
+              ),
+            ],
+            client: 'vscodium',
           },
+          ...['de', 'hu'].map(language => ({
+            folder: path.join(
+              '/run',
+              `extensions-extensionpack-lp-${language}`,
+            ),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+              path.join(
+                workspace.root,
+                'dist',
+                'vscode-remote-extensionpack-0.1.0.vsix',
+              ),
+              path.join('/run', `language-pack-${language}.vsix`),
+            ],
+            client: 'vscodium',
+          })),
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
@@ -1193,6 +1248,15 @@ describe('acceptance', () => {
             ],
             client: 'vscode',
           })),
+          {
+            folder: path.join('/run', 'extensions-genuine-containers'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscode',
+          },
           {
             folder: path.join('/run', 'extensions-containers-view'),
             files: [
@@ -3571,7 +3635,7 @@ describe('acceptance', () => {
         launchesOf(REPOSITORY_ROOT)
           .slice(-3)
           .map(launch => launch.label),
-        ['genuine', 'ssh-no-proposals', 'containers-view'],
+        ['ssh-no-proposals', 'genuine-containers', 'containers-view'],
       );
     });
 
@@ -3669,7 +3733,7 @@ describe('acceptance', () => {
             )
             .map(launch => launch.label),
           [],
-          ['genuine', 'ssh-no-proposals'],
+          ['genuine', 'ssh-no-proposals', 'genuine-containers'],
           ['containers'],
         ],
       );

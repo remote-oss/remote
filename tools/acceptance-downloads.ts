@@ -55,6 +55,16 @@ export const DOWNLOAD_HOST_NAMES: readonly string[] = [
   'update.code.visualstudio.com',
 ];
 
+/**
+ * The names the run's certificate holds: those of the download host, and `localhost`, which the runner itself resolves,
+ * for the CLI that runs there and fetches a Feature's tarball. `localhost` is not one of the harness host's names: it
+ * must stay the harness host's own loopback.
+ */
+const CERTIFICATE_NAMES: readonly string[] = [
+  ...DOWNLOAD_HOST_NAMES,
+  'localhost',
+];
+
 /** The certificate's common name: the download host's own name. */
 const CERTIFICATE_NAME = 'downloads';
 
@@ -234,7 +244,7 @@ export function makeCertificate(folder: string): {
   const now = Date.now();
   const alternativeNames = derElement(
     SEQUENCE,
-    ...DOWNLOAD_HOST_NAMES.map(hostName =>
+    ...CERTIFICATE_NAMES.map(hostName =>
       derElement(0x82, Buffer.from(hostName)),
     ),
   );
@@ -300,6 +310,8 @@ export interface DownloadHostOptions {
   templatesFolder: string;
   /** The folder whose `devcontainer-control-manifest.json` the host serves under `/control/`, once the run has written it. */
   controlFolder: string;
+  /** The folder whose `<name>.tgz` files the host serves under `/features/`, as a Feature's direct tarball. */
+  featuresFolder: string;
 }
 
 /** A running download host. */
@@ -383,6 +395,29 @@ function answerControl(
   response.end();
 }
 
+/** The answer under `/features/`: the `<name>.tgz` of the run's folder, or 404 for any other name or a missing file. */
+function answerFeatures(
+  response: ServerResponse,
+  featuresFolder: string,
+  url: string,
+): void {
+  const name = /^\/features\/([A-Za-z0-9._-]+\.tgz)$/.exec(
+    url.split('?')[0] ?? '',
+  )?.[1];
+  const file = name === undefined ? undefined : path.join(featuresFolder, name);
+  if (file === undefined || !existsSync(file)) {
+    response.writeHead(404, {'Content-Length': 0});
+    response.end();
+    return;
+  }
+  const body = readFileSync(file);
+  response.writeHead(200, {
+    'Content-Type': 'application/gzip',
+    'Content-Length': body.length,
+  });
+  response.end(body);
+}
+
 /**
  * The archive a request gets: the one of the platform it names, the default platform's when it names none, and none for
  * a platform the run serves no archive for.
@@ -433,7 +468,11 @@ function answer(
   response: ServerResponse,
   options: Pick<
     DownloadHostOptions,
-    'archiveFiles' | 'defaultPlatform' | 'templatesFolder' | 'controlFolder'
+    | 'archiveFiles'
+    | 'defaultPlatform'
+    | 'templatesFolder'
+    | 'controlFolder'
+    | 'featuresFolder'
   >,
   held: Set<Socket>,
 ): void {
@@ -443,6 +482,9 @@ function answer(
       return;
     case 'control':
       answerControl(request, response, options.controlFolder);
+      return;
+    case 'features':
+      answerFeatures(response, options.featuresFolder, String(request.url));
       return;
     case 'ok':
     case 'cut':
@@ -591,13 +633,55 @@ export async function startDownloadHost(
   };
 }
 
-/** The harness variables of a download host: its bases as the harness host and as the editor reach it, and its log. */
+/** The Feature tarball of the run's fixture, by name under `/features/`: the CLI refuses any name but `devcontainer-feature-<id>.tgz`. */
+const FEATURE_TARBALL = 'devcontainer-feature-c92-tarball.tgz';
+
+/** Where the download host serves Feature tarballs from. */
+function servedFeaturesFolder(runFolder: string): string {
+  return path.join(runFolder, 'downloads', 'features');
+}
+
+/**
+ * Packs the fixture Feature under `root` into its tarball in the run's features folder, as the dev container
+ * specification's Feature tarballs are: the Feature's files at the top of a gzipped tar.
+ */
+function packFeatureTarball(
+  command: CommandRunner,
+  root: string,
+  runFolder: string,
+): void {
+  const folder = servedFeaturesFolder(runFolder);
+  mkdirSync(folder, {recursive: true});
+  checked(command, 'tar', [
+    '-czf',
+    path.join(folder, FEATURE_TARBALL),
+    '-C',
+    path.join(
+      root,
+      'tests',
+      'acceptance',
+      'containers-features',
+      'fixtures',
+      'tarball-feature',
+    ),
+    '.',
+  ]);
+}
+
+/**
+ * The harness variables of a download host: its bases as the harness host and as the editor reach it, its log, the
+ * certificate file the CLI of a launch can trust, and the address of the fixture Feature's tarball on the runner's own
+ * `localhost`.
+ */
 export function downloadVariables(
   host: Pick<DownloadHost, 'httpPort' | 'httpsPort'>,
   logFile: string,
   tlsLogFile: string,
+  certificateFile: string,
 ): Record<string, string> {
   return {
+    HARNESS_DOWNLOADS_CERTIFICATE: certificateFile,
+    HARNESS_FEATURE_TARBALL_URL: `https://localhost:${String(host.httpsPort)}/features/${FEATURE_TARBALL}`,
     HARNESS_DOWNLOADS_HTTP: `http://downloads:${String(host.httpPort)}`,
     HARNESS_DOWNLOADS_HTTPS: `https://downloads:${String(host.httpsPort)}`,
     HARNESS_DOWNLOADS_LICENSED: `https://update.code.visualstudio.com:${String(host.httpsPort)}`,
@@ -659,6 +743,7 @@ export async function startRunDownloads(
   const folder = path.join(runFolder, 'downloads');
   mkdirSync(folder, {recursive: true});
   const certificate = makeCertificate(folder);
+  packFeatureTarball(command, root, runFolder);
   const logFile = path.join(folder, 'requests.log');
   writeFileSync(logFile, '');
   const tlsLogFile = path.join(runFolder, 'downloads-tls.log');
@@ -672,9 +757,15 @@ export async function startRunDownloads(
     tlsLogFile,
     templatesFolder: servedTemplatesFolder(runFolder),
     controlFolder: servedControlFolder(runFolder),
+    featuresFolder: servedFeaturesFolder(runFolder),
   });
   return {
-    variables: downloadVariables(host, logFile, tlsLogFile),
+    variables: downloadVariables(
+      host,
+      logFile,
+      tlsLogFile,
+      certificate.certificateFile,
+    ),
     stop: () => host.stop(),
   };
 }

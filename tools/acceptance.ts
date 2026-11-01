@@ -107,7 +107,10 @@ import {
   editorLogsEnvironment,
   extensionsFolderOf,
   launchFiles,
+  languagePackVsixOf,
+  packageLanguagePack,
   packageWindowAgent,
+  registerLanguagePack,
   runPlainLaunch,
   startDetached,
   stateFolderOf,
@@ -227,6 +230,9 @@ export interface HarnessVariables {
   HARNESS_DOWNLOADS_LICENSED?: string;
   HARNESS_DOWNLOADS_LOCAL?: string;
   HARNESS_DOWNLOADS_LOG?: string;
+  /** The run's download host certificate file, and the address of the fixture Feature tarball it serves on the runner's `localhost`. */
+  HARNESS_DOWNLOADS_CERTIFICATE?: string;
+  HARNESS_FEATURE_TARBALL_URL?: string;
   /** The run's own ssh-agent, named for every launch's processes, and its socket for the tests; VSCodium run only. */
   SSH_AUTH_SOCK?: string;
   HARNESS_AGENT_SOCKET?: string;
@@ -259,6 +265,12 @@ export interface HarnessDependencies {
   ) => Promise<AttemptResult>;
   /** Packages the window agent into a VSIX in the run's folder and returns the file. */
   windowAgentVsix: (root: string, runFolder: string) => Promise<string>;
+  /** Packages the fixture language pack for a language and gives its VSIX file. */
+  languagePackVsix: (
+    root: string,
+    runFolder: string,
+    language: string,
+  ) => string;
   /** Runs a launch with no runner: the editor started plainly, and the Node tests against it. */
   runPlain: (
     root: string,
@@ -740,6 +752,9 @@ export function installsOf(
                 extensionId => LAUNCH_EXTENSIONS.get(extensionId) ?? [],
               ),
             ),
+            ...(launch.languagePack === undefined
+              ? []
+              : [languagePackVsixOf(runFolder, launch.languagePack)]),
           ],
           client: launch.client ?? 'vscodium',
         },
@@ -838,6 +853,12 @@ async function prepare(
   ) {
     vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
   }
+  // Every launch of the table gets its installs, chosen or not, so every language pack file has to exist.
+  for (const launch of editor === 'vscodium' ? launchesOf(root) : []) {
+    if (launch.kind === 'plain' && launch.languagePack !== undefined) {
+      dependencies.languagePackVsix(root, runFolder, launch.languagePack);
+    }
+  }
   const vscode = chosen.some(
     launch => launch.kind === 'plain' && launch.client === 'vscode',
   )
@@ -889,6 +910,9 @@ async function prepare(
   }
   const launches = editor === 'vscodium' ? launchesOf(root) : [];
   for (const launch of launches) {
+    if (launch.kind === 'plain' && launch.languagePack !== undefined) {
+      registerLanguagePack(runFolder, launch, launch.languagePack);
+    }
     if (launch.kind === 'plain' && launch.standIns !== undefined) {
       writeStandIns(runFolder, launch, standInEngines(root, launch));
     }
@@ -2081,6 +2105,7 @@ if (isMainModule(import.meta.url)) {
         ),
         runTests: runTestCli,
         windowAgentVsix: packageWindowAgent,
+        languagePackVsix: packageLanguagePack,
         startAgent: startRunAgent,
         startRegistry: runId =>
           startRunRegistry(runCommand, SYSTEM_CLOCK, runId),

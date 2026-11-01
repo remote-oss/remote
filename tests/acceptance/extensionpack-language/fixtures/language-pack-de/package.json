@@ -1,0 +1,29 @@
+{
+  "name": "language-pack-de",
+  "displayName": "German test language pack",
+  "description": "A language pack for the German display language that translates nothing, for the rows of the extension pack.",
+  "version": "0.0.1",
+  "publisher": "remote-oss-test",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Language Packs"
+  ],
+  "contributes": {
+    "localizations": [
+      {
+        "languageId": "de",
+        "languageName": "German",
+        "localizedLanguageName": "Deutsch",
+        "translations": [
+          {
+            "id": "vscode",
+            "path": "./translations/main.i18n.json"
+          }
+        ]
+      }
+    ]
+  }
+}

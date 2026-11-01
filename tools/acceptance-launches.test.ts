@@ -66,10 +66,16 @@ function labelsFromExplorer(): string[] {
     'containers-killed-35',
     'containers-killed-43',
     'containers-podman',
+    'containers-context',
     'extensionpack',
+    'extensionpack-german',
+    'extensionpack-partial',
+    'extensionpack-lp-de',
+    'extensionpack-lp-hu',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
+    'genuine-containers',
     'containers-view',
   ];
 }
@@ -129,7 +135,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the two genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the three genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -153,6 +159,7 @@ describe('the launches of the VSCodium run', () => {
         'preconnect',
         'config-files',
         'default-ports',
+        'ssh-core',
         'no-proposals',
         ...labelsFromExplorer(),
       ],
@@ -226,6 +233,7 @@ describe('the launches of the VSCodium run', () => {
       ),
       [
         ['default-ports', undefined, true, undefined],
+        ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',
@@ -333,7 +341,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
-          'extensionpack',
+          'containers-context',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        ...['extensionpack', 'extensionpack-german'].map(label => [
+          label,
           [
             'remote-oss.remote-containers',
             'remote-oss.remote-ssh',
@@ -341,9 +355,31 @@ describe('the launches of the VSCodium run', () => {
           ],
           true,
           undefined,
+        ]),
+        [
+          'extensionpack-partial',
+          ['remote-oss.vscode-remote-extensionpack'],
+          true,
+          undefined,
         ],
+        ...['extensionpack-lp-de', 'extensionpack-lp-hu'].map(label => [
+          label,
+          [
+            'remote-oss.remote-containers',
+            'remote-oss.remote-ssh',
+            'remote-oss.vscode-remote-extensionpack',
+          ],
+          true,
+          undefined,
+        ]),
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
+        [
+          'genuine-containers',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ['containers-view', ['remote-oss.remote-containers'], true, undefined],
       ],
     );
@@ -472,6 +508,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-context',
+          'containers-context',
+          shared,
+          undefined,
+          undefined,
+        ],
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -507,7 +550,12 @@ describe('the launches of the VSCodium run', () => {
         'containers-killed-35',
         'containers-killed-43',
         'containers-podman',
+        'containers-context',
         'extensionpack',
+        'extensionpack-german',
+        'extensionpack-lp-de',
+        'extensionpack-lp-hu',
+        'genuine-containers',
         'containers-view',
       ],
     );
@@ -649,7 +697,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51, connect-84, containers-101: the containers-podman launch and the two genuine launches are named only, and only the genuine ones start VS Code', () => {
+  it('tooling-51, connect-84, containers-101: the containers-podman launch and the three genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -658,7 +706,12 @@ describe('the launches of the VSCodium run', () => {
             (launch.kind === 'plain' && launch.client !== undefined),
         )
         .map(launch => launch.label),
-      ['containers-podman', 'genuine', 'ssh-no-proposals'],
+      [
+        'containers-podman',
+        'genuine',
+        'ssh-no-proposals',
+        'genuine-containers',
+      ],
     );
   });
 
@@ -691,6 +744,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'default-ports',
+        'ssh-core',
         ...labelsFromExplorer(),
       ],
     );
@@ -1361,7 +1415,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, the three killed launches name their cases, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context gives the Docker configuration of its own, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1373,7 +1427,13 @@ describe('the platform cases (card coverage-12)', () => {
       [
         ['containers', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
-        ['containers-features', {PATH: '<run>/browser-bin:<path>'}],
+        [
+          'containers-features',
+          {
+            PATH: '<run>/browser-bin:<path>',
+            NODE_EXTRA_CA_CERTS: '${HARNESS_DOWNLOADS_CERTIFICATE}',
+          },
+        ],
         [
           'containers-index-broken',
           {
@@ -1393,6 +1453,7 @@ describe('the platform cases (card coverage-12)', () => {
         ['containers-killed-23', {HARNESS_KILLED_CASE: '23'}],
         ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
         ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],
+        ['containers-context', {DOCKER_CONFIG: '<run>/docker-config'}],
       ],
     );
   });

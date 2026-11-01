@@ -24,19 +24,19 @@ function modalAnswering(chosen: string | undefined | Error) {
 const NEVER = new AbortController().signal;
 
 describe('the licence modal (card containers-08)', () => {
-  it('R-68: the modal names the extension, the application and the terms, with Accept first', async () => {
+  it('R-68: the modal names the extension, the application and the terms, with the one button Accept and Continue, the editor adding its own Cancel', async () => {
     const {modal, shown} = modalAnswering('Accept and Continue');
     await modal.askUser('https://terms.example/x', NEVER);
     deepStrictEqual(shown, [
       [
         'Dev Containers needs you to accept the license terms of the VSCodium server before installing it.',
         'Read the terms at https://terms.example/x.',
-        ['Accept and Continue', 'Cancel'],
+        ['Accept and Continue'],
       ],
     ]);
   });
 
-  it('R-68: only the first button accepts', async () => {
+  it('R-68: only Accept and Continue accepts', async () => {
     deepStrictEqual(
       [
         await modalAnswering('Accept and Continue').modal.askUser('u', NEVER),

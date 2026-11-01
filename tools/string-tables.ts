@@ -7,8 +7,9 @@
  * Every `%key%` of package.json has a text in package.nls.json. Each locale has package.nls.<locale>.json with
  * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json with
  * exactly the keys of the default bundle l10n/bundle.l10n.json; the folder holds nothing else. Every string the package's code
- * translates (see translated-strings.ts) is a key of the default bundle. Every text is a non-empty string. The locales are
- * identifiers.json's `locales`, or the locales of the tables present when it names none.
+ * translates (see translated-strings.ts) is a key of the default bundle, and every key of the default bundle is
+ * translated by the package's own code or by a workspace library in its dependency closure. Every text is a non-empty
+ * string. The locales are identifiers.json's `locales`, or the locales of the tables present when it names none.
  */
 
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
@@ -200,18 +201,77 @@ function untranslatedProblems(
   );
 }
 
+/**
+ * The package folders whose code runs in `folder`'s l10n context: the folder itself and every workspace library it
+ * depends on, directly or through another library.
+ */
+function closureFolders(root: string, folder: string): string[] {
+  const seen = new Set<string>([folder]);
+  const queue = [folder];
+  for (const current of queue) {
+    const manifest = path.join(root, 'packages', current, 'package.json');
+    if (!existsSync(manifest)) {
+      continue;
+    }
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as {
+      dependencies?: Record<string, string>;
+    };
+    for (const name of Object.keys(parsed.dependencies ?? {})) {
+      if (
+        !seen.has(name) &&
+        existsSync(path.join(root, 'packages', name, 'package.json'))
+      ) {
+        seen.add(name);
+        queue.push(name);
+      }
+    }
+  }
+  return [...seen];
+}
+
+/** A problem for each key of the default bundle that no code of the package or of its libraries translates. */
+function unusedKeyProblems(
+  root: string,
+  folder: string,
+  keys: ReadonlySet<string>,
+): FileProblem[] {
+  const directory = path.join(root, 'packages', folder);
+  if (shippedSources(directory).length === 0) {
+    return [];
+  }
+  const translated = new Set(
+    closureFolders(root, folder).flatMap(member => {
+      const memberDirectory = path.join(root, 'packages', member);
+      return shippedSources(memberDirectory).flatMap(file =>
+        translatedStrings(
+          file,
+          readFileSync(path.join(memberDirectory, file), 'utf8'),
+        ).map(found => found.text),
+      );
+    }),
+  );
+  return [...keys]
+    .filter(key => !translated.has(key))
+    .map(key => ({
+      file: BUNDLE_SOURCE,
+      text: `"${key}" is never translated`,
+    }));
+}
+
 function bundleProblems(
-  directory: string,
+  root: string,
+  folder: string,
   locales: readonly string[],
   problems: FileProblem[],
 ): void {
-  const folder = path.join(directory, BUNDLE_FOLDER);
-  if (!existsSync(folder)) {
+  const directory = path.join(root, 'packages', folder);
+  const bundles = path.join(directory, BUNDLE_FOLDER);
+  if (!existsSync(bundles)) {
     return;
   }
   const translatedFiles = locales.map(bundleFile);
   const knownFiles = new Set([BUNDLE_SOURCE, ...translatedFiles]);
-  for (const name of readdirSync(folder)) {
+  for (const name of readdirSync(bundles)) {
     const file = `${BUNDLE_FOLDER}/${name}`;
     if (!knownFiles.has(file)) {
       problems.push({file, text: "not a bundle of the package's locales"});
@@ -229,6 +289,7 @@ function bundleProblems(
   problems.push(...emptyTextProblems(BUNDLE_SOURCE, source));
   const sourceKeys = new Set(source.keys());
   problems.push(...untranslatedProblems(directory, sourceKeys));
+  problems.push(...unusedKeyProblems(root, folder, sourceKeys));
   problems.push(
     ...translationProblems(
       readTables(directory, translatedFiles, problems),
@@ -266,7 +327,7 @@ export function checkStringTables(root: string, folder: string): string[] {
     }
   }
   nlsProblems(directory, sources.manifest.stringReferences, locales, problems);
-  bundleProblems(directory, locales, problems);
+  bundleProblems(root, folder, locales, problems);
   return problems
     .map((problem, position) => ({...problem, position}))
     .sort((left, right) =>

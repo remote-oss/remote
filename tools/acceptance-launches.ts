@@ -103,6 +103,13 @@ export interface PlainLaunch extends LaunchCommon {
    * code and no contribution, carrying the id it stands for.
    */
   standIns?: readonly string[];
+  /** The display language the editor starts in, as its `--locale` switch takes it. */
+  locale?: string;
+  /**
+   * The language id of a fixture language pack the launch installs, packaged from the language suite's fixtures: an
+   * extension that contributes a display language and translates nothing.
+   */
+  languagePack?: string;
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -203,6 +210,24 @@ const GENUINE_LAUNCH: PlainLaunch = {
   environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
 };
 
+/**
+ * The genuine client with our Dev Containers and Docker: the server comes from the run's stand-in licensed host, so the
+ * licence question of a server under terms of its own is asked and nothing reaches the editor's publisher. The other
+ * Dev Containers extension is never installed.
+ */
+const GENUINE_CONTAINERS_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'genuine-containers',
+  suite: 'genuine-containers',
+  withExtensions: ['remote-oss.remote-containers'],
+  settings: {
+    ...GENUINE_LAUNCH.settings,
+    // The folder dialog is the in-window one, which the renderer helpers can type into.
+    'files.simpleDialog.enable': true,
+    'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LICENSED}',
+  },
+};
+
 /** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
 const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   ...GENUINE_LAUNCH,
@@ -264,12 +289,13 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases. */
+/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases and its certificate file. */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
   'HARNESS_DOWNLOADS_LICENSED',
   'HARNESS_DOWNLOADS_LOCAL',
+  'HARNESS_DOWNLOADS_CERTIFICATE',
 ];
 
 /**
@@ -553,7 +579,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view`, `containers-context` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -696,6 +722,8 @@ export function launchesOf(root: string): Launch[] {
         ],
       },
     },
+    // The core features of the editor in a window on the SSH host, read through the renderer.
+    {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
     {
       label: 'no-proposals',
       kind: 'plain',
@@ -852,7 +880,12 @@ export function launchesOf(root: string): Launch[] {
       templates: true,
       // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that Learn More
       // opens nothing on the machine and its address can be read.
-      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+      // The CLI there fetches a Feature's tarball over HTTPS from the run's download host, whose certificate it trusts
+      // by this variable and by nothing else.
+      environment: {
+        PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`,
+        NODE_EXTRA_CA_CERTS: '${HARNESS_DOWNLOADS_CERTIFICATE}',
+      },
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
@@ -901,6 +934,13 @@ export function launchesOf(root: string): Launch[] {
       engine: 'podman',
       namedOnly: true,
     },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-context',
+      suite: 'containers-context',
+      // A Docker configuration of its own, so that a row can create, use and delete a context without touching the machine's.
+      environment: {DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`},
+    },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
     {
       ...RENDERER_LAUNCH,
@@ -913,6 +953,41 @@ export function launchesOf(root: string): Launch[] {
       ],
       environment: UNREACHABLE_GALLERY,
     },
+    // The same, in German, with no language pack: the display language the pack's strings are read for.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'extensionpack-german',
+      suite: 'extensionpack-german',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-ssh',
+        'remote-oss.vscode-remote-extensionpack',
+      ],
+      environment: UNREACHABLE_GALLERY,
+      locale: 'de',
+    },
+    // The pack and Remote - SSH without Dev Containers: a member of the pack that is not installed, with no gallery to fetch it from.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'extensionpack-partial',
+      suite: 'extensionpack-partial',
+      withExtensions: ['remote-oss.vscode-remote-extensionpack'],
+      environment: UNREACHABLE_GALLERY,
+    },
+    // The same with a fixture language pack active: the display language the pack's strings are read for.
+    ...['de', 'hu'].map((language): PlainLaunch => ({
+      ...RENDERER_LAUNCH,
+      label: `extensionpack-lp-${language}`,
+      suite: 'extensionpack-language',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-ssh',
+        'remote-oss.vscode-remote-extensionpack',
+      ],
+      environment: UNREACHABLE_GALLERY,
+      locale: language,
+      languagePack: language,
+    })),
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
         label: hostCaseLabel(suite, hostCase),
@@ -932,6 +1007,7 @@ export function launchesOf(root: string): Launch[] {
     ),
     GENUINE_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
+    GENUINE_CONTAINERS_LAUNCH,
     // Last: its rows remove every container of the run, the run's host and registry included.
     {
       ...CONTAINERS_LAUNCH,
