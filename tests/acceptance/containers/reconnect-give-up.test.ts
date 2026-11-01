@@ -3,6 +3,8 @@ import {
   closeWindow,
   connectedToContainer,
   containersLog,
+  devContainersOf,
+  reloadWindow,
 } from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
 import {
@@ -410,6 +412,48 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         withinEightSeconds: true,
         newPort: true,
         started: true,
+      });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-11 (c67-host-stop): a container stopped from the host gives the Disconnected indicator and core’s modal Cannot reconnect dialog with Cancel and Reload Window; Cancel leaves the window disconnected, and after the container is started again Reload Window re-attaches it', async () => {
+    const {name, containerId, folder} = await settledWindow('c67-host-stop');
+    try {
+      await docker('stop', containerId);
+      const dialog = await waitForDialog(name, 30_000);
+      const indicator = await statusBarText(name, 'status.host');
+      await answerDialog(name, 'Cancel');
+      await pause(3000);
+      const afterCancel = {
+        dialog: await dialogOf(name),
+        indicator: await statusBarText(name, 'status.host'),
+      };
+      await docker('start', containerId);
+      await reloadWindow(name);
+      await connectedToContainer(name);
+      const state = {
+        details: dialog.details,
+        message: dialog.message,
+        buttons: [...dialog.buttons],
+        indicator,
+        afterCancel,
+        reattached: await statusBarText(name, 'status.host'),
+        containers: await devContainersOf(folder),
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        details: CANNOT_RECONNECT,
+        message: '',
+        buttons: ['Cancel', 'Reload Window'],
+        indicator: 'Disconnected from Dev Container: c67-host-stop',
+        afterCancel: {
+          dialog: undefined,
+          indicator: 'Disconnected from Dev Container: c67-host-stop',
+        },
+        reattached: 'Dev Container: c67-host-stop',
+        containers: [containerId],
       });
     } finally {
       await removeContainers(folder);
