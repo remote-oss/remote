@@ -153,6 +153,8 @@ function isDrop(script: string): boolean {
   return script.includes('rm -rf -- "$folder"');
 }
 
+const DROPPED = ['result=removed'];
+
 function isDiscard(script: string): boolean {
   return script.includes("ARCHIVE_REMOVE='yes'");
 }
@@ -854,7 +856,7 @@ describe('the server steps of a connect (card containers-08)', () => {
     const channel = channelOf({
       volume: true,
       start: blockOf('ServerFailedToStart'),
-      extra: [answer(isDrop, [])],
+      extra: [answer(isDrop, DROPPED)],
     });
     const {result, seen} = await runSteps(channel, {
       volume: true,
@@ -885,7 +887,7 @@ describe('the server steps of a connect (card containers-08)', () => {
         [TREE, '/home/node/.fixture-server/bin/abc123'],
         [
           `the cached server archive ${seen.removed[0] ?? ''} was removed: the server didn't start from it`,
-          `the server folders ${TREE}, /home/node/.fixture-server/bin/abc123 were removed: the server didn't start from them`,
+          `the server folders ${TREE}, /home/node/.fixture-server/bin/abc123 were removed: node cannot run from them`,
         ],
       ],
     );
@@ -897,7 +899,7 @@ describe('the server steps of a connect (card containers-08)', () => {
       treeComplete: true,
       installed: true,
       start: blockOf('ServerFailedToStart'),
-      extra: [answer(isDrop, [])],
+      extra: [answer(isDrop, DROPPED)],
     });
     const {result, seen} = await runSteps(channel, {volume: true});
     deepStrictEqual(
@@ -907,6 +909,51 @@ describe('the server steps of a connect (card containers-08)', () => {
         scriptsOf(channel).filter(isDrop).length,
       ],
       ['serverFailed', [], 1],
+    );
+  });
+
+  it('containers-130: a start that fails on an installed server reused with no download source drops nothing', async () => {
+    const channel = channelOf({
+      volume: true,
+      treeComplete: true,
+      installed: true,
+      start: blockOf('ServerFailedToStart'),
+      extra: [answer(isDrop, [])],
+    });
+    const {result, seen} = await runSteps(channel, {
+      volume: true,
+      override: undefined,
+      cached: true,
+    });
+    deepStrictEqual(
+      [failureKind(result), seen.removed, scriptsOf(channel).filter(isDrop)],
+      ['serverFailed', [], []],
+    );
+  });
+
+  it("containers-130: a start that fails while the folder's own node runs drops the cache entry and keeps the server folders", async () => {
+    const channel = channelOf({
+      volume: true,
+      start: blockOf('ServerFailedToStart'),
+      extra: [answer(isDrop, ['result=kept'])],
+    });
+    const {result, seen} = await runSteps(channel, {
+      volume: true,
+      cached: true,
+    });
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.removed.map(file => file.endsWith('.tar.gz')),
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('kept')),
+      ],
+      [
+        'serverFailed',
+        [true],
+        [`the server folders were kept: node runs from ${TREE}`],
+      ],
     );
   });
 
