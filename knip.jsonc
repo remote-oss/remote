@@ -15,6 +15,7 @@
         "tools/identifiers.ts!",
         "tools/public-surface.ts!",
         "tools/string-tables.ts!",
+        "tools/locale-tables.ts!",
         "tools/check-coverage.ts!",
         "tools/seed-coverage.ts!",
         "tools/package-extensions.ts!",
