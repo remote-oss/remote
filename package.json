@@ -28,6 +28,7 @@
     "check-public-surface": "node tools/public-surface.ts",
     "check-string-tables": "node tools/string-tables.ts",
     "check-coverage": "node tools/check-coverage.ts",
+    "coverage-table": "node tools/check-coverage.ts --table",
     "check-ci-gate": "node tools/check-ci-gate.ts",
     "check-workflow-tokens": "node tools/check-workflow-tokens.ts",
     "import-suite": "node tools/import-suite.ts",
