@@ -807,7 +807,7 @@ F-0501.AC-3	deferred	containers release 1: later (the attach, Kubernetes and App
 F-0501.AC-4	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-5	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-6	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
-F-0501.AC-7	todo	
+F-0501.AC-7	acceptance	
 F-0501.AC-8	acceptance	
 F-0501.AC-9	core	core: an authority nothing resolves opens a local empty window
 F-0501.AC-10	core	core: a single-colon vscode-remote argument read as a local path
@@ -826,7 +826,7 @@ F-0501.AC-22	acceptance
 F-0501.AC-23	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-24	deferred	containers release 1: later (the recovery container)
 F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0501.AC-26	todo	
+F-0501.AC-26	acceptance	
 F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
 F-0502.AC-1	acceptance	
@@ -956,7 +956,7 @@ F-0504.AC-28	acceptance
 F-0504.AC-29	unit	
 F-0504.AC-30	unit	
 F-0504.AC-31	unit	
-F-0504.AC-32	todo	
+F-0504.AC-32	acceptance	
 F-0505.AC-1	acceptance	
 F-0505.AC-2	acceptance	
 F-0505.AC-3	acceptance	
