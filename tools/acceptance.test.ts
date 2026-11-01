@@ -36,6 +36,7 @@ import {
   runArgumentsOf,
   type CommandResult,
   failureText,
+  FORWARD_ALIASES,
   harnessSshConfig,
   sshConfigOf,
   type HarnessDependencies,
@@ -748,6 +749,19 @@ describe('acceptance', () => {
       accountBlock('noall'),
       [...sharedLines('noall', 'harness-noall'), ...KEY_ALIAS_LINES].join('\n'),
     );
+  });
+
+  it('coverage-83: each forwarding alias logs in to its account with the run key and adds its forwards', () => {
+    for (const [alias, user, lines] of FORWARD_ALIASES) {
+      strictEqual(
+        accountBlock(alias),
+        [
+          ...sharedLines(alias, user),
+          ...KEY_ALIAS_LINES,
+          ...lines.map(line => `  ${line}`),
+        ].join('\n'),
+      );
+    }
   });
 
   it('coverage-43: Host harness-fish logs in to harness-fish with the run key', () => {

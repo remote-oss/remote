@@ -447,6 +447,12 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
+    ...FORWARD_ALIASES.flatMap(([alias, user, lines]) =>
+      accountAlias(alias, user, port, runFolder, [
+        ...keyLines(runFolder),
+        ...lines,
+      ]),
+    ),
     ...accountAlias(
       'mute',
       'harness-mute',
@@ -636,6 +642,34 @@ function keyLines(runFolder: string): string[] {
     'BatchMode yes',
   ];
 }
+
+/**
+ * The aliases whose configuration forwards ports: `fwd-busy` and `fwd-busy-exit` (a `LocalForward` for a port the row
+ * holds, without and with `ExitOnForwardFailure`), `fwd-static` (a `LocalForward` for the host's port 8657),
+ * `fwd-gateway` (`GatewayPorts yes` with a `LocalForward`), `fwd-remote` (a `RemoteForward` to a port of the client),
+ * `fwd-dynamic` (a `DynamicForward`), and `fwd-open` and `fwd-noopen` (a dynamic `RemoteForward` with `PermitRemoteOpen`
+ * `any` and `none`, an option of the client's configuration). Each is the alias's name, its account and its lines.
+ */
+export const FORWARD_ALIASES: ReadonlyArray<
+  readonly [string, string, readonly string[]]
+> = [
+  ['fwd-busy', 'harness', ['LocalForward 13020 127.0.0.1:8660']],
+  [
+    'fwd-busy-exit',
+    'harness',
+    ['LocalForward 13020 127.0.0.1:8660', 'ExitOnForwardFailure yes'],
+  ],
+  ['fwd-static', 'harness', ['LocalForward 13010 127.0.0.1:8657']],
+  [
+    'fwd-gateway',
+    'harness',
+    ['GatewayPorts yes', 'LocalForward 13001 127.0.0.1:8661'],
+  ],
+  ['fwd-remote', 'harness', ['RemoteForward 19000 127.0.0.1:19101']],
+  ['fwd-dynamic', 'harness', ['DynamicForward 11080']],
+  ['fwd-open', 'harness', ['RemoteForward 19201', 'PermitRemoteOpen any']],
+  ['fwd-noopen', 'harness', ['RemoteForward 19200', 'PermitRemoteOpen none']],
+];
 
 /**
  * One alias of the host's other accounts: the lines every one shares, its own known-hosts file, then `further`. Its
