@@ -1,13 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
-import {promisify} from 'node:util';
 import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
-  editorProduct,
   reopenStarted,
   windowState,
 } from '../windows/harness.ts';
@@ -20,39 +15,7 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 import {downloadLogsText, logMarks, requestsSince} from '../genuine/genuine.ts';
-
-const execFileAsync = promisify(execFile);
-
-/** The display name of Dev Containers, as its manifest gives it. */
-const DISPLAY_NAME = (
-  JSON.parse(
-    readFileSync(
-      path.join(
-        import.meta.dirname,
-        '..',
-        '..',
-        '..',
-        'packages',
-        'remote-containers',
-        'package.json',
-      ),
-      'utf8',
-    ),
-  ) as {displayName: string}
-).displayName;
-
-/** The pids of the VS Code server processes in container `containerId`, by their connection-token argument. */
-async function serversIn(containerId: string): Promise<string[]> {
-  // A container that is not running has no server in it.
-  const {stdout} = await execFileAsync('docker', [
-    'exec',
-    containerId,
-    'sh',
-    '-c',
-    'for each in /proc/[0-9]*; do if tr "\\0" " " < "$each/cmdline" 2>/dev/null | grep -q -- "--connection-token-fil[e]"; then echo "${each#/proc/}"; fi; done',
-  ]).catch(() => ({stdout: ''}));
-  return stdout.split('\n').filter(line => line !== '');
-}
+import {licenceTexts, serversIn, statusOf} from './licence-support.ts';
 
 /** How long a connect takes to reach the licence question: the image, the container and the CLI's run come before it. */
 const DIALOG_MILLISECONDS = 300_000;
@@ -84,25 +47,20 @@ describe('the server licence of a genuine client with Dev Containers (card conta
       const after = {
         requests: requestsSince(marks.requests),
         servers: await serversIn(containerId),
-        container: await execFileAsync('docker', [
-          'inspect',
-          '--format',
-          '{{.State.Status}}',
-          containerId,
-        ]).then(each => each.stdout.trim()),
+        container: await statusOf(containerId),
         remoteName: (await windowState(name)).remoteName,
         dialog: settled && [settled.message, settled.details, settled.buttons],
         title: await windowTitle(name),
         indicator: (await statusItem(name, 'status.host')).text,
       };
-      const product = editorProduct();
+      const texts = licenceTexts();
       deepStrictEqual(
         {asked, after},
         {
           asked: {
             kind: 'warning',
-            message: `${DISPLAY_NAME} needs you to accept the license terms of the ${product.applicationName} server before installing it.`,
-            details: `Read the terms at ${product.serverLicenseUrl}.`,
+            message: texts.message,
+            details: texts.details,
             buttons: ['Cancel', 'Accept and Continue'],
             requests: [],
           },

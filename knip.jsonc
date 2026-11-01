@@ -63,6 +63,8 @@
         "trust-terminal/*.test.ts",
         "genuine/*.test.ts",
         "genuine-containers/*.test.ts",
+        "genuine-containers-accept-a/*.test.ts",
+        "genuine-containers-accept-b/*.test.ts",
         "ssh-no-proposals/*.test.ts",
         "containers/*.test.ts",
         "containers-standdown/*.test.ts",
