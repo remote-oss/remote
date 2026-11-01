@@ -4,6 +4,10 @@
  * get a real terminal when the CLI can load `node-pty`, which the editor ships for its own terminal (ADR-0011). The
  * editor's copy is made resolvable to this process's `require` alone: no environment variable is set, so a lifecycle
  * command sees the editor's environment as before. The preload says what it loaded in one marker line on stderr.
+ *
+ * It also ends the CLI with its build when the extension host that started it is gone. The CLI runs in a process group
+ * of its own, so that the host can end the whole group on a cancellation; a window that closes ends the host without
+ * telling the extension, and nothing else would end the group then.
  */
 
 import module from 'node:module';
@@ -14,6 +18,12 @@ const MARKER = 'remote-oss-cli-preload';
 
 /** The platforms measured with a pty (ADR-0011 decision 6): Linux by its acceptance rows, macOS by a probe run. */
 const PTY_PLATFORMS = new Set(['linux', 'darwin']);
+
+/** How often the CLI looks for the process that started it, in milliseconds. */
+const PARENT_POLL_MILLISECONDS = 1000;
+
+/** How long the group has to end after SIGTERM before it is killed, in milliseconds. */
+const GROUP_GRACE_MILLISECONDS = 5000;
 
 delete process.env.ELECTRON_RUN_AS_NODE;
 /** Where the editor keeps `node-pty`: handed by the host, and removed so no child of the CLI sees it. */
@@ -53,4 +63,29 @@ if (
   }
 } else {
   process.stderr.write(marker(false, 'none'));
+}
+
+/** Signals the CLI's whole process group, or the CLI alone when it leads none; a group that is gone is not an error. */
+function signalGroup(name: 'SIGTERM' | 'SIGKILL'): void {
+  try {
+    process.kill(-process.pid, name);
+  } catch {
+    try {
+      process.kill(process.pid, name);
+    } catch {
+      // The process is already gone, which is what the signal was for.
+    }
+  }
+}
+
+if (process.platform !== 'win32') {
+  const startedBy = process.ppid;
+  setInterval(() => {
+    if (process.ppid !== startedBy) {
+      setTimeout(() => {
+        signalGroup('SIGKILL');
+      }, GROUP_GRACE_MILLISECONDS).unref();
+      signalGroup('SIGTERM');
+    }
+  }, PARENT_POLL_MILLISECONDS).unref();
 }

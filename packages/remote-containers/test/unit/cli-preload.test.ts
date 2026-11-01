@@ -1,6 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {buildSync} from 'esbuild';
@@ -13,27 +19,33 @@ interface Scene {
   fakePty(parent: string, answer?: string): string;
 }
 
+/** Bundles the preload into `folder` and gives its path. */
+function bundledPreload(folder: string): string {
+  const bundled = buildSync({
+    entryPoints: [
+      path.join(
+        import.meta.dirname,
+        '..',
+        '..',
+        'src',
+        'programs',
+        'cli-preload.ts',
+      ),
+    ],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    write: false,
+  });
+  const preload = path.join(folder, 'cli-preload.js');
+  writeFileSync(preload, bundled.outputFiles[0]?.text ?? '');
+  return preload;
+}
+
 function withScene(test: (scene: Scene) => void): void {
   const folder = mkdtempSync(path.join(tmpdir(), 'preload-'));
   try {
-    const bundled = buildSync({
-      entryPoints: [
-        path.join(
-          import.meta.dirname,
-          '..',
-          '..',
-          'src',
-          'programs',
-          'cli-preload.ts',
-        ),
-      ],
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      write: false,
-    });
-    const preload = path.join(folder, 'cli-preload.js');
-    writeFileSync(preload, bundled.outputFiles[0]?.text ?? '');
+    const preload = bundledPreload(folder);
     test({
       folder,
       preload,
@@ -201,5 +213,66 @@ describe('the CLI preload (card containers-04)', () => {
         ['ran', NOT_LOADED, 0],
       );
     });
+  });
+
+  it('connect-120: a CLI whose parent is gone ends its whole process group, a child of it included', async function () {
+    this.timeout(30_000);
+    const folder = mkdtempSync(path.join(tmpdir(), 'preload-parent-'));
+    const pidFile = path.join(folder, 'pids.json');
+    try {
+      const preload = bundledPreload(folder);
+      // The CLI: a child of its own that waits, and its own wait.
+      const script = path.join(folder, 'cli.js');
+      writeFileSync(
+        script,
+        `const {spawn} = require('node:child_process');
+const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio: 'ignore'});
+require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, child.pid]));
+setInterval(() => {}, 1000);`,
+      );
+      // The parent: starts the CLI in a group of its own, as the host does, and ends once the CLI has written its pids.
+      const parent = path.join(folder, 'parent.js');
+      writeFileSync(
+        parent,
+        `const {spawn} = require('node:child_process');
+const {existsSync} = require('node:fs');
+spawn(process.execPath, ['--require', ${JSON.stringify(preload)}, ${JSON.stringify(script)}], {detached: true, stdio: 'ignore'}).unref();
+const wait = setInterval(() => { if (existsSync(${JSON.stringify(pidFile)})) { clearInterval(wait); } }, 50);`,
+      );
+      const started = spawnSync(process.execPath, [parent]);
+      const pids = await (async (): Promise<number[]> => {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          try {
+            return JSON.parse(readFileSync(pidFile, 'utf8')) as number[];
+          } catch {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        return [];
+      })();
+      function alive(processId: number): boolean {
+        try {
+          process.kill(processId, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      let remaining = pids;
+      for (
+        let attempt = 0;
+        attempt < 120 && remaining.length > 0;
+        attempt += 1
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        remaining = remaining.filter(alive);
+      }
+      for (const processId of remaining) {
+        process.kill(processId, 'SIGKILL');
+      }
+      deepStrictEqual([started.status, pids.length, remaining], [0, 2, []]);
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 });
