@@ -38,6 +38,7 @@ import {
   startCommand,
   screenWith,
   startedWith,
+  takeOptionalScreen,
   withWindow,
 } from './authoring-support.ts';
 
@@ -297,6 +298,7 @@ describe('Select Features in the wizard (card containers-88)', function () {
       );
       await toggleQuickPickRow(window, DOCKER_IN_DOCKER);
       await pressQuickPickTitleButton(window, 'Finish');
+      await takeOptionalScreen(window);
       const configuration = await configurationOf(folder);
       deepStrictEqual(
         [

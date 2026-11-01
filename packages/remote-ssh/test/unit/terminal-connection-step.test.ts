@@ -78,7 +78,6 @@ function requestFor(socksPort: number | undefined): SshRequest {
     programs: {sshProgram: 'ssh', scpProgram: 'scp'},
     homeFolder: '/home/a',
     platform: 'linux',
-    remoteProgram: 'sh',
     ...(socksPort === undefined
       ? {clearUserForwards: true}
       : {forwards: [{kind: 'dynamic' as const, localPort: socksPort}]}),
@@ -260,13 +259,21 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(terminal.invocation.environment, {});
   });
 
-  it('F-2704 BR-1: the invocation runs sh without a terminal on the host', async () => {
+  it('F-2704 BR-1, F-2107 BR-1: with a RemoteCommand in effect the invocation has no program after the host, and no terminal on the host', async () => {
     const {terminal} = await started(fixture());
     const invoked = terminal.invocation.arguments;
     deepStrictEqual(
-      [invoked.slice(-3), invoked.includes('-T')],
-      [['--', 'dev', 'sh'], true],
+      [invoked.slice(-2), invoked.includes('-T')],
+      [['--', 'dev'], true],
     );
+  });
+
+  it('F-2107 BR-1: with a RemoteCommand in effect the first bytes the session is fed are the exec line of the bootstrap program', async () => {
+    const made = fixture();
+    const {terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    await settled();
+    deepStrictEqual(terminal.sent[0]?.startsWith('exec sh -c '), true);
   });
 
   it('F-2104 6.3: with dynamic forwarding the install holds the SOCKS port', async () => {
@@ -625,8 +632,8 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     await settled();
     deepStrictEqual(
       terminal.sent
-        .find(text => text.startsWith('LAYER1_SECONDS='))
-        ?.split('\n')[0],
+        .flatMap(text => text.split('\n'))
+        .find(line => line.startsWith('LAYER1_SECONDS=')),
       'LAYER1_SECONDS=12',
     );
   });

@@ -797,6 +797,9 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-trust',
       suite: 'containers-trust',
       workspaceTrust: true,
+      // The run's registry and templates, as in `containers`: the wizard's rows run in an untrusted folder too.
+      registry: true,
+      templates: true,
       settings: {
         ...CONTAINERS_LAUNCH.settings,
         // A folder opens untrusted and silent, so the only trust dialog is the one Reopen asks for.
@@ -972,11 +975,12 @@ export function settingsOfLaunch(
     : {...launch.settings, 'dev.containers.dockerPath': launch.engine};
 }
 
-/** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */
+/** Whether a launch installs Dev Containers, whose rows need the run's dev container image; a launch that publishes its templates builds it too, because the run's `mini` template names it. */
 export function needsDevContainerImage(launch: Launch): boolean {
   return (
     launch.kind === 'plain' &&
-    (launch.withExtensions ?? []).includes('remote-oss.remote-containers')
+    ((launch.withExtensions ?? []).includes('remote-oss.remote-containers') ||
+      launch.templates === true)
   );
 }
 

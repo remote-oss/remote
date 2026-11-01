@@ -15,10 +15,12 @@ import {
   bootstrapEventOf,
   bootstrapLogLine,
   connectionStart,
+  tunnelStart,
   preludeProgram,
   sessionStart,
   sessionStartFor,
 } from '../../src/index.ts';
+import {TUNNEL_COMMAND} from '../../src/arguments/invocation.ts';
 import {planScript} from '../../src/process/remote-program.ts';
 
 describe('the connection start (card connect-92, #1407)', () => {
@@ -48,6 +50,26 @@ describe('the connection start (card connect-92, #1407)', () => {
         ),
       ],
       [true, true, true],
+    );
+  });
+});
+
+describe('the tunnel start (card connect-94, #1445)', () => {
+  it('F-2107 BR-1: with no RemoteCommand in effect the tunnel command is the remote program and nothing is fed', () => {
+    deepStrictEqual(tunnelStart(false), {remoteProgram: TUNNEL_COMMAND});
+  });
+
+  it('F-2107 BR-1: with one in effect there is no remote program, and the input is exactly one line, ending in a newline, that execs the command in sh', () => {
+    const {remoteProgram, input} = tunnelStart(true);
+    deepStrictEqual(
+      [
+        remoteProgram,
+        input?.endsWith('\n'),
+        input?.split('\n').length,
+        input?.startsWith('exec sh -c '),
+        input?.includes('exec sleep 2147483647'),
+      ],
+      [undefined, true, 2, true, true],
     );
   });
 });

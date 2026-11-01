@@ -1414,13 +1414,14 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59, tooling-56, tooling-74: only the containers launch, containers-ports, containers-features and containers-view ask for the run’s registry', () => {
+  it('containers-59, tooling-56, tooling-74: only the containers launch, containers-trust, containers-ports, containers-features and containers-view ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
       [
         'containers',
+        'containers-trust',
         'containers-ports',
         'containers-features',
         'containers-view',
@@ -1428,13 +1429,14 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('tooling-57, containers-80: only the containers launch, containers-features and the two index launches ask for the run’s templates', () => {
+  it('tooling-57, containers-80: only the containers launch, containers-trust, containers-features and the two index launches ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
       [
         'containers',
+        'containers-trust',
         'containers-features',
         'containers-index-broken',
         'containers-index-down',

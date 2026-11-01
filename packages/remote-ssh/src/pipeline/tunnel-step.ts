@@ -58,6 +58,8 @@ export interface TunnelStepDependencies {
   terminals: LoginTerminals;
   /** The tunnel run for one forward: the local port and where it leads on the host. */
   tunnelInvocation(forward: Forward): Invocation;
+  /** What the tunnel run is fed on its input at once: its command, when the host's RemoteCommand is in effect. */
+  tunnelInput(): string | undefined;
   /** Shows the tunnel login's questions for this connect and answers the terminal; the handle takes an input down. */
   attachQuestions(
     login: TerminalLogin,
@@ -180,6 +182,7 @@ async function openTerminalTunnel(
     dependencies.tunnelInvocation(forward),
     localPort,
     dependencies.revealLoginTerminals(),
+    dependencies.tunnelInput(),
   );
   let stall: (() => void) | undefined;
   const unreachable = new Promise<'unreachable'>(resolve => {

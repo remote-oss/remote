@@ -12,6 +12,7 @@ import {
   extensionPresent,
   inWindow,
   reopenInContainer,
+  reopenStarted,
   startInWindow,
   variable,
   waitFor,
@@ -22,8 +23,10 @@ import {
   dialogOf,
   notificationCentre,
   notifications,
+  primaryButtonOf,
   statusItem,
   waitForDialog,
+  waitForQuickPick,
   welcomeText,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -186,6 +189,62 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
       },
     );
     await closeWindow(name);
+  });
+
+  it('F-0412 AC-11 (gate-row-7): a Dockerfile that fails to build on Reopen shows F-0410’s dialog with Retry, Edit and More Actions..., and makes no container', async () => {
+    const folder = devContainerFolder('gate-build', {
+      name: 'Gate Seven',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeFileSync(
+      path.join(folder, '.devcontainer', 'Dockerfile'),
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nRUN false\n`,
+    );
+    const name = await openFolderWindow(folder);
+    try {
+      await reopenStarted(name);
+      const dialog = await waitForDialog(name, 300_000);
+      const primary = await primaryButtonOf(name);
+      const title = await windowTitle(name);
+      const indicator = (await statusItem(name, 'status.host')).text;
+      const containers = await devContainersOf(folder);
+      await answerDialog(name, 'More Actions...');
+      const pick = await waitForQuickPick(name, 30_000);
+      deepStrictEqual(
+        {
+          dialog: [dialog.message, dialog.details, [...dialog.buttons].sort()],
+          primary,
+          title,
+          indicator,
+          containers,
+          pick,
+        },
+        {
+          dialog: [
+            '',
+            'An error occurred setting up the container.',
+            ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          ],
+          primary: 'Retry',
+          title: '[gate-build]',
+          indicator: 'Opening Remote...',
+          containers: [],
+          pick: {
+            placeholder: 'Pick an action to help resolve the problem.',
+            items: [
+              'Reload Window',
+              'Edit devcontainer.json Locally',
+              'Open Recent...',
+              'Open Documentation',
+            ],
+          },
+        },
+      );
+    } finally {
+      await closeWindow(name);
+      await removeContainers(folder);
+    }
   });
 
   it('ruling (c) (P1), containers-24: with a Docker that answers after a second, the Connecting to Dev Container toast is on screen before the window reloads, and then it connects', async () => {

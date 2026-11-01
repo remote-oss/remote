@@ -945,9 +945,7 @@ describe("a terminal-mode connect's tunnel run", () => {
   };
 
   /** The arguments of the tunnel run a connect with `terms` opens on the second-ssh path. */
-  async function tunnelArguments(
-    remoteCommandInEffect: boolean,
-  ): Promise<readonly string[] | undefined> {
+  async function tunnelTerminal(remoteCommandInEffect: boolean) {
     const {ports, seen} = portsOf({lookup: REMOTE_COMMAND_LOOKUP});
     const steps = stepsOf({
       ...ports,
@@ -976,7 +974,14 @@ describe("a terminal-mode connect's tunnel run", () => {
       new AbortController().signal,
     );
     await new Promise(resolve => setImmediate(resolve));
-    return seen.terminals.opened[0]?.invocation.arguments;
+    return seen.terminals.opened[0];
+  }
+
+  /** The arguments of the tunnel run. */
+  async function tunnelArguments(
+    remoteCommandInEffect: boolean,
+  ): Promise<readonly string[] | undefined> {
+    return (await tunnelTerminal(remoteCommandInEffect))?.invocation.arguments;
   }
 
   it('connect-18: the run is a tunnel run holding the forward to the server', async () => {
@@ -992,8 +997,23 @@ describe("a terminal-mode connect's tunnel run", () => {
 
   it('connect-18: the run carries the tunnel command, not an install shell', async () => {
     deepStrictEqual(
-      (await tunnelArguments(true))?.at(-1)?.includes(TUNNEL_SUCCESS_LINE),
+      (await tunnelArguments(false))?.at(-1)?.includes(TUNNEL_SUCCESS_LINE),
       true,
+    );
+  });
+
+  it('F-2107 BR-1: with a RemoteCommand in effect the run has no command after the host, and the terminal is fed the exec line of the tunnel command; with none it is fed nothing', async () => {
+    const inEffect = await tunnelTerminal(true);
+    const disabled = await tunnelTerminal(false);
+    deepStrictEqual(
+      [
+        inEffect?.invocation.arguments.at(-1)?.includes(TUNNEL_SUCCESS_LINE),
+        inEffect?.sent.length,
+        inEffect?.sent[0]?.startsWith('exec sh -c '),
+        inEffect?.sent[0]?.includes(TUNNEL_SUCCESS_LINE),
+        disabled?.sent,
+      ],
+      [false, 1, true, true, []],
     );
   });
 

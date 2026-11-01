@@ -106,6 +106,10 @@ export interface BooleanScreen {
   items: readonly BooleanItem[];
   /** True on Select Features: a title-bar button that finishes the wizard with what is checked. */
   finishButton?: true;
+  /** True for a screen that stays open when the focus leaves it. */
+  keepOpen?: true;
+  /** True for a screen that starts with no row focused. */
+  unfocused?: true;
 }
 
 /** What a boolean screen ends with. */
@@ -301,7 +305,13 @@ export function pickBooleans(
       picker.title = screen.title;
       picker.placeholder = screen.placeholder;
       picker.canSelectMany = true;
+      if (screen.keepOpen === true) {
+        picker.ignoreFocusOut = true;
+      }
       picker.items = rows;
+      if (screen.unfocused === true) {
+        picker.activeItems = [];
+      }
       picker.selectedItems = rows.filter(
         (entry, index) => screen.items[index]?.checked === true,
       );

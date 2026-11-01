@@ -88,14 +88,6 @@ export async function runConnectionHelper(
       fromHost: request.effective.connectTimeout !== undefined,
       unboundedWaitSeconds: options.unboundedWaitSeconds,
     };
-    if (
-      request.settings.remoteCommandInEffect &&
-      request.remoteProgram !== undefined
-    ) {
-      throw new Error(
-        'a shared connection whose RemoteCommand is in effect takes no remote program',
-      );
-    }
     const start = connectionStart(
       sessionStartFor(waitSettings),
       request.settings.remoteCommandInEffect,
