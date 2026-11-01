@@ -324,10 +324,7 @@ describe('the port attributes of the configuration (card containers-73)', functi
     }
   });
 
-  // Skipped: the product gives no row at all for a detected port when portsAttributes carries a regex key (the
-  // listener was verified running); the same listener gets its row in about 8 s without regex keys; posted on
-  // #1538.
-  it.skip('F-1101 AC-39 (regex-spaces): a regex key with spaces between the arguments does not label the row, and the same key with a dot for each space does', async () => {
+  it('F-1101 AC-39 (regex-spaces): a regex key with spaces between the arguments does not label the row, and the same key with a dot for each space does', async () => {
     const port = await freePort();
     const window = await connectedWith('c73b-ac39', {
       portsAttributes: {

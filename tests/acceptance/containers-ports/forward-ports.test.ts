@@ -343,9 +343,7 @@ describe('the declared forwardPorts (card containers-72)', function () {
     }
   });
 
-  // Skipped: the product shows no dialog and never takes a fallback local port: the row keeps the taken local port,
-  // while the declared batch takes a different one silently (AC-7); posted on #1538.
-  it.skip('F-1101 AC-8 (manual-taken): a manually forwarded port whose local port is taken shows the core could-not-be-used modal with OK only, and the row takes the fallback local port', async () => {
+  it('F-1101 AC-8 (manual-taken): a manually forwarded port whose local port is taken shows the core could-not-be-used modal with OK only, and the row takes the fallback local port', async () => {
     const port = await freePort();
     const release = await occupy(port);
     try {

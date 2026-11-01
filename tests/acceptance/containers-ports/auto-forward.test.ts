@@ -765,9 +765,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     }
   });
 
-  // Skipped: the product detects the process on the port but never opens the localhost:<port> preview tab, so no
-  // request reaches the listener; posted on #1538.
-  it.skip('F-1101 AC-14 (preview-below-10000): openPreview on a declared port below 10000 opens an editor tab titled localhost:<port> whose request reaches the listener', async () => {
+  it('F-1101 AC-14 (preview-below-10000): openPreview on a declared port below 10000 opens an editor tab titled localhost:<port> whose request reaches the listener, with the Ports view never shown', async () => {
     let port = 7143;
     while (port === 9229 || !(await isFree(port))) {
       port -= 1;
@@ -780,12 +778,9 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     const [containerId = ''] = await devContainersOf(folderOf('c73b-ac14p'));
     let tabOpened = false;
     try {
-      await showPorts(window);
-      await rowsWhen(window, shown =>
-        shown.some(each => each.port === String(port)),
-      );
-      // A port that already listens when core makes its first scan is one of its initial candidates, which core does
-      // not act on; the criterion is about a process that is detected later.
+      // The Ports view is not shown in this row: core detects and reacts without it. A port that already listens when
+      // core makes its first scan is one of its initial candidates, which core does not act on, so the listener starts
+      // after the scan, which the connect has long begun by then; the criterion is about a process detected later.
       await new Promise(resolve =>
         setTimeout(resolve, INITIAL_SCAN_MILLISECONDS),
       );
@@ -823,25 +818,19 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
         async () => (await requestLog()).includes('GET /'),
         30_000,
       ).catch(() => undefined);
-      const received = {stdout: await requestLog()};
-      const finalRows = await portsRows(window).catch(() => []);
       deepStrictEqual(
         {
-          process: finalRows.some(
-            each => each.port === String(port) && each.runningProcess !== '',
-          ),
           tabOpened,
           tabs: (await editorTabs(window))
             .map(entry => entry.label)
             .filter(label => label.startsWith('localhost:')),
-          request: received.stdout.includes('GET /'),
+          request: (await requestLog()).includes('GET /'),
           notice: (await notificationCentre(window)).filter(text =>
             text.includes(String(port)),
           ),
           browser: browserOpens(logFile),
         },
         {
-          process: true,
           tabOpened: true,
           tabs: [`localhost:${String(port)}`],
           request: true,
@@ -873,7 +862,6 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     );
     try {
       await showPorts(ignoreWindow);
-      await showPorts(plainWindow);
       await new Promise(resolve => setTimeout(resolve, 45_000));
       const never = portsOf(await portsRows(ignoreWindow).catch(() => []));
       const status = await statusItem(ignoreWindow, 'status.forwardedPorts');
@@ -898,10 +886,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     }
   });
 
-  // Skipped: the product does not forward a terminal listener of a plain window: two launches, the listener verified
-  // running, no row within 75 s, while the single-window rows of the same launches get theirs within 10 s
-  // (F-1102 AC-1); posted on #1538.
-  it.skip('F-1101 AC-28 (forwarded-plain): the same listener without the ignore override is forwarded', async () => {
+  it('F-1101 AC-28 (forwarded-plain): the same listener without the ignore override is forwarded', async () => {
     const plainPort = await freePort();
     const plainWindow = await connectedWith('c73b-ac28b', {});
     const [plainId = ''] = await devContainersOf(folderOf('c73b-ac28b'));
@@ -909,6 +894,8 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       listenInTerminal(plainWindow, plainId, plainPort),
     );
     try {
+      // The rows are read from the Ports view, so it is shown first; a view that is not shown has no table to read.
+      await showPorts(plainWindow);
       const plain = (
         await rowsWhen(plainWindow, shown =>
           shown.some(each => each.port === String(plainPort)),
