@@ -1321,4 +1321,42 @@ describe('runPlainLaunch relaunch (card tooling-88)', () => {
       [{id: 'r', succeeded: true, own: 'local'}, [[], []]],
     );
   });
+
+  it('tooling-88: a request left by an earlier attempt is not answered, and the launch touches no folder of its own for relaunches', async () => {
+    const workspace = new TemporaryWorkspace('relaunch-stale');
+    try {
+      const folder = path.join(workspace.root, LAUNCH.label, 'relaunch');
+      mkdirSync(folder, {recursive: true});
+      writeFileSync(
+        path.join(folder, 'request.json'),
+        JSON.stringify({id: 'old', environment: {}}),
+      );
+      const started: Program[] = [];
+      await runPlainLaunch(
+        '/repo',
+        {
+          runFolder: workspace.root,
+          executable: '/editor',
+          environment: {HARNESS_RUN_FOLDER: workspace.root},
+        },
+        LAUNCH,
+        {
+          start: program => {
+            started.push(program);
+            return {stop: () => Promise.resolve()};
+          },
+          runTests: async () => {
+            await new Promise(resolve => setTimeout(resolve, 600));
+            return {exitCode: 0, output: ''};
+          },
+        },
+      );
+      deepStrictEqual(
+        [started.length, existsSync(path.join(folder, 'response.json'))],
+        [1, false],
+      );
+    } finally {
+      workspace.remove();
+    }
+  });
 });

@@ -515,6 +515,18 @@ export async function answerRelaunch(
   writeFileSync(path.join(folder, 'response.json'), JSON.stringify(answer));
 }
 
+/** The ids of the requests `folder` already holds: none when it has no request or one that does not parse. */
+function staleRequestIds(folder: string): string[] {
+  const file = path.join(folder, 'request.json');
+  try {
+    return existsSync(file)
+      ? [(JSON.parse(readFileSync(file, 'utf8')) as RelaunchRequest).id]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 /** How many times the agent of window `name` reported `activated`, from its events file in `agentFolder`. */
 export function activationsIn(agentFolder: string, name: string): number {
   const file = path.join(agentFolder, `${name}.events.jsonl`);
@@ -604,15 +616,15 @@ export async function runPlainLaunch(
   // A port file an earlier attempt left would name a port nobody listens on.
   rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
   const relaunchFolder = relaunchFolderOf(session.runFolder, launch.label);
-  // A request an earlier attempt left would restart the editor for a row that is gone; the row makes the folder.
-  rmSync(relaunchFolder, {recursive: true, force: true});
+  // A request an earlier attempt left would restart the editor for a row that is gone, so it counts as answered. The
+  // folder itself is the row's to make and is not touched here: the run folder may be a path the harness cannot write.
+  const handled = new Set<string>(staleRequestIds(relaunchFolder));
   const current = {
     editor: steps.start(
       plainEditorOf(session.executable, session.runFolder, launch, environment),
     ),
   };
   const agentFolder = path.join(session.runFolder, launch.label, 'agent');
-  const handled = new Set<string>();
   let answering: Promise<void> | undefined;
   const watching = setInterval(() => {
     if (answering !== undefined) {
