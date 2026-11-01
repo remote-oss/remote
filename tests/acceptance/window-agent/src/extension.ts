@@ -558,6 +558,32 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.writeActiveEditor',
+      async (text: string) => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor === undefined) {
+          throw new Error('the window has no active text editor');
+        }
+        const document = editor.document;
+        await editor.edit(edit => {
+          edit.replace(
+            new vscode.Range(
+              document.positionAt(0),
+              document.positionAt(document.getText().length),
+            ),
+            text,
+          );
+        });
+        await document.save();
+      },
+    ),
+    vscode.commands.registerCommand('acceptance.agent.activeEditorText', () => {
+      report(agentFolder, name, {
+        event: 'editorText',
+        message: vscode.window.activeTextEditor?.document.getText() ?? null,
+      });
+    }),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {
