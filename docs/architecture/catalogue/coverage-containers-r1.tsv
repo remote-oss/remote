@@ -281,7 +281,7 @@ F-0402.AC-15	deferred	containers 0.4: workspace files and multi-root windows lat
 F-0402.AC-16	deferred	containers 0.4: Reopen from a Remote-SSH window later
 F-0403.AC-1	acceptance	
 F-0403.AC-2	todo	
-F-0403.AC-3	todo	
+F-0403.AC-3	core	core: the folder dialog's typing, descending, .. and confirming are core's file dialog
 F-0403.AC-4	todo	
 F-0403.AC-5	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-6	deferred	containers release 1: increment 2 (authoring)
@@ -299,7 +299,7 @@ F-0403.AC-17	acceptance
 F-0403.AC-18	todo	
 F-0403.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-20	acceptance	
-F-0403.AC-21	todo	
+F-0403.AC-21	deferred	containers release 1: later (the log terminal, F-0104)
 F-0403.AC-22	deferred	containers release 1: later (remote engines)
 F-0403.AC-23	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)

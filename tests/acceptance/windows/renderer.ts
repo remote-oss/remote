@@ -2177,6 +2177,41 @@ export async function folderDialogOpen(name: string): Promise<boolean> {
   return evaluate<boolean>(name, `${FOLDER_DIALOG_INPUT} !== null`);
 }
 
+/** What the in-window folder dialog of a window shows: its input, buttons, rows and focus. */
+export interface FolderDialogFacts {
+  placeholder: string;
+  value: string;
+  buttons: string[];
+  titleButtons: string[];
+  rows: string[];
+  inputFocused: boolean;
+  focusedRow: string | null;
+}
+
+/** What the in-window folder dialog of window `name` shows now. */
+export async function folderDialogFacts(
+  name: string,
+): Promise<FolderDialogFacts> {
+  return evaluate<FolderDialogFacts>(
+    name,
+    `(() => {
+      const input = ${FOLDER_DIALOG_INPUT};
+      const widget = input.closest('.quick-input-widget');
+      const rows = [...widget.querySelectorAll('.quick-input-list .monaco-list-row')];
+      const focused = rows.find(each => each.classList.contains('focused'));
+      return {
+        placeholder: input.getAttribute('placeholder') ?? '',
+        value: input.value,
+        buttons: [...widget.querySelectorAll('.quick-input-action .monaco-button')].filter(each => each.getBoundingClientRect().width > 0).map(each => each.textContent.trim()),
+        titleButtons: [...widget.querySelectorAll('.quick-input-titlebar .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+        rows: rows.map(each => each.querySelector('.label-name')?.textContent ?? each.textContent.trim()),
+        inputFocused: document.activeElement === input,
+        focusedRow: focused === undefined ? null : (focused.querySelector('.label-name')?.textContent ?? focused.textContent.trim()),
+      };
+    })()`,
+  );
+}
+
 /**
  * Has window `name`'s in-window folder dialog take `key` (`Enter` or `Escape`), with `typed` in its input first when
  * given; with no key it only types. It waits for the dialog to open, and fails when none does.
