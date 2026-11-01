@@ -336,8 +336,15 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
   });
 
   it('F-0301 AC-69 (o5): before the window connects, the connect shows the Connecting to Dev Container (show log) notification with an indeterminate bar and the status Opening Remote..., and the same window then reloads in place', async () => {
+    // The progress opens half a second into the connect, with the latest stage: a connect that is long enough in its
+    // building stage keeps the plain title on screen to be sampled.
     const folder = configFolder('c50-connecting', {
-      '.devcontainer/devcontainer.json': {name: 'Connecting'},
+      '.devcontainer/devcontainer.json': {
+        name: 'Connecting',
+        image: undefined,
+        build: {dockerfile: 'Dockerfile'},
+      },
+      '.devcontainer/Dockerfile': `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nRUN sleep 5; echo c50-connecting\n`,
     });
     const window = await openFolderWindow(folder);
     opened.push(window);

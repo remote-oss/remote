@@ -341,7 +341,7 @@
         {
           "command": "remote-containers.createDevContainerFile",
           "group": "remote_30_dev-container_2_actions@4",
-          "when": "workspaceFolderCount != 0 && remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",

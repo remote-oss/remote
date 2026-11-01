@@ -34,7 +34,6 @@ import {
   CONFIGURATION,
   closeScreen,
   indicatorMenu,
-  neighboursOf,
   rowsOf,
   slotNames,
   startCommand,
@@ -68,17 +67,17 @@ async function inContainerWindow(
 describe('the authoring command in a dev container window (card containers-126)', function () {
   this.timeout(900_000);
 
-  it('F-0801 AC-1 (c126-dev-container): the palette lists the command and the remote indicator menu holds it, in the Dev Containers group right before Rebuild Container, in a dev container window', async () => {
+  it('F-0801 AC-1 (c126-dev-container): the palette lists the command in a dev container window, whose remote indicator menu, as the reference’s, does not hold it', async () => {
     await inContainerWindow('c126-menu', async window => {
-      const neighbours = neighboursOf(await indicatorMenu(window));
+      const menu = await indicatorMenu(window);
       deepStrictEqual(
         [
+          menu.includes(ADD_ITEM),
           (
             await paletteRows(window, 'Add Dev Container Configuration')
           ).includes(`Dev Containers: ${ADD_ITEM}`),
-          neighbours,
         ],
-        [true, [undefined, 'Rebuild Container']],
+        [false, true],
       );
     });
   });
