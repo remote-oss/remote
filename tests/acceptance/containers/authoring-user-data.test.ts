@@ -14,6 +14,8 @@ import {promisify} from 'node:util';
 import {activations, openFolderWindow} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  inWindow,
+  reloadWindow,
   variable,
   waitFor,
   windowState,
@@ -28,6 +30,8 @@ import {
   editorTabs,
   notificationCentre,
   notificationLinks,
+  pressEscape,
+  pressQuickPickRowButton,
   primaryButtonOf,
   quickPickFacts,
   quickPickOf,
@@ -38,6 +42,7 @@ import {
 } from '../windows/renderer.ts';
 import {
   ALPINE_OPTION,
+  chooseWorkspace,
   CONFIGURATION,
   closeScreen,
   existing,
@@ -555,5 +560,310 @@ describe('the location pick and the store of user data (card containers-91)', fu
         true,
       ],
     ]);
+  });
+});
+
+/** The row of the template pick that copies the stored configuration into the workspace. */
+const COPY_ROW = 'Copy existing configuration to workspace';
+
+/** The start of the notification for a folder's own configuration. */
+const FOLDER_NOTICE_START =
+  'Folder contains a Dev Container configuration file.';
+
+/** The question about a file the workspace already holds. */
+const OVERWRITE =
+  "File '.devcontainer/devcontainer.json' already exists, overwrite?";
+
+/** The question about the stored file after the copy. */
+const DELETE_QUESTION = 'Delete the configuration from the user data folder?';
+
+/** Runs `body` over a window whose folder has a stored Alpine configuration, made by the wizard, with the editors and notices cleared. */
+async function withStored(
+  name: string,
+  contents: Readonly<Record<string, string>>,
+  body: (window: string, folder: string, stored: string) => Promise<void>,
+): Promise<void> {
+  await withWindow(name, contents, async (window, folder) => {
+    await writeToStore(window);
+    const stored = path.join(storeRoot(), name, CONFIGURATION);
+    await written(stored);
+    await inWindow(window, 'workbench.action.closeAllEditors');
+    await inWindow(window, 'notifications.clearAll');
+    await body(window, folder, stored);
+  });
+}
+
+/** Starts the command in `window`, chooses the workspace, and gives the rows of the chooser that follows. */
+async function chooserOf(
+  window: string,
+): Promise<Array<[string, string, string, boolean]>> {
+  await startCommand(window);
+  await chooseWorkspace(window);
+  return rowsOf(window);
+}
+
+/** Waits until the notification centre of `window` holds a notice that starts with `start`. */
+function noticeShown(window: string, start: string): Promise<void> {
+  return waitFor(
+    `the notice ${start}`,
+    async () =>
+      (await notificationCentre(window)).some(text => text.startsWith(start)),
+    30_000,
+  );
+}
+
+/** The reopen notices `window` shows when it opens again: S186 for the folder's own configuration, S368 for a stored one. */
+async function noticesAfterReload(window: string): Promise<string[]> {
+  await inWindow(window, 'notifications.clearAll');
+  await reloadWindow(window);
+  await waitFor(
+    'a reopen notice',
+    async () =>
+      (await notificationCentre(window)).some(
+        text =>
+          text.startsWith(FOLDER_NOTICE_START) || text.startsWith(NOTICE_START),
+      ),
+    60_000,
+  );
+  return (await notificationCentre(window))
+    .filter(
+      text =>
+        text.startsWith(FOLDER_NOTICE_START) || text.startsWith(NOTICE_START),
+    )
+    .map(text => (text.startsWith(FOLDER_NOTICE_START) ? 'S186' : 'S368'));
+}
+
+describe('a stored configuration is found, picked and copied to the workspace (card containers-92)', function () {
+  this.timeout(900_000);
+
+  beforeEach(emptyStore);
+
+  it('F-0302 AC-7, AC-8, AC-9, F-0801 AC-8 (c92-delete): the chooser offers the copy after the template row, the copy is written byte for byte before S108 asks, Keep is primary, and Delete removes the slot, opens the workspace copy and offers the folder notification', async () => {
+    await withStored('c92-delete', {}, async (window, folder, stored) => {
+      const rows = await chooserOf(window);
+      await chooseQuickPickRow(window, COPY_ROW);
+      const dialog = await waitForDialog(window);
+      const said = await dialogText(window);
+      const primary = await primaryButtonOf(window);
+      const copy = path.join(folder, CONFIGURATION);
+      const identical = readFileSync(copy).equals(readFileSync(stored));
+      await answerDialog(window, 'Delete');
+      await noticeShown(window, FOLDER_NOTICE_START);
+      await waitFor(
+        'the slot to be removed',
+        () => slotNames().length === 0,
+        30_000,
+      );
+      const active = (await editorTabs(window)).find(each => each.active);
+      deepStrictEqual(
+        {
+          rows: rows.map((each, index) => each.slice(0, index < 2 ? 3 : 2)),
+          focused: rows.map(each => each[3]),
+          said: said?.includes(DELETE_QUESTION),
+          buttons: dialog.buttons,
+          primary,
+          identical,
+          slots: slotNames(),
+          preview: [active?.label, active?.preview],
+          nextOpen: await noticesAfterReload(window),
+        },
+        {
+          rows: [
+            [
+              'From a predefined container configuration template...',
+              '',
+              'Use a base configuration from the container template registry',
+            ],
+            [
+              COPY_ROW,
+              '',
+              'Copy the configuration from your user data folder to the workspace folder',
+            ],
+            ['Learn More', 'Documentation on predefined container templates'],
+          ],
+          focused: [true, false, false],
+          said: true,
+          buttons: ['Delete', 'Cancel', 'Keep'],
+          primary: 'Keep',
+          identical: true,
+          slots: [],
+          preview: ['devcontainer', true],
+          nextOpen: ['S186'],
+        },
+      );
+    });
+  });
+
+  it('F-0302 AC-10 (c92-keep): Keep, Cancel and Escape (BR-8) each leave the workspace copy and the stored file and offer the notification for the stored configuration', async () => {
+    await withStored('c92-keep', {}, async (window, folder, stored) => {
+      const outcomes: unknown[] = [];
+      for (const answer of ['Keep', 'Cancel', 'Escape'] as const) {
+        rmSync(path.join(folder, '.devcontainer'), {
+          recursive: true,
+          force: true,
+        });
+        await inWindow(window, 'notifications.clearAll');
+        await chooserOf(window);
+        await chooseQuickPickRow(window, COPY_ROW);
+        await waitForDialog(window);
+        if (answer === 'Escape') {
+          await pressEscape(window);
+        } else {
+          await answerDialog(window, answer);
+        }
+        await noticeShown(window, NOTICE_START);
+        outcomes.push([
+          readFileSync(path.join(folder, CONFIGURATION)).equals(
+            readFileSync(stored),
+          ),
+          existsSync(stored),
+          slotNames(),
+          (await notificationCentre(window)).some(text =>
+            text.startsWith(FOLDER_NOTICE_START),
+          ),
+        ]);
+      }
+      deepStrictEqual(
+        [outcomes, await noticesAfterReload(window)],
+        [
+          [
+            [true, true, ['c92-keep'], false],
+            [true, true, ['c92-keep'], false],
+            [true, true, ['c92-keep'], false],
+          ],
+          ['S368'],
+        ],
+      );
+    });
+  });
+
+  it('F-0302 AC-34, AC-38 (c92-open-file): the Open File button of the copy row closes the pick and opens the stored file with nothing written and no dialog, and an editor on the stored file stays open after a copy that deletes it', async () => {
+    await withStored('c92-open-file', {}, async (window, folder, stored) => {
+      await chooserOf(window);
+      await pressQuickPickRowButton(window, COPY_ROW, 'Open File');
+      await waitFor(
+        'the stored file in an editor',
+        async () =>
+          (await editorTabs(window)).some(
+            each => each.label === 'devcontainer' && each.active,
+          ),
+        30_000,
+      );
+      await inWindow(window, 'workbench.action.keepEditor');
+      const opened = [
+        await dialogOf(window),
+        await quickPickOf(window),
+        existing(folder, '.devcontainer'),
+        existsSync(stored),
+      ];
+      await chooserOf(window);
+      await chooseQuickPickRow(window, COPY_ROW);
+      await waitForDialog(window);
+      await answerDialog(window, 'Delete');
+      await waitFor(
+        'the slot to be removed',
+        () => slotNames().length === 0,
+        30_000,
+      );
+      await noticeShown(window, FOLDER_NOTICE_START);
+      deepStrictEqual(
+        [
+          opened,
+          (await editorTabs(window))
+            .filter(each => each.label === 'devcontainer')
+            .map(each => each.preview)
+            .sort(),
+        ],
+        [
+          [undefined, undefined, [], true],
+          [false, true],
+        ],
+      );
+    });
+  });
+
+  it('F-0801 AC-8 (ruling-d100-copy): with a configuration in the workspace the copy asks about it first, Skip primary, and then S108, after the copy was written', async () => {
+    await withStored(
+      'c92-ruling',
+      {[CONFIGURATION]: '{"name":"Mine","image":"x"}'},
+      async (window, folder, stored) => {
+        await chooserOf(window);
+        await chooseQuickPickRow(window, COPY_ROW);
+        const first = await waitForDialog(window);
+        const said = await dialogText(window);
+        const primary = await primaryButtonOf(window);
+        const before = readFileSync(path.join(folder, CONFIGURATION), 'utf8');
+        await answerDialog(window, 'Overwrite');
+        await waitFor(
+          'S108',
+          async () =>
+            (await dialogText(window))?.includes(DELETE_QUESTION) === true,
+          30_000,
+        );
+        const copied = readFileSync(path.join(folder, CONFIGURATION)).equals(
+          readFileSync(stored),
+        );
+        await answerDialog(window, 'Keep');
+        await noticeShown(window, NOTICE_START);
+        deepStrictEqual(
+          [first.buttons, said?.includes(OVERWRITE), primary, before, copied],
+          [
+            ['Overwrite', 'Cancel', 'Skip'],
+            true,
+            'Skip',
+            '{"name":"Mine","image":"x"}',
+            true,
+          ],
+        );
+      },
+    );
+  });
+
+  it('F-0302 AC-6, AC-16 (c92-reopen): Reopen in Container on a folder with no configuration of its own uses the stored one with no pick, and the container is labelled with the stored file', async () => {
+    await withWindow('c92-reopen', {}, async (window, folder) => {
+      await startCommand(window);
+      await chooseUserData(window);
+      await chooseMini(window);
+      const stored = path.join(storeRoot(), 'c92-reopen', CONFIGURATION);
+      await written(stored);
+      await startCommand(window, REOPEN);
+      await containerMade(folder);
+      try {
+        deepStrictEqual(
+          [
+            await dialogOf(window),
+            await labelOfContainer(folder, 'devcontainer.config_file'),
+          ],
+          [undefined, stored],
+        );
+      } finally {
+        await closeWindow('c92-reopen').catch(() => undefined);
+        await removeContainersOf(folder);
+      }
+    });
+  });
+
+  it('BR-3 of the configuration pick (c92-pick): a stored configuration beside the workspace’s own gives the configuration pick, both rows ordered by absolute path with the stored one named by its ~ path and the first focused', async () => {
+    await withStored(
+      'c92-pick',
+      {[CONFIGURATION]: '{"name":"Local","image":"x"}'},
+      async (window, folder, stored) => {
+        await startCommand(window, REOPEN);
+        await waitForQuickPick(window, 180_000);
+        const rows = await rowsOf(window);
+        await closeScreen(window);
+        const local = path.join(folder, CONFIGURATION);
+        const ordered = [stored, local].sort();
+        deepStrictEqual(
+          [rows.map(each => each[1]), rows.map(each => each[3])],
+          [
+            ordered.map(file =>
+              file === stored ? tilde(stored) : CONFIGURATION,
+            ),
+            [true, false],
+          ],
+        );
+      },
+    );
   });
 });

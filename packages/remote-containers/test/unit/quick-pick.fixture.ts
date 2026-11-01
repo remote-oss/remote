@@ -19,6 +19,7 @@ export class FakeQuickPick<Item extends {label: string}> {
   private readonly accepting: Array<() => void> = [];
   private readonly changing: Array<(value: string) => void> = [];
   private readonly hiding: Array<() => void> = [];
+  private readonly itemButtons: Array<(event: {item: Item}) => void> = [];
   /** Records the accept listener. */
   onDidAccept(listener: () => void): void {
     this.accepting.push(listener);
@@ -30,6 +31,19 @@ export class FakeQuickPick<Item extends {label: string}> {
   /** Records the hide listener. */
   onDidHide(listener: () => void): void {
     this.hiding.push(listener);
+  }
+  /** Records the listener of a row's button. */
+  onDidTriggerItemButton(listener: (event: {item: Item}) => void): void {
+    this.itemButtons.push(listener);
+  }
+  /** The user presses the button of the row with `label`. */
+  pressButton(label: string): void {
+    const found = this.items.find(each => each.label === label);
+    if (found !== undefined) {
+      this.itemButtons.forEach(listener => {
+        listener({item: found});
+      });
+    }
   }
   /** Marks the pick shown. */
   show(): void {

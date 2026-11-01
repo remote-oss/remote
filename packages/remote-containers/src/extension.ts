@@ -43,7 +43,12 @@ import {
 import type {OptionRow} from './authoring/option-screens.ts';
 import type {PickRow} from './authoring/template-pick.ts';
 import type {WizardPorts} from './authoring/wizard-stages.ts';
-import {storeRootOf} from './authoring/user-data-store.ts';
+import {
+  slotOf,
+  storeRootOf,
+  type StoreFiles,
+} from './authoring/user-data-store.ts';
+import {storedCandidate, type StoredLookup} from './config/stored-candidate.ts';
 import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
 import {finishTooltip} from './authoring/select-features.ts';
@@ -161,6 +166,33 @@ function windowFolders(): Array<{scheme: string; fsPath: string}> {
 
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** A modal dialog with the buttons, the first the primary one and Cancel the close affordance; gives the title chosen. */
+async function modalShown(
+  severity: 'error' | 'info',
+  message: string,
+  detail: string,
+  buttons: readonly string[],
+): Promise<string | undefined> {
+  const cancel = translate('Cancel');
+  const items = buttons.map(title => ({
+    title,
+    isCloseAffordance: title === cancel,
+  }));
+  const chosen =
+    severity === 'error'
+      ? await vscode.window.showErrorMessage(
+          message,
+          {modal: true, detail},
+          ...items,
+        )
+      : await vscode.window.showInformationMessage(
+          message,
+          {modal: true, detail},
+          ...items,
+        );
+  return chosen?.title;
 }
 
 /** What the editor asks of a tree whose nodes are `Node`. */
@@ -443,6 +475,19 @@ export async function activate(
     vscode.FileType,
   );
   const collate = new Intl.Collator(undefined, {sensitivity: 'accent'}).compare;
+  /** The extension's store of configurations outside the workspace, which the open commands and the wizard look in. */
+  const userDataStore: StoreFiles = {
+    folderNames: async folder =>
+      (await readdir(folder, {withFileTypes: true}).catch(() => []))
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name),
+    readText: file => readFile(file, 'utf8').catch(() => undefined),
+  };
+  const storedLookup: StoredLookup = {
+    root: storeRootOf(context.globalStorageUri.fsPath),
+    store: userDataStore,
+    home: os.homedir(),
+  };
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
@@ -481,9 +526,18 @@ export async function activate(
         },
         global: context.globalState,
         workspace: context.workspaceState,
-        hasConfiguration: async folder =>
-          (await discoverConfigurations(folder, configFiles, collate)).length >
-          0,
+        configurationKind: async folder => {
+          if (
+            (await slotOf(storedLookup.root, folder, userDataStore)) !==
+            undefined
+          ) {
+            return 'stored';
+          }
+          return (await discoverConfigurations(folder, configFiles, collate))
+            .length > 0
+            ? 'folder'
+            : 'none';
+        },
         show: (message, buttons) =>
           vscode.window.showInformationMessage(message, ...buttons),
         reopen: () =>
@@ -604,6 +658,7 @@ export async function activate(
           createQuickPick: () =>
             vscode.window.createQuickPick<PickRow & vscode.QuickPickItem>(),
           verifiedIcon: new vscode.ThemeIcon('verified'),
+          openFileIcon: new vscode.ThemeIcon('go-to-file'),
           openExternal: address =>
             vscode.env.openExternal(vscode.Uri.parse(address)),
           templateMetadata: (templateId, cancellation) =>
@@ -663,26 +718,7 @@ export async function activate(
                 },
               },
               dialogs: {
-                show: async (severity, message, detail, buttons) => {
-                  const cancel = translate('Cancel');
-                  const items = buttons.map(title => ({
-                    title,
-                    isCloseAffordance: title === cancel,
-                  }));
-                  const chosen =
-                    severity === 'error'
-                      ? await vscode.window.showErrorMessage(
-                          message,
-                          {modal: true, detail},
-                          ...items,
-                        )
-                      : await vscode.window.showInformationMessage(
-                          message,
-                          {modal: true, detail},
-                          ...items,
-                        );
-                  return chosen?.title;
-                },
+                show: modalShown,
                 revealLog: () => {
                   logChannel?.show(true);
                 },
@@ -724,20 +760,31 @@ export async function activate(
           read: file => readFile(file),
           write: (file, bytes) => writeFile(file, bytes),
         },
+        stored: {
+          files: {
+            exists: file =>
+              stat(file).then(
+                () => true,
+                () => false,
+              ),
+            read: file => readFile(file),
+            write: (file, bytes) => writeFile(file, bytes),
+            makeFolder: async folder => {
+              await mkdir(folder, {recursive: true});
+            },
+            removeFolder: folder => rm(folder, {recursive: true, force: true}),
+          },
+          show: modalShown,
+          translate,
+        },
         slotFolder: slot =>
           path.join(storeRootOf(context.globalStorageUri.fsPath), slot),
         location: {
           createQuickPick: () =>
             vscode.window.createQuickPick<LocationRow & vscode.QuickPickItem>(),
-          storeRoot: storeRootOf(context.globalStorageUri.fsPath),
-          store: {
-            folderNames: async folder =>
-              (await readdir(folder, {withFileTypes: true}).catch(() => []))
-                .filter(entry => entry.isDirectory())
-                .map(entry => entry.name),
-            readText: file => readFile(file, 'utf8').catch(() => undefined),
-          },
-          home: os.homedir(),
+          storeRoot: storedLookup.root,
+          store: userDataStore,
+          home: storedLookup.home,
         },
         record: line => {
           served.logger.info(line);
@@ -808,6 +855,7 @@ export async function activate(
             served.logger,
           ),
           compare: collate,
+          stored: folder => storedCandidate(storedLookup, folder),
           useTemplate: folder => addConfiguration(continuation, folder),
           translate,
         },

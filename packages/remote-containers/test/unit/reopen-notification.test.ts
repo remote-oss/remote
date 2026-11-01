@@ -43,7 +43,7 @@ interface Scene {
   global: RecordingMemento;
   workspace: RecordingMemento;
   window: ReopenNotificationPorts['window'];
-  configuration: boolean;
+  configuration: 'none' | 'folder' | 'stored';
   /** What each `show` answers, in order. */
   answers: Array<string | undefined>;
   shown: Array<[string, readonly string[]]>;
@@ -61,7 +61,7 @@ function sceneOf(): Scene {
       workspaceFile: false,
       folders: [{scheme: 'file', fsPath: '/w/p'}],
     },
-    configuration: true,
+    configuration: 'folder',
     answers: [],
     shown: [],
     reopened: 0,
@@ -80,7 +80,7 @@ async function offered(
       window: scene.window,
       global: scene.global,
       workspace: scene.workspace,
-      hasConfiguration: folder => {
+      configurationKind: folder => {
         scene.asked.push(folder);
         return Promise.resolve(scene.configuration);
       },
@@ -116,11 +116,21 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
 
   it('F-0302 AC-5: the user data variant shows S368 with the same buttons, without asking the folder for a configuration', async () => {
     const scene = sceneOf();
-    scene.configuration = false;
+    scene.configuration = 'none';
     await offered(scene, 1000, 'userData');
     deepStrictEqual(
       [scene.shown, scene.asked],
       [[[S368, [REOPEN, SUPPRESS]]], []],
+    );
+  });
+
+  it('F-0302 BR-4: a folder with a stored configuration shows the S368 variant, whether or not its own files hold one too', async () => {
+    const scene = sceneOf();
+    scene.configuration = 'stored';
+    await offered(scene);
+    deepStrictEqual(
+      [scene.shown, scene.asked],
+      [[[S368, [REOPEN, SUPPRESS]]], ['/w/p']],
     );
   });
 
@@ -233,7 +243,7 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
 
   it('F-0402 7.E1: a folder without a configuration shows nothing and logs nothing', async () => {
     const scene = sceneOf();
-    scene.configuration = false;
+    scene.configuration = 'none';
     await offered(scene);
     deepStrictEqual(
       [scene.shown, lines(scene), scene.asked],
