@@ -2547,10 +2547,18 @@ export interface SettingsTab {
 export async function settingsTabs(name: string): Promise<SettingsTab[]> {
   return evaluate<SettingsTab[]>(
     name,
-    `[...document.querySelectorAll('.settings-editor .settings-tabs-widget .action-item .action-label')].map(each => ({
-      label: (each.textContent ?? '').trim(),
-      selected: each.classList.contains('checked') || each.getAttribute('aria-checked') === 'true',
-    }))`,
+    `(() => {
+      const root = document.querySelector('.settings-editor');
+      const wanted = [...(root?.querySelectorAll('*') ?? [])].filter(each => each.children.length === 0 && /^(User|Remote \\[.*\\]|Workspace)$/.test((each.textContent ?? '').trim()) && each.closest('.settings-header') !== null);
+      return wanted.map(each => {
+        const holder = each.closest('.action-item, [role="tab"]') ?? each;
+        const classes = holder.className + ' ' + each.className;
+        return {
+          label: (each.textContent ?? '').trim(),
+          selected: /checked|selected|active/.test(classes) || holder.getAttribute('aria-selected') === 'true' || holder.getAttribute('aria-checked') === 'true',
+        };
+      });
+    })()`,
   );
 }
 

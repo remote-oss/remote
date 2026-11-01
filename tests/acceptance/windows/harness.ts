@@ -64,7 +64,8 @@ export interface AgentEvent {
     | 'terminalNames'
     | 'untitledDocuments'
     | 'tunnels'
-    | 'environment';
+    | 'environment'
+    | 'editorText';
   time: number;
   id?: string;
   message?: string;
@@ -1788,4 +1789,12 @@ export async function masterExit(alias: string): Promise<void> {
 /** Whether a login to `alias` with no question succeeds, which it does only through a master that runs. */
 export async function batchLogin(alias: string): Promise<boolean> {
   return (await sshStatus(['-o', 'BatchMode=yes', alias, 'true'])) === 0;
+}
+
+/** The text of the active text editor of window `name`, or null when it has none. */
+export async function activeEditorTextOf(name: string): Promise<string | null> {
+  return (
+    (await reported(name, 'editorText', 'acceptance.agent.activeEditorText'))
+      ?.message ?? null
+  );
 }

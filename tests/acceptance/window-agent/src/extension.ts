@@ -578,6 +578,12 @@ export function activate(context: vscode.ExtensionContext): void {
         await document.save();
       },
     ),
+    vscode.commands.registerCommand('acceptance.agent.activeEditorText', () => {
+      report(agentFolder, name, {
+        event: 'editorText',
+        message: vscode.window.activeTextEditor?.document.getText() ?? null,
+      });
+    }),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {
