@@ -208,7 +208,10 @@ export function pageTitleByName(
   const matching = titles.filter(title =>
     name === 'local'
       ? title === '[]'
-      : title === `[${name}]` || title.startsWith(`[${name} [`),
+      : title === `[${name}]` ||
+        title.startsWith(`[${name} [`) ||
+        // The window of the in-memory folder memfs:/ is titled by the folder's name, which is its root.
+        (name === 'memfs' && title === '[/]'),
   );
   return matching.length === 1 ? matching[0] : undefined;
 }
