@@ -714,54 +714,60 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     );
   });
 
-  it('containers-116: with a delay, a phase that is not quiet opens no progress before it, and the timer is the delay', async () => {
-    const context = await setup({progressDelayMilliseconds: 500});
-    context.connector.phases = [{name: 'initializing'}, {name: 'downloading'}];
-    await resolve(context);
-    deepStrictEqual(
-      [
-        context.editor.progressRuns.length,
-        context.editor.timers.map(timer => timer.milliseconds),
-      ],
-      [0, [500]],
+  /** What a connect with `phases` did to the progress, with the family's delay as given and the delay passing during the connect or not. */
+  async function progressOf(
+    delay: number | undefined,
+    phases: ConnectPhase[],
+    delayPasses: boolean,
+  ): Promise<{
+    runs: number;
+    title: string | undefined;
+    updates: string[] | undefined;
+    timers: number[];
+  }> {
+    const context = await setup(
+      delay === undefined ? {} : {progressDelayMilliseconds: delay},
     );
+    context.connector.phases = phases;
+    if (delayPasses) {
+      context.connector.during = () => {
+        context.editor.fireTimers();
+      };
+    }
+    await resolve(context);
+    context.editor.fireTimers();
+    return {
+      runs: context.editor.progressRuns.length,
+      title: context.editor.progressRuns[0]?.title,
+      updates: context.editor.progressRuns[0]?.updates,
+      timers: context.editor.timers.map(timer => timer.milliseconds),
+    };
+  }
+
+  it('containers-116: with a delay, a phase that is not quiet opens no progress before it, and the timer is the delay', async () => {
+    const shown = await progressOf(
+      500,
+      [{name: 'initializing'}, {name: 'downloading'}],
+      false,
+    );
+    deepStrictEqual([shown.runs, shown.timers], [0, [500]]);
   });
 
   it('containers-116: with a delay, the progress opens when it has passed, with the latest title of the phases before it', async () => {
-    const context = await setup({progressDelayMilliseconds: 500});
-    context.connector.phases = [{name: 'initializing'}, {name: 'downloading'}];
-    context.connector.during = () => {
-      context.editor.fireTimers();
-    };
-    await resolve(context);
-    deepStrictEqual(
-      [
-        context.editor.progressRuns.map(entry => entry.title),
-        context.editor.progressRuns[0]?.updates,
-      ],
-      [['starting'], ['phase downloading']],
+    const shown = await progressOf(
+      500,
+      [{name: 'initializing'}, {name: 'downloading'}],
+      true,
     );
-  });
-
-  it('containers-116: with a delay, a connect that ends before it opens no progress', async () => {
-    const context = await setup({progressDelayMilliseconds: 500});
-    context.connector.phases = [{name: 'downloading'}];
-    await resolve(context);
-    context.editor.fireTimers();
-    deepStrictEqual(context.editor.progressRuns.length, 0);
+    deepStrictEqual(
+      [shown.title, shown.updates],
+      ['starting', ['phase downloading']],
+    );
   });
 
   it('containers-116: without a delay, a phase that is not quiet opens the progress at once', async () => {
-    const context = await setup();
-    context.connector.phases = [{name: 'downloading'}];
-    await resolve(context);
-    deepStrictEqual(
-      [
-        context.editor.progressRuns.length,
-        context.editor.timers.map(timer => timer.milliseconds),
-      ],
-      [1, [1500, 2000]],
-    );
+    const shown = await progressOf(undefined, [{name: 'downloading'}], false);
+    deepStrictEqual([shown.runs, shown.timers], [1, [1500, 2000]]);
   });
 
   it('contracts §3.2: once open, a quiet phase updates the progress', async () => {
