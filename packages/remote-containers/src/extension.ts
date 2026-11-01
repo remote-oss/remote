@@ -786,8 +786,12 @@ export async function activate(
           store: userDataStore,
           home: storedLookup.home,
         },
-        record: line => {
-          served.logger.info(line);
+        record: (line, level) => {
+          if (level === 'warn') {
+            served.logger.warn(line);
+          } else {
+            served.logger.info(line);
+          }
         },
         translate,
       };

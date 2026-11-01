@@ -156,6 +156,7 @@ export async function runWizard(
       features: [],
       featureMode: 'defaults',
       omitPaths: [],
+      metadataMissing: false,
     },
     cancellation,
   );

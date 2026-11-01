@@ -17,6 +17,7 @@ import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
 import type {LocationPorts} from '../../src/authoring/location.ts';
 import {
+  checking,
   pick,
   pressBack,
   FINISH_BUTTON,
@@ -40,6 +41,7 @@ const INITIAL: WizardState = {
   features: [],
   featureMode: 'defaults',
   omitPaths: [],
+  metadataMissing: false,
 };
 
 interface Entry {
@@ -239,6 +241,7 @@ interface Scene {
   failures: string[];
   written: WriteRequest[];
   logged: string[];
+  warned: string[];
   files: Map<string, string>;
   writes: Array<[string, string]>;
   ports: WizardPorts;
@@ -256,6 +259,7 @@ function sceneOf(
     failures: [],
     written: [],
     logged: [],
+    warned: [],
     files: new Map(),
     writes: [],
     outcome: {kind: 'written', files: ['.devcontainer/devcontainer.json']},
@@ -320,8 +324,8 @@ function sceneOf(
       },
     },
     slotFolder: slot => `/store/configs/${slot}`,
-    record: line => {
-      scene.logged.push(line);
+    record: (line, level) => {
+      (level === 'warn' ? scene.warned : scene.logged).push(line);
     },
     translate: template => template,
   };
@@ -462,6 +466,7 @@ describe('the wizard (card containers-80)', () => {
       takeDefaults,
       takeDefaults,
       takeDefaults,
+      takeDefaults,
     ]).ports;
     const {picker, result} = await started(scene);
     picker.accept('Alpine');
@@ -505,15 +510,23 @@ describe('the wizard (card containers-80)', () => {
     const scene = sceneOf();
     scene.ports.pick.templateMetadata = () =>
       Promise.resolve({kind: 'configurationFailed', message: 'x'});
-    deepStrictEqual(await customWritten(scene), [
-      {
-        targetFolder: '/work/ws',
-        templateId: 'a/b/c',
-        templateArgs: {},
-        features: [],
-        omitPaths: [],
-      },
-    ]);
+    deepStrictEqual(
+      [await customWritten(scene), scene.warned],
+      [
+        [
+          {
+            targetFolder: '/work/ws',
+            templateId: 'a/b/c',
+            templateArgs: {},
+            features: [],
+            omitPaths: [],
+          },
+        ],
+        [
+          'the template a/b/c has no metadata, so every optional file is included',
+        ],
+      ],
+    );
   });
 
   it('F-0802 AC-22: an existing Dockerfile is referred to: the written configuration is changed to name it when it names another', async () => {
@@ -610,12 +623,18 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list is the template pick, the template’s options, Select Features and the Features’ options', () => {
+  it('F-0801 BR-5: the stage list is the template pick, the template’s options, Select Features, the Features’ options and the optional paths', () => {
     const scene = sceneOf();
     const stages = stagesWithoutFeatures(scene);
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick', 'templateOptions', 'selectFeatures', 'featureOptions'],
+      [
+        'templatePick',
+        'templateOptions',
+        'selectFeatures',
+        'featureOptions',
+        'optionalPaths',
+      ],
     );
   });
 
@@ -806,6 +825,74 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  /** The optional paths stage over the state of a template with `paths`, the screen played by `steps`. */
+  async function optionalStageOver(
+    paths: readonly string[],
+    steps: Step[],
+    extra: Partial<WizardState> = {},
+  ) {
+    const scene = sceneOf();
+    const input = scriptedInput(steps);
+    scene.ports.options = input.ports;
+    const stages = stagesWithoutFeatures(scene);
+    const result = await stages[4]?.execute(
+      {
+        ...INITIAL,
+        template: {...NO_TEMPLATE, id: 'a/b/c', optionalPaths: paths},
+        omitPaths: ['stale'],
+        ...extra,
+      },
+      undefined,
+      NEVER,
+    );
+    return {scene, input, result};
+  }
+
+  it('F-0805 7.E1: a template that declares no optional path shows nothing, leaves nothing out and logs nothing', async () => {
+    const {scene, input, result} = await optionalStageOver([], []);
+    deepStrictEqual(
+      [
+        result?.kind === 'next' && [result.state.omitPaths, result.shown],
+        input.pickers.length,
+        scene.warned,
+        scene.logged,
+      ],
+      [[[], false], 0, [], []],
+    );
+  });
+
+  it('F-0805 7.E2: a custom id with no metadata shows nothing, leaves nothing out and warns in the log only', async () => {
+    const {scene, result} = await optionalStageOver([], [], {
+      metadataMissing: true,
+    });
+    deepStrictEqual(
+      [result?.kind === 'next' && result.shown, scene.warned, scene.logged],
+      [
+        false,
+        [
+          'the template a/b/c has no metadata, so every optional file is included',
+        ],
+        [],
+      ],
+    );
+  });
+
+  it('F-0805 AC-4: OK sets what was not checked as the paths to leave out, and the screen counts as shown', async () => {
+    const {result} = await optionalStageOver(
+      ['x.txt', 'y.txt'],
+      [checking(['y.txt'])],
+    );
+    deepStrictEqual(
+      result?.kind === 'next' && [result.state.omitPaths, result.shown],
+      [['x.txt'], true],
+    );
+  });
+
+  it('F-0805 AC-9, AC-18: Back keeps the answer of the stage before it', async () => {
+    const {result} = await optionalStageOver(['x.txt'], [pressBack]);
+    deepStrictEqual(result, {kind: 'back', keep: true});
+  });
+
   it('F-0801 BR-5: with the location ports the location stage runs before the template pick', () => {
     const scene = sceneOf();
     const stages = stagesOf(
@@ -825,6 +912,7 @@ describe('the wizard (card containers-80)', () => {
         'templateOptions',
         'selectFeatures',
         'featureOptions',
+        'optionalPaths',
       ],
     );
   });

@@ -166,5 +166,7 @@
   "Keep Feature defaults or configure options?": "Keep Feature defaults or configure options?",
   "Select boolean options for '{0}'": "Select boolean options for '{0}'",
   "Select boolean options for {0}": "Select boolean options for {0}",
-  "Select options for '{0}'": "Select options for '{0}'"
+  "Select options for '{0}'": "Select options for '{0}'",
+  "Include the following optional files/directories": "Include the following optional files/directories",
+  "Optional Files/Directories": "Optional Files/Directories"
 }

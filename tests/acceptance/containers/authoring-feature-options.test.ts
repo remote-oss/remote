@@ -30,6 +30,7 @@ import {
   screenWith,
   startCommand,
   startedWith,
+  takeOptionalScreen,
   takeOptionScreen,
   takenThrough,
   withWindow,
@@ -517,6 +518,7 @@ describe('the Features’ options in the wizard (card containers-89)', function 
           await titled(window, GATE_TITLE);
           await acceptQuickPick(window);
         }
+        await takeOptionalScreen(window);
         const configuration = await configurationOf(folder);
         written.push({
           lines: readFileSync(path.join(folder, CONFIGURATION), 'utf8')

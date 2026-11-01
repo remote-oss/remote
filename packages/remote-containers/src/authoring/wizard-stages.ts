@@ -24,6 +24,7 @@ import {askLocation, type LocationPorts} from './location.ts';
 import type {QuickInputPorts} from './option-screens.ts';
 import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
 import {askFeatureOptions} from './feature-options.ts';
+import {askOptionalPaths} from './optional-paths.ts';
 import {
   askFeatures,
   type FeatureChoice,
@@ -48,7 +49,10 @@ export interface WizardState {
   readonly features: readonly FeatureChoice[];
   /** How Select Features was confirmed: Finish, or OK. */
   readonly featureMode: 'defaults' | 'configure';
+  /** The optional files and directories the copy leaves out; the last stage sets it. */
   readonly omitPaths: readonly string[];
+  /** Whether the template is a custom id whose metadata could not be read, so that it declares nothing. */
+  readonly metadataMissing: boolean;
   /** The Dockerfile-family entry the user asked to refer to, which the written configuration must name. */
   readonly reuseEntry?: string;
 }
@@ -120,8 +124,8 @@ export interface WizardPorts {
   location?: LocationPorts;
   /** The copy of a stored configuration into the workspace. */
   stored: CopyStoredPorts;
-  /** Writes a line to the Dev Containers log. */
-  record(line: string): void;
+  /** Writes a line to the Dev Containers log, at info unless told `warn`. */
+  record(line: string, level?: 'warn'): void;
   translate: Translate;
 }
 
@@ -173,7 +177,8 @@ function withTemplate(
     ...state,
     template,
     templateArgs: {},
-    omitPaths: template.optionalPaths,
+    omitPaths: [],
+    metadataMissing: false,
     ...(reuseEntry === undefined ? {} : {reuseEntry}),
   };
 }
@@ -213,10 +218,13 @@ function templatePickStage(
         case 'custom':
           return {
             kind: 'next',
-            state: withTemplate(
-              state,
-              customTemplateOf(choice.templateId, choice.metadata),
-            ),
+            state: {
+              ...withTemplate(
+                state,
+                customTemplateOf(choice.templateId, choice.metadata),
+              ),
+              metadataMissing: choice.metadata === undefined,
+            },
             shown: true,
           };
         case 'reuse':
@@ -389,6 +397,41 @@ function featureOptionsStage(
   };
 }
 
+/** The stage that asks which of the template's optional files and directories to include. */
+function optionalPathsStage(ports: StagePorts): WizardStage {
+  return {
+    name: 'optionalPaths',
+    execute: async (state, previous, cancellation) => {
+      const paths = state.template.optionalPaths;
+      if (paths.length === 0) {
+        if (state.metadataMissing) {
+          ports.record(
+            `the template ${state.template.id} has no metadata, so every optional file is included`,
+            'warn',
+          );
+        }
+        return {
+          kind: 'next',
+          state: {...state, omitPaths: []},
+          shown: false,
+        };
+      }
+      const answer = await askOptionalPaths(
+        paths,
+        {...ports.options, translate: ports.translate},
+        cancellation,
+      );
+      return answer.kind === 'back'
+        ? {kind: 'back', keep: true}
+        : {
+            kind: 'next',
+            state: {...state, omitPaths: answer.omitPaths},
+            shown: true,
+          };
+    },
+  };
+}
+
 /** The stages of the wizard, in order, made once the catalogue is read. */
 export function stagesOf(
   catalogue: CatalogueResult & {kind: 'catalogue'},
@@ -399,6 +442,7 @@ export function stagesOf(
     templateOptionsStage(ports),
     selectFeaturesStage(catalogue.features, ports),
     featureOptionsStage(catalogue.features, ports),
+    optionalPathsStage(ports),
   ];
   return ports.location === undefined
     ? rest
