@@ -97,6 +97,16 @@ export interface PlainLaunch extends LaunchCommon {
   /** The editor the launch starts: VS Code at the floor of ADR-0007 instead of the run's VSCodium. */
   client?: 'vscode';
   /**
+   * The base names of the suite's test files this launch runs, when it runs only some of them; every `*.test.ts` of the
+   * suite when absent.
+   */
+  files?: readonly string[];
+  /**
+   * The name of the launch that this one is a part of, which runs the same suite in parts: a selection that names it
+   * makes every part, and `!<name>` takes every part out.
+   */
+  partOf?: string;
+  /**
    * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
    * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
    */
@@ -293,6 +303,80 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
  */
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
+
+/** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
+const CONTAINERS_A_FILES: readonly string[] = [
+  'authoring-container.test.ts',
+  'authoring-feature-options.test.ts',
+  'authoring-features.test.ts',
+  'authoring-flows.test.ts',
+  'authoring-optional.test.ts',
+  'authoring-options.test.ts',
+  'authoring-sweep.test.ts',
+  'authoring-templates.test.ts',
+  'authoring-user-data.test.ts',
+  'authoring.test.ts',
+  'cache-volume.test.ts',
+  'configuration-errors.test.ts',
+  'configuration-open.test.ts',
+  'configuration-picker.test.ts',
+  'connect-progress.test.ts',
+  'connect-reading.test.ts',
+  'containers-log.test.ts',
+  'created-container.test.ts',
+  'details.test.ts',
+  'dev-port.test.ts',
+  'docker-context.test.ts',
+  'dockerfile.test.ts',
+  'extensions.test.ts',
+  'gate.test.ts',
+  'glibc-server.test.ts',
+  'image-build.test.ts',
+  'initialize-input.test.ts',
+  'launch.test.ts',
+  'lifecycle-commands.test.ts',
+  'lifecycle-markers.test.ts',
+  'lifecycle-more.test.ts',
+  'lifecycle-order.test.ts',
+  'mount-settings.test.ts',
+  'open-folder-dialog.test.ts',
+  'open-folder-failure.test.ts',
+  'open-folder-virtual.test.ts',
+  'open-folder.test.ts',
+  'progress-bar.test.ts',
+  'rebuild-close.test.ts',
+  'rebuild-config.test.ts',
+  'rebuild-images.test.ts',
+  'rebuild-virtual.test.ts',
+];
+
+/** The second part of the containers suite's test files: the rest, from recent-entry on. */
+const CONTAINERS_B_FILES: readonly string[] = [
+  'recent-entry.test.ts',
+  'reconnect-give-up.test.ts',
+  'reconnect.test.ts',
+  'recovery.test.ts',
+  'relaunch.test.ts',
+  'remote-environment.test.ts',
+  'reopen-command.test.ts',
+  'reopen-notification.test.ts',
+  'resolve-reload.test.ts',
+  'reuse-more.test.ts',
+  'reuse-sweep.test.ts',
+  'reuse.test.ts',
+  'server-install.test.ts',
+  'server-rows.test.ts',
+  'setup-failure-actions.test.ts',
+  'setup-failure-state.test.ts',
+  'targets-menus.test.ts',
+  'template-catalogue.test.ts',
+  'transport-token.test.ts',
+  'ubuntu-base.test.ts',
+  'user-env.test.ts',
+  'users.test.ts',
+  'workspace-mount.test.ts',
+  'workspace-window.test.ts',
+];
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -876,10 +960,14 @@ export function launchesOf(root: string): Launch[] {
       },
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
     },
-    {
+    // The containers suite runs in two parts of about an hour each, on two runners: the files from the start of the
+    // alphabet to rebuild-virtual, and the rest (the backstop's times of 2026-11-01).
+    ...[CONTAINERS_A_FILES, CONTAINERS_B_FILES].map((files, index): Launch => ({
       ...CONTAINERS_LAUNCH,
-      label: 'containers',
+      label: `containers-${index === 0 ? 'a' : 'b'}`,
       suite: 'containers',
+      files,
+      partOf: 'containers',
       registry: true,
       templates: true,
       // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
@@ -887,7 +975,7 @@ export function launchesOf(root: string): Launch[] {
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
-    },
+    })),
     {
       ...CONTAINERS_LAUNCH,
       label: 'containers-standdown',

@@ -429,6 +429,20 @@ describe('the Node tests of a plain launch', () => {
     ]);
   });
 
+  it('tooling-96: a launch that lists its files runs those of its suite folder, one spec each, in the list’s order', () => {
+    const program = plainTestsOf(
+      '/repo',
+      {...LAUNCH, files: ['b.test.ts', 'a.test.ts']},
+      {},
+    );
+    deepStrictEqual(program.programArguments.slice(4), [
+      '--spec',
+      path.join('/repo', 'tests', 'acceptance', 'windows', 'b.test.ts'),
+      '--spec',
+      path.join('/repo', 'tests', 'acceptance', 'windows', 'a.test.ts'),
+    ]);
+  });
+
   it('D-85: they run in the Node.js that runs the harness', () => {
     strictEqual(plainTestsOf('/repo', LAUNCH, {}).file, process.execPath);
   });
