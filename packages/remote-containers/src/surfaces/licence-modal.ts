@@ -1,6 +1,7 @@
 /**
  * @fileoverview The question the user is asked before a server that comes under licence terms is installed: a modal
- * with the extension's own wording and the buttons Accept and Continue and Cancel. Only the first accepts.
+ * with the extension's own wording and the button Accept and Continue. The editor adds its own Cancel, so Cancel and
+ * Escape both decline.
  */
 
 import type {LicenceModal} from 'lib-server';
@@ -19,7 +20,6 @@ export interface LicenceDialogPort {
 
 /** The texts of the modal. */
 const LICENCE_TEMPLATES = {
-  cancel: 'Cancel',
   message:
     '{0} needs you to accept the license terms of the {1} server before installing it.',
   detail: 'Read the terms at {0}.',
@@ -31,7 +31,7 @@ function questionOf(
   translate: Translate,
   names: {displayName: string; applicationName: string},
   termsUrl: string,
-): {message: string; detail: string; accept: string; cancel: string} {
+): {message: string; detail: string; accept: string} {
   return {
     message: filled(translate, LICENCE_TEMPLATES.message, [
       names.displayName,
@@ -39,7 +39,6 @@ function questionOf(
     ]),
     detail: filled(translate, LICENCE_TEMPLATES.detail, [termsUrl]),
     accept: filled(translate, LICENCE_TEMPLATES.accept),
-    cancel: filled(translate, LICENCE_TEMPLATES.cancel),
   };
 }
 
@@ -56,10 +55,7 @@ export function licenceModalOf(
       }
       const question = questionOf(translate, names, termsUrl);
       const chosen = await Promise.resolve(
-        dialog.showModal(question.message, question.detail, [
-          question.accept,
-          question.cancel,
-        ]),
+        dialog.showModal(question.message, question.detail, [question.accept]),
       ).catch(() => undefined);
       return chosen === question.accept ? 'accept' : 'cancel';
     },

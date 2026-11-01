@@ -643,6 +643,10 @@ a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's r
 
     node tools/acceptance.ts --editor vscodium --launches genuine,ssh-no-proposals
 
+`genuine-containers` is the same client with Dev Containers (ours; the other extension of that name is never installed) and Docker, and the editor's server address set to the run's stand-in licensed host (`${HARNESS_DOWNLOADS_LICENSED}`), so the first Reopen in Container asks the licence question of a server under terms of its own, for F-1402. Nothing reaches the editor's publisher and no row accepts a licence. It builds the run's dev container image like the containers launches. It comes last of the genuine launches and only when named, at either version:
+
+    node tools/acceptance.ts --editor vscodium --launches genuine-containers
+
 The genuine launches run the recorded version unless the job names the floor: the variable `HARNESS_GENUINE_VERSION` is
 `1.139.1` (the default when it is unset) or `1.125.0`, and any other value fails the run before it starts. The run
 downloads that version, installs the family's extensions into it, and gives the tests the version as
