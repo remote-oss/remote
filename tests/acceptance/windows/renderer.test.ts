@@ -1,5 +1,11 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
-import {pageAmong, pageTitleByName, pageTitleFor} from './renderer.ts';
+import {
+  pageAmong,
+  pageTitleByName,
+  pageTitleFor,
+  pressUntilClosed,
+  type FolderDialogReading,
+} from './renderer.ts';
 
 describe('pageTitleByName', () => {
   it('containers-19: a folder window finds its page by its name, with or without the remote part of the title', () => {
@@ -262,5 +268,77 @@ describe('pageAmong', () => {
 
   it('tooling-64: no page that fits gives none', () => {
     deepStrictEqual(pageAmong([], 'local', new Map(), alwaysOpen), undefined);
+  });
+});
+
+describe('pressUntilClosed', () => {
+  /** A dialog that closes once it has been read `readsToClose` times, and the key presses it saw. */
+  function dialog(readsToClose: number, values: string[] = []) {
+    const state = {reads: 0, presses: 0, pauses: 0};
+    return {
+      state,
+      press: () => {
+        state.presses += 1;
+        return Promise.resolve();
+      },
+      read: (): Promise<FolderDialogReading> => {
+        state.reads += 1;
+        return Promise.resolve({
+          open: state.reads < readsToClose,
+          value: values[state.reads - 1] ?? '/work',
+          rows: ['..', 'one'],
+        });
+      },
+      pause: () => {
+        state.pauses += 1;
+        return Promise.resolve();
+      },
+    };
+  }
+
+  it('tooling-85: a dialog that closes after the first press gets no second', async () => {
+    const shown = dialog(3);
+    await pressUntilClosed(shown.press, shown.read, 3, shown.pause);
+    strictEqual(shown.state.presses, 1);
+  });
+
+  it('tooling-85: a dialog still open after the wait gets the key again, and a close then ends it', async () => {
+    const shown = dialog(13);
+    await pressUntilClosed(shown.press, shown.read, 3, shown.pause);
+    strictEqual(shown.state.presses, 2);
+  });
+
+  /** What a run of {@link pressUntilClosed} did: the presses made and the message it failed with, if it did. */
+  async function outcomeOf(shown: ReturnType<typeof dialog>, retries: number) {
+    const failure = await pressUntilClosed(
+      shown.press,
+      shown.read,
+      retries,
+      shown.pause,
+    ).then(
+      () => undefined,
+      (caught: unknown) => (caught as Error).message,
+    );
+    return {presses: shown.state.presses, failure};
+  }
+
+  it('tooling-85: a dialog that never closes gets the key four times and then fails naming its value and rows', async () => {
+    deepStrictEqual(await outcomeOf(dialog(Infinity), 3), {
+      presses: 4,
+      failure:
+        'the folder dialog is still open after 4 waits: it reads "/work" and lists ["..","one"]',
+    });
+  });
+
+  it('tooling-85: one retry is the escape key’s whole allowance', async () => {
+    deepStrictEqual((await outcomeOf(dialog(Infinity), 1)).presses, 2);
+  });
+
+  it('tooling-85: a dialog whose value changed after the press is only waited for', async () => {
+    const changed = dialog(Infinity, [
+      '/work',
+      ...Array<string>(11).fill('/work/inner'),
+    ]);
+    deepStrictEqual((await outcomeOf(changed, 1)).presses, 1);
   });
 });

@@ -2261,14 +2261,91 @@ export async function folderDialogFacts(
   );
 }
 
+/** What a folder dialog reads: whether it is open, its input's value and its first rows. */
+export interface FolderDialogReading {
+  open: boolean;
+  value: string;
+  rows: string[];
+}
+
+/** How long a key waits for the folder dialog to close before it is pressed again, and how often the dialog is read. */
+const REPRESS_MILLISECONDS = 2000;
+const CLOSE_CHECK_MILLISECONDS = 200;
+
+/** How long a folder dialog reading looks for the window's page. */
+const PAGE_LOOKUP_MILLISECONDS = 1500;
+
+/** The folder dialog of the page as a {@link FolderDialogReading}: another pick in the same widget reads as closed. */
+const FOLDER_DIALOG_READING = `(() => {
+  const input = ${FOLDER_DIALOG_INPUT};
+  if (input === null || input.getAttribute('placeholder') !== 'Folder path') {
+    return {open: false, value: '', rows: []};
+  }
+  const rows = [...input.closest('.quick-input-widget').querySelectorAll('.quick-input-list .monaco-list-row')];
+  return {
+    open: true,
+    value: input.value,
+    rows: rows.slice(0, 3).map(each => each.querySelector('.label-name')?.textContent ?? each.textContent.trim()),
+  };
+})()`;
+
+/** Reads until the dialog is closed, for at most {@link REPRESS_MILLISECONDS}, and gives the last reading. */
+async function closedWithin(
+  read: () => Promise<FolderDialogReading>,
+  pause: (milliseconds: number) => Promise<void>,
+): Promise<FolderDialogReading> {
+  let reading = await read();
+  for (
+    let waited = 0;
+    reading.open && waited < REPRESS_MILLISECONDS;
+    waited += CLOSE_CHECK_MILLISECONDS
+  ) {
+    await pause(CLOSE_CHECK_MILLISECONDS);
+    reading = await read();
+  }
+  return reading;
+}
+
+/**
+ * Presses a key in a folder dialog and waits for the dialog to close. A key the dialog still has open after
+ * {@link REPRESS_MILLISECONDS} with the value it had at the press is pressed again, `retries` times at most; a changed
+ * value means the dialog is acting on the key, so it only waits. It fails naming the dialog's value and first rows.
+ */
+export async function pressUntilClosed(
+  press: () => Promise<void>,
+  read: () => Promise<FolderDialogReading>,
+  retries: number,
+  pause: (milliseconds: number) => Promise<void>,
+): Promise<void> {
+  let pressedAt = (await read()).value;
+  let last: FolderDialogReading = {open: true, value: pressedAt, rows: []};
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt === 0 || last.value === pressedAt) {
+      await press();
+    } else {
+      pressedAt = last.value;
+    }
+    last = await closedWithin(read, pause);
+    if (!last.open) {
+      return;
+    }
+  }
+  throw new Error(
+    `the folder dialog is still open after ${String(retries + 1)} waits: it reads ${JSON.stringify(last.value)} and lists ${JSON.stringify(last.rows)}`,
+  );
+}
+
 /**
  * Has window `name`'s in-window folder dialog take `key` (`Enter` or `Escape`), with `typed` in its input first when
- * given; with no key it only types. It waits for the dialog to open, and fails when none does.
+ * given; with no key it only types. It waits for the dialog to open, and fails when none does. With `waiting`, a typed
+ * value is waited for before the key (the input reads it and the list shows `..`), and the dialog is waited on to close
+ * after it, with `retries` more presses of a key it did not take.
  */
 async function keyInFolderDialog(
   name: string,
   key: 'Enter' | 'Escape' | undefined,
   typed?: string,
+  waiting?: {retries: number},
 ): Promise<void> {
   await settled(
     () => `the folder dialog of window ${name}`,
@@ -2287,9 +2364,48 @@ async function keyInFolderDialog(
       return null;
     })()`,
   );
-  if (key !== undefined) {
-    await pressKey(await pageOf(name), name, key);
+  // A key the dialog took can take the window to the folder, and then no page has its name: that reads as closed.
+  async function read(): Promise<FolderDialogReading> {
+    const address = await pageOf(name, PAGE_LOOKUP_MILLISECONDS).catch(
+      () => undefined,
+    );
+    return address === undefined
+      ? {open: false, value: '', rows: []}
+      : evaluateAt<FolderDialogReading>(
+          address,
+          `window ${name}`,
+          FOLDER_DIALOG_READING,
+        );
   }
+  if (waiting !== undefined && typed !== undefined) {
+    await settled(
+      () => `the folder dialog of window ${name} to show ${typed}`,
+      async () => {
+        const reading = await read();
+        return reading.value.replace(/\/$/, '') === typed.replace(/\/$/, '') &&
+          reading.rows[0] === '..'
+          ? true
+          : undefined;
+      },
+    );
+  }
+  if (key === undefined) {
+    return;
+  }
+  const pressed = key;
+  async function press(): Promise<void> {
+    await pressKey(await pageOf(name), name, pressed);
+  }
+  if (waiting === undefined) {
+    await press();
+    return;
+  }
+  await pressUntilClosed(
+    press,
+    read,
+    waiting.retries,
+    milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+  );
 }
 
 /**
@@ -2498,12 +2614,12 @@ export function answerFolderDialog(
   name: string,
   folder: string,
 ): Promise<void> {
-  return keyInFolderDialog(name, 'Enter', folder);
+  return keyInFolderDialog(name, 'Enter', folder, {retries: 3});
 }
 
 /** Closes window `name`'s folder dialog with Escape. */
 export function cancelFolderDialog(name: string): Promise<void> {
-  return keyInFolderDialog(name, 'Escape');
+  return keyInFolderDialog(name, 'Escape', undefined, {retries: 1});
 }
 
 /** The page's terminal text rows: the one terminal of the launches these helpers serve, xterm's visible rows. */
