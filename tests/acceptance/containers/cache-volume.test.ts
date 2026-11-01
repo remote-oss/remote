@@ -1,6 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -12,6 +20,7 @@ import {
   GLIBC_IMAGE,
   reloadingCommand,
   reopenInContainer,
+  reopenStarted,
   startInWindow,
   userScopeHolds,
   variable,
@@ -90,6 +99,46 @@ async function serverLinkOf(containerId: string): Promise<string> {
     '-c',
     'for link in "$HOME"/.*-server*/bin/*; do [ -L "$link" ] && readlink "$link"; done',
   );
+}
+
+/**
+ * Where the extension keeps the archive of the server for `platform` in the client's cache (`<tmpdir>/
+ * vscode-remote-containers/<application>/<quality>/<commit>/<server>-<platform>-<quality>.tar.gz`, F-0503 5.0 step 5).
+ */
+function cachedArchiveOf(platform: string): string {
+  const product = editorProduct();
+  return path.join(
+    tmpdir(),
+    'vscode-remote-containers',
+    product.applicationName,
+    product.quality,
+    product.commit,
+    `${product.serverApplicationName}-${platform}-${product.quality}.tar.gz`,
+  );
+}
+
+/** The run's pinned Alpine server archive, which the harness keeps beside its other downloads. */
+function pinnedAlpineArchive(): string {
+  const downloads = path.join(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    '.vscode-test',
+    'downloads',
+  );
+  return path.join(
+    downloads,
+    readdirSync(downloads).find(file => file.includes('reh-alpine-x64')) ??
+      'missing',
+  );
+}
+
+/** How many lines the download host's request log has. */
+function downloadRequests(): string[] {
+  return readFileSync(variable('HARNESS_DOWNLOADS_LOG'), 'utf8')
+    .split('\n')
+    .filter(line => line !== '');
 }
 
 /** The commit folders in the platform folder that `link` (a server link's target) is in, as seen from container `containerId`. */
@@ -570,6 +619,63 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
     } finally {
       await removeContainers(glibc);
       await removeContainers(alpine);
+    }
+  });
+
+  it('containers-130 (c130-bad-cache): F-0503 5.0 step 5, a cached archive that holds the wrong server fails the connect at once with F-0410’s dialog, is removed, and Retry downloads the right one and connects', async () => {
+    await docker('volume', 'rm', '--force', 'vscode');
+    const planted = cachedArchiveOf('linux-x64');
+    mkdirSync(path.dirname(planted), {recursive: true});
+    copyFileSync(pinnedAlpineArchive(), planted);
+    const folder = devContainerFolder('c130-bad-cache', {
+      name: 'Bad Cache',
+      image: GLIBC_IMAGE,
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      const started = Date.now();
+      await reopenStarted(name);
+      const dialog = await waitForDialog(name, 30_000);
+      const shownAfter = Date.now() - started;
+      const goneAtDialog = !existsSync(planted);
+      const before = downloadRequests().length;
+      await answerDialog(name, 'Retry');
+      await connectedToContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      const requests = downloadRequests().slice(before);
+      deepStrictEqual(
+        {
+          dialog: [dialog.details, [...dialog.buttons].sort()],
+          withinThirtySeconds: shownAfter < 30_000,
+          goneAtDialog,
+          nodeRuns: (
+            await docker(
+              'exec',
+              containerId,
+              'sh',
+              '-c',
+              '"$(dirname "$(readlink -f "$HOME"/.*-server*/bin/*/node)")"/node --version',
+            )
+          ).startsWith('v'),
+          downloaded: requests.filter(line => line.includes('linux-x64'))
+            .length,
+          cacheRefilled: existsSync(planted),
+        },
+        {
+          dialog: [
+            S034,
+            ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          ],
+          withinThirtySeconds: true,
+          goneAtDialog: true,
+          nodeRuns: true,
+          downloaded: 1,
+          cacheRefilled: true,
+        },
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
     }
   });
 

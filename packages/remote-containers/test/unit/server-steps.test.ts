@@ -149,6 +149,10 @@ function isStart(script: string): boolean {
   return script.includes('ready_port()');
 }
 
+function isDrop(script: string): boolean {
+  return script.includes('rm -rf -- "$folder"');
+}
+
 function isDiscard(script: string): boolean {
   return script.includes("ARCHIVE_REMOVE='yes'");
 }
@@ -207,6 +211,7 @@ function channelOf(
 interface Seen {
   downloads: DownloadRequest[];
   renames: Array<[string, string]>;
+  removed: string[];
   asked: string[];
   phases: string[];
   percents: number[];
@@ -227,6 +232,8 @@ function dependenciesOf(
     percents?: number[];
     /** The clock of the lock waits; a fake one that no row advances by default. */
     clock?: Clock;
+    /** Whether an archive of an earlier connect is in the client's cache. */
+    cached?: boolean;
   } = {},
 ): ServerStepDependencies {
   const downloads = [...(options.downloads ?? [])];
@@ -246,9 +253,16 @@ function dependenciesOf(
     },
   };
   const files: ClientFilePort = {
-    remove: () => Promise.resolve(),
+    remove: file => {
+      seen.removed.push(file);
+      return Promise.resolve();
+    },
     exists: file =>
-      Promise.resolve(seen.renames.some(([, kept]) => kept === file)),
+      Promise.resolve(
+        options.cached === true
+          ? !seen.removed.includes(file)
+          : seen.renames.some(([, kept]) => kept === file),
+      ),
     size: () => Promise.resolve(10),
     sha256: () => Promise.resolve('00'),
     rename: (source, destination) => {
@@ -319,6 +333,7 @@ async function runSteps(
   const seen: Seen = {
     downloads: [],
     renames: [],
+    removed: [],
     asked: [],
     phases: [],
     percents: [],
@@ -833,6 +848,106 @@ describe('the server steps of a connect (card containers-08)', () => {
       channelOf({start: blockOf('ServerFailedToStart')}),
     );
     deepStrictEqual(failureKind(result), 'serverFailed');
+  });
+
+  it("containers-130: a start that fails after the archive came from the client's cache removes the cache entry and the server folders, logs both, and is serverFailed", async () => {
+    const channel = channelOf({
+      volume: true,
+      start: blockOf('ServerFailedToStart'),
+      extra: [answer(isDrop, [])],
+    });
+    const {result, seen} = await runSteps(channel, {
+      volume: true,
+      cached: true,
+    });
+    const drop = channel.calls.find(
+      call => call.operation === 'runScript' && isDrop(call.request.script),
+    );
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.removed.map(file => file.endsWith('.tar.gz')),
+        seen.downloads.length,
+        drop?.operation === 'runScript'
+          ? [
+              drop.request.environment.SERVER_FOLDER_1,
+              drop.request.environment.SERVER_FOLDER_2,
+            ]
+          : undefined,
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('removed')),
+      ],
+      [
+        'serverFailed',
+        [true],
+        0,
+        [TREE, '/home/node/.fixture-server/bin/abc123'],
+        [
+          `the cached server archive ${seen.removed[0] ?? ''} was removed: the server didn't start from it`,
+          `the server folders ${TREE}, /home/node/.fixture-server/bin/abc123 were removed: the server didn't start from them`,
+        ],
+      ],
+    );
+  });
+
+  it('containers-130: a start that fails on a server the volume already held drops the server folders, and the cache entry too when it is there', async () => {
+    const channel = channelOf({
+      volume: true,
+      treeComplete: true,
+      installed: true,
+      start: blockOf('ServerFailedToStart'),
+      extra: [answer(isDrop, [])],
+    });
+    const {result, seen} = await runSteps(channel, {volume: true});
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.removed,
+        scriptsOf(channel).filter(isDrop).length,
+      ],
+      ['serverFailed', [], 1],
+    );
+  });
+
+  it("containers-130: a start that fails after this connect's own download leaves the cache and the folders alone", async () => {
+    const channel = channelOf({
+      start: blockOf('ServerFailedToStart'),
+      extra: [answer(isDrop, [])],
+    });
+    const {result, seen} = await runSteps(channel);
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.removed.filter(file =>
+          file.endsWith('fixture-server-linux-x64.tar.gz'),
+        ),
+        scriptsOf(channel).filter(isDrop).length,
+      ],
+      ['serverFailed', [], 0],
+    );
+  });
+
+  it('containers-130: a drop script that fails is logged and the connect still ends in serverFailed', async () => {
+    const channel = channelOf({
+      start: blockOf('ServerFailedToStart'),
+      extra: [answer(isDrop, [], 1)],
+    });
+    const {result, seen} = await runSteps(channel, {cached: true});
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('were not all removed')),
+      ],
+      [
+        'serverFailed',
+        [
+          'the server folders /home/node/.fixture-server/bin/abc123 were not all removed',
+        ],
+      ],
+    );
   });
 
   it('F-0503 3.5: a server that listens on a socket is serverFailed', async () => {
