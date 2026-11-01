@@ -291,7 +291,7 @@ from the table (`launchGroupOf`):
 An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
 the longest launch, `containers`, alone:
 
-    node tools/acceptance.ts --editor vscodium --launches @ssh,!remote-ubuntu
+    node tools/acceptance.ts --editor vscodium --launches @ssh
     node tools/acceptance.ts --editor vscodium --launches containers
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
@@ -538,10 +538,6 @@ That's `remote-ubuntu`, the `remote` launch on it. The second host gets:
 
 A glibc host is served the glibc server by the download host (tooling-68). A launch on another host can't have a
 `hostSetup`, because that runs in the run's own host.
-
-The backstop's ssh part leaves `remote-ubuntu` out (`@ssh,!remote-ubuntu`) while two of its rows fail on the Ubuntu
-host (#1380): F-2401 AC-2 and F-2304 AC-6. A dispatch that names it runs it, and so does a local run without
-`--launches`.
 
 ## Rows that fail in some runs
 
