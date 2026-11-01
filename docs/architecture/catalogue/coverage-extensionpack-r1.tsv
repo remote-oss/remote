@@ -5,27 +5,27 @@ F-9001.AC-3	unit
 F-9001.AC-4	unit	
 F-9001.AC-5	unit	
 F-9001.AC-6	unit	
-F-9001.AC-7	todo	
-F-9001.AC-8	todo	
-F-9001.AC-9	todo	
-F-9001.AC-10	todo	
-F-9001.AC-11	todo	
+F-9001.AC-7	acceptance	
+F-9001.AC-8	acceptance	
+F-9001.AC-9	acceptance	
+F-9001.AC-10	acceptance	
+F-9001.AC-11	acceptance	
 F-9001.AC-12	core	core: the gallery's tag search; ours is keywords, proved by F-9001 AC-3
 F-9001.AC-13	core	core: the gallery's Resources tooltips; ours is repository and bugs, proved by F-9001 AC-6
-F-9001.AC-14	todo	
+F-9001.AC-14	acceptance	
 F-9001.AC-15	core	core: the gallery's version list in Install Specific Version; ours is version and engines.vscode, proved by F-9001 AC-15 (version) and F-9001 AC-5
-F-9001.AC-16	todo	
+F-9001.AC-16	acceptance	
 F-9001.AC-17	todo	
-F-9001.AC-18	todo	
+F-9001.AC-18	acceptance	
 F-9001.AC-19	core	core: the gallery's details page of a pack not installed; ours is displayName, description, categories, repository and bugs, proved by F-9001 AC-1, F-9001 AC-2 and F-9001 AC-6
-F-9001.AC-20	todo	
+F-9001.AC-20	acceptance	
 F-9001.AC-21	core	core: the incompatibility refusal; ours is engines.vscode, proved by F-9001 AC-5
 F-9001.AC-22	core	core: the gallery record's name and description on the page; ours is categories and the nls tables, proved by F-9001 AC-2 and F-9001 AC-1
 F-9001.AC-23	unit	
 F-9002.AC-1	unit	
-F-9002.AC-2	todo	
-F-9002.AC-3	todo	
-F-9002.AC-4	todo	
+F-9002.AC-2	acceptance	
+F-9002.AC-3	acceptance	
+F-9002.AC-4	acceptance	
 F-9002.AC-5	core	core: the gallery row's Install button and member grid; ours is extensionPack and the readme, proved by F-9101 AC-1 and F-9002 AC-1
 F-9002.AC-6	unit	
 F-9002.AC-7	unit	
@@ -33,16 +33,16 @@ F-9002.AC-8	unit
 F-9002.AC-9	unit	
 F-9002.AC-10	unit	
 F-9002.AC-11	unit	
-F-9002.AC-12	todo	
-F-9002.AC-13	todo	
+F-9002.AC-12	unit	
+F-9002.AC-13	unit	
 F-9002.AC-14	unit	
 F-9002.AC-15	unit	
 F-9002.AC-16	todo	
 F-9002.AC-17	unit	
 F-9002.AC-18	core	core: the gallery's Resources tooltips; ours is repository, bugs and license, proved by F-9001 AC-6 and F-9002 AC-18 (license)
-F-9002.AC-19	todo	
+F-9002.AC-19	acceptance	
 F-9002.AC-20	core	core: the order of the Resources entries; ours is the repository, bugs and license fields that make them, proved by F-9002 AC-18 (license)
-F-9002.AC-21	todo	
+F-9002.AC-21	acceptance	
 F-9002.AC-22	core	core: the editor's alt text for an image that cannot load; ours is a readme with no image, proved by F-9002 AC-15
 F-9002.AC-23	unit	
 F-9101.AC-1	unit	

@@ -427,6 +427,7 @@ const LAUNCH_ORDER = [
   ...['containers-killed-23', 'containers-killed-35', 'containers-killed-43'],
   'containers-context',
   'extensionpack',
+  'extensionpack-german',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1180,8 +1181,8 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
-          {
-            folder: path.join('/run', 'extensions-extensionpack'),
+          ...['extensionpack', 'extensionpack-german'].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',
@@ -1193,7 +1194,7 @@ describe('acceptance', () => {
               ),
             ],
             client: 'vscodium',
-          },
+          })),
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [

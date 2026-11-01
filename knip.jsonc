@@ -78,6 +78,7 @@
         "containers-view/*.test.ts",
         "containers-podman/*.test.ts",
         "extensionpack/*.test.ts",
+        "extensionpack-german/*.test.ts",
         "web-ui/*.test.ts",
         "web-ui-trust/*.test.ts",
         "window-agent/src/extension.ts",

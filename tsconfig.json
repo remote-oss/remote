@@ -230,6 +230,9 @@
       "path": "tests/acceptance/extensionpack"
     },
     {
+      "path": "tests/acceptance/extensionpack-german"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {
