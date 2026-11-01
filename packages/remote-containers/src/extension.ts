@@ -1267,6 +1267,7 @@ export async function activate(
         },
         commands: host,
         recentLabel: recentLabelPortsOf(vscode, () => os.homedir()),
+        knownNames: context.globalState,
         presenter: recoveryPortsOf(vscode, {
           writeAttemptLog: async () =>
             writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),

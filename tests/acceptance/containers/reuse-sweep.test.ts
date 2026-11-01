@@ -345,7 +345,7 @@ describe('F-0409 discovery and reuse, the remaining rows (card coverage-70)', fu
       await removeContainers(folder);
     }
   });
-  it.skip('F-0409 AC-36 (c70-paused-settles): a paused container after a Reopen in a profile that connected the folder shows F-0410’s dialog under the named title and Opening Remote..., and More Actions... then Escape leaves Disconnected from Dev Container: <name>, the title unchanged and the container paused', async () => {
+  it('F-0409 AC-36 (c70-paused-settles): a paused container after a Reopen in a profile that connected the folder shows F-0410’s dialog under the named title and Opening Remote..., and More Actions... then Escape leaves Disconnected from Dev Container: <name>, the title unchanged and the container paused', async () => {
     const folder = devContainerFolder('c70-paused', {name: 'Paused'});
     let container: string | undefined;
     try {
@@ -388,7 +388,7 @@ describe('F-0409 discovery and reuse, the remaining rows (card coverage-70)', fu
     }
   });
 
-  it.skip('F-0409 AC-11 (c70-countdown-reload): Reload Window on the countdown dialog of a paused container shows F-0410’s dialog under the same title, and More Actions... then Escape leaves Disconnected from Dev Container: <name> with the container still paused', async () => {
+  it('F-0409 AC-11 (c70-countdown-reload): Reload Window on the countdown dialog of a paused container shows F-0410’s dialog under the same title, and More Actions... then Escape leaves Disconnected from Dev Container: <name> with the container still paused', async () => {
     const {name, containerId, folder} = await connectedWindow('c70-countdown');
     try {
       await docker('pause', containerId);
