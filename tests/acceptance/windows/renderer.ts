@@ -2337,6 +2337,156 @@ export async function detailedQuickPickRows(
   );
 }
 
+/** A row of a quick pick in one of its on-screen reads, tagged with its place in the full set. */
+export interface QuickPickReadRow extends DetailedQuickPickRow {
+  /** The row's 1-based place in the full set, from its `aria-posinset`. */
+  position: number;
+  /** The size of the full set, from its `aria-setsize`. */
+  setSize: number;
+}
+
+/** One on-screen read of a quick pick: the rows it rendered, and the size of the full set they belong to. */
+export interface QuickPickRead {
+  rows: QuickPickReadRow[];
+  setSize: number;
+}
+
+/**
+ * The whole quick pick out of its on-screen reads: the union of the reads' rows, in list order by the rows'
+ * `aria-posinset`; a read that missed rows fails against the set's `aria-setsize` instead of passing short.
+ */
+export function combineQuickPickReads(
+  reads: readonly QuickPickRead[],
+): DetailedQuickPickRow[] {
+  const setSize = reads[0]?.setSize ?? 0;
+  if (!Number.isInteger(setSize)) {
+    throw new Error(`the quick pick's set has no size: ${String(setSize)}`);
+  }
+  const seen = new Map<number, DetailedQuickPickRow>();
+  for (const read of reads) {
+    if (read.setSize !== setSize) {
+      throw new Error(
+        `the quick pick's set changed mid-read: ${String(setSize)} rows, then ${String(read.setSize)}`,
+      );
+    }
+    for (const entry of read.rows) {
+      if (
+        !Number.isInteger(entry.position) ||
+        entry.position < 1 ||
+        entry.position > setSize
+      ) {
+        throw new Error(
+          `a quick pick row is out of its set: position ${String(entry.position)} of ${String(setSize)}`,
+        );
+      }
+      seen.set(entry.position, {
+        label: entry.label,
+        description: entry.description,
+        detail: entry.detail,
+        icons: entry.icons,
+        buttons: entry.buttons,
+        focused: entry.focused,
+      });
+    }
+  }
+  if (seen.size !== setSize) {
+    throw new Error(
+      `the quick pick's reads missed rows: ${String(seen.size)} of ${String(setSize)}`,
+    );
+  }
+  return [...seen.entries()]
+    .sort((first, second) => first[0] - second[0])
+    .map(([, entry]) => entry);
+}
+
+/**
+ * The whole quick pick open in window `name`, in list order, however many rows its virtualized list renders at once:
+ * the list is read, wheeled to its end collecting every row it shows, and wheeled back where it was for the next user
+ * action, so a later read or click sees the list as it opened. None when no quick pick is open.
+ */
+export async function allQuickPickRows(
+  name: string,
+): Promise<DetailedQuickPickRow[]> {
+  const reads = await evaluate<QuickPickRead[] | null>(
+    name,
+    `(async () => {
+      const widget = document.querySelector('${QUICK_WIDGET}');
+      if (widget === null || widget.style.display === 'none') {
+        return null;
+      }
+      const list = widget.querySelector('.quick-input-list .monaco-list');
+      if (list === null) {
+        return null;
+      }
+      const read = () => {
+        const rows = [...list.querySelectorAll('.monaco-list-row')].map(row => ({
+          position: Number(row.getAttribute('aria-posinset')),
+          setSize: Number(row.getAttribute('aria-setsize')),
+          label: row.querySelector('.label-name')?.textContent ?? '',
+          description: row.querySelector('.label-description')?.textContent ?? '',
+          detail: [...row.querySelectorAll('.quick-input-list-label-meta .monaco-icon-label')].filter(each => each.style.display !== 'none').map(each => each.textContent).join(''),
+          icons: [...row.querySelectorAll('.codicon')].flatMap(each => [...each.classList].filter(name => name.startsWith('codicon-'))),
+          buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+          focused: row.classList.contains('focused'),
+        }));
+        return {rows, setSize: rows[0]?.setSize ?? 0};
+      };
+      // The innermost element that overflows and holds the rows: a wheel on it reaches the list's scroller.
+      const overflow = [...list.querySelectorAll('*')].filter(el =>
+        el.scrollHeight > el.clientHeight + 1 &&
+        el.querySelector('.monaco-list-row') !== null
+      );
+      const scroller = overflow.find(el =>
+        overflow.every(other => other === el || other.contains(el))
+      );
+      const reads = [read()];
+      if (scroller !== undefined) {
+        const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const first = () => {
+          const rows = [...list.querySelectorAll('.monaco-list-row')];
+          const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+          return label(rows[0]) + '\\u0000' + label(rows.at(-1));
+        };
+        // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
+        const move = async delta => {
+          const before = first();
+          scroller.dispatchEvent(
+            new WheelEvent('wheel', {bubbles: true, cancelable: true, deltaY: delta, deltaMode: 0}),
+          );
+          await wait(600);
+          return first() !== before;
+        };
+        const topFirst = first();
+        let down = 0;
+        if (await move(-400)) {
+          down = -400;
+        } else if (await move(400)) {
+          down = 400;
+        }
+        let steps = 0;
+        while (down !== 0 && steps < 200) {
+          if (!(await move(down))) {
+            break;
+          }
+          reads.push(read());
+          steps += 1;
+        }
+        while (down !== 0 && steps < 400) {
+          await move(-down);
+          if (first() === topFirst) {
+            break;
+          }
+          steps += 1;
+        }
+        await wait(200);
+        reads.push(read());
+      }
+      return reads;
+    })()`,
+  );
+  return reads === null ? [] : combineQuickPickReads(reads);
+}
+
 /** Presses the button `button` beside the row labelled `label` of the quick pick open in window `name`. */
 export async function pressQuickPickRowButton(
   name: string,

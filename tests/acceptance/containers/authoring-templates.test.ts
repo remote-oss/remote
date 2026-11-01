@@ -7,6 +7,7 @@ import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
 import {installBrowser, openedUrls} from '../windows/web-ui-support.ts';
 import {
   acceptQuickPick,
+  allQuickPickRows,
   answerDialog,
   answerFolderDialog,
   chooseQuickPickRow,
@@ -229,7 +230,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
           ),
         15_000,
       );
-      const all = await detailedQuickPickRows(window);
+      const all = await allQuickPickRows(window);
       const allLabels = all.map(each => each.label);
       const focus = focusedLabel(all);
       await closeScreen(window);
@@ -560,9 +561,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
         60_000,
       );
       const facts = await quickPickFacts(window);
-      const labels = (await detailedQuickPickRows(window)).map(
-        each => each.label,
-      );
+      const labels = (await allQuickPickRows(window)).map(each => each.label);
       const custom = (await typed(window, 'a/b/c')).map(each => each.label);
       await closeScreen(window);
       deepStrictEqual(
@@ -606,9 +605,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
             'Select a container configuration template or enter a custom template id',
           30_000,
         );
-        const labels = (await detailedQuickPickRows(window)).map(
-          each => each.label,
-        );
+        const labels = (await allQuickPickRows(window)).map(each => each.label);
         await closeScreen(window);
         deepStrictEqual(labels.join('|'), flat.join('|'));
       },

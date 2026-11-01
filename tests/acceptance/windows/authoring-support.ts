@@ -22,6 +22,7 @@ import {
 } from './harness.ts';
 import {
   acceptQuickPick,
+  allQuickPickRows,
   chooseQuickPickRow,
   type DetailedQuickPickRow,
   detailedQuickPickRows,
@@ -373,13 +374,16 @@ export async function startFromPalette(window: string): Promise<void> {
   );
 }
 
-/** Opens the screen in `window` and gives its rows, leaving it open. */
+/**
+ * Opens the screen in `window` and gives its whole rows, leaving it open at the top as it opened: the screen's list
+ * is virtualized, so the rows are read back from the list wheeled to its end.
+ */
 export async function screenOf(
   window: string,
 ): Promise<DetailedQuickPickRow[]> {
   await startCommand(window);
   await chooseWorkspace(window);
-  return detailedQuickPickRows(window);
+  return allQuickPickRows(window);
 }
 
 /** Types `text` into the screen of `window` and gives the rows once the list has followed. */
