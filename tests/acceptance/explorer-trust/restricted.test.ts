@@ -78,7 +78,9 @@ describe('the explorer in Restricted Mode (card coverage-25c, part b)', function
         'the @workspaceUnsupported list',
         async () =>
           (await extensionsViewSections(name)).some(
-            section => section.title === 'Disabled in Restricted Mode',
+            section =>
+              section.title === 'Disabled in Restricted Mode' &&
+              section.entries.length > 0,
           ),
         30_000,
       );
