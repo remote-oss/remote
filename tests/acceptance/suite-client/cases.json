@@ -122,6 +122,20 @@
       "used": "old/ssh"
     },
     {
+      "label": "client-old-socket",
+      "cite": "F-2410 AC-18",
+      "setting": "<run>/clients/old/ssh",
+      "settings": {
+        "remote.SSH.remoteServerListenOnSocket": true,
+        "remote.SSH.remotePlatform": {
+          "harness": "linux"
+        }
+      },
+      "checked": ["old/ssh"],
+      "used": "old/ssh",
+      "connects": 2
+    },
+    {
       "label": "client-windows",
       "cite": "F-2101 AC-25",
       "setting": "<run>/clients/windows/ssh",
