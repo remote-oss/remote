@@ -1,6 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -32,10 +31,15 @@ import {
   statusBarText,
   terminalText,
   toastDetails,
-  type ToastDetails,
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
+import {
+  connectingOf,
+  sampled,
+  sampling,
+  slowBuildFolder,
+} from '../windows/sampling.ts';
 
 const CONNECTING = 'Connecting to Dev Container (show log)';
 const LOG_LINK = 'command:remote-containers.revealLogTerminal';
@@ -49,47 +53,6 @@ const NEVER_SHOWN = [
   'Creating Dev Container',
   'Starting container',
 ];
-
-/** One reading of the window: when it was taken, the toasts, and the remote indicator's text. */
-interface Sample {
-  takenAt: number;
-  toasts: ToastDetails[];
-  indicator: string;
-}
-
-/** Reads every 100 ms until `stop` is called; a reading that fails because the window reloads is skipped. */
-function sampled<Reading>(read: () => Promise<Reading>): {
-  stop(): Promise<Reading[]>;
-} {
-  const readings: Reading[] = [];
-  const gate = {done: false};
-  const loop = (async () => {
-    while (!gate.done) {
-      try {
-        readings.push(await read());
-      } catch {
-        // The window is reloading.
-      }
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  })();
-  return {
-    stop: async () => {
-      gate.done = true;
-      await loop;
-      return readings;
-    },
-  };
-}
-
-/** Samples window `name`'s toasts and remote indicator every 100 ms until `stop` is called. */
-function sampling(name: string): {stop(): Promise<Sample[]>} {
-  return sampled(async () => ({
-    takenAt: Date.now(),
-    toasts: await toastDetails(name),
-    indicator: await statusBarText(name, 'status.host'),
-  }));
-}
 
 /** What window `name` showed on its surfaces and the log held while `connect` went on, and the log terminal's text after it. */
 async function flowOf(name: string, connect: () => Promise<void>) {
@@ -120,31 +83,6 @@ async function flowOf(name: string, connect: () => Promise<void>) {
     ),
     stepInLog: lines.includes('Starting container'),
   };
-}
-
-/** The connecting toasts of every sample, in order. */
-function connectingOf(samples: readonly Sample[]): ToastDetails[] {
-  return samples.flatMap(sample =>
-    sample.toasts.filter(toast => toast.message.startsWith('Connecting')),
-  );
-}
-
-/** A folder that builds a Dockerfile with a slow step, so the connect lasts long enough to be sampled. */
-function slowBuildFolder(
-  folderName: string,
-  title: string,
-  step = 'sleep 5',
-): string {
-  const folder = devContainerFolder(folderName, {
-    name: title,
-    image: undefined,
-    build: {dockerfile: 'Dockerfile'},
-  });
-  writeFileSync(
-    path.join(folder, '.devcontainer', 'Dockerfile'),
-    `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nRUN ${step}; echo ${folderName}-${String(Date.now())}\n`,
-  );
-  return folder;
 }
 
 /** The ids of the host's processes whose command line holds `needle`: the image build of a folder holds the folder's image tag. */

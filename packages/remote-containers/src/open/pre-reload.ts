@@ -38,6 +38,8 @@ export interface PreReloadPorts {
   dialogs: EngineDialogPort;
   config: ConfigurationPorts;
   progress: PreReloadProgressPorts;
+  /** The time now, in milliseconds. */
+  clock(): number;
 }
 
 /** The function, which closes `progress` before each call. */
@@ -124,6 +126,8 @@ export async function beforeReload(
       progress.close();
       return 'stopped';
     });
+  logger.info('Reading configuration');
+  const began = ports.clock();
   try {
     const choice = await chooseConfiguration(
       {...request, engineCheck, cancellation},
@@ -147,6 +151,8 @@ export async function beforeReload(
       };
     }
     throw caught;
+  } finally {
+    logger.info(`Reading configuration: ${String(ports.clock() - began)} ms`);
   }
 }
 
@@ -161,6 +167,7 @@ export interface CommandChecksPorts {
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   bridge: Pick<CliBridge, 'readConfiguration'>;
   progress: PreReloadProgressPorts;
+  clock(): number;
   /** The control manifest check of the Features, made once a configuration is chosen. */
   problematic: ProblematicPorts;
   logger: Logger;
@@ -184,6 +191,7 @@ export async function commandBeforeReload(
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       config: {...ports.config, cli: ports.bridge, logger: ports.logger},
       progress: ports.progress,
+      clock: () => ports.clock(),
     },
     {
       folder,

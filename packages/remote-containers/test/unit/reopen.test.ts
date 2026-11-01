@@ -77,6 +77,12 @@ async function reentered(
   return {during, lines: linesOf(sink)};
 }
 
+/** The lines the log holds around the configuration's reading before a reload. */
+const READING = [
+  'info: Reading configuration',
+  'info: Reading configuration: 0 ms',
+];
+
 describe('Reopen in Container', () => {
   it('F-0401 BR-1: a local window reloads on the dev-container authority of its folder, in the order of the flow', async () => {
     const state = setup();
@@ -358,7 +364,9 @@ describe('Reopen in Container', () => {
         [],
         ['ensureTrusted', 'wizard /w/p'],
         [
+          'info: Reading configuration',
           'info: no dev container configuration in /w/p',
+          'info: Reading configuration: 0 ms',
           'info: Reopen in Container found no configuration in /w/p',
         ],
       ],
@@ -451,7 +459,11 @@ describe('Reopen in Container', () => {
       [state.commands, lines, state.shown.length],
       [
         [],
-        ['warn: the configuration could not be read: buildFailed: no build'],
+        [
+          'info: Reading configuration',
+          'warn: the configuration could not be read: buildFailed: no build',
+          'info: Reading configuration: 0 ms',
+        ],
         1,
       ],
     );
@@ -462,22 +474,34 @@ describe('Reopen in Container', () => {
     state.read = {kind: 'noResult', status: 1};
     const {lines} = await reopened(state);
     deepStrictEqual(lines, [
+      'info: Reading configuration',
       'warn: the configuration could not be read: noResult',
+      'info: Reading configuration: 0 ms',
     ]);
   });
 
-  it('contracts §6: a read the CLI was cancelled in opens nothing and logs nothing', async () => {
+  it('contracts §6: a read the CLI was cancelled in opens nothing and logs only the reading step', async () => {
     const state = setup();
     state.read = {kind: 'cancelled'};
     const {lines} = await reopened(state);
-    deepStrictEqual([state.commands, lines], [[], []]);
+    deepStrictEqual(
+      [state.commands, lines],
+      [
+        [],
+        ['info: Reading configuration', 'info: Reading configuration: 0 ms'],
+      ],
+    );
   });
 
   it('F-0401 BR-1: an editor that refuses the open is logged with its reason', async () => {
     const state = setup();
     state.rejects = 'x';
     const {lines} = await reopened(state);
-    deepStrictEqual(lines, ['warn: Reopen in Container was refused: x']);
+    deepStrictEqual(lines, [
+      'info: Reading configuration',
+      'info: Reading configuration: 0 ms',
+      'warn: Reopen in Container was refused: x',
+    ]);
   });
 
   it('F-0401 BR-7a: a call while another waits on the first check returns at once, and a call after the first ends runs again', async () => {
@@ -590,8 +614,8 @@ describe('Reopen in Container', () => {
       seen.push([state.commands, lines]);
     }
     deepStrictEqual(seen, [
-      [[], ['warn: the rebuild intent could not be stored: disk']],
-      [[], ['warn: the rebuild intent could not be stored: gone']],
+      [[], [...READING, 'warn: the rebuild intent could not be stored: disk']],
+      [[], [...READING, 'warn: the rebuild intent could not be stored: gone']],
     ]);
   });
 

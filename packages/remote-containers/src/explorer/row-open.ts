@@ -34,6 +34,7 @@ export interface RowOpenPorts extends Pick<
   | 'engine'
   | 'dialogs'
   | 'progress'
+  | 'clock'
   | 'bridge'
   | 'problematic'
   | 'opener'

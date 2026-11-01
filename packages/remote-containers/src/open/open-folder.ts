@@ -26,6 +26,7 @@ export interface OpenFolderPorts extends Pick<
   | 'engine'
   | 'dialogs'
   | 'progress'
+  | 'clock'
   | 'bridge'
   | 'problematic'
   | 'opener'

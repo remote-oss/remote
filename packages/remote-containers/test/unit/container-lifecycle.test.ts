@@ -653,6 +653,39 @@ describe('containerLifecycleOf', () => {
     );
   }
 
+  it('F-0408 AC-14, 6.2: a container that already runs gets no starting step, and an exited one, none at all and a rebuild of a running one each get it before the container is ready', async () => {
+    const steps: Record<string, readonly string[]> = {};
+    for (const status of ['running', 'exited']) {
+      const result = await prepared(
+        scriptedEngine({
+          ...standardListing(status),
+          [`inspect --type container ${NEW}`]: [
+            ran(inspected([[NEW, 'running']])),
+          ],
+        }),
+      );
+      steps[status] = result.steps;
+    }
+    steps.none = (
+      await prepared(
+        scriptedEngine({
+          ...EMPTY_LISTING,
+          [`inspect --type container ${NEW}`]: [
+            ran(inspected([[NEW, 'running']])),
+          ],
+        }),
+      )
+    ).steps;
+    steps.rebuild = (await rebuiltFrom('running')).steps;
+    const started = ['findingContainer', 'startingContainer', 'containerReady'];
+    deepStrictEqual(steps, {
+      running: ['findingContainer', 'containerReady'],
+      exited: started,
+      none: started,
+      rebuild: started,
+    });
+  });
+
   it('F-0405 BR-3: a rebuild runs up with removeExistingContainer, always creates, and logs what it removes', async () => {
     const result = await rebuiltFrom('running');
     deepStrictEqual(

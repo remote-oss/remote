@@ -50,6 +50,8 @@ interface Scene {
   cancels: Array<() => void>;
   /** The signals the engine check and the CLI read were given. */
   signals: AbortSignal[];
+  /** The clock: each reading adds five milliseconds. */
+  now: number;
   sink: MemorySink;
 }
 
@@ -65,6 +67,7 @@ function sceneOf(): Scene {
     timers: [],
     cancels: [],
     signals: [],
+    now: 1000,
     sink: new MemorySink(),
   };
 }
@@ -138,6 +141,10 @@ function portsOf(scene: Scene): PreReloadPorts {
       compare: (left, right) => left.localeCompare(right, 'en'),
       translate: template => template,
       logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
+    },
+    clock: () => {
+      scene.now += 5;
+      return scene.now;
     },
     progress: {
       showProgress: (title, until, cancel) => {
@@ -242,6 +249,8 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
         {kind: 'stopped'},
         ['check dialog Docker is missing'],
         [
+          'info: Reading configuration',
+          'info: Reading configuration: 5 ms',
           'info: the configuration was read while the engine check failed: configurationFailed',
         ],
       ],
@@ -360,7 +369,9 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
         {kind: 'stopped'},
         [],
         [
+          'info: Reading configuration',
           'error: the engine check failed: boom',
+          'info: Reading configuration: 5 ms',
           'info: the configuration was read while the engine check failed: configuration',
         ],
         [],
@@ -380,6 +391,36 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     deepStrictEqual(
       lines(scene).filter(line => line.startsWith('error')),
       ['error: the engine check failed: plain'],
+    );
+  });
+
+  it('F-0408 AC-8, BR-15: the log says Reading configuration before the read and the time it took after it, in the format of the Resolving Remote phase', async () => {
+    const scene = sceneOf();
+    scene.hold.resolve(undefined);
+    await beforeReload(portsOf(scene), REQUEST);
+    deepStrictEqual(
+      [lines(scene), scene.order],
+      [
+        ['info: Reading configuration', 'info: Reading configuration: 5 ms'],
+        [`firstCheck ${FOLDER}`, 'readConfiguration'],
+      ],
+    );
+  });
+
+  it('F-0408 AC-8: a read that throws still logs the time it took, and the failure is the command’s', async () => {
+    const scene = sceneOf();
+    scene.read = Promise.reject(new Error('no disk'));
+    scene.hold.resolve(undefined);
+    const failure = await beforeReload(portsOf(scene), REQUEST).then(
+      () => 'no failure',
+      (caught: unknown) => (caught instanceof Error ? caught.message : ''),
+    );
+    deepStrictEqual(
+      [failure, lines(scene)],
+      [
+        'no disk',
+        ['info: Reading configuration', 'info: Reading configuration: 5 ms'],
+      ],
     );
   });
 
