@@ -15,6 +15,7 @@ import {
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
+  accountDockerfileLines,
   containerOf,
   inWorkspace,
   labelsOf,
@@ -33,13 +34,6 @@ function writtenAfter(
   return lines
     .slice(lines.indexOf(running) + 1)
     .filter(line => line.startsWith(prefix));
-}
-
-/** The Dockerfile line that frees the host's ids from the run's `node` account when it holds them, so the synced account takes them. */
-function freeHostIds(): string {
-  return process.getuid?.() === 1000 && process.getgid?.() === 1000
-    ? 'RUN deluser node\n'
-    : '';
 }
 
 describe('F-0415 the markers and the output of the lifecycle commands (card coverage-77)', function () {
@@ -143,7 +137,8 @@ describe('F-0415 the markers and the output of the lifecycle commands (card cove
     mkdirSync(path.join(folder, '.devcontainer'), {recursive: true});
     writeFileSync(
       path.join(folder, '.devcontainer', 'Dockerfile'),
-      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\n${freeHostIds()}RUN addgroup -g 4713 vscode && adduser -D -u 4713 -G vscode -s /bin/sh vscode\n`,
+      `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}
+${accountDockerfileLines('vscode')}`,
     );
     const markers = '/home/vscode/.devcontainer';
     try {

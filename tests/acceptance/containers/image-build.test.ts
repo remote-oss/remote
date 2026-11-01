@@ -951,9 +951,8 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     }
   });
 
-  it('F-0412 AC-19 (c77-long-name): a folder name of 176 characters gets the full vsc- tag with no shortening, and the connect goes on when the engine takes it', async () => {
-    const folderName = `c77-${'n'.repeat(172)}`;
-    const folder = devContainerFolder(folderName, {
+  it('F-0412 AC-19 (c77-long-name): a folder name of 200 characters makes a tag beyond the engine’s limit, which the engine refuses with its own error in the log, then the generic dialog shows and no container or image exists', async () => {
+    const folder = devContainerFolder(`c77-${'n'.repeat(196)}`, {
       name: 'Long Name',
       image: undefined,
       build: {dockerfile: 'Dockerfile'},
@@ -962,24 +961,35 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
     try {
       const mark = containersLog().length;
       const name = await openFolderWindow(folder);
-      await reopenInContainer(name);
-      const [containerId = ''] = await devContainersOf(folder);
+      await reopenStarted(name);
+      const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const lines = containersLogSince(mark);
       deepStrictEqual(
         {
           nameLength: nameOf(folder).length,
-          repositories: await repositoriesStarting(`vsc-${nameOf(folder)}-`),
-          built: await docker('exec', containerId, 'cat', '/built'),
-          dialog: await dialogOf(name),
-          refused: containersLogSince(mark).some(line =>
-            line.includes('invalid reference format'),
+          tagLength: tagOf(folder).length > 255,
+          dialog: [dialog.details, [...dialog.buttons].sort()],
+          engineError: lines.some(line =>
+            line.includes(
+              'repository name must not be more than 255 characters',
+            ),
           ),
+          fullHash: lines.some(line =>
+            line.includes(
+              `-${createHash('sha256').update(folder).digest('hex')}`,
+            ),
+          ),
+          containers: await devContainersOf(folder),
+          images: await repositoriesStarting(`vsc-${nameOf(folder)}-`),
         },
         {
-          nameLength: 176,
-          repositories: [tagOf(folder)],
-          built: 'built',
-          dialog: undefined,
-          refused: false,
+          nameLength: 200,
+          tagLength: true,
+          dialog: [S034, RECOVERY_BUTTONS],
+          engineError: true,
+          fullHash: true,
+          containers: [],
+          images: [],
         },
       );
       await closeWindow(name);
