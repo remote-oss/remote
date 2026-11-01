@@ -170,3 +170,13 @@ export async function connectedState(
   }
   return state;
 }
+
+/**
+ * Dockerfile lines that add the account `account` with ids the host does not have, after freeing the host's ids from the
+ * run's `node` account when it holds them, so that a remote user of that name is synced to the host's ids and the
+ * Dev Containers CLI makes a `-uid` image for it.
+ */
+export function accountDockerfileLines(account: string): string {
+  const frees = process.getuid?.() === 1000 && process.getgid?.() === 1000;
+  return `${frees ? 'RUN deluser node\n' : ''}RUN addgroup -g 4713 ${account} && adduser -D -u 4713 -G ${account} -s /bin/sh ${account}\n`;
+}
