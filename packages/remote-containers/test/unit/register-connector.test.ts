@@ -56,9 +56,14 @@ async function registered(
     ports?: DeclaredPorts;
     /** The editor's registration of the resolver throws, as it does when the proposal is not enabled. */
     registerThrows?: boolean;
+    /** What the profile's global state holds of the names it connected. */
+    known?: Record<string, unknown>;
+    /** The state's update fails. */
+    updateFails?: boolean;
   } = {},
 ) {
   const warned: string[] = [];
+  const memento: Record<string, unknown> = {...options.known};
   const stored: string[] = [];
   const answers = [...(options.answers ?? [])];
   let identity = options.identity;
@@ -146,6 +151,16 @@ async function registered(
         },
       },
       commands: host,
+      knownNames: {
+        get: key => memento[key],
+        update: (key, value) => {
+          if (options.updateFails === true) {
+            return Promise.reject(new Error('the state is read-only'));
+          }
+          memento[key] = value;
+          return Promise.resolve();
+        },
+      },
       recentLabel: {
         homeFolder: () => '/home/al',
         windowEntry: () => ({
@@ -223,6 +238,7 @@ async function registered(
     recording,
     revealed: () => revealed,
     warned,
+    memento,
     stored,
     recentAdded,
     identify: (next: typeof identity) => {
@@ -477,6 +493,76 @@ describe('the registration of the container connector (card containers-08)', () 
         seen.disposed,
       ],
       [['dev-container+7b7d'], ['Dev Container'], []],
+    );
+  });
+
+  it('F-0409 BR-9: a folder this profile connected before keeps its name when the connect fails, and one it never connected is bare', async () => {
+    const known = {
+      'remote-oss.remote-containers.connectedNames': {
+        '/w#/w/.devcontainer/devcontainer.json': {
+          name: 'Proj',
+          context: undefined,
+        },
+      },
+    };
+    const knownFolder = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+      known,
+    });
+    await settledResolve(knownFolder, 1, FOLDER_AUTHORITY);
+    const otherFolder = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(otherFolder, 1, FOLDER_AUTHORITY);
+    deepStrictEqual(
+      [suffixesOf(knownFolder), suffixesOf(otherFolder)],
+      [['Dev Container: Proj'], ['Dev Container']],
+    );
+  });
+
+  it('F-0409 BR-9: a connect that settles connected records the folder’s identity, and a state that cannot be written is only logged', async () => {
+    const recorded = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await settledResolve(recorded, 1, FOLDER_AUTHORITY);
+    const readOnly = await registered({
+      identity: {name: 'Proj', context: undefined},
+      updateFails: true,
+    });
+    await settledResolve(readOnly, 1, FOLDER_AUTHORITY);
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      [
+        recorded.memento['remote-oss.remote-containers.connectedNames'],
+        readOnly.warned,
+      ],
+      [
+        {
+          '/w#/w/.devcontainer/devcontainer.json': {
+            name: 'Proj',
+            context: undefined,
+          },
+        },
+        [
+          'the name of the connection could not be kept: the state is read-only',
+        ],
+      ],
+    );
+  });
+
+  it('F-0409 BR-9: a connection with no identity yet records the unnamed one', async () => {
+    const seen = await registered();
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    deepStrictEqual(
+      seen.memento['remote-oss.remote-containers.connectedNames'],
+      {
+        '/w#/w/.devcontainer/devcontainer.json': {
+          name: undefined,
+          context: undefined,
+        },
+      },
     );
   });
 

@@ -274,6 +274,7 @@ function dependenciesOf(
     clock: options.clock ?? new FakeClock(),
     newTemporaryToken: () => 'token',
     logger: createLogger(seen.sink, {minimumLevel: () => 'info'}),
+    translate: template => template,
   };
 }
 
@@ -307,6 +308,7 @@ async function runSteps(
     defaultExtensions?: readonly string[];
     machineSettings?: Record<string, unknown>;
     devPort?: string;
+    created?: boolean;
     cancellation?: AbortSignal;
     root?: RecordingChannel;
   } = {},
@@ -326,6 +328,7 @@ async function runSteps(
     volumeMounted: options.volume ?? false,
     defaultExtensions: options.defaultExtensions ?? [],
     devPort: options.devPort ?? '',
+    created: options.created ?? false,
     machineSettings: options.machineSettings ?? {},
     onPhase: phase => {
       seen.phases.push(phase);
@@ -543,6 +546,30 @@ describe('the server steps of a connect (card containers-08)', () => {
     const channel = channelOf();
     await runSteps(channel);
     deepStrictEqual(treesOf(channel), ['', 'none', '', '']);
+  });
+
+  /** The log lines of a run on a container with `libc` that this connect `created` or not, that tell a preview platform. */
+  async function previewLines(
+    libc: string,
+    created: boolean,
+  ): Promise<string[]> {
+    const {seen} = await runSteps(channelOf({libc}), {created});
+    return seen.sink.lines
+      .map(line => line.message)
+      .filter(message => message.includes('is in preview'));
+  }
+
+  it('F-0502 AC-17: a container this connect created on Alpine logs its preview line once', async () => {
+    deepStrictEqual(await previewLines('musl', true), [
+      'Support for Alpine Linux is in preview.',
+    ]);
+  });
+
+  it('F-0502 AC-17: a container that ran already, or a glibc one on x64, logs no preview line', async () => {
+    deepStrictEqual(
+      [await previewLines('musl', false), await previewLines('glibc', true)],
+      [[], []],
+    );
   });
 
   it('contracts §5.2: a musl container’s tree is under alpine', async () => {

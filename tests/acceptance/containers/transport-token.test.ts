@@ -6,9 +6,11 @@ import {
   connectedToContainer,
   containersLog,
   reloadWindow,
+  UBUNTU_IMAGE,
   variable,
 } from '../windows/harness.ts';
 import {removeContainers, setUserSetting} from '../windows/folder-windows.ts';
+import {notificationCentre} from '../windows/renderer.ts';
 import {
   connectedWindow,
   docker,
@@ -83,6 +85,44 @@ describe('F-0502 the transport, the token and the log (card containers-43)', fun
       await setUserSetting('telemetry.telemetryLevel', undefined);
       await removeContainers(folder);
     }
+  });
+
+  /** The preview lines that a connect of a new container on `image` logs, and the texts of the window's notifications that mention one. */
+  async function previewOf(
+    label: string,
+    image?: string,
+  ): Promise<{lines: string[]; shown: string[]}> {
+    const mark = containersLog().length;
+    const {name, folder} = await connectedWindow(
+      label,
+      image === undefined ? {} : {image},
+    );
+    try {
+      const lines = logSince(mark).filter(line =>
+        /Support for .* is in preview\./.test(line),
+      );
+      const shown = (await notificationCentre(name)).filter(text =>
+        text.includes('preview'),
+      );
+      await closeWindow(name);
+      return {lines, shown};
+    } finally {
+      await removeContainers(folder);
+    }
+  }
+
+  it('F-0502 AC-17 (c43-preview-alpine): the connect that creates an Alpine container on x64 logs Support for Alpine Linux is in preview. once and shows nothing of it', async () => {
+    deepStrictEqual(await previewOf('c43-preview-alpine'), {
+      lines: ['Support for Alpine Linux is in preview.'],
+      shown: [],
+    });
+  });
+
+  it('F-0502 AC-17 (c43-preview-ubuntu): the connect that creates a base:ubuntu container on x64 logs no preview line', async () => {
+    deepStrictEqual(await previewOf('c43-preview-ubuntu', UBUNTU_IMAGE), {
+      lines: [],
+      shown: [],
+    });
   });
 
   it('F-0502 AC-42 (c43-forward): one forward listens on 127.0.0.1 on the server’s port number, nothing else listens on it, the container publishes no port, and the window stays connected', async () => {
