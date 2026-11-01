@@ -1,13 +1,23 @@
 import {deepStrictEqual, doesNotThrow, strictEqual, throws} from 'node:assert';
-import {existsSync, readFileSync, statSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
+  activationsIn,
+  answerRelaunch,
   debuggingPortFile,
   editorArguments,
   editorLogsEnvironment,
   extensionsFolderOf,
   launchFiles,
   packageWindowAgent,
+  type RelaunchRequest,
   type PlainSteps,
   plainEditorOf,
   plainTestsOf,
@@ -1047,6 +1057,191 @@ describe('the stand-ins of a launch (card containers-09)', () => {
       {
         message: `${path.join(workspace.root, 'extensions-standing', 'extensions.json')} lists no extension to copy a stand-in's entry from`,
       },
+    );
+  });
+});
+
+describe('answerRelaunch (card tooling-88)', () => {
+  const REQUEST: RelaunchRequest = {
+    id: 'one',
+    name: 'folder',
+    environment: {CHANGED: 'yes'},
+    folderUri: 'file:///a',
+  };
+  const PROGRAM: Program = {
+    file: '/editor',
+    programArguments: [],
+    environment: {},
+  };
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('relaunch');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  /** Runs one answer with scripted steps: the happenings, the editor it left, and the answer file's text. */
+  async function answered(
+    request: string | undefined,
+    activate: boolean,
+    handled = new Set<string>(),
+  ) {
+    const happened: string[] = [];
+    for (const file of ['request.json', 'response.json']) {
+      rmSync(path.join(workspace.root, file), {force: true});
+    }
+    if (request !== undefined) {
+      writeFileSync(path.join(workspace.root, 'request.json'), request);
+    }
+    let activations = 0;
+    const current = {
+      editor: {
+        stop: () => {
+          happened.push('stop old');
+          return Promise.resolve();
+        },
+      },
+    };
+    await answerRelaunch(
+      workspace.root,
+      current,
+      request2 => {
+        happened.push(`program ${JSON.stringify(request2.environment)}`);
+        return PROGRAM;
+      },
+      {
+        start: () => {
+          happened.push('start');
+          if (activate) {
+            activations += 1;
+          }
+          return {
+            stop: () => {
+              happened.push('stop new');
+              return Promise.resolve();
+            },
+          };
+        },
+        activations: () => activations,
+        activationMilliseconds: 50,
+        pollMilliseconds: 5,
+      },
+      handled,
+    );
+    await current.editor.stop();
+    const file = path.join(workspace.root, 'response.json');
+    return {
+      happened,
+      answer: existsSync(file) ? readFileSync(file, 'utf8') : undefined,
+    };
+  }
+
+  it('tooling-88: it stops the editor, starts the program the request makes, waits for the window and answers success', async () => {
+    const outcome = await answered(JSON.stringify(REQUEST), true);
+    deepStrictEqual(outcome, {
+      happened: ['stop old', 'program {"CHANGED":"yes"}', 'start', 'stop new'],
+      answer: JSON.stringify({id: 'one', succeeded: true}),
+    });
+  });
+
+  it('tooling-88: a window that does not activate within the bound is answered as a failure naming the window', async () => {
+    const outcome = await answered(JSON.stringify(REQUEST), false);
+    deepStrictEqual(
+      outcome.answer,
+      JSON.stringify({
+        id: 'one',
+        succeeded: false,
+        message: 'window folder did not activate within 50 ms',
+      }),
+    );
+  });
+
+  it('tooling-88: a request already answered, no request and a request that is not JSON are left alone', async () => {
+    const results = [
+      await answered(JSON.stringify(REQUEST), true, new Set(['one'])),
+      await answered(undefined, true),
+      await answered('{not json', true),
+    ];
+    deepStrictEqual(
+      results.map(each => each.answer),
+      [undefined, undefined, undefined],
+    );
+  });
+
+  it('tooling-88: a start that throws is answered as a failure with the error', async () => {
+    writeFileSync(
+      path.join(workspace.root, 'request.json'),
+      JSON.stringify(REQUEST),
+    );
+    await answerRelaunch(
+      workspace.root,
+      {editor: {stop: () => Promise.reject(new Error('cannot stop'))}},
+      () => PROGRAM,
+      {
+        start: () => ({stop: () => Promise.resolve()}),
+        activations: () => 0,
+        activationMilliseconds: 50,
+        pollMilliseconds: 5,
+      },
+      new Set(),
+    );
+    strictEqual(
+      (
+        JSON.parse(
+          readFileSync(path.join(workspace.root, 'response.json'), 'utf8'),
+        ) as {message: string}
+      ).message,
+      'Error: cannot stop',
+    );
+  });
+
+  it('tooling-88: the activations of a window are the activated lines of its events file', () => {
+    mkdirSync(workspace.root, {recursive: true});
+    writeFileSync(
+      path.join(workspace.root, 'folder.events.jsonl'),
+      '{"event":"activated"}\n{"event":"done"}\n{"event":"activated"}\n',
+    );
+    deepStrictEqual(
+      [
+        activationsIn(workspace.root, 'folder'),
+        activationsIn(workspace.root, 'none'),
+      ],
+      [2, 0],
+    );
+  });
+
+  it('tooling-88: the relaunched editor opens the request’s folder and not the launch’s, and a workspace file by its own option', () => {
+    const base = plainEditorOf(
+      '/e',
+      '/run',
+      {...LAUNCH, folderUri: 'file:///launch'},
+      {},
+      undefined,
+    );
+    const folder = plainEditorOf(
+      '/e',
+      '/run',
+      {...LAUNCH, folderUri: 'file:///launch'},
+      {},
+      {folderUri: 'file:///a'},
+    );
+    const file = plainEditorOf(
+      '/e',
+      '/run',
+      LAUNCH,
+      {},
+      {fileUri: 'file:///w.code-workspace'},
+    );
+    deepStrictEqual(
+      [base, folder, file].map(program => program.programArguments.slice(-2)),
+      [
+        ['--folder-uri', 'file:///launch'],
+        ['--folder-uri', 'file:///a'],
+        ['--file-uri', 'file:///w.code-workspace'],
+      ],
     );
   });
 });

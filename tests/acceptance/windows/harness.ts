@@ -63,7 +63,8 @@ export interface AgentEvent {
     | 'taskEnded'
     | 'terminalNames'
     | 'untitledDocuments'
-    | 'tunnels';
+    | 'tunnels'
+    | 'environment';
   time: number;
   id?: string;
   message?: string;
@@ -755,6 +756,58 @@ export async function reloadingCommand(
 }
 
 /**
+ * Restarts the launch's editor with `environment` added to its own, and reopens window `name` on what it showed, a
+ * folder or a workspace file, remote or not; resolves once that window has activated its agent again. Only a plain
+ * launch can: its harness answers, and a launch of the runner fails here.
+ */
+export async function relaunch(
+  name: string,
+  options: {environment: Readonly<Record<string, string>>},
+): Promise<void> {
+  const folder = process.env.REMOTE_OSS_ACCEPTANCE_RELAUNCH;
+  if (folder === undefined || folder === '') {
+    throw new Error('relaunch is for plain launches');
+  }
+  const state = await windowState(name);
+  const requestId = `${String(Date.now())}-${String(process.pid)}`;
+  const answerFile = path.join(folder, 'response.json');
+  mkdirSync(folder, {recursive: true});
+  rmSync(answerFile, {force: true});
+  writeFileSync(
+    path.join(folder, 'request.json'),
+    JSON.stringify({
+      id: requestId,
+      name,
+      environment: options.environment,
+      ...(state.workspaceFile === null
+        ? {folderUri: state.folders[0]}
+        : {fileUri: state.workspaceFile}),
+    }),
+  );
+  await waitFor(
+    `the harness to relaunch the editor for window ${name}`,
+    () => {
+      if (!existsSync(answerFile)) {
+        return false;
+      }
+      const answer = JSON.parse(readFileSync(answerFile, 'utf8')) as {
+        id: string;
+        succeeded: boolean;
+        message?: string;
+      };
+      if (answer.id !== requestId) {
+        return false;
+      }
+      if (!answer.succeeded) {
+        throw new Error(answer.message ?? 'the relaunch failed');
+      }
+      return true;
+    },
+    300_000,
+  );
+}
+
+/**
  * Runs the command in window `name`, Reopen in Container unless `command` says another, and resolves once the window
  * is connected to its container: the window reads its workspace folder through the container's file system, which it
  * can't before the connect is done.
@@ -1066,6 +1119,22 @@ async function reported(
   return windowEvents(name)
     .filter(each => each.event === event)
     .at(-1);
+}
+
+/** The value of the environment variable `variableName` in the extension host of window `name`, or null when it has none. */
+export async function environmentOf(
+  name: string,
+  variableName: string,
+): Promise<string | null> {
+  const value = (
+    await reported(
+      name,
+      'environment',
+      'acceptance.agent.environment',
+      variableName,
+    )
+  )?.value;
+  return typeof value === 'string' ? value : null;
 }
 
 /** Has window `name` report its state once, and gives that report. */

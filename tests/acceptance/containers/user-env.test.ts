@@ -10,6 +10,7 @@ import {
   devContainersOf,
   inWindow,
   reloadWindow,
+  relaunch,
   reopenInContainer,
   terminalBuffer,
   variable,
@@ -271,6 +272,37 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       deepStrictEqual(
         [terminal, await dialogOf(name), await notifications(name)],
         [['', ''], undefined, []],
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
+
+  it('F-0416 AC-17 (x17): after VS Code restarts with another local variable, the same container reconnects without a rebuild: the remoteEnv entry takes the new value in the terminal, the containerEnv one keeps the old in the terminal and in a plain docker exec', async () => {
+    const folder = envFolder('c42-env-restart', '', {
+      containerEnv: {MY_CONTAINER_VAR2: '${localEnv:F0416_LOCAL_VAR}'},
+      remoteEnv: {MY_REMOTE_VAR3: '${localEnv:F0416_LOCAL_VAR}'},
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      await relaunch(name, {environment: {F0416_LOCAL_VAR: 'hello-local'}});
+      await reopenInContainer(name);
+      const containerId = await containerOf(folder);
+      const names = ['MY_CONTAINER_VAR2', 'MY_REMOTE_VAR3'];
+      const before = await printed(name, 'before', names);
+      await relaunch(name, {environment: {F0416_LOCAL_VAR: 'changed-local'}});
+      await connectedToContainer(name);
+      const after = await printed(name, 'after', names);
+      const plain = await execEnvOf(containerId, 'MY_CONTAINER_VAR2');
+      deepStrictEqual(
+        [before, after, plain, await devContainersOf(folder)],
+        [
+          ['hello-local', 'hello-local'],
+          ['hello-local', 'changed-local'],
+          'hello-local',
+          [containerId],
+        ],
       );
       await closeWindow(name);
     } finally {

@@ -6,7 +6,13 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
-import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {
@@ -262,6 +268,7 @@ export function plainEditorOf(
   runFolder: string,
   launch: Launch,
   environment: Readonly<Record<string, string | undefined>>,
+  target?: {folderUri?: string | undefined; fileUri?: string | undefined},
 ): Program {
   return {
     file: executable,
@@ -274,9 +281,14 @@ export function plainEditorOf(
         extensionId => `--disable-extension=${extensionId}`,
       ),
       '--new-window',
-      ...(launch.folderUri === undefined
-        ? []
-        : ['--folder-uri', launch.folderUri]),
+      ...(target?.fileUri === undefined ? [] : ['--file-uri', target.fileUri]),
+      ...(target === undefined
+        ? launch.folderUri === undefined
+          ? []
+          : ['--folder-uri', launch.folderUri]
+        : target.folderUri === undefined
+          ? []
+          : ['--folder-uri', target.folderUri]),
     ],
     // The harness may itself run under an extension host, where the editor's program is a plain Node.js.
     environment: {...environment, ELECTRON_RUN_AS_NODE: undefined},
@@ -424,6 +436,92 @@ export function startDetached(
   };
 }
 
+/** The folder whose files carry a row's request to relaunch the editor and the harness's answer. */
+function relaunchFolderOf(runFolder: string, label: string): string {
+  return path.join(runFolder, label, 'relaunch');
+}
+
+/** A row's request: restart the editor with `environment` added, and open the window `name` again on the target. */
+export interface RelaunchRequest {
+  id: string;
+  name: string;
+  environment: Record<string, string>;
+  folderUri?: string;
+  fileUri?: string;
+}
+
+/** The harness's answer to a request. */
+interface RelaunchAnswer {
+  id: string;
+  succeeded: boolean;
+  message?: string;
+}
+
+/** What restarting the editor needs besides the start: how many times window `name` activated, and the wait's bounds. */
+export interface RelaunchSteps {
+  start: (program: Program) => Started;
+  activations: (name: string) => number;
+  activationMilliseconds: number;
+  pollMilliseconds: number;
+}
+
+/**
+ * Answers the request in `folder` when there is a new one: stops the editor in `current`, starts the program the
+ * request makes of the launch's, and waits until the window the request names activates again. Whatever happens, the
+ * answer is written for the row.
+ */
+export async function answerRelaunch(
+  folder: string,
+  current: {editor: Started},
+  programOf: (request: RelaunchRequest) => Program,
+  steps: RelaunchSteps,
+  handled: Set<string>,
+): Promise<void> {
+  const file = path.join(folder, 'request.json');
+  if (!existsSync(file)) {
+    return;
+  }
+  let request: RelaunchRequest;
+  try {
+    request = JSON.parse(readFileSync(file, 'utf8')) as RelaunchRequest;
+  } catch {
+    return;
+  }
+  if (handled.has(request.id)) {
+    return;
+  }
+  handled.add(request.id);
+  const answer: RelaunchAnswer = {id: request.id, succeeded: true};
+  try {
+    const before = steps.activations(request.name);
+    await current.editor.stop();
+    current.editor = steps.start(programOf(request));
+    const activated = await waitUntil(
+      () => steps.activations(request.name) > before,
+      steps.activationMilliseconds,
+      steps.pollMilliseconds,
+    );
+    if (!activated) {
+      answer.succeeded = false;
+      answer.message = `window ${request.name} did not activate within ${String(steps.activationMilliseconds)} ms`;
+    }
+  } catch (caught) {
+    answer.succeeded = false;
+    answer.message = String(caught);
+  }
+  writeFileSync(path.join(folder, 'response.json'), JSON.stringify(answer));
+}
+
+/** How many times the agent of window `name` reported `activated`, from its events file in `agentFolder`. */
+export function activationsIn(agentFolder: string, name: string): number {
+  const file = path.join(agentFolder, `${name}.events.jsonl`);
+  return existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(line => line.includes('"event":"activated"')).length
+    : 0;
+}
+
 /** What a plain launch needs of the run: its folder, the editor's program, and the variables its processes share. */
 export interface PlainRun {
   runFolder: string;
@@ -435,7 +533,12 @@ export interface PlainRun {
 export interface PlainSteps {
   start: (program: Program) => Started;
   runTests: (program: Program) => Promise<{exitCode: number; output: string}>;
+  /** How many times window `name` of the launch activated its agent; the files of its agent folder by default. */
+  activations?: (name: string) => number;
 }
+
+/** How long a relaunched editor has to activate its window again, in milliseconds. */
+const RELAUNCH_ACTIVATION_MILLISECONDS = 120_000;
 
 /**
  * Runs a launch with no runner: starts the editor, runs the Node tests against it, and stops the editor whatever the
@@ -480,16 +583,59 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
+    REMOTE_OSS_ACCEPTANCE_RELAUNCH: relaunchFolderOf(
+      session.runFolder,
+      launch.label,
+    ),
     ...launchEnvironment,
   };
   // A port file an earlier attempt left would name a port nobody listens on.
   rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
-  const editor = steps.start(
-    plainEditorOf(session.executable, session.runFolder, launch, environment),
-  );
+  const relaunchFolder = relaunchFolderOf(session.runFolder, launch.label);
+  // A request an earlier attempt left would restart the editor for a row that is gone; the row makes the folder.
+  rmSync(relaunchFolder, {recursive: true, force: true});
+  const current = {
+    editor: steps.start(
+      plainEditorOf(session.executable, session.runFolder, launch, environment),
+    ),
+  };
+  const agentFolder = path.join(session.runFolder, launch.label, 'agent');
+  const handled = new Set<string>();
+  let answering = false;
+  const watching = setInterval(() => {
+    if (answering) {
+      return;
+    }
+    answering = true;
+    void answerRelaunch(
+      relaunchFolder,
+      current,
+      request => {
+        rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
+        return plainEditorOf(
+          session.executable,
+          session.runFolder,
+          launch,
+          {...environment, ...request.environment},
+          {folderUri: request.folderUri, fileUri: request.fileUri},
+        );
+      },
+      {
+        start: steps.start,
+        activations:
+          steps.activations ?? (name => activationsIn(agentFolder, name)),
+        activationMilliseconds: RELAUNCH_ACTIVATION_MILLISECONDS,
+        pollMilliseconds: 200,
+      },
+      handled,
+    ).finally(() => {
+      answering = false;
+    });
+  }, 200);
   try {
     return await steps.runTests(plainTestsOf(root, launch, environment));
   } finally {
-    await editor.stop();
+    clearInterval(watching);
+    await current.editor.stop();
   }
 }
