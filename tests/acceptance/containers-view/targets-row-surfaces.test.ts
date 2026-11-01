@@ -1,7 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
+import {renameSync} from 'node:fs';
 import {
+  closeWindow,
   devContainerFolder,
+  devContainersOf,
   inWindow,
+  reopenInContainer,
+  runScopedName,
   untitledDocuments,
   waitFor,
   windowNames,
@@ -10,20 +15,29 @@ import {
 import {
   chosen,
   docker,
+  iconReaches,
   idOf,
   made,
+  rowsWhen,
   viewed,
 } from '../windows/dev-containers-view.ts';
 import {
   paneFocused,
   remoteExplorerSections,
+  rowActionTitles,
   rowContextMenu,
   rowDetails,
   rowMenuAction,
   terminalText,
+  titleAction,
 } from '../windows/renderer.ts';
 import {VIEW} from '../windows/dev-containers-view.ts';
-import {activations, clearEarlierRows} from '../windows/folder-windows.ts';
+import {
+  activations,
+  clearEarlierRows,
+  openFolderWindow,
+  removeContainers,
+} from '../windows/folder-windows.ts';
 
 /** Closes the active editor without asking about its unsaved changes: the untitled tabs a row opened. */
 async function discardTabs(count: number): Promise<void> {
@@ -210,7 +224,8 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
     await made('rs-menu-running', ['sleep', '600']);
     await viewed('rs-menu-exited');
     await viewed('rs-menu-running');
-    const menus = [];
+    await iconReaches('local', 'rs-menu-running', 'vm-running');
+    const menus: string[][] = [];
     for (const label of ['rs-menu-exited', 'rs-menu-running']) {
       menus.push(
         (await rowContextMenu('local', VIEW, label)).filter(
@@ -218,8 +233,155 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
         ),
       );
     }
-    deepStrictEqual(menus, [
+    const running = (await rowDetails('local', VIEW))?.find(
+      entry => entry.label === 'rs-menu-running',
+    );
+    deepStrictEqual(
+      [menus, running?.icon, running?.ariaLabel],
       [
+        [
+          [
+            'Start Container',
+            'Show Details',
+            'Inspect',
+            'Show Container Log',
+            'Open in Container in Current Window',
+            'Open in Container in New Window',
+            'Remove Container',
+          ],
+          [
+            'Show Details',
+            'Inspect',
+            'Show Container Log',
+            'Open in Container in Current Window',
+            'Open in Container in New Window',
+            'Stop Container',
+            'Remove Container',
+          ],
+        ],
+        'vm-running',
+        `rs-menu-running (${runScopedName('rs-menu-running')}) Running, has actions`,
+      ],
+    );
+  });
+
+  it('F-0901 AC-10 (restarting): a crash-looping container shows the vm-outline icon, Start and no Stop in its menu, and a Restarting tooltip without "ago"', async () => {
+    const base = 'c65-restarting';
+    const container = await made(base, ['sh', '-c', 'exit 1'], {
+      extra: ['--restart=always'],
+    });
+    try {
+      await viewed(base);
+      const rows = await rowsWhen('local', each =>
+        (each.find(entry => entry.label === base)?.ariaLabel ?? '').includes(
+          ' Restarting ',
+        ),
+      );
+      const found = rows.find(entry => entry.label === base);
+      const menu = (await rowContextMenu('local', VIEW, base)).filter(
+        item => item !== '',
+      );
+      const tooltip = found?.ariaLabel ?? '';
+      deepStrictEqual(
+        [
+          found?.icon,
+          menu.includes('Start Container'),
+          menu.includes('Stop Container'),
+          new RegExp(
+            `^${base} \\(${container}\\) Restarting \\d+ (second|seconds|minute)$`,
+          ).exec(tooltip) !== null,
+          tooltip.endsWith(' ago'),
+        ],
+        ['vm-outline', true, false, true, false],
+      );
+    } finally {
+      await docker('rm', '--force', container).catch(() => undefined);
+    }
+  });
+
+  it('F-0901 AC-42 (folder-moved): a dev container’s row loses its Open items when its folder is moved away and the list rebuilds, keeps them until it does, and gets them back after the folder returns', async () => {
+    const base = 'c65-moved';
+    const folder = devContainerFolder(base);
+    const away = `${folder}-away`;
+    const openItems = [
+      'Open in Container in Current Window',
+      'Open in Container in New Window',
+    ];
+    let window: string | undefined = await openFolderWindow(folder);
+    let movedAway = false;
+    try {
+      await reopenInContainer(window);
+      await closeWindow(window);
+      window = undefined;
+      const [container = ''] = await devContainersOf(folder);
+      await viewed(base);
+      await iconReaches('local', base, 'vm');
+      const before = (await rowDetails('local', VIEW))?.find(
+        entry => entry.label === base,
+      );
+      async function cleaned(label: string): Promise<string[]> {
+        return (await rowContextMenu('local', VIEW, label)).filter(
+          item => item !== '',
+        );
+      }
+      function hasOpen(menu: string[]): boolean {
+        return openItems.every(item => menu.includes(item));
+      }
+      function sameMenu(shown: string[], expected: readonly string[]): boolean {
+        return (
+          shown.length === expected.length &&
+          expected.every((item, index) => shown[index] === item)
+        );
+      }
+      // A Refresh click lands the rebuilt list asynchronously, so each read after one waits it out.
+      async function rebuilt(
+        label: string,
+        menu: readonly string[],
+        actions?: readonly string[],
+      ): Promise<void> {
+        await waitFor(
+          `the row ${label} to rebuild`,
+          async () => {
+            if (!sameMenu(await cleaned(label), menu)) {
+              return false;
+            }
+            return actions === undefined
+              ? true
+              : sameMenu(await rowActionTitles('local', VIEW, label), actions);
+          },
+          30_000,
+        );
+      }
+      // The tooltip's elapsed clause is time itself, so the comparison ends at the state word.
+      function tooltipState(value: string): string {
+        return (
+          new RegExp(
+            '^(.*) (Running|Restarting|Exited|Created|Paused|Connected)',
+          ).exec(value)?.[0] ?? value
+        );
+      }
+      const beforeMenu = await cleaned(base);
+      renameSync(folder, away);
+      movedAway = true;
+      await new Promise(resolve => setTimeout(resolve, 3_000));
+      const staleMenu = await cleaned(base);
+      await titleAction('local', VIEW, 'Refresh');
+      const withoutOpen = [
+        'Start Container',
+        'Show Details',
+        'Inspect',
+        'Show Container Log',
+        'Remove Container',
+      ];
+      await rebuilt(base, withoutOpen);
+      const withoutMenu = await cleaned(base);
+      const afterMove = (await rowDetails('local', VIEW))?.find(
+        entry => entry.label === base,
+      );
+      renameSync(away, folder);
+      movedAway = false;
+      await titleAction('local', VIEW, 'Refresh');
+      const withOpen = [
         'Start Container',
         'Show Details',
         'Inspect',
@@ -227,16 +389,70 @@ describe('Show Details, Inspect and Show Container Log from a row (card containe
         'Open in Container in Current Window',
         'Open in Container in New Window',
         'Remove Container',
-      ],
-      [
+      ];
+      await rebuilt(base, withOpen);
+      const restoredMenu = await cleaned(base);
+      await docker('start', container);
+      await iconReaches('local', base, 'vm-running');
+      renameSync(folder, away);
+      movedAway = true;
+      await titleAction('local', VIEW, 'Refresh');
+      const runningWithoutOpen = [
         'Show Details',
         'Inspect',
         'Show Container Log',
-        'Open in Container in Current Window',
-        'Open in Container in New Window',
         'Stop Container',
         'Remove Container',
-      ],
-    ]);
+      ];
+      await rebuilt(base, runningWithoutOpen, ['Remove Container']);
+      const runningMenu = await cleaned(base);
+      deepStrictEqual(
+        [
+          hasOpen(beforeMenu),
+          sameMenu(staleMenu, beforeMenu),
+          withoutMenu,
+          [
+            afterMove?.label === before?.label,
+            afterMove?.description === before?.description,
+            afterMove?.icon,
+            afterMove?.icon === before?.icon,
+            tooltipState(afterMove?.ariaLabel ?? '') ===
+              tooltipState(before?.ariaLabel ?? ''),
+          ],
+          hasOpen(restoredMenu),
+          await rowActionTitles('local', VIEW, base),
+          runningMenu,
+        ],
+        [
+          true,
+          true,
+          [
+            'Start Container',
+            'Show Details',
+            'Inspect',
+            'Show Container Log',
+            'Remove Container',
+          ],
+          [true, true, 'vm', true, true],
+          true,
+          ['Remove Container'],
+          [
+            'Show Details',
+            'Inspect',
+            'Show Container Log',
+            'Stop Container',
+            'Remove Container',
+          ],
+        ],
+      );
+    } finally {
+      if (movedAway) {
+        renameSync(away, folder);
+      }
+      if (window !== undefined) {
+        await closeWindow(window).catch(() => undefined);
+      }
+      await removeContainers(folder);
+    }
   });
 });
