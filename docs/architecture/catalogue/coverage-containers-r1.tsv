@@ -815,14 +815,14 @@ F-0501.AC-11	deferred	containers release 1: later (trust for attach, pod and vol
 F-0501.AC-12	deferred	containers release 1: increment 2 (shutdown)
 F-0501.AC-13	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-14	todo	
-F-0501.AC-15	todo	
+F-0501.AC-15	acceptance	
 F-0501.AC-16	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0501.AC-17	deferred	containers release 1: the full contribution set comes with later increments
 F-0501.AC-18	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-19	deferred	containers release 1: the full contribution set comes with later increments
 F-0501.AC-20	deferred	containers release 1: the full contribution set comes with later increments
 F-0501.AC-21	acceptance	
-F-0501.AC-22	todo	
+F-0501.AC-22	acceptance	
 F-0501.AC-23	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-24	deferred	containers release 1: later (the recovery container)
 F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
