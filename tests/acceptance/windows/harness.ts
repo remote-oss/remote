@@ -843,23 +843,47 @@ export async function reopenInContainer(
   await connectedToContainer(name, milliseconds);
 }
 
-/** Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file system. */
+/** How many lines of the Dev Containers log a connect that times out carries. */
+const CONNECT_LOG_LINES = 40;
+
+/** `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none. */
+export function withLogTail(message: string, lines: readonly string[]): string {
+  const tail = lines.slice(-CONNECT_LOG_LINES);
+  return tail.length === 0 ? message : `${message}\n${tail.join('\n')}`;
+}
+
+/**
+ * Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file
+ * system. When the wait times out, its error also carries the last lines of the Dev Containers log written since the wait
+ * began, so that a hang shows the step it stopped at.
+ */
 export async function connectedToContainer(
   name: string,
   milliseconds = 300_000,
 ): Promise<void> {
-  await waitFor(
-    `window ${name} to connect to its container`,
-    async () => {
-      try {
-        await inWindow(name, 'acceptance.agent.statFolder');
-        return (await windowState(name)).remoteName === 'dev-container';
-      } catch {
-        return false;
-      }
-    },
-    milliseconds,
-  );
+  const mark = containersLog().length;
+  try {
+    await waitFor(
+      `window ${name} to connect to its container`,
+      async () => {
+        try {
+          await inWindow(name, 'acceptance.agent.statFolder');
+          return (await windowState(name)).remoteName === 'dev-container';
+        } catch {
+          return false;
+        }
+      },
+      milliseconds,
+    );
+  } catch (caught) {
+    throw new Error(
+      withLogTail(
+        caught instanceof Error ? caught.message : String(caught),
+        containersLogSince(mark),
+      ),
+      {cause: caught},
+    );
+  }
 }
 
 /** `base` scoped to this run, so that a container name never clashes with another run's or a leftover's. */
