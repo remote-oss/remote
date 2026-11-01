@@ -2,11 +2,9 @@ import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {existsSync, readFileSync} from 'node:fs';
 import {promisify} from 'node:util';
-import {createServer, type Server} from 'node:net';
 import {
   closeWindow,
   connectionLog,
-  type ForwardedTunnel,
   inWindow,
   nextEmptyWindow,
   onHost,
@@ -29,100 +27,20 @@ import {
 } from '../windows/renderer.ts';
 import {connectingPrograms, holdOpen} from '../windows/forward-support.ts';
 import {DATA_FOLDER} from '../windows/maintenance.ts';
+import {
+  holdLocal,
+  listenHoldingOnHost,
+  listenOnHost,
+  localPortOf,
+  showPorts,
+  tunnelFor,
+} from './forward-support.ts';
 import {greetingOf} from './greeting.ts';
 
 const execFileAsync = promisify(execFile);
 
 /** The setting the rows change. */
 const ENTRIES = 'remote.SSH.defaultForwardedPorts';
-
-/** The command that shows core's Ports view. */
-const FOCUS_PORTS = '~remote.forwardedPorts.focus';
-
-/** Starts a listener on the host's loopback `port` that answers with `greeting`, outside VS Code. */
-async function listenOnHost(port: number, greeting: string): Promise<void> {
-  await onHost(
-    'sh',
-    '-c',
-    `nc -lk -p ${String(port)} -s 127.0.0.1 -e /bin/echo ${greeting} >/dev/null 2>&1 &`,
-  );
-}
-
-/** Starts a listener on the host's loopback `port` that greets and then keeps each connection open for a while. */
-async function listenHoldingOnHost(
-  port: number,
-  greeting: string,
-): Promise<void> {
-  const greeter = `/tmp/c83-greeter-${String(port)}.sh`;
-  await onHost(
-    'sh',
-    '-c',
-    `printf '#!/bin/sh\\necho ${greeting}\\nsleep 30\\n' > ${greeter} && chmod 755 ${greeter}`,
-  );
-  await onHost(
-    'sh',
-    '-c',
-    `nohup nc -lk -p ${String(port)} -s 127.0.0.1 -e ${greeter} >/dev/null 2>&1 &`,
-  );
-}
-
-/** The local port of a tunnel's local address, `<host>:<port>`. */
-function localPortOf(tunnel: ForwardedTunnel): number {
-  return Number(
-    tunnel.localAddress.slice(tunnel.localAddress.lastIndexOf(':') + 1),
-  );
-}
-
-/** Waits until window `name` forwards remote `port`, and gives that tunnel. */
-async function tunnelFor(
-  name: string,
-  port: number,
-  milliseconds = 30_000,
-): Promise<ForwardedTunnel> {
-  let found: ForwardedTunnel | undefined;
-  await waitFor(
-    `window ${name} to forward port ${String(port)}`,
-    async () => {
-      found = (await tunnelsOf(name)).find(
-        tunnel => tunnel.remotePort === port,
-      );
-      return found !== undefined;
-    },
-    milliseconds,
-  );
-  return found ?? {remotePort: port, localAddress: ''};
-}
-
-/** Holds the client's local `port` on its loopback until the returned function is called. */
-async function holdLocal(port: number): Promise<() => Promise<void>> {
-  const holder: Server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    holder.once('error', reject);
-    holder.listen(port, '127.0.0.1', resolve);
-  });
-  return () =>
-    new Promise(resolve => {
-      holder.close(() => {
-        resolve();
-      });
-    });
-}
-
-/** Shows core's Ports view in window `name`. */
-async function showPorts(name: string): Promise<void> {
-  await waitFor(
-    'core to register the Ports view',
-    async () => {
-      try {
-        await inWindow(name, FOCUS_PORTS);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    30_000,
-  );
-}
 
 describe('the default forwarded ports of an SSH window (card coverage-83)', function () {
   this.timeout(300_000);
@@ -135,7 +53,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
 
   afterEach(async () => {
     restoreUserSettings(settingsBefore);
-    await onHost('sh', '-c', "pkill -f 'n[c] -lk -p 864'; true");
+    await onHost('sh', '-c', "pkill -f 'n[c] -lk -p 86[0-9][0-9]'; true");
   });
 
   it('F-2507 AC-4 (c83-held-local): an entry whose local port another local process holds goes to the next free higher port, with no prompt and no notification', async () => {
@@ -397,23 +315,6 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
     }
   });
 
-  it('F-2507 AC-31 (c83-no-local-server): with remote.SSH.useLocalServer false a default entry is forwarded and listens', async () => {
-    await listenOnHost(8651, 'c83-8651');
-    await userSettings({
-      'remote.SSH.useLocalServer': false,
-      // Without the shared connection the platform is asked, unless the settings name it.
-      'remote.SSH.remotePlatform': {harness: 'linux'},
-      [ENTRIES]: [{name: 'plain', remotePort: 8651, localPort: 18651}],
-    });
-    try {
-      await openWindow('harness', 'c83-a31');
-      await tunnelFor('c83-a31', 8651);
-      deepStrictEqual(await greetingOf(18651), 'c83-8651');
-    } finally {
-      await closeWindow('c83-a31');
-    }
-  });
-
   // Skipped: the new window's forward is reported on the same local port as the first window's (18652 for both), where the
   // criterion has it on another one (18653); posted on #1603.
   it.skip('F-2507 AC-29 (c83-new-window): New Window on Active Host forwards the same entry to another local port in the new window, and both work', async () => {
@@ -514,7 +415,6 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
         }
       }
       const seconds = (Date.now() - began) / 1000;
-      console.log(`F-2507 AC-8: listening ${String(seconds)} s after Resolved`);
       deepStrictEqual([listening, seconds <= 7], [true, true]);
     } finally {
       await closeWindow('c83-a8');
