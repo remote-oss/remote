@@ -154,6 +154,19 @@
   "Add configuration to user data folder": "Add configuration to user data folder",
   "This avoids having outgoing changes in your workspace folder": "This avoids having outgoing changes in your workspace folder",
   "Configuration already exists": "Configuration already exists",
+  "Copy existing configuration to workspace": "Copy existing configuration to workspace",
+  "Copy the configuration from your user data folder to the workspace folder": "Copy the configuration from your user data folder to the workspace folder",
+  "Delete the configuration from the user data folder?": "Delete the configuration from the user data folder?",
+  "Delete": "Delete",
+  "Keep": "Keep",
   "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.": "There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.",
-  "Error inspecting: {0}": "Error inspecting: {0}"
+  "Error inspecting: {0}": "Error inspecting: {0}",
+  "Configure Options": "Configure Options",
+  "Keep Defaults": "Keep Defaults",
+  "Keep Feature defaults or configure options?": "Keep Feature defaults or configure options?",
+  "Select boolean options for '{0}'": "Select boolean options for '{0}'",
+  "Select boolean options for {0}": "Select boolean options for {0}",
+  "Select options for '{0}'": "Select options for '{0}'",
+  "Include the following optional files/directories": "Include the following optional files/directories",
+  "Optional Files/Directories": "Optional Files/Directories"
 }

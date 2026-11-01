@@ -629,7 +629,7 @@ describe('the authoring wizard (card containers-80)', function () {
         10_000,
       );
       await acceptQuickPick(window);
-      await takeFeatureScreen(window);
+      await takeFeatureScreen(window, false);
       const dialog = await waitForDialog(window, 120_000);
       const said = await dialogText(window);
       const kind = await dialogKindOf(window);

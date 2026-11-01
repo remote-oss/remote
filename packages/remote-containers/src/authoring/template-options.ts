@@ -7,6 +7,13 @@
 
 import {filled} from '../surfaces/filled.ts';
 import {
+  descriptionOf,
+  isTrue,
+  placeholderOf,
+  recordOf,
+  stringsOf,
+} from './option-schema.ts';
+import {
   type BooleanScreen,
   pickBooleans,
   pickValue,
@@ -17,7 +24,6 @@ import type {CatalogueTemplate} from './catalogue.ts';
 
 /** The English template of each text of the stage, by its string id. */
 const OPTION_TEMPLATES = {
-  S307: 'Select a value',
   S317: "Select the options for the '{0}' dev container",
 } as const;
 
@@ -40,23 +46,6 @@ type Screen =
   | {kind: 'string'; name: string; screen: ValueScreen}
   | {kind: 'booleans'; screen: BooleanScreen};
 
-function recordOf(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function stringsOf(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((each): each is string => typeof each === 'string')
-    : [];
-}
-
-/** Whether a declared default stands for true: the boolean, or the string the CLI's arguments spell it as. */
-function isTrue(value: unknown): boolean {
-  return value === true || value === 'true';
-}
-
 /** The screen for the value of the string option `name`. */
 function stringScreen(
   name: string,
@@ -74,10 +63,7 @@ function stringScreen(
     name,
     screen: {
       title,
-      placeholder:
-        typeof option.description === 'string' && option.description !== ''
-          ? option.description
-          : quick.translate(OPTION_TEMPLATES.S307),
+      placeholder: placeholderOf(option, quick.translate),
       values: strict
         ? choices
         : proposals.length > 0
@@ -117,11 +103,7 @@ function screensOf(template: CatalogueTemplate, ports: OptionsPorts): Screen[] {
             ]),
             items: booleans.map(([name, option]) => ({
               key: name,
-              label:
-                typeof option.description === 'string' &&
-                option.description !== ''
-                  ? option.description
-                  : name,
+              label: descriptionOf(option) ?? name,
               checked: isTrue(option.default),
             })),
           },

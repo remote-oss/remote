@@ -1884,7 +1884,7 @@ export interface QuickPickRow {
 
 /** A row of a quick pick as {@link detailedQuickPickRows} reads it: also its second line and its codicons. */
 export interface DetailedQuickPickRow extends QuickPickRow {
-  /** The second line of the row, the hover text the pick shows beside the label. */
+  /** The second line of the row, the text the pick shows beside the label; empty when the line is hidden. */
   detail: string;
   /** The codicon classes the row carries, such as `codicon-verified`. */
   icons: string[];
@@ -1912,7 +1912,7 @@ export async function detailedQuickPickRows(
     `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
       label: row.querySelector('.label-name')?.textContent ?? '',
       description: row.querySelector('.label-description')?.textContent ?? '',
-      detail: row.querySelector('.quick-input-list-label-meta')?.textContent ?? '',
+      detail: [...row.querySelectorAll('.quick-input-list-label-meta .monaco-icon-label')].filter(each => each.style.display !== 'none').map(each => each.textContent).join(''),
       icons: [...row.querySelectorAll('.codicon')].flatMap(each => [...each.classList].filter(name => name.startsWith('codicon-'))),
       buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
       focused: row.classList.contains('focused'),
@@ -2103,16 +2103,28 @@ export interface EditorTab {
   preview: boolean;
 }
 
-/** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
-export async function editorTabs(name: string): Promise<EditorTab[]> {
-  return evaluate<EditorTab[]>(
+/** The editor tabs of window `name` by editor group, in the order the groups are shown; read from the page, so it works while a modal dialog is open. */
+export async function editorGroups(name: string): Promise<EditorTab[][]> {
+  return evaluate<EditorTab[][]>(
     name,
-    `[...document.querySelectorAll('.editor-group-container .tabs-container .tab')].map(tab => ({
+    `[...document.querySelectorAll('.editor-group-container')].map(group => [...group.querySelectorAll('.tabs-container .tab')].map(tab => ({
       label: tab.querySelector('.label-name')?.textContent ?? '',
       active: tab.classList.contains('active'),
       preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
-    }))`,
+    })))`,
   );
+}
+
+/** The tab labels of each editor group of window `name`, the groups in the order shown. */
+export async function editorGroupLabels(name: string): Promise<string[][]> {
+  return (await editorGroups(name)).map(group =>
+    group.map(entry => entry.label),
+  );
+}
+
+/** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
+export async function editorTabs(name: string): Promise<EditorTab[]> {
+  return (await editorGroups(name)).flat();
 }
 
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
@@ -2354,8 +2366,21 @@ async function pressCharacter(
   await pressStroke(address, owner, characterStroke(character));
 }
 
+/** Types `text` into window `name`, as the keyboard does, a character at a time, into whatever of the page has the focus. */
+export async function typeInFocus(name: string, text: string): Promise<void> {
+  const address = await pageOf(name);
+  for (const character of text) {
+    await pressCharacter(address, name, character);
+  }
+}
+
 /** The modifier bits of the protocol's key events. */
 const ALT_AND_CONTROL = 3;
+
+/** The key events' fields of the characters that are not letters, which the keys press by their name. */
+const NAMED_KEYS: Readonly<Record<string, {code: string; keyCode: number}>> = {
+  '-': {code: 'Minus', keyCode: 189},
+};
 
 /** Presses Ctrl+Alt+`character` in window `name`, as the keyboard does, so that a keybinding on it runs its command. */
 export async function pressControlAlt(
@@ -2363,11 +2388,12 @@ export async function pressControlAlt(
   character: string,
 ): Promise<void> {
   const upper = character.toUpperCase();
+  const named = NAMED_KEYS[character];
   await pressStroke(await pageOf(name), name, {
     key: character,
-    code: `Key${upper}`,
-    windowsVirtualKeyCode: upper.charCodeAt(0),
-    nativeVirtualKeyCode: upper.charCodeAt(0),
+    code: named?.code ?? `Key${upper}`,
+    windowsVirtualKeyCode: named?.keyCode ?? upper.charCodeAt(0),
+    nativeVirtualKeyCode: named?.keyCode ?? upper.charCodeAt(0),
     modifiers: ALT_AND_CONTROL,
   });
 }

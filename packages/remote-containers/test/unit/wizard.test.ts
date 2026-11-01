@@ -17,6 +17,8 @@ import {NO_TEMPLATE, stagesOf} from '../../src/authoring/wizard-stages.ts';
 import type {WriteOutcome, WriteRequest} from '../../src/authoring/write.ts';
 import type {LocationPorts} from '../../src/authoring/location.ts';
 import {
+  checking,
+  pick,
   pressBack,
   FINISH_BUTTON,
   pressEscape,
@@ -39,6 +41,7 @@ const INITIAL: WizardState = {
   features: [],
   featureMode: 'defaults',
   omitPaths: [],
+  metadataMissing: false,
 };
 
 interface Entry {
@@ -238,6 +241,7 @@ interface Scene {
   failures: string[];
   written: WriteRequest[];
   logged: string[];
+  warned: string[];
   files: Map<string, string>;
   writes: Array<[string, string]>;
   ports: WizardPorts;
@@ -255,6 +259,7 @@ function sceneOf(
     failures: [],
     written: [],
     logged: [],
+    warned: [],
     files: new Map(),
     writes: [],
     outcome: {kind: 'written', files: ['.devcontainer/devcontainer.json']},
@@ -266,6 +271,17 @@ function sceneOf(
       environment: {},
       download,
       setTimer: () => () => undefined,
+    },
+    stored: {
+      files: {
+        exists: () => Promise.resolve(false),
+        read: () => Promise.resolve(new Uint8Array()),
+        write: () => Promise.resolve(),
+        makeFolder: () => Promise.resolve(),
+        removeFolder: () => Promise.resolve(),
+      },
+      show: () => Promise.resolve(undefined),
+      translate: template => template,
     },
     dialogs: {
       showModalError: message => {
@@ -280,6 +296,7 @@ function sceneOf(
         return picker;
       },
       verifiedIcon: 'verified',
+      openFileIcon: 'file',
       openExternal: () => undefined,
       templateMetadata: () =>
         Promise.resolve({
@@ -307,8 +324,8 @@ function sceneOf(
       },
     },
     slotFolder: slot => `/store/configs/${slot}`,
-    record: line => {
-      scene.logged.push(line);
+    record: (line, level) => {
+      (level === 'warn' ? scene.warned : scene.logged).push(line);
     },
     translate: template => template,
   };
@@ -330,6 +347,15 @@ function locationOf(scene: Scene): LocationPorts {
     },
     home: '/store',
   };
+}
+
+/** The stages of a catalogue with one template and no Feature, over the ports of `scene`. */
+function stagesWithoutFeatures(scene: Scene): ReturnType<typeof stagesOf> {
+  return stagesOf({kind: 'catalogue', templates: [ALPINE], features: []}, {
+    ...scene.ports,
+    title: 'T',
+    facts: {rootEntries: [], files: [], truncated: false},
+  } satisfies StagePorts);
 }
 
 /** Starts the wizard and gives the first quick pick it makes, once the catalogue and the folder were read. */
@@ -440,6 +466,7 @@ describe('the wizard (card containers-80)', () => {
       takeDefaults,
       takeDefaults,
       takeDefaults,
+      takeDefaults,
     ]).ports;
     const {picker, result} = await started(scene);
     picker.accept('Alpine');
@@ -483,15 +510,23 @@ describe('the wizard (card containers-80)', () => {
     const scene = sceneOf();
     scene.ports.pick.templateMetadata = () =>
       Promise.resolve({kind: 'configurationFailed', message: 'x'});
-    deepStrictEqual(await customWritten(scene), [
-      {
-        targetFolder: '/work/ws',
-        templateId: 'a/b/c',
-        templateArgs: {},
-        features: [],
-        omitPaths: [],
-      },
-    ]);
+    deepStrictEqual(
+      [await customWritten(scene), scene.warned],
+      [
+        [
+          {
+            targetFolder: '/work/ws',
+            templateId: 'a/b/c',
+            templateArgs: {},
+            features: [],
+            omitPaths: [],
+          },
+        ],
+        [
+          'the template a/b/c has no metadata, so every optional file is included',
+        ],
+      ],
+    );
   });
 
   it('F-0802 AC-22: an existing Dockerfile is referred to: the written configuration is changed to name it when it names another', async () => {
@@ -588,19 +623,18 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list is the template pick, the template’s options and Select Features', () => {
+  it('F-0801 BR-5: the stage list is the template pick, the template’s options, Select Features, the Features’ options and the optional paths', () => {
     const scene = sceneOf();
-    const stages = stagesOf(
-      {kind: 'catalogue', templates: [ALPINE], features: []},
-      {
-        ...scene.ports,
-        title: 'T',
-        facts: {rootEntries: [], files: [], truncated: false},
-      } satisfies StagePorts,
-    );
+    const stages = stagesWithoutFeatures(scene);
     deepStrictEqual(
       stages.map(each => each.name),
-      ['templatePick', 'templateOptions', 'selectFeatures'],
+      [
+        'templatePick',
+        'templateOptions',
+        'selectFeatures',
+        'featureOptions',
+        'optionalPaths',
+      ],
     );
   });
 
@@ -695,6 +729,170 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  /** A catalogue with an Alpine template and the Feature `Lab Options`, which declares a boolean and an enum. */
+  function labCatalogue(): string {
+    return JSON.stringify({
+      collections: [
+        {
+          templates: [{id: `${PREFIX}alpine`, version: '1', name: 'Alpine'}],
+          features: [
+            {
+              id: 'ghcr.io/x/features/lab',
+              version: '1.0.0',
+              name: 'Lab Options',
+              options: {
+                enabled: {type: 'boolean', default: true},
+                level: {type: 'string', enum: ['low', 'high'], default: 'low'},
+              },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  /** Runs the wizard over the lab catalogue to its end, the Features' screens played by `steps`. */
+  async function ranOverLab(steps: Step[]) {
+    const scene = sceneOf();
+    const input = scriptedInput(steps);
+    scene.ports.options = input.ports;
+    scene.ports.catalogue.download = () => Promise.resolve(labCatalogue());
+    const {picker, result} = await started(scene);
+    picker.accept('Alpine');
+    await result;
+    return {scene, input};
+  }
+
+  it('F-0803 AC-11, BR-5: OK on Select Features with a Feature that declares options asks Keep Defaults or Configure Options, and Keep Defaults writes the Feature as {}', async () => {
+    const {scene, input} = await ranOverLab([
+      picker => {
+        picker.acceptChecked(['Lab Options']);
+      },
+      pick('Keep Defaults'),
+    ]);
+    deepStrictEqual(
+      [scene.written.map(each => each.features), input.pickers[1]?.title],
+      [
+        [[{id: 'ghcr.io/x/features/lab:1', options: {}}]],
+        'Keep Feature defaults or configure options?',
+      ],
+    );
+  });
+
+  it('F-0803 AC-25, BR-14: Back in the Features’ walk reopens Select Features with nothing checked', async () => {
+    const {input} = await ranOverLab([
+      picker => {
+        picker.acceptChecked(['Lab Options']);
+      },
+      pick('Configure Options'),
+      pressBack,
+      pressEscape,
+    ]);
+    deepStrictEqual(
+      [
+        input.pickers.map(each => each.title),
+        input.pickers[3]?.selectedItems.length,
+      ],
+      [
+        [
+          'Select Features',
+          'Keep Feature defaults or configure options?',
+          "Select boolean options for 'Lab Options'",
+          'Select Features',
+        ],
+        0,
+      ],
+    );
+  });
+
+  it('F-0803 BR-8: a Feature the catalogue does not list keeps its entry and asks nothing', async () => {
+    const scene = sceneOf();
+    const input = scriptedInput([]);
+    scene.ports.options = input.ports;
+    const stages = stagesWithoutFeatures(scene);
+    const result = await stages[3]?.execute(
+      {
+        ...INITIAL,
+        features: [{id: 'ghcr.io/x/features/gone:1', options: {}}],
+        featureMode: 'configure',
+      },
+      undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      [result?.kind === 'next' && result.state.features, input.pickers.length],
+      [[{id: 'ghcr.io/x/features/gone:1', options: {}}], 0],
+    );
+  });
+
+  /** The optional paths stage over the state of a template with `paths`, the screen played by `steps`. */
+  async function optionalStageOver(
+    paths: readonly string[],
+    steps: Step[],
+    extra: Partial<WizardState> = {},
+  ) {
+    const scene = sceneOf();
+    const input = scriptedInput(steps);
+    scene.ports.options = input.ports;
+    const stages = stagesWithoutFeatures(scene);
+    const result = await stages[4]?.execute(
+      {
+        ...INITIAL,
+        template: {...NO_TEMPLATE, id: 'a/b/c', optionalPaths: paths},
+        omitPaths: ['stale'],
+        ...extra,
+      },
+      undefined,
+      NEVER,
+    );
+    return {scene, input, result};
+  }
+
+  it('F-0805 7.E1: a template that declares no optional path shows nothing, leaves nothing out and logs nothing', async () => {
+    const {scene, input, result} = await optionalStageOver([], []);
+    deepStrictEqual(
+      [
+        result?.kind === 'next' && [result.state.omitPaths, result.shown],
+        input.pickers.length,
+        scene.warned,
+        scene.logged,
+      ],
+      [[[], false], 0, [], []],
+    );
+  });
+
+  it('F-0805 7.E2: a custom id with no metadata shows nothing, leaves nothing out and warns in the log only', async () => {
+    const {scene, result} = await optionalStageOver([], [], {
+      metadataMissing: true,
+    });
+    deepStrictEqual(
+      [result?.kind === 'next' && result.shown, scene.warned, scene.logged],
+      [
+        false,
+        [
+          'the template a/b/c has no metadata, so every optional file is included',
+        ],
+        [],
+      ],
+    );
+  });
+
+  it('F-0805 AC-4: OK sets what was not checked as the paths to leave out, and the screen counts as shown', async () => {
+    const {result} = await optionalStageOver(
+      ['x.txt', 'y.txt'],
+      [checking(['y.txt'])],
+    );
+    deepStrictEqual(
+      result?.kind === 'next' && [result.state.omitPaths, result.shown],
+      [['x.txt'], true],
+    );
+  });
+
+  it('F-0805 AC-9, AC-18: Back keeps the answer of the stage before it', async () => {
+    const {result} = await optionalStageOver(['x.txt'], [pressBack]);
+    deepStrictEqual(result, {kind: 'back', keep: true});
+  });
+
   it('F-0801 BR-5: with the location ports the location stage runs before the template pick', () => {
     const scene = sceneOf();
     const stages = stagesOf(
@@ -708,7 +906,14 @@ describe('the wizard (card containers-80)', () => {
     );
     deepStrictEqual(
       stages.map(each => each.name),
-      ['location', 'templatePick', 'templateOptions', 'selectFeatures'],
+      [
+        'location',
+        'templatePick',
+        'templateOptions',
+        'selectFeatures',
+        'featureOptions',
+        'optionalPaths',
+      ],
     );
   });
 
@@ -755,6 +960,119 @@ describe('the wizard (card containers-80)', () => {
         [],
       ],
     );
+  });
+
+  /** Ports whose store holds a slot of `/home/a/ws`, and whose dialog answers `answer`; the removals are recorded. */
+  function withSlot(
+    scene: Scene,
+    answer: string | undefined,
+    removed: string[],
+  ): WizardPorts {
+    const marker =
+      '// Maintained by the Dev Container extension\n{"rootFolder":"/home/a/ws"}\n';
+    return {
+      ...scene.ports,
+      location: {
+        ...locationOf(scene),
+        store: {
+          folderNames: () => Promise.resolve(['ws']),
+          readText: file =>
+            Promise.resolve(
+              file.endsWith('.devcontainer-internal.json') ? marker : '{}',
+            ),
+        },
+      },
+      stored: {
+        ...scene.ports.stored,
+        files: {
+          ...scene.ports.stored.files,
+          removeFolder: folder => {
+            removed.push(folder);
+            return Promise.resolve();
+          },
+        },
+        show: () => Promise.resolve(answer),
+      },
+    };
+  }
+
+  /** Runs the wizard over a store holding the folder's slot, answers the location pick with `choice` and waits for the template pick. */
+  async function pastLocation(
+    scene: Scene,
+    choice: string,
+    answer?: string,
+    removed: string[] = [],
+  ): Promise<{result: ReturnType<typeof runWizard>}> {
+    scene.ports = withSlot(scene, answer, removed);
+    const result = runWizard(
+      {title: 'T', folder: '/home/a/ws'},
+      scene.ports,
+      NEVER,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.locationPickers[0]?.accept(choice);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return {result};
+  }
+
+  const COPY = 'Copy existing configuration to workspace';
+
+  it('F-0801 AC-8: with a stored configuration and the workspace chosen the chooser offers the copy, and Delete in S108 ends the wizard with the workspace file written and the slot removed', async () => {
+    const scene = sceneOf();
+    const removed: string[] = [];
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to workspace',
+      'Delete',
+      removed,
+    );
+    const offered = scene.pickers[0]?.items.map(each => each.label);
+    scene.pickers[0]?.accept(COPY);
+    deepStrictEqual(
+      [offered?.slice(0, 2), await result, removed, scene.written.length],
+      [
+        ['From a predefined container configuration template...', COPY],
+        {
+          kind: 'written',
+          files: ['.devcontainer/devcontainer.json'],
+          target: '/home/a/ws',
+          place: 'workspace',
+        },
+        ['/store/configs/ws'],
+        0,
+      ],
+    );
+  });
+
+  it('F-0302 AC-34: the Open File button of the copy row ends the wizard with the stored file to show and nothing written', async () => {
+    const scene = sceneOf();
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to workspace',
+    );
+    scene.pickers[0]?.pressButton(COPY);
+    deepStrictEqual(
+      [await result, scene.written.length],
+      [
+        {
+          kind: 'openStored',
+          file: '/store/configs/ws/.devcontainer/devcontainer.json',
+        },
+        0,
+      ],
+    );
+  });
+
+  it('F-0801 AC-8: the copy is not offered when the configuration goes to the user data folder', async () => {
+    const scene = sceneOf();
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to user data folder',
+    );
+    const labelsShown = scene.pickers[0]?.items.map(each => each.label);
+    scene.pickers[0]?.hide();
+    await result;
+    deepStrictEqual(labelsShown?.includes(COPY), false);
   });
 
   it('F-0801 AC-3: Escape on the location pick cancels the wizard before any template is asked', async () => {

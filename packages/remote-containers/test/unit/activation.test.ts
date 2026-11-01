@@ -102,6 +102,7 @@ function surroundings(options: Options): {
     table: TABLE,
     standDownTexts: {warning: 'Another one runs', button: 'Show it'},
     standDown,
+    alsoLogTo: {write: () => undefined},
     commands: {
       registerCommand: commandId => {
         if (options.registerThrows === true) {
@@ -257,6 +258,31 @@ describe('the activation', () => {
         '[info] Dev Containers 0.1.0 in VSCodium 1.139.0 (abc).',
         '[info] Initializing configuration support...',
         '[info] Internal initialization of dev container support package...',
+      ],
+    );
+  });
+
+  it('F-0410 5.0: the second sink gets the lines of the log the channel gets, in the same order', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const also: string[] = [];
+    await activateContainers({
+      ...inputs,
+      alsoLogTo: {write: line => also.push(line.message)},
+    });
+    deepStrictEqual(
+      [
+        also.slice(0, 3),
+        seen.channelLines
+          .slice(0, 3)
+          .map(line => line.replace(/^\S+ \[info\] /, '')),
+      ],
+      [
+        [
+          'Dev Containers 0.1.0 in VSCodium 1.139.0 (abc).',
+          'Initializing configuration support...',
+          'Internal initialization of dev container support package...',
+        ],
+        also.slice(0, 3),
       ],
     );
   });

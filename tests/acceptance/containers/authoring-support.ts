@@ -3,7 +3,13 @@
  * names, the wizard's command started without waiting for it, and the waits on its screen and its files.
  */
 
-import {existsSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
@@ -115,11 +121,28 @@ export async function takeOptionScreen(
 export const ALPINE_OPTION = 'Alpine version:';
 
 /** The placeholder of the Select Features screen. */
-const FEATURES_PLACEHOLDER = 'Select additional features to install';
+export const FEATURES_PLACEHOLDER = 'Select additional features to install';
 
-/** Waits for Select Features and presses OK with nothing checked. */
-export async function takeFeatureScreen(window: string): Promise<void> {
+/** The placeholder of the Optional Files/Directories screen. */
+const OPTIONAL_PLACEHOLDER = 'Include the following optional files/directories';
+
+/** Waits for Optional Files/Directories and presses OK with nothing checked, which leaves every optional file out. */
+export async function takeOptionalScreen(window: string): Promise<void> {
+  await takeOptionScreen(window, OPTIONAL_PLACEHOLDER);
+}
+
+/**
+ * Waits for Select Features and presses OK with nothing checked, then takes the optional files of the template; a
+ * template that has none (`optional` false) ends the wizard there.
+ */
+export async function takeFeatureScreen(
+  window: string,
+  optional = true,
+): Promise<void> {
   await takeOptionScreen(window, FEATURES_PLACEHOLDER);
+  if (optional) {
+    await takeOptionalScreen(window);
+  }
 }
 
 /** Runs `body` over a window with the files, and closes the window after. */
@@ -134,6 +157,26 @@ export async function withWindow(
   } finally {
     await closeWindow(window).catch(() => undefined);
   }
+}
+
+/** What a written configuration holds that the rows read: its Features, and its keys in the order written. */
+export type WrittenConfiguration = Record<string, unknown> & {
+  features?: Record<string, unknown>;
+};
+
+/** The configuration a row's wizard wrote into `folder`, once it is there, its commented lines and trailing commas dropped. */
+export async function configurationOf(
+  folder: string,
+): Promise<WrittenConfiguration> {
+  const file = path.join(folder, CONFIGURATION);
+  await written(file);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const text = readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(line => !line.trim().startsWith('//'))
+    .join('\n')
+    .replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(text) as WrittenConfiguration;
 }
 
 /** Waits until `file` exists. */
@@ -203,3 +246,10 @@ export async function takenThrough(
     await acceptQuickPick(window);
   }
 }
+
+/** The placeholders of the string option screens of the options-lab template, in order. */
+export const STRING_SCREENS = ['Flavour:', 'Channel:', 'Motto:'] as const;
+
+/** The placeholder of the boolean option screen of the options-lab template. */
+export const BOOLEAN_SCREEN =
+  "Select the options for the 'Options Lab' dev container";

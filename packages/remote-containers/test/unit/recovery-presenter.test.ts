@@ -44,11 +44,19 @@ interface Script {
   failed?: FailedContainer;
   /** A rejection of the paused retry's store, an Error or a text. */
   storeRefusal?: Error | string;
+  /** The file the attempt's log is written to; none when the write gives none. */
+  logFile?: string;
+  /** Whether the write of the attempt's log fails. */
+  logFails?: boolean;
+  /** A rejection of the attempt's log write that is not an Error. */
+  logRefusal?: string;
 }
 
 /** A presenter over recording ports; `later` queues its tasks until `flush` runs them. */
 function presenting(script: Script = {}) {
   const calls: string[] = [];
+  /** How many calls had been made when each attempt log was written. */
+  const written: number[] = [];
   const order: string[] = [];
   const queued: Array<() => void> = [];
   const errors = [...(script.errors ?? [])];
@@ -72,8 +80,20 @@ function presenting(script: Script = {}) {
         calls.push(`pick ${placeholder}|${labels.join(',')}`);
         return Promise.resolve(picks.shift());
       },
-      keepEdit: (folder, configFile) => {
-        calls.push(`keepEdit ${folder} ${configFile}`);
+      writeAttemptLog: () => {
+        written.push(calls.length);
+        if (script.logRefusal !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
+          return Promise.reject(script.logRefusal);
+        }
+        return script.logFails === true
+          ? Promise.reject(new Error('disk full'))
+          : Promise.resolve(script.logFile);
+      },
+      keepEdit: (folder, configFile, logFile) => {
+        calls.push(
+          `keepEdit ${folder} ${configFile}${logFile === undefined ? '' : ` ${logFile}`}`,
+        );
         if (script.keepRefusal !== undefined) {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
           return Promise.reject(script.keepRefusal);
@@ -134,7 +154,7 @@ function presenting(script: Script = {}) {
       await new Promise(resolve => setImmediate(resolve));
     }
   }
-  return {presenter, calls, order, flush, sink};
+  return {presenter, calls, written, order, flush, sink};
 }
 
 async function present(failed: Failed, script: Script = {}) {
@@ -547,6 +567,72 @@ describe('the failure presenter C8 (card containers-11)', () => {
           address.includes('microsoft.com'),
       ),
       [],
+    );
+  });
+  it('F-0410 5.0, F-0502 AC-29: the attempt’s log is written before the dialog shows, and Edit Locally keeps its file with the configuration', async () => {
+    const {calls, written} = await present(containerSetupFailed(), {
+      errors: [EDIT],
+      logFile: '/logs/dev-containers-attempt-1.log',
+    });
+    deepStrictEqual(
+      [written, calls],
+      [
+        [0],
+        [
+          `showError |An error occurred setting up the container.|Retry,${EDIT},More Actions... (close)`,
+          'keepEdit /w /w/.devcontainer/devcontainer.json /logs/dev-containers-attempt-1.log',
+          'openLocally /w',
+        ],
+      ],
+    );
+  });
+
+  it('F-0410 5.0: a log that cannot be written is logged at warn, the dialog still shows and Edit Locally keeps the configuration alone', async () => {
+    const {calls, sink} = await present(containerSetupFailed(), {
+      errors: [EDIT],
+      logFails: true,
+    });
+    deepStrictEqual(
+      [
+        calls.slice(1),
+        sink.lines.map(line => `${line.level}: ${line.message}`),
+      ],
+      [
+        ['keepEdit /w /w/.devcontainer/devcontainer.json', 'openLocally /w'],
+        ['warn: the log of the attempt could not be written: disk full'],
+      ],
+    );
+  });
+
+  it('F-0410 5.0: Edit Locally from More Actions... keeps the same attempt file', async () => {
+    const {calls, flush} = await present(containerSetupFailed(), {
+      errors: ['More Actions...'],
+      picks: [EDIT],
+      logFile: '/logs/dev-containers-attempt-2.log',
+    });
+    await flush();
+    deepStrictEqual(
+      calls.filter(call => call.startsWith('keepEdit')),
+      [
+        'keepEdit /w /w/.devcontainer/devcontainer.json /logs/dev-containers-attempt-2.log',
+      ],
+    );
+  });
+
+  it('F-0410: a window with no download source writes no attempt log', async () => {
+    const {written} = await present(noServerSource('VSCodium'), {
+      errors: ['Cancel'],
+    });
+    deepStrictEqual(written, []);
+  });
+  it('F-0410 5.0: a log write rejected with a text is logged by its text', async () => {
+    const {sink} = await present(containerSetupFailed(), {
+      errors: [EDIT],
+      logRefusal: 'quota',
+    });
+    deepStrictEqual(
+      sink.lines.map(line => `${line.level}: ${line.message}`),
+      ['warn: the log of the attempt could not be written: quota'],
     );
   });
 });

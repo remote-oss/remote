@@ -10,6 +10,7 @@ import {filled} from '../surfaces/filled.ts';
 import {failureText} from '../surfaces/failure-strings.ts';
 import {CONTAINERS_INTRODUCTION} from '../surfaces/recovery-presenter.ts';
 import type {CatalogueTemplate} from './catalogue.ts';
+import type {StoredSlot} from './user-data-store.ts';
 import {type QuickPicker, shownPick} from './quick-pick.ts';
 import {
   curatedTemplates,
@@ -23,8 +24,11 @@ const PICK_TEMPLATES = {
   S040: 'Apply this custom template instead of one of the listed templates.',
   S148: 'Documentation on predefined container templates',
   S189: "From '{0}'",
+  S094: 'Copy existing configuration to workspace',
+  S095: 'Copy the configuration from your user data folder to the workspace folder',
   S190: 'From a predefined container configuration template...',
   S198: 'How would you like to create your container configuration?',
+  S257: 'Open File',
   S287: "Refer to the existing '{0}' in the container configuration",
   S302: 'Select a container configuration template or enter a custom template id',
   S323: 'Show All Templates...',
@@ -48,6 +52,10 @@ export type TemplateChoice =
       metadata?: Readonly<Record<string, unknown>>;
     }
   | {kind: 'reuse'; template: CatalogueTemplate; entry: string}
+  /** Copy the stored configuration of the folder's slot into the workspace. */
+  | {kind: 'copyStored'; slot: StoredSlot}
+  /** The row's Open File button: show the slot's configuration and end the command. */
+  | {kind: 'openStored'; slot: StoredSlot}
   | {kind: 'learnMore'}
   | {kind: 'cancelled'}
   | {kind: 'failed'; cause: string};
@@ -57,6 +65,7 @@ type RowAction =
   | {kind: 'template'; template: CatalogueTemplate}
   | {kind: 'custom'; value: string}
   | {kind: 'reuse'; entry: string}
+  | {kind: 'copyStored'; slot: StoredSlot}
   | {kind: 'chooseTemplate'}
   | {kind: 'showAll'}
   | {kind: 'learnMore'};
@@ -69,6 +78,8 @@ export interface PickRow {
   alwaysShow?: boolean;
   /** The editor's icon of the verified owner. */
   iconPath?: unknown;
+  /** The buttons of the row, each with the icon and the tooltip the editor shows. */
+  buttons?: ReadonlyArray<{iconPath: unknown; tooltip: string}>;
   action: RowAction;
 }
 
@@ -80,6 +91,8 @@ export interface TemplatePickPorts {
   createQuickPick(): TemplatePicker;
   /** The editor's icon that marks a verified owner. */
   verifiedIcon: unknown;
+  /** The editor's icon of a button that opens a file. */
+  openFileIcon: unknown;
   /** Opens a page outside the editor. */
   openExternal(address: string): unknown;
   /** The metadata of the template `templateId` names, as the CLI gives it. */
@@ -103,6 +116,8 @@ export interface TemplatePickRequest {
   title: string;
   folder: FolderFacts;
   catalogue: readonly CatalogueTemplate[];
+  /** The folder's slot in the user data folder when the pick may offer to copy its configuration into the workspace. */
+  storedSlot: StoredSlot | undefined;
 }
 
 function text(
@@ -142,6 +157,7 @@ function lastPartOf(template: CatalogueTemplate): string {
 /** The rows of the chooser that offers an existing Dockerfile, with the template pick first. */
 function chooserRows(
   entries: readonly string[],
+  storedSlot: StoredSlot | undefined,
   ports: TemplatePickPorts,
 ): PickRow[] {
   return [
@@ -150,6 +166,18 @@ function chooserRows(
       detail: text(ports, 'S390'),
       action: {kind: 'chooseTemplate'},
     },
+    ...(storedSlot !== undefined
+      ? [
+          {
+            label: text(ports, 'S094'),
+            detail: text(ports, 'S095'),
+            buttons: [
+              {iconPath: ports.openFileIcon, tooltip: text(ports, 'S257')},
+            ],
+            action: {kind: 'copyStored', slot: storedSlot},
+          } satisfies PickRow,
+        ]
+      : []),
     ...entries.map((entry): PickRow => ({
       label: text(ports, 'S189', [entry]),
       detail: text(ports, 'S287', [entry]),
@@ -287,11 +315,17 @@ async function chooserPick(
     () => ports.createQuickPick(),
     cancellation,
     (picker, finish) => {
-      const rows = chooserRows(entries, ports);
+      const rows = chooserRows(entries, request.storedSlot, ports);
       picker.title = request.title;
       picker.placeholder = text(ports, 'S198');
       picker.items = rows;
       picker.activeItems = rows.slice(0, 1);
+      picker.onDidTriggerItemButton(event => {
+        const {action} = event.item;
+        if (action.kind === 'copyStored') {
+          finish({kind: 'openStored', slot: action.slot});
+        }
+      });
       picker.onDidAccept(() => {
         const [selected] = picker.selectedItems;
         chosen = selected?.action;
@@ -300,6 +334,8 @@ async function chooserPick(
         } else if (chosen?.kind === 'learnMore') {
           void ports.openExternal(CONTAINERS_INTRODUCTION);
           finish({kind: 'learnMore'});
+        } else if (chosen?.kind === 'copyStored') {
+          finish({kind: 'copyStored', slot: chosen.slot});
         } else if (chosen?.kind === 'reuse') {
           const existing = request.catalogue.find(
             template => lastPartOf(template) === EXISTING_DOCKERFILE,
@@ -332,7 +368,7 @@ export function pickTemplate(
   cancellation: AbortSignal,
 ): Promise<TemplateChoice> {
   const entries = dockerfileEntries(request.folder);
-  return entries.length === 0
+  return entries.length === 0 && request.storedSlot === undefined
     ? templatePick(request, ports, cancellation)
     : chooserPick(entries, request, ports, cancellation);
 }

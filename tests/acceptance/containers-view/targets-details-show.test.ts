@@ -346,9 +346,17 @@ describe('Show Details and the Details section’s single slot (card containers-
         [
           seen.every(count => count <= 1),
           Date.now() - started < REVERT_MILLISECONDS,
-          (await rowsOf(connected, base)).slice(0, 2),
+          (await rowsOf(connected, base)).slice(0, 3),
         ],
-        [true, true, ['Attributes', `Name: ${await ownName(folder)}`]],
+        [
+          true,
+          true,
+          [
+            'Attributes',
+            `Workspace: ${folder}`,
+            `Name: ${await ownName(folder)}`,
+          ],
+        ],
       );
     } finally {
       await closeWindow(connected).catch(() => undefined);

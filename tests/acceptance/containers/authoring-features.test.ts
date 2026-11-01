@@ -31,19 +31,18 @@ import {
 } from '../windows/renderer.ts';
 import {
   chooseWorkspace,
+  configurationOf,
   CONFIGURATION,
+  FEATURES_PLACEHOLDER as FEATURES,
   existing,
   startCommand,
   screenWith,
   startedWith,
+  takeOptionalScreen,
   withWindow,
-  written,
 } from './authoring-support.ts';
 
 const execFileAsync = promisify(execFile);
-
-/** The placeholder of the Select Features screen. */
-const FEATURES = 'Select additional features to install';
 
 /** The labels of the Features of the run's index that its own collections publish, and the one reference Feature the rows check. */
 const GIT_FEATURE = 'Git (from source)';
@@ -59,23 +58,6 @@ const FEATURES_SCREEN = {
   titleButtons: ['Back (Ctrl+Alt+-)', 'Finish'],
   multiSelect: true,
 };
-
-/** The configuration a row's wizard wrote into `folder`, once it is there. */
-async function configurationOf(
-  folder: string,
-): Promise<{features?: Record<string, unknown>}> {
-  const file = path.join(folder, CONFIGURATION);
-  await written(file);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  const text = readFileSync(file, 'utf8')
-    .split('\n')
-    .filter(line => !line.trim().startsWith('//'))
-    .join('\n')
-    .replace(/,(\s*[}\]])/g, '$1');
-  return JSON.parse(text) as {
-    features?: Record<string, unknown>;
-  };
-}
 
 /** The labels of the rows the Select Features screen of `window` lists now. */
 async function listedLabels(window: string): Promise<string[]> {
@@ -316,6 +298,7 @@ describe('Select Features in the wizard (card containers-88)', function () {
       );
       await toggleQuickPickRow(window, DOCKER_IN_DOCKER);
       await pressQuickPickTitleButton(window, 'Finish');
+      await takeOptionalScreen(window);
       const configuration = await configurationOf(folder);
       deepStrictEqual(
         [

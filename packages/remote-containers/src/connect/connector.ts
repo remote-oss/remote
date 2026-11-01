@@ -52,6 +52,7 @@ import {
   settingEntries,
 } from '../extensions/extension-list.ts';
 import {portAttributeSettings} from '../ports/port-attributes.ts';
+import {devPortOf} from './dev-port.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
@@ -220,6 +221,8 @@ export interface ContainerConnectorDependencies {
   showDeclined(message: string, detail: string): Promise<void>;
   /** Opens `hostPath` as a local folder in this window. */
   reopenLocally(hostPath: string): Promise<void>;
+  /** Starts the log of a new connect attempt, as the phase begins. */
+  beginAttempt(): void;
   /** What tells the shutdown helper about this window's connection. */
   shutdown: ShutdownMessenger;
   /** A fresh id for each connection of the window to a container. */
@@ -1059,6 +1062,7 @@ export function containerConnectorOf(
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         defaultExtensions,
+        devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
         onPhase: phase => {
           phases.tell({name: phase});
@@ -1184,6 +1188,7 @@ export function containerConnectorOf(
       const phase = input.isReconnection
         ? `Reconnection attempt ${String(reconnectionAttempts)}`
         : 'Resolving Remote';
+      dependencies.beginAttempt();
       logger.info(phase);
       try {
         const target = input.target as ContainerTarget;

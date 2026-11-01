@@ -13,27 +13,38 @@ import {
 /** The extension's own key in `globalState`; it is not synced. */
 export const PENDING_EDITS_KEY = 'remote-oss.remote-containers.pendingEdits';
 
-/** The file to open: the configuration's path on this machine. */
+/** The files to open: the configuration's path on this machine, and the failed attempt's log when one was written. */
 export interface PendingEdit {
   configFile: string;
+  logFile?: string;
 }
 
 function isPendingEdit(value: unknown): value is PendingEdit {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as {configFile?: unknown}).configFile === 'string'
+    typeof (value as {configFile?: unknown}).configFile === 'string' &&
+    ['undefined', 'string'].includes(
+      typeof (value as {logFile?: unknown}).logFile,
+    )
   );
 }
 
-/** Keeps `configFile` to be opened in the window that opens `folder` next. */
+/** Keeps `configFile`, and the attempt's `logFile` when there is one, to be opened in the window that opens `folder` next. */
 export function storePendingEdit(
   memento: IntentMemento,
   folder: string,
   configFile: string,
   now: number,
+  logFile?: string,
 ): Promise<void> {
-  return storeTimedEntry(memento, PENDING_EDITS_KEY, folder, {configFile}, now);
+  return storeTimedEntry(
+    memento,
+    PENDING_EDITS_KEY,
+    folder,
+    logFile === undefined ? {configFile} : {configFile, logFile},
+    now,
+  );
 }
 
 /** The file to open for `folder`, once; undefined when none was kept or it expired. */
@@ -61,6 +72,10 @@ export interface PendingEditPorts {
   now(): number;
   /** Opens a file of this machine in the window. */
   open(file: string): PromiseLike<unknown>;
+  /** Opens the failed attempt's log in a second, unfocused group beside the configuration. */
+  openLog(file: string): PromiseLike<unknown>;
+  /** Whether a file of this machine exists. */
+  exists(file: string): PromiseLike<boolean>;
   logger: Logger;
 }
 
@@ -75,14 +90,41 @@ export async function openPendingEdit(ports: PendingEditPorts): Promise<void> {
   ) {
     return;
   }
+  let edit: PendingEdit | undefined;
   try {
-    const edit = await takePendingEdit(ports.memento, only.fsPath, ports.now());
-    if (edit !== undefined) {
-      await ports.open(edit.configFile);
-    }
+    edit = await takePendingEdit(ports.memento, only.fsPath, ports.now());
   } catch (caught) {
     ports.logger.warn(
-      `the configuration file could not be opened: ${caught instanceof Error ? caught.message : String(caught)}`,
+      `the pending edit could not be read: ${caught instanceof Error ? caught.message : String(caught)}`,
+    );
+  }
+  if (edit === undefined) {
+    return;
+  }
+  // The log opens even when the configuration is gone, and the configuration opens first so the log leaves its focus.
+  await attempt(ports, 'the configuration file', edit.configFile, file =>
+    ports.open(file),
+  );
+  const {logFile} = edit;
+  if (logFile !== undefined && (await ports.exists(logFile))) {
+    await attempt(ports, "the failed attempt's log", logFile, file =>
+      ports.openLog(file),
+    );
+  }
+}
+
+/** Opens `file` with `open`; a failure is only logged, naming `what`. */
+async function attempt(
+  ports: PendingEditPorts,
+  what: string,
+  file: string,
+  open: (file: string) => PromiseLike<unknown>,
+): Promise<void> {
+  try {
+    await open(file);
+  } catch (caught) {
+    ports.logger.warn(
+      `${what} could not be opened: ${caught instanceof Error ? caught.message : String(caught)}`,
     );
   }
 }
