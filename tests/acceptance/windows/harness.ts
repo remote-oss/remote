@@ -161,6 +161,8 @@ export interface RecordLine {
   detail?: string;
   /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
   items?: string[];
+  /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
+  active?: string | undefined;
   time: number;
 }
 
