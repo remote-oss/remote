@@ -117,7 +117,7 @@ const NOTHING_RAN = {dockerCalls: false, initialized: false, containers: []};
 describe('Dev Containers trust gate rows (card containers-12)', function () {
   this.timeout(600_000);
 
-  it('F-0106 AC-3, AC-4, AC-7, F-0401 AC-21 (gate-row-11): Reopen in Container in an untrusted folder asks core’s dialog with S265 before anything runs (BR-2); Cancel leaves everything as it was, twice (6.4); Trust Folder & Continue goes on to the container', async () => {
+  it('F-0106 AC-3, AC-4, AC-7, F-0401 AC-21, F-0201 AC-12 (gate-row-11): Reopen in Container in an untrusted folder asks core’s dialog with S265 before anything runs (BR-2); Cancel leaves everything as it was, twice (6.4); Trust Folder & Continue goes on to the container', async () => {
     await setUserSetting('dev.containers.dockerPath', dockerRecorder());
     try {
       const folder = devContainerFolder('gate-trust', {
