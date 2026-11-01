@@ -524,6 +524,7 @@ describe('the authoring wizard (card containers-80)', function () {
         await waitForDialog(window);
         const said = await dialogText(window);
         await pressEscape(window);
+        const leftOpen = await quickPickOf(window);
         const kept = readFileSync(path.join(folder, '.devcontainer'), 'utf8');
         rmSync(path.join(folder, '.devcontainer'));
         await pickTemplate(window, 'Alpine');
@@ -532,9 +533,11 @@ describe('the authoring wizard (card containers-80)', function () {
           [
             said?.includes("The configuration couldn't be written to "),
             said?.includes(folder),
+            /ENOTDIR|EEXIST|not a directory|file exists/i.test(said ?? ''),
+            leftOpen,
             kept,
           ],
-          [true, true, 'a file'],
+          [true, true, true, undefined, 'a file'],
         );
       },
     );
@@ -548,6 +551,7 @@ describe('the authoring wizard (card containers-80)', function () {
         await waitForDialog(window);
         const said = await dialogText(window);
         await pressEscape(window);
+        const leftOpen = await quickPickOf(window);
         const created = existing(folder, '.devcontainer');
         chmodSync(folder, 0o755);
         await pickTemplate(window, 'Alpine');
@@ -556,9 +560,11 @@ describe('the authoring wizard (card containers-80)', function () {
           [
             said?.includes("The configuration couldn't be written to "),
             said?.includes(folder),
+            /EACCES|permission denied|EROFS/i.test(said ?? ''),
+            leftOpen,
             created,
           ],
-          [true, true, []],
+          [true, true, true, undefined, []],
         );
       } finally {
         chmodSync(folder, 0o755);

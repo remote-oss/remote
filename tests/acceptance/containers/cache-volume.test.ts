@@ -14,6 +14,7 @@ import {
   reopenInContainer,
   startInWindow,
   userScopeHolds,
+  variable,
   waitFor,
 } from '../windows/harness.ts';
 import {
@@ -496,6 +497,18 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
   });
 
   it('F-0419 AC-35 (glibc-then-alpine): a Debian container and then an Alpine one, on a daemon with no vscode volume, mount the same vscode volume, and its server folder lists a glibc and an Alpine platform folder, each with one commit folder', async () => {
+    const holders = await docker(
+      'ps',
+      '--all',
+      '--quiet',
+      '--filter',
+      'volume=vscode',
+      '--filter',
+      `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+    );
+    if (holders !== '') {
+      await docker('rm', '--force', ...holders.split('\n'));
+    }
     await docker('volume', 'rm', '--force', 'vscode');
     const glibc = devContainerFolder('c53v-glibc', {
       name: 'Volume Glibc',

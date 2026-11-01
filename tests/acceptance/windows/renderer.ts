@@ -1721,6 +1721,21 @@ export async function answerToast(
   );
 }
 
+/** Whether the toast of window `name` whose message starts with `messageStart` shows an indeterminate progress bar (core draws it beside the notification, in its list row); none when no such toast has a bar. */
+export async function toastProgressIndeterminate(
+  name: string,
+  messageStart: string,
+): Promise<boolean | undefined> {
+  return evaluate<boolean | undefined>(
+    name,
+    `(() => {
+      const item = [...document.querySelectorAll('.notifications-toasts .notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+      const bar = item?.closest('.monaco-list-row')?.querySelector('.monaco-progress-container');
+      return bar === undefined || bar === null ? undefined : bar.classList.contains('infinite');
+    })()`,
+  );
+}
+
 /** The labels of the buttons of window `name`'s notification whose message starts with `messageStart`, from the centre. */
 export async function notificationButtons(
   name: string,
@@ -2222,6 +2237,8 @@ export interface EditorTab {
   label: string;
   active: boolean;
   preview: boolean;
+  /** Whether the tab shows unsaved changes. */
+  dirty: boolean;
 }
 
 /** The editor tabs of window `name` by editor group, in the order the groups are shown; read from the page, so it works while a modal dialog is open. */
@@ -2232,6 +2249,7 @@ export async function editorGroups(name: string): Promise<EditorTab[][]> {
       label: tab.querySelector('.label-name')?.textContent ?? '',
       active: tab.classList.contains('active'),
       preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
+      dirty: tab.classList.contains('dirty'),
     })))`,
   );
 }
