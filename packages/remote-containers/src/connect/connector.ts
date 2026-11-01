@@ -164,6 +164,8 @@ export interface ContainerConnector extends Connector {
 
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
+  /** Whether a folder exists on this machine. */
+  folderExists(folder: string): Promise<boolean>;
   /** The engine for the program a connect will spawn. */
   engineFor(file: string): EngineHost;
   /** The CLI bridge for the environment its processes get. */
@@ -936,6 +938,10 @@ export function containerConnectorOf(
   ): Promise<Connected | Failed> {
     const cancellation = controller.signal;
     failedContainer = undefined;
+    if (!(await dependencies.folderExists(folder.hostPath))) {
+      logger.info(`the folder ${folder.hostPath} doesn't exist`);
+      return containerSetupFailed();
+    }
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
     // A folder that is trusted already counts as connecting from the start; one that is not waits for its answer.

@@ -11,6 +11,15 @@
  * kind of row that does not cite the criterion, when a row cites a criterion the file does not have, or when an
  * acceptance row names a feature of a file and no criterion. It prints how many criteria each tag holds, per file. A `todo` line a row already cites gets a note, which never changes the exit code. Exit 0
  * when it passes, 1 with problems, 2 when a file cannot be read.
+ *
+ * A line tagged `open` is one a person has decided to prove with the acceptance rows its reason names, by their case
+ * labels (`(first-case), (second-case)`): it counts as `acceptance` once every named row exists and cites the
+ * criterion, and as `todo`, with a note naming the missing rows, until then. A row whose case label ends in `-half` or
+ * `-part` proves a part of a criterion and never counts.
+ *
+ *     node tools/check-coverage.ts --table
+ *
+ * prints every criterion with the tag it counts as and, for an `open` one, the rows that make it so.
  */
 
 import {existsSync, readFileSync} from 'node:fs';
@@ -30,7 +39,7 @@ import {
 /** Where the first slice's file lies under the repository root. */
 export const COVERAGE_FILE = SLICE_ONE_SCOPE.file;
 
-/** The tags of a criterion, `todo` meaning not tagged yet. */
+/** The tags a criterion counts as, `todo` meaning not tagged yet. */
 const TAGS = [
   'acceptance',
   'unit',
@@ -42,8 +51,11 @@ const TAGS = [
 
 type Tag = (typeof TAGS)[number];
 
-/** The tags whose line must say why. */
-const REASON_TAGS: readonly string[] = ['core', 'deferred'];
+/** The tags a line of the file holds: the tags above, and `open` for a line whose tag the named rows decide. */
+const FILE_TAGS: readonly string[] = [...TAGS, 'open'];
+
+/** The tags whose line must say why, `open` saying which rows decide it. */
+const REASON_TAGS: readonly string[] = ['core', 'deferred', 'open'];
 
 /** The set whose missing file makes the check unreadable; the others' missing files are skipped. */
 const READABLE_SET = 'slice1';
@@ -64,6 +76,11 @@ const CITE_PATTERN = new RegExp(
   `^(${FEATURE_CITE}(?:, ${FEATURE_CITE})*)(?: \\([a-z0-9-]+\\))?(?::|$)`,
 );
 
+/** The case label of a name that cites criteria. */
+const CASE_LABEL_PATTERN = new RegExp(
+  `^${FEATURE_CITE}(?:, ${FEATURE_CITE})* \\(([a-z0-9-]+)\\)`,
+);
+
 /** What the check found. */
 export type CoverageReport =
   | {kind: 'unreadable'; file: string}
@@ -80,6 +97,19 @@ interface Row {
   name: string;
   acceptance: boolean;
 }
+
+/** The case label of a row's cite, the text in parentheses after the criteria, or none. */
+function caseLabelOf(name: string): string | undefined {
+  return CASE_LABEL_PATTERN.exec(name)?.[1];
+}
+
+/** A case label that marks its row as proving a part of a criterion, which never counts towards a tag. */
+function isPartLabel(label: string): boolean {
+  return /-(?:half|part)$/.test(label);
+}
+
+/** A word in a case label that says its row proves a part, wherever it stands in the label. */
+const PART_WORD_PATTERN = /(?:^|-)(?:half|part|clause|only)(?:-|$)/;
 
 /**
  * The criterion ids a name or cite starts with, in the order the features are cited, or none for a name that cites
@@ -244,7 +274,7 @@ function linesOf(file: string, text: string, problems: string[]): Line[] {
         );
         return;
       }
-      if (!(TAGS as readonly string[]).includes(tagName)) {
+      if (!FILE_TAGS.includes(tagName)) {
         problems.push(`${place(file, number)}: unknown tag: ${tagName}`);
         return;
       }
@@ -291,10 +321,64 @@ function reasonProblems(
       );
     } else if (!needs && line.reason !== '') {
       problems.push(
-        `${place(scope.file, line.number)}: ${line.id} has a reason, which is only for core or deferred`,
+        `${place(scope.file, line.number)}: ${line.id} has a reason, which is only for core, deferred or open`,
       );
     }
   }
+}
+
+/** The rows that cite a criterion, the acceptance rows apart from the unit rows. */
+interface Citations {
+  acceptance: Row[];
+  unit: Row[];
+}
+
+/** Which rows cite each criterion. */
+function citationsOf(rows: readonly Row[]): Map<string, Citations> {
+  const citations = new Map<string, Citations>();
+  for (const testRow of rows) {
+    for (const criterion of citedBy(testRow.name)) {
+      const cited = citations.get(criterion) ?? {acceptance: [], unit: []};
+      cited[testRow.acceptance ? 'acceptance' : 'unit'].push(testRow);
+      citations.set(criterion, cited);
+    }
+  }
+  return citations;
+}
+
+/** The case labels an `open` line names in its reason, `(first), (second)`. */
+function namedLabels(line: Line): string[] {
+  return [...line.reason.matchAll(/\(([a-z0-9-]+)\)/g)].map(
+    match => match[1] ?? '',
+  );
+}
+
+/** What a line counts as, with the rows that make it so for an `open` line, and the named labels no row has. */
+interface Effective {
+  counted: Tag;
+  rows: Row[];
+  missing: string[];
+}
+
+/** The tag a line counts as: an `open` line is `acceptance` once every row it names exists, and `todo` before. */
+function effectiveOf(
+  line: Line,
+  citations: ReadonlyMap<string, Citations>,
+): Effective {
+  if (line.tagName !== 'open') {
+    return {counted: line.tagName as Tag, rows: [], missing: []};
+  }
+  const cited = citations.get(line.id)?.acceptance ?? [];
+  const named = namedLabels(line).map(label => ({
+    label,
+    found: cited.find(each => caseLabelOf(each.name) === label),
+  }));
+  const missing = named.filter(each => each.found === undefined);
+  return {
+    counted: missing.length === 0 && named.length > 0 ? 'acceptance' : 'todo',
+    rows: named.flatMap(each => (each.found === undefined ? [] : [each.found])),
+    missing: missing.map(each => each.label),
+  };
 }
 
 /** Checks what the tags promise against the rows that cite the criteria. */
@@ -302,6 +386,7 @@ function rowProblems(
   scope: CoverageScope,
   lines: readonly Line[],
   rows: readonly Row[],
+  citations: ReadonlyMap<string, Citations>,
   problems: string[],
   notes: string[],
 ): void {
@@ -346,6 +431,9 @@ function rowProblems(
         `${place(scope.file, line.number)}: ${line.id} is tagged unit and no row cites it`,
       );
     }
+    if (line.tagName === 'open') {
+      openProblems(scope, line, citations, problems, notes);
+    }
   }
   for (const line of lines) {
     if (line.tagName !== 'todo') {
@@ -363,8 +451,49 @@ function rowProblems(
   }
 }
 
-/** The count of `lines` per tag. */
-function countsOf(lines: readonly Line[]): Record<Tag, number> {
+/** The problems and the note of an `open` line: what it names, and the rows that cite it with a part's wording. */
+function openProblems(
+  scope: CoverageScope,
+  line: Line,
+  citations: ReadonlyMap<string, Citations>,
+  problems: string[],
+  notes: string[],
+): void {
+  const where = place(scope.file, line.number);
+  const labels = namedLabels(line);
+  if (labels.length === 0 && line.reason !== '') {
+    problems.push(`${where}: ${line.id} is open and names no row`);
+  }
+  for (const label of labels.filter(each => PART_WORD_PATTERN.test(each))) {
+    problems.push(
+      `${where}: ${line.id} names (${label}), whose label marks a part of the criterion`,
+    );
+  }
+  const cited = citations.get(line.id);
+  for (const testRow of [
+    ...(cited?.acceptance ?? []),
+    ...(cited?.unit ?? []),
+  ]) {
+    const label = caseLabelOf(testRow.name) ?? '';
+    if (PART_WORD_PATTERN.test(label) && !isPartLabel(label)) {
+      problems.push(
+        `${testRow.file}: row "${testRow.name}" cites ${line.id}, which is open, with a case label that marks a part: end it in -half or -part`,
+      );
+    }
+  }
+  const {missing} = effectiveOf(line, citations);
+  if (missing.length > 0) {
+    notes.push(
+      `${where}: ${line.id} is open and still counts as todo: no acceptance row cites it as ${missing.map(each => `(${each})`).join(', ')}`,
+    );
+  }
+}
+
+/** The count of `lines` per tag they count as. */
+function countsOf(
+  lines: readonly Line[],
+  citations: ReadonlyMap<string, Citations>,
+): Record<Tag, number> {
   const counts: Record<Tag, number> = {
     acceptance: 0,
     unit: 0,
@@ -374,9 +503,45 @@ function countsOf(lines: readonly Line[]): Record<Tag, number> {
     todo: 0,
   };
   for (const line of lines) {
-    counts[line.tagName as Tag] += 1;
+    counts[effectiveOf(line, citations).counted] += 1;
   }
   return counts;
+}
+
+/**
+ * The present files of `scopes`, each with its lines, and the rows with what cites each criterion; or the file of the
+ * slice-1 set when that is missing, which makes the check unreadable.
+ */
+function readScopes(
+  root: string,
+  scopes: readonly CoverageScope[],
+  problems: string[],
+):
+  | {unreadable: string}
+  | {
+      read: Array<{scope: CoverageScope; lines: Line[]}>;
+      rows: Row[];
+      citations: Map<string, Citations>;
+    } {
+  const sliceMissing = scopes.find(
+    scope =>
+      scope.name === READABLE_SET && !existsSync(path.join(root, scope.file)),
+  );
+  if (sliceMissing !== undefined) {
+    return {unreadable: sliceMissing.file};
+  }
+  const rows = rowsOf(root);
+  const read = scopes
+    .filter(scope => existsSync(path.join(root, scope.file)))
+    .map(scope => ({
+      scope,
+      lines: linesOf(
+        scope.file,
+        readFileSync(path.join(root, scope.file), 'utf8'),
+        problems,
+      ),
+    }));
+  return {read, rows, citations: citationsOf(rows)};
 }
 
 /**
@@ -387,28 +552,17 @@ export function checkCoverage(
   root: string,
   scopes: readonly CoverageScope[] = COVERAGE_SCOPES,
 ): CoverageReport {
-  const sliceMissing = scopes.find(
-    scope =>
-      scope.name === READABLE_SET && !existsSync(path.join(root, scope.file)),
-  );
-  if (sliceMissing !== undefined) {
-    return {kind: 'unreadable', file: sliceMissing.file};
-  }
-  const present = scopes.filter(scope =>
-    existsSync(path.join(root, scope.file)),
-  );
   const problems: string[] = [];
   const notes: string[] = [];
-  const rows = rowsOf(root);
-  const counts = present.map(scope => {
-    const lines = linesOf(
-      scope.file,
-      readFileSync(path.join(root, scope.file), 'utf8'),
-      problems,
-    );
+  const found = readScopes(root, scopes, problems);
+  if ('unreadable' in found) {
+    return {kind: 'unreadable', file: found.unreadable};
+  }
+  const {read, rows, citations} = found;
+  const counts = read.map(({scope, lines}) => {
     reasonProblems(scope, lines, problems);
-    rowProblems(scope, lines, rows, problems, notes);
-    return {file: scope.file, counts: countsOf(lines)};
+    rowProblems(scope, lines, rows, citations, problems, notes);
+    return {file: scope.file, counts: countsOf(lines, citations)};
   });
   return {
     kind: 'checked',
@@ -416,6 +570,31 @@ export function checkCoverage(
     notes: notes.sort(),
     counts,
   };
+}
+
+/**
+ * Every criterion of each present file of `scopes` with the tag it counts as and, for an `open` line, the rows that
+ * make it so, one tab-separated line each under a line for the file; for people, never committed.
+ */
+export function tableOf(
+  root: string,
+  scopes: readonly CoverageScope[] = COVERAGE_SCOPES,
+): string[] {
+  const found = readScopes(root, scopes, []);
+  if ('unreadable' in found) {
+    return [`check-coverage: cannot read ${found.unreadable}`];
+  }
+  return found.read.flatMap(({scope, lines}) => [
+    `${scope.file}:`,
+    ...lines.map(line => {
+      const {counted, rows} = effectiveOf(line, found.citations);
+      return [
+        line.id,
+        counted,
+        ...rows.map(each => `${each.file}: ${each.name}`),
+      ].join('\t');
+    }),
+  ]);
 }
 
 /** The lines the command prints for a report, and its exit code. */
@@ -442,9 +621,13 @@ export function outputOf(report: CoverageReport): {
 
 if (isMainModule(import.meta.url)) {
   try {
-    const {lines, exitCode} = outputOf(checkCoverage(REPOSITORY_ROOT));
-    console.log(lines.join('\n'));
-    process.exitCode = exitCode;
+    if (process.argv.includes('--table')) {
+      console.log(tableOf(REPOSITORY_ROOT).join('\n'));
+    } else {
+      const {lines, exitCode} = outputOf(checkCoverage(REPOSITORY_ROOT));
+      console.log(lines.join('\n'));
+      process.exitCode = exitCode;
+    }
   } catch (error) {
     console.error(`check-coverage: ${messageOf(error)}`);
     process.exitCode = 2;

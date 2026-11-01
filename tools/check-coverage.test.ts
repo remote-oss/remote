@@ -7,6 +7,7 @@ import {
   COVERAGE_FILE,
   type CoverageReport,
   outputOf,
+  tableOf,
 } from './check-coverage.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {
@@ -180,7 +181,7 @@ describe('check-coverage', () => {
       acceptanceTest('F-2601 AC-1: x');
       tagged('F-2601.AC-1\tacceptance\twhy');
       deepStrictEqual(problems(), [
-        `${COVERAGE_FILE}:00002: F-2601.AC-1 has a reason, which is only for core or deferred`,
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 has a reason, which is only for core, deferred or open`,
       ]);
     });
 
@@ -554,6 +555,129 @@ describe('check-coverage', () => {
         outputOf(checkCoverage(workspace.root, SLICE_ONLY)).exitCode,
         1,
       );
+    });
+  });
+
+  describe('an open line (card tooling-39)', () => {
+    function notesOf(): string[] {
+      return reportMember(checkCoverage(workspace.root, SLICE_ONLY), 'notes');
+    }
+
+    /** The count of acceptance lines the report gives. */
+    function acceptanceCount(): string | undefined {
+      return outputOf(checkCoverage(workspace.root, SLICE_ONLY)).lines.find(
+        line => line.startsWith('acceptance: '),
+      );
+    }
+
+    it('tooling-39: an open line whose named rows all exist counts as acceptance', () => {
+      acceptanceTest('F-2601 AC-1 (first): x', 'F-2601 AC-1 (second): y');
+      tagged('F-2601.AC-1\topen\t(first), (second)');
+      deepStrictEqual(
+        [problems(), notesOf(), acceptanceCount()],
+        [[], [], 'acceptance: 1'],
+      );
+    });
+
+    it('tooling-39: an open line with a named row missing counts as todo and a note names the row', () => {
+      acceptanceTest('F-2601 AC-1 (first): x');
+      tagged('F-2601.AC-1\topen\t(first), (second)');
+      deepStrictEqual(
+        [problems(), notesOf(), acceptanceCount()],
+        [
+          [],
+          [
+            `${COVERAGE_FILE}:00002: F-2601.AC-1 is open and still counts as todo: no acceptance row cites it as (second)`,
+          ],
+          'acceptance: 0',
+        ],
+      );
+    });
+
+    it('tooling-39: a named row that is a unit row does not count', () => {
+      unitTest('F-2601 AC-1 (first): x');
+      tagged('F-2601.AC-1\topen\t(first)');
+      deepStrictEqual(acceptanceCount(), 'acceptance: 0');
+    });
+
+    it('tooling-39: a named row that is skipped is not seen, so it is missing', () => {
+      workspace.write(
+        'tests/acceptance/server/x.test.ts',
+        "it.skip('F-2601 AC-1 (first): x', () => {});",
+      );
+      tagged('F-2601.AC-1\topen\t(first)');
+      deepStrictEqual(acceptanceCount(), 'acceptance: 0');
+    });
+
+    it('tooling-39: an open line that names no row fails', () => {
+      tagged('F-2601.AC-1\topen\t');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 needs a reason`,
+      ]);
+    });
+
+    it('tooling-39: an open line whose reason names no case label fails', () => {
+      tagged('F-2601.AC-1\topen\tthe rows');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 is open and names no row`,
+      ]);
+    });
+
+    it('tooling-39: an open line that names a -half row fails', () => {
+      acceptanceTest('F-2601 AC-1 (image-half): x');
+      tagged('F-2601.AC-1\topen\t(image-half)');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 names (image-half), whose label marks a part of the criterion`,
+      ]);
+    });
+
+    it('tooling-39: a -half row that cites an open line is not counted and is no problem', () => {
+      acceptanceTest('F-2601 AC-1 (first): x', 'F-2601 AC-1 (own-half): y');
+      tagged('F-2601.AC-1\topen\t(first)');
+      deepStrictEqual([problems(), acceptanceCount()], [[], 'acceptance: 1']);
+    });
+
+    it('tooling-39: a -part row that cites an open line is no problem', () => {
+      acceptanceTest('F-2601 AC-1 (first): x', 'F-2601 AC-1 (own-part): y');
+      tagged('F-2601.AC-1\topen\t(first)');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('tooling-39: a row that cites an open line with another partial wording fails', () => {
+      acceptanceTest('F-2601 AC-1 (first): x', 'F-2601 AC-1 (only-image): y');
+      tagged('F-2601.AC-1\topen\t(first)');
+      deepStrictEqual(problems(), [
+        'tests/acceptance/server/x.test.ts: row "F-2601 AC-1 (only-image): y" cites F-2601.AC-1, which is open, with a case label that marks a part: end it in -half or -part',
+      ]);
+    });
+
+    it('tooling-39: a row with a partial wording that cites a line that is not open is no problem', () => {
+      acceptanceTest('F-2601 AC-1 (only-image): y');
+      tagged('F-2601.AC-1\ttodo\t');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('tooling-39: a unit row with a partial wording that cites an open line fails too', () => {
+      acceptanceTest('F-2601 AC-1 (first): x');
+      unitTest('F-2601 AC-1 (clause-two): y');
+      tagged('F-2601.AC-1\topen\t(first)');
+      deepStrictEqual(problems().length, 1);
+    });
+
+    it('tooling-39: the table gives each criterion its tag and, for an open line, the rows that decide it', () => {
+      acceptanceTest('F-2601 AC-1 (first): x');
+      tagged('F-2601.AC-1\topen\t(first)', 'F-2601.AC-2\ttodo\t');
+      deepStrictEqual(tableOf(workspace.root, SLICE_ONLY), [
+        `${COVERAGE_FILE}:`,
+        'F-2601.AC-1\tacceptance\ttests/acceptance/server/x.test.ts: F-2601 AC-1 (first): x',
+        'F-2601.AC-2\ttodo',
+      ]);
+    });
+
+    it('tooling-39: the table of a repository without the first slice names the file', () => {
+      deepStrictEqual(tableOf(workspace.root, SLICE_ONLY), [
+        `check-coverage: cannot read ${COVERAGE_FILE}`,
+      ]);
     });
   });
 

@@ -1002,18 +1002,26 @@ describe("a terminal-mode connect's tunnel run", () => {
     );
   });
 
-  it('F-2107 BR-1: with a RemoteCommand in effect the run has no command after the host, and the terminal is fed the exec line of the tunnel command; with none it is fed nothing', async () => {
+  it('F-2107 BR-1, connect-95: with a RemoteCommand in effect the run has no command after the host, and once ssh is authenticated the terminal is fed the exec line of the tunnel command, not before; with none it is fed nothing', async () => {
     const inEffect = await tunnelTerminal(true);
+    const unauthenticated = [...(inEffect?.sent ?? [])];
+    inEffect?.write(
+      'Authenticated to dev ([10.0.0.1]:22) using "publickey".\n',
+    );
     const disabled = await tunnelTerminal(false);
+    disabled?.write(
+      'Authenticated to dev ([10.0.0.1]:22) using "publickey".\n',
+    );
     deepStrictEqual(
       [
+        unauthenticated,
         inEffect?.invocation.arguments.at(-1)?.includes(TUNNEL_SUCCESS_LINE),
         inEffect?.sent.length,
         inEffect?.sent[0]?.startsWith('exec sh -c '),
         inEffect?.sent[0]?.includes(TUNNEL_SUCCESS_LINE),
         disabled?.sent,
       ],
-      [false, 1, true, true, []],
+      [[], false, 1, true, true, []],
     );
   });
 

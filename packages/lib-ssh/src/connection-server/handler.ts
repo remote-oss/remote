@@ -16,6 +16,7 @@ import type {
 import {AskpassEndpoint} from '../askpass/endpoint.ts';
 import type {Invocation} from '../arguments/invocation.ts';
 import {classify} from '../diagnostics/classify.ts';
+import {setupMarkerOf} from '../diagnostics/setup-report.ts';
 import {
   ConnectWait,
   type ConnectWaitSettings,
@@ -268,7 +269,6 @@ export class ConnectionHandler implements MessageHandler {
       },
     );
     this.wait = wait;
-    void session.write(this.options.sessionPrelude);
     const runs = new ShellRuns({
       write: text => {
         void session.write(text);
@@ -304,7 +304,14 @@ export class ConnectionHandler implements MessageHandler {
     session.onOutput(piece => {
       output.push(piece);
     });
+    // The session's input waits for ssh to report it is authenticated, so that nothing on the host that reads its
+    // standard input before the login can take it; a session that ends first is written nothing.
+    let preludeWritten = false;
     const lines = new LineSplitter(line => {
+      if (!preludeWritten && setupMarkerOf(line) === 'authenticated') {
+        preludeWritten = true;
+        void session.write(this.options.sessionPrelude);
+      }
       feed.push(line);
       if (this.state === 'connecting') {
         errorLines.push(line);

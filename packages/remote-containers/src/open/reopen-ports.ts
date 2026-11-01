@@ -31,6 +31,7 @@ interface EnginePort {
   firstCheck(
     base: string | undefined,
     dialogs: EngineDialogPort,
+    cancellation?: AbortSignal,
   ): Promise<FirstCheckResult>;
   /** The name of the current Docker context; none for the default one. */
   currentContext(dockerFile: string): Promise<string | undefined>;

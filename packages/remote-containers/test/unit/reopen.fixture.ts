@@ -17,7 +17,7 @@ export const FOLDER = '/w/p';
 export const CONFIG = '/w/p/.devcontainer/devcontainer.json';
 /** The text of the progress that shows while the checks take long. */
 export const START =
-  '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)';
+  '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)';
 /** What the CLI reads of that configuration. */
 export const CONFIGURATION: ConfigurationResult = {
   kind: 'configuration',
@@ -63,6 +63,8 @@ export interface Setup {
   targets: unknown[];
   /** The order of the progress and the open, as far as the rows on them look. */
   order: string[];
+  /** The Cancel callbacks of the progresses shown. */
+  cancels: Array<() => void>;
   /** What the progress asked the clock for. */
   timers: Array<{milliseconds: number; callback: () => void}>;
   /** How many times the window told the shutdown helper that it leaves its container. */
@@ -98,6 +100,7 @@ export function setup(): Setup {
     dockerPath: 'docker',
     mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
+    cancels: [],
     wizard: {kind: 'cancelled'},
     wizardLeaves: [],
     targets: [],
@@ -220,10 +223,10 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       lockfile: () => undefined,
     },
     engine: {
-      firstCheck: async base => {
+      firstCheck: async (base, dialogs, cancellation) => {
         state.calls.push(`firstCheck ${String(base)}`);
         await state.waitOnCheck;
-        return state.check;
+        return cancellation?.aborted === true ? 'stopped' : state.check;
       },
       currentContext: () => {
         state.calls.push('currentContext');
@@ -236,7 +239,8 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       revealLog: () => undefined,
     },
     progress: {
-      showProgress: (title, until) => {
+      showProgress: (title, until, cancel) => {
+        state.cancels.push(cancel);
         state.order.push(`progress shown ${title}`);
         void until.then(() => {
           state.order.push('progress closed');

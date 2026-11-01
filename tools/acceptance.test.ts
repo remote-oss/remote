@@ -425,6 +425,7 @@ const LAUNCH_ORDER = [
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
   ...['containers-killed-23', 'containers-killed-35', 'containers-killed-43'],
+  'extensionpack',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1035,6 +1036,7 @@ describe('acceptance', () => {
     it('tooling-30, containers-09, connect-84: the run installs once into its folder, once into each explorer and containers launch’s folder with its own extension, and once into each genuine launch’s folder', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
+      workspace.write('dist/vscode-remote-extensionpack-0.1.0.vsix', '');
       deepStrictEqual(
         installsOf(
           workspace.root,
@@ -1165,6 +1167,20 @@ describe('acceptance', () => {
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
+          {
+            folder: path.join('/run', 'extensions-extensionpack'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+              path.join(
+                workspace.root,
+                'dist',
+                'vscode-remote-extensionpack-0.1.0.vsix',
+              ),
             ],
             client: 'vscodium',
           },

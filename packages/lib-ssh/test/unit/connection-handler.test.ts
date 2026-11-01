@@ -235,7 +235,23 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
-    it('F-2003 BR-6 item 6: the lines that wait when ssh ends leave before the login failure', async () => {
+    it('connect-95: the session prelude is not written before ssh reports it is authenticated, and is written once after it', async () => {
+      await send(1, {type: 'connect'});
+      await settled();
+      const before = spawner.started[0]?.inputText();
+      spawner.started[0]?.error('debug1: Connecting to 192.0.2.10 port 22.\n');
+      await settled();
+      const stillBefore = spawner.started[0]?.inputText();
+      authenticate(spawner.started[0]);
+      authenticate(spawner.started[0]);
+      await settled();
+      deepStrictEqual(
+        [before, stillBefore, spawner.started[0]?.inputText()],
+        ['', '', 'P\n'],
+      );
+    });
+
+    it('F-2003 BR-6 item 6, connect-95: the lines that wait when ssh ends leave before the login failure, and a session that ends before ssh is authenticated is written nothing', async () => {
       await send(1, {type: 'connect'});
       spawner.started[0]?.error(
         'ssh: connect to host 127.0.0.1 port 1: Connection refused\n',
@@ -243,8 +259,11 @@ describe('connection handler (contracts §4 S9)', () => {
       spawner.started[0]?.exit(255);
       await settled();
       deepStrictEqual(
-        order.filter(type => type !== 'ownerChanged'),
-        ['sshLines', 'loginFailed'],
+        [
+          order.filter(type => type !== 'ownerChanged'),
+          spawner.started[0]?.inputText(),
+        ],
+        [['sshLines', 'loginFailed'], ''],
       );
     });
 

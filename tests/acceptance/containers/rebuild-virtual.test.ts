@@ -24,6 +24,7 @@ import {
   writeMemoryFile,
 } from '../windows/folder-windows.ts';
 import {containerOf} from './lifecycle-support.ts';
+import {dockerObjects} from './resolve-support.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -35,21 +36,6 @@ const REBUILD_COMMANDS = [
 
 /** How long the window is given to show a dialog or a quick pick after the command. */
 const UI_MILLISECONDS = 6000;
-
-/** The run's containers and the host's images, as one comparable text: what a build or a container would change. */
-async function dockerObjects(): Promise<string> {
-  const [containers, images] = await Promise.all([
-    execFileAsync('docker', [
-      'ps',
-      '--all',
-      '--quiet',
-      '--filter',
-      `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
-    ]),
-    execFileAsync('docker', ['images', '--quiet', '--no-trunc']),
-  ]);
-  return `${containers.stdout}|${images.stdout.split('\n').sort().join(',')}`;
-}
 
 /**
  * Runs `command` in window `name`, gives it a moment, dismisses whatever dialog or quick pick shows (Cancel, else

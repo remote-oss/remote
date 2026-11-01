@@ -124,10 +124,11 @@ export interface FailureCase {
   bound?: {from: string; milliseconds: number; cite: string};
 }
 
-/** The extensions only some launches install, by id, with their package folders. */
+/** The extensions only some launches install, by id, with their package names, the ones their VSIX files carry. */
 export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
   ['remote-oss.remote-containers', 'remote-containers'],
+  ['remote-oss.vscode-remote-extensionpack', 'vscode-remote-extensionpack'],
 ]);
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
@@ -144,6 +145,15 @@ const EXPLORER_LAUNCH = {
   withExtensions: ['remote-oss.remote-explorer'],
   // The remote name after the folder, as core's own label gives it, so a claimed window's page is found by its state.
   settings: {'window.title': '[${rootName}]${remoteName}'},
+} as const;
+
+/** The editor's gallery variables pointed at a closed port, so that the Extensions view has no gallery data. */
+const UNREACHABLE_GALLERY = {
+  VSCODE_GALLERY_SERVICE_URL: 'http://127.0.0.1:1',
+  VSCODE_GALLERY_ITEM_URL: 'http://127.0.0.1:1',
+  VSCODE_GALLERY_CONTROL_URL: 'http://127.0.0.1:1',
+  VSCODE_GALLERY_RESOURCE_URL_TEMPLATE:
+    'http://127.0.0.1:1/{publisher}/{name}/{version}/{path}',
 } as const;
 
 /** What the trust launches share: workspace trust on, read by the renderer helpers. */
@@ -550,6 +560,8 @@ function forwardingLaunch(
  * installed and disabled as in `containers`; `containers-killed-23`, `containers-killed-35` and
  * `containers-killed-43` run the same `containers-killed` suite, each naming its killed case in
  * `HARNESS_KILLED_CASE`, so that a launch runs one row and kills the launch's editor last;
+ * `extensionpack` installs Dev Containers and Remote - SSH from their VSIX files and then the extension pack from its own,
+ * with the editor's gallery variables pointed at a closed port, so that no gallery data is the state it starts from;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -888,6 +900,18 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers-podman',
       engine: 'podman',
       namedOnly: true,
+    },
+    // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'extensionpack',
+      suite: 'extensionpack',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-ssh',
+        'remote-oss.vscode-remote-extensionpack',
+      ],
+      environment: UNREACHABLE_GALLERY,
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({

@@ -41,7 +41,11 @@ export async function chooseOrAuthor(
   ports.logger.info(`${title} found no configuration in ${folder}`);
   const outcome = await ports.authoring.execute(folder);
   if (outcome.kind !== 'written') {
-    return {choice: {kind: 'dismissed'}, progress: first.progress};
+    return {
+      choice: {kind: 'dismissed'},
+      progress: first.progress,
+      cancellation: first.cancellation,
+    };
   }
   return commandBeforeReload(
     ports,

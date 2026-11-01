@@ -157,6 +157,9 @@ export async function firstCheck(
       );
     }
   }
+  if (cancellation.aborted) {
+    return 'stopped';
+  }
   const structured = queries[1];
   if (
     structured?.kind === 'ran' &&

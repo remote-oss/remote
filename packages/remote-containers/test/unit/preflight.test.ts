@@ -323,6 +323,19 @@ describe('the first check', () => {
     deepStrictEqual(scene.dialogs, [ERROR_DIALOG]);
   });
 
+  it('F-0408 AC-7: a check whose signal was aborted stops with no dialog, whatever the killed queries printed', async () => {
+    const scene = sceneOf({
+      '--version': finished(0),
+      [STRUCTURED.join(' ')]: finished(undefined),
+    });
+    const answer = await firstCheck(
+      scene.dependencies,
+      undefined,
+      AbortSignal.abort(),
+    );
+    deepStrictEqual([answer, scene.dialogs], ['stopped', []]);
+  });
+
   it('F-0201 AC-20: a query that never ends is ended at 60 000 ms, and only then is the dialog shown', async () => {
     const scene = sceneOf({'--version': 'never'});
     const checking = firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
