@@ -160,12 +160,14 @@ export function windowFiles<Address>(
   };
 }
 
-/** Whether `file` is `folder` or lies below it, by the segments of the paths. */
+/** Whether `file` is `folder` or lies below it, by the segments of the paths: a name that merely starts with two dots is below. */
 export function isUnder(folder: string, file: string): boolean {
   const relative = path.posix.relative(folder, file);
   return (
     relative === '' ||
-    (!relative.startsWith('..') && !path.posix.isAbsolute(relative))
+    (relative !== '..' &&
+      !relative.startsWith('../') &&
+      !path.posix.isAbsolute(relative))
   );
 }
 

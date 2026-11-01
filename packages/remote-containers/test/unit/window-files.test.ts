@@ -301,6 +301,19 @@ describe('the files of the authoring command (card containers-126)', () => {
       ]);
     });
 
+    it('F-0801 AC-14: a name that starts with two dots is under the folder, and the folder above it is not', () => {
+      deepStrictEqual(
+        [
+          isUnder('/w/x', '/w/x/..env'),
+          isUnder('/w/x', '/w/x/..env/a'),
+          isUnder('/w/x', '/w/x/...'),
+          isUnder('/w/x', '/w'),
+          isUnder('/w/x', '/w/..env'),
+        ],
+        [true, true, true, false, false],
+      );
+    });
+
     it('F-0801 AC-14: a path is under a folder by its segments', () => {
       deepStrictEqual(
         [
