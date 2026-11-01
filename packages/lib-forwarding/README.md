@@ -31,4 +31,4 @@ free. It is bundled into the extensions that use it and never published on its o
 | Maintainers         | remote-oss                                                              |
 | Entry points        | `lib-forwarding` (`src/index.ts`), `lib-forwarding/testing/*` |
 | Allowed imports     | `lib-helper`, `lib-log`                                                 |
-| Coverage exclusions | `src/window-tunnel/ports.ts`: types only, no executable code                                                                    |
+| Coverage exclusions | none |

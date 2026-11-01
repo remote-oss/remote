@@ -30,5 +30,5 @@ It is bundled into the extensions that install a server and never published on i
 | Maintainers | remote-oss |
 | Entry points | `lib-server` (`src/index.ts`) |
 | Allowed imports | `lib-host`, `lib-product`, `lib-log` |
-| Coverage exclusions | `src/policy/record.ts` and `src/transfer/ports.ts`: types only, no executable code |
+| Coverage exclusions | none |
 | Notes | `CONTAINERS_POLICY`'s `verification` and `cleanup` are provisional until the containers design settles them |

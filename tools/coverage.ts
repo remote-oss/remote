@@ -7,13 +7,16 @@
  *     node tools/coverage.ts --shard 2/4   check the second of four shards of the units (CI runs the four at once)
  *
  * A unit is tools/, or a package under packages/ that has a src/ folder. Its coverage.json holds the files excluded
- * from measurement, each with a reason, and the ratchet: the best numbers recorded so far.
+ * from measurement, each with a reason, and the ratchet: the best numbers recorded so far. Generated files and files
+ * without runtime code (only types) are excluded by rule and never named there.
  */
 
 import {spawnSync} from 'node:child_process';
+import {transformSync} from 'esbuild';
 import {
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -89,12 +92,62 @@ export function coverageUnits(root: string): CoverageUnit[] {
 }
 
 /**
- * The problems with a unit's exclusions: a generated file, which is excluded by rule and never named; an exclusion
- * without a reason; one naming a file that no longer exists; and, for a package, one its README does not list.
+ * Whether the TypeScript in `text` has runtime code: what esbuild emits for it, without comments, `export {};`,
+ * `"use strict";` and whitespace, is not empty. Interfaces, types and type-only imports and exports emit nothing.
+ */
+export function hasRuntimeCode(text: string): boolean {
+  const emitted = transformSync(text, {loader: 'ts', format: 'esm'}).code;
+  return (
+    emitted
+      .replaceAll(/\/\*[\s\S]*?\*\//g, '')
+      .replaceAll(/\/\/.*$/gm, '')
+      .replaceAll('export {};', '')
+      .replaceAll(/(["'])use strict\1;?/g, '')
+      .replaceAll(/\s/g, '') !== ''
+  );
+}
+
+/** Whether `file` (relative to a unit) is a source the coverage run measures: not a test, a generated file, a fixture or a build output. */
+function isMeasuredSource(file: string): boolean {
+  const segments = file.split(path.sep);
+  return (
+    file.endsWith('.ts') &&
+    !file.endsWith('.test.ts') &&
+    !file.endsWith('.generated.ts') &&
+    !segments.includes('fixtures') &&
+    !segments.includes('.tsc')
+  );
+}
+
+/**
+ * The unit's source files without runtime code, relative to the unit's folder and sorted: the files the run leaves
+ * out by rule. The sources are those of `unit.sources`, found under `root`.
+ */
+export function typesOnlyFiles(unit: CoverageUnit, root: string): string[] {
+  const sourceFolder = path.join(root, unit.sources.split('/**')[0] ?? '');
+  if (!existsSync(sourceFolder)) {
+    return [];
+  }
+  return readdirSync(sourceFolder, {recursive: true})
+    .map(entry => path.join(sourceFolder, String(entry)))
+    .map(file => path.relative(unit.directory, file))
+    .filter(isMeasuredSource)
+    .filter(
+      file =>
+        !hasRuntimeCode(readFileSync(path.join(unit.directory, file), 'utf8')),
+    )
+    .sort();
+}
+
+/**
+ * The problems with a unit's exclusions: a generated file or a file without runtime code (`typesOnly`, relative to the
+ * unit), which are excluded by rule and never named; an exclusion without a reason; one naming a file that no longer
+ * exists; and, for a package, one its README does not list.
  */
 export function exclusionProblems(
   unit: CoverageUnit,
   configuration: CoverageConfiguration,
+  typesOnly: readonly string[],
 ): string[] {
   const problems: string[] = [];
   const readme =
@@ -105,6 +158,12 @@ export function exclusionProblems(
     if (file.endsWith('.generated.ts')) {
       problems.push(
         `${unit.name}: exclusion ${file} is covered by the generated-file rule; remove the entry`,
+      );
+      continue;
+    }
+    if (typesOnly.includes(file)) {
+      problems.push(
+        `${unit.name}: exclusion ${file} is covered by the types-only rule; remove the entry`,
       );
       continue;
     }
@@ -241,17 +300,17 @@ export function runCoverage(
   const problems: string[] = [];
   for (const unit of shardOf(coverageUnits(root), shard)) {
     const configuration = readConfiguration(unit);
-    const unitProblems = exclusionProblems(unit, configuration);
+    const typesOnly = typesOnlyFiles(unit, root);
+    const unitProblems = exclusionProblems(unit, configuration, typesOnly);
     if (configuration.ratchet === undefined && !update) {
       unitProblems.push(
         `${unit.name}: coverage.json has no ratchet; run pnpm coverage:update`,
       );
     }
-    const measured = measure(
-      root,
-      unit,
-      Object.keys(configuration.exclude ?? {}),
-    );
+    const measured = measure(root, unit, [
+      ...Object.keys(configuration.exclude ?? {}),
+      ...typesOnly,
+    ]);
     if (measured === undefined) {
       unitProblems.push(`${unit.name}: the tests failed or none were found`);
     } else {
