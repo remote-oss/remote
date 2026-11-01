@@ -299,7 +299,7 @@ F-0403.AC-17	acceptance
 F-0403.AC-18	todo	
 F-0403.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-20	acceptance	
-F-0403.AC-21	todo	
+F-0403.AC-21	deferred	containers release 1: later (the log terminal, F-0104)
 F-0403.AC-22	deferred	containers release 1: later (remote engines)
 F-0403.AC-23	deferred	containers release 1: increment 2 (authoring)
 F-0403.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)
