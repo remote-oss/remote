@@ -845,7 +845,7 @@ F-0502.AC-13	acceptance
 F-0502.AC-14	deferred	containers release 1: increment 2 (shutdown)
 F-0502.AC-15	acceptance	
 F-0502.AC-16	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
-F-0502.AC-17	todo	
+F-0502.AC-17	acceptance	
 F-0502.AC-18	acceptance	
 F-0502.AC-19	acceptance	
 F-0502.AC-20	acceptance	
