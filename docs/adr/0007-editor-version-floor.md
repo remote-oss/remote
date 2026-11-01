@@ -1,7 +1,8 @@
 # ADR-0007: The editor version floor is 1.125, the recorded version stays 1.139.1, and proposed API is pinned to the floor
 
 - Status: accepted (the lead, 2026-10-06); amended 2026-10-20 by the user's instruction (D-102): the floor moves from
-  1.139 to 1.125. Raised or lowered only by an amendment like this one.
+  1.139 to 1.125. Raised or lowered only by an amendment like this one. Decision 4's floor list gained the container
+  open on 2026-11-01 (#1570, #1575).
 - Date: 2026-10-06; amended 2026-10-20
 - Deciders: `remote-architect`; the floor of 2026-10-20 is the user's
 - Scope: all packages
@@ -66,11 +67,14 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
        proposals" case doesn't occur there as it does on 1.139.1 (tooling-69, #1402). Why it doesn't is measured
        in tooling-72 (#1385). Until that's settled, the floor run makes no claim about the no-proposals path;
      - a connect up to the declined licence;
+     - a container open up to the declined licence, through the `genuine-containers` launch (F-1402 AC-1, #1570). It
+       installs our Dev Containers alone, downloads from the run's stand-in licensed host, and ends in Cancel at the
+       licence modal;
      - the Remote Explorer's rows without a connect, through the genuine launch's explorer row (tooling-69).
-   - **It doesn't cover a connect, a container open or the Ports view.** Those need the server of genuine 1.125.0's
-     own commit, which is Microsoft's server under its licence. The genuine job runs on the opposite terms: nothing
-     accepts that licence for the user, and no server comes from the publisher. VSCodium's server doesn't match a
-     1.125.0 client.
+   - **It doesn't cover a connect or a container open past the licence, or the Ports view.** Those need the server of
+     genuine 1.125.0's own commit, which is Microsoft's server under its licence. The genuine job runs on the opposite
+     terms: nothing accepts that licence for the user, and no server comes from the publisher. VSCodium's server
+     doesn't match a 1.125.0 client.
    - **Connect coverage on the floor** would need a Code - OSS 1.125.0 build (the client and its server, built from
      the MIT tag). That's a card of its own and the user's call.
 
@@ -106,4 +110,5 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
 - **The constant:** `tools/check-layout` verifies that every extension manifest's `engines.vscode` equals the root
   constant, and that a package declaring `enabledApiProposals` carries the pinned declaration files.
 - **The recorded suite** runs on 1.139.1.
-- **The floor run** (decision 4) runs the genuine launch, with the explorer, on 1.125.0. `ssh-no-proposals` runs on 1.139.1.
+- **The floor run** (decision 4) runs the genuine launch, with the explorer, and `genuine-containers` on 1.125.0.
+  `ssh-no-proposals` runs on 1.139.1.
