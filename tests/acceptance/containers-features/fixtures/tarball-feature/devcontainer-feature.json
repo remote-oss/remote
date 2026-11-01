@@ -1,0 +1,6 @@
+{
+  "id": "c92-tarball",
+  "version": "1.0.0",
+  "name": "A Feature fetched as a tarball",
+  "description": "Writes /c92-tarball, for the rows that fetch a Feature by its direct tarball address."
+}

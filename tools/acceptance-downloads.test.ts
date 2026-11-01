@@ -154,6 +154,7 @@ describe('the download host', function () {
       tlsLogFile,
       templatesFolder: path.join(folder, 'templates'),
       controlFolder: path.join(folder, 'control'),
+      featuresFolder: path.join(folder, 'features'),
     });
   });
 
@@ -319,6 +320,69 @@ describe('the download host', function () {
     strictEqual(received.body.equals(archive), true);
   });
 
+  it('tooling-92: a tarball of the run’s features folder is served whole, and any other name, a missing file and a path outside the folder give 404', async () => {
+    mkdirSync(path.join(folder, 'features'), {recursive: true});
+    const tarball = Buffer.from('not really a tarball');
+    writeFileSync(path.join(folder, 'features', 'known.tgz'), tarball);
+    writeFileSync(path.join(folder, 'features', 'known.txt'), 'x');
+    const [known, missing, wrongType, outside] = await Promise.all([
+      get('https', host.httpsPort, '/features/known.tgz'),
+      get('https', host.httpsPort, '/features/absent.tgz'),
+      get('https', host.httpsPort, '/features/known.txt'),
+      get('https', host.httpsPort, '/features/..%2Frequests.log'),
+    ]);
+    deepStrictEqual(
+      [
+        known.status,
+        known.body.equals(tarball),
+        missing.status,
+        wrongType.status,
+        outside.status,
+      ],
+      [200, true, 404, 404, 404],
+    );
+  });
+
+  it('tooling-92: Node accepts the run’s self-signed certificate as an extra authority for the names it holds, localhost included, and refuses any other name', async () => {
+    const authority = readFileSync(
+      path.join(folder, 'downloads-certificate.pem'),
+    );
+    function handshake(servername: string): Promise<string> {
+      return new Promise(resolve => {
+        const socket = connect(
+          {
+            host: '127.0.0.1',
+            port: host.httpsPort,
+            servername,
+            // eslint-disable-next-line id-length -- the option's name in Node
+            ca: authority,
+          },
+          () => {
+            resolve(
+              socket.authorized
+                ? 'authorized'
+                : String(socket.authorizationError),
+            );
+            socket.destroy();
+          },
+        );
+        socket.on('error', (error: Error) => {
+          resolve(error.message);
+        });
+      });
+    }
+    deepStrictEqual(
+      [
+        await handshake('localhost'),
+        await handshake('downloads'),
+        (await handshake('other.example')).startsWith(
+          'Hostname/IP does not match',
+        ),
+      ],
+      ['authorized', 'authorized', true],
+    );
+  });
+
   it('tooling-27: a path no behaviour names gives 404', async () => {
     strictEqual((await get('http', host.httpPort, '/other/x')).status, 404);
   });
@@ -423,13 +487,18 @@ describe('the download host', function () {
     ok(lines.some(line => line.endsWith(' GET /ok/linux-x64/abc unit-row')));
   });
 
-  it('tooling-27: the certificate names the download host and the update service', () => {
+  it('tooling-27, tooling-92: the certificate names the download host, the update service and the runner’s localhost', () => {
     const certificate = new X509Certificate(
       readFileSync(path.join(folder, 'downloads-certificate.pem')),
     );
     deepStrictEqual(
       [certificate.subjectAltName, certificate.verify(certificate.publicKey)],
-      [DOWNLOAD_HOST_NAMES.map(name => `DNS:${name}`).join(', '), true],
+      [
+        [...DOWNLOAD_HOST_NAMES, 'localhost']
+          .map(name => `DNS:${name}`)
+          .join(', '),
+        true,
+      ],
     );
   });
 
@@ -466,6 +535,7 @@ describe('startDownloadHost', () => {
           tlsLogFile: path.join(folder, 'tls-log'),
           templatesFolder: path.join(folder, 'templates'),
           controlFolder: path.join(folder, 'control'),
+          featuresFolder: path.join(folder, 'features'),
         }),
       );
     } finally {
@@ -719,14 +789,19 @@ describe('the download host in the run', () => {
     }
   });
 
-  it('tooling-27: the harness variables are the bases as the host and the editor reach them, and the log', () => {
+  it('tooling-27, tooling-92: the harness variables are the bases as the host and the editor reach them, the log, the certificate file and the Feature tarball’s address', () => {
     deepStrictEqual(
       downloadVariables(
         {httpPort: 8080, httpsPort: 8443},
         '/run/requests.log',
         '/run/downloads-tls.log',
+        '/run/downloads/downloads-certificate.pem',
       ),
       {
+        HARNESS_DOWNLOADS_CERTIFICATE:
+          '/run/downloads/downloads-certificate.pem',
+        HARNESS_FEATURE_TARBALL_URL:
+          'https://localhost:8443/features/devcontainer-feature-c92-tarball.tgz',
         HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080',
         HARNESS_DOWNLOADS_HTTPS: 'https://downloads:8443',
         HARNESS_DOWNLOADS_LICENSED: 'https://update.code.visualstudio.com:8443',

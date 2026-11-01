@@ -289,12 +289,13 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases. */
+/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases and its certificate file. */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
   'HARNESS_DOWNLOADS_LICENSED',
   'HARNESS_DOWNLOADS_LOCAL',
+  'HARNESS_DOWNLOADS_CERTIFICATE',
 ];
 
 /**
@@ -877,7 +878,12 @@ export function launchesOf(root: string): Launch[] {
       templates: true,
       // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that Learn More
       // opens nothing on the machine and its address can be read.
-      environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
+      // The CLI there fetches a Feature's tarball over HTTPS from the run's download host, whose certificate it trusts
+      // by this variable and by nothing else.
+      environment: {
+        PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`,
+        NODE_EXTRA_CA_CERTS: '${HARNESS_DOWNLOADS_CERTIFICATE}',
+      },
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],

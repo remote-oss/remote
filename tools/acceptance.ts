@@ -230,6 +230,9 @@ export interface HarnessVariables {
   HARNESS_DOWNLOADS_LICENSED?: string;
   HARNESS_DOWNLOADS_LOCAL?: string;
   HARNESS_DOWNLOADS_LOG?: string;
+  /** The run's download host certificate file, and the address of the fixture Feature tarball it serves on the runner's `localhost`. */
+  HARNESS_DOWNLOADS_CERTIFICATE?: string;
+  HARNESS_FEATURE_TARBALL_URL?: string;
   /** The run's own ssh-agent, named for every launch's processes, and its socket for the tests; VSCodium run only. */
   SSH_AUTH_SOCK?: string;
   HARNESS_AGENT_SOCKET?: string;
