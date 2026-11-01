@@ -793,7 +793,7 @@ F-0419.AC-31	unit
 F-0419.AC-32	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0419.AC-33	acceptance	
 F-0419.AC-34	deferred	containers release 1: later (Compose)
-F-0419.AC-35	todo	
+F-0419.AC-35	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
 F-0419.AC-36	acceptance	
 F-0419.AC-37	acceptance	
 F-0419.AC-38	deferred	containers release 1: later (remote engines)
