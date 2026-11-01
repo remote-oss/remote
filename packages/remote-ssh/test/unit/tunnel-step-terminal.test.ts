@@ -490,6 +490,20 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     );
   });
 
+  it('connect-105, F-2304 6.9: on a first resolve of the second ssh, a port that closes the connection that proved it accepting is no failure: the step opens and the window reconnects', async () => {
+    const context = stepWith();
+    const pending = context.open();
+    await settled();
+    context.opened().write(`${TUNNEL_SUCCESS_LINE}\n`);
+    await advance(context.clock, 30);
+    context.local.probes[0]?.close();
+    await advance(context.clock, 30);
+    deepStrictEqual(
+      [(await pending).kind, context.local.probes.map(probe => probe.closed)],
+      ['done', [true]],
+    );
+  });
+
   it('#299 ruling 1b: the handshake line the test prints is the one the reader knows', () => {
     deepStrictEqual(setupMarkerOf(HANDSHAKE), 'handshake');
   });

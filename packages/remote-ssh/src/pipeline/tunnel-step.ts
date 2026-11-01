@@ -262,8 +262,10 @@ async function openTerminalTunnel(
       ...dependencies.limits,
       readyMilliseconds: FORWARD_READY_MILLISECONDS,
     },
-    // After a connect has worked the refusal stays a reconnection, which is how the window recovers a lost one.
-    ...(input.isReconnection
+    // After a connect has worked the refusal stays a reconnection, which is how the window recovers a lost one. Only
+    // the socket path fails on a refused forward; the second ssh's refused port forward reconnects, with the platform
+    // pick of each attempt.
+    ...(input.isReconnection || path !== 'socket'
       ? {}
       : {refusalMilliseconds: FORWARD_REFUSAL_MILLISECONDS}),
     stopSession: () => {
