@@ -1,9 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import type {
-  ConnectionState,
-  DecodedTarget,
-  ResourceLabelFormatter,
-} from 'lib-authority';
+import type {DecodedTarget, ResourceLabelFormatter} from 'lib-authority';
 import {registerWindowLabel} from '../../src/surfaces/label-formatter.ts';
 import type {Translate} from '../../src/surfaces/strings.ts';
 
@@ -32,34 +28,28 @@ class FakeFormatterHost {
   }
 }
 
-interface CurrentConnection {
-  decodedTarget: DecodedTarget;
-  state: ConnectionState;
-}
-
-/** A resolver handle whose first settle the test fires, with the connection it answers. */
+/** A resolver handle whose first resolve start the test fires, with the target it answers. */
 function fakeResolver() {
-  let listener: (() => void) | undefined;
-  let connection: CurrentConnection | undefined;
+  let listener: ((target: DecodedTarget) => void) | undefined;
   const resolver = {
-    currentConnection: (): CurrentConnection | undefined => connection,
-    onFirstResolveSettled: (callback: () => void): void => {
+    onFirstResolveStarted: (
+      callback: (target: DecodedTarget) => void,
+    ): void => {
       listener = callback;
     },
   };
-  function settled(value: CurrentConnection | undefined): void {
-    connection = value;
-    listener?.();
+  function started(target: DecodedTarget): void {
+    listener?.(target);
   }
-  return {resolver, settled};
+  return {resolver, started};
 }
 
-/** The host, the fake resolver and the registration of one row, ready to settle. */
+/** The host, the fake resolver and the registration of one row, ready to start. */
 function freshRow(translate: Translate = same) {
   const host = new FakeFormatterHost();
-  const {resolver, settled} = fakeResolver();
+  const {resolver, started} = fakeResolver();
   const handle = registerWindowLabel(resolver, host, translate);
-  return {host, handle, settled};
+  return {host, handle, started};
 }
 
 /** A decoded ssh target, plain as written. */
@@ -80,89 +70,81 @@ function wslTarget(): DecodedTarget {
   };
 }
 
-describe('the window label of the connected resolve', () => {
-  it('F-2502 BR-2: a connected first resolve registers one formatter with the host suffix', () => {
-    const {host, settled} = freshRow();
-    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
+describe('the window label at the first resolve start (card connect-100)', () => {
+  it('F-2410 AC-12: the label is registered when the first resolve starts, before its outcome, and stays registered when the resolve then fails', () => {
+    const {host, started} = freshRow();
+    started(sshTarget('dev'));
+    // The outcome is the resolve's business; nothing of it removes the registration.
     deepStrictEqual(
       [host.formatters.length, host.formatters[0]?.formatting.workspaceSuffix],
       [1, 'SSH: dev'],
     );
   });
 
-  it('F-2502 BR-2: the same resolve registers the authority as written', () => {
-    const {host, settled} = freshRow();
-    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
+  it('F-2410 AC-12: for ssh-remote+harness the formatter carries the authority as written and the suffix', () => {
+    const {host, started} = freshRow();
+    started(sshTarget('harness'));
+    deepStrictEqual(
+      [
+        host.formatters[0]?.scheme,
+        host.formatters[0]?.authority,
+        host.formatters[0]?.formatting.workspaceSuffix,
+      ],
+      ['vscode-remote', 'ssh-remote+harness', 'SSH: harness'],
+    );
+  });
+
+  it('F-2410 AC-12: dispose before the start registers nothing', () => {
+    const {host, handle, started} = freshRow();
+    handle.dispose();
+    started(sshTarget('dev'));
+    deepStrictEqual([host.formatters.length, host.disposals], [1, 1]);
+  });
+
+  it('F-2502 BR-2: the start registers the authority as written', () => {
+    const {host, started} = freshRow();
+    started(sshTarget('dev'));
     deepStrictEqual(host.formatters[0]?.authority, 'ssh-remote+dev');
   });
 
   it('F-2502 BR-3, AC-14: the alias of a user and port target is the suffix', () => {
-    const {host, settled} = freshRow();
-    settled({
-      decodedTarget: sshTarget('alex@my-alias:22'),
-      state: 'connected',
-    });
+    const {host, started} = freshRow();
+    started(sshTarget('alex@my-alias:22'));
     deepStrictEqual(
       host.formatters[0]?.formatting.workspaceSuffix,
       'SSH: my-alias',
     );
   });
 
-  it('F-2502 AC-34: a failed first resolve registers nothing', () => {
-    const {host, settled} = freshRow();
-    settled({decodedTarget: sshTarget('dev'), state: 'failed'});
-    strictEqual(host.formatters.length, 0);
-  });
-
-  it('F-2502 AC-34: no connection when the listener runs registers nothing', () => {
-    const {host, settled} = freshRow();
-    settled(undefined);
-    strictEqual(host.formatters.length, 0);
-  });
-
   it('F-2502 BR-2: a target that is not ssh-remote registers nothing', () => {
-    const {host, settled} = freshRow();
-    settled({decodedTarget: wslTarget(), state: 'connected'});
+    const {host, started} = freshRow();
+    started(wslTarget());
     strictEqual(host.formatters.length, 0);
   });
 
-  it('F-2502 BR-2: nothing settled yet registers nothing', () => {
+  it('F-2502 BR-2: nothing started yet registers nothing', () => {
     const {host} = freshRow();
     strictEqual(host.formatters.length, 0);
   });
 
-  it('F-2502 BR-2: dispose after a connected resolve disposes the registration once', () => {
-    const {host, handle, settled} = freshRow();
-    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
+  it('F-2502 BR-2: dispose after a resolve disposes the registration once', () => {
+    const {host, handle, started} = freshRow();
+    started(sshTarget('dev'));
     handle.dispose();
     deepStrictEqual([host.formatters.length, host.disposals], [1, 1]);
   });
 
-  it('F-2502 BR-2: dispose twice after a connected resolve disposes once', () => {
-    const {host, handle, settled} = freshRow();
-    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
+  it('F-2502 BR-2: dispose twice after a resolve disposes once', () => {
+    const {host, handle, started} = freshRow();
+    started(sshTarget('dev'));
     handle.dispose();
     handle.dispose();
     strictEqual(host.disposals, 1);
   });
 
-  it('F-2502 AC-34: dispose after a failed resolve throws nothing and disposes nothing', () => {
-    const {host, handle, settled} = freshRow();
-    settled({decodedTarget: sshTarget('dev'), state: 'failed'});
-    handle.dispose();
-    strictEqual(host.disposals, 0);
-  });
-
-  it('F-2502 BR-2: a dispose before the first resolve settles disposes the late registration', () => {
-    const {host, handle, settled} = freshRow();
-    handle.dispose();
-    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
-    deepStrictEqual([host.formatters.length, host.disposals], [1, 1]);
-  });
-
-  it('R-29: a connected resolve with a translated table registers the translated suffix', () => {
-    const {host, settled} = freshRow(german);
-    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
+  it('R-29: a resolve with a translated table registers the translated suffix', () => {
+    const {host, started} = freshRow(german);
+    started(sshTarget('dev'));
     deepStrictEqual(
       host.formatters[0]?.formatting.workspaceSuffix,
       'SSH-Host: dev',

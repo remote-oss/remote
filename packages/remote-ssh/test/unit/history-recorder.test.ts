@@ -49,6 +49,8 @@ function resolveOf(lastResolve: LastResolve, times = 1) {
       onFirstResolveSettled: (listener: () => void) => {
         listeners.push(listener);
       },
+      // The rows never start a resolve, so the start listener never runs.
+      onFirstResolveStarted: () => undefined,
       lastResolve: () => lastResolve,
     },
     fire: () => {
