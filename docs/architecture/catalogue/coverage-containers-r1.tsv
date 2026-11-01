@@ -123,7 +123,7 @@ F-0201.AC-52	deferred	containers release 1: later (the attach, Kubernetes and Ap
 F-0201.AC-53	todo	
 F-0201.AC-54	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0201.AC-55	acceptance	
-F-0201.AC-56	todo	
+F-0201.AC-56	acceptance	
 F-0301.AC-1	acceptance	
 F-0301.AC-2	acceptance	
 F-0301.AC-3	acceptance	
@@ -814,7 +814,7 @@ F-0501.AC-10	core	core: a single-colon vscode-remote argument read as a local pa
 F-0501.AC-11	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
 F-0501.AC-12	deferred	containers release 1: increment 2 (shutdown)
 F-0501.AC-13	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
-F-0501.AC-14	todo	
+F-0501.AC-14	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-15	todo	
 F-0501.AC-16	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0501.AC-17	deferred	containers release 1: the full contribution set comes with later increments
