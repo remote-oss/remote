@@ -5,6 +5,7 @@ import {
   decodedFolderOf,
   devContainerPayloadOf,
   devContainerTargetOf,
+  folderTargetOf,
   type SerializedUri,
   serializedUriOf,
 } from '../../src/authority/payload.ts';
@@ -222,5 +223,32 @@ describe('the folder of a window’s decoded target (card containers-11)', () =>
       ],
       [undefined, undefined, undefined, undefined],
     );
+  });
+});
+
+describe('the folder target of a legacy entry (card containers-121)', () => {
+  const LEGACY = {kind: 'legacy', hostPath: '/home/u/p'} as const;
+
+  it('F-0501 AC-7: one configuration gives the folder target a Reopen carries, with no Docker context', () => {
+    deepStrictEqual(folderTargetOf(LEGACY, [{file: CONFIG_PATH}]), {
+      kind: 'folder',
+      hostPath: '/home/u/p',
+      localDocker: false,
+      configFile: {$mid: 1, path: CONFIG_PATH, scheme: 'file'},
+    });
+  });
+
+  it('F-0501 AC-7: several configurations give the first, in the order they come', () => {
+    deepStrictEqual(
+      folderTargetOf(LEGACY, [
+        {file: '/home/u/p/.devcontainer.json'},
+        {file: CONFIG_PATH},
+      ])?.configFile.path,
+      '/home/u/p/.devcontainer.json',
+    );
+  });
+
+  it('F-0501 AC-7: no configuration gives none', () => {
+    deepStrictEqual(folderTargetOf(LEGACY, []), undefined);
   });
 });

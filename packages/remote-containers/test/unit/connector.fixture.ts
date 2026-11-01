@@ -99,6 +99,8 @@ export interface Scene {
   dockerHost: string | undefined;
   /** Whether the folder the payload names exists on the machine. */
   folderExists: boolean;
+  /** The configuration files discovery finds in a folder, in the picker's order. */
+  candidates: Array<{file: string}>;
   connector: ContainerConnector;
   /** How many connect attempts began their log. */
   attemptsBegun: number;
@@ -228,6 +230,7 @@ export function sceneOf(
     connector: undefined as unknown as ContainerConnector,
     dockerHost: undefined,
     folderExists: true,
+    candidates: [],
     attemptsBegun: 0,
     engineCalls: [],
     engineFiles: [],
@@ -412,6 +415,7 @@ export function sceneOf(
   let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
     folderExists: () => Promise.resolve(scene.folderExists),
+    discoverConfigurations: () => Promise.resolve(scene.candidates),
     shutdown: {
       send: request => {
         scene.shutdownSent.push(request);

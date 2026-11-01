@@ -1180,6 +1180,8 @@ export async function activate(
           )?.globalValue,
         };
       },
+      discoverConfigurations: folder =>
+        discoverConfigurations(folder, configFiles, collate),
       folderExists: async folder => {
         try {
           await vscode.workspace.fs.stat(vscode.Uri.file(folder));

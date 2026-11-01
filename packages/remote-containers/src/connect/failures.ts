@@ -33,7 +33,7 @@ function failure(
 /** The generic reason: the dialog shows the string S034. */
 const GENERIC: FailureReason = {id: 'S034'};
 
-/** The authority is not a payload the connector reads, or is the legacy form that waits for configuration discovery. */
+/** The authority is not a payload the connector reads. */
 export function malformedAuthority(): Failed {
   return failure('malformedAuthority', {});
 }
