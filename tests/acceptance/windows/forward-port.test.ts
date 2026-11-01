@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {connect} from 'node:net';
+import {holdOpen, connectingPrograms} from './forward-support.ts';
 import {inWindow, onHost, openWindow, windowEvents} from './harness.ts';
 
 /** The port on the host that the listener answers on. */
@@ -10,42 +10,6 @@ const GREETING = 'forwarded-8613';
 
 /** The listener's program on the host: it greets, then keeps the connection open for a while. */
 const GREETER = '/tmp/forward-greeter.sh';
-
-/** A connection through a forward that has been greeted, and is held open until `release`. */
-interface Held {
-  greeting: string;
-  release(): void;
-}
-
-/** Connects to a local port and gives the listener's greeting, keeping the connection open. */
-function holdOpen(port: number): Promise<Held> {
-  return new Promise((resolve, reject) => {
-    const socket = connect(port, '127.0.0.1');
-    socket.once('data', (chunk: Buffer) => {
-      resolve({
-        greeting: chunk.toString('utf8').trim(),
-        release: () => {
-          socket.destroy();
-        },
-      });
-    });
-    socket.on('error', reject);
-  });
-}
-
-/** The program column of each host connection to the listener's port, from the side that opened it. */
-async function connectingPrograms(): Promise<string[]> {
-  const table = await onHost('netstat', '-tnp');
-  return table
-    .split('\n')
-    .map(line => line.trim().split(/\s+/))
-    .filter(
-      columns =>
-        columns.includes('ESTABLISHED') &&
-        columns[4] === `127.0.0.1:${String(REMOTE_PORT)}`,
-    )
-    .map(columns => columns.slice(6).join(' '));
-}
 
 /** The local port a `forwarded` event of window `name` names, whatever shape the editor gives the address in. */
 function localPortOf(name: string): number {
@@ -94,7 +58,7 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
 
   it('F-2507 AC-18 (host-side): the connection to the port is opened by the VS Code Server, not by sshd', async () => {
     const held = await holdOpen(localPortOf('f1'));
-    const programs = await connectingPrograms();
+    const programs = await connectingPrograms(REMOTE_PORT);
     held.release();
     deepStrictEqual(
       [programs.length > 0, programs.every(name => name.includes('node'))],
