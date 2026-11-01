@@ -5,6 +5,7 @@
  */
 
 import type {TunnelOpener} from './forwarding/default-forwards.ts';
+import type {DefaultReadEvents} from './forwarding/default-forwards-timing.ts';
 import type {AcceptanceStore} from 'lib-server';
 import type {FilePickPort} from './config/file-choice.ts';
 import type {DownloadProgressPort} from './cli/server-download-progress.ts';
@@ -107,6 +108,8 @@ export interface SurfaceContext {
   ) => void;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
+  /** The editor's events that tell the default forwards' read that the window has its remote settings. */
+  defaultReadEvents: DefaultReadEvents;
 }
 
 /** The setting the platform is written to. */
@@ -152,6 +155,7 @@ export function editorSurfacesOf(
     linkTerminals: adapters.linkTerminals,
     applyTerminalEnvironment: context.applyTerminalEnvironment,
     tunnels: context.tunnels,
+    defaultReadEvents: context.defaultReadEvents,
     pickPlatform: async (alias, cancellation) => {
       const picked = await pickRemotePlatform(
         adapters.platformPick,

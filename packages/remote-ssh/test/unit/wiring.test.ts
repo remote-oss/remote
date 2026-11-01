@@ -1,4 +1,5 @@
 import type {TunnelOptions} from '../../src/forwarding/default-forwards.ts';
+import type {ReadSignal} from '../../src/forwarding/default-forwards-timing.ts';
 import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {parseDefaultForwards} from 'lib-forwarding';
@@ -135,6 +136,8 @@ function portsOf(
     agentForwarding?: boolean;
     x11Forwarding?: boolean;
     defaultForwards?: unknown;
+    /** What the read of the default forwards waits for; the configuration's change at once when absent. */
+    defaultRead?: () => Promise<ReadSignal>;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -161,6 +164,8 @@ function portsOf(
         return Promise.resolve({});
       },
     },
+    defaultRead:
+      changes.defaultRead ?? (() => Promise.resolve('configuration')),
     configuredHosts: changes.configuredHosts ?? (() => ({hosts: []})),
     preconnect: {
       readFile: () => Promise.resolve(new Uint8Array()),
@@ -1344,6 +1349,50 @@ describe("the composition's channel and window environment", () => {
         label: 'web',
       },
     ]);
+  });
+
+  it('F-2507 BR-4, BR-5: the applyDefaults step opens nothing until the read signal, then reads the setting once and logs the signal', async () => {
+    const changes: {defaultForwards: unknown} = {
+      defaultForwards: [{name: 'user', remotePort: 8001}],
+    };
+    const waiting: {release?: (name: ReadSignal) => void} = {};
+    const wired = portsOf({
+      defaultRead: () =>
+        new Promise(resolve => {
+          waiting.release = resolve;
+        }),
+    });
+    let reads = 0;
+    const ports: WiringPorts = {
+      ...wired.ports,
+      settings: {
+        ...wired.ports.settings,
+        defaultForwards: () => {
+          reads += 1;
+          return parseDefaultForwards(changes.defaultForwards);
+        },
+      },
+    };
+    const done = stepsOf(ports).applyDefaults(inputFor('dev'));
+    await Promise.resolve();
+    const before = [wired.seen.tunnels.length, reads];
+    // The remote layer arrives: the setting is the folder's value when the signal comes.
+    changes.defaultForwards = [{name: 'folder', remotePort: 8000}];
+    waiting.release?.('configuration');
+    await done;
+    deepStrictEqual(
+      [
+        before,
+        wired.seen.tunnels.map(each => each.remoteAddress.port),
+        reads,
+        wired.seen.sink.lines.some(
+          line =>
+            line.message ===
+            'the default forwards are read after configuration',
+        ),
+      ],
+      [[0, 0], [8000], 1, true],
+    );
   });
 
   it('F-2507.AC-6: the applyDefaults step shows no notice and presents no failure', async () => {
