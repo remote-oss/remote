@@ -382,8 +382,8 @@ F-0409.AC-9	acceptance
 F-0409.AC-10	acceptance	
 F-0409.AC-11	todo	
 F-0409.AC-12	acceptance	
-F-0409.AC-13	todo	
-F-0409.AC-14	todo	
+F-0409.AC-13	acceptance	
+F-0409.AC-14	deferred	containers 0.4: C12 attach later
 F-0409.AC-15	unit	
 F-0409.AC-16	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-17	todo	
@@ -393,7 +393,7 @@ F-0409.AC-20	deferred	containers release 1: later (Reopen Folder Locally)
 F-0409.AC-21	deferred	containers release 1: later (remote engines)
 F-0409.AC-22	acceptance	
 F-0409.AC-23	acceptance	
-F-0409.AC-24	todo	
+F-0409.AC-24	acceptance	
 F-0409.AC-25	unit	
 F-0409.AC-26	acceptance	
 F-0409.AC-27	deferred	containers release 1: later (Compose)
@@ -406,11 +406,11 @@ F-0409.AC-34	acceptance
 F-0409.AC-35	acceptance	
 F-0409.AC-36	todo	
 F-0409.AC-37	unit	
-F-0409.AC-38	todo	
-F-0409.AC-39	todo	
+F-0409.AC-38	acceptance	
+F-0409.AC-39	acceptance	
 F-0409.AC-40	acceptance	
 F-0409.AC-41	deferred	containers 0.4: F-0407 later
-F-0409.AC-42	todo	
+F-0409.AC-42	deferred	containers release 1: later (the log terminal, F-0104)
 F-0409.AC-43	acceptance	
 F-0409.AC-44	acceptance	
 F-0409.AC-45	acceptance	
