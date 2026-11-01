@@ -265,40 +265,22 @@ export async function listeningPorts(containerId: string): Promise<string[]> {
 }
 
 /**
- * The command line of the process lib-server's bootstrap started in container `containerId`, as its argument list,
- * read from its command line file.
+ * The port the server lib-server started in container `containerId` listens on, from the last ready line of the
+ * server's own log; `undefined` when the log names a socket instead of a port. The start itself passes a
+ * system-chosen port, so the ready line is the only place the bound port is.
  */
-async function serverArgumentsOf(containerId: string): Promise<string[]> {
+export async function serverPortOf(
+  containerId: string,
+): Promise<string | undefined> {
   const {stdout} = await execFileAsync('docker', [
     'exec',
     containerId,
     'sh',
     '-c',
-    'grep -al -- --start-server /proc/[0-9]*/cmdline 2>/dev/null | head -n 1',
+    "find /home /root -maxdepth 3 -name '.*.log' 2>/dev/null | while read -r f; do sed -n 's/^Extension host agent listening on \\([0-9][0-9]*\\)$/\\1/p' \"$f\"; done | tail -n 1",
   ]);
-  const file = stdout.trim();
-  if (file === '') {
-    throw new Error(`container ${containerId}: no server process`);
-  }
-  const {stdout: commandLine} = await execFileAsync('docker', [
-    'exec',
-    containerId,
-    'cat',
-    file,
-  ]);
-  return commandLine.split('\0').filter(text => text !== '');
-}
-
-/**
- * The TCP port the server process lib-server started in container `containerId` listens on; `undefined` when it was
- * started on a socket.
- */
-export async function serverPortOf(
-  containerId: string,
-): Promise<string | undefined> {
-  const options = await serverArgumentsOf(containerId);
-  const index = options.indexOf('--port');
-  return index === -1 ? undefined : options[index + 1];
+  const port = stdout.trim();
+  return port === '' ? undefined : port;
 }
 
 /**
