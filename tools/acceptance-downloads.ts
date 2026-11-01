@@ -10,9 +10,13 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
+import {tmpdir} from 'node:os';
 import {
   createServer as createHttpServer,
   type IncomingMessage,
@@ -146,6 +150,38 @@ export async function serverArchiveOf(
   mkdirSync(cacheFolder, {recursive: true});
   writeFile(file, archive);
   return file;
+}
+
+/** The archive files of the extension's client cache: `<server>-<platform>[-<quality>].tar.gz`, the platform captured. */
+const CLIENT_ARCHIVE = /-((?:alpine|linux)-[a-z0-9]+)(?:-[a-z]+)?\.tar\.gz$/;
+
+/**
+ * Removes the server archives of the extension's client cache under `cacheFolder` whose bytes are not the pinned
+ * archive of the platform their name gives, and gives the files removed. The extension reuses a cached archive without
+ * checking it, so one left by an earlier run, with the wrong bytes under a platform's name, would be installed by
+ * every connect; a missing folder has none.
+ */
+export function removeStaleClientArchives(
+  cacheFolder: string,
+  checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
+): string[] {
+  if (!existsSync(cacheFolder)) {
+    return [];
+  }
+  const removed: string[] = [];
+  for (const entry of readdirSync(cacheFolder, {recursive: true})) {
+    const file = path.join(cacheFolder, String(entry));
+    const platform = CLIENT_ARCHIVE.exec(file)?.[1];
+    if (
+      platform !== undefined &&
+      statSync(file).isFile() &&
+      sha256Of(readFileSync(file)) !== checksums[platform]
+    ) {
+      rmSync(file);
+      removed.push(file);
+    }
+  }
+  return removed;
 }
 
 function sha256Of(bytes: Uint8Array): string {
@@ -787,6 +823,12 @@ export async function startRunDownloads(
       writeFileSync,
       checksums,
     );
+  }
+  for (const file of removeStaleClientArchives(
+    path.join(tmpdir(), 'vscode-remote-containers'),
+    checksums,
+  )) {
+    console.log(`acceptance: removed a stale server archive: ${file}`);
   }
   const folder = path.join(runFolder, 'downloads');
   mkdirSync(folder, {recursive: true});
