@@ -1,3 +1,4 @@
+import {resolveStartedAt, windowLogFiles} from '../windows/sampling.ts';
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -336,13 +337,22 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
   });
 
   it('F-0301 AC-69 (o5): before the window connects, the connect shows the Connecting to Dev Container (show log) notification with an indeterminate bar and the status Opening Remote..., and the same window then reloads in place', async () => {
+    // The progress opens half a second into the connect, with the latest stage: a connect that is long enough in its
+    // building stage keeps the plain title on screen to be sampled.
     const folder = configFolder('c50-connecting', {
-      '.devcontainer/devcontainer.json': {name: 'Connecting'},
+      '.devcontainer/devcontainer.json': {
+        name: 'Connecting',
+        image: undefined,
+        build: {dockerfile: 'Dockerfile'},
+      },
+      '.devcontainer/Dockerfile': `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nRUN sleep 5; echo c50-connecting\n`,
     });
     const window = await openFolderWindow(folder);
     opened.push(window);
     const plain = new Set<string>();
     const indicators = new Set<string>();
+    const firstPlain: {time?: number} = {};
+    const logFilesBefore = windowLogFiles();
     const watch = {done: false};
     const sampling = (async () => {
       while (!watch.done) {
@@ -352,6 +362,7 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
         ).catch(() => undefined);
         if (toast?.message === 'Connecting to Dev Container (show log)') {
           plain.add(toast.progress);
+          firstPlain.time ??= Date.now();
         }
         const indicator = await statusItem(window, 'status.host').catch(
           () => undefined,
@@ -365,13 +376,18 @@ describe('F-0301 workspace folders and Open Folder in Container (card containers
     await reopenInContainer(window);
     watch.done = true;
     await sampling;
+    const resolvedAt = resolveStartedAt(
+      windowLogFiles().filter(file => !logFilesBefore.includes(file)),
+    );
     deepStrictEqual(
       [
         [...plain],
+        // The progress opens half a second after the resolve began, with the plain title of the building stage.
+        (firstPlain.time ?? 0) - resolvedAt >= 400,
         indicators.has('Opening Remote...'),
         (await windowState(window)).remoteName,
       ],
-      [['infinite'], true, 'dev-container'],
+      [['infinite'], true, true, 'dev-container'],
     );
   });
 });

@@ -23,11 +23,9 @@ import {
   notifications,
   pageText,
   paletteRows,
-  pressEscape,
   pressQuickPickOk,
   quickPickFacts,
   quickPickOf,
-  quickPickRows,
   rememberPage,
   toastProgressIndeterminate,
   toggleQuickPickRow,
@@ -38,6 +36,7 @@ import {
 } from '../windows/renderer.ts';
 import {activations} from '../windows/folder-windows.ts';
 import {
+  ADD_ITEM,
   ALPINE_OPTION,
   chooseWorkspace,
   CONFIGURATION,
@@ -45,6 +44,8 @@ import {
   emptyStore,
   existing,
   filesIn,
+  indicatorMenu,
+  neighboursOf,
   rowsOf,
   screenWith,
   startCommand,
@@ -67,29 +68,6 @@ const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 const OPTIONAL_PLACEHOLDER = 'Include the following optional files/directories';
 
 const FEATURES_PLACEHOLDER = 'Select additional features to install';
-
-const ADD_ITEM = 'Add Dev Container Configuration Files...';
-
-/** The labels of the remote indicator's menu in window `name`. */
-async function indicatorMenu(name: string): Promise<string[]> {
-  void inWindow(name, 'workbench.action.remote.showMenu').catch(
-    () => undefined,
-  );
-  await waitFor(
-    'the indicator menu',
-    async () => (await quickPickRows(name).catch(() => [])).length > 0,
-    30_000,
-  );
-  const labels = (await quickPickRows(name)).map(entry => entry.label);
-  await pressEscape(name);
-  return labels;
-}
-
-/** Where `ADD_ITEM` is in `menu`, between which neighbours. */
-function neighboursOf(menu: readonly string[]): Array<string | undefined> {
-  const index = menu.indexOf(ADD_ITEM);
-  return index < 0 ? [] : [menu[index - 1], menu[index + 1]];
-}
 
 describe('F-0801 the command, its progress and its rows (card coverage-72)', function () {
   this.timeout(600_000);

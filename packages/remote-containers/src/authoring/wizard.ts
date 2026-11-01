@@ -165,6 +165,12 @@ export async function runWizard(
   }
   const {state} = walked;
   const folder = targetFolderOf(state, ports);
+  if (state.target.kind === 'userData') {
+    const refusal = ports.location?.refuseStore;
+    if (refusal !== undefined) {
+      throw refusal(folder);
+    }
+  }
   const entry = state.reuseEntry;
   const home = ports.location?.home;
   const written = await ports.write(

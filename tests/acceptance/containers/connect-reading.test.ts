@@ -2,14 +2,12 @@ import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {existsSync, readdirSync, readFileSync} from 'node:fs';
 import {
   closeWindow,
   connectedToContainer,
   containersLog,
   containersLogSince,
   devContainerFolder,
-  editorLogsFolder,
   reloadingAction,
   reloadingCommand,
   reopenInContainer,
@@ -31,7 +29,9 @@ import {
   connectingOf,
   sampled,
   sampling,
+  resolveStartedAt,
   slowBuildFolder,
+  windowLogFiles,
 } from '../windows/sampling.ts';
 
 const execFileAsync = promisify(execFile);
@@ -45,16 +45,6 @@ const TOLERANCE_MILLISECONDS = 1500;
 
 /** The pause between two readings of the rows that time the progress. */
 const FAST_SAMPLE_MILLISECONDS = 25;
-
-/** The Dev Containers log files the editor has written so far, one for each window that ran the extension. */
-function windowLogFiles(): string[] {
-  const logs = editorLogsFolder();
-  return existsSync(logs)
-    ? readdirSync(logs, {recursive: true, encoding: 'utf8'}).filter(
-        file => path.basename(file) === '1-Dev Containers.log',
-      )
-    : [];
-}
 
 /** One reading of window `name` with the time it was taken. */
 async function timedSurface(
@@ -159,14 +149,7 @@ describe('F-0408 the reading step, the pull and the entry points (card coverage-
       const newLogFiles = windowLogFiles().filter(
         file => !logFilesBefore.includes(file),
       );
-      // The harness cannot read a window while it reloads, so the pause is counted from the resolve's own log line.
-      const resolving = newLogFiles
-        .flatMap(file =>
-          readFileSync(path.join(editorLogsFolder(), file), 'utf8').split('\n'),
-        )
-        .map(line => /^(\S+) \[info\] Resolving Remote$/.exec(line)?.[1])
-        .find(each => each !== undefined);
-      const resolvedAt = Date.parse(resolving ?? '');
+      const resolvedAt = resolveStartedAt(newLogFiles);
       const firstToast = samples.find(sample =>
         sample.toasts.some(toast => toast.startsWith('Connecting')),
       );
