@@ -18,9 +18,15 @@ const INVOCATION: Invocation = {
 const LOCAL_PORT = 18111;
 
 /** A tunnel session over a recording terminal, with the gate and the ends it reports. */
-function opened(reveal = false) {
+function opened(reveal = false, input?: string) {
   const terminals = new RecordingTerminals();
-  const session = openTunnelSession(terminals, INVOCATION, LOCAL_PORT, reveal);
+  const session = openTunnelSession(
+    terminals,
+    INVOCATION,
+    LOCAL_PORT,
+    reveal,
+    input,
+  );
   const [terminal] = terminals.opened;
   if (terminal === undefined) {
     throw new Error('no terminal was opened');
@@ -56,6 +62,33 @@ describe('the tunnel session (card ssh-23)', () => {
       ]),
       [['SSH Tunnel', INVOCATION, false]],
     );
+  });
+
+  it('connect-95: the tunnel’s input is not sent before ssh reports it is authenticated, and is sent once after it', () => {
+    const {terminal} = opened(false, 'exec sh -c cmd\n');
+    const before = [...terminal.sent];
+    terminal.write('debug1: Connecting to 192.0.2.10 port 22.\n');
+    const stillBefore = [...terminal.sent];
+    terminal.write(
+      'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+    );
+    terminal.write(
+      'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+    );
+    deepStrictEqual(
+      [before, stillBefore, terminal.sent],
+      [[], [], ['exec sh -c cmd\n']],
+    );
+  });
+
+  it('connect-95: a tunnel that ends before ssh is authenticated, or has no input, sends nothing', () => {
+    const ended = opened(false, 'exec sh -c cmd\n');
+    ended.terminal.end(255);
+    const plain = opened();
+    plain.terminal.write(
+      'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+    );
+    deepStrictEqual([ended.terminal.sent, plain.terminal.sent], [[], []]);
   });
 
   it('F-2308 BR-2: reveals the terminal at the open when asked', () => {
