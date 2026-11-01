@@ -71,7 +71,7 @@ F-9101.AC-23	core	core: the details page of a pack installed from the gallery; o
 F-9101.AC-24	todo	
 F-9101.AC-25	todo	
 F-9101.AC-26	core	core: the header after a failed gallery install; ours is extensionPack, proved by F-9101 AC-1
-F-9101.AC-27	todo	
+F-9101.AC-27	core	core: the launcher's forced reinstall of the installed pack, which asks a reachable gallery (offline it exits 1 with the network error, measured); ours is name and publisher, proved by F-9101 AC-11 (name, publisher)
 F-9101.AC-28	core	core: the members fetched when a VSIX is installed; ours is extensionPack, proved by F-9101 AC-1
 F-9101.AC-29	core	core: an entry the gallery does not know; ours is the form of the extensionPack ids, proved by F-9101 AC-29 (extensionPack)
 F-9101.AC-30	core	core: a failed member query of the gallery; ours is extensionPack, proved by F-9101 AC-1
