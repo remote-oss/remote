@@ -777,7 +777,9 @@ export async function activate(
           ...(vscode.env.remoteName === 'dev-container'
             ? {
                 refuseStore: (folder: string) =>
-                  vscode.FileSystemError.NoPermissions(vscode.Uri.file(folder)),
+                  vscode.FileSystemError.NoPermissions(
+                    `permission denied, mkdir '${folder}'`,
+                  ),
               }
             : {}),
         },

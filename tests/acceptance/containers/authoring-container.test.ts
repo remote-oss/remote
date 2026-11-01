@@ -206,7 +206,8 @@ describe('the authoring command in a dev container window (card containers-126)'
         {
           dialog: [
             dialog.message,
-            dialog.details.endsWith('/configs/c126-user-data'),
+            dialog.details.startsWith("permission denied, mkdir '") &&
+              dialog.details.includes('/configs/c126-user-data'),
             [...dialog.buttons],
             kind,
           ],

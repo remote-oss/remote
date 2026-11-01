@@ -3,9 +3,9 @@
  * stop, and the connecting toasts among the samples.
  */
 
-import {writeFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {devContainerFolder, variable} from './harness.ts';
+import {devContainerFolder, editorLogsFolder, variable} from './harness.ts';
 import {statusBarText, toastDetails, type ToastDetails} from './renderer.ts';
 
 /** One reading of the window: when it was taken, the toasts, and the remote indicator's text. */
@@ -75,4 +75,28 @@ export function slowBuildFolder(
     `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\nRUN ${step}; echo ${folderName}-${String(Date.now())}\n`,
   );
   return folder;
+}
+
+/** The Dev Containers log files the editor has written so far, one for each window that ran the extension. */
+export function windowLogFiles(): string[] {
+  const logs = editorLogsFolder();
+  return existsSync(logs)
+    ? readdirSync(logs, {recursive: true, encoding: 'utf8'}).filter(
+        file => path.basename(file) === '1-Dev Containers.log',
+      )
+    : [];
+}
+
+/**
+ * When the resolve began in the windows whose logs are `files`, from the log's own `Resolving Remote` line; NaN when
+ * none has one. The harness cannot read a window while it reloads, so a pause is counted from this time.
+ */
+export function resolveStartedAt(files: readonly string[]): number {
+  const found = files
+    .flatMap(file =>
+      readFileSync(path.join(editorLogsFolder(), file), 'utf8').split('\n'),
+    )
+    .map(line => /^(\S+) \[info\] Resolving Remote$/.exec(line)?.[1])
+    .find(each => each !== undefined);
+  return Date.parse(found ?? '');
 }
