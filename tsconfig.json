@@ -137,6 +137,9 @@
       "path": "tests/acceptance/config-files"
     },
     {
+      "path": "tests/acceptance/secrets"
+    },
+    {
       "path": "tests/acceptance/no-proposals"
     },
     {

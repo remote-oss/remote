@@ -35,6 +35,7 @@ import {
   baseContainersOf,
   publisherDownloadsRefusal,
   GENUINE_JOB,
+  hostBaseVariables,
   runArgumentsOf,
   type CommandResult,
   failureText,
@@ -423,6 +424,7 @@ const LAUNCH_ORDER = [
   'login-shells',
   'preconnect',
   'config-files',
+  'secrets',
   'default-ports',
   'ssh-core',
   'no-proposals',
@@ -724,6 +726,22 @@ describe('acceptance', () => {
       accountBlock('password'),
       [...sharedLines('password', 'harness-pw'), ...PASSWORD_ALIAS_LINES].join(
         '\n',
+      ),
+    );
+  });
+
+  it('tooling-34: Host twofactor and Host expired log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
+    deepStrictEqual(
+      [accountBlock('twofactor'), accountBlock('expired')],
+      [
+        ['twofactor', 'harness-2fa'],
+        ['expired', 'harness-expired'],
+      ].map(([name = '', user = '']) =>
+        [
+          ...sharedLines(name, user),
+          '  PubkeyAuthentication no',
+          '  PreferredAuthentications keyboard-interactive',
+        ].join('\n'),
       ),
     );
   });
@@ -1674,6 +1692,7 @@ describe('acceptance', () => {
         HARNESS_RUN_FOLDER: harness.runFolder,
         HARNESS_RUN_ID: acceptanceRunId(process.env, process.pid),
         HARNESS_PASSWORD_FILE: path.join(harness.runFolder, 'password'),
+        HARNESS_TOTP_FILE: path.join(harness.runFolder, 'totp-secret'),
         REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(
           harness.runFolder,
           'script.json',
@@ -3245,9 +3264,9 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11: the run waits for the helper of the launch before to end: the grace before the slow launch and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets launch and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000]);
+      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -3506,6 +3525,41 @@ describe('acceptance', () => {
             path.join('/run', 'ssh_config-debian-12'),
             'debian-12',
           ],
+        ],
+      );
+    });
+
+    it('tooling-34: the rows of a launch on a host of another base, plain or not, see that host’s container and ssh_config and its base, and a launch on the harness host sees nothing new', () => {
+      const environment = {
+        HARNESS_HOST_CONTAINERS: JSON.stringify({
+          'ubuntu-26.04': 'ubuntu-host',
+        }),
+      };
+      deepStrictEqual(
+        [
+          hostBaseVariables(
+            {
+              label: 'secrets',
+              kind: 'plain',
+              suite: 'secrets',
+              hostBase: 'ubuntu-26.04',
+            },
+            environment,
+            '/run',
+          ),
+          hostBaseVariables(
+            {label: 'windows', kind: 'plain', suite: 'windows'},
+            environment,
+            '/run',
+          ),
+        ],
+        [
+          {
+            HARNESS_CONTAINER: 'ubuntu-host',
+            HARNESS_SSH_CONFIG: path.join('/run', 'ssh_config-ubuntu-26.04'),
+            HARNESS_HOST_BASE: 'ubuntu-26.04',
+          },
+          {},
         ],
       );
     });
@@ -4265,6 +4319,7 @@ describe('acceptance', () => {
           HARNESS_RUN_FOLDER: '',
           HARNESS_RUN_ID: '',
           HARNESS_PASSWORD_FILE: '',
+          HARNESS_TOTP_FILE: '',
           REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
           REMOTE_OSS_ACCEPTANCE_SIGNALS: '',

@@ -109,6 +109,14 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `config-files`: a plain launch with a `HOME` of its own, `<run>/home` (the test's rows empty it before they run), an empty `SSH_AUTH_SOCK`, and the XDG folders under `<run>/xdg/`, so the editor's own files stay out of the account's folders and the launch's `HOME`; `config-files/*.test.ts` sets `remote.SSH.configFile` through the launch's user settings and reads the back through the host pick, the connects and the log. Its `PATH` starts with `<run>/ssh-bin`, whose `ssh` the run writes before the launch: a pass-through that notes each call's argv in `<run>/ssh-bin/invocations.txt`, one argument per line and a blank line after every call, and then execs the real ssh unchanged, so a row still sees the argv of an ssh that lived only milliseconds; the rows read the notes with `invocationNotesOf` of `tools/acceptance-clients.ts`.
 
+- `secrets`: a plain launch on the Ubuntu 26.04 host (`hostBase`) with a `HOME` of its own, `<run>/home-secrets`, for
+  F-2306 AC-27. Its rows log in by keyboard-interactive on the host's two PAM accounts: `twofactor` (`harness-2fa`, a
+  password and then a one-time code of the run's secret, `HARNESS_TOTP_FILE`, from `totpCode`) and `expired`
+  (`harness-expired`, whose password `start-sshd` marks expired, so the login asks for the current one and a new one
+  twice). Some logins succeed and some fail. Then `secretHits` searches the client's and the host's files for every typed
+  value and gives the files, never the values. Its host setup gives both accounts the run's password again and expires
+  `harness-expired`'s again before each attempt, as a forced change gives it a new one.
+
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
@@ -710,6 +718,8 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | Alias | User | What it is for |
 |---|---|---|
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
+| `twofactor` | `harness-2fa` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password and then a one-time code of the run's secret (`HARNESS_TOTP_FILE`; RFC 6238, six digits, a window of three steps) |
+| `expired` | `harness-expired` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password, marked expired, so the login asks for the current password and a new one twice |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |

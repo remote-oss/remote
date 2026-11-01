@@ -47,6 +47,7 @@
         "windows/*.test.ts",
         "login-shells/*.test.ts",
         "config-files/*.test.ts",
+        "secrets/*.test.ts",
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
         "ssh-core/*.test.ts",
