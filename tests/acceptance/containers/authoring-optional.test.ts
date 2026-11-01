@@ -1,6 +1,4 @@
 import {deepStrictEqual} from 'node:assert';
-import {readdirSync} from 'node:fs';
-import path from 'node:path';
 import {
   isOpen,
   windowNames,
@@ -35,6 +33,7 @@ import {
 import {
   BOOLEAN_SCREEN,
   chooseWorkspace,
+  filesIn,
   FEATURES_PLACEHOLDER,
   screenWith,
   startCommand,
@@ -66,16 +65,6 @@ async function toOptionalScreen(window: string): Promise<void> {
   await screenWith(window, FEATURES_PLACEHOLDER);
   await pressQuickPickTitleButton(window, 'Finish');
   await screenWith(window, OPTIONAL_PLACEHOLDER);
-}
-
-/** The files under `folder`, relative and sorted. */
-function filesIn(folder: string): string[] {
-  return readdirSync(folder, {recursive: true, withFileTypes: true})
-    .filter(entry => entry.isFile())
-    .map(entry =>
-      path.relative(folder, path.join(entry.parentPath, entry.name)),
-    )
-    .sort();
 }
 
 /** Waits until the wizard has ended, which its notification shows, and gives the files it wrote. */
