@@ -889,6 +889,8 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     const folder = devContainerFolder('c74-manage', {name: 'C74 Manage'});
     const name = await openFolderWindow(folder);
     const activated = activations(name);
+    // The Docker log and the initialize marker belong to the whole file, so the rows before this one may have left their traces.
+    const before = await ranOnHost(folder);
     const running = inWindow(name, 'remote-containers.reopenInContainer');
     running.catch(() => undefined);
     const shown = await waitForDialog(name);
@@ -911,7 +913,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       trusted: false,
       activated,
       title: `[${name}]`,
-      host: {...NOTHING_RAN, containers: []},
+      host: before,
     });
   });
 
