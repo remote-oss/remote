@@ -906,6 +906,15 @@ describe('the manifest rows of slices 1 and 2', () => {
     );
   });
 
+  it('F-2410 AC-33: Kill Local Connection Server For Host... is in the palette on the useLocalServer key and the stand-down key alone, so the server on a socket does not hide it', () => {
+    deepStrictEqual(
+      manifest.contributes.menus.commandPalette?.find(
+        entry => entry.command === 'opensshremotes.cleanLocalServer',
+      )?.when,
+      'config.remote.SSH.useLocalServer && !opensshremotes.standingDown',
+    );
+  });
+
   it('F-2301 AC-1: "Remote-SSH: Connect to Host..." is in the palette unconditionally and has no keybinding', () => {
     const command = manifest.contributes.commands.find(
       entry => entry.command === 'opensshremotes.openEmptyWindow',

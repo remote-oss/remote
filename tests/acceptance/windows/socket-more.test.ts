@@ -9,6 +9,7 @@ import {
   messagesSince,
   onHost,
   openWindow,
+  waitFor,
   readUserSettings,
   recordLines,
   reloadWindow,
@@ -163,8 +164,63 @@ describe('more of the server on a socket (card coverage-81)', function () {
     }
   });
 
+  it('F-2410 AC-24 (ruling-1601-host-key-pick): with a stored platform and a host key not yet known, the progress notification shows and then the question about the key’s fingerprint is shown by the extension, with nothing else before it', async () => {
+    await userSettings({
+      'remote.SSH.remoteServerListenOnSocket': true,
+      'remote.SSH.remotePlatform': {
+        harness: 'linux',
+        bindmask: 'linux',
+        password: 'linux',
+        stranger: 'linux',
+      },
+    });
+    appendScript([
+      {
+        surface: 'pick',
+        match: 'fingerprint',
+        answer: 'dismiss',
+        window: 'm24',
+      },
+      {
+        surface: 'failureDialog',
+        match: 'Could not establish connection',
+        answer: 'dismiss',
+        window: 'm24',
+      },
+      {
+        surface: 'mitigationPick',
+        match: 'Pick an action',
+        answer: 'dismiss',
+        window: 'm24',
+      },
+    ]);
+    await openWindow('stranger', 'm24');
+    await waitFor(
+      'the question about the key',
+      () => recordLines('pick', 'm24').length > 0,
+      60_000,
+    );
+    const lines = recordLines(undefined, 'm24');
+    const asked = lines.findIndex(line => line.surface === 'pick');
+    deepStrictEqual(
+      [
+        lines.slice(0, asked).map(line => [line.surface, line.question]),
+        lines[asked]?.question.startsWith(
+          '"stranger" has fingerprint "SHA256:',
+        ),
+      ],
+      [
+        [
+          ['progress', 'Setting up SSH Host stranger'],
+          ['progress', 'Initializing VS Code Server'],
+        ],
+        true,
+      ],
+    );
+  });
+
   after(async () => {
-    for (const name of ['m17', 'm33', 'm32']) {
+    for (const name of ['m17', 'm33', 'm32', 'm20', 'm24']) {
       await closeWindow(name).catch(() => undefined);
     }
   });
