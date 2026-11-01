@@ -147,7 +147,10 @@ export interface ContainerConnector extends Connector {
   failedContainer(): FailedContainer | undefined;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
-  /** The identity read from the configuration in the latest attempt, failed or not; none before a read. */
+  /**
+   * The identity the latest attempt read from its configuration, once the attempt's container was ready; none while it
+   * wasn't, and none once the next attempt begins.
+   */
   attemptIdentity(): WindowIdentity | undefined;
   /** The ports the connection the window holds declared; nothing before the first connect. */
   heldPorts(): DeclaredPorts | undefined;
@@ -445,7 +448,10 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
-  /** The identity the latest attempt read from the configuration, failed or not; nothing before a read. */
+  /**
+   * The identity the latest attempt read from its configuration, kept once the attempt's container was ready; nothing
+   * while the container isn't, and nothing once the next attempt begins.
+   */
   let attemptIdentity: WindowIdentity | undefined;
   /** The id the shutdown helper knows this window's connection by; nothing before the connect passed the trust gate. */
   let shutdownConnection: string | undefined;
@@ -997,13 +1003,6 @@ export function containerConnectorOf(
       registerWithShutdown(folder, tools);
     }
     const read = await readWithinCap(payload, folder, tools);
-    if (read !== undefined) {
-      const readName = read.configuration.name;
-      attemptIdentity = {
-        name: typeof readName === 'string' ? readName : undefined,
-        context: folder.context,
-      };
-    }
     if (!(await trustedFolder(folder, cancellation, trustedAtStart))) {
       return trustDeclined();
     }
@@ -1075,6 +1074,13 @@ export function containerConnectorOf(
       );
     }
     failedContainer = {containerId: prepared.containerId, paused: false};
+    if (read !== undefined) {
+      const readName = read.configuration.name;
+      attemptIdentity = {
+        name: typeof readName === 'string' ? readName : undefined,
+        context: folder.context,
+      };
+    }
     if (isAborted(cancellation)) {
       return cancelled();
     }

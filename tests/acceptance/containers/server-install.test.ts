@@ -888,14 +888,14 @@ describe('F-0503 server install (card containers-41)', function () {
     ]);
   });
 
-  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog, or Escape on the dialog itself, shows the disconnected status and the five-item recovery quick pick of ruling 14 and opens no URL, and Escape on it closes it and leaves the status', async () => {
+  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog, or Escape on the dialog itself, shows the disconnected status named for the configuration and the five-item recovery quick pick of ruling 14 and opens no URL, and Escape on it closes it and leaves the status', async () => {
     const urlsBefore = openedUrls().length;
     const results: unknown[] = [];
     for (const [label, leave] of [
       ['c41-requirements-pick', answerMoreActions],
       ['c41-requirements-escape', pressEscape],
     ] as const) {
-      const window = await requirementsDialog(label);
+      const window = await requirementsDialog(label, {name: 'Old Glibc'});
       await leave(window);
       const pick = await waitForQuickPick(window, 30_000);
       const indicator = (await statusItem(window, 'status.host')).text;
@@ -920,8 +920,8 @@ describe('F-0503 server install (card containers-41)', function () {
           'Open Documentation',
         ],
       },
-      indicator: 'Disconnected from Dev Container',
-      after: [undefined, 'Disconnected from Dev Container'],
+      indicator: 'Disconnected from Dev Container: Old Glibc',
+      after: [undefined, 'Disconnected from Dev Container: Old Glibc'],
     };
     deepStrictEqual(
       [results, openedUrls().slice(urlsBefore)],

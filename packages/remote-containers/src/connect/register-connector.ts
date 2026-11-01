@@ -96,7 +96,8 @@ export async function registerContainerResolver(
   let dialogs = 0;
   /**
    * The label of a window that is disconnected and has none yet: the name the latest attempt read from the
-   * configuration, or the name this profile last connected the folder with, else none; never while a dialog is open.
+   * configuration, kept once its container was ready, or the name this profile last connected the folder with, else
+   * none; never while a dialog is open.
    */
   function registerDisconnectedLabel(): void {
     const target = handle?.currentConnection()?.decodedTarget;
