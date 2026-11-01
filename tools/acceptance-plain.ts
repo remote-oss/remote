@@ -22,6 +22,7 @@ import {
   type Launch,
 } from './acceptance-launches.ts';
 import {resolveBinary} from './repository.ts';
+import {windowNameOf} from '../tests/acceptance/window-agent/src/window-name.ts';
 
 /** The extensions under test that use proposed API, enabled for them on the command line. */
 const PROPOSED_API_EXTENSIONS: readonly string[] = [
@@ -268,7 +269,6 @@ export function plainEditorOf(
   runFolder: string,
   launch: Launch,
   environment: Readonly<Record<string, string | undefined>>,
-  target?: {folderUri?: string | undefined; fileUri?: string | undefined},
 ): Program {
   return {
     file: executable,
@@ -281,14 +281,9 @@ export function plainEditorOf(
         extensionId => `--disable-extension=${extensionId}`,
       ),
       '--new-window',
-      ...(target?.fileUri === undefined ? [] : ['--file-uri', target.fileUri]),
-      ...(target === undefined
-        ? launch.folderUri === undefined
-          ? []
-          : ['--folder-uri', launch.folderUri]
-        : target.folderUri === undefined
-          ? []
-          : ['--folder-uri', target.folderUri]),
+      ...(launch.folderUri === undefined
+        ? []
+        : ['--folder-uri', launch.folderUri]),
     ],
     // The harness may itself run under an extension host, where the editor's program is a plain Node.js.
     environment: {...environment, ELECTRON_RUN_AS_NODE: undefined},
@@ -441,25 +436,26 @@ function relaunchFolderOf(runFolder: string, label: string): string {
   return path.join(runFolder, label, 'relaunch');
 }
 
-/** A row's request: restart the editor with `environment` added, and open the window `name` again on the target. */
+/** A row's request: restart the editor with `environment` added to the launch's own. */
 export interface RelaunchRequest {
   id: string;
-  name: string;
-  environment: Record<string, string>;
-  folderUri?: string;
-  fileUri?: string;
+  /** The variables to set; a `null` removes the launch's own. */
+  environment: Record<string, string | null>;
 }
 
 /** The harness's answer to a request. */
 interface RelaunchAnswer {
   id: string;
   succeeded: boolean;
+  /** The name of the launch's own window, which the restarted editor opens first and a row opens its target from. */
+  own: string;
   message?: string;
 }
 
-/** What restarting the editor needs besides the start: how many times window `name` activated, and the wait's bounds. */
+/** What restarting the editor needs besides the start: the launch's own window, how many times a window activated, and the wait's bounds. */
 export interface RelaunchSteps {
   start: (program: Program) => Started;
+  ownWindow: string;
   activations: (name: string) => number;
   activationMilliseconds: number;
   pollMilliseconds: number;
@@ -491,19 +487,23 @@ export async function answerRelaunch(
     return;
   }
   handled.add(request.id);
-  const answer: RelaunchAnswer = {id: request.id, succeeded: true};
+  const answer: RelaunchAnswer = {
+    id: request.id,
+    succeeded: true,
+    own: steps.ownWindow,
+  };
   try {
-    const before = steps.activations(request.name);
+    const before = steps.activations(steps.ownWindow);
     await current.editor.stop();
     current.editor = steps.start(programOf(request));
     const activated = await waitUntil(
-      () => steps.activations(request.name) > before,
+      () => steps.activations(steps.ownWindow) > before,
       steps.activationMilliseconds,
       steps.pollMilliseconds,
     );
     if (!activated) {
       answer.succeeded = false;
-      answer.message = `window ${request.name} did not activate within ${String(steps.activationMilliseconds)} ms`;
+      answer.message = `window ${steps.ownWindow} did not activate within ${String(steps.activationMilliseconds)} ms`;
     }
   } catch (caught) {
     answer.succeeded = false;
@@ -535,6 +535,15 @@ export interface PlainSteps {
   runTests: (program: Program) => Promise<{exitCode: number; output: string}>;
   /** How many times window `name` of the launch activated its agent; the files of its agent folder by default. */
   activations?: (name: string) => number;
+}
+
+/** The name the window agent gives the window the launch's own arguments open first: its folder's name, or `local` for none. */
+function ownWindowOf(launch: Launch): string {
+  return windowNameOf(
+    launch.folderUri === undefined
+      ? undefined
+      : new URL(launch.folderUri).pathname,
+  );
 }
 
 /** How long a relaunched editor has to activate its window again, in milliseconds. */
@@ -601,27 +610,34 @@ export async function runPlainLaunch(
   };
   const agentFolder = path.join(session.runFolder, launch.label, 'agent');
   const handled = new Set<string>();
-  let answering = false;
+  let answering: Promise<void> | undefined;
   const watching = setInterval(() => {
-    if (answering) {
+    if (answering !== undefined) {
       return;
     }
-    answering = true;
-    void answerRelaunch(
+    answering = answerRelaunch(
       relaunchFolder,
       current,
       request => {
         rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
-        return plainEditorOf(
-          session.executable,
-          session.runFolder,
-          launch,
-          {...environment, ...request.environment},
-          {folderUri: request.folderUri, fileUri: request.fileUri},
-        );
+        // The names the stopped editor's windows claimed are free again: its empty window is `local` once more.
+        rmSync(path.join(agentFolder, 'claims'), {
+          recursive: true,
+          force: true,
+        });
+        return plainEditorOf(session.executable, session.runFolder, launch, {
+          ...environment,
+          ...Object.fromEntries(
+            Object.entries(request.environment).map(([key, value]) => [
+              key,
+              value ?? undefined,
+            ]),
+          ),
+        });
       },
       {
         start: steps.start,
+        ownWindow: ownWindowOf(launch),
         activations:
           steps.activations ?? (name => activationsIn(agentFolder, name)),
         activationMilliseconds: RELAUNCH_ACTIVATION_MILLISECONDS,
@@ -629,13 +645,15 @@ export async function runPlainLaunch(
       },
       handled,
     ).finally(() => {
-      answering = false;
+      answering = undefined;
     });
   }, 200);
   try {
     return await steps.runTests(plainTestsOf(root, launch, environment));
   } finally {
     clearInterval(watching);
+    // A relaunch still being answered owns the editor until it has started the next one.
+    await answering;
     await current.editor.stop();
   }
 }

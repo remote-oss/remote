@@ -314,6 +314,8 @@ describe('F-0416 the remote environment (card containers-42, group B)', function
       );
       await closeWindow(name);
     } finally {
+      // The rows after this one expect the variable unset in the editor.
+      await relaunch('local', {environment: {F0416_LOCAL_VAR: null}});
       await cleanUp(folder);
     }
   });

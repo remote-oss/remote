@@ -5,7 +5,7 @@ import {
   environmentOf,
   relaunch,
 } from '../windows/harness.ts';
-import {openFolderWindow} from '../windows/folder-windows.ts';
+import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
 
 describe('a row can relaunch its launch’s editor (card tooling-88)', function () {
   this.timeout(600_000);
@@ -18,9 +18,12 @@ describe('a row can relaunch its launch’s editor (card tooling-88)', function 
       const first = await environmentOf(name, 'T88_PROBE');
       await relaunch(name, {environment: {T88_PROBE: 'second'}});
       const second = await environmentOf(name, 'T88_PROBE');
+      // The launch's own window is back: a user setting is written and read through it.
+      await setUserSetting('dev.containers.dockerPath', undefined);
       deepStrictEqual([before, first, second], [null, 'first', 'second']);
     } finally {
       await closeWindow(name).catch(() => undefined);
+      await relaunch('local', {environment: {T88_PROBE: null}});
     }
   });
 });

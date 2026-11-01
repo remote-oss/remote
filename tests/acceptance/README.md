@@ -713,3 +713,7 @@ launch gets `SSH_AUTH_SOCK` and `HARNESS_AGENT_SOCKET` naming it. It starts empt
 (no askpass, no display), so a key added with confirmation can't be used.
 
 `server/host-accounts.test.ts` shows each account does what it is for.
+
+## Relaunching the editor
+
+A row of a plain launch can restart the launch's editor with a changed environment: `relaunch(name, {environment})` in `windows/harness.ts`. The row writes a request to `request.json` in the folder `REMOTE_OSS_ACCEPTANCE_RELAUNCH` names (`<run>/<label>/relaunch/`); the harness, which started the editor, stops it (after the grace its group is killed), starts it again with the launch's own arguments and the environment merged with the request's, waits for the launch's own window to activate, and answers in `response.json`. The row then opens window `name` again from that window, on the folder or workspace file it showed, and waits for its agent to activate. A launch of the runner has no such variable, so `relaunch` fails there with `relaunch is for plain launches`. `environmentOf(name, variable)` reads a variable from a window's extension host.

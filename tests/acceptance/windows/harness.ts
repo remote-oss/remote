@@ -771,34 +771,31 @@ export async function reloadingCommand(
 }
 
 /**
- * Restarts the launch's editor with `environment` added to its own, and reopens window `name` on what it showed, a
- * folder or a workspace file, remote or not; resolves once that window has activated its agent again. Only a plain
- * launch can: its harness answers, and a launch of the runner fails here.
+ * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable) and reopens window `name` on what it showed, a
+ * folder or a workspace file, remote or not: the editor opens the launch's own window, and this opens the target from
+ * it. Resolves once window `name` has activated its agent again. Only a plain launch can: its harness answers, and a
+ * launch of the runner fails here.
  */
 export async function relaunch(
   name: string,
-  options: {environment: Readonly<Record<string, string>>},
+  options: {environment: Readonly<Record<string, string | null>>},
 ): Promise<void> {
   const folder = process.env.REMOTE_OSS_ACCEPTANCE_RELAUNCH;
   if (folder === undefined || folder === '') {
     throw new Error('relaunch is for plain launches');
   }
   const state = await windowState(name);
+  const target = state.workspaceFile ?? state.folders[0];
+  const before = countOf(name, 'activated');
   const requestId = `${String(Date.now())}-${String(process.pid)}`;
   const answerFile = path.join(folder, 'response.json');
   mkdirSync(folder, {recursive: true});
   rmSync(answerFile, {force: true});
   writeFileSync(
     path.join(folder, 'request.json'),
-    JSON.stringify({
-      id: requestId,
-      name,
-      environment: options.environment,
-      ...(state.workspaceFile === null
-        ? {folderUri: state.folders[0]}
-        : {fileUri: state.workspaceFile}),
-    }),
+    JSON.stringify({id: requestId, environment: options.environment}),
   );
+  let own = '';
   await waitFor(
     `the harness to relaunch the editor for window ${name}`,
     () => {
@@ -808,6 +805,7 @@ export async function relaunch(
       const answer = JSON.parse(readFileSync(answerFile, 'utf8')) as {
         id: string;
         succeeded: boolean;
+        own: string;
         message?: string;
       };
       if (answer.id !== requestId) {
@@ -816,9 +814,18 @@ export async function relaunch(
       if (!answer.succeeded) {
         throw new Error(answer.message ?? 'the relaunch failed');
       }
+      own = answer.own;
       return true;
     },
     300_000,
+  );
+  if (own !== name && target !== undefined) {
+    await inWindow(own, 'acceptance.agent.openWindow', target);
+  }
+  await waitFor(
+    `window ${name} to activate its agent again`,
+    () => countOf(name, 'activated') > before,
+    120_000,
   );
 }
 
