@@ -880,11 +880,11 @@ export async function activate(
               ?.globalValue,
         },
         engine: {
-          firstCheck: (base, dialogs) =>
+          firstCheck: (base, dialogs, cancellation) =>
             firstCheck(
               {...served.preflight, dialogs},
               base,
-              new AbortController().signal,
+              cancellation ?? new AbortController().signal,
             ),
           currentContext: () =>
             currentContext(
@@ -895,14 +895,17 @@ export async function activate(
         },
         dialogs: served.preflight.dialogs,
         progress: {
-          showProgress: (title, until) => {
+          showProgress: (title, until, cancel) => {
             void vscode.window.withProgress(
               {
                 location: vscode.ProgressLocation.Notification,
                 title,
-                cancellable: false,
+                cancellable: true,
               },
-              () => until,
+              (progress, token) => {
+                token.onCancellationRequested(cancel);
+                return until;
+              },
             );
           },
           setTimer: (milliseconds, callback) =>

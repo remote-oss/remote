@@ -169,5 +169,6 @@
   "Select boolean options for {0}": "Select boolean options for {0}",
   "Select options for '{0}'": "Select options for '{0}'",
   "Include the following optional files/directories": "Include the following optional files/directories",
-  "Optional Files/Directories": "Optional Files/Directories"
+  "Optional Files/Directories": "Optional Files/Directories",
+  "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)": "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)"
 }
