@@ -211,6 +211,20 @@ function linkTargets(): string[] {
   );
 }
 
+/** The `extensionPack` list of the manifest of the family package in `folder`, empty when it has none. */
+function packOf(folder: string): string[] {
+  return (
+    (
+      JSON.parse(
+        readFileSync(
+          path.join(PACKAGE_FOLDER, '..', folder, 'package.json'),
+          'utf8',
+        ),
+      ) as {extensionPack?: string[]}
+    ).extensionPack ?? []
+  );
+}
+
 describe('the pack’s package (card pack-01)', () => {
   it('F-9001 AC-1, F-9901 AC-18: the display name and description are placeholders that resolve to Remote Development and the project’s sentence', () => {
     deepStrictEqual(
@@ -501,7 +515,7 @@ describe('the pack’s package (card pack-01)', () => {
     const manifest = manifestOf();
     deepStrictEqual(
       [
-        /^\d+\.\d+\.\d+$/.test(String(manifest.version)),
+        /^\d+\.\d+\.\d+$/.test(manifest.version),
         manifest.engines.vscode.startsWith('^'),
       ],
       [true, true],
@@ -522,7 +536,7 @@ describe('the pack’s package (card pack-01)', () => {
   it('F-9101 AC-11 (name, publisher): the pack’s id is remote-oss.vscode-remote-extensionpack', () => {
     const manifest = manifestOf();
     strictEqual(
-      `${String(manifest.publisher)}.${manifest.name}`,
+      `${manifest.publisher}.${manifest.name}`,
       'remote-oss.vscode-remote-extensionpack',
     );
   });
@@ -539,15 +553,6 @@ describe('the pack’s package (card pack-01)', () => {
   });
 
   it('F-9901 AC-3 (extensionPack): Remote - SSH brings Remote Explorer and the SSH configuration editor, and Dev Containers brings nothing, so the first release installs the pack plus four', () => {
-    const packOf = (folder: string): string[] =>
-      (
-        JSON.parse(
-          readFileSync(
-            path.join(PACKAGE_FOLDER, '..', folder, 'package.json'),
-            'utf8',
-          ),
-        ) as {extensionPack?: string[]}
-      ).extensionPack ?? [];
     deepStrictEqual(
       [packOf('remote-containers'), [...packOf('remote-ssh')].sort()],
       [[], ['remote-oss.remote-explorer', 'remote-oss.remote-ssh-edit']],
