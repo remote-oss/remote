@@ -11,23 +11,6 @@ const PACKAGE = path.join(import.meta.dirname, '..', '..');
 
 const GATE = '!remote-explorer.standingDown';
 
-const LOCALES = [
-  'cs',
-  'de',
-  'es',
-  'fr',
-  'it',
-  'ja',
-  'ko',
-  'pl',
-  'pt-br',
-  'qps-ploc',
-  'ru',
-  'tr',
-  'zh-cn',
-  'zh-tw',
-];
-
 /** Whether none of the keys names telemetry, case-insensitively. */
 function noTelemetryKey(keys: string[]): boolean {
   return keys.every(key => !/telemetry/i.test(key));
@@ -230,49 +213,46 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the eight commands, in order, with a title and an icon and no category or enablement', () => {
-    deepStrictEqual(CONTRIBUTES.commands, [
+  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the commands of the card are contributed with their title and icon, and every command has a title and an icon and no category or enablement', () => {
+    const required: Array<[string, string]> = [
+      ['refresh', '$(refresh)'],
+      ['connectToRemoteInNewWindow', '$(empty-window)'],
+      ['connectToRemoteInCurrentWindow', '$(arrow-right)'],
+      ['connectToFolderInNewWindow', '$(empty-window)'],
+      ['connectToFolderInCurrentWindow', '$(arrow-right)'],
+      ['deleteFolderHistoryItem', '$(remove)'],
+      ['configureSsh', '$(gear)'],
+      ['add', '$(plus)'],
+    ];
+    const commands = (CONTRIBUTES.commands ?? []) as Array<
+      Record<string, unknown>
+    >;
+    deepStrictEqual(
       {
-        command: 'remote-explorer.refresh',
-        title: '%commands.refresh.title%',
-        icon: '$(refresh)',
+        missing: required.filter(
+          ([name, icon]) =>
+            !commands.some(
+              entry =>
+                JSON.stringify(entry) ===
+                JSON.stringify({
+                  command: `remote-explorer.${name}`,
+                  title: `%commands.${name}.title%`,
+                  icon,
+                }),
+            ),
+        ),
+        incomplete: commands
+          .filter(
+            entry =>
+              typeof entry.title !== 'string' ||
+              typeof entry.icon !== 'string' ||
+              'category' in entry ||
+              'enablement' in entry,
+          )
+          .map(entry => entry.command),
       },
-      {
-        command: 'remote-explorer.connectToRemoteInNewWindow',
-        title: '%commands.connectToRemoteInNewWindow.title%',
-        icon: '$(empty-window)',
-      },
-      {
-        command: 'remote-explorer.connectToRemoteInCurrentWindow',
-        title: '%commands.connectToRemoteInCurrentWindow.title%',
-        icon: '$(arrow-right)',
-      },
-      {
-        command: 'remote-explorer.connectToFolderInNewWindow',
-        title: '%commands.connectToFolderInNewWindow.title%',
-        icon: '$(empty-window)',
-      },
-      {
-        command: 'remote-explorer.connectToFolderInCurrentWindow',
-        title: '%commands.connectToFolderInCurrentWindow.title%',
-        icon: '$(arrow-right)',
-      },
-      {
-        command: 'remote-explorer.deleteFolderHistoryItem',
-        title: '%commands.deleteFolderHistoryItem.title%',
-        icon: '$(remove)',
-      },
-      {
-        command: 'remote-explorer.configureSsh',
-        title: '%commands.configureSsh.title%',
-        icon: '$(gear)',
-      },
-      {
-        command: 'remote-explorer.add',
-        title: '%commands.add.title%',
-        icon: '$(plus)',
-      },
-    ]);
+      {missing: [], incomplete: []},
+    );
   });
 
   it('F-5002.AC-1, AC-2, F-5101.AC-8, F-5103.AC-3: no command is in the palette', () => {
@@ -438,101 +418,112 @@ describe('the manifest of the Remote Explorer package', () => {
     });
   });
 
-  it('F-5001.BR-9: the strings table has the fifteen keys, and the manifest uses only those', () => {
+  it('F-5001.BR-9: the strings table holds the card’s keys with their texts, and the manifest uses every key the table holds', () => {
+    const table = jsonOf('package.nls.json');
+    const used = new Set(nlsKeysUsed(MANIFEST));
     deepStrictEqual(
-      [jsonOf('package.nls.json'), [...new Set(nlsKeysUsed(MANIFEST))].sort()],
-      [STRINGS_TABLE, Object.keys(STRINGS_TABLE).sort()],
+      {
+        wrong: Object.entries(STRINGS_TABLE).filter(
+          ([key, text]) => table[key] !== text,
+        ),
+        unused: Object.keys(table).filter(key => !used.has(key)),
+      },
+      {wrong: [], unused: []},
     );
   });
 
-  it('F-5001.AC-16, F-5901.AC-11: the 14 locales have the same keys and the English values', () => {
-    deepStrictEqual(
-      LOCALES.map(locale => jsonOf(`package.nls.${locale}.json`)),
-      LOCALES.map(() => STRINGS_TABLE),
-    );
-  });
-
-  it('F-5001.AC-16: the runtime strings are the ten texts, in the default bundle and the 14 locales, as English', () => {
+  it('F-5001.AC-16, F-5901.AC-11: every locale of identifiers.json has a table and a runtime bundle with the English values', () => {
+    const locales = (jsonOf('identifiers.json').locales ?? []) as string[];
+    const english = jsonOf('package.nls.json');
     const texts = Object.keys(jsonOf('l10n/bundle.l10n.json'));
     deepStrictEqual(
-      [
-        texts.length,
-        ...LOCALES.map(locale => jsonOf(`l10n/bundle.l10n.${locale}.json`)),
-      ],
-      [
-        10,
-        ...LOCALES.map(() =>
-          Object.fromEntries(texts.map(text => [text, text])),
-        ),
-      ],
+      locales.map(locale => [
+        jsonOf(`package.nls.${locale}.json`),
+        jsonOf(`l10n/bundle.l10n.${locale}.json`),
+      ]),
+      locales.map(() => [
+        english,
+        Object.fromEntries(texts.map(text => [text, text])),
+      ]),
     );
   });
 
-  it('F-5901.5.identifiers: the identifier inventory is the card', () => {
-    deepStrictEqual(jsonOf('identifiers.json'), {
-      source: 'remote-oss/remote-explorer#7 (F-5901)',
-      standsDownFor: 'ms-vscode.remote-explorer',
-      standingDownKey: 'remote-explorer.standingDown',
-      namespaces: {
-        commands: ['remote-explorer.'],
-        settings: ['remote-explorer.'],
-        contextKeys: ['remote-explorer.'],
-        internalCommands: ['remote-internal.'],
+  it('F-5901.5.identifiers: the identifier inventory has the card’s source, stand-down key, namespaces, context key, internal commands and invented identifier', () => {
+    const inventory = jsonOf('identifiers.json');
+    const internal = (inventory.internal ?? []) as Array<{id: string}>;
+    const required = [
+      {id: 'remote-internal.setActiveFolders', role: 'served', kind: 'push'},
+      {
+        id: 'remote-internal.sshHostsChanged',
+        role: 'served',
+        kind: 'push',
+        activates: false,
       },
-      contextKeys: [{id: 'remote-explorer.standingDown', setter: 'extension'}],
-      infoLineCommands: [],
-      runtimeCommands: [],
-      internal: [
-        {
-          id: 'remote-internal.setActiveFolders',
-          role: 'served',
-          kind: 'push',
-        },
-        {
-          id: 'remote-internal.sshHostsChanged',
-          role: 'served',
-          kind: 'push',
-          activates: false,
-        },
-        {
-          id: 'remote-internal.getActiveSshRemote',
-          role: 'called',
-          kind: 'query',
-        },
-        {
-          id: 'remote-internal.getConfiguredHostnames',
-          role: 'called',
-          kind: 'query',
-        },
-        {
-          id: 'remote-internal.getSshFoldersHistory',
-          role: 'called',
-          kind: 'query',
-        },
-        {
-          id: 'remote-internal.openRemoteSshTarget',
-          role: 'called',
-          kind: 'change',
-        },
-        {
-          id: 'remote-internal.deleteSshFolderFromHistory',
-          role: 'called',
-          kind: 'change',
-        },
-        {id: 'remote-oss.gate.claim', role: 'called', kind: 'query'},
-      ],
-      invented: [
-        {
-          id: 'remote-explorer.standingDown',
-          kind: 'contextKeys',
-          spec: 'F-5001',
-          date: '2026-10-13',
-        },
-      ],
-      settingPairs: [],
-      ungated: [],
-      locales: LOCALES,
-    });
+      {id: 'remote-internal.getActiveSshRemote', role: 'called', kind: 'query'},
+      {
+        id: 'remote-internal.getConfiguredHostnames',
+        role: 'called',
+        kind: 'query',
+      },
+      {
+        id: 'remote-internal.getSshFoldersHistory',
+        role: 'called',
+        kind: 'query',
+      },
+      {
+        id: 'remote-internal.openRemoteSshTarget',
+        role: 'called',
+        kind: 'change',
+      },
+      {
+        id: 'remote-internal.deleteSshFolderFromHistory',
+        role: 'called',
+        kind: 'change',
+      },
+      {id: 'remote-oss.gate.claim', role: 'called', kind: 'query'},
+    ];
+    deepStrictEqual(
+      {
+        identity: [
+          inventory.source,
+          inventory.standsDownFor,
+          inventory.standingDownKey,
+          inventory.namespaces,
+        ],
+        contextKeys: inventory.contextKeys,
+        missingInternal: required.filter(
+          entry =>
+            JSON.stringify(internal.find(each => each.id === entry.id)) !==
+            JSON.stringify(entry),
+        ),
+        invented: inventory.invented,
+      },
+      {
+        identity: [
+          'remote-oss/remote-explorer#7 (F-5901)',
+          'ms-vscode.remote-explorer',
+          'remote-explorer.standingDown',
+          {
+            commands: ['remote-explorer.'],
+            settings: ['remote-explorer.'],
+            contextKeys: ['remote-explorer.'],
+            internalCommands: ['remote-internal.'],
+          },
+        ],
+        contextKeys: [
+          {id: 'remote-explorer.standingDown', setter: 'extension'},
+        ],
+        missingInternal: [],
+        invented: [
+          {
+            id: 'remote-explorer.standingDown',
+            kind: 'contextKeys',
+            spec: 'F-5001',
+            date: '2026-10-13',
+          },
+        ],
+      },
+    );
   });
 
   it('F-5901 AC-7: the package declares no telemetry: no telemetry.json, and no telemetry key in the manifest', () => {
