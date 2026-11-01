@@ -309,8 +309,10 @@ describe('the files of the authoring command (card containers-126)', () => {
           isUnder('/w', '/wx'),
           isUnder('/w', '/'),
           isUnder('/w/a', '/w'),
+          isUnder('/w', '/w/..env'),
+          isUnder('/w', '/w/../x'),
         ],
-        [true, true, false, false, false],
+        [true, true, false, false, false, true, false],
       );
     });
   });

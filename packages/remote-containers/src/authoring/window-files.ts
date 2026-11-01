@@ -165,7 +165,7 @@ export function isUnder(folder: string, file: string): boolean {
   const relative = path.posix.relative(folder, file);
   return (
     relative === '' ||
-    (!relative.startsWith('..') && !path.posix.isAbsolute(relative))
+    (relative.split('/')[0] !== '..' && !path.posix.isAbsolute(relative))
   );
 }
 
