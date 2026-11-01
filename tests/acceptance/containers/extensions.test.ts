@@ -39,6 +39,9 @@ const YAML_ID = 'redhat.vscode-yaml';
 
 const YAML_PREFIX = `${YAML_ID}-`;
 
+/** The newest stable version of the YAML extension on Open VSX when this row was written; its pre-releases are newer. */
+const STABLE_YAML = '2.0.0';
+
 /** What the editor appends to the folder of an extension that is not built for a platform. */
 const UNIVERSAL = '-universal';
 
@@ -153,24 +156,38 @@ describe('the configuration’s extensions in the container (card containers-16)
     }
   });
 
-  it('F-0505 AC-3 (c66-prerelease): an id suffixed with @prerelease installs the latest pre-release, which is newer than the stable version', async () => {
+  it('F-0505 AC-3 (c66-prerelease): an id suffixed with @prerelease installs the latest pre-release when the extension has one, newer than its stable version, and the latest version when it has none', async () => {
     const folder = devContainerFolder('c66-prerelease', {
-      customizations: {vscode: {extensions: [`${YAML_ID}@prerelease`]}},
+      customizations: {
+        vscode: {
+          extensions: [`${YAML_ID}@prerelease`, `${DRACULA_ID}@prerelease`],
+        },
+      },
     });
     try {
       const prerelease = await openVsxVersion(
         `${YAML_ID.replace('.', '/')}/pre-release`,
       );
-      const stable = await openVsxVersion(`${YAML_ID.replace('.', '/')}/2.0.0`);
+      const latest = await latestDracula();
       const {name, containerId} = await connected(folder);
       const installed = await installedWhen(
         containerId,
-        folders => startingWith(folders, YAML_PREFIX).length > 0,
+        folders =>
+          startingWith(folders, YAML_PREFIX).length > 0 &&
+          startingWith(folders, DRACULA_PREFIX).length > 0,
       );
       await closeWindow(name);
       deepStrictEqual(
-        [startingWith(installed, YAML_PREFIX), prerelease !== stable],
-        [[`${YAML_PREFIX}${prerelease}${UNIVERSAL}`], true],
+        [
+          startingWith(installed, YAML_PREFIX),
+          startingWith(installed, DRACULA_PREFIX),
+          prerelease === STABLE_YAML,
+        ],
+        [
+          [`${YAML_PREFIX}${prerelease}${UNIVERSAL}`],
+          [`${DRACULA_PREFIX}${latest}${UNIVERSAL}`],
+          false,
+        ],
       );
     } finally {
       await removeContainers(folder);
