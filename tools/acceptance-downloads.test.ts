@@ -10,7 +10,6 @@ import {createHash, X509Certificate} from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
-  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
