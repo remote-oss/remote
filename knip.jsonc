@@ -49,6 +49,7 @@
         "config-files/*.test.ts",
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
+        "ssh-core/*.test.ts",
         "terminal-pick/*.test.ts",
         "preconnect/*.test.ts",
         "explorer/*.test.ts",

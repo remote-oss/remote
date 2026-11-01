@@ -721,6 +721,8 @@ export function launchesOf(root: string): Launch[] {
         ],
       },
     },
+    // The core features of the editor in a window on the SSH host, read through the renderer.
+    {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
     {
       label: 'no-proposals',
       kind: 'plain',

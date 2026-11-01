@@ -159,6 +159,7 @@ describe('the launches of the VSCodium run', () => {
         'preconnect',
         'config-files',
         'default-ports',
+        'ssh-core',
         'no-proposals',
         ...labelsFromExplorer(),
       ],
@@ -232,6 +233,7 @@ describe('the launches of the VSCodium run', () => {
       ),
       [
         ['default-ports', undefined, true, undefined],
+        ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',
@@ -742,6 +744,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'default-ports',
+        'ssh-core',
         ...labelsFromExplorer(),
       ],
     );
