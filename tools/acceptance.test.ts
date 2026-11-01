@@ -1307,7 +1307,7 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           })),
-          ...['genuine', 'ssh-no-proposals'].map(label => ({
+          ...['genuine', 'genuine-licensed', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
@@ -4048,6 +4048,7 @@ describe('acceptance', () => {
           [],
           [
             'genuine',
+            'genuine-licensed',
             'ssh-no-proposals',
             'genuine-containers',
             'genuine-accept-a',

@@ -663,6 +663,8 @@ to reach the download host: as root on the harness host it adds `<gateway> githu
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
 
+The `genuine-licensed` launch is the one with `publisherDownloads`: it connects Remote - SSH to the run's host in a profile of its own, answers the licence question with Accept and Continue, and checks the server of the client's commit, the remote indicator, a terminal on the host and that a reload asks nothing (`tests/acceptance/genuine-licensed/`). Its template names the update service's Alpine server, as the run's SSH host is Alpine.
+
 A launch with `publisherDownloads: true` takes its server from Microsoft's update service, the server of the genuine
 client's own commit, and its rows accept the licence in the product's own modal, as the user decided on 2026-11-01
 (D-104, the genuine job only). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:

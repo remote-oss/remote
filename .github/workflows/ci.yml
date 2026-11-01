@@ -373,9 +373,11 @@ jobs:
   # the VSCodium no-proposals launch, which dismisses it, never shares this run. It runs at the recorded version only:
   # at the floor the editor lets Remote - SSH resolve without the proposals, and the run refuses that pair.
   # genuine-containers runs at both versions: our Dev Containers alone, against the run's stand-in licensed host, ending
-  # in Cancel at the licence modal. genuine-accept-a and -b come after it, in that order, at both versions:
-  # they accept the licence and take the publisher's server, the first in one profile, the second in a fresh one that
-  # meets the first's server volume, so -b needs -a earlier in the same run.
+  # in Cancel at the licence modal. genuine-licensed runs at both versions, after genuine: Remote - SSH in a profile of
+  # its own, past the licence, with the server of the client's commit for the run's Alpine host. genuine-accept-a and -b
+  # come after genuine-containers, in that order, at both versions: they accept the licence and take the publisher's
+  # server, the first in one profile, the second in a fresh one that meets the first's server volume, so -b needs -a
+  # earlier in the same run.
   acceptance-genuine:
     name: acceptance (genuine ${{ matrix.version }})
     if: inputs.genuine || github.event.schedule == '43 4 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
@@ -384,9 +386,9 @@ jobs:
       matrix:
         include:
           - version: 1.139.1
-            launches: genuine,ssh-no-proposals,genuine-containers,genuine-accept-a,genuine-accept-b
+            launches: genuine,genuine-licensed,ssh-no-proposals,genuine-containers,genuine-accept-a,genuine-accept-b
           - version: 1.125.0
-            launches: genuine,genuine-containers,genuine-accept-a,genuine-accept-b
+            launches: genuine,genuine-licensed,genuine-containers,genuine-accept-a,genuine-accept-b
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}-${{ matrix.version }}
       cancel-in-progress: false

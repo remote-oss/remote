@@ -63,6 +63,7 @@
         "trust/*.test.ts",
         "trust-terminal/*.test.ts",
         "genuine/*.test.ts",
+        "genuine-licensed/*.test.ts",
         "genuine-containers/*.test.ts",
         "genuine-accept-a/*.test.ts",
         "genuine-accept-b/*.test.ts",

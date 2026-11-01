@@ -185,6 +185,9 @@
       "path": "tests/acceptance/genuine"
     },
     {
+      "path": "tests/acceptance/genuine-licensed"
+    },
+    {
       "path": "tests/acceptance/genuine-containers"
     },
     {
