@@ -1,7 +1,8 @@
 /**
  * @fileoverview The label a dev container window stores with its Open Recent entry when the entry is created: the host
- * folder's path with the home folder as `~`, then the static suffix. An entry that has a label already is left alone, so
- * a label never changes after it is stored.
+ * folder's path with the home folder as `~`, then ` @ <context>` when the connection was made under a Docker context,
+ * then the static suffix (STR:S428). An entry that has a label already is left alone, so a label never changes after it
+ * is stored. The entries of one folder under two contexts differ in their authority, so each is labelled on its own.
  */
 
 import type {Logger} from 'lib-log';
@@ -45,12 +46,16 @@ export function tildedPathOf(hostPath: string, homeFolder: string): string {
     : hostPath;
 }
 
-/** Adds the window's Open Recent entry with its label unless the editor holds an entry for it that has one. */
+/**
+ * Adds the window's Open Recent entry with its label unless the editor holds an entry for it that has one; `context` is
+ * the Docker context the connection was made under, or undefined for the default one.
+ */
 export async function storeRecentLabel(
   ports: RecentLabelPorts,
   translate: Translate,
   logger: Logger,
   target: DevContainerFolder,
+  context: string | undefined,
 ): Promise<void> {
   try {
     const entry = ports.windowEntry();
@@ -66,7 +71,7 @@ export async function storeRecentLabel(
     const suffix = workspaceSuffixOf(undefined, translate);
     await ports.addEntry({
       ...entry,
-      label: `${tildedPathOf(target.hostPath, ports.homeFolder())} [${suffix}]`,
+      label: `${tildedPathOf(target.hostPath, ports.homeFolder())}${context === undefined ? '' : ` @ ${context}`} [${suffix}]`,
     });
   } catch (caught: unknown) {
     logger.warn(

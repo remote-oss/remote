@@ -158,6 +158,12 @@ export interface ResolverOptions {
   /** The title the progress starts with. */
   startTitle(target: DecodedTarget): string;
   /**
+   * How long after a resolve starts the progress opens, whatever the phases: a phase before it is remembered and the
+   * progress opens at the delay with the latest title, and a connect that ends first opens none. A family that leaves it
+   * off opens the progress on its first stage that is not quiet, or after the fallback.
+   */
+  progressDelayMilliseconds?: number;
+  /**
    * The family's canonical mapping, registered as the resolver's `getCanonicalURI` (windows contracts §3.2): the local
    * path a `vscode-remote` URI of this window stands for, or nothing. `warn` logs a mapping that failed.
    */
@@ -401,7 +407,10 @@ export async function registerResolver(
           () => undefined,
         );
     }
-    const stopTimer = editor.startTimer(PROGRESS_FALLBACK_MILLISECONDS, open);
+    const stopTimer = editor.startTimer(
+      options.progressDelayMilliseconds ?? PROGRESS_FALLBACK_MILLISECONDS,
+      open,
+    );
     const stop = connector.onPhase(phase => {
       const title = options.titleOf(phase, decoded);
       shown = {title, details: phase.details === true, staged: title !== ''};
@@ -412,7 +421,10 @@ export async function registerResolver(
       }
       if (report !== undefined) {
         report(shown.title, shown.details, incrementOf());
-      } else if (phase.quiet !== true) {
+      } else if (
+        phase.quiet !== true &&
+        options.progressDelayMilliseconds === undefined
+      ) {
         open();
       }
     });

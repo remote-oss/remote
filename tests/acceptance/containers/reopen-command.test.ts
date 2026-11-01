@@ -3,10 +3,18 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  inWindow,
   reopenInContainer,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
-import {notifications, statusItem, windowTitle} from '../windows/renderer.ts';
+import {
+  notifications,
+  pressEscape,
+  quickPickFacts,
+  quickPickRows,
+  statusItem,
+  windowTitle,
+} from '../windows/renderer.ts';
 
 /** The stage texts the connect progress may show, each once after the start title (F-0408 BR-2, F-0503 AC-2). */
 const TOAST_TEXTS = [
@@ -34,7 +42,7 @@ async function sampleOf(name: string): Promise<Sample> {
 describe('F-0401 the reopen command (card containers-40)', function () {
   this.timeout(600_000);
 
-  it('F-0401 AC-1, AC-2 (b1): the connect shows one "Connecting to Dev Container (show log)" toast that never doubles, and the window ends titled and labelled with the container\'s name', async () => {
+  it('F-0401 AC-1, AC-2, F-0101 AC-5 (b1): the connect shows one "Connecting to Dev Container (show log)" toast that never doubles, and the window ends titled and labelled with the container\'s name', async () => {
     const folder = devContainerFolder('c40-reopen', {name: 'Reopen One'});
     const name = await openFolderWindow(folder);
     try {
@@ -96,6 +104,27 @@ describe('F-0401 the reopen command (card containers-40)', function () {
         },
       );
       await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+  it('F-0101 AC-21 (c74-indicator-menu): the remote indicator’s pick in a dev container window has its placeholder, its first item, Rebuild Container, focused', async () => {
+    const folder = devContainerFolder('c74-indicator', {name: 'Indicator'});
+    const name = await openFolderWindow(folder);
+    try {
+      await reopenInContainer(name);
+      void inWindow(name, 'workbench.action.remote.showMenu').catch(
+        () => undefined,
+      );
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const facts = await quickPickFacts(name);
+      const rows = await quickPickRows(name);
+      await pressEscape(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        [facts?.placeholder, rows[0]?.label, rows[0]?.focused],
+        ['Select an option to open a Remote Window', 'Rebuild Container', true],
+      );
     } finally {
       await removeContainers(folder);
     }

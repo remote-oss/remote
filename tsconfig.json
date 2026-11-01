@@ -224,6 +224,9 @@
       "path": "tests/acceptance/containers-podman"
     },
     {
+      "path": "tests/acceptance/extensionpack"
+    },
+    {
       "path": "tests/acceptance/web-ui"
     },
     {

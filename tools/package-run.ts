@@ -10,6 +10,7 @@ import {performance} from 'node:perf_hooks';
 import type {Writable} from 'node:stream';
 import {buildPackages} from './build.ts';
 import {generateTables} from './identifiers.ts';
+import {writeLocaleTables} from './locale-tables.ts';
 import {messageOf, isMainModule, REPOSITORY_ROOT} from './repository.ts';
 import {packageExtensions} from './package-extensions.ts';
 import {chooseMode, parseOutcome, renderPackageRun} from './package-view.ts';
@@ -138,11 +139,26 @@ export async function runPackage(
   }
 }
 
+/**
+ * The identifiers phase: the identifier tables, then the locale tables, which the build's string-table check reads
+ * (a fresh checkout has neither).
+ */
+export function tablesPhase(
+  identifierTables: PackagePhases['identifiers'],
+  localeTables: (root: string) => void,
+): PackagePhases['identifiers'] {
+  return async root => {
+    const outcomes = await identifierTables(root);
+    localeTables(root);
+    return outcomes;
+  };
+}
+
 if (isMainModule(import.meta.url)) {
   await runPackage(
     REPOSITORY_ROOT,
     {
-      identifiers: generateTables,
+      identifiers: tablesPhase(generateTables, writeLocaleTables),
       build: buildPackages,
       package: packageExtensions,
       stat: statSync,

@@ -836,6 +836,11 @@ export async function extensionsViewSections(
   );
 }
 
+/** The page-side lookup of the Extensions view entries named `displayName`. */
+function extensionRowsExpression(displayName: string): string {
+  return `[...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)})`;
+}
+
 /**
  * The labels of the context menu that a right click on the entry `displayName` of the Extensions view in window `name`
  * opens, in order. The menu is closed again. It fails naming the entry when the view lists it not once.
@@ -847,7 +852,7 @@ export async function extensionContextMenu(
   const menu = await evaluate<string[] | null>(
     name,
     `(async () => {
-      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const rows = ${extensionRowsExpression(displayName)};
       if (rows.length !== 1) {
         return null;
       }
@@ -869,6 +874,59 @@ export async function extensionContextMenu(
   return menu;
 }
 
+/** What the details page of an extension shows. */
+export interface ExtensionPage {
+  title: string;
+  description: string;
+  /** The names the page lists under Extension Pack, in order; none for an extension that is no pack. */
+  pack: string[];
+}
+
+/**
+ * Opens the details page of the entry `displayName` of the Extensions view in window `name`, and reads its title, its
+ * description and the names it lists under Extension Pack. It fails naming the entry when the view lists it not once.
+ */
+export async function extensionPageOf(
+  name: string,
+  displayName: string,
+): Promise<ExtensionPage> {
+  const page = await evaluate<ExtensionPage | null>(
+    name,
+    `(async () => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return null;
+      }
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        rows[0].dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      const read = () => {
+        const editor = document.querySelector('.extension-editor');
+        return {
+          title: editor?.querySelector('.header .details .title .name')?.textContent ?? '',
+          description: editor?.querySelector('.header .details > .description')?.textContent ?? '',
+          pack: [...(editor?.querySelectorAll('.extension-pack .extensions-grid-view .extension-list-item .name') ?? [])].map(each => each.textContent ?? ''),
+        };
+      };
+      // The page opens at once; the pack list is read in after it, so the read ends when it shows or after 5 s.
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const now = read();
+        if (now.title === ${JSON.stringify(displayName)} && now.pack.length > 0) {
+          return now;
+        }
+      }
+      return read();
+    })()`,
+  );
+  if (page === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return page;
+}
+
 /**
  * Whether the entry `displayName` of the Extensions view in window `name` shows its status marker, the icon core puts
  * on an extension that Restricted Mode limits or disables; `undefined` when the view lists no such entry.
@@ -880,7 +938,7 @@ export async function extensionStatusShown(
   return evaluate<boolean | undefined>(
     name,
     `(() => {
-      const row = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].find(each => each.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const row = ${extensionRowsExpression(displayName)}[0];
       const status = row?.querySelector('.extension-status');
       return status === undefined || status === null ? undefined : !status.classList.contains('hide');
     })()`,
@@ -1278,7 +1336,7 @@ export async function extensionCard(
   const card = await evaluate<ExtensionCard | null>(
     name,
     `(() => {
-      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const rows = ${extensionRowsExpression(displayName)};
       if (rows.length !== 1) {
         return null;
       }
@@ -1762,6 +1820,17 @@ export async function statusItem(
 export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   return (
     (await evaluate<ShownDialog | null>(name, DIALOG_EXPRESSION)) ?? undefined
+  );
+}
+
+/** The codicons of the status bar item `itemId` of window `name`, such as `alert` for a disconnected remote indicator. */
+export async function statusItemIcons(
+  name: string,
+  itemId: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...(document.getElementById(${JSON.stringify(itemId)})?.querySelectorAll('.codicon') ?? [])].flatMap(each => [...each.classList].filter(entry => entry.startsWith('codicon-') && entry !== 'codicon-modifier-spin').map(entry => entry.slice('codicon-'.length)))`,
   );
 }
 
@@ -2261,14 +2330,91 @@ export async function folderDialogFacts(
   );
 }
 
+/** What a folder dialog reads: whether it is open, its input's value and its first rows. */
+export interface FolderDialogReading {
+  open: boolean;
+  value: string;
+  rows: string[];
+}
+
+/** How long a key waits for the folder dialog to close before it is pressed again, and how often the dialog is read. */
+const REPRESS_MILLISECONDS = 2000;
+const CLOSE_CHECK_MILLISECONDS = 200;
+
+/** How long a folder dialog reading looks for the window's page. */
+const PAGE_LOOKUP_MILLISECONDS = 1500;
+
+/** The folder dialog of the page as a {@link FolderDialogReading}: another pick in the same widget reads as closed. */
+const FOLDER_DIALOG_READING = `(() => {
+  const input = ${FOLDER_DIALOG_INPUT};
+  if (input === null || input.getAttribute('placeholder') !== 'Folder path') {
+    return {open: false, value: '', rows: []};
+  }
+  const rows = [...input.closest('.quick-input-widget').querySelectorAll('.quick-input-list .monaco-list-row')];
+  return {
+    open: true,
+    value: input.value,
+    rows: rows.slice(0, 3).map(each => each.querySelector('.label-name')?.textContent ?? each.textContent.trim()),
+  };
+})()`;
+
+/** Reads until the dialog is closed, for at most {@link REPRESS_MILLISECONDS}, and gives the last reading. */
+async function closedWithin(
+  read: () => Promise<FolderDialogReading>,
+  pause: (milliseconds: number) => Promise<void>,
+): Promise<FolderDialogReading> {
+  let reading = await read();
+  for (
+    let waited = 0;
+    reading.open && waited < REPRESS_MILLISECONDS;
+    waited += CLOSE_CHECK_MILLISECONDS
+  ) {
+    await pause(CLOSE_CHECK_MILLISECONDS);
+    reading = await read();
+  }
+  return reading;
+}
+
+/**
+ * Presses a key in a folder dialog and waits for the dialog to close. A key the dialog still has open after
+ * {@link REPRESS_MILLISECONDS} with the value it had at the press is pressed again, `retries` times at most; a changed
+ * value means the dialog is acting on the key, so it only waits. It fails naming the dialog's value and first rows.
+ */
+export async function pressUntilClosed(
+  press: () => Promise<void>,
+  read: () => Promise<FolderDialogReading>,
+  retries: number,
+  pause: (milliseconds: number) => Promise<void>,
+): Promise<void> {
+  let pressedAt = (await read()).value;
+  let last: FolderDialogReading = {open: true, value: pressedAt, rows: []};
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt === 0 || last.value === pressedAt) {
+      await press();
+    } else {
+      pressedAt = last.value;
+    }
+    last = await closedWithin(read, pause);
+    if (!last.open) {
+      return;
+    }
+  }
+  throw new Error(
+    `the folder dialog is still open after ${String(retries + 1)} waits: it reads ${JSON.stringify(last.value)} and lists ${JSON.stringify(last.rows)}`,
+  );
+}
+
 /**
  * Has window `name`'s in-window folder dialog take `key` (`Enter` or `Escape`), with `typed` in its input first when
- * given; with no key it only types. It waits for the dialog to open, and fails when none does.
+ * given; with no key it only types. It waits for the dialog to open, and fails when none does. With `waiting`, a typed
+ * value is waited for before the key (the input reads it and the list shows `..`), and the dialog is waited on to close
+ * after it, with `retries` more presses of a key it did not take.
  */
 async function keyInFolderDialog(
   name: string,
   key: 'Enter' | 'Escape' | undefined,
   typed?: string,
+  waiting?: {retries: number},
 ): Promise<void> {
   await settled(
     () => `the folder dialog of window ${name}`,
@@ -2287,9 +2433,48 @@ async function keyInFolderDialog(
       return null;
     })()`,
   );
-  if (key !== undefined) {
-    await pressKey(await pageOf(name), name, key);
+  // A key the dialog took can take the window to the folder, and then no page has its name: that reads as closed.
+  async function read(): Promise<FolderDialogReading> {
+    const address = await pageOf(name, PAGE_LOOKUP_MILLISECONDS).catch(
+      () => undefined,
+    );
+    return address === undefined
+      ? {open: false, value: '', rows: []}
+      : evaluateAt<FolderDialogReading>(
+          address,
+          `window ${name}`,
+          FOLDER_DIALOG_READING,
+        );
   }
+  if (waiting !== undefined && typed !== undefined) {
+    await settled(
+      () => `the folder dialog of window ${name} to show ${typed}`,
+      async () => {
+        const reading = await read();
+        return reading.value.replace(/\/$/, '') === typed.replace(/\/$/, '') &&
+          reading.rows[0] === '..'
+          ? true
+          : undefined;
+      },
+    );
+  }
+  if (key === undefined) {
+    return;
+  }
+  const pressed = key;
+  async function press(): Promise<void> {
+    await pressKey(await pageOf(name), name, pressed);
+  }
+  if (waiting === undefined) {
+    await press();
+    return;
+  }
+  await pressUntilClosed(
+    press,
+    read,
+    waiting.retries,
+    milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+  );
 }
 
 /**
@@ -2498,12 +2683,12 @@ export function answerFolderDialog(
   name: string,
   folder: string,
 ): Promise<void> {
-  return keyInFolderDialog(name, 'Enter', folder);
+  return keyInFolderDialog(name, 'Enter', folder, {retries: 3});
 }
 
 /** Closes window `name`'s folder dialog with Escape. */
 export function cancelFolderDialog(name: string): Promise<void> {
-  return keyInFolderDialog(name, 'Escape');
+  return keyInFolderDialog(name, 'Escape', undefined, {retries: 1});
 }
 
 /** The page's terminal text rows: the one terminal of the launches these helpers serve, xterm's visible rows. */

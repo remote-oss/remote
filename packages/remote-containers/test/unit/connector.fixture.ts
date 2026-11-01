@@ -97,6 +97,8 @@ interface EngineCall {
 export interface Scene {
   /** The `DOCKER_HOST` of the editor's environment; unset when undefined. */
   dockerHost: string | undefined;
+  /** Whether the folder the payload names exists on the machine. */
+  folderExists: boolean;
   connector: ContainerConnector;
   /** How many connect attempts began their log. */
   attemptsBegun: number;
@@ -225,6 +227,7 @@ export function sceneOf(
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
     dockerHost: undefined,
+    folderExists: true,
     attemptsBegun: 0,
     engineCalls: [],
     engineFiles: [],
@@ -408,6 +411,7 @@ export function sceneOf(
   };
   let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
+    folderExists: () => Promise.resolve(scene.folderExists),
     shutdown: {
       send: request => {
         scene.shutdownSent.push(request);

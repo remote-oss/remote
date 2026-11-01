@@ -6,8 +6,7 @@
  *
  * Every `%key%` of package.json has a text in package.nls.json. Each locale has package.nls.<locale>.json with
  * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json with
- * exactly the keys of the default bundle l10n/bundle.l10n.json, or, in a package that ships no default bundle
- * the same keys as every other locale's bundle; the folder holds nothing else. Every string the package's code
+ * exactly the keys of the default bundle l10n/bundle.l10n.json; the folder holds nothing else. Every string the package's code
  * translates (see translated-strings.ts) is a key of the default bundle. Every text is a non-empty string. The locales are
  * identifiers.json's `locales`, or the locales of the tables present when it names none.
  */
@@ -45,6 +44,20 @@ function bundleFile(locale: string): string {
   return `${BUNDLE_FOLDER}/bundle.l10n.${locale}.json`;
 }
 
+/** The JSON object in `directory/file`; throws when the file holds anything else. */
+export function readObject(
+  directory: string,
+  file: string,
+): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(
+    readFileSync(path.join(directory, file), 'utf8'),
+  );
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('not a JSON object');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 /** Reads a table, or records why it cannot be read and returns undefined. */
 function readTable(
   directory: string,
@@ -52,17 +65,7 @@ function readTable(
   problems: FileProblem[],
 ): StringTable | undefined {
   try {
-    const parsed: unknown = JSON.parse(
-      readFileSync(path.join(directory, file), 'utf8'),
-    );
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      throw new Error('not a JSON object');
-    }
-    return new Map(Object.entries(parsed));
+    return new Map(Object.entries(readObject(directory, file)));
   } catch (error) {
     problems.push({file, text: `cannot be read: ${messageOf(error)}`});
     return undefined;
@@ -214,22 +217,22 @@ function bundleProblems(
       problems.push({file, text: "not a bundle of the package's locales"});
     }
   }
-  let sourceKeys: Set<string> | undefined;
-  if (existsSync(path.join(directory, BUNDLE_SOURCE))) {
-    const source = readTable(directory, BUNDLE_SOURCE, problems);
-    if (source === undefined) {
-      return;
+  const source = existsSync(path.join(directory, BUNDLE_SOURCE))
+    ? readTable(directory, BUNDLE_SOURCE, problems)
+    : undefined;
+  if (source === undefined) {
+    if (!existsSync(path.join(directory, BUNDLE_SOURCE))) {
+      problems.push({file: BUNDLE_SOURCE, text: 'missing'});
     }
-    problems.push(...emptyTextProblems(BUNDLE_SOURCE, source));
-    sourceKeys = new Set(source.keys());
-    problems.push(...untranslatedProblems(directory, sourceKeys));
+    return;
   }
-  const bundles = readTables(directory, translatedFiles, problems);
+  problems.push(...emptyTextProblems(BUNDLE_SOURCE, source));
+  const sourceKeys = new Set(source.keys());
+  problems.push(...untranslatedProblems(directory, sourceKeys));
   problems.push(
     ...translationProblems(
-      bundles,
-      sourceKeys ??
-        new Set([...bundles.values()].flatMap(table => [...table.keys()])),
+      readTables(directory, translatedFiles, problems),
+      sourceKeys,
     ),
   );
 }

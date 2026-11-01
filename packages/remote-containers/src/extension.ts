@@ -1180,6 +1180,14 @@ export async function activate(
           )?.globalValue,
         };
       },
+      folderExists: async folder => {
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(folder));
+          return true;
+        } catch {
+          return false;
+        }
+      },
       preflight: served.preflight,
       editorEnvironment: process.env,
       intents: context.globalState,

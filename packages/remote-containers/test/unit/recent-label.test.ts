@@ -66,7 +66,8 @@ function storing(
     },
   };
   return {
-    store: () => storeRecentLabel(ports, template => template, logger, TARGET),
+    store: (context?: string) =>
+      storeRecentLabel(ports, template => template, logger, TARGET, context),
     added,
     warned,
     reads: () => reads,
@@ -109,6 +110,29 @@ describe('tildedPathOf', () => {
 });
 
 describe('storeRecentLabel', () => {
+  it('F-0501 AC-26, F-0504 AC-32: a connection under a Docker context stores ` @ <context>` before the suffix', async () => {
+    const seen = storing();
+    await seen.store('f0504ctx');
+    deepStrictEqual(seen.added, [
+      {...ENTRY, label: '~/work/app @ f0504ctx [Dev Container]'},
+    ]);
+  });
+
+  it('F-0504 AC-32: the entries of one folder under the default context and under another each get their own label', async () => {
+    const other: WindowEntry = {
+      ...ENTRY,
+      uri: 'vscode-remote://dev-container%2B7b22636f6e74657874223a2278227d/workspaces/app',
+    };
+    const labelled: StoredEntry[] = [
+      {uri: ENTRY.uri, label: '~/work/app [Dev Container]'},
+    ];
+    const seen = storing({entry: other, stored: labelled});
+    await seen.store('f0504ctx');
+    deepStrictEqual(seen.added, [
+      {...other, label: '~/work/app @ f0504ctx [Dev Container]'},
+    ]);
+  });
+
   it('adds the window with its tilded path and the static suffix when the editor has no entry', async () => {
     const seen = storing();
     await seen.store();
