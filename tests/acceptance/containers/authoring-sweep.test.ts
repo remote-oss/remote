@@ -65,6 +65,9 @@ const WRITING = 'Adding Dev Container Configuration Files...';
 
 const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
+/** The start of the reopen notice of a configuration in the store of user data. */
+const STORED_NOTICE_START = 'There is a Dev Container configuration';
+
 const OPTIONAL_PLACEHOLDER = 'Include the following optional files/directories';
 
 const FEATURES_PLACEHOLDER = 'Select additional features to install';
@@ -187,6 +190,16 @@ describe('F-0801 the command, its progress and its rows (card coverage-72)', fun
     await withWindow('c72-exists-store', {}, async window => {
       await writeToStore(window);
       await written(path.join(storeRoot(), 'c72-exists-store', CONFIGURATION));
+      // The file is written before the run opens its preview and offers to reopen; a second command started meanwhile is
+      // refused as already running. The notice is the run's last step, so it is shown once the command can run again.
+      await waitFor(
+        'the first run to end with its reopen notice',
+        async () =>
+          (await notificationCentre(window)).some(text =>
+            text.startsWith(STORED_NOTICE_START),
+          ),
+        60_000,
+      );
       await startCommand(window);
       await waitForQuickPick(window);
       seen.push(await rowsOf(window), await dialogOf(window));
