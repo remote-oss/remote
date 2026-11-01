@@ -16,8 +16,8 @@ import {
   onHostAs,
   recordLines,
   reloadWindow,
-  settingIn,
   terminalsOf,
+  userScopeHolds,
   variable,
   waitFor,
   windowState,
@@ -561,10 +561,10 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       deepStrictEqual(
         [
           surfacesSince(mark, 'local'),
-          (await settingIn('local', 'remote.SSH.remotePlatform')) ?? null,
+          await userScopeHolds('local', 'remote.SSH.remotePlatform'),
           settingsText().includes('"harness"'),
         ],
-        [['hostPick', 'platformPick'], null, false],
+        [['hostPick', 'platformPick'], false, false],
       );
     });
 
