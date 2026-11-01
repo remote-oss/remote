@@ -18,7 +18,10 @@ export interface Listener {
   program: string;
 }
 
-/** The listening TCP sockets of the runner held by `ssh` or by the editor, as `ss -ltnp` lists them. */
+/**
+ * The listening TCP sockets of the runner held by `ssh` or by the editor, as `ss -ltnp` lists them. The editor is told by
+ * the program name `codium…`, which is the VSCodium these rows run in.
+ */
 export function listeners(): Listener[] {
   return execFileSync('ss', ['-ltnp'])
     .toString()

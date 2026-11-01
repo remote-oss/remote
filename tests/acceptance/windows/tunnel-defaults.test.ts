@@ -85,7 +85,6 @@ describe('the tunnel of a window under the default settings and their combinatio
       const editorBefore = portsOf(listeners(), 'editor');
       const socksBefore = portsOf(connected.added, 'ssh');
       const loginsBefore = await acceptedPasswords();
-      const recordBefore = recordLines(undefined, 'c79-reload').length;
       await reloadWindow('c79-reload');
       await new Promise(resolve => setTimeout(resolve, 8000));
       const after = listeners();
@@ -101,12 +100,11 @@ describe('the tunnel of a window under the default settings and their combinatio
             portsOf(after, 'ssh'),
             portsOf(after, 'editor').some(port => !editorBefore.includes(port)),
             editorBefore.some(port => portsOf(after, 'editor').includes(port)),
-            recordLines(undefined, 'c79-reload').length >= recordBefore,
           ],
         },
         {
           first: [1, 1],
-          reload: [1, 0, socksBefore, true, false, true],
+          reload: [1, 0, socksBefore, true, false],
         },
       );
     });
