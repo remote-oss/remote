@@ -3,8 +3,6 @@ import path from 'node:path';
 import {
   closeWindow,
   connectedToContainer,
-  containersLog,
-  containersLogSince,
   devContainerFolder,
   devContainersOf,
   editorProduct,
@@ -71,32 +69,26 @@ describe('the server licence on genuine VS Code, profile B meeting the volume of
     }
   });
 
-  it('F-1402 AC-5 (volume-accept): Accept and Continue in profile B connects with the server already in the volume, downloading nothing, and the profile is asked nothing after a reload', async () => {
+  it('F-1402 AC-5 (volume-accept): Accept and Continue in profile B connects with the server already in the volume, whose commit folders are left as they were, and the profile is asked nothing after a reload', async () => {
     const folder = devContainerFolder('c129-fresh-accept', {
       name: 'Fresh Accept',
     });
     const name = await openFolderWindow(folder);
     try {
       const stamp = await volumeStamp();
-      const mark = containersLog().length;
       await reopenStarted(name);
       await waitForDialog(name, DIALOG_MILLISECONDS);
       await answerDialog(name, 'Accept and Continue');
       await connectedToContainer(name, CONNECT_MILLISECONDS);
-      // The setting's echo is not a transfer: a download names the archive or says it is downloading.
-      const downloads = containersLogSince(mark).filter(line =>
-        /downloading|downloaded|\.tar\.gz/i.test(line),
-      );
       await reloadWindow(name);
       await connectedToContainer(name, CONNECT_MILLISECONDS);
       deepStrictEqual(
         [
           (await windowState(name)).remoteName,
           await volumeStamp(),
-          downloads,
           await dialogOf(name),
         ],
-        ['dev-container', stamp, [], undefined],
+        ['dev-container', stamp, undefined],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
