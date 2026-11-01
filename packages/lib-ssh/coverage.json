@@ -1,8 +1,4 @@
 {
-  "exclude": {
-    "src/config/platform.ts": "declares a type only; nothing in it runs",
-    "src/process/ports.ts": "declares types only; nothing in it runs"
-  },
   "ratchet": {
     "lines": 99.95,
     "branches": 99.15,

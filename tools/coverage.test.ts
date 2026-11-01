@@ -12,11 +12,13 @@ import {
   coverageUnits,
   exclusionProblems,
   gateProblems,
+  hasRuntimeCode,
   measureUnit,
   nextRatchet,
   runCoverage,
   shardArgument,
   shardOf,
+  typesOnlyFiles,
 } from './coverage.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -82,16 +84,18 @@ describe('coverage', () => {
         'Excluded: src/editor.ts\n',
       );
       deepStrictEqual(
-        exclusionProblems(packageUnit(), {
-          exclude: {'src/editor.ts': 'only the editor calls it'},
-        }),
+        exclusionProblems(
+          packageUnit(),
+          {exclude: {'src/editor.ts': 'only the editor calls it'}},
+          [],
+        ),
         [],
       );
     });
 
     it('report a missing reason, a stale file and a missing README entry', () => {
       deepStrictEqual(
-        exclusionProblems(packageUnit(), {exclude: {'src/gone.ts': ' '}}),
+        exclusionProblems(packageUnit(), {exclude: {'src/gone.ts': ' '}}, []),
         [
           'remote-a: exclusion src/gone.ts has no reason',
           'remote-a: exclusion src/gone.ts names no file',
@@ -103,7 +107,7 @@ describe('coverage', () => {
     it('need no README entry for tools/', () => {
       workspace.write('tools/run.ts', '');
       deepStrictEqual(
-        exclusionProblems(unitAt(0), {exclude: {'run.ts': 'a script'}}),
+        exclusionProblems(unitAt(0), {exclude: {'run.ts': 'a script'}}, []),
         [],
       );
     });
@@ -111,12 +115,89 @@ describe('coverage', () => {
     it('report a named generated file as covered by the rule', () => {
       workspace.write('packages/remote-a/src/x.generated.ts', '');
       deepStrictEqual(
-        exclusionProblems(packageUnit(), {
-          exclude: {'src/x.generated.ts': 'generated'},
-        }),
+        exclusionProblems(
+          packageUnit(),
+          {exclude: {'src/x.generated.ts': 'generated'}},
+          [],
+        ),
         [
           'remote-a: exclusion src/x.generated.ts is covered by the generated-file rule; remove the entry',
         ],
+      );
+    });
+
+    it('tooling-102: report a named file without runtime code as covered by the types-only rule, and nothing else about it', () => {
+      workspace.write(
+        'packages/remote-a/src/shapes.ts',
+        'export interface Shape {\n  sides: number;\n}\n',
+      );
+      deepStrictEqual(
+        exclusionProblems(
+          packageUnit(),
+          {exclude: {'src/shapes.ts': 'types only; no executable code'}},
+          typesOnlyFiles(packageUnit(), workspace.root),
+        ),
+        [
+          'remote-a: exclusion src/shapes.ts is covered by the types-only rule; remove the entry',
+        ],
+      );
+    });
+  });
+
+  describe('files without runtime code', () => {
+    it('tooling-102: a file of interfaces, types and type-only imports and exports has none', () => {
+      deepStrictEqual(
+        hasRuntimeCode(
+          "import type {Other} from './other.ts';\nimport {type Third} from './third.ts';\n// a comment\nexport interface Shape {\n  other: Other;\n  third: Third;\n}\nexport type Name = string;\nexport type {Other};\n",
+        ),
+        false,
+      );
+    });
+
+    it('tooling-102: a file with one constant or one function has some', () => {
+      deepStrictEqual(
+        [
+          hasRuntimeCode('export const x = 1;\n'),
+          hasRuntimeCode('export function f(): void {}\n'),
+        ],
+        [true, true],
+      );
+    });
+
+    it('tooling-102: the unit’s types-only files are listed, relative to the unit and sorted, and not a test, a generated file or a fixture', () => {
+      workspace.write(
+        'packages/remote-a/src/shapes.ts',
+        'export interface Shape {\n  sides: number;\n}\n',
+      );
+      workspace.write(
+        'packages/remote-a/src/deep/kinds.ts',
+        'export type Kind = string;\n',
+      );
+      workspace.write(
+        'packages/remote-a/src/x.generated.ts',
+        'export type Generated = string;\n',
+      );
+      workspace.write(
+        'packages/remote-a/src/fixtures/shape.ts',
+        'export type Fixture = string;\n',
+      );
+      workspace.write(
+        'packages/remote-a/src/shape.test.ts',
+        'export type Tested = string;\n',
+      );
+      deepStrictEqual(typesOnlyFiles(packageUnit(), workspace.root), [
+        'src/deep/kinds.ts',
+        'src/shapes.ts',
+      ]);
+    });
+
+    it('tooling-102: a unit without a source folder has none', () => {
+      deepStrictEqual(
+        typesOnlyFiles(
+          {...packageUnit(), sources: 'packages/gone/src/**/*.ts'},
+          workspace.root,
+        ),
+        [],
       );
     });
   });
@@ -268,6 +349,28 @@ describe('coverage', () => {
       deepStrictEqual(runCoverage(workspace.root, false, measured(passing)), [
         'tools: coverage.json has no ratchet; run pnpm coverage:update',
         'remote-a: coverage.json has no ratchet; run pnpm coverage:update',
+      ]);
+    });
+
+    it('tooling-102: the files without runtime code are among the exclusions the measurement is given, after the named ones', () => {
+      workspace.write(
+        'packages/remote-a/src/shapes.ts',
+        'export interface Shape {\n  sides: number;\n}\n',
+      );
+      workspace.write('packages/remote-a/coverage.json', {
+        exclude: {'src/sign.ts': 'a reason'},
+        ratchet: passing,
+      });
+      workspace.write('packages/remote-a/README.md', 'src/sign.ts\n');
+      workspace.write('tools/coverage.json', {ratchet: passing});
+      const given: Array<[string, string[]]> = [];
+      runCoverage(workspace.root, false, (root, unit, excluded) => {
+        given.push([unit.name, excluded]);
+        return passing;
+      });
+      deepStrictEqual(given, [
+        ['tools', []],
+        ['remote-a', ['src/sign.ts', 'src/shapes.ts']],
       ]);
     });
 

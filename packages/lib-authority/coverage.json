@@ -3,9 +3,5 @@
     "lines": 100,
     "branches": 100,
     "functions": 100
-  },
-  "exclude": {
-    "src/codecs/types.ts": "types only; no executable code",
-    "src/connector/results.ts": "types only; no executable code"
   }
 }

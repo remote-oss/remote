@@ -16,4 +16,4 @@ It is bundled into the packages that use it and never published on its own.
 | Maintainers | remote-oss |
 | Entry points | `lib-log` (`src/index.ts`), `lib-log/testing/memory-sink`, `lib-log/testing/once` |
 | Allowed imports | none |
-| Coverage exclusions | `src/sinks/editor-port.ts`: types only, no executable code |
+| Coverage exclusions | none |
