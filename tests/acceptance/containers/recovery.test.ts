@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
+import {chmodSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
@@ -33,6 +34,7 @@ import {
   waitForDialog,
   waitForQuickPick,
 } from '../windows/renderer.ts';
+import {dockerObjects} from './resolve-support.ts';
 import {
   activations,
   openFolderWindow,
@@ -442,6 +444,89 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
           dialog: undefined,
         },
       );
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
+  });
+
+  it('F-0201 AC-12 (c74-dismissed-docker-dialog): dismissing the missing-Docker dialog creates no container, volume or image and leaves the local window as it was, and the same command shows the same dialog again', async () => {
+    const bogus = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c74-dismissed-docker',
+    );
+    const folder = folderOf('c74-dismissed', {});
+    const name = await open(folder);
+    await setUserSetting('dev.containers.dockerPath', bogus);
+    try {
+      const before = await dockerObjects();
+      const states: Array<[string, string, string, string, boolean]> = [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const running = inWindow(name, 'remote-containers.reopenInContainer');
+        running.catch(() => undefined);
+        const dialog = await waitForDialog(name, 60_000);
+        await answerDialog(name, 'Cancel');
+        await running.catch(() => undefined);
+        states.push([
+          dialog.message,
+          dialog.details,
+          String((await windowState(name)).remoteName),
+          await windowTitle(name),
+          (await dockerObjects()) === before,
+        ]);
+      }
+      const expected = [
+        'Docker version 17.12.0 or later required.',
+        `Command not found: '${bogus}'. Check the license for details.`,
+        'null',
+        `[${name}]`,
+        true,
+      ];
+      deepStrictEqual(states, [expected, expected]);
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
+  });
+
+  it('F-0201 AC-12 (c74-dismissed-permission-dialog): dismissing the permission-denied dialog creates no container, volume or image and leaves the local window as it was, and the same command shows the same dialog again', async () => {
+    const wrapper = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c74-docker-denied',
+    );
+    writeFileSync(
+      wrapper,
+      `#!/bin/sh\necho 'permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: dial unix /var/run/docker.sock: connect: permission denied' >&2\nexit 1\n`,
+    );
+    chmodSync(wrapper, 0o755);
+    const name = await open(folderOf('c74-denied', {}));
+    await setUserSetting('dev.containers.dockerPath', wrapper);
+    try {
+      const before = await dockerObjects();
+      const states: Array<[string, string, string[], string, string, boolean]> =
+        [];
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const running = inWindow(name, 'remote-containers.reopenInContainer');
+        running.catch(() => undefined);
+        const dialog = await waitForDialog(name, 60_000);
+        await answerDialog(name, 'Cancel');
+        await running.catch(() => undefined);
+        states.push([
+          dialog.message,
+          dialog.details,
+          [...dialog.buttons],
+          String((await windowState(name)).remoteName),
+          await windowTitle(name),
+          (await dockerObjects()) === before,
+        ]);
+      }
+      const expected: (typeof states)[number] = [
+        "Current user does not have permission to run 'docker'.",
+        "Try adding the user to the 'docker' group.",
+        ['Cancel', 'Documentation'],
+        'null',
+        `[${name}]`,
+        true,
+      ];
+      deepStrictEqual(states, [expected, expected]);
     } finally {
       await setUserSetting('dev.containers.dockerPath', undefined);
     }
