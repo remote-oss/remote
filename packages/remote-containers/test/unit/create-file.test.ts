@@ -87,6 +87,29 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
     ]);
   });
 
+  it('F-0302 AC-34: a stored configuration the user asked to see opens in a preview, and nothing is offered', async () => {
+    const scene = sceneOf({
+      kind: 'openStored',
+      file: '/store/configs/p/.devcontainer/devcontainer.json',
+    });
+    await addConfiguration(scene.ports, '/w/p');
+    deepStrictEqual(scene.calls, [
+      'wizard /w/p',
+      'preview /store/configs/p/.devcontainer/devcontainer.json',
+    ]);
+  });
+
+  it('F-0302 AC-10: a copy that kept the stored configuration opens no file and offers the user data variant', async () => {
+    const scene = sceneOf({
+      kind: 'written',
+      files: [],
+      target: '/store/configs/p',
+      place: 'userData',
+    });
+    await addConfiguration(scene.ports, '/w/p');
+    deepStrictEqual(scene.calls, ['wizard /w/p', 'offerReopen userData']);
+  });
+
   it('F-0801 AC-4: a write with no configuration file among its paths only offers the notification', async () => {
     const scene = sceneOf({...WRITTEN, files: ['README.md']});
     await createDevContainerFile(scene.ports)();

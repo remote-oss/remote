@@ -39,7 +39,8 @@ export interface ReopenNotificationPorts {
   window: NotificationWindow;
   global: IntentMemento;
   workspace: IntentMemento;
-  hasConfiguration(folder: string): Promise<boolean>;
+  /** Where the folder's configuration is: none, the folder's own, or a stored one (which wins when both exist). */
+  configurationKind(folder: string): Promise<'none' | 'folder' | 'stored'>;
   show(
     message: string,
     buttons: readonly string[],
@@ -120,9 +121,15 @@ export async function offerReopen(
     isSuppressed(
       ports.global.get(REOPEN_NOTIFICATION_KEY),
       ports.workspace.get(REOPEN_NOTIFICATION_KEY),
-    ) ||
-    (variant === 'folder' && !(await ports.hasConfiguration(folder.fsPath)))
+    )
   ) {
+    return;
+  }
+  const kind =
+    variant === 'userData'
+      ? 'stored'
+      : await ports.configurationKind(folder.fsPath);
+  if (kind === 'none') {
     return;
   }
   const reopen = translate(REOPEN_TEMPLATES.S293);
@@ -130,7 +137,7 @@ export async function offerReopen(
   const answer = await ports.show(
     filled(translate, REOPEN_TEMPLATES.S426, [
       translate(
-        variant === 'folder' ? REOPEN_TEMPLATES.S186 : REOPEN_TEMPLATES.S368,
+        kind === 'folder' ? REOPEN_TEMPLATES.S186 : REOPEN_TEMPLATES.S368,
       ),
       '',
     ]),

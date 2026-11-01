@@ -272,6 +272,17 @@ function sceneOf(
       download,
       setTimer: () => () => undefined,
     },
+    stored: {
+      files: {
+        exists: () => Promise.resolve(false),
+        read: () => Promise.resolve(new Uint8Array()),
+        write: () => Promise.resolve(),
+        makeFolder: () => Promise.resolve(),
+        removeFolder: () => Promise.resolve(),
+      },
+      show: () => Promise.resolve(undefined),
+      translate: template => template,
+    },
     dialogs: {
       showModalError: message => {
         scene.failures.push(message);
@@ -285,6 +296,7 @@ function sceneOf(
         return picker;
       },
       verifiedIcon: 'verified',
+      openFileIcon: 'file',
       openExternal: () => undefined,
       templateMetadata: () =>
         Promise.resolve({
@@ -948,6 +960,119 @@ describe('the wizard (card containers-80)', () => {
         [],
       ],
     );
+  });
+
+  /** Ports whose store holds a slot of `/home/a/ws`, and whose dialog answers `answer`; the removals are recorded. */
+  function withSlot(
+    scene: Scene,
+    answer: string | undefined,
+    removed: string[],
+  ): WizardPorts {
+    const marker =
+      '// Maintained by the Dev Container extension\n{"rootFolder":"/home/a/ws"}\n';
+    return {
+      ...scene.ports,
+      location: {
+        ...locationOf(scene),
+        store: {
+          folderNames: () => Promise.resolve(['ws']),
+          readText: file =>
+            Promise.resolve(
+              file.endsWith('.devcontainer-internal.json') ? marker : '{}',
+            ),
+        },
+      },
+      stored: {
+        ...scene.ports.stored,
+        files: {
+          ...scene.ports.stored.files,
+          removeFolder: folder => {
+            removed.push(folder);
+            return Promise.resolve();
+          },
+        },
+        show: () => Promise.resolve(answer),
+      },
+    };
+  }
+
+  /** Runs the wizard over a store holding the folder's slot, answers the location pick with `choice` and waits for the template pick. */
+  async function pastLocation(
+    scene: Scene,
+    choice: string,
+    answer?: string,
+    removed: string[] = [],
+  ): Promise<{result: ReturnType<typeof runWizard>}> {
+    scene.ports = withSlot(scene, answer, removed);
+    const result = runWizard(
+      {title: 'T', folder: '/home/a/ws'},
+      scene.ports,
+      NEVER,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.locationPickers[0]?.accept(choice);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return {result};
+  }
+
+  const COPY = 'Copy existing configuration to workspace';
+
+  it('F-0801 AC-8: with a stored configuration and the workspace chosen the chooser offers the copy, and Delete in S108 ends the wizard with the workspace file written and the slot removed', async () => {
+    const scene = sceneOf();
+    const removed: string[] = [];
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to workspace',
+      'Delete',
+      removed,
+    );
+    const offered = scene.pickers[0]?.items.map(each => each.label);
+    scene.pickers[0]?.accept(COPY);
+    deepStrictEqual(
+      [offered?.slice(0, 2), await result, removed, scene.written.length],
+      [
+        ['From a predefined container configuration template...', COPY],
+        {
+          kind: 'written',
+          files: ['.devcontainer/devcontainer.json'],
+          target: '/home/a/ws',
+          place: 'workspace',
+        },
+        ['/store/configs/ws'],
+        0,
+      ],
+    );
+  });
+
+  it('F-0302 AC-34: the Open File button of the copy row ends the wizard with the stored file to show and nothing written', async () => {
+    const scene = sceneOf();
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to workspace',
+    );
+    scene.pickers[0]?.pressButton(COPY);
+    deepStrictEqual(
+      [await result, scene.written.length],
+      [
+        {
+          kind: 'openStored',
+          file: '/store/configs/ws/.devcontainer/devcontainer.json',
+        },
+        0,
+      ],
+    );
+  });
+
+  it('F-0801 AC-8: the copy is not offered when the configuration goes to the user data folder', async () => {
+    const scene = sceneOf();
+    const {result} = await pastLocation(
+      scene,
+      'Add configuration to user data folder',
+    );
+    const labelsShown = scene.pickers[0]?.items.map(each => each.label);
+    scene.pickers[0]?.hide();
+    await result;
+    deepStrictEqual(labelsShown?.includes(COPY), false);
   });
 
   it('F-0801 AC-3: Escape on the location pick cancels the wizard before any template is asked', async () => {

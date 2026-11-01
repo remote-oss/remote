@@ -199,11 +199,11 @@ F-0302.AC-2	deferred	containers release 1: later (repository configuration folde
 F-0302.AC-3	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-4	acceptance	
 F-0302.AC-5	acceptance	
-F-0302.AC-6	todo	
-F-0302.AC-7	todo	
-F-0302.AC-8	todo	
-F-0302.AC-9	todo	
-F-0302.AC-10	todo	
+F-0302.AC-6	acceptance	
+F-0302.AC-7	acceptance	
+F-0302.AC-8	acceptance	
+F-0302.AC-9	acceptance	
+F-0302.AC-10	acceptance	
 F-0302.AC-11	acceptance	
 F-0302.AC-12	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-13	deferred	containers release 1: later (repository configuration folders)
@@ -227,11 +227,11 @@ F-0302.AC-30	acceptance
 F-0302.AC-31	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-32	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-33	todo	
-F-0302.AC-34	todo	
+F-0302.AC-34	acceptance	
 F-0302.AC-35	todo	
 F-0302.AC-36	deferred	containers release 1: later (repository configuration folders)
 F-0302.AC-37	deferred	containers release 1: later (repository configuration folders)
-F-0302.AC-38	todo	
+F-0302.AC-38	acceptance	
 F-0302.AC-39	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0302.AC-40	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0302.AC-41	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -1001,7 +1001,7 @@ F-0801.AC-4	todo
 F-0801.AC-5	acceptance	
 F-0801.AC-6	todo	
 F-0801.AC-7	todo	
-F-0801.AC-8	todo	
+F-0801.AC-8	acceptance	
 F-0801.AC-9	todo	
 F-0801.AC-10	todo	
 F-0801.AC-11	deferred	containers release 1: later (Compose)
@@ -1155,7 +1155,7 @@ F-0805.AC-17	acceptance
 F-0805.AC-18	acceptance	
 F-0805.AC-19	todo	
 F-0805.AC-20	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0805.AC-21	todo	
+F-0805.AC-21	core	core's quick-input focus after a mouse OK: the first Escape clears the focus ring on 1.139.1 and doesn't on the pinned VSCodium 1.140; our stage handles every Escape the same
 F-0901.AC-1	deferred	containers 0.4: F-0806 later
 F-0901.AC-2	acceptance	
 F-0901.AC-3	deferred	containers 0.4: F-0905 later

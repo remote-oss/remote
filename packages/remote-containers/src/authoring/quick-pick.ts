@@ -17,6 +17,8 @@ export interface QuickPicker<Item> {
   onDidAccept(listener: () => void): unknown;
   onDidChangeValue(listener: (value: string) => void): unknown;
   onDidHide(listener: () => void): unknown;
+  /** The user pressed the button of a row. */
+  onDidTriggerItemButton(listener: (event: {item: Item}) => void): unknown;
   show(): void;
   hide(): void;
   dispose(): void;
