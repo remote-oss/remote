@@ -21,7 +21,7 @@ const CONFIGURATION: ConfigurationResult = {
   mergedConfiguration: undefined,
 };
 const START =
-  '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)';
+  '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)';
 
 /** The folders of the fake file system: what each holds. */
 const ONE_FILE: Record<string, string[]> = {
@@ -46,6 +46,10 @@ interface Scene {
   /** The order of what happened, as far as the rows look at it. */
   order: string[];
   timers: Array<() => void>;
+  /** The Cancel callbacks of the progresses shown. */
+  cancels: Array<() => void>;
+  /** The signals the engine check and the CLI read were given. */
+  signals: AbortSignal[];
   sink: MemorySink;
 }
 
@@ -59,6 +63,8 @@ function sceneOf(): Scene {
     check: () => Promise.resolve('proceed'),
     order: [],
     timers: [],
+    cancels: [],
+    signals: [],
     sink: new MemorySink(),
   };
 }
@@ -72,8 +78,9 @@ function later(scene: Scene, text: string): void {
 
 function portsOf(scene: Scene): PreReloadPorts {
   return {
-    firstCheck: async (base, dialogs) => {
+    firstCheck: async (base, dialogs, cancellation) => {
       scene.order.push(`firstCheck ${String(base)}`);
+      scene.signals.push(cancellation);
       await scene.hold.promise;
       return scene.check(dialogs);
     },
@@ -121,8 +128,9 @@ function portsOf(scene: Scene): PreReloadPorts {
       },
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       cli: {
-        readConfiguration: () => {
+        readConfiguration: (input, stdin, onEvent, cancellation) => {
           scene.order.push('readConfiguration');
+          scene.signals.push(cancellation);
           return scene.read;
         },
       },
@@ -132,7 +140,8 @@ function portsOf(scene: Scene): PreReloadPorts {
       logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
     },
     progress: {
-      showProgress: (title, until) => {
+      showProgress: (title, until, cancel) => {
+        scene.cancels.push(cancel);
         scene.order.push(`progress shown ${title}`);
         void until.then(() => {
           scene.order.push('progress closed');
@@ -152,7 +161,6 @@ const REQUEST = {
   dockerPath: '/usr/bin/docker',
   mountGitWorktreeCommonDir: false,
   features: {defaultFeatures: {}, lockfile: true},
-  cancellation: new AbortController().signal,
 };
 
 /** Runs the checks with the timer fired while the check waits, and the progress closed by the end. */
@@ -165,6 +173,16 @@ async function slowRun(scene: Scene) {
   outcome.progress.close();
   await settled();
   return outcome.choice;
+}
+
+/** Runs the checks, shows the progress, presses its Cancel while the check waits, and gives how they ended. */
+async function cancelledRun(scene: Scene) {
+  const running = beforeReload(portsOf(scene), REQUEST);
+  await settled();
+  scene.timers[0]?.();
+  scene.cancels[0]?.();
+  scene.hold.resolve(undefined);
+  return running;
 }
 
 function lines(scene: Scene): string[] {
@@ -382,5 +400,37 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       ],
       ['no disk', false],
     );
+  });
+
+  it('F-0408 AC-7: Cancel aborts the one signal the engine check and the read share, and the choice is cancelled with nothing shown', async () => {
+    const scene = sceneOf();
+    scene.check = () => Promise.resolve('stopped');
+    scene.read = Promise.resolve({kind: 'cancelled'});
+    const outcome = await cancelledRun(scene);
+    await settled();
+    deepStrictEqual(
+      [
+        outcome.choice.kind,
+        scene.signals.map(signal => signal.aborted),
+        outcome.cancellation.aborted,
+        scene.order.filter(entry => !entry.startsWith('progress')),
+        lines(scene).filter(line => line.includes('was cancelled')),
+      ],
+      [
+        'cancelled',
+        [true, true],
+        true,
+        [`firstCheck ${FOLDER}`, 'readConfiguration'],
+        ['info: the command was cancelled while reading the configuration'],
+      ],
+    );
+  });
+
+  it('F-0408 AC-7: a read that fails after Cancel is a cancelled choice, not a failure', async () => {
+    const scene = sceneOf();
+    scene.read = Promise.reject(new Error('killed'));
+    scene.read.catch(() => undefined);
+    const outcome = await cancelledRun(scene);
+    deepStrictEqual(outcome.choice.kind, 'cancelled');
   });
 });

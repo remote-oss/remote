@@ -18,9 +18,10 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     remote-oss/remote-containers#59, card containers-93).
 
 - **Reopen in Container checks Docker and reads the configuration before the window reloads.** When that takes longer
-  than half a second, a "Connecting to Dev Container" notification shows meanwhile.
+  than half a second, a "Reading Dev Container Configuration" notification shows meanwhile, with Cancel.
   - F-0401 5.0 step 2 has the reload "within about 1 s"; the dev container CLI's read of the configuration can't
-    promise that (ruling (c) on #929, card containers-24).
+    promise that (ruling (c) on #929, card containers-24). The notification is F-0408's S283, with its Cancel (athena on
+    2026-11-01, card containers-114).
 
 - **Switching the dev container's `remoteUser` to another account and reloading the window connects** as that
   account, in the same container, with no rebuild. Files the new account creates in a bind mount keep its own

@@ -33,6 +33,7 @@ export interface PreReloadPorts {
   firstCheck(
     base: string | undefined,
     dialogs: EngineDialogPort,
+    cancellation: AbortSignal,
   ): Promise<FirstCheckResult>;
   dialogs: EngineDialogPort;
   config: ConfigurationPorts;
@@ -74,18 +75,48 @@ function closingSurfaces(
   };
 }
 
+/** The choice, or a cancelled one, logged, when the user cancelled while the checks ran. */
+function cancelledOr(
+  choice: ConfigurationChoice,
+  cancellation: AbortSignal,
+  logger: Logger,
+): {choice: ConfigurationChoice} {
+  if (!cancellation.aborted) {
+    return {choice};
+  }
+  logger.info('the command was cancelled while reading the configuration');
+  return {choice: {kind: 'cancelled'}};
+}
+
+/** What the checks before a reload end with: the choice, the progress still open, and the signal Cancel aborts. */
+export interface BeforeReload {
+  choice: ConfigurationChoice;
+  progress: PreReloadProgress;
+  /** Aborted when the user cancels the progress; the work after the choice may use it too. */
+  cancellation: AbortSignal;
+}
+
 /**
- * The checks before a reload: the engine and the configuration together, with S087 after 500 ms. The caller closes the
- * progress before its reload, and when it ends without one.
+ * The checks before a reload: the engine and the configuration together, with S283 and a Cancel after 500 ms. Cancel
+ * aborts them all: the engine's queries, the CLI's read and a pull it makes. The caller closes the progress before its
+ * reload, and when it ends without one.
  */
 export async function beforeReload(
   ports: PreReloadPorts,
-  request: Omit<ConfigurationRequest, 'engineCheck'>,
-): Promise<{choice: ConfigurationChoice; progress: PreReloadProgress}> {
+  request: Omit<ConfigurationRequest, 'engineCheck' | 'cancellation'>,
+): Promise<BeforeReload> {
   const {logger} = ports.config;
-  const progress = startPreReloadProgress(ports.progress);
+  const controller = new AbortController();
+  const cancellation = controller.signal;
+  const progress = startPreReloadProgress(ports.progress, () => {
+    controller.abort();
+  });
   const engineCheck = ports
-    .firstCheck(request.folder, closingDialogs(ports.dialogs, progress))
+    .firstCheck(
+      request.folder,
+      closingDialogs(ports.dialogs, progress),
+      cancellation,
+    )
     .catch((caught: unknown): FirstCheckResult => {
       logger.error(
         `the engine check failed: ${caught instanceof Error ? caught.message : String(caught)}`,
@@ -95,15 +126,26 @@ export async function beforeReload(
     });
   try {
     const choice = await chooseConfiguration(
-      {...request, engineCheck},
+      {...request, engineCheck, cancellation},
       {
         ...ports.config,
         surfaces: closingSurfaces(ports.config.surfaces, progress),
       },
     );
-    return {choice, progress};
+    return {
+      ...cancelledOr(choice, cancellation, logger),
+      progress,
+      cancellation,
+    };
   } catch (caught) {
     progress.close();
+    if (cancellation.aborted) {
+      return {
+        ...cancelledOr({kind: 'stopped'}, cancellation, logger),
+        progress,
+        cancellation,
+      };
+    }
     throw caught;
   }
 }
@@ -135,7 +177,6 @@ export async function commandBeforeReload(
   dockerPath: string,
   configFile?: string,
 ): ReturnType<typeof beforeReload> {
-  const cancellation = new AbortController().signal;
   const result = await beforeReload(
     {
       firstCheck,
@@ -154,7 +195,6 @@ export async function commandBeforeReload(
         ports.settings.defaultFeatures(),
         ports.settings.lockfile(),
       ),
-      cancellation,
       ...(configFile === undefined ? {} : {configFile}),
     },
   );
@@ -172,14 +212,25 @@ export async function commandBeforeReload(
       await problematicFeatureRefused(
         ports.problematic,
         requested,
-        cancellation,
+        result.cancellation,
       )
     ) {
       result.progress.close();
-      return {choice: {kind: 'rejected'}, progress: result.progress};
+      return {
+        ...cancelledOr({kind: 'rejected'}, result.cancellation, ports.logger),
+        progress: result.progress,
+        cancellation: result.cancellation,
+      };
     }
   } catch (caught) {
     result.progress.close();
+    if (result.cancellation.aborted) {
+      return {
+        ...cancelledOr({kind: 'rejected'}, result.cancellation, ports.logger),
+        progress: result.progress,
+        cancellation: result.cancellation,
+      };
+    }
     throw caught;
   }
   return result;

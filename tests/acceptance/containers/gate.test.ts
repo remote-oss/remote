@@ -20,7 +20,9 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  answerNotification,
   dialogOf,
+  notificationButtons,
   notificationCentre,
   notifications,
   primaryButtonOf,
@@ -59,7 +61,7 @@ async function containerIds(): Promise<string[]> {
 }
 
 /** The text the pre-reload progress shows once its link is rendered (S087). */
-const PRE_RELOAD_TOAST = 'Connecting to Dev Container (show log)';
+const PRE_RELOAD_TOAST = 'Reading Dev Container Configuration (show log)';
 
 describe('Dev Containers release 1 gate rows (card containers-09)', function () {
   this.timeout(600_000);
@@ -247,7 +249,7 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
     }
   });
 
-  it('ruling (c) (P1), containers-24: with a Docker that answers after a second, the Connecting to Dev Container toast is on screen before the window reloads, and then it connects', async () => {
+  it('ruling (c) (P1), containers-24: with a Docker that answers after a second, the Reading Dev Container Configuration toast is on screen before the window reloads, and then it connects', async () => {
     const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'slow-docker');
     writeFileSync(wrapper, '#!/bin/sh\nsleep 1\nexec docker "$@"\n', {
       mode: 0o755,
@@ -276,6 +278,52 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
           containers: (await devContainersOf(folder)).length,
         },
         {remoteName: 'dev-container', containers: 1},
+      );
+      await closeWindow(name);
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
+  });
+
+  it('F-0408 AC-7 (c114-cancel): Cancel on the Reading Dev Container Configuration toast, shown with a primary Cancel, removes it, and the window does not reload, no container is made and no other notification or dialog shows', async () => {
+    const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'slow-docker-8');
+    writeFileSync(wrapper, '#!/bin/sh\nsleep 8\nexec docker "$@"\n', {
+      mode: 0o755,
+    });
+    const folder = devContainerFolder('c114-cancel', {name: 'Cancel Reading'});
+    await setUserSetting('dev.containers.dockerPath', wrapper);
+    try {
+      const name = await openFolderWindow(folder);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      await inWindow(name, 'notifications.clearAll');
+      const running = inWindow(name, 'remote-containers.reopenInContainer');
+      running.catch(() => undefined);
+      await waitFor(
+        `the toast ${PRE_RELOAD_TOAST}`,
+        async () => (await notifications(name)).includes(PRE_RELOAD_TOAST),
+        30_000,
+      );
+      const buttons = await notificationButtons(name, PRE_RELOAD_TOAST);
+      await answerNotification(name, PRE_RELOAD_TOAST, 'Cancel');
+      await running;
+      await new Promise(resolve => setTimeout(resolve, 12_000));
+      deepStrictEqual(
+        {
+          buttons,
+          toasts: await notifications(name),
+          centre: await notificationCentre(name),
+          dialog: await dialogOf(name),
+          remoteName: (await windowState(name)).remoteName,
+          containers: await devContainersOf(folder),
+        },
+        {
+          buttons: ['Cancel'],
+          toasts: [],
+          centre: [],
+          dialog: undefined,
+          remoteName: null,
+          containers: [],
+        },
       );
       await closeWindow(name);
     } finally {

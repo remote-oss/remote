@@ -6,7 +6,7 @@ import {
 import {settled} from './pending.ts';
 
 const START =
-  '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)';
+  '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)';
 
 /** The timer and the notification a row steers, and what they recorded. */
 interface Recording {
@@ -15,6 +15,10 @@ interface Recording {
   stops: number;
   shown: string[];
   closes: number;
+  /** The Cancel callbacks of the progresses shown. */
+  cancels: Array<() => void>;
+  /** How often the progress asked its owner to stop the work. */
+  stopped: number;
 }
 
 function progressOf(): {
@@ -27,26 +31,34 @@ function progressOf(): {
     stops: 0,
     shown: [],
     closes: 0,
+    cancels: [],
+    stopped: 0,
   };
   return {
     recording,
     start: () =>
-      startPreReloadProgress({
-        showProgress: (title, until) => {
-          recording.shown.push(title);
-          void until.then(() => {
-            recording.closes += 1;
-          });
+      startPreReloadProgress(
+        {
+          showProgress: (title, until, cancel) => {
+            recording.cancels.push(cancel);
+            recording.shown.push(title);
+            void until.then(() => {
+              recording.closes += 1;
+            });
+          },
+          setTimer: (milliseconds, callback) => {
+            recording.waits.push(milliseconds);
+            recording.fire.push(callback);
+            return () => {
+              recording.stops += 1;
+            };
+          },
+          translate: template => template,
         },
-        setTimer: (milliseconds, callback) => {
-          recording.waits.push(milliseconds);
-          recording.fire.push(callback);
-          return () => {
-            recording.stops += 1;
-          };
+        () => {
+          recording.stopped += 1;
         },
-        translate: template => template,
-      }),
+      ),
   };
 }
 
@@ -60,7 +72,7 @@ describe('the progress before a reload (card containers-24, ruling (c))', () => 
     );
   });
 
-  it('ruling (c): at 500 ms S087 shows until close', async () => {
+  it('ruling (c): at 500 ms S283 shows until close', async () => {
     const {recording, start} = progressOf();
     const progress = start();
     recording.fire[0]?.();
@@ -89,6 +101,20 @@ describe('the progress before a reload (card containers-24, ruling (c))', () => 
     deepStrictEqual(
       [recording.shown, recording.closes, recording.stops],
       [[START], 1, 1],
+    );
+  });
+
+  it('ruling (c): Cancel closes the progress and asks for the work to stop, once', async () => {
+    const {recording, start} = progressOf();
+    const progress = start();
+    recording.fire[0]?.();
+    await settled();
+    recording.cancels[0]?.();
+    await settled();
+    progress.close();
+    deepStrictEqual(
+      [recording.closes, recording.stopped, recording.stops],
+      [1, 1, 1],
     );
   });
 });

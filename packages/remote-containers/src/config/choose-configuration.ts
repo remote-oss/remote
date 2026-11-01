@@ -133,7 +133,9 @@ export type ConfigurationChoice =
   /** A dialog of this module was shown; nothing more is to be shown. */
   | {kind: 'rejected'}
   /** The engine check stopped the flow, and its own dialog has shown. */
-  | {kind: 'stopped'};
+  | {kind: 'stopped'}
+  /** The user cancelled the progress that shows while the checks run; nothing was shown or started. */
+  | {kind: 'cancelled'};
 
 /** The text of a template with its values, translated. */
 function textOf(

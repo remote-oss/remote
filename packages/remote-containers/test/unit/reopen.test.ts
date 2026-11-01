@@ -292,6 +292,34 @@ describe('Reopen in Container', () => {
     );
   });
 
+  it('F-0408 AC-7: Cancel on the progress ends Reopen with no reload, no other notification and a line in the log', async () => {
+    const state = setup();
+    const release = pendingOf<undefined>();
+    state.waitOnCheck = release.promise;
+    const {ports, sink} = portsOf(state);
+    const running = handlerOf(ports)();
+    await settled();
+    state.timers[0]?.callback();
+    state.cancels[0]?.();
+    release.resolve(undefined);
+    await running;
+    await settled();
+    deepStrictEqual(
+      [
+        state.order,
+        state.commands,
+        state.shown,
+        linesOf(sink).filter(line => line.includes('was cancelled')),
+      ],
+      [
+        [`progress shown ${START}`, 'progress closed'],
+        [],
+        [],
+        ['info: the command was cancelled while reading the configuration'],
+      ],
+    );
+  });
+
   it('ruling (c): the progress closes in the end of every other answer, and nothing opens', async () => {
     const answers: Array<(state: Setup) => void> = [
       state => {
