@@ -86,6 +86,8 @@ async function registered(
       for (const listener of listeners) {
         listener({name: 'installing'});
       }
+      // The progress opens after its delay, which a connect that lasts has passed.
+      recording.fireTimers();
       return Promise.resolve(
         (answers.length > 1 ? answers.shift() : answers[0]) ??
           options.failure ??
@@ -358,6 +360,15 @@ describe('the registration of the container connector (card containers-08)', () 
           false,
         ],
       ],
+    );
+  });
+
+  it('containers-116: the progress waits half a second: the resolver’s timer is 500 ms', async () => {
+    const seen = await registered();
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    deepStrictEqual(
+      seen.events.filter(event => event.startsWith('timer')),
+      ['timer 500', 'timer 2000'],
     );
   });
 

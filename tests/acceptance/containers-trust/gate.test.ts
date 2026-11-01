@@ -884,4 +884,102 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       await setUserSetting('security.workspace.trust.enabled', undefined);
     }
   });
+
+  it('F-0501 AC-15 (c74-manage): Manage on core’s dialog leaves the window local, untrusted and unchanged, with nothing run on the host', async () => {
+    const folder = devContainerFolder('c74-manage', {name: 'C74 Manage'});
+    const name = await openFolderWindow(folder);
+    const activated = activations(name);
+    const running = inWindow(name, 'remote-containers.reopenInContainer');
+    running.catch(() => undefined);
+    const shown = await waitForDialog(name);
+    await answerDialog(name, 'Manage');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const state = {
+      shown: [shown.message, shown.buttons],
+      dialog: await dialogOf(name),
+      remoteName: (await windowState(name)).remoteName,
+      trusted: await isTrusted(name),
+      activated: activations(name),
+      title: await windowTitle(name),
+      host: await ranOnHost(folder),
+    };
+    await closeWindow(name);
+    deepStrictEqual(state, {
+      shown: [TRUST_QUESTION, ['Manage', 'Cancel', 'Trust Folder & Continue']],
+      dialog: undefined,
+      remoteName: null,
+      trusted: false,
+      activated,
+      title: `[${name}]`,
+      host: {...NOTHING_RAN, containers: []},
+    });
+  });
+
+  it('F-0501 AC-22 (c74-recent-untrusted): opening the stored entry of a folder that is not trusted switches the title and indicator to the container before core asks, and declining shows S360 with S377, then reopens the same folder locally and restricted', async () => {
+    const folder = devContainerFolder('c74-untrusted', {name: 'C74 Untrusted'});
+    const connected = await trustedContainerWindow(folder);
+    await trustSettled(connected, true);
+    await inWindow(connected, 'workbench.trust.manage');
+    await waitFor(
+      'the trust editor of the connected window',
+      async () => (await pageText(connected)).includes('You trust this folder'),
+      30_000,
+    );
+    await clickButton(connected, "Don't Trust");
+    await closeWindow(connected);
+    const from = await openFolderWindow(
+      devContainerFolder('c74-untrusted-from'),
+    );
+    const entry = (await recentlyOpenedIn(from)).find(
+      each =>
+        each.remoteAuthority?.startsWith('dev-container+') === true &&
+        each.uri.endsWith('/workspaces/c74-untrusted'),
+    );
+    const opening = inWindow(from, 'acceptance.agent.openWindow', entry?.uri);
+    opening.catch(() => undefined);
+    const asked = await waitForDialog('c74-untrusted');
+    const whileAsked = {
+      title: (await windowTitle('c74-untrusted')).includes('C74 Untrusted'),
+      remoteName: (await windowState('c74-untrusted')).remoteName,
+      indicator: await statusBarText('c74-untrusted', 'status.host'),
+    };
+    await answerDialog('c74-untrusted', 'Cancel');
+    const declined = await waitForDialog('c74-untrusted');
+    const declinedText = await dialogText('c74-untrusted');
+    await answerDialog('c74-untrusted', 'OK');
+    await waitFor(
+      'the window to be the local folder again',
+      async () => (await windowState('c74-untrusted')).remoteName === null,
+      60_000,
+    );
+    const after = {
+      folders: (await windowState('c74-untrusted')).folders.map(each =>
+        decodeURIComponent(each),
+      ),
+      trusted: await trustSettled('c74-untrusted', false),
+    };
+    await closeWindow('c74-untrusted');
+    deepStrictEqual(
+      {
+        asked: asked.message,
+        whileAsked,
+        declined: [
+          declined.message,
+          declinedText?.includes(S377),
+          declined.buttons,
+        ],
+        after,
+      },
+      {
+        asked: TRUST_QUESTION,
+        whileAsked: {
+          title: true,
+          remoteName: 'dev-container',
+          indicator: 'Opening Remote...',
+        },
+        declined: [S360, true, ['OK']],
+        after: {folders: [`file://${folder}`], trusted: false},
+      },
+    );
+  });
 });

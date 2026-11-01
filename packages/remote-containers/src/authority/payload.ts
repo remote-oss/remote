@@ -33,7 +33,7 @@ export interface DevContainerFolder {
 }
 
 /** A payload that is only a host path. */
-interface DevContainerLegacy {
+export interface DevContainerLegacy {
   kind: 'legacy';
   hostPath: string;
 }
@@ -130,6 +130,25 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
     ...(context === undefined ? {} : {context}),
     configFile,
   };
+}
+
+/**
+ * The folder target that a fresh Reopen would carry for the legacy host path `legacy`: the first of its configuration
+ * `candidates`, which come in the order of the picker, with no Docker context; none when the folder has no configuration.
+ */
+export function folderTargetOf(
+  legacy: DevContainerLegacy,
+  candidates: ReadonlyArray<{file: string}>,
+): DevContainerFolder | undefined {
+  const first = candidates[0];
+  return first === undefined
+    ? undefined
+    : {
+        kind: 'folder',
+        hostPath: legacy.hostPath,
+        localDocker: false,
+        configFile: {$mid: 1, path: first.file, scheme: 'file'},
+      };
 }
 
 /** Reads a payload: a folder target, the legacy host path, or why it is neither. */

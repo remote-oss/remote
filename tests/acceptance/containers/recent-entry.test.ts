@@ -4,17 +4,23 @@ import {
   closeWindow,
   containersLog,
   devContainerFolder,
+  devContainersOf,
   inWindow,
   recentlyOpenedIn,
+  reloadWindow,
   reopenInContainer,
+  startInWindow,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   chooseQuickPickRow,
+  detailedQuickPickRows,
+  pressEscape,
   primaryButtonOf,
   quickPickRows,
   statusItem,
+  statusItemText,
   waitForDialog,
   waitForQuickPick,
   windowTitle,
@@ -27,7 +33,7 @@ const SETUP_FAILED = {
   buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
 };
 
-describe('F-0502 a stored entry whose folder is gone (card containers-43)', function () {
+describe('The Open Recent entry and the label of a connected window (cards containers-43 and coverage-74)', function () {
   this.timeout(600_000);
 
   it('F-0502 AC-23 (ruling-1053-folder): picking a stored dev-container entry whose host folder was deleted shows the remembered title and indicator, the setup error with Retry primary, More Actions... with its four items, and the same error again after Retry and after Reload Window, with the folder named in the log', async () => {
@@ -97,6 +103,60 @@ describe('F-0502 a stored entry whose folder is gone (card containers-43)', func
       await closeWindow(window).catch(() => undefined);
       await closeWindow(starter).catch(() => undefined);
       await removeContainers(folder).catch(() => undefined);
+    }
+  });
+  it('F-0504 AC-2 (c74-static-label): the Open Recent list of a connected window has a new entry labelled with the folder name and [Dev Container], whatever the configuration’s name is', async () => {
+    const folder = devContainerFolder('c74-static-label', {
+      name: 'Name Not In The Label',
+    });
+    try {
+      const window = await openFolderWindow(folder);
+      await reopenInContainer(window);
+      await startInWindow(window, 'workbench.action.openRecent');
+      await waitForQuickPick(window, 30_000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const rows = await detailedQuickPickRows(window);
+      await pressEscape(window);
+      await closeWindow(window);
+      deepStrictEqual(
+        rows.slice(0, 2).map(entry => entry.label),
+        ['c74-static-label [Dev Container]', 'c74-static-label'],
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0504 AC-28 (c74-name-change): a changed configuration name shows in the title, the indicator text and its label after a Reload Window, with the same container, not rebuilt', async () => {
+    const folder = devContainerFolder('c74-name-change', {name: 'Before'});
+    try {
+      const window = await openFolderWindow(folder);
+      await reopenInContainer(window);
+      const [before = ''] = await devContainersOf(folder);
+      devContainerFolder('c74-name-change', {name: 'After'});
+      await reloadWindow(window);
+      const text = await statusItemText(
+        window,
+        'status.host',
+        'Dev Container: After',
+        60_000,
+      );
+      const indicator = await statusItem(window, 'status.host');
+      const state = {
+        text,
+        label: indicator.ariaLabel.endsWith('Dev Container: After'),
+        title: await windowTitle(window),
+        containers: await devContainersOf(folder),
+      };
+      await closeWindow(window);
+      deepStrictEqual(state, {
+        text: 'Dev Container: After',
+        label: true,
+        title: '[c74-name-change [Dev Container: After]]',
+        containers: [before],
+      });
+    } finally {
+      await removeContainers(folder);
     }
   });
 });
