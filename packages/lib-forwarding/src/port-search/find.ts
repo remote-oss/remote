@@ -4,8 +4,8 @@
  */
 import type {PortRange} from './range.ts';
 
-/** The answer of one probe: nobody listens (free), something listens, or the attempt failed. */
-export type ProbeAnswer = 'refused' | 'open' | 'error';
+/** The answer of one probe: nobody listens (free), something listens, the attempt failed, or no answer in time. */
+export type ProbeAnswer = 'refused' | 'open' | 'error' | 'timedOut';
 
 /** Probes one port. 'refused' means nobody listens, so the port is free. */
 export interface PortProber {
@@ -52,7 +52,10 @@ function withDefaults(options: FindOptions | undefined): FilledOptions {
   };
 }
 
-/** Probes the ports of a range in order; the first refusal wins, open and error continue. */
+/**
+ * Probes the ports of a range in order; the first refusal wins; a port that doesn't answer in time ends the search;
+ * open and error continue.
+ */
 async function searchRange(
   prober: PortProber,
   range: PortRange,
@@ -67,11 +70,17 @@ async function searchRange(
     if (answer === 'refused') {
       return {port};
     }
+    if (answer === 'timedOut') {
+      return {failure: 'noFreePort'};
+    }
   }
   return {failure: 'noFreePort'};
 }
 
-/** Probes up to ten random candidates; the first refusal wins, open and error continue. */
+/**
+ * Probes up to ten random candidates; the first refusal wins; a port that doesn't answer in time ends the search;
+ * open and error continue.
+ */
 async function searchRandom(
   prober: PortProber,
   options: FilledOptions,
@@ -85,6 +94,9 @@ async function searchRandom(
     const answer = await prober.probe(candidate);
     if (answer === 'refused') {
       return {port: candidate};
+    }
+    if (answer === 'timedOut') {
+      return {failure: 'noFreePort'};
     }
   }
   return {failure: 'noFreePort'};

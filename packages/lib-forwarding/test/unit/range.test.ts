@@ -8,9 +8,10 @@ describe('parseRange (card forwarding-01 table)', () => {
     });
   });
 
-  it("parseRange(' 1 - 65535 ') -> {first:1, last:65535}", () => {
+  it("F-2104 AC-18: parseRange(' 1 - 65535 ') -> none badFormat", () => {
     deepStrictEqual(parseRange(' 1 - 65535 '), {
-      range: {first: 1, last: 65535},
+      none: true,
+      reason: 'badFormat',
     });
   });
 
@@ -42,12 +43,21 @@ describe('parseRange (card forwarding-01 table)', () => {
     );
   });
 
-  it("parseRange(''), parseRange('   ') -> none empty", () => {
+  it('F-2104 AC-18: the range is exactly "A-B", as the setting’s pattern: spaces around or inside are badFormat, a string of spaces is badFormat, the empty string is empty, and the plain range is the range', () => {
     deepStrictEqual(
-      [parseRange(''), parseRange('   ')],
       [
+        parseRange(' 41080-41081 '),
+        parseRange('41080 - 41081'),
+        parseRange('   '),
+        parseRange(''),
+        parseRange('41080-41081'),
+      ],
+      [
+        {none: true, reason: 'badFormat'},
+        {none: true, reason: 'badFormat'},
+        {none: true, reason: 'badFormat'},
         {none: true, reason: 'empty'},
-        {none: true, reason: 'empty'},
+        {range: {first: 41080, last: 41081}},
       ],
     );
   });
