@@ -719,6 +719,7 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     delay: number | undefined,
     phases: ConnectPhase[],
     delayPasses: boolean,
+    extra: Partial<ResolverOptions> = {},
   ): Promise<{
     runs: number;
     title: string | undefined;
@@ -726,7 +727,9 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     timers: number[];
   }> {
     const context = await setup(
-      delay === undefined ? {} : {progressDelayMilliseconds: delay},
+      delay === undefined
+        ? extra
+        : {...extra, progressDelayMilliseconds: delay},
     );
     context.connector.phases = phases;
     if (delayPasses) {
@@ -768,6 +771,37 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
   it('containers-116: without a delay, a phase that is not quiet opens the progress at once', async () => {
     const shown = await progressOf(undefined, [{name: 'downloading'}], false);
     deepStrictEqual([shown.runs, shown.timers], [1, [1500, 2000]]);
+  });
+
+  it('connect-104: with the progress at the start, a connect that fails before any stage has shown the progress with the start title alone, and closed it', async () => {
+    const context = await setup({progressAtStart: true});
+    context.connector.failure = new Error('no port');
+    await failureOf(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.map(entry => entry.title),
+        context.editor.progressRuns[0]?.updates,
+        context.editor.progressEnded,
+      ],
+      [['starting'], [], 1],
+    );
+  });
+
+  it('connect-104: with the progress at the start, the progress is open before the first stage and a stage updates it', async () => {
+    const shown = await progressOf(undefined, [{name: 'downloading'}], false, {
+      progressAtStart: true,
+    });
+    deepStrictEqual(
+      [shown.runs, shown.title, shown.updates],
+      [1, 'starting', ['phase downloading']],
+    );
+  });
+
+  it('connect-104: without it, a connect that fails before any stage shows no progress', async () => {
+    const context = await setup();
+    context.connector.failure = new Error('no port');
+    await failureOf(context);
+    deepStrictEqual(context.editor.progressRuns.length, 0);
   });
 
   it('contracts §3.2: once open, a quiet phase updates the progress', async () => {

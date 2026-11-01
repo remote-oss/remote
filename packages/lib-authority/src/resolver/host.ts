@@ -164,6 +164,12 @@ export interface ResolverOptions {
    */
   progressDelayMilliseconds?: number;
   /**
+   * Whether the progress opens when a resolve starts, with the start title alone and before any stage: the family's
+   * progress shows from the resolve's start, so a connect that fails before its first stage has shown it all the same.
+   * It closes when the resolve ends.
+   */
+  progressAtStart?: boolean;
+  /**
    * The family's canonical mapping, registered as the resolver's `getCanonicalURI` (windows contracts §3.2): the local
    * path a `vscode-remote` URI of this window stands for, or nothing. `warn` logs a mapping that failed.
    */
@@ -418,6 +424,9 @@ export async function registerResolver(
       options.progressDelayMilliseconds ?? PROGRESS_FALLBACK_MILLISECONDS,
       open,
     );
+    if (options.progressAtStart === true) {
+      open();
+    }
     const stop = connector.onPhase(phase => {
       const title = options.titleOf(phase, decoded);
       shown = {title, details: phase.details === true, staged: title !== ''};
