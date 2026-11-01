@@ -201,3 +201,18 @@ export async function settledWindow(
   await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
   return connected;
 }
+
+/** The run's containers and the host's images, as one comparable text: what a build or a container would change. */
+export async function dockerObjects(): Promise<string> {
+  const [containers, images] = await Promise.all([
+    execFileAsync('docker', [
+      'ps',
+      '--all',
+      '--quiet',
+      '--filter',
+      `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+    ]),
+    execFileAsync('docker', ['images', '--quiet', '--no-trunc']),
+  ]);
+  return `${containers.stdout}|${images.stdout.split('\n').sort().join(',')}`;
+}
