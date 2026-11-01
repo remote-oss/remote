@@ -917,4 +917,74 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       ]),
     );
   });
+
+  it('F-0412 AC-14 (c77-two-caches): a two-entry build.cacheFrom array shows a cache import in BuildKit’s trace for each entry', async () => {
+    const folder = devContainerFolder('c77-cache-two', {
+      name: 'Cache Two',
+      image: undefined,
+      build: {
+        dockerfile: 'Dockerfile',
+        cacheFrom: ['c77-cache-one:1', 'c77-cache-two:1'],
+      },
+    });
+    writeDockerfile(folder, `FROM ${base()}\nRUN echo built > /built\n`);
+    const cached = ['c77-cache-one:1', 'c77-cache-two:1'];
+    for (const imageTag of cached) {
+      await buildTag(imageTag, `FROM ${base()}\nRUN echo cached > /cached\n`);
+    }
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const lines = containersLogSince(mark);
+      deepStrictEqual(
+        cached.map(imageTag =>
+          lines.some(line =>
+            line.endsWith(`importing cache manifest from ${imageTag}`),
+          ),
+        ),
+        [true, true],
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder, cached);
+    }
+  });
+
+  it('F-0412 AC-19 (c77-long-name): a folder name of 176 characters gets the full vsc- tag with no shortening, and the connect goes on when the engine takes it', async () => {
+    const folderName = `c77-${'n'.repeat(172)}`;
+    const folder = devContainerFolder(folderName, {
+      name: 'Long Name',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(folder, `FROM ${base()}\nRUN echo built > /built\n`);
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      deepStrictEqual(
+        {
+          nameLength: nameOf(folder).length,
+          repositories: await repositoriesStarting(`vsc-${nameOf(folder)}-`),
+          built: await docker('exec', containerId, 'cat', '/built'),
+          dialog: await dialogOf(name),
+          refused: containersLogSince(mark).some(line =>
+            line.includes('invalid reference format'),
+          ),
+        },
+        {
+          nameLength: 176,
+          repositories: [tagOf(folder)],
+          built: 'built',
+          dialog: undefined,
+          refused: false,
+        },
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
 });
