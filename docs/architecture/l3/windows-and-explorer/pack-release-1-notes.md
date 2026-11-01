@@ -23,9 +23,6 @@ decides these outcomes (`extension pack: after publication (post-publish check)`
   active in the same window, with no reload, as soon as the install ends.
 - **F-9901 AC-11:** look up each id the release's `extensionPack` lists on Open VSX; each is found with a version whose
   `engines.vscode` accepts the lowest editor version the project supports.
-- **F-9901 AC-12:** in Microsoft's VS Code with both packs installed, disable the reference pack and its members and
-  reload; each family extension activates on its own event, contributes its commands and views, and shows no coexistence
-  warning.
 - **F-9901 AC-19:** for the first release, `extensionPack` lists exactly Dev Containers then Remote - SSH (proved by the
   manifest row of F-9101 AC-1). For a later release, compare the list with the family members published on Open VSX
   before it: every one that is published with a compatible version is listed, and none that is not (no WSL before it is

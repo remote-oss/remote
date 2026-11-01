@@ -84,13 +84,13 @@ F-9901.AC-2	unit
 F-9901.AC-3	core	core: the set of extensions a gallery install adds; ours is the packs of the members, proved by F-9901 AC-3 (extensionPack) and F-9101 AC-1
 F-9901.AC-4	unit	
 F-9901.AC-5	unit	
-F-9901.AC-6	core	core: the notifications of a profile with both packs; ours is a pack with no entry point, proved by F-9901 AC-4
+F-9901.AC-6	todo	
 F-9901.AC-7	unit	
 F-9901.AC-8	unit	
 F-9901.AC-9	core	core: the listing's publisher fields; ours is publisher, proved by F-9901 AC-9 (publisher) and F-9001 AC-6
 F-9901.AC-10	unit	
 F-9901.AC-11	deferred	extension pack: after publication (post-publish check)
-F-9901.AC-12	deferred	extension pack: after publication (post-publish check)
+F-9901.AC-12	todo	
 F-9901.AC-13	unit	
 F-9901.AC-14	unit	
 F-9901.AC-15	unit	
