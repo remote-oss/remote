@@ -1477,6 +1477,19 @@ export async function statusBarText(
   );
 }
 
+/** The remote indicator's text and the text of each notification toast of window `name`, read in one go so that a sample is quick. */
+export async function connectSurface(
+  name: string,
+): Promise<{indicator: string; toasts: string[]}> {
+  return evaluate<{indicator: string; toasts: string[]}>(
+    name,
+    `({
+      indicator: (document.getElementById('status.host')?.textContent ?? '').trim(),
+      toasts: [...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(each => each.textContent ?? ''),
+    })`,
+  );
+}
+
 /** One notification toast as the window shows it: its text, links, buttons, toolbar actions and progress bar. */
 export interface ToastDetails extends ConnectingToast {
   /** The words and the address of each link in the message. */
@@ -1599,6 +1612,42 @@ export async function answerNotification(
   const item = items.find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
   if (item === undefined) {
     return 'notifications: ' + JSON.stringify(items.map(each => each.querySelector('.notification-list-item-message')?.textContent));
+  }
+  const buttons = [...item.querySelectorAll('.monaco-button')];
+  const button = buttons.find(each => each.textContent === ${JSON.stringify(label)});
+  if (button === undefined) {
+    return 'buttons: ' + JSON.stringify(buttons.map(each => each.textContent));
+  }
+  button.click();
+  return 'clicked';
+})()`,
+      );
+      return found === 'clicked' ? true : undefined;
+    },
+  );
+}
+
+/**
+ * Clicks the button labelled `label` of the notification toast of window `name` whose message starts with
+ * `messageStart`, with the notification centre closed as it stays. It fails naming the toasts or the buttons it found.
+ */
+export async function answerToast(
+  name: string,
+  messageStart: string,
+  label: string,
+): Promise<void> {
+  let found = '';
+  await settled(
+    () =>
+      `the toast "${messageStart}" with "${label}" in window ${name} (${found})`,
+    async () => {
+      found = await evaluate<string>(
+        name,
+        `(() => {
+  const items = [...document.querySelectorAll('.notifications-toasts .notification-list-item')];
+  const item = items.find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  if (item === undefined) {
+    return 'toasts: ' + JSON.stringify(items.map(each => each.querySelector('.notification-list-item-message')?.textContent));
   }
   const buttons = [...item.querySelectorAll('.monaco-button')];
   const button = buttons.find(each => each.textContent === ${JSON.stringify(label)});

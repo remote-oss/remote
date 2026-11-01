@@ -444,7 +444,15 @@ export function containerLifecycleOf(dependencies: {
     ) {
       return decided;
     }
-    onStep('startingContainer');
+    // The step covers making a container or starting one; a container that already runs needs neither
+    if (
+      request.rebuild !== undefined ||
+      retry !== undefined ||
+      decided.kind !== 'use' ||
+      decided.status !== 'running'
+    ) {
+      onStep('startingContainer');
+    }
     const decision =
       retry === undefined
         ? decided

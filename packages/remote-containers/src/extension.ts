@@ -910,6 +910,7 @@ export async function activate(
           translate,
         },
         bridge,
+        clock: Date.now,
         problematic: {
           manifest: {
             environment: process.env,
