@@ -54,6 +54,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     new window's resolve, after the window has switched (athena on #1464, ruling-1464; spec question on
     remote-oss/remote-containers#80).
 
+- **A download that fails leaves no partial archive, and a window closed during the install leaves no half-installed
+  directory.** The download folder and the `vscode` volume are as they were before the attempt.
+  - F-0503 AC-21 and AC-23 describe a `vscode-server-{platform}.tar.gz_{epoch-ms}` file per failed attempt and a
+    `{commit}_{epoch-ms}` directory on the volume, both left behind (athena on #1591: `ruling-1591-no-partials`; spec
+    question on remote-oss/remote-containers#34).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild

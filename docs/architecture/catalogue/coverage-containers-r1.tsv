@@ -386,7 +386,7 @@ F-0409.AC-13	acceptance
 F-0409.AC-14	deferred	containers 0.4: C12 attach later
 F-0409.AC-15	unit	
 F-0409.AC-16	deferred	containers release 1: later (the Remote Explorer views)
-F-0409.AC-17	todo	
+F-0409.AC-17	deferred	containers release 1: later (F-0902's recent-folder rows)
 F-0409.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-20	deferred	containers release 1: later (Reopen Folder Locally)
@@ -891,9 +891,9 @@ F-0503.AC-17	acceptance
 F-0503.AC-18	acceptance	
 F-0503.AC-19	acceptance	
 F-0503.AC-20	acceptance	
-F-0503.AC-21	todo	
+F-0503.AC-21	acceptance	
 F-0503.AC-22	deferred	containers release 1: later (attach)
-F-0503.AC-23	todo	
+F-0503.AC-23	deferred	containers release 1: increment 2 (shutdown)
 F-0503.AC-24	deferred	containers release 1: later (attach)
 F-0503.AC-25	unit	
 F-0503.AC-26	unit	
