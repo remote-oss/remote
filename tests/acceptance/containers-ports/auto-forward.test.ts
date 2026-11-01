@@ -41,6 +41,9 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/** How long after a declared port's row shows core has surely made its first scan of the listening ports. */
+const INITIAL_SCAN_MILLISECONDS = 10_000;
+
 /** The addresses the host listens on for local port `port`, as `ss -ltn` writes them. */
 async function listeningFor(port: number): Promise<string[]> {
   const {stdout} = await execFileAsync('ss', ['-ltn']);
@@ -762,9 +765,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     }
   });
 
-  // Skipped: the product detects the process on the port but never opens the localhost:<port> preview tab, so no
-  // request reaches the listener; posted on #1538.
-  it.skip('F-1101 AC-14 (preview-below-10000): openPreview on a declared port below 10000 opens an editor tab titled localhost:<port> whose request reaches the listener', async () => {
+  it('F-1101 AC-14 (preview-below-10000): openPreview on a declared port below 10000 opens an editor tab titled localhost:<port> whose request reaches the listener, with the Ports view never shown', async () => {
     let port = 7143;
     while (port === 9229 || !(await isFree(port))) {
       port -= 1;
@@ -775,20 +776,23 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       portsAttributes: {[String(port)]: {onAutoForward: 'openPreview'}},
     });
     const [containerId = ''] = await devContainersOf(folderOf('c73b-ac14p'));
-    await execFileAsync('docker', [
-      'exec',
-      '-d',
-      containerId,
-      'sh',
-      '-c',
-      `nc -lk -p ${String(port)} >> /tmp/c73b-ac14p.log`,
-    ]);
     let tabOpened = false;
     try {
-      await showPorts(window);
-      await rowsWhen(window, shown =>
-        shown.some(each => each.port === String(port)),
+      // The Ports view is not shown in this row: core detects and reacts without it. A port that already listens when
+      // core makes its first scan is one of its initial candidates, which core does not act on, so the listener starts
+      // after the scan, which the connect has long begun by then; the criterion is about a process detected later.
+      await new Promise(resolve =>
+        setTimeout(resolve, INITIAL_SCAN_MILLISECONDS),
       );
+      await execFileAsync('docker', [
+        'exec',
+        '-d',
+        containerId,
+        'sh',
+        '-c',
+        // tee keeps what a connection sends in the log as it arrives, and gives it back.
+        `: > /tmp/c73b-ac14p.log; nc -lk -p ${String(port)} -e tee -a /tmp/c73b-ac14p.log`,
+      ]);
       await waitFor(
         `a localhost:${String(port)} tab`,
         async () => {
@@ -799,30 +803,34 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
         },
         120_000,
       ).catch(() => undefined);
-      const received = await execFileAsync('docker', [
-        'exec',
-        containerId,
-        'cat',
-        '/tmp/c73b-ac14p.log',
-      ]);
-      const finalRows = await portsRows(window).catch(() => []);
+      async function requestLog(): Promise<string> {
+        const {stdout} = await execFileAsync('docker', [
+          'exec',
+          containerId,
+          'cat',
+          '/tmp/c73b-ac14p.log',
+        ]);
+        return stdout;
+      }
+      // The preview tab asks for the page when it has loaded, a moment after it opens.
+      await waitFor(
+        'the preview’s request at the listener',
+        async () => (await requestLog()).includes('GET /'),
+        30_000,
+      ).catch(() => undefined);
       deepStrictEqual(
         {
-          process: finalRows.some(
-            each => each.port === String(port) && each.runningProcess !== '',
-          ),
           tabOpened,
           tabs: (await editorTabs(window))
             .map(entry => entry.label)
             .filter(label => label.startsWith('localhost:')),
-          request: received.stdout.includes('GET /'),
+          request: (await requestLog()).includes('GET /'),
           notice: (await notificationCentre(window)).filter(text =>
             text.includes(String(port)),
           ),
           browser: browserOpens(logFile),
         },
         {
-          process: true,
           tabOpened: true,
           tabs: [`localhost:${String(port)}`],
           request: true,
@@ -878,10 +886,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     }
   });
 
-  // Skipped: the product does not forward a terminal listener of a plain window: two launches, the listener verified
-  // running, no row within 75 s, while the single-window rows of the same launches get theirs within 10 s
-  // (F-1102 AC-1); posted on #1538.
-  it.skip('F-1101 AC-28 (forwarded-plain): the same listener without the ignore override is forwarded', async () => {
+  it('F-1101 AC-28 (forwarded-plain): the same listener without the ignore override is forwarded', async () => {
     const plainPort = await freePort();
     const plainWindow = await connectedWith('c73b-ac28b', {});
     const [plainId = ''] = await devContainersOf(folderOf('c73b-ac28b'));
@@ -889,6 +894,8 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       listenInTerminal(plainWindow, plainId, plainPort),
     );
     try {
+      // The rows are read from the Ports view, so it is shown first; a view that is not shown has no table to read.
+      await showPorts(plainWindow);
       const plain = (
         await rowsWhen(plainWindow, shown =>
           shown.some(each => each.port === String(plainPort)),
