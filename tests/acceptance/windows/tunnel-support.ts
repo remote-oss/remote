@@ -64,7 +64,7 @@ export interface Connected {
 }
 
 /** The settings of the rows: the platform of the hosts is stored, so that terminal mode asks no pick. */
-export const PLATFORMS = {
+const PLATFORMS = {
   'remote.SSH.remotePlatform': {harness: 'linux', password: 'linux'},
 };
 
