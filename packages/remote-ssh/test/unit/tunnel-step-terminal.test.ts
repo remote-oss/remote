@@ -47,6 +47,10 @@ const SOCKET_SERVER: StartedServer = {
   endpoint: {kind: 'socket', path: '/tmp/code-ab'},
 };
 
+/** The line `ssh -v` prints when the login succeeded. */
+const AUTHENTICATED_ONLY =
+  'Authenticated to dev ([10.0.0.1]:22) using "publickey".\n';
+
 /** The failure line `ssh` prints when our forward could not be set up. */
 const FORWARD_FAILURE = 'Could not request local forwarding.';
 
@@ -191,16 +195,23 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     );
   });
 
-  it('F-2107 BR-1: the line the step is given as the tunnel run’s input is written to the terminal as soon as it opens, and with none nothing is', async () => {
+  it('F-2107 BR-1, connect-95: the line the step is given as the tunnel run’s input is written to the terminal once ssh reports it is authenticated, and with none nothing is', async () => {
     const withInput = stepWith({input: 'exec sh -c cmd\n'});
     void withInput.open();
     await settled();
+    const beforeLogin = [...(withInput.terminals.opened[0]?.sent ?? [])];
+    withInput.terminals.opened[0]?.write(AUTHENTICATED_ONLY);
     const without = stepWith();
     void without.open();
     await settled();
+    without.terminals.opened[0]?.write(AUTHENTICATED_ONLY);
     deepStrictEqual(
-      [withInput.terminals.opened[0]?.sent, without.terminals.opened[0]?.sent],
-      [['exec sh -c cmd\n'], []],
+      [
+        beforeLogin,
+        withInput.terminals.opened[0]?.sent,
+        without.terminals.opened[0]?.sent,
+      ],
+      [[], ['exec sh -c cmd\n'], []],
     );
   });
 

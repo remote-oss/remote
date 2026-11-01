@@ -159,13 +159,19 @@ describe('connection helper', () => {
     launchers = new Map();
   });
 
-  it('runs ssh with the SOCKS forward and tells the window when it is set up', async () => {
-    const ended = start();
+  /** Starts the helper for `request` and connects it, and authenticates its ssh; gives the connection and the run's end. */
+  async function connectedAuthenticated(request: typeof REQUEST = REQUEST) {
+    const ended = start(request);
     const connection = await join();
     connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
     await settled();
     authenticate(spawner.started[0]);
     await settled();
+    return {connection, ended};
+  }
+
+  it('runs ssh with the SOCKS forward and tells the window when it is set up', async () => {
+    const {connection, ended} = await connectedAuthenticated();
     deepStrictEqual(
       [spawner.started[0]?.specification.programArguments, received.slice(-3)],
       [
@@ -215,13 +221,10 @@ describe('connection helper', () => {
   }
 
   it('F-2704 AC-30: with a RemoteCommand in effect ssh gets no program after the host, and the first write to the session is the exec line', async () => {
-    const ended = start({
+    const {connection, ended} = await connectedAuthenticated({
       ...REQUEST,
       settings: {...REQUEST.settings, remoteCommandInEffect: true},
     });
-    const connection = await join();
-    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
-    await settled();
     const programArguments = spawner.started[0]?.specification.programArguments;
     const input = spawner.started[0]?.inputText();
     connection.send({type: 'stop'});
@@ -247,13 +250,10 @@ describe('connection helper', () => {
   });
 
   it("F-2105 BR-3: the shared session's login shell is bounded at the connect wait", async () => {
-    const ended = start({
+    const {connection, ended} = await connectedAuthenticated({
       ...REQUEST,
       effective: {...REQUEST.effective, connectTimeout: '10'},
     });
-    const connection = await join();
-    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
-    await settled();
     const firstLine = spawner.started[0]?.inputText().split('\n')[0];
     connection.send({type: 'stop'});
     await ended;
