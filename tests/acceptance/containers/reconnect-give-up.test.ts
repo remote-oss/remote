@@ -3,11 +3,15 @@ import {
   closeWindow,
   connectedToContainer,
   containersLog,
+  devContainersOf,
+  reloadWindow,
 } from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
+  dialogKindOf,
   dialogOf,
+  primaryButtonOf,
   statusBarText,
   toastDetails,
   waitForDialog,
@@ -414,5 +418,80 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
     } finally {
       await removeContainers(folder);
     }
+  });
+
+  it('F-0405 AC-11 (c67-host-stop): a container stopped from the host gives the Disconnected indicator and core’s modal error Cannot reconnect dialog with Cancel and Reload Window as the primary button; Cancel leaves the window disconnected, and after the container is started again Reload Window, from the command or from the dialog’s button, re-attaches it', async () => {
+    const outcomes: unknown[] = [];
+    for (const variant of ['cancel', 'button']) {
+      const label = `c67-host-stop-${variant}`;
+      const {name, containerId, folder} = await settledWindow(label);
+      try {
+        await docker('stop', containerId);
+        const dialog = await waitForDialog(name, 30_000);
+        const seen = {
+          details: dialog.details,
+          message: dialog.message,
+          buttons: [...dialog.buttons],
+          kind: await dialogKindOf(name),
+          primary: await primaryButtonOf(name),
+          indicator: await statusBarText(name, 'status.host'),
+        };
+        if (variant === 'cancel') {
+          await answerDialog(name, 'Cancel');
+          await pause(3000);
+        }
+        const afterCancel =
+          variant === 'cancel'
+            ? {
+                dialog: await dialogOf(name),
+                indicator: await statusBarText(name, 'status.host'),
+              }
+            : null;
+        await docker('start', containerId);
+        if (variant === 'cancel') {
+          await reloadWindow(name);
+        } else {
+          await answerDialog(name, 'Reload Window');
+        }
+        await connectedToContainer(name);
+        outcomes.push({
+          variant,
+          seen,
+          afterCancel,
+          reattached: await statusBarText(name, 'status.host'),
+          containers: await devContainersOf(folder),
+        });
+        await closeWindow(name);
+      } finally {
+        await removeContainers(folder);
+      }
+    }
+    deepStrictEqual(
+      outcomes.map(each => ({
+        ...(each as {containers: string[]}),
+        containers: (each as {containers: string[]}).containers.length,
+      })),
+      ['cancel', 'button'].map(variant => ({
+        variant,
+        seen: {
+          details: CANNOT_RECONNECT,
+          message: '',
+          buttons: ['Cancel', 'Reload Window'],
+          kind: 'error',
+          primary: 'Reload Window',
+          indicator: `Disconnected from Dev Container: c67-host-stop-${variant}`,
+        },
+        afterCancel:
+          variant === 'cancel'
+            ? {
+                dialog: undefined,
+                indicator:
+                  'Disconnected from Dev Container: c67-host-stop-cancel',
+              }
+            : null,
+        reattached: `Dev Container: c67-host-stop-${variant}`,
+        containers: 1,
+      })),
+    );
   });
 });

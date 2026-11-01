@@ -33,7 +33,7 @@ async function openLocalWindow(target: string, name: string): Promise<string> {
   await inWindow(
     'local',
     'acceptance.agent.openWindow',
-    pathToFileURL(target).href,
+    target === 'memfs:/' ? target : pathToFileURL(target).href,
   );
   await waitFor(
     `window ${name} to activate its agent`,
@@ -65,6 +65,27 @@ export function openWorkspaceWindow(workspaceFile: string): Promise<string> {
     workspaceFile,
     path.basename(path.resolve(path.dirname(workspaceFile), listed)),
   );
+}
+
+/** The name of a window whose first folder is the in-memory `memfs:/` of the window agent. */
+const MEMORY_WINDOW = 'memfs';
+
+/**
+ * Opens a local window on the in-memory folder `memfs:/` and waits for its agent: the window of the folder itself, or,
+ * with `workspaceFile`, the window of that saved `.code-workspace` file, which lists the folder. The agent of the
+ * window serves the folder, empty until `writeMemoryFile` puts a file in it.
+ */
+export function openMemoryWindow(workspaceFile?: string): Promise<string> {
+  return openLocalWindow(workspaceFile ?? 'memfs:/', MEMORY_WINDOW);
+}
+
+/** Writes `text` to `file` (an absolute path in the folder) of the in-memory folder served by window `name`. */
+export function writeMemoryFile(
+  name: string,
+  file: string,
+  text: string,
+): Promise<void> {
+  return inWindow(name, 'acceptance.agent.memoryWrite', file, text);
 }
 
 /** Sets a user setting from the local window, or removes it for `undefined`, and waits until the local window reads the result. */

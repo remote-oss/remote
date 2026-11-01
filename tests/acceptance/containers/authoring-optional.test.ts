@@ -31,7 +31,6 @@ import {
   toggleQuickPickRow,
   typeInFocus,
   typeInQuickPick,
-  waitForDialog,
 } from '../windows/renderer.ts';
 import {
   BOOLEAN_SCREEN,
@@ -43,7 +42,7 @@ import {
   STRING_SCREENS,
   takenThrough,
   withWindow,
-} from './authoring-support.ts';
+} from '../windows/authoring-support.ts';
 
 /** The windows that are open now. */
 function openWindows(): string[] {
@@ -274,27 +273,29 @@ describe('Optional Files/Directories in the wizard (card containers-90)', functi
     });
   });
 
-  it('F-0805 AC-12 (no-metadata): a custom id whose metadata cannot be read (its tag is not in the registry) shows no such screen and logs the warning, and the apply is attempted with nothing left out (it fails on the missing tag, which shows its error)', async () => {
-    await withWindow('o90-no-metadata', {}, async window => {
+  it('F-0805 AC-12 (no-metadata): a custom id whose published artifact carries no template metadata shows no optional files stage and logs a warning about the missing metadata, and the apply goes on with every file', async () => {
+    await withWindow('o90-no-metadata', {}, async (window, folder) => {
       const mark = containersLog().length;
       await startCommand(window);
       await chooseWorkspace(window);
-      const templateId = `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/custom/mini:9`;
+      const templateId = `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/custom/no-metadata-lab`;
       await typeInQuickPick(window, templateId);
       await new Promise(resolve => setTimeout(resolve, 1500));
       await acceptQuickPick(window);
       await takenThrough(window, [FEATURES_PLACEHOLDER]);
-      const dialog = await waitForDialog(window, 60_000);
+      const files = await writtenFiles(window, folder);
       deepStrictEqual(
         [
-          dialog.details,
-          (await quickPickOf(window))?.placeholder,
+          files,
+          await quickPickOf(window),
+          await dialogOf(window),
           containersLogSince(mark).filter(line =>
-            line.includes('has no metadata'),
+            line.toLowerCase().includes('metadata'),
           ),
         ],
         [
-          'Application of the template failed.',
+          [BASE, 'extra/kept.txt'].sort(),
+          undefined,
           undefined,
           [
             `the template ${templateId} has no metadata, so every optional file is included`,

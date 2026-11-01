@@ -910,6 +910,7 @@ export async function activate(
           translate,
         },
         bridge,
+        clock: Date.now,
         problematic: {
           manifest: {
             environment: process.env,
@@ -1222,6 +1223,7 @@ export async function activate(
             newTemporaryToken: () =>
               `${String(process.pid)}-${String(clock.now())}`,
             logger,
+            translate,
           },
           request,
         ),

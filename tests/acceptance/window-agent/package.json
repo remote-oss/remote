@@ -26,6 +26,7 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onFileSystem:memfs",
     "onResolveRemoteAuthority:ssh-remote",
     "onResolveRemoteAuthority:dev-container"
   ],

@@ -32,10 +32,11 @@ CLI. So Podman is **one measured launch, and a product change only where a measu
    (`chmod u+s`) in our runner image.
 1. **The launch:** `containers-podman`, the `containers` launch with `dev.containers.dockerPath: "podman"` and Podman 5 on
    the runner.
-   - **How a Podman container reaches the run's infrastructure** (measured by proteus on #1433: rootless Podman 5.8.9
-     can't reach the host's loopback on its default network). The harness sets pasta's `--map-host-loopback` in the job
-     user's `containers.conf`, with the run's host names mapped to it. So the container reaches the download host and
-     the registry by the same names the Docker rows use.
+   - **How a Podman container reaches the run's infrastructure, only if a row needs it.** Rootless Podman 5.8.9 can't
+     reach the host's loopback on its default network (proteus on #1433). But #1453's measurement m0 found that no dev
+     container of the Podman launch reaches the download host or the registry, so today no `containers.conf` is set
+     (#1506). If a Podman row ever needs the run's hosts, the harness sets pasta's `--map-host-loopback` in the job
+     user's `containers.conf`, with the run's host names mapped to it.
      - **Not `--network host`:** it would hide the port-mapping differences the launch is there to find.
      - **No product change:** this is the harness's setup, as a user's own Podman setup is theirs.
    - **The rows that use the engine** read it through one harness helper (`engineCli()`, the launch's executable), not a

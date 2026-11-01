@@ -56,6 +56,9 @@ import {
   serverFailed,
   unsupportedPlatform,
 } from './failures.ts';
+import {filled} from '../surfaces/filled.ts';
+import type {Translate} from '../surfaces/engine-dialogs.ts';
+import {PREVIEW_TEMPLATES, previewNoteOf} from './preview-note.ts';
 import {prepareVolumeFolders} from './volume-folders.ts';
 
 /** How long the server may take to report its port, in seconds. */
@@ -88,6 +91,7 @@ export interface ServerStepDependencies {
   clock: Clock;
   newTemporaryToken: () => string;
   logger: Logger;
+  translate: Translate;
 }
 
 /** What one connect asks of the steps. */
@@ -100,6 +104,8 @@ export interface ServerRequest {
   volumeMounted: boolean;
   /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
   defaultExtensions: readonly string[];
+  /** Whether this connect created the container, which is when a preview platform is told in the log. */
+  created: boolean;
   /** The server's port range from the configuration's `devPort`: `port-port` for a fixed port, empty for a dynamic one. */
   devPort: string;
   /** The settings to set in the container's machine settings before the server starts. */
@@ -335,6 +341,14 @@ export async function runServerSteps(
     return failedWith(probeFailure(discovered, logger));
   }
   const platform = templatePlatformOf(discovered.host);
+  const previewNote = previewNoteOf(platform);
+  if (request.created && previewNote !== undefined) {
+    logger.info(
+      filled(dependencies.translate, PREVIEW_TEMPLATES.previewNote, [
+        previewNote,
+      ]),
+    );
+  }
   const platformName = `${platform.operatingSystem}-${platform.architecture}`;
   const installTree =
     cacheFolders(profile, profile.commit, platformName, request.volumeMounted)

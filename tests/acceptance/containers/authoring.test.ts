@@ -44,7 +44,7 @@ import {
   takeOptionScreen,
   withWindow,
   written,
-} from './authoring-support.ts';
+} from '../windows/authoring-support.ts';
 
 const NOTICE_START = 'Folder contains a Dev Container configuration file.';
 
