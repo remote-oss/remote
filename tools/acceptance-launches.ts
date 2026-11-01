@@ -52,6 +52,12 @@ interface LaunchCommon {
    * base beside its own, and the launch's ssh_config, settings and harness variables name it.
    */
   hostBase?: Exclude<HostBase, 'alpine'>;
+  /**
+   * Whether the launch's server comes from the editor's publisher rather than from the run's download host, or its rows
+   * accept the publisher's licence: while it runs, the harness host resolves the update service's name through DNS, not
+   * to the download host. Only a launch of the genuine client has it, and the run makes it only in the genuine job.
+   */
+  publisherDownloads?: true;
 }
 
 /** One command of a launch's host setup, run on the host container through `docker exec`, in order. */

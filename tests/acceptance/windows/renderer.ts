@@ -1309,6 +1309,24 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
   return rows;
 }
 
+/** The count badge on the tab titled `title` of the panel in window `name`: its text, or nothing when it has none. */
+export async function panelBadge(
+  name: string,
+  title: string,
+): Promise<string | undefined> {
+  const found = await evaluate<string | null>(
+    name,
+    `(() => {
+      const tab = [...document.querySelectorAll('.part.panel .composite-bar .action-item')].find(each => (each.querySelector('.action-label')?.textContent ?? '').trim().startsWith(${JSON.stringify(title)}));
+      return tab === undefined ? null : (tab.querySelector('.badge-content')?.textContent ?? '');
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name} has no panel tab ${title}`);
+  }
+  return found === '' ? undefined : found;
+}
+
 /** The titles of the columns of core's Ports view in window `name`, in order. */
 export async function portsColumns(name: string): Promise<string[]> {
   return evaluate<string[]>(
