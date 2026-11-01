@@ -6,6 +6,7 @@
  */
 
 import {type Invocation, TUNNEL_SUCCESS_LINE} from '../arguments/invocation.ts';
+import {setupMarkerOf} from '../diagnostics/setup-report.ts';
 import {LineSplitter} from '../process/line-splitter.ts';
 import type {LoginTerminals} from './login-terminal.ts';
 
@@ -47,7 +48,7 @@ function isForwardFailureFor(line: string, localPort: number): boolean {
 
 /**
  * Starts `invocation`, the tunnel run, in an `SSH Tunnel` terminal for the window's `localPort`; `input` is written to
- * the terminal at once, when the tunnel's command goes in on its input.
+ * the terminal once ssh reports it is authenticated, when the tunnel's command goes in on its input.
  */
 export function openTunnelSession(
   terminals: LoginTerminals,
@@ -57,9 +58,6 @@ export function openTunnelSession(
   input?: string,
 ): TunnelSession {
   const terminal = terminals.open(invocation, 'SSH Tunnel', reveal);
-  if (input !== undefined) {
-    terminal.send(input);
-  }
   const settling: {settle?: (gate: TunnelGate) => void} = {};
   const gate = new Promise<TunnelGate>(resolve => {
     settling.settle = resolve;
@@ -68,7 +66,18 @@ export function openTunnelSession(
     settling.settle?.(answer);
   }
   let failure: string | undefined;
+  let inputSent = input === undefined;
   const splitter = new LineSplitter(line => {
+    // The tunnel's input waits for ssh to report it is authenticated: nothing on the host that reads its standard input
+    // before the login can take it.
+    if (
+      !inputSent &&
+      input !== undefined &&
+      setupMarkerOf(line) === 'authenticated'
+    ) {
+      inputSent = true;
+      terminal.send(input);
+    }
     if (line === TUNNEL_SUCCESS_LINE) {
       settle(
         failure === undefined

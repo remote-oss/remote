@@ -9,6 +9,7 @@ import type {Translate} from '../surfaces/engine-dialogs.ts';
 /** The English templates of the progress. */
 const PROGRESS_TEMPLATES = {
   S087: '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)',
+  S283: '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)',
   S209: 'Installing server',
   S334: 'Starting server',
 } as const;
@@ -20,6 +21,11 @@ const STAGE_TEMPLATES = {
   // The download is part of the install: the suffix stays until the next stage replaces it.
   serverDownloadPercent: PROGRESS_TEMPLATES.S209,
 } as const;
+
+/** The title the progress before a reload has while the configuration is read. */
+export function readTitleOf(translate: Translate): string {
+  return translate(PROGRESS_TEMPLATES.S283);
+}
 
 /** The title the progress starts with. */
 export function startTitleOf(translate: Translate): string {

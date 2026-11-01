@@ -7,6 +7,7 @@ import {
   cancelFolderDialog,
   folderDialogFacts,
   folderDialogOpen,
+  pressQuickPickTitleButton,
 } from '../windows/renderer.ts';
 
 /** A folder of the run with the sub-folders `names`, a hidden one and a plain file, and no dev container configuration. */
@@ -32,23 +33,32 @@ async function dialogOn(folder: string): Promise<string> {
 describe('F-0403 the folder pick of Open Folder in Container (card coverage-71)', function () {
   this.timeout(600_000);
 
-  it.skip('F-0403 AC-2 (c71-dialog): the folder pick is an input with the placeholder Folder path and the current folder’s path, an Open button, a Hide dot files title button that toggles to Show dot files, the sub-folders only with a leading .., and the focus on the input with no row focused (skipped until the button reads Open)', async () => {
+  it('F-0403 AC-2 (c71-dialog): the folder pick is an input with the placeholder Folder path and the current folder’s path, an Open button, a Hide dot files title button that toggles to Show dot files, the sub-folders only with a leading .., and the focus on the input with no row focused', async () => {
     const folder = treeFolder('c71-dialog', ['one', 'two']);
     const name = await dialogOn(folder);
     try {
       const facts = await folderDialogFacts(name);
-      await closeWindow(name);
-      deepStrictEqual(facts, {
-        placeholder: 'Folder path',
-        value: `${folder}/`,
-        buttons: ['Open'],
-        titleButtons: ['Hide dot files'],
-        rows: ['..', '.hidden', 'one', 'two'],
-        inputFocused: true,
-        focusedRow: null,
-      });
+      await pressQuickPickTitleButton(name, 'Hide dot files');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const hidden = await folderDialogFacts(name);
+      deepStrictEqual(
+        {facts, hidden: [hidden.titleButtons, hidden.rows]},
+        {
+          hidden: [['Show dot files'], ['..', 'one', 'two']],
+          facts: {
+            placeholder: 'Folder path',
+            value: `${folder}/`,
+            buttons: ['Open'],
+            titleButtons: ['Hide dot files'],
+            rows: ['..', '.hidden', 'one', 'two'],
+            inputFocused: true,
+            focusedRow: null,
+          },
+        },
+      );
     } finally {
       await cancelFolderDialog(name).catch(() => undefined);
+      await closeWindow(name).catch(() => undefined);
     }
   });
 });

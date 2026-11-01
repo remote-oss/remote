@@ -68,7 +68,8 @@ export function reopenHandlersOf(
     ) as Extract<Executable, {kind: 'spawn'}>;
     const {choice, progress} = await chooseOrAuthor(
       ports,
-      (base, dialogs) => ports.engine.firstCheck(base, dialogs),
+      (base, dialogs, cancellation) =>
+        ports.engine.firstCheck(base, dialogs, cancellation),
       {title, folder, dockerPath: executable.file},
     );
     try {

@@ -72,6 +72,7 @@ import {
   RESOLVER_EDITOR_OPTIONS,
 } from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
+import {folderDialogOptions} from './open/folder-dialog.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
@@ -880,11 +881,11 @@ export async function activate(
               ?.globalValue,
         },
         engine: {
-          firstCheck: (base, dialogs) =>
+          firstCheck: (base, dialogs, cancellation) =>
             firstCheck(
               {...served.preflight, dialogs},
               base,
-              new AbortController().signal,
+              cancellation ?? new AbortController().signal,
             ),
           currentContext: () =>
             currentContext(
@@ -895,14 +896,17 @@ export async function activate(
         },
         dialogs: served.preflight.dialogs,
         progress: {
-          showProgress: (title, until) => {
+          showProgress: (title, until, cancel) => {
             void vscode.window.withProgress(
               {
                 location: vscode.ProgressLocation.Notification,
                 title,
-                cancellable: false,
+                cancellable: true,
               },
-              () => until,
+              (progress, token) => {
+                token.onCancellationRequested(cancel);
+                return until;
+              },
             );
           },
           setTimer: (milliseconds, callback) =>
@@ -973,9 +977,7 @@ export async function activate(
         pickFolder: async start => {
           const [picked] =
             (await vscode.window.showOpenDialog({
-              canSelectFiles: false,
-              canSelectFolders: true,
-              canSelectMany: false,
+              ...folderDialogOptions(translate),
               defaultUri: vscode.Uri.file(start),
             })) ?? [];
           return picked === undefined
@@ -1177,6 +1179,14 @@ export async function activate(
             settings.defaultExtensions.legacyId,
           )?.globalValue,
         };
+      },
+      folderExists: async folder => {
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(folder));
+          return true;
+        } catch {
+          return false;
+        }
       },
       preflight: served.preflight,
       editorEnvironment: process.env,

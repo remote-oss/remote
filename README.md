@@ -27,9 +27,11 @@ pnpm test:unit && pnpm dupes && pnpm dead && pnpm coverage
 pnpm package
 ```
 
-`pnpm identifiers` writes each extension's git-ignored `src/identifiers.generated.ts`. The scripts that read it
-(`typecheck`, `lint`, `test:unit`, `build`, `dead`, `coverage`) run it first, and `package` runs `build` first, so
-every script works on a cold tree. CI runs the same scripts.
+`pnpm identifiers` writes each extension's git-ignored `src/identifiers.generated.ts`, and its git-ignored locale
+tables (`package.nls.<locale>.json` and `l10n/bundle.l10n.<locale>.json`), which `tools/locale-tables.ts` generates from
+the default tables and the hand-written `translations/<locale>.json`. The scripts that read them (`typecheck`, `lint`,
+`test:unit`, `build`, `dead`, `coverage`) run it first, and `package` runs `build` first, so every script works on a
+cold tree. CI runs the same scripts. Run `pnpm identifiers` once before `npx mocha <file>` on a fresh clone.
 
 `pnpm check-consumed` fails on a contributed setting, command or view that no production source consumes: it reads
 the generated identifier tables, decides a reference with the TypeScript checker, finds the modules only tests

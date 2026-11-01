@@ -84,6 +84,7 @@
   "Volume": "Volume",
   "Volume mount": "Volume mount",
   "Workspace": "Workspace",
+  "Open": "Open",
   "Support for {0} is in preview.": "Support for {0} is in preview.",
   "Folder contains a Dev Container configuration file.": "Folder contains a Dev Container configuration file.",
   "Reopen in Container": "Reopen in Container",
@@ -169,5 +170,6 @@
   "Select boolean options for {0}": "Select boolean options for {0}",
   "Select options for '{0}'": "Select options for '{0}'",
   "Include the following optional files/directories": "Include the following optional files/directories",
-  "Optional Files/Directories": "Optional Files/Directories"
+  "Optional Files/Directories": "Optional Files/Directories",
+  "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)": "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)"
 }

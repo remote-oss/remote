@@ -11,6 +11,87 @@ const PACKAGE = path.join(import.meta.dirname, '..', '..');
 const DESCRIPTION =
   'Highlighting and completion for SSH config files, with every keyword documented as you type.';
 
+/** F-4003 §3.4's table: the two runtime texts of each locale, in the order of the default bundle's keys. */
+const RUNTIME_TEXTS: Array<[string, [string, string]]> = [
+  [
+    'cs',
+    ['Konfigurovat tunel', 'Vložte šablonu pro konfiguraci připojení tunelu.'],
+  ],
+  [
+    'de',
+    [
+      'Tunnel konfigurieren',
+      'Fügen Sie eine Vorlage zum Konfigurieren einer Tunnelverbindung ein.',
+    ],
+  ],
+  [
+    'es',
+    [
+      'Configurar túnel',
+      'Inserte una plantilla para configurar una conexión de túnel.',
+    ],
+  ],
+  [
+    'fr',
+    [
+      'Configurer le tunnel',
+      'Insérez un modèle pour configurer une connexion tunnel.',
+    ],
+  ],
+  [
+    'it',
+    [
+      'Configurare tunnel',
+      'Inserire un modello per la configurazione di una connessione tunnel.',
+    ],
+  ],
+  [
+    'ja',
+    [
+      'トンネルの構成',
+      'トンネル接続を構成するためのテンプレートを挿入します。',
+    ],
+  ],
+  ['ko', ['터널 구성', '터널 연결 구성을 위한 템플릿을 삽입합니다.']],
+  [
+    'pl',
+    [
+      'Konfigurowanie aplikacji Tunnel',
+      'Wstaw szablon służący do konfigurowania połączenia tunelu.',
+    ],
+  ],
+  [
+    'pt-br',
+    [
+      'Configurar túnel',
+      'Insira um modelo para configurar uma conexão de túnel.',
+    ],
+  ],
+  [
+    'qps-ploc',
+    [
+      'Çøñfïgµrë tµññël',
+      'Ïñsërt æ tëmplætë før çøñfïgµrïñg æ tµññël çøññëçtïøñ.',
+    ],
+  ],
+  [
+    'ru',
+    [
+      'Настройка туннеля',
+      'Вставка шаблона для настройки туннельного соединения.',
+    ],
+  ],
+  [
+    'tr',
+    [
+      'Tünel Yapılandırma',
+      'Tünel bağlantısını yapılandırmak için bir şablon ekleyin.',
+    ],
+  ],
+  ['zh-cn', ['配置隧道', '插入用于配置隧道连接的模板。']],
+  ['zh-tw', ['設定通道', '插入範本以設定通道連線。']],
+];
+
 /** The identity values the card fixes. */
 const EXPECTED = {
   displayName: 'Remote - SSH: Editing Configuration Files',
@@ -120,6 +201,23 @@ describe('identity card (card identity-01 table)', () => {
         })),
       ],
     );
+  });
+
+  it("F-4003 BR-6: each locale's runtime bundle holds its translated texts", () => {
+    const observed = Object.fromEntries(
+      RUNTIME_TEXTS.map(([locale]) => [
+        locale,
+        Object.values(
+          JSON.parse(
+            readFileSync(
+              path.join(PACKAGE, 'l10n', `bundle.l10n.${locale}.json`),
+              'utf8',
+            ),
+          ) as Record<string, string>,
+        ),
+      ]),
+    );
+    deepStrictEqual(observed, Object.fromEntries(RUNTIME_TEXTS));
   });
 
   it('README: the seven section headings in order and none of the forbidden words', () => {

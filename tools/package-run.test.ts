@@ -4,6 +4,7 @@ import {Writable} from 'node:stream';
 import {FIXTURE} from './package-view.fixture.ts';
 import {
   runPackage,
+  tablesPhase,
   type PackageOut,
   type PackagePhases,
 } from './package-run.ts';
@@ -344,6 +345,28 @@ describe('an error in a phase (tooling-46 §3)', () => {
         writes: 2,
         error: '\x1b[31m  \u2716 build: boom\x1b[0m\n',
         exitCode: 1,
+      },
+    );
+  });
+});
+
+describe('the identifiers phase (tooling-41)', () => {
+  it('tooling-41: it writes the identifier tables, then the locale tables, and gives the identifier outcomes', async () => {
+    const calls: string[] = [];
+    const outcomes = await tablesPhase(
+      root => {
+        calls.push(`identifiers ${root}`);
+        return Promise.resolve(['remote-ssh: table']);
+      },
+      root => {
+        calls.push(`locales ${root}`);
+      },
+    )('/repo');
+    deepStrictEqual(
+      {calls, outcomes},
+      {
+        calls: ['identifiers /repo', 'locales /repo'],
+        outcomes: ['remote-ssh: table'],
       },
     );
   });
