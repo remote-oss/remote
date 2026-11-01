@@ -432,6 +432,22 @@ function archiveFileOf(
 }
 
 /**
+ * The archive a `/machine/` request gets: the run's archive of the system the request names (`linux` or `alpine`),
+ * whatever architecture it names, for a host whose `uname` reports another machine than the one it runs on; none for a
+ * system the run has no archive of, or a path that names no platform.
+ */
+function machineArchiveOf(
+  url: string,
+  options: Pick<DownloadHostOptions, 'archiveFiles'>,
+): string | undefined {
+  const system = requestedPlatform(url)?.split('-')[0];
+  const platform = Object.keys(options.archiveFiles).find(
+    name => name.split('-')[0] === system,
+  );
+  return platform === undefined ? undefined : options.archiveFiles[platform];
+}
+
+/**
  * The archive's answers: whole (`ok`), cut after its first megabyte (`cut`) or in chunks at a slow pace (`slow`); 404
  * when the run serves no archive for the platform asked.
  */
@@ -493,6 +509,13 @@ function answer(
         request,
         response,
         archiveFileOf(String(request.url), options),
+      );
+      return;
+    case 'machine':
+      answerArchive(
+        request,
+        response,
+        machineArchiveOf(String(request.url), options),
       );
       return;
     case 'missing':

@@ -32,6 +32,7 @@ import {
   selectionLine,
   editorExecutableOf,
   genuineVersionIn,
+  baseContainersOf,
   runArgumentsOf,
   type CommandResult,
   failureText,
@@ -1541,6 +1542,8 @@ describe('acceptance', () => {
           'docker image',
           'docker image',
           'docker image',
+          'docker image',
+          'docker image',
           'docker ps',
           'docker network',
         ],
@@ -2352,6 +2355,55 @@ describe('acceptance', () => {
           ],
           2,
         ],
+      );
+    });
+
+    const DEBIAN_PORTS: Launch = {
+      ...PORTS,
+      label: 'ports-debian',
+      hostBase: 'debian-12',
+    };
+
+    /** Runs `launches` with the run's Debian 12 host started, each attempt passing. */
+    function runOnBases(
+      launches: readonly Launch[],
+      command: CommandRunner,
+    ): Promise<number[]> {
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        'alpine-host',
+        recordingSleeper().sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {},
+        undefined,
+        undefined,
+        undefined,
+        {'debian-12': 'debian-host'},
+      );
+    }
+
+    it('tooling-35: a launch on a host of another base runs its host setup on that host, and a launch on the harness host on the harness host', async () => {
+      const {calls, command} = recordingCommand();
+      await runOnBases([DEBIAN_PORTS, PORTS], command);
+      deepStrictEqual(
+        calls
+          .filter(call => call.startsWith('docker exec'))
+          .map(call => /--user root (\S+)/.exec(call)?.[1]),
+        ['debian-host', 'debian-host', 'alpine-host', 'alpine-host'],
+      );
+    });
+
+    it('tooling-35: a launch on a base the run started no host of fails its attempt, naming the base', async () => {
+      await rejects(
+        runOnBases(
+          [{...DEBIAN_PORTS, hostBase: 'ubuntu-18.04'}],
+          recordingCommand().command,
+        ),
+        /ports-debian: the run started no host of base ubuntu-18.04/,
       );
     });
 
@@ -3286,25 +3338,54 @@ describe('acceptance', () => {
       );
     });
 
-    it("tooling-70, tooling-75: a launch on the Ubuntu host checks that host: its container and its ssh_config stand for the run's, and its rows know its base", () => {
-      const {env} = vscodiumConfiguration(
-        workspace.root,
-        {
-          ...CONFIGURATION_ENVIRONMENT,
-          HARNESS_CONTAINER: 'alpine-host',
-          HARNESS_SSH_CONFIG: '/run/ssh_config',
-          HARNESS_HOST_UBUNTU_CONTAINER: 'ubuntu-host',
-        },
-        EXECUTABLE,
-        {...LAUNCH, hostBase: 'ubuntu-26.04'},
-      );
+    it("tooling-70, tooling-75, tooling-35: a launch on a host of another base checks that host: its container and its ssh_config stand for the run's, and its rows know its base", () => {
+      const environment = {
+        ...CONFIGURATION_ENVIRONMENT,
+        HARNESS_CONTAINER: 'alpine-host',
+        HARNESS_SSH_CONFIG: '/run/ssh_config',
+        HARNESS_HOST_CONTAINERS: JSON.stringify({
+          'ubuntu-26.04': 'ubuntu-host',
+          'debian-12': 'debian-host',
+        }),
+      };
       deepStrictEqual(
-        [env.HARNESS_CONTAINER, env.HARNESS_SSH_CONFIG, env.HARNESS_HOST_BASE],
+        (['ubuntu-26.04', 'debian-12'] as const).map(hostBase => {
+          const {env} = vscodiumConfiguration(
+            workspace.root,
+            environment,
+            EXECUTABLE,
+            {...LAUNCH, hostBase},
+          );
+          return [
+            env.HARNESS_CONTAINER,
+            env.HARNESS_SSH_CONFIG,
+            env.HARNESS_HOST_BASE,
+          ];
+        }),
         [
-          'ubuntu-host',
-          path.join('/run', 'ssh_config-ubuntu-26.04'),
-          'ubuntu-26.04',
+          [
+            'ubuntu-host',
+            path.join('/run', 'ssh_config-ubuntu-26.04'),
+            'ubuntu-26.04',
+          ],
+          [
+            'debian-host',
+            path.join('/run', 'ssh_config-debian-12'),
+            'debian-12',
+          ],
         ],
+      );
+    });
+
+    it('tooling-35: the containers of the hosts of other bases are none when the run started none, else the map it names', () => {
+      deepStrictEqual(
+        [
+          baseContainersOf({}),
+          baseContainersOf({
+            HARNESS_HOST_CONTAINERS: '{"ubuntu-18.04":"c18"}',
+          }),
+        ],
+        [{}, {'ubuntu-18.04': 'c18'}],
       );
     });
 
