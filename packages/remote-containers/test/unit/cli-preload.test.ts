@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
@@ -104,6 +104,68 @@ const NOT_LOADED = {
   marker: 'remote-oss-cli-preload',
   nodePty: {loaded: false, from: 'none'},
 };
+
+function alive(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function pause(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+/**
+ * Starts a parent that runs the preloaded CLI in a group of its own, as the host does, and a child of that CLI, then
+ * gives `check` the pids of the two. The parent ends once the CLI has written its pids when `parent` is `ends`, and
+ * stays until killed when it is `stays`; it is killed after the check either way.
+ */
+async function withParent(
+  parent: 'ends' | 'stays',
+  check: (pids: number[]) => Promise<void>,
+): Promise<void> {
+  const folder = mkdtempSync(path.join(tmpdir(), 'preload-parent-'));
+  const pidFile = path.join(folder, 'pids.json');
+  const parentScript = path.join(folder, 'parent.js');
+  try {
+    const preload = bundledPreload(folder);
+    // The CLI: a child of its own that waits, and its own wait.
+    const script = path.join(folder, 'cli.js');
+    writeFileSync(
+      script,
+      `const {spawn} = require('node:child_process');
+const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio: 'ignore'});
+require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, child.pid]));
+setInterval(() => {}, 1000);`,
+    );
+    writeFileSync(
+      parentScript,
+      `const {spawn} = require('node:child_process');
+const {existsSync} = require('node:fs');
+spawn(process.execPath, ['--require', ${JSON.stringify(preload)}, ${JSON.stringify(script)}], {detached: true, stdio: 'ignore'}).unref();
+const wait = setInterval(() => { if (existsSync(${JSON.stringify(pidFile)}) && ${JSON.stringify(parent)} === 'ends') { clearInterval(wait); } }, 50);`,
+    );
+    const started = spawn(process.execPath, [parentScript], {stdio: 'ignore'});
+    let pids: number[] = [];
+    for (let attempt = 0; attempt < 100 && pids.length === 0; attempt += 1) {
+      try {
+        pids = JSON.parse(readFileSync(pidFile, 'utf8')) as number[];
+      } catch {
+        await pause(100);
+      }
+    }
+    try {
+      await check(pids);
+    } finally {
+      started.kill('SIGKILL');
+    }
+  } finally {
+    rmSync(folder, {recursive: true, force: true});
+  }
+}
 
 describe('the CLI preload (card containers-04)', () => {
   it('C3: a program started with the preload does not see ELECTRON_RUN_AS_NODE', () => {
@@ -217,62 +279,32 @@ describe('the CLI preload (card containers-04)', () => {
 
   it('connect-120: a CLI whose parent is gone ends its whole process group, a child of it included', async function () {
     this.timeout(30_000);
-    const folder = mkdtempSync(path.join(tmpdir(), 'preload-parent-'));
-    const pidFile = path.join(folder, 'pids.json');
-    try {
-      const preload = bundledPreload(folder);
-      // The CLI: a child of its own that waits, and its own wait.
-      const script = path.join(folder, 'cli.js');
-      writeFileSync(
-        script,
-        `const {spawn} = require('node:child_process');
-const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio: 'ignore'});
-require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify([process.pid, child.pid]));
-setInterval(() => {}, 1000);`,
-      );
-      // The parent: starts the CLI in a group of its own, as the host does, and ends once the CLI has written its pids.
-      const parent = path.join(folder, 'parent.js');
-      writeFileSync(
-        parent,
-        `const {spawn} = require('node:child_process');
-const {existsSync} = require('node:fs');
-spawn(process.execPath, ['--require', ${JSON.stringify(preload)}, ${JSON.stringify(script)}], {detached: true, stdio: 'ignore'}).unref();
-const wait = setInterval(() => { if (existsSync(${JSON.stringify(pidFile)})) { clearInterval(wait); } }, 50);`,
-      );
-      const started = spawnSync(process.execPath, [parent]);
-      const pids = await (async (): Promise<number[]> => {
-        for (let attempt = 0; attempt < 100; attempt += 1) {
-          try {
-            return JSON.parse(readFileSync(pidFile, 'utf8')) as number[];
-          } catch {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-        }
-        return [];
-      })();
-      function alive(processId: number): boolean {
-        try {
-          process.kill(processId, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      }
+    await withParent('ends', async pids => {
       let remaining = pids;
       for (
         let attempt = 0;
         attempt < 120 && remaining.length > 0;
         attempt += 1
       ) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await pause(100);
         remaining = remaining.filter(alive);
       }
       for (const processId of remaining) {
         process.kill(processId, 'SIGKILL');
       }
-      deepStrictEqual([started.status, pids.length, remaining], [0, 2, []]);
-    } finally {
-      rmSync(folder, {recursive: true, force: true});
-    }
+      deepStrictEqual([pids.length, remaining], [2, []]);
+    });
+  });
+
+  it('connect-120: a CLI whose parent stays alive is not signalled, nor is a child of it', async function () {
+    this.timeout(30_000);
+    await withParent('stays', async pids => {
+      await pause(3000);
+      const remaining = pids.filter(alive);
+      for (const processId of pids) {
+        process.kill(processId, 'SIGKILL');
+      }
+      deepStrictEqual([pids.length, remaining], [2, pids]);
+    });
   });
 });
