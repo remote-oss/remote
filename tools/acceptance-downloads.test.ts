@@ -30,6 +30,7 @@ import {
   downloadVariables,
   DROP_HUNG_PATH,
   makeCertificate,
+  removeStaleClientArchives,
   requestedPlatform,
   SERVER_ARCHIVE,
   servedPlatforms,
@@ -714,6 +715,68 @@ describe('serverArchiveOf', () => {
       {'alpine-arm64': sha256},
     );
   }
+});
+
+describe('removeStaleClientArchives (card tooling-101)', () => {
+  const GLIBC = 'glibc bytes';
+  const MUSL = 'musl bytes';
+  const CHECKSUMS = {
+    'linux-x64': createHash('sha256').update(GLIBC).digest('hex'),
+    'alpine-x64': createHash('sha256').update(MUSL).digest('hex'),
+  };
+  let folder = '';
+
+  beforeEach(() => {
+    folder = mkdtempSync(path.join(tmpdir(), 'client-cache-'));
+    mkdirSync(path.join(folder, 'codium-insiders', 'insider', 'abc'), {
+      recursive: true,
+    });
+  });
+
+  afterEach(() => {
+    rmSync(folder, {recursive: true, force: true});
+  });
+
+  function archive(platform: string, bytes: string): string {
+    const file = path.join(
+      folder,
+      'codium-insiders',
+      'insider',
+      'abc',
+      `codium-server-insiders-${platform}-insider.tar.gz`,
+    );
+    writeFileSync(file, bytes);
+    return file;
+  }
+
+  it('tooling-101: removes an archive whose bytes are not the pinned ones of the platform its name gives', () => {
+    const poisoned = archive('linux-x64', MUSL);
+    deepStrictEqual(
+      [removeStaleClientArchives(folder, CHECKSUMS), existsSync(poisoned)],
+      [[poisoned], false],
+    );
+  });
+
+  it('tooling-101: keeps the archives that are the pinned ones, and the files that are no archive', () => {
+    const glibc = archive('linux-x64', GLIBC);
+    const musl = archive('alpine-x64', MUSL);
+    const note = path.join(folder, 'codium-insiders', 'note.txt');
+    writeFileSync(note, 'x');
+    deepStrictEqual(
+      [
+        removeStaleClientArchives(folder, CHECKSUMS),
+        [glibc, musl, note].map(file => existsSync(file)),
+      ],
+      [[], [true, true, true]],
+    );
+  });
+
+  it('tooling-101: a cache folder that does not exist has nothing to remove', () => {
+    deepStrictEqual(
+      removeStaleClientArchives(path.join(folder, 'missing'), CHECKSUMS),
+      [],
+    );
+  });
 });
 
 describe('the platform a request names (card tooling-68)', () => {
