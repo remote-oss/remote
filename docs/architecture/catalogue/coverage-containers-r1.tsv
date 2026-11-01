@@ -4,7 +4,7 @@ F-0101.AC-2	deferred	containers release 1: the full contribution set comes with 
 F-0101.AC-3	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-3b	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-4	todo	
-F-0101.AC-5	todo	
+F-0101.AC-5	acceptance	
 F-0101.AC-6	deferred	containers release 1: the full contribution set comes with later increments
 F-0101.AC-7	deferred	containers release 1: increment 2 (shutdown)
 F-0101.AC-8	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
@@ -19,7 +19,7 @@ F-0101.AC-17b	deferred	containers release 1: later (the attach, Kubernetes and A
 F-0101.AC-18	acceptance	
 F-0101.AC-19	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-20	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
-F-0101.AC-21	todo	
+F-0101.AC-21	deferred	containers release 1: the full contribution set comes with later increments
 F-0101.AC-22	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0106.AC-1	unit	
 F-0106.AC-2	deferred	containers release 1: increment 2 (authoring)
