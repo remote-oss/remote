@@ -879,6 +879,11 @@ export async function displayLanguageOf(name: string): Promise<string> {
   return evaluate<string>(name, 'navigator.language');
 }
 
+/** The language the editor's own strings of window `name` are in: the one an installed language pack gave it, else `en`. */
+export async function nlsLanguageOf(name: string): Promise<string> {
+  return evaluate<string>(name, 'window._VSCODE_NLS_LANGUAGE ?? ""');
+}
+
 /** The size of window `name`'s page, as `<width>x<height>`. */
 export async function windowSizeOf(name: string): Promise<string> {
   return evaluate<string>(name, '`${window.innerWidth}x${window.innerHeight}`');

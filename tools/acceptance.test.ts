@@ -250,6 +250,15 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('window-agent.vsix');
   };
 
+  readonly languagePackVsix = (
+    root: string,
+    runFolder: string,
+    language: string,
+  ): string => {
+    this.calls.push(`language pack vsix ${language} of ${root}`);
+    return path.join(runFolder, `language-pack-${language}.vsix`);
+  };
+
   readonly runPlain = (
     root: string,
     variables: HarnessVariables,
@@ -428,6 +437,8 @@ const LAUNCH_ORDER = [
   'containers-context',
   'extensionpack',
   'extensionpack-german',
+  'extensionpack-lp-de',
+  'extensionpack-lp-hu',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -1192,6 +1203,24 @@ describe('acceptance', () => {
                 'dist',
                 'vscode-remote-extensionpack-0.1.0.vsix',
               ),
+            ],
+            client: 'vscodium',
+          })),
+          ...['de', 'hu'].map(language => ({
+            folder: path.join(
+              '/run',
+              `extensions-extensionpack-lp-${language}`,
+            ),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+              path.join(
+                workspace.root,
+                'dist',
+                'vscode-remote-extensionpack-0.1.0.vsix',
+              ),
+              path.join('/run', `language-pack-${language}.vsix`),
             ],
             client: 'vscodium',
           })),
