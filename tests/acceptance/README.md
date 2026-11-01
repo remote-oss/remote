@@ -583,7 +583,7 @@ Alpine (musl) one and the glibc one. They're cached under `.vscode-test/download
 (`SERVER_ARCHIVE`, by platform).
 - A path segment `alpine-<arch>` (Remote - SSH's `${os}-${arch}` on a musl host), or the update service's
   `server-linux-alpine` (Alpine on x64) or `server-alpine-<arch>`, gets the Alpine server.
-- `linux-<arch>` or `server-linux-<arch>` gets the glibc server, as for a Debian container (`GLIBC_IMAGE`).
+- `linux-<arch>` or `server-linux-<arch>` gets the glibc server, as for a Debian container (`GLIBC_IMAGE`, `debian:bookworm-slim` pinned by its index digest; the run pre-pulls no base image, so the daemon pulls it on the first row that uses it, as it does `OLD_GLIBC_IMAGE`).
 - A path that names no platform, such as `/ok/x`, gets the Alpine server.
 - A platform the run has no archive for, another architecture or another system, gets 404. The HTTPS certificate is the run's own,
 made in Node for `downloads` and `update.code.visualstudio.com` and kept in the run's folder; nothing trusts it. The

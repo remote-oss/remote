@@ -9,6 +9,7 @@ import {
   devContainerFolder,
   devContainersOf,
   editorProduct,
+  GLIBC_IMAGE,
   reloadingCommand,
   reopenInContainer,
   startInWindow,
@@ -492,6 +493,63 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
       ),
       [true, true],
     );
+  });
+
+  it('F-0419 AC-35 (glibc-then-alpine): a Debian container and then an Alpine one, on a daemon with no vscode volume, mount the same vscode volume, and its server folder lists a glibc and an Alpine platform folder, each with one commit folder', async () => {
+    await docker('volume', 'rm', '--force', 'vscode');
+    const glibc = devContainerFolder('c53v-glibc', {
+      name: 'Volume Glibc',
+      image: GLIBC_IMAGE,
+    });
+    const alpine = devContainerFolder('c53v-alpine', {name: 'Volume Alpine'});
+    try {
+      const glibcOpen = await opened(glibc);
+      const glibcMount = await vscodeMountOf(glibcOpen.containerId);
+      await closeWindow(glibcOpen.name);
+      const alpineOpen = await opened(alpine);
+      const alpineMount = await vscodeMountOf(alpineOpen.containerId);
+      const link = await serverLinkOf(alpineOpen.containerId);
+      const binFolder = link.replace(/\/[^/]*\/[^/]*$/, '');
+      const platforms = (
+        await docker('exec', alpineOpen.containerId, 'ls', binFolder)
+      )
+        .split('\n')
+        .filter(line => line !== '');
+      const commits = [];
+      for (const platform of platforms) {
+        commits.push(
+          (
+            await docker(
+              'exec',
+              alpineOpen.containerId,
+              'ls',
+              `${binFolder}/${platform}`,
+            )
+          )
+            .split('\n')
+            .filter(line => line !== '').length,
+        );
+      }
+      await closeWindow(alpineOpen.name);
+      deepStrictEqual(
+        {
+          mounts: [glibcMount, alpineMount],
+          platforms,
+          commits,
+        },
+        {
+          mounts: [
+            ['volume', 'vscode', true],
+            ['volume', 'vscode', true],
+          ],
+          platforms: [`alpine-${process.arch}`, `linux-${process.arch}`],
+          commits: [1, 1],
+        },
+      );
+    } finally {
+      await removeContainers(glibc);
+      await removeContainers(alpine);
+    }
   });
 
   it('tooling-77 (reset-removes): a reset leaves no dev.containers.cacheVolume key in the user settings', async () => {
