@@ -309,7 +309,7 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
     });
   });
 
-  it('F-0410 AC-4 (r5): Edit devcontainer.json Locally reopens the folder in the same window with the configuration open', async () => {
+  it('F-0410 AC-4, F-0201 AC-10 (r5): Edit devcontainer.json Locally reopens the folder in the same window with the configuration open', async () => {
     const folder = folderOf('recover-edit', {
       runArgs: [...runLabelArguments(), '--no-such-flag'],
     });

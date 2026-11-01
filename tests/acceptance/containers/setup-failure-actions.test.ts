@@ -26,6 +26,7 @@ import {
   waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
+  activations,
   openFolderWindow,
   removeContainers,
   setUserSetting,
@@ -146,6 +147,44 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
           asked: true,
           opened: [
             'https://github.com/remote-oss/remote/blob/main/docs/remote-containers/README.md#when-the-dev-container-cant-be-set-up',
+          ],
+          containers: [],
+        },
+      );
+    } finally {
+      await closeWindow(name);
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0401 AC-17 (c74-reload-window): More Actions... Reload Window reloads the window and tries the connection again, and a further failure shows the same dialog again', async () => {
+    const folder = failingBuildFolder('c74-reload-window');
+    const name = await failedSetup(folder);
+    try {
+      const before = activations(name);
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      await chooseQuickPickRow(name, 'Reload Window');
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > before,
+        60_000,
+      );
+      const again = await waitForDialog(name, 180_000);
+      deepStrictEqual(
+        {
+          message: again.message,
+          details: again.details,
+          buttons: again.buttons,
+          containers: await devContainersOf(folder),
+        },
+        {
+          message: '',
+          details: FAILED_SETUP,
+          buttons: [
+            'Edit devcontainer.json Locally',
+            'More Actions...',
+            'Retry',
           ],
           containers: [],
         },
