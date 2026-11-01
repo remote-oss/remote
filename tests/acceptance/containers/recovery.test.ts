@@ -8,6 +8,7 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  inWindow,
   OLD_GLIBC_IMAGE,
   reloadWindow,
   reopenInContainer,
@@ -25,6 +26,7 @@ import {
   editorGroups,
   pressEscape,
   primaryButtonOf,
+  quickPickOf,
   type ShownDialog,
   statusItem,
   windowTitle,
@@ -386,6 +388,59 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
       deepStrictEqual(
         sayingOf(await waitForDialog(name, DIALOG_MILLISECONDS)),
         {message: '', details: S339},
+      );
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
+  });
+
+  it('F-0201 AC-23 (c74-missing-docker-commands): with dockerPath set to a missing executable, Reopen in Container and both Rebuild and Reopen commands show the Docker dialog with the missing command before any picker, and Add Dev Container Configuration Files opens its pick with no dialog', async () => {
+    const bogus = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c74-no-such-docker',
+    );
+    const name = await open(folderOf('c74-missing-docker', {}));
+    await setUserSetting('dev.containers.dockerPath', bogus);
+    try {
+      const shown: Array<[string, string, string, boolean]> = [];
+      for (const command of [
+        'remote-containers.reopenInContainer',
+        'remote-containers.rebuildAndReopenInContainer',
+        'remote-containers.rebuildNoCacheAndReopenInContainer',
+      ]) {
+        const running = inWindow(name, command);
+        running.catch(() => undefined);
+        const dialog = await waitForDialog(name, 60_000);
+        shown.push([
+          command,
+          dialog.message,
+          dialog.details,
+          (await quickPickOf(name)) === undefined,
+        ]);
+        await answerDialog(name, 'Cancel');
+        await running.catch(() => undefined);
+      }
+      const adding = inWindow(name, 'remote-containers.createDevContainerFile');
+      adding.catch(() => undefined);
+      const pick = await waitForQuickPick(name, 60_000);
+      const dialog = await dialogOf(name);
+      await pressEscape(name);
+      deepStrictEqual(
+        {shown, pick: pick.placeholder !== '', dialog},
+        {
+          shown: [
+            'remote-containers.reopenInContainer',
+            'remote-containers.rebuildAndReopenInContainer',
+            'remote-containers.rebuildNoCacheAndReopenInContainer',
+          ].map(command => [
+            command,
+            'Docker version 17.12.0 or later required.',
+            `Command not found: '${bogus}'. Check the license for details.`,
+            true,
+          ]),
+          pick: true,
+          dialog: undefined,
+        },
       );
     } finally {
       await setUserSetting('dev.containers.dockerPath', undefined);
