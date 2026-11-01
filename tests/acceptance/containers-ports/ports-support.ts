@@ -1,6 +1,14 @@
-import {writeFileSync} from 'node:fs';
-import {connect, createServer} from 'node:net';
+import {execFile} from 'node:child_process';
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import {connect, createServer, type Server} from 'node:net';
 import path from 'node:path';
+import {promisify} from 'node:util';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   closeWindow,
@@ -14,7 +22,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {portsRows, type PortsRow} from '../windows/renderer.ts';
+import {answerInputBox, portsRows, type PortsRow} from '../windows/renderer.ts';
 
 /** The command that focuses core's Ports view. */
 const FOCUS_PORTS = '~remote.forwardedPorts.focus';
@@ -115,6 +123,145 @@ export function editConfiguration(
 export async function reloaded(window: string): Promise<void> {
   await reloadWindow(window);
   await connectedToContainer(window);
+}
+
+/** The promisified docker runner of this suite. */
+const execFileAsync = promisify(execFile);
+
+/**
+ * The run's recording `xdg-open`: the containers-ports launch puts the run's `xdg-bin` first on the editor's PATH,
+ * so a browser or preview ask lands in the log. The script is installed fresh with an empty log, and the log's
+ * path comes back.
+ */
+export function recordBrowserOpens(): string {
+  const binFolder = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-bin');
+  const logFile = path.join(variable('HARNESS_RUN_FOLDER'), 'xdg-open.log');
+  mkdirSync(binFolder, {recursive: true});
+  writeFileSync(
+    path.join(binFolder, 'xdg-open'),
+    `#!/bin/sh\nprintf '%s\\n' "$1" >> '${logFile}'\n`,
+  );
+  chmodSync(path.join(binFolder, 'xdg-open'), 0o755);
+  rmSync(logFile, {force: true});
+  return logFile;
+}
+
+/** Forwards `port` of the window by hand, as a user does with Forward a Port. */
+export async function forwardByHand(
+  window: string,
+  port: number,
+): Promise<void> {
+  const forwarding = inWindow(window, 'remote.tunnel.forwardCommandPalette');
+  await answerInputBox(window, String(port));
+  await forwarding;
+}
+
+/** Holds `port` on the host's loopback until the returned function is called. */
+export async function occupy(port: number): Promise<() => Promise<void>> {
+  const holder: Server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    holder.once('error', reject);
+    holder.listen(port, '127.0.0.1', resolve);
+  });
+  return () =>
+    new Promise(resolve => {
+      holder.close(() => {
+        resolve();
+      });
+    });
+}
+
+/** Whether `port` can be bound on the host's loopback now. */
+export async function isFree(port: number): Promise<boolean> {
+  try {
+    await (
+      await occupy(port)
+    )();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The local port of the one row `window` shows for remote `port`, once it is shown. */
+export async function localPortOf(
+  window: string,
+  port: number,
+): Promise<number> {
+  const rows = await rowsWhen(window, shown =>
+    portsOf(shown).includes(String(port)),
+  );
+  const address = rows.find(
+    shown => shown.port === String(port),
+  )?.forwardedAddress;
+  return Number((address ?? '').split(':').at(-1));
+}
+
+/** The addresses the run's recording `xdg-open` was asked to open; an uncreated log means it was never asked. */
+export function browserOpens(logFile: string): string[] {
+  try {
+    return readFileSync(logFile, 'utf8').split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Starts `command` in a new terminal of the window, as a user does: core's detection looks at the processes that
+ * terminals started. The way to end every process of that command comes back.
+ */
+async function inTerminal(
+  window: string,
+  containerId: string,
+  command: string,
+): Promise<() => Promise<void>> {
+  await inWindow(window, 'workbench.action.terminal.new');
+  await inWindow(window, 'workbench.action.terminal.sendSequence', {
+    text: `${command} &\n`,
+  });
+  return async () => {
+    await execFileAsync('docker', [
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `pkill -f '[${command.charAt(0)}]${command.slice(1)}' || true`,
+    ]).catch(() => undefined);
+  };
+}
+
+/** Starts a listener on `port` in a terminal of the window (an echo server on every address). */
+export function listenInTerminal(
+  window: string,
+  containerId: string,
+  port: number,
+  address = '',
+): Promise<() => Promise<void>> {
+  return inTerminal(
+    window,
+    containerId,
+    `nc -lk ${address === '' ? '' : `-s ${address} `}-p ${String(port)} -e cat`,
+  );
+}
+
+/** The ports the container listens on, as its netstat reports them. */
+export async function listeningPorts(containerId: string): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'netstat',
+    '-ltn',
+  ]);
+  return stdout
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('tcp'))
+    .map(line => {
+      const address = line.split(/\s+/)[3] ?? '';
+      return address.slice(address.lastIndexOf(':') + 1);
+    })
+    .filter(text => text !== '')
+    .sort();
 }
 
 /**
