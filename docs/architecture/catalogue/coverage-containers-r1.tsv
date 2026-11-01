@@ -1163,7 +1163,7 @@ F-0901.AC-4	unit
 F-0901.AC-5	deferred	containers 0.4: F-0406 later
 F-0901.AC-6	todo	
 F-0901.AC-7	deferred	containers 0.4: C12 attach later
-F-0901.AC-8	todo	
+F-0901.AC-8	acceptance	
 F-0901.AC-9	unit	
 F-0901.AC-10	todo	
 F-0901.AC-11	unit	
@@ -1185,8 +1185,8 @@ F-0901.AC-26	deferred	containers 0.4: F-1302 later
 F-0901.AC-27	deferred	containers 0.4: C13 volumes later
 F-0901.AC-28	deferred	containers 0.4: C12 attach later
 F-0901.AC-29	deferred	containers 0.4: F-0406 later
-F-0901.AC-30	todo	
-F-0901.AC-31	todo	
+F-0901.AC-30	acceptance	
+F-0901.AC-31	acceptance	
 F-0901.AC-32	deferred	containers 0.4: C12 attach later
 F-0901.AC-33	deferred	containers 0.4: C12 attach later
 F-0901.AC-34	deferred	containers 0.4: C13 volumes later
@@ -1198,7 +1198,7 @@ F-0901.AC-39	unit
 F-0901.AC-40	unit	
 F-0901.AC-41	deferred	containers 0.4: C12 attach later
 F-0901.AC-42	todo	
-F-0901.AC-43	todo	
+F-0901.AC-43	acceptance	
 F-0901.AC-44	acceptance	
 F-0901.AC-45	acceptance	
 F-0901.AC-46	deferred	containers 0.4: C12 attach later
