@@ -55,6 +55,23 @@ export const MIRROR_NAMESPACE = 'devcontainers/templates';
 /** The namespace of the run's own templates. */
 export const CUSTOM_NAMESPACE = 'remote-oss-run/custom';
 
+/**
+ * The run's own templates that are published but not listed in the index, each re-pushed without the annotation that
+ * holds its metadata: the manifest of `templates publish` carries it, and a template whose artifact does not is the
+ * case of F-0805 AC-12.
+ */
+export const UNLISTED_TEMPLATES: readonly string[] = ['no-metadata-lab'];
+
+/**
+ * The `oras` image the run copies a manifest with, pinned by its tag and the digest `docker pull` reported for it on
+ * 2026-11-01.
+ */
+export const ORAS_IMAGE =
+  'ghcr.io/oras-project/oras:v1.2.2@sha256:cd549d80c4aa89638aea5964a3cd8193a6dd8abf939a43b5d562c24dbab08ff1';
+
+/** The annotation of a template's manifest that holds its metadata, as the dev container spec names it. */
+const METADATA_ANNOTATION = 'dev.containers.metadata';
+
 /** The namespace of the run's own Features, which are published; the second owner's are listed only. */
 export const CUSTOM_FEATURES_NAMESPACE = 'remote-oss-run/features';
 
@@ -218,6 +235,41 @@ export function publishArguments(
   ];
 }
 
+/**
+ * The manifest text of a template without the annotation that holds its metadata: the config and the layers stay as
+ * they are, and the annotations object goes when that was its only key.
+ */
+export function manifestWithoutMetadata(manifestText: string): string {
+  const manifest = JSON.parse(manifestText) as {
+    annotations?: Record<string, string>;
+  } & Record<string, unknown>;
+  const {annotations, ...rest} = manifest;
+  const others = Object.fromEntries(
+    Object.entries(annotations ?? {}).filter(
+      ([key]) => key !== METADATA_ANNOTATION,
+    ),
+  );
+  return JSON.stringify(
+    Object.keys(others).length === 0 ? rest : {...rest, annotations: others},
+  );
+}
+
+/** The `oras` command line that runs `orasArguments` in the image, on the host's network so that it reaches `localhost`. */
+export function orasArguments(
+  subcommand: readonly string[],
+  mount?: {folder: string},
+): string[] {
+  return [
+    'run',
+    '--rm',
+    '--network',
+    'host',
+    ...(mount === undefined ? [] : ['-v', `${mount.folder}:/work`]),
+    ORAS_IMAGE,
+    ...subcommand,
+  ];
+}
+
 /** Where a run keeps its templates' work: the sources it publishes. */
 function runTemplatesFolder(runFolder: string): string {
   return path.join(runFolder, 'templates');
@@ -303,6 +355,28 @@ export async function prepareRunTemplates(
       CUSTOM_NAMESPACE,
     ),
   );
+  for (const name of UNLISTED_TEMPLATES) {
+    const reference = `${registry}/${CUSTOM_NAMESPACE}/${name}:latest`;
+    const manifest = checked(
+      command,
+      'docker',
+      orasArguments(['manifest', 'fetch', '--plain-http', reference]),
+    );
+    const pushed = path.join(work, 'oras');
+    mkdirSync(pushed, {recursive: true});
+    writeFileSync(
+      path.join(pushed, `${name}.json`),
+      manifestWithoutMetadata(manifest),
+    );
+    checked(
+      command,
+      'docker',
+      orasArguments(
+        ['manifest', 'push', '--plain-http', reference, `/work/${name}.json`],
+        {folder: pushed},
+      ),
+    );
+  }
   const featureSources = path.join(work, 'features', 'src');
   cpSync(path.join(fixtures, 'custom-features', 'src'), featureSources, {
     recursive: true,
@@ -339,6 +413,7 @@ export async function prepareRunTemplates(
     runIndexText(
       readFileSync(path.join(fixtures, 'devcontainer-index.json'), 'utf8'),
       readdirSync(customSources)
+        .filter(name => !UNLISTED_TEMPLATES.includes(name))
         .sort()
         .map(name =>
           metadata(

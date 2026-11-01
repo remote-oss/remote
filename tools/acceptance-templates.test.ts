@@ -23,13 +23,17 @@ import {
   featureMetadataText,
   ghcrLayer,
   type MirroredTemplate,
+  manifestWithoutMetadata,
   MIRROR_NAMESPACE,
   MIRRORED_TEMPLATES,
+  orasArguments,
+  ORAS_IMAGE,
   prepareRunTemplates,
   publishArguments,
   runIndexText,
   servedTemplatesFolder,
   templateLayerOf,
+  UNLISTED_TEMPLATES,
   templateRegistryOf,
 } from './acceptance-templates.ts';
 import type {CommandResult, CommandRunner} from './command-runner.ts';
@@ -41,8 +45,33 @@ import {
   TEMPLATES_REFERENCE,
 } from './trim-template-index.ts';
 
-/** The run's own templates, in name order. */
+/** The run's own templates the index lists, in name order. */
 const CUSTOM_TEMPLATES = ['bare-lab', 'mini', 'options-lab', 'paths-free-lab'];
+
+/** The folders of the run's own templates that are published: the listed ones and the unlisted, in name order. */
+const PUBLISHED_TEMPLATES = [...CUSTOM_TEMPLATES, ...UNLISTED_TEMPLATES].sort();
+
+/** The manifest `templates publish` gives a template: its config, a layer, and the annotation with its metadata. */
+const MANIFEST = JSON.stringify({
+  schemaVersion: 2,
+  mediaType: 'application/vnd.oci.image.manifest.v1+json',
+  config: {
+    mediaType: 'application/vnd.devcontainers',
+    digest: 'sha256:c',
+    size: 2,
+  },
+  layers: [
+    {
+      mediaType: 'application/vnd.devcontainers.layer.v1+tar',
+      digest: 'sha256:l',
+      size: 10,
+      annotations: {
+        'org.opencontainers.image.title': 'devcontainer-template-x.tgz',
+      },
+    },
+  ],
+  annotations: {'dev.containers.metadata': '{"id":"x"}'},
+});
 
 /** A collection of the run's own Features at `namespace`, with `features`. */
 function collectionOf(
@@ -116,7 +145,11 @@ function recording(): {command: CommandRunner; calls: string[][]} {
   return {
     command: (program, programArguments): CommandResult => {
       calls.push([program, ...programArguments]);
-      return {status: 0, stdout: '', stderr: ''};
+      return {
+        status: 0,
+        stdout: programArguments.includes('fetch') ? MANIFEST : '',
+        stderr: '',
+      };
     },
     calls,
   };
@@ -385,6 +418,102 @@ describe('the run templates', () => {
     });
   });
 
+  describe('the template without metadata', () => {
+    it('tooling-82: a manifest without its metadata annotation keeps its config and layers, and an annotation of the layer, and loses the annotations object when that was its only key', () => {
+      const without = JSON.parse(manifestWithoutMetadata(MANIFEST)) as {
+        annotations?: unknown;
+        config: unknown;
+        layers: unknown;
+      };
+      const other = JSON.parse(
+        manifestWithoutMetadata(
+          JSON.stringify({
+            layers: [],
+            annotations: {'dev.containers.metadata': 'x', 'other.key': 'y'},
+          }),
+        ),
+      ) as {annotations?: unknown};
+      deepStrictEqual(
+        [
+          without.annotations,
+          without.config,
+          without.layers,
+          other.annotations,
+        ],
+        [
+          undefined,
+          JSON.parse(MANIFEST).config,
+          JSON.parse(MANIFEST).layers,
+          {'other.key': 'y'},
+        ],
+      );
+    });
+
+    it('tooling-82: the oras commands run in the pinned image on the host network, with the folder mounted only when asked', () => {
+      deepStrictEqual(
+        [
+          orasArguments(['manifest', 'fetch', 'r/x:latest']),
+          orasArguments(['manifest', 'push', 'r/x:latest', '/work/x.json'], {
+            folder: '/run/oras',
+          }),
+          ORAS_IMAGE.includes('@sha256:'),
+        ],
+        [
+          [
+            'run',
+            '--rm',
+            '--network',
+            'host',
+            ORAS_IMAGE,
+            'manifest',
+            'fetch',
+            'r/x:latest',
+          ],
+          [
+            'run',
+            '--rm',
+            '--network',
+            'host',
+            '-v',
+            '/run/oras:/work',
+            ORAS_IMAGE,
+            'manifest',
+            'push',
+            'r/x:latest',
+            '/work/x.json',
+          ],
+          true,
+        ],
+      );
+    });
+
+    it('tooling-82: the fixture is a published template of the run that the index does not list, and its metadata names an optional directory', () => {
+      const folderOfFixture = path.join(
+        REPOSITORY_ROOT,
+        SNAPSHOT_FOLDER,
+        'custom',
+        'src',
+        'no-metadata-lab',
+      );
+      const metadata = JSON.parse(
+        readFileSync(
+          path.join(folderOfFixture, 'devcontainer-template.json'),
+          'utf8',
+        ),
+      ) as {id: string; optionalPaths: string[]};
+      deepStrictEqual(
+        [
+          UNLISTED_TEMPLATES,
+          CUSTOM_TEMPLATES.includes('no-metadata-lab'),
+          metadata.id,
+          metadata.optionalPaths,
+          readFileSync(path.join(folderOfFixture, 'extra', 'kept.txt'), 'utf8'),
+        ],
+        [['no-metadata-lab'], false, 'no-metadata-lab', ['extra/'], 'kept\n'],
+      );
+    });
+  });
+
   describe('prepareRunTemplates', () => {
     it("tooling-57: each layer is unpacked, both collections are published with the package's CLI, and the run's index is written where the host serves it", async () => {
       const root = path.join(folder, 'root');
@@ -430,6 +559,10 @@ describe('the run templates', () => {
           readdirSync(
             path.join(runFolder, 'templates', 'custom', 'src'),
           ).sort(),
+          readFileSync(
+            path.join(runFolder, 'templates', 'oras', 'no-metadata-lab.json'),
+            'utf8',
+          ),
           templates?.templates?.map(template => template.id),
           featureCollections.flatMap(collection =>
             (collection.features ?? []).map(feature => feature.id),
@@ -466,6 +599,28 @@ describe('the run templates', () => {
               ),
             ],
             [
+              'docker',
+              ...orasArguments([
+                'manifest',
+                'fetch',
+                '--plain-http',
+                'localhost:49200/remote-oss-run/custom/no-metadata-lab:latest',
+              ]),
+            ],
+            [
+              'docker',
+              ...orasArguments(
+                [
+                  'manifest',
+                  'push',
+                  '--plain-http',
+                  'localhost:49200/remote-oss-run/custom/no-metadata-lab:latest',
+                  '/work/no-metadata-lab.json',
+                ],
+                {folder: path.join(runFolder, 'templates', 'oras')},
+              ),
+            ],
+            [
               process.execPath,
               ...publishArguments(
                 bundledCli,
@@ -476,7 +631,8 @@ describe('the run templates', () => {
               ),
             ],
           ],
-          CUSTOM_TEMPLATES,
+          PUBLISHED_TEMPLATES,
+          manifestWithoutMetadata(MANIFEST),
           CUSTOM_TEMPLATES.map(
             name => `localhost:49200/${CUSTOM_NAMESPACE}/${name}`,
           ),
@@ -597,8 +753,8 @@ describe('the run templates', () => {
           read('bare-lab').optionalPaths,
         ],
         [
-          CUSTOM_TEMPLATES,
-          CUSTOM_TEMPLATES,
+          PUBLISHED_TEMPLATES,
+          PUBLISHED_TEMPLATES,
           [
             ['flavour', 'string', ['a', 'b', 'c'], 'b', 'Flavour:'],
             ['channel', 'string', ['stable', 'edge'], 'stable', 'Channel:'],
