@@ -19,6 +19,7 @@ import {
   answerDialog,
   dialogOf,
   dialogText,
+  primaryButtonOf,
   waitForDialog,
 } from '../windows/renderer.ts';
 
@@ -68,6 +69,7 @@ describe('F-0405 Rebuild and Reopen in an untrusted folder (card coverage-67)', 
           shown.message,
           (await dialogText(window))?.includes(S265),
           shown.buttons,
+          await primaryButtonOf(window),
         ]);
         await answerDialog(window, button);
         await running.catch(() => undefined);
@@ -102,9 +104,19 @@ describe('F-0405 Rebuild and Reopen in an untrusted folder (card coverage-67)', 
         {
           untrusted: true,
           asked: [
-            [QUESTION, true, ['Manage', 'Cancel', 'Trust Folder & Continue']],
+            [
+              QUESTION,
+              true,
+              ['Manage', 'Cancel', 'Trust Folder & Continue'],
+              'Trust Folder & Continue',
+            ],
             ['Cancel', undefined, true, null, true],
-            [QUESTION, true, ['Manage', 'Cancel', 'Trust Folder & Continue']],
+            [
+              QUESTION,
+              true,
+              ['Manage', 'Cancel', 'Trust Folder & Continue'],
+              'Trust Folder & Continue',
+            ],
             ['Manage', undefined, true, null, true],
           ],
           after: {remoteName: 'dev-container', containers: 1},
