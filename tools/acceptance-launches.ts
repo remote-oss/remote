@@ -203,6 +203,24 @@ const GENUINE_LAUNCH: PlainLaunch = {
   environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
 };
 
+/**
+ * The genuine client with our Dev Containers and Docker: the server comes from the run's stand-in licensed host, so the
+ * licence question of a server under terms of its own is asked and nothing reaches the editor's publisher. The other
+ * Dev Containers extension is never installed.
+ */
+const GENUINE_CONTAINERS_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'genuine-containers',
+  suite: 'genuine-containers',
+  withExtensions: ['remote-oss.remote-containers'],
+  settings: {
+    ...GENUINE_LAUNCH.settings,
+    // The folder dialog is the in-window one, which the renderer helpers can type into.
+    'files.simpleDialog.enable': true,
+    'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LICENSED}',
+  },
+};
+
 /** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
 const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   ...GENUINE_LAUNCH,
@@ -939,6 +957,7 @@ export function launchesOf(root: string): Launch[] {
     ),
     GENUINE_LAUNCH,
     SSH_NO_PROPOSALS_LAUNCH,
+    GENUINE_CONTAINERS_LAUNCH,
     // Last: its rows remove every container of the run, the run's host and registry included.
     {
       ...CONTAINERS_LAUNCH,

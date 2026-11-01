@@ -1204,6 +1204,15 @@ describe('acceptance', () => {
             client: 'vscode',
           })),
           {
+            folder: path.join('/run', 'extensions-genuine-containers'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscode',
+          },
+          {
             folder: path.join('/run', 'extensions-containers-view'),
             files: [
               '/dist/remote-ssh.vsix',
@@ -3581,7 +3590,7 @@ describe('acceptance', () => {
         launchesOf(REPOSITORY_ROOT)
           .slice(-3)
           .map(launch => launch.label),
-        ['genuine', 'ssh-no-proposals', 'containers-view'],
+        ['ssh-no-proposals', 'genuine-containers', 'containers-view'],
       );
     });
 
@@ -3679,7 +3688,7 @@ describe('acceptance', () => {
             )
             .map(launch => launch.label),
           [],
-          ['genuine', 'ssh-no-proposals'],
+          ['genuine', 'ssh-no-proposals', 'genuine-containers'],
           ['containers'],
         ],
       );
