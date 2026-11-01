@@ -9,11 +9,12 @@
  * never pruned.
  */
 
-import {randomInt} from 'node:crypto';
+import {randomBytes, randomInt} from 'node:crypto';
 import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {stopRunHelpers} from './acceptance-helper-stop.ts';
+import {base32Of} from './one-time-code.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {HOST_BASE_VARIANTS, type HostBase} from './host-variants.ts';
 import {isMainModule, messageOf} from './repository.ts';
@@ -351,6 +352,8 @@ export interface HostContainer {
   keyFile: string;
   /** The file holding the bare password of the user `harness-pw`, mode 600. */
   passwordFile: string;
+  /** The file holding the one-time-code secret of the user `harness-2fa`, in base32, mode 600. */
+  totpFile: string;
 }
 
 /** The host port Docker maps to the container's port 22, from `docker port` output such as `127.0.0.1:49153`. */
@@ -404,9 +407,19 @@ export function startHostContainer(
   const password = existsSync(passwordFile)
     ? readFileSync(passwordFile, 'utf8')
     : newPassword();
+  const totpFile = path.join(runFolder, 'totp-secret');
+  // 20 random bytes, the length RFC 4226 recommends for a one-time-code secret: 32 characters of base32.
+  const totpSecret = existsSync(totpFile)
+    ? readFileSync(totpFile, 'utf8')
+    : base32Of(randomBytes(20));
   const environmentFile = path.join(runFolder, 'host.env');
   writeFileSync(passwordFile, password, {mode: 0o600});
-  writeFileSync(environmentFile, `HOST_PASSWORD=${password}\n`, {mode: 0o600});
+  writeFileSync(totpFile, totpSecret, {mode: 0o600});
+  writeFileSync(
+    environmentFile,
+    `HOST_PASSWORD=${password}\nHOST_TOTP_SECRET=${totpSecret}\n`,
+    {mode: 0o600},
+  );
   const container = checked(command, 'docker', [
     'run',
     '--detach',
@@ -427,7 +440,7 @@ export function startHostContainer(
   const port = mappedPort(
     checked(command, 'docker', ['port', container, '22']),
   );
-  return {container, port, keyFile, passwordFile};
+  return {container, port, keyFile, passwordFile, totpFile};
 }
 
 /**

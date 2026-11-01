@@ -245,6 +245,14 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
   proposedApi: false,
 };
 
+/**
+ * The host setup of the secrets launch: both keyboard-interactive accounts get the run's password again, and
+ * harness-expired's is marked expired again. `docker exec` sees the container's `HOST_PASSWORD`, which `start-sshd` only
+ * unsets in its own shell.
+ */
+const SECRETS_ACCOUNTS_RESET =
+  'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
+
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
@@ -719,6 +727,16 @@ export function launchesOf(root: string): Launch[] {
         XDG_DATA_HOME: '<run>/xdg/data',
         XDG_STATE_HOME: '<run>/xdg/state',
       },
+    },
+    {
+      // Keyboard-interactive logins on the Ubuntu 26.04 host's two PAM accounts, then a search for what was typed.
+      label: 'secrets',
+      kind: 'plain',
+      suite: 'secrets',
+      hostBase: 'ubuntu-26.04',
+      environment: {HOME: '<run>/home-secrets'},
+      // Each attempt starts from the same accounts: a forced change gives harness-expired a new password.
+      hostSetup: [{command: SECRETS_ACCOUNTS_RESET}],
     },
     {
       ...RENDERER_LAUNCH,

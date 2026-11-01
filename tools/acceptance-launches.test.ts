@@ -184,7 +184,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('tooling-70: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and no launch on another host has a host setup', () => {
+  it('tooling-70, tooling-34: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and secrets is the one launch on another host with a host setup', () => {
     const remote = launches.find(launch => launch.label === 'remote');
     deepStrictEqual(
       [
@@ -196,7 +196,29 @@ describe('the launches of the VSCodium run', () => {
           )
           .map(launch => launch.label),
       ],
-      [{...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'}, []],
+      [
+        {...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'},
+        ['secrets'],
+      ],
+    );
+  });
+
+  it('tooling-34: the secrets launch is a plain launch on the Ubuntu 26.04 host with a HOME of its own, whose host setup gives both keyboard-interactive accounts the run password again and expires harness-expired’s', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'secrets'),
+      {
+        label: 'secrets',
+        kind: 'plain',
+        suite: 'secrets',
+        hostBase: 'ubuntu-26.04',
+        environment: {HOME: '<run>/home-secrets'},
+        hostSetup: [
+          {
+            command:
+              'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired',
+          },
+        ],
+      },
     );
   });
 
@@ -223,6 +245,7 @@ describe('the launches of the VSCodium run', () => {
         'login-shells',
         'preconnect',
         'config-files',
+        'secrets',
         'default-ports',
         'ssh-core',
         'no-proposals',
