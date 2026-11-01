@@ -662,7 +662,7 @@ F-0416.AC-23	acceptance
 F-0416.AC-24	acceptance	
 F-0416.AC-25	acceptance	
 F-0416.AC-26	acceptance	
-F-0416.AC-27	todo	
+F-0416.AC-27	acceptance	
 F-0416.AC-28	acceptance	
 F-0416.AC-29	acceptance	
 F-0416.AC-30	acceptance	
@@ -677,12 +677,12 @@ F-0416.AC-38	deferred	containers release 1: later (Compose)
 F-0416.AC-39	deferred	containers release 1: later (Compose)
 F-0416.AC-40	acceptance	
 F-0416.AC-41	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0416.AC-42	todo	
+F-0416.AC-42	acceptance	
 F-0416.AC-43	acceptance	
-F-0416.AC-44	todo	
+F-0416.AC-44	acceptance	
 F-0416.AC-45	acceptance	
 F-0416.AC-46	acceptance	
-F-0416.AC-47	todo	
+F-0416.AC-47	acceptance	
 F-0416.AC-48	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-49	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0416.AC-50	deferred	containers release 1: later (Windows, WSL and macOS)
