@@ -645,7 +645,7 @@ answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settings
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
 executable the launch started, and `editorProduct()` reads the `product.json` beside it.
 
-Nothing reaches Microsoft or GitHub from the rows, in two ways. The host's side is shown by the download host: it
+Nothing reaches Microsoft or GitHub from the rows, other than a launch with `publisherDownloads` (below), in two ways. The host's side is shown by the download host: it
 answers for `update.code.visualstudio.com`, its request log shows what the host asked for, and its TLS log shows which
 names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
 built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
@@ -654,6 +654,26 @@ built-in chat) is not seen there, so the launch turns each off in its settings: 
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
+
+A launch with `publisherDownloads: true` takes its server from Microsoft's update service, the server of the genuine
+client's own commit, and its rows accept the licence in the product's own modal, as the user decided on 2026-11-01
+(D-104, the genuine job only). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:
+before the launch the run moves the host's line for that name out of `/etc/hosts` into `/etc/hosts.update-service`
+(rewriting the file in place, as it is a bind mount), and before the next launch without the field it puts the line
+back. The log says each change (`acceptance: the harness host resolves update.code.visualstudio.com through DNS`, then
+`… to the download host`). The client's download, as Dev Containers makes it, needs nothing from the run: the runner
+resolves the name itself.
+
+These launches run only in the genuine CI job (D-104; a run on any other machine is outside the user's decision until
+they rule on it). The field also marks every launch whose rows click "Accept and Continue", whether or not its server
+comes from the publisher, so all of them pass the same gate: the run refuses such a launch unless `GITHUB_ACTIONS` is
+`true`, `GITHUB_JOB` is `acceptance-genuine` and `HARNESS_GENUINE_VERSION` is set (`acceptance: <label>: a launch that
+takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): …`). Anyone
+can set those three variables, so the gate guards against an accident, not against intent. The tools rows check the
+rest: every launch whose suite answers a dialog with "Accept and Continue" has the field, only such a launch names
+`update.code.visualstudio.com` or `vscode.download.prss.microsoft.com`, only a genuine launch on the harness host has
+the field, every genuine launch keeps `telemetry.telemetryLevel` off and `update.mode` none, no part of the VSCodium
+job makes a genuine launch, and the genuine job's lists make only genuine launches.
 
     node tools/acceptance.ts --editor vscodium --launches genuine
 

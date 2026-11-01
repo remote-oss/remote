@@ -49,6 +49,8 @@ import {
   downloadHostArguments,
   type RunDownloads,
   startRunDownloads,
+  UPDATE_SERVICE_NAME,
+  updateServicePinCommand,
 } from './acceptance-downloads.ts';
 import {
   acceptanceRunId,
@@ -1164,6 +1166,8 @@ export async function runLaunches(
   baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
 ): Promise<number[]> {
   const exitCodes: number[] = [];
+  // The harness host starts with the update service's name pinned to the download host.
+  let pinned = true;
   for (const launch of launches) {
     if (launch !== undefined) {
       // The line a log reader splits the run's output at: tools/flake-ledger.ts reads each launch's rows after it.
@@ -1209,6 +1213,16 @@ export async function runLaunches(
     return runWithRetry(async () => {
       // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
       if (launch !== undefined) {
+        const wanted = launch.publisherDownloads !== true;
+        if (wanted !== pinned) {
+          runHostSetup(command, container, [
+            {command: updateServicePinCommand(wanted)},
+          ]);
+          pinned = wanted;
+          report(
+            `acceptance: the harness host resolves ${UPDATE_SERVICE_NAME} ${wanted ? 'to the download host' : 'through DNS'}`,
+          );
+        }
         if (launch.hostSetup !== undefined) {
           runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
         }
@@ -1304,6 +1318,11 @@ export async function runAcceptance(
     console.error(
       'acceptance: ssh-no-proposals runs at the recorded version only',
     );
+    return 2;
+  }
+  const refusal = publisherDownloadsRefusal(chosen, process.env);
+  if (refusal !== undefined) {
+    console.error(`acceptance: ${refusal}`);
     return 2;
   }
   const runId = acceptanceRunId(process.env, process.pid);
@@ -1455,6 +1474,32 @@ export function genuineVersionIn(
     : {
         problem: `HARNESS_GENUINE_VERSION must be ${GENUINE_VERSIONS.join(' or ')}`,
       };
+}
+
+/** The id of the workflow job that alone makes a launch with `publisherDownloads`, as Actions gives it in `GITHUB_JOB`. */
+export const GENUINE_JOB = 'acceptance-genuine';
+
+/**
+ * Why the run refuses its launches, when one of them takes its server from the editor's publisher or accepts its
+ * licence outside the genuine job: the run takes such a launch only under Actions, in that job, with the version named.
+ * Anyone can set the three variables, so this guards against an accident, not against intent.
+ */
+export function publisherDownloadsRefusal(
+  launches: readonly Launch[],
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const named = environment.HARNESS_GENUINE_VERSION;
+  const labels = launches
+    .filter(launch => launch.publisherDownloads === true)
+    .map(launch => launch.label);
+  const genuineJob =
+    environment.GITHUB_ACTIONS === 'true' &&
+    environment.GITHUB_JOB === GENUINE_JOB &&
+    named !== undefined &&
+    named !== '';
+  return labels.length === 0 || genuineJob
+    ? undefined
+    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB ${GENUINE_JOB} and HARNESS_GENUINE_VERSION set`;
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
