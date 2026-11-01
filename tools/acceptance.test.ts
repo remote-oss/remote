@@ -437,6 +437,7 @@ const LAUNCH_ORDER = [
   'containers-context',
   'extensionpack',
   'extensionpack-german',
+  'extensionpack-partial',
   'extensionpack-lp-de',
   'extensionpack-lp-hu',
   'ports-probe',
@@ -1206,6 +1207,19 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           })),
+          {
+            folder: path.join('/run', 'extensions-extensionpack-partial'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(
+                workspace.root,
+                'dist',
+                'vscode-remote-extensionpack-0.1.0.vsix',
+              ),
+            ],
+            client: 'vscodium',
+          },
           ...['de', 'hu'].map(language => ({
             folder: path.join(
               '/run',

@@ -836,6 +836,11 @@ export async function extensionsViewSections(
   );
 }
 
+/** The page-side list of the actions that `container` shows and has not disabled, by their labels. */
+function actionsExpression(container: string): string {
+  return `[...(${container}?.querySelectorAll('.monaco-action-bar .action-label') ?? [])].filter(each => !each.classList.contains('hide') && !each.classList.contains('disabled') && each.getAttribute('aria-disabled') !== 'true').map(each => each.getAttribute('aria-label') || each.textContent || '').filter(label => label !== '' && label !== 'More Actions...')`;
+}
+
 /** The page-side lookup of the Extensions view entries named `displayName`. */
 function extensionRowsExpression(displayName: string): string {
   return `[...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)})`;
@@ -896,6 +901,8 @@ export interface ExtensionRow {
   publisher: string;
   /** The count on the row's icon, as a pack shows its members; empty for an extension that has none. */
   badge: string;
+  /** The actions the row offers: those shown and not disabled, such as Manage or Install. */
+  actions: string[];
 }
 
 /** The row of the entry `displayName` of the Extensions view in window `name`; it fails naming the entry when the view lists it not once. */
@@ -915,6 +922,7 @@ export async function extensionRowOf(
         description: rows[0].querySelector('.description')?.textContent ?? '',
         publisher: rows[0].querySelector('.publisher-name')?.textContent ?? '',
         badge: rows[0].querySelector('.extension-pack-badge')?.textContent ?? '',
+        actions: ${actionsExpression('rows[0]')},
       };
     })()`,
   );
@@ -974,6 +982,8 @@ export interface ExtensionPage {
   pack: string[];
   /** Whether the Extension Pack block comes above the rendered README. */
   packAboveReadme: boolean;
+  /** The actions the page's header offers: those shown and not disabled, such as Disable, Uninstall and Manage. */
+  actions: string[];
 }
 
 /**
@@ -1006,6 +1016,7 @@ export async function extensionPageOf(
           blocks: [...(editor?.querySelectorAll('.extension-editor .more-info-container .more-info-title, .additional-details-title') ?? [])].map(each => each.textContent ?? ''),
           packHeader: text(editor, '.extension-pack .header'),
           pack: [...(editor?.querySelectorAll('.extension-pack .extensions-grid-view .extension-list-item .name') ?? [])].map(each => each.textContent ?? ''),
+          actions: ${actionsExpression("editor?.querySelector('.header')")},
           packAboveReadme: (editor?.querySelector('.extension-pack')?.compareDocumentPosition(editor?.querySelector('.readme-content') ?? document.body) ?? 0) === Node.DOCUMENT_POSITION_FOLLOWING,
         };
       };
@@ -1112,6 +1123,21 @@ export async function issueReporterExtensions(): Promise<string[]> {
     })()`,
   );
   return names;
+}
+
+/** The text of the FEATURES tab of the details page open in window `name`, which the call selects. */
+export async function extensionFeaturesOf(name: string): Promise<string> {
+  return evaluate<string>(
+    name,
+    `(async () => {
+      const tab = [...document.querySelectorAll('.extension-editor .body .navbar .action-label')].find(each => each.textContent === 'Features');
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        tab?.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return document.querySelector('.extension-editor .feature-contributions')?.textContent?.trim() ?? '';
+    })()`,
+  );
 }
 
 /**

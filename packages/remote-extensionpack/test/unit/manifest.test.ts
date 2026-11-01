@@ -540,6 +540,23 @@ describe('the pack’s package (card pack-01)', () => {
     deepStrictEqual(readme().match(/!\[[^\]]*\]\([^)]*\)|<img /g) ?? [], []);
   });
 
+  it('F-9901 AC-17: the requirements link each member to its own readme in its remote-oss folder, and WSL and Remote - Tunnels are named as not part of this release with no promise of a later one', () => {
+    const members = flat(sectionOf('The members'));
+    deepStrictEqual(
+      [
+        sectionOf('Requirements').match(
+          /\]\(https:\/\/github\.com\/remote-oss\/remote\/tree\/main\/packages\/[a-z-]+#readme\)/g,
+        )?.length,
+        members.includes('WSL: not part of this release.'),
+        members.includes('Remote - Tunnels: not part of this release.'),
+        /later|soon|will|plan|upcoming|20\d\d/i.test(
+          members.slice(members.indexOf('WSL:')),
+        ),
+      ],
+      [2, true, true, false],
+    );
+  });
+
   it('F-9901 AC-8: the readme and the package present no release of the reference as the project’s own history', () => {
     deepStrictEqual(
       [readme(), textOf('package.json')].filter(text =>

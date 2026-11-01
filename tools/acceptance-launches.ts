@@ -958,6 +958,14 @@ export function launchesOf(root: string): Launch[] {
       environment: UNREACHABLE_GALLERY,
       locale: 'de',
     },
+    // The pack and Remote - SSH without Dev Containers: a member of the pack that is not installed, with no gallery to fetch it from.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'extensionpack-partial',
+      suite: 'extensionpack-partial',
+      withExtensions: ['remote-oss.vscode-remote-extensionpack'],
+      environment: UNREACHABLE_GALLERY,
+    },
     // The same with a fixture language pack active: the display language the pack's strings are read for.
     ...['de', 'hu'].map((language): PlainLaunch => ({
       ...RENDERER_LAUNCH,
