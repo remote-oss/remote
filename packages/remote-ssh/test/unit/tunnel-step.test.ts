@@ -39,6 +39,7 @@ const TERMINAL_NOT_USED = {
   attachQuestions: (): never => {
     throw new Error('the SOCKS path asks no question');
   },
+  tunnelInput: (): undefined => undefined,
   revealLoginTerminals: (): boolean => false,
   connectWait: (): never => {
     throw new Error('the SOCKS path has no connect wait');

@@ -142,8 +142,8 @@ The argument rules:
   the host sets none (F-2105; `scp` passes `-o` to its `ssh`, ruled on #253 Q13: without it a copy to an unreachable
   address waits for the system's limit). Never a `ServerAlive*` option.
 - The shared connection's `ssh` runs the bootstrap's fixed `sh -c` program and writes the prelude to its standard input; in
-  terminal mode the remote program is `sh` (F-2105, F-2704). **When `remoteCommandInEffect` is true, the shared
-  connection's `ssh` gets no remote program on its command line**, since ssh refuses one beside the host's `RemoteCommand`. The program
+  terminal mode the remote program is `sh` (F-2105, F-2704). **When `remoteCommandInEffect` is true, every connection
+  `ssh`, the shared connection's and terminal mode's, gets no remote program on its command line**, since ssh refuses one beside the host's `RemoteCommand`. The program
   goes first on standard input as `exec <program>`, read by the shell the `RemoteCommand` starts, and the prelude
   follows unchanged; no TTY, the same markers and bounds (athena on #1221, F-2704 6.7, AC-30).
 - `-o RemoteCommand=none` when the effective options carry a `RemoteCommand` and `remoteCommandInEffect` is false

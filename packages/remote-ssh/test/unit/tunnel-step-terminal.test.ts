@@ -62,6 +62,7 @@ function stepWith(
     connectScript?: Array<'work' | 'fail' | 'hang'>;
     connectWait?: ConnectWaitSettings;
     retryMilliseconds?: number;
+    input?: string;
   } = {},
 ) {
   const clock = new FakeClock();
@@ -99,6 +100,7 @@ function stepWith(
       forwards.push(forward);
       return {program: 'ssh', arguments: ['tunnel'], environment: {}};
     },
+    tunnelInput: () => options.input,
     attachQuestions: login => {
       logins.push(login);
       return {
@@ -186,6 +188,19 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
         ['SSH Tunnel'],
         [{kind: 'local', localPort: LOCAL_PORT, remotePort: 4321}],
       ],
+    );
+  });
+
+  it('F-2107 BR-1: the line the step is given as the tunnel run’s input is written to the terminal as soon as it opens, and with none nothing is', async () => {
+    const withInput = stepWith({input: 'exec sh -c cmd\n'});
+    void withInput.open();
+    await settled();
+    const without = stepWith();
+    void without.open();
+    await settled();
+    deepStrictEqual(
+      [withInput.terminals.opened[0]?.sent, without.terminals.opened[0]?.sent],
+      [['exec sh -c cmd\n'], []],
     );
   });
 

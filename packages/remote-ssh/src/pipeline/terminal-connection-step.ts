@@ -21,6 +21,7 @@ import {
   followLoginOutput,
   PromptReader,
   type SessionRunner,
+  connectionStart,
   sessionStartFor,
   setupMarkerOf,
   type SshRequest,
@@ -184,7 +185,10 @@ export function openTerminalConnectionStep(
         const runner: TerminalSessionRunner = new TerminalSessionRunner({
           terminal,
           scheduler: dependencies.scheduler,
-          prelude: sessionStartFor(waitSettings).prelude,
+          prelude: connectionStart(
+            sessionStartFor(waitSettings),
+            terms.remoteCommandInEffect,
+          ).prelude,
           newMarker: () => dependencies.newMarker(),
           onBootstrap: event => {
             hearBootstrap(event, runner);

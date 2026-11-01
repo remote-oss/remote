@@ -339,6 +339,16 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
+      # Podman 5 for the containers-podman launch, on a part that can choose it (the @containers group includes it): run
+      # as the job's user, rootless Podman needs newuidmap and newgidmap setuid, which the runners' image does not have,
+      # and subordinate ids for that user. A runner keeps what an earlier job installed.
+      - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
+        run: |
+          command -v podman >/dev/null || sudo dnf install -y -q podman
+          sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
+          grep -q "^$(id -un):" /etc/subuid || sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
+          podman --version
+          podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
       # the part's launches: a group selection, or the launches a dispatch names
       - run: |
           if command -v xvfb-run >/dev/null; then
