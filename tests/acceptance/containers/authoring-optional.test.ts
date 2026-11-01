@@ -17,6 +17,7 @@ import {
   editorTabs,
   notificationCentre,
   pressControlAlt,
+  pageText,
   pressEscape,
   pressQuickPickBack,
   pressQuickPickOk,
@@ -27,6 +28,7 @@ import {
   quickPickOf,
   detailedQuickPickRows,
   toggleQuickPickRow,
+  typeInFocus,
   typeInQuickPick,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -333,17 +335,26 @@ describe('Optional Files/Directories in the wizard (card containers-90)', functi
     });
   });
 
-  it('F-0805 AC-16 (focus-moved): moving the focus into an editor (a new untitled file) leaves the screen open with its selection, and OK afterwards finishes with that selection', async () => {
+  it('F-0805 AC-16 (focus-moved): moving the focus into an editor (a new untitled file) and typing into it leaves the screen open with its selection, and OK afterwards finishes with that selection', async () => {
     await withWindow('o90-focus', {}, async (window, folder) => {
       await toOptionalScreen(window);
       await toggleQuickPickRow(window, 'alpha.txt');
       await inWindow(window, 'workbench.action.files.newUntitledFile');
       await new Promise(resolve => setTimeout(resolve, 2000));
-      const stillOpen = (await quickPickOf(window))?.placeholder;
+      await typeInFocus(window, 'notes');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const stillOpen = [
+        (await quickPickOf(window))?.placeholder,
+        (await quickPickChrome(window)).counter,
+        (await pageText(window)).includes('notes'),
+      ];
       await pressQuickPickOk(window);
       deepStrictEqual(
         [stillOpen, await writtenFiles(window, folder)],
-        [OPTIONAL_PLACEHOLDER, [BASE, 'alpha.txt'].sort()],
+        [
+          [OPTIONAL_PLACEHOLDER, '1 Selected', true],
+          [BASE, 'alpha.txt'].sort(),
+        ],
       );
     });
   });

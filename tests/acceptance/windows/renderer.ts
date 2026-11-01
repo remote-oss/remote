@@ -2366,6 +2366,14 @@ async function pressCharacter(
   await pressStroke(address, owner, characterStroke(character));
 }
 
+/** Types `text` into window `name`, as the keyboard does, a character at a time, into whatever of the page has the focus. */
+export async function typeInFocus(name: string, text: string): Promise<void> {
+  const address = await pageOf(name);
+  for (const character of text) {
+    await pressCharacter(address, name, character);
+  }
+}
+
 /** The modifier bits of the protocol's key events. */
 const ALT_AND_CONTROL = 3;
 
