@@ -10,7 +10,7 @@ pnpm test:acceptance    # on Linux without a display: xvfb-run --auto-servernum 
 
 The command packages the extensions, then `tools/acceptance.ts`:
 
-1. builds the host image from `host/` (Alpine with OpenSSH's server and libstdc++, key login only, the user `harness` with the
+1. builds the host image from `host/` (Alpine with OpenSSH's server, libstdc++ and git, key login only, the user `harness` with the
    POSIX `sh` login shell, TCP forwarding allowed);
 2. makes an Ed25519 key pair for the run and starts the host with its public key on a free local port;
 3. writes an `ssh_config` whose `Host harness` reaches the host with that key, its own known-hosts file and no agent (and whose `Host 127.0.0.1` block reaches it by the address as typed),
