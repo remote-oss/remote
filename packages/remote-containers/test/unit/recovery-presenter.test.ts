@@ -44,6 +44,8 @@ interface Script {
   failed?: FailedContainer;
   /** A rejection of the paused retry's store, an Error or a text. */
   storeRefusal?: Error | string;
+  /** What fileExists answers with; by default the file is there. */
+  fileExists?: (file: string) => PromiseLike<boolean>;
   /** The file the attempt's log is written to; none when the write gives none. */
   logFile?: string;
   /** Whether the write of the attempt's log fails. */
@@ -80,6 +82,10 @@ function presenting(script: Script = {}) {
         calls.push(`pick ${placeholder}|${labels.join(',')}`);
         return Promise.resolve(picks.shift());
       },
+      fileExists: file =>
+        script.fileExists === undefined
+          ? Promise.resolve(true)
+          : script.fileExists(file),
       writeAttemptLog: () => {
         written.push(calls.length);
         if (script.logRefusal !== undefined) {
@@ -244,6 +250,19 @@ describe('the failure presenter C8 (card containers-11)', () => {
     deepStrictEqual(seen.calls.slice(2), [
       `pick Pick an action to help resolve the problem.|Reload Window,Rebuild Container,${EDIT},Open Recent...,Open Documentation`,
       'rebuildContainer',
+    ]);
+  });
+
+  it('F-0410 AC-27: More Actions... offers no Rebuild Container when the configuration file is gone, though the connect found a container', async () => {
+    const seen = await present(containerSetupFailed(), {
+      errors: ['More Actions...'],
+      picks: ['Rebuild Container'],
+      failed: {containerId: 'd'.repeat(64), paused: false},
+      fileExists: () => Promise.resolve(false),
+    });
+    await seen.flush();
+    deepStrictEqual(seen.calls.slice(2), [
+      `pick Pick an action to help resolve the problem.|Reload Window,${EDIT},Open Recent...,Open Documentation`,
     ]);
   });
 

@@ -4,7 +4,7 @@
  */
 
 import {appendFileSync, readFileSync} from 'node:fs';
-import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readdir, readFile, stat} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -1282,6 +1282,11 @@ export async function activate(
         presenter: recoveryPortsOf(vscode, {
           writeAttemptLog: async () =>
             writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
+          fileExists: file =>
+            stat(file).then(
+              () => true,
+              () => false,
+            ),
           keepEdit: (folder, configFile, logFile) =>
             storePendingEdit(
               context.globalState,
