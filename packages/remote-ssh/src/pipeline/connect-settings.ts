@@ -101,10 +101,10 @@ export function connectionSettingsOf(
   };
 }
 
-/** The settings the terms read. */
+/** The settings the terms read, with the shared connection as the connect uses it: off in socket mode. */
 export function termsSettingsOf(host: SettingHost): TermsSettings {
   return {
-    useLocalServer: switchOf(host, 'useLocalServer'),
+    useLocalServer: effectiveUseLocalServer(tunnelSettingsOf(host)),
     remotePlatform: valueOf(host, 'remotePlatform'),
     windowsRemotes: valueOf(host, 'windowsRemotes'),
     enableRemoteCommand: switchOf(host, 'enableRemoteCommand'),

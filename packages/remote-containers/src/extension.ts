@@ -4,17 +4,7 @@
  */
 
 import {appendFileSync, readFileSync} from 'node:fs';
-import {
-  access,
-  constants as fileConstants,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -51,6 +41,12 @@ import {
 import {storedCandidate, type StoredLookup} from './config/stored-candidate.ts';
 import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
+import {
+  hostFiles,
+  isUnder,
+  routedFiles,
+  windowFiles,
+} from './authoring/window-files.ts';
 import {finishTooltip} from './authoring/select-features.ts';
 import {writeTemplate} from './authoring/write.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
@@ -157,12 +153,40 @@ interface Manifest {
   contributes?: {commands?: Array<{command: string; title: string}>};
 }
 
-/** The folders the window has open, by scheme and path on this machine. */
-function windowFolders(): Array<{scheme: string; fsPath: string}> {
+/** The folders the window has open, by scheme, path on this machine and path in the folder's own file system. */
+function windowFolders(): Array<{
+  scheme: string;
+  fsPath: string;
+  path: string;
+}> {
   return (vscode.workspace.workspaceFolders ?? []).map(folder => ({
     scheme: folder.uri.scheme,
     fsPath: folder.uri.fsPath,
+    path: folder.uri.path,
   }));
+}
+
+/**
+ * The path in the container of the only folder of a dev container window; none in any other window. Read at each call,
+ * because the window's folders can change.
+ */
+function containerFolder(): string | undefined {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  const [only] = folders;
+  return folders.length === 1 &&
+    only?.uri.scheme === 'vscode-remote' &&
+    vscode.env.remoteName === 'dev-container'
+    ? only.uri.path
+    : undefined;
+}
+
+/** The address of a path the authoring command uses: in the container for a path of the window's folder, else here. */
+function authoringUriOf(file: string): vscode.Uri {
+  const root = containerFolder();
+  const [folder] = vscode.workspace.workspaceFolders ?? [];
+  return root !== undefined && folder !== undefined && isUnder(root, file)
+    ? folder.uri.with({path: file})
+    : vscode.Uri.file(file);
 }
 
 function translate(template: string): string {
@@ -640,6 +664,18 @@ export async function activate(
         );
       }
       const bridge = bridgeFor(process.env, served.logger);
+      const authoringFiles = routedFiles(
+        hostFiles(),
+        windowFiles(
+          vscode.workspace.fs,
+          {
+            file: vscode.FileType.File,
+            directory: vscode.FileType.Directory,
+          },
+          authoringUriOf,
+        ),
+        containerFolder,
+      );
       const wizardPorts: WizardPorts = {
         catalogue: {
           environment: process.env,
@@ -691,32 +727,7 @@ export async function activate(
                     path.join(context.globalStorageUri.fsPath, 'template-'),
                   );
                 },
-                kindOf: async file => {
-                  const found = await stat(file).catch(() => undefined);
-                  if (found === undefined) {
-                    return 'missing';
-                  }
-                  return found.isDirectory() ? 'folder' : 'file';
-                },
-                read: file => readFile(file),
-                write: (file, bytes) => writeFile(file, bytes),
-                makeFolder: async folder => {
-                  await mkdir(folder, {recursive: true});
-                },
-                removeFile: file => rm(file, {force: true}),
-                removeFolder: folder =>
-                  rm(folder, {recursive: true, force: true}),
-                creationProblem: async folder => {
-                  let nearest = folder;
-                  while (!(await stat(nearest).catch(() => undefined))) {
-                    nearest = path.dirname(nearest);
-                  }
-                  return access(nearest, fileConstants.W_OK).then(
-                    () => undefined,
-                    (caught: unknown) =>
-                      caught instanceof Error ? caught.message : String(caught),
-                  );
-                },
+                ...authoringFiles,
               },
               dialogs: {
                 show: modalShown,
@@ -726,7 +737,9 @@ export async function activate(
               },
               hasUnsavedChanges: file =>
                 vscode.workspace.textDocuments.some(
-                  document => document.isDirty && document.uri.fsPath === file,
+                  document =>
+                    document.isDirty &&
+                    document.uri.toString() === authoringUriOf(file).toString(),
                 ),
               withProgress: (title, work) =>
                 Promise.resolve(
@@ -746,35 +759,9 @@ export async function activate(
             },
             cancellation,
           ),
-        files: {
-          list: async folder =>
-            (await readdir(folder, {withFileTypes: true}).catch(() => [])).map(
-              entry => ({
-                name: entry.name,
-                kind: entry.isFile()
-                  ? 'file'
-                  : entry.isDirectory()
-                    ? 'folder'
-                    : 'other',
-              }),
-            ),
-          read: file => readFile(file),
-          write: (file, bytes) => writeFile(file, bytes),
-        },
+        files: authoringFiles,
         stored: {
-          files: {
-            exists: file =>
-              stat(file).then(
-                () => true,
-                () => false,
-              ),
-            read: file => readFile(file),
-            write: (file, bytes) => writeFile(file, bytes),
-            makeFolder: async folder => {
-              await mkdir(folder, {recursive: true});
-            },
-            removeFolder: folder => rm(folder, {recursive: true, force: true}),
-          },
+          files: authoringFiles,
           show: modalShown,
           translate,
         },
@@ -786,6 +773,15 @@ export async function activate(
           storeRoot: storedLookup.root,
           store: userDataStore,
           home: storedLookup.home,
+          // The store is on this machine, and a window whose folder is in a container must not create it from there.
+          ...(vscode.env.remoteName === 'dev-container'
+            ? {
+                refuseStore: (folder: string) =>
+                  vscode.FileSystemError.NoPermissions(
+                    `permission denied, mkdir '${folder}'`,
+                  ),
+              }
+            : {}),
         },
         record: (line, level) => {
           if (level === 'warn') {
@@ -800,7 +796,7 @@ export async function activate(
       const continuation = {
         wizard: authoring.execute,
         openPreview: (file: string) =>
-          vscode.window.showTextDocument(vscode.Uri.file(file), {
+          vscode.window.showTextDocument(authoringUriOf(file), {
             preview: true,
           }),
         offerReopen: (variant: NotificationVariant) => {
@@ -991,7 +987,10 @@ export async function activate(
         createDevContainerFile: {
           execute: createDevContainerFile({
             ...continuation,
-            window: {folders: windowFolders},
+            window: {
+              folders: windowFolders,
+              remoteName: () => vscode.env.remoteName,
+            },
             showModal: (message, buttons) =>
               vscode.window.showInformationMessage(
                 '',

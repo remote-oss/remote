@@ -1131,6 +1131,59 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
+  /** A scene whose location stage refuses the store; the location pick is answered with `choice`. */
+  async function refusingStore(choice: string): Promise<{
+    scene: Scene;
+    outcome: string;
+  }> {
+    const scene = sceneOf();
+    scene.ports = {
+      ...scene.ports,
+      location: {
+        ...locationOf(scene),
+        refuseStore: folder => new Error(`refused ${folder}`),
+      },
+    };
+    const result = runWizard(
+      {title: 'T', folder: '/home/a/ws'},
+      scene.ports,
+      NEVER,
+    ).then(
+      outcome => outcome.kind,
+      (caught: unknown) => (caught as Error).message,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.locationPickers[0]?.accept(choice);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    scene.pickers[0]?.accept('Alpine');
+    return {scene, outcome: await result};
+  }
+
+  it('F-0801 AC-14: with refuseStore set, a write to the store throws its error after the stages, and nothing is written', async () => {
+    const {scene, outcome} = await refusingStore(
+      'Add configuration to user data folder',
+    );
+    deepStrictEqual(
+      [
+        outcome.startsWith('refused /store/configs/'),
+        scene.pickers.length,
+        scene.writes,
+        scene.written,
+      ],
+      [true, 1, [], []],
+    );
+  });
+
+  it('F-0801 AC-14: with refuseStore set, a write to the workspace goes on', async () => {
+    const {scene, outcome} = await refusingStore(
+      'Add configuration to workspace',
+    );
+    deepStrictEqual(
+      [outcome, scene.written.map(each => each.targetFolder)],
+      ['written', ['/home/a/ws']],
+    );
+  });
+
   it('F-0801 AC-1: the runner the commands use titles the pick S024 and writes into the folder it is given', async () => {
     const scene = sceneOf();
     const result = wizardRunnerOf(scene.ports)('/work/ws');

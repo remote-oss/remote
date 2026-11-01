@@ -111,6 +111,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `default-ports`: a plain launch with the renderer helpers, whose settings forward one default port; `default-ports/*.test.ts` opens windows and reads the local end of a port, the window's tunnels (`tunnelsOf`, the agent's `acceptance.agent.tunnels` over `workspace.tunnels`), a setting's default in the window (`settingDefaultIn`) and core's notifications.
 
+- `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
+
 - `no-proposals`: the same without the proposed API.
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
@@ -291,7 +293,7 @@ from the table (`launchGroupOf`):
 An entry that names no label or group fails, listing both. The backstop splits across four runners this way, with
 the longest launch, `containers`, alone:
 
-    node tools/acceptance.ts --editor vscodium --launches @ssh,!remote-ubuntu
+    node tools/acceptance.ts --editor vscodium --launches @ssh
     node tools/acceptance.ts --editor vscodium --launches containers
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
     node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
@@ -538,10 +540,6 @@ That's `remote-ubuntu`, the `remote` launch on it. The second host gets:
 
 A glibc host is served the glibc server by the download host (tooling-68). A launch on another host can't have a
 `hostSetup`, because that runs in the run's own host.
-
-The backstop's ssh part leaves `remote-ubuntu` out (`@ssh,!remote-ubuntu`) while two of its rows fail on the Ubuntu
-host (#1380): F-2401 AC-2 and F-2304 AC-6. A dispatch that names it runs it, and so does a local run without
-`--launches`.
 
 ## Rows that fail in some runs
 

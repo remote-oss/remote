@@ -1047,6 +1047,51 @@ describe('application-scope settings ignore workspace values', () => {
   });
 });
 
+describe('the terms in socket mode (card connect-96)', () => {
+  /** A setting host whose user settings hold `values`, by setting id, and no remotePlatform entry. */
+  function userHost(values: Readonly<Record<string, unknown>>): SettingHost {
+    return {
+      inspectSetting: settingId => ({
+        defaultValue: undefined,
+        globalValue: values[settingId],
+      }),
+    };
+  }
+
+  const SOCKET_AND_LOCAL = userHost({
+    'remote.SSH.remoteServerListenOnSocket': true,
+    'remote.SSH.useLocalServer': true,
+  });
+
+  it('F-2410 AC-5: in socket mode with useLocalServer true and no remotePlatform entry, the platform is asked', () => {
+    deepStrictEqual(
+      decidePlatform(termsSettingsOf(SOCKET_AND_LOCAL), 'devbox'),
+      {
+        kind: 'ask',
+      },
+    );
+  });
+
+  it('F-2410 AC-5: socket mode gives the terms the shared connection off', () => {
+    deepStrictEqual(termsSettingsOf(SOCKET_AND_LOCAL).useLocalServer, false);
+  });
+
+  it('F-2410: without socket mode, useLocalServer true still probes', () => {
+    deepStrictEqual(
+      decidePlatform(
+        termsSettingsOf(
+          userHost({
+            'remote.SSH.remoteServerListenOnSocket': false,
+            'remote.SSH.useLocalServer': true,
+          }),
+        ),
+        'devbox',
+      ),
+      {kind: 'probe'},
+    );
+  });
+});
+
 describe("the assembly's maintenance run (card connect-23)", () => {
   it('F-2411.BR-2: a run on a host that cannot be reached is a failed connection, with the cause', async () => {
     const {surfaces, machine, recorded} = assemblyInputs();

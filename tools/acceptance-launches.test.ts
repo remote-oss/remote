@@ -159,6 +159,7 @@ describe('the launches of the VSCodium run', () => {
         'preconnect',
         'config-files',
         'default-ports',
+        'ssh-core',
         'no-proposals',
         ...labelsFromExplorer(),
       ],
@@ -232,6 +233,7 @@ describe('the launches of the VSCodium run', () => {
       ),
       [
         ['default-ports', undefined, true, undefined],
+        ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',
@@ -742,6 +744,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'default-ports',
+        'ssh-core',
         ...labelsFromExplorer(),
       ],
     );
@@ -1412,7 +1415,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context gives the Docker configuration of its own, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context gives the Docker configuration of its own, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1424,7 +1427,13 @@ describe('the platform cases (card coverage-12)', () => {
       [
         ['containers', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
-        ['containers-features', {PATH: '<run>/browser-bin:<path>'}],
+        [
+          'containers-features',
+          {
+            PATH: '<run>/browser-bin:<path>',
+            NODE_EXTRA_CA_CERTS: '${HARNESS_DOWNLOADS_CERTIFICATE}',
+          },
+        ],
         [
           'containers-index-broken',
           {

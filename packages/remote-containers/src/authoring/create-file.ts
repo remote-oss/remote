@@ -39,7 +39,9 @@ export interface ContinuationPorts {
 /** What the command needs of its surroundings. */
 export interface CreateFilePorts extends ContinuationPorts {
   window: {
-    folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
+    folders(): ReadonlyArray<{scheme: string; fsPath: string; path: string}>;
+    /** The kind of remote the window is connected to; none for a local window. */
+    remoteName(): string | undefined;
   };
   /** A modal with the buttons; gives the one chosen, or nothing for Cancel. */
   showModal(
@@ -94,11 +96,19 @@ export function createDevContainerFile(
       }
       return;
     }
-    if (folders.length !== 1 || only.scheme !== 'file') {
+    // A dev container window's folder is in the container: the wizard gets its path there.
+    const folder =
+      only.scheme === 'file'
+        ? only.fsPath
+        : only.scheme === 'vscode-remote' &&
+            ports.window.remoteName() === 'dev-container'
+          ? only.path
+          : undefined;
+    if (folders.length !== 1 || folder === undefined) {
       ports.logger.info(`${TITLE} does nothing in this window`);
       return;
     }
-    await addConfiguration(ports, only.fsPath);
+    await addConfiguration(ports, folder);
   }
 
   return async () => {

@@ -179,7 +179,7 @@
         },
         {
           "command": "remote-containers.createDevContainerFile",
-          "when": "!remoteName && !virtualWorkspace && !remote-containers:standingDown"
+          "when": "remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
