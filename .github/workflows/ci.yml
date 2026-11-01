@@ -322,9 +322,9 @@ jobs:
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
-    # at 60), so it runs in parts; the containers launch alone takes 44 minutes. A dispatch of every launch named in one
-    # part still fits in 120
-    timeout-minutes: 120
+    # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01
+    # (41252320561, 41264381137, 41279176317), near the old limit of 120, so the limit is 150 until that launch is split
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
