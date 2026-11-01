@@ -66,6 +66,7 @@ function labelsFromExplorer(): string[] {
     'containers-killed-35',
     'containers-killed-43',
     'containers-podman',
+    'extensionpack',
     ...hostLaunchLabels(),
     'genuine',
     'ssh-no-proposals',
@@ -331,6 +332,16 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        [
+          'extensionpack',
+          [
+            'remote-oss.remote-containers',
+            'remote-oss.remote-ssh',
+            'remote-oss.vscode-remote-extensionpack',
+          ],
+          true,
+          undefined,
+        ],
         ['genuine', ['remote-oss.remote-explorer'], true, undefined],
         ['ssh-no-proposals', ['remote-oss.remote-explorer'], true, undefined],
         ['containers-view', ['remote-oss.remote-containers'], true, undefined],
@@ -496,6 +507,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-killed-35',
         'containers-killed-43',
         'containers-podman',
+        'extensionpack',
         'containers-view',
       ],
     );

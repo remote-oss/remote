@@ -836,6 +836,11 @@ export async function extensionsViewSections(
   );
 }
 
+/** The page-side lookup of the Extensions view entries named `displayName`. */
+function extensionRowsExpression(displayName: string): string {
+  return `[...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)})`;
+}
+
 /**
  * The labels of the context menu that a right click on the entry `displayName` of the Extensions view in window `name`
  * opens, in order. The menu is closed again. It fails naming the entry when the view lists it not once.
@@ -847,7 +852,7 @@ export async function extensionContextMenu(
   const menu = await evaluate<string[] | null>(
     name,
     `(async () => {
-      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const rows = ${extensionRowsExpression(displayName)};
       if (rows.length !== 1) {
         return null;
       }
@@ -869,6 +874,59 @@ export async function extensionContextMenu(
   return menu;
 }
 
+/** What the details page of an extension shows. */
+export interface ExtensionPage {
+  title: string;
+  description: string;
+  /** The names the page lists under Extension Pack, in order; none for an extension that is no pack. */
+  pack: string[];
+}
+
+/**
+ * Opens the details page of the entry `displayName` of the Extensions view in window `name`, and reads its title, its
+ * description and the names it lists under Extension Pack. It fails naming the entry when the view lists it not once.
+ */
+export async function extensionPageOf(
+  name: string,
+  displayName: string,
+): Promise<ExtensionPage> {
+  const page = await evaluate<ExtensionPage | null>(
+    name,
+    `(async () => {
+      const rows = ${extensionRowsExpression(displayName)};
+      if (rows.length !== 1) {
+        return null;
+      }
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        rows[0].dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+      }
+      const read = () => {
+        const editor = document.querySelector('.extension-editor');
+        return {
+          title: editor?.querySelector('.header .details .title .name')?.textContent ?? '',
+          description: editor?.querySelector('.header .details > .description')?.textContent ?? '',
+          pack: [...(editor?.querySelectorAll('.extension-pack .extensions-grid-view .extension-list-item .name') ?? [])].map(each => each.textContent ?? ''),
+        };
+      };
+      // The page opens at once; the pack list is read in after it, so the read ends when it shows or after 5 s.
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const now = read();
+        if (now.title === ${JSON.stringify(displayName)} && now.pack.length > 0) {
+          return now;
+        }
+      }
+      return read();
+    })()`,
+  );
+  if (page === null) {
+    throw new Error(
+      `window ${name}: not one Extensions entry named ${JSON.stringify(displayName)}`,
+    );
+  }
+  return page;
+}
+
 /**
  * Whether the entry `displayName` of the Extensions view in window `name` shows its status marker, the icon core puts
  * on an extension that Restricted Mode limits or disables; `undefined` when the view lists no such entry.
@@ -880,7 +938,7 @@ export async function extensionStatusShown(
   return evaluate<boolean | undefined>(
     name,
     `(() => {
-      const row = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].find(each => each.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const row = ${extensionRowsExpression(displayName)}[0];
       const status = row?.querySelector('.extension-status');
       return status === undefined || status === null ? undefined : !status.classList.contains('hide');
     })()`,
@@ -1278,7 +1336,7 @@ export async function extensionCard(
   const card = await evaluate<ExtensionCard | null>(
     name,
     `(() => {
-      const rows = [...document.querySelectorAll('.extensions-viewlet .extension-list-item')].filter(row => row.querySelector('.name')?.textContent === ${JSON.stringify(displayName)});
+      const rows = ${extensionRowsExpression(displayName)};
       if (rows.length !== 1) {
         return null;
       }
