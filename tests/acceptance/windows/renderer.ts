@@ -1823,6 +1823,17 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** The codicons of the status bar item `itemId` of window `name`, such as `alert` for a disconnected remote indicator. */
+export async function statusItemIcons(
+  name: string,
+  itemId: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...(document.getElementById(${JSON.stringify(itemId)})?.querySelectorAll('.codicon') ?? [])].flatMap(each => [...each.classList].filter(entry => entry.startsWith('codicon-') && entry !== 'codicon-modifier-spin').map(entry => entry.slice('codicon-'.length)))`,
+  );
+}
+
 /** The kind of the open dialog, as its icon says ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`): the icon element carries `codicon-dialog-<kind>`. */
 export type DialogKind = 'info' | 'warning' | 'error';
 

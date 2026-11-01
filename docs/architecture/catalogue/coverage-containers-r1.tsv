@@ -78,7 +78,7 @@ F-0201.AC-6	deferred	containers release 1: later (Compose)
 F-0201.AC-7	unit	
 F-0201.AC-8	unit	
 F-0201.AC-9	deferred	containers release 1: later (Compose)
-F-0201.AC-10	todo	
+F-0201.AC-10	acceptance	
 F-0201.AC-11	deferred	containers release 1: later (Compose)
 F-0201.AC-12	todo	
 F-0201.AC-13	deferred	containers release 1: later (remote engines)
@@ -251,12 +251,12 @@ F-0401.AC-8	deferred	containers release 1: increment 2 (authoring)
 F-0401.AC-9	todo	
 F-0401.AC-10	todo	
 F-0401.AC-11	acceptance	
-F-0401.AC-12	todo	
+F-0401.AC-12	deferred	containers release 1: later (the log terminal, F-0104)
 F-0401.AC-13	acceptance	
 F-0401.AC-14	deferred	containers release 1: later (the recovery container)
 F-0401.AC-15	acceptance	
 F-0401.AC-16	deferred	containers release 1: later (remote engines)
-F-0401.AC-17	todo	
+F-0401.AC-17	acceptance	
 F-0401.AC-18	unit	
 F-0401.AC-19	deferred	containers release 1: later (remote engines)
 F-0401.AC-20	acceptance	
