@@ -100,6 +100,15 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   if (request.purpose === 'copy') {
     return copyInvocation(request, common);
   }
+  if (
+    request.purpose === 'connection' &&
+    request.settings.remoteCommandInEffect &&
+    request.remoteProgram !== undefined
+  ) {
+    throw new Error(
+      'a connection whose RemoteCommand is in effect takes no remote program',
+    );
+  }
   const argumentList = [...common];
   if (
     request.purpose === 'connection' &&
@@ -129,7 +138,10 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   }
   argumentList.push(...targetArguments(request.target));
   if (request.purpose === 'tunnel') {
-    argumentList.push(TUNNEL_COMMAND);
+    // With the host's RemoteCommand in effect the command goes in on the session's input instead (`tunnelStart`)
+    if (!request.settings.remoteCommandInEffect) {
+      argumentList.push(TUNNEL_COMMAND);
+    }
   } else if (request.remoteProgram !== undefined) {
     argumentList.push(request.remoteProgram);
   }

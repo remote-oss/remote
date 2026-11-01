@@ -45,14 +45,21 @@ function isForwardFailureFor(line: string, localPort: number): boolean {
   );
 }
 
-/** Starts `invocation`, the tunnel run, in an `SSH Tunnel` terminal for the window's `localPort`. */
+/**
+ * Starts `invocation`, the tunnel run, in an `SSH Tunnel` terminal for the window's `localPort`; `input` is written to
+ * the terminal at once, when the tunnel's command goes in on its input.
+ */
 export function openTunnelSession(
   terminals: LoginTerminals,
   invocation: Invocation,
   localPort: number,
   reveal: boolean,
+  input?: string,
 ): TunnelSession {
   const terminal = terminals.open(invocation, 'SSH Tunnel', reveal);
+  if (input !== undefined) {
+    terminal.send(input);
+  }
   const settling: {settle?: (gate: TunnelGate) => void} = {};
   const gate = new Promise<TunnelGate>(resolve => {
     settling.settle = resolve;

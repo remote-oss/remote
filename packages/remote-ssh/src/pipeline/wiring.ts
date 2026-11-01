@@ -18,6 +18,7 @@ import type {OverrideValue} from 'lib-product';
 import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
 import {
   buildInvocation,
+  tunnelStart,
   connectWaitMilliseconds,
   type HostListResult,
 } from 'lib-ssh';
@@ -175,7 +176,7 @@ export interface WiringPorts {
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
     TunnelStepDependencies,
-    'environment' | 'connectWait' | 'tunnelInvocation'
+    'environment' | 'connectWait' | 'tunnelInvocation' | 'tunnelInput'
   >;
   cliPath: CliWiring;
   /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */
@@ -419,6 +420,8 @@ export function stepsOf(
         forwards: [forward],
       });
     },
+    tunnelInput: () =>
+      tunnelStart(held.opening?.terms.remoteCommandInEffect ?? false).input,
     environment: () =>
       windowEnvironment(
         held.forwarding,
