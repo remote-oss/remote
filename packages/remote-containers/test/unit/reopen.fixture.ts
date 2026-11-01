@@ -121,6 +121,7 @@ export const WRITTEN_IN_FOLDER: WizardOutcome = {
 export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
   const sink = new MemorySink();
   const ports: ReopenPorts = {
+    clock: () => 1000,
     authoring: {
       execute: folder => {
         state.calls.push(`wizard ${folder}`);

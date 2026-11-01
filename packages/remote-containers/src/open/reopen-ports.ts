@@ -61,6 +61,8 @@ export interface ReopenPorts extends AuthoringPort {
   dialogs: EngineDialogPort;
   /** The progress that shows while the checks before the reload take long. */
   progress: PreReloadProgressPorts;
+  /** The time now, in milliseconds. */
+  clock(): number;
   bridge: Pick<CliBridge, 'readConfiguration'>;
   /** The check of the Features against the control manifest, once a configuration is chosen. */
   problematic: ProblematicPorts;
