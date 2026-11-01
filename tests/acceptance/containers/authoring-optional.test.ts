@@ -26,6 +26,7 @@ import {
   quickPickChrome,
   quickPickFacts,
   quickPickOf,
+  quickPickRows,
   detailedQuickPickRows,
   toggleQuickPickRow,
   typeInFocus,
@@ -346,13 +347,14 @@ describe('Optional Files/Directories in the wizard (card containers-90)', functi
       const stillOpen = [
         (await quickPickOf(window))?.placeholder,
         (await quickPickChrome(window)).counter,
+        (await quickPickRows(window)).length,
         (await pageText(window)).includes('notes'),
       ];
       await pressQuickPickOk(window);
       deepStrictEqual(
         [stillOpen, await writtenFiles(window, folder)],
         [
-          [OPTIONAL_PLACEHOLDER, '1 Selected', true],
+          [OPTIONAL_PLACEHOLDER, '1 Selected', 3, true],
           [BASE, 'alpha.txt'].sort(),
         ],
       );
