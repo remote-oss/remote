@@ -1,12 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {connect} from 'node:net';
 import {
   acceptedPasswords,
   closeWindow,
   inWindow,
   nextEmptyWindow,
-  onHost,
-  windowEvents,
   recordLines,
   reloadWindow,
   userSettings,
@@ -14,6 +11,12 @@ import {
 } from './harness.ts';
 import {closeAllButLocal} from './maintenance.ts';
 import {
+  forwardedPortOf,
+  GREETING,
+  greetedAt,
+  REMOTE_PORT,
+  startGreeter,
+  stopGreeter,
   connectedWith,
   keepingSettings,
   listeners,
@@ -26,36 +29,6 @@ function portsOf(
   program: string,
 ): number[] {
   return held.filter(each => each.program === program).map(each => each.port);
-}
-
-/** The port on the host that the listener answers on, and what it says to a connection. */
-const REMOTE_PORT = 8631;
-const GREETING = 'forwarded-8631';
-const GREETER = '/tmp/c79-greeter.sh';
-
-/** The greeting a connection to the local `port` is given, over 127.0.0.1. */
-function greetedAt(port: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const socket = connect(port, '127.0.0.1');
-    socket.once('data', (chunk: Buffer) => {
-      resolve(chunk.toString('utf8').trim());
-      socket.destroy();
-    });
-    socket.on('error', reject);
-  });
-}
-
-/** The local port a `forwarded` event of window `name` names. */
-function forwardedPortOf(name: string): number {
-  const address = windowEvents(name).find(
-    each => each.event === 'forwarded',
-  )?.localAddress;
-  if (address === undefined) {
-    throw new Error('the window reported no forwarded port');
-  }
-  return typeof address === 'string'
-    ? Number(address.slice(address.lastIndexOf(':') + 1))
-    : address.port;
 }
 
 describe('the tunnel of a window under the default settings and their combinations (card coverage-79)', function () {
@@ -216,11 +189,7 @@ describe('the tunnel of a window under the default settings and their combinatio
     });
   });
   it('F-2104 AC-6 (c79-forward-any-mode): in every combination of the local server and dynamic forwarding a port forwarded with Forward a Port works locally, with no password asked and no new login', async () => {
-    await onHost(
-      'sh',
-      '-c',
-      `printf '#!/bin/sh\\necho ${GREETING}\\nsleep 30\\n' > ${GREETER} && chmod 755 ${GREETER}; nohup nc -lk -p ${String(REMOTE_PORT)} -s 127.0.0.1 -e ${GREETER} >/dev/null 2>&1 &`,
-    );
+    await startGreeter();
     const seen: Array<[boolean, boolean, string, number, number]> = [];
     try {
       for (const [local, dynamic] of [
@@ -251,11 +220,7 @@ describe('the tunnel of a window under the default settings and their combinatio
         });
       }
     } finally {
-      await onHost(
-        'sh',
-        '-c',
-        `pkill -f "[n]c -lk -p ${String(REMOTE_PORT)}" || true; pkill -f "[c]79-greeter" || true`,
-      );
+      await stopGreeter();
     }
     deepStrictEqual(seen, [
       [true, true, GREETING, 0, 0],
