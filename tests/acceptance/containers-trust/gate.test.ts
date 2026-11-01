@@ -36,6 +36,7 @@ import {
   dialogText,
   hasStatusItem,
   notificationProgress,
+  toastsOfPages,
   notifications,
   pageText,
   pressEscape,
@@ -863,19 +864,36 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       const openFolder = devContainerFolder('c69-off-open', {name: 'Off Open'});
       const from = await openFolderWindow(devContainerFolder('c69-off-from'));
       await openFolderFrom(from, openFolder);
-      const opened = await watchConnect(
-        'c69-off-open',
-        connectedToContainer('c69-off-open'),
-      );
+      const connected = connectedToContainer('c69-off-open');
+      const state = {toastOfNewWindow: false, finished: false};
+      void connected
+        .finally(() => {
+          state.finished = true;
+        })
+        .catch(() => undefined);
+      const watching = (async () => {
+        while (!state.finished) {
+          state.toastOfNewWindow ||= (
+            await toastsOfPages().catch(() => [])
+          ).some(text => text.startsWith('Connecting to Dev Container'));
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      })();
+      const opened = await watchConnect('c69-off-open', connected);
+      await watching;
       deepStrictEqual(
         {
           reopened: connectOutcomeOf(reopened),
-          opened: {pick: opened.pick, dialogs: opened.dialogs},
+          opened: {
+            toast: state.toastOfNewWindow,
+            pick: opened.pick,
+            dialogs: opened.dialogs,
+          },
           containers: (await devContainersOf(openFolder)).length,
         },
         {
           reopened: {toast: true, pick: false, dialogs: []},
-          opened: {pick: false, dialogs: []},
+          opened: {toast: true, pick: false, dialogs: []},
           containers: 1,
         },
       );

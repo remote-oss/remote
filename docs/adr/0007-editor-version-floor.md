@@ -2,7 +2,7 @@
 
 - Status: accepted (the lead, 2026-10-06); amended 2026-10-20 by the user's instruction (D-102): the floor moves from
   1.139 to 1.125. Raised or lowered only by an amendment like this one. Decision 4's floor list gained the container
-  open on 2026-11-01 (#1570, #1575).
+  open on 2026-11-01 (#1570, #1575), and the connect past the licence by the user's D-104 the same day.
 - Date: 2026-10-06; amended 2026-10-20
 - Deciders: `remote-architect`; the floor of 2026-10-20 is the user's
 - Scope: all packages
@@ -71,12 +71,19 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
        installs our Dev Containers alone, downloads from the run's stand-in licensed host, and ends in Cancel at the
        licence modal;
      - the Remote Explorer's rows without a connect, through the genuine launch's explorer row (tooling-69).
-   - **It doesn't cover a connect or a container open past the licence, or the Ports view.** Those need the server of
-     genuine 1.125.0's own commit, which is Microsoft's server under its licence. The genuine job runs on the opposite
-     terms: nothing accepts that licence for the user, and no server comes from the publisher. VSCodium's server
-     doesn't match a 1.125.0 client.
-   - **Connect coverage on the floor** would need a Code - OSS 1.125.0 build (the client and its server, built from
-     the MIT tag). That's a card of its own and the user's call.
+   - **Past the licence, by D-104 (the user, 2026-11-01):** a connect, and the surfaces that need one, need the
+     server of genuine 1.125.0's own commit, which is Microsoft's server under its licence. The user accepted that
+     licence for the lab's CI. So in the genuine job only, the automation clicks "Accept and Continue" on our licence
+     modal (R-68's dialog, as a user would) once per fresh profile, and the server downloads from Microsoft. The floor
+     run then covers, on both versions, as each row lands:
+     - a Remote - SSH connect to the run's SSH host past the licence;
+     - a container open past the licence (`genuine-containers`, F-1402 AC-3 and AC-5);
+     - the Ports view after a connect. Its rows that assert one of the three core differences name the version they
+       describe.
+   - **What stays as it was:** no job but the genuine one downloads a Microsoft server or accepts its licence;
+     Microsoft's own extensions are never installed (AGENTS.md); our product never accepts for the user (R-68).
+     VSCodium's server doesn't match a 1.125.0 client, so the VSCodium jobs stay on the recorded version. A Code -
+     OSS 1.125.0 build is no longer needed for connect coverage on the floor.
 
    Rows asserting core's own rendering stay on the recorded version, and the three core differences above aren't
    failures of ours. A row that asserts one of those surfaces names the version it describes.
@@ -111,4 +118,4 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
   constant, and that a package declaring `enabledApiProposals` carries the pinned declaration files.
 - **The recorded suite** runs on 1.139.1.
 - **The floor run** (decision 4) runs the genuine launch, with the explorer, and `genuine-containers` on 1.125.0.
-  `ssh-no-proposals` runs on 1.139.1.
+  `ssh-no-proposals` runs on 1.139.1. The rows past the licence (D-104) join both versions as their cards land.

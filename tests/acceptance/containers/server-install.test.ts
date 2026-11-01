@@ -1,6 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {existsSync, mkdirSync, readdirSync, readFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {volumeServerFolder} from 'lib-product';
@@ -14,6 +20,7 @@ import {
   devContainersOf,
   editorProduct,
   OLD_GLIBC_IMAGE,
+  reloadingCommand,
   reopenInContainer,
   reopenStarted,
   runLabelArguments,
@@ -26,7 +33,9 @@ import {
   primaryButtonOf,
   notifications,
   pressEscape,
+  quickPickFacts,
   quickPickOf,
+  quickPickRows,
   statusItem,
   waitForDialog,
   waitForQuickPick,
@@ -78,6 +87,15 @@ function volumeFolder(): string {
 async function platformName(): Promise<string> {
   const machine = (await inVolume('uname -m')).trim();
   return `alpine-${machine === 'aarch64' ? 'arm64' : 'x64'}`;
+}
+
+/** The partial installs on the volume: the entries named `{commit}_{epoch-ms}`, sorted. */
+async function leftoversOnVolume(): Promise<string[]> {
+  return (
+    await inVolume(`find ${volumeFolder()} -maxdepth 3 -name '*_[0-9]*' | sort`)
+  )
+    .split('\n')
+    .filter(line => line !== '');
 }
 
 /** The tree of the run's editor's commit for the run's image on the volume. */
@@ -528,6 +546,42 @@ describe('F-0503 server install (card containers-41)', function () {
     };
   }
 
+  it('F-0503 AC-33 (s33): a named volume on a root user’s server folder keeps the machine settings files as they were when Rebuild Container replaces the container', async () => {
+    const volume = `c78-root-${variable('HARNESS_RUN_ID')}`;
+    const product = editorProduct();
+    const folder = folderOf('c78-root-volume', {
+      portsAttributes: {'3000': {label: 'App'}},
+      mounts: [
+        {
+          type: 'volume',
+          source: volume,
+          target: `/root/${product.serverDataFolderName}`,
+        },
+      ],
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      opened.push(name);
+      await reopenInContainer(name);
+      const first = (await devContainersOf(folder))[0] ?? '';
+      const listing = `stat -c '%n %Y' /root/${product.serverDataFolderName}/data/Machine/* | sort`;
+      const before = await inContainer(first, listing);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      await connectedToContainer(name, 300_000);
+      const second = (await devContainersOf(folder))[0] ?? '';
+      const after = await inContainer(second, listing);
+      deepStrictEqual(
+        [first !== second, before !== '', after],
+        [true, true, before],
+      );
+    } finally {
+      await removeContainers(folder);
+      await execFileAsync('docker', ['volume', 'rm', '--force', volume]);
+      await removeImagesOf('c78-root-volume');
+    }
+  });
+
   it('F-0503 AC-19 (s9): a source that answers 404 shows the generic dialog with Retry primary, no S157 notification, the container running and the URL in the log', async () => {
     await withFailingSource(async folder => {
       const before = requestCount();
@@ -564,6 +618,49 @@ describe('F-0503 server install (card containers-41)', function () {
         logNamesUrl: true,
       });
     }, unreachable);
+  });
+
+  it('F-0503 AC-21 (ruling-1591-no-partials): a download that fails mid-transfer leaves no partial and no final-name archive in the download folder', async () => {
+    const cutSource = `${variable('HARNESS_DOWNLOADS_LOCAL')}/cut`;
+    await withFailingSource(async (folder, downloads) => {
+      await failedDownload(folder, cutSource);
+      deepStrictEqual(
+        filesUnder(downloads).filter(
+          entry =>
+            !entry.startsWith('.devcontainer') &&
+            statSync(path.join(downloads, entry)).isFile(),
+        ),
+        [],
+      );
+    }, cutSource);
+  });
+
+  it('F-0503 AC-23 (ruling-1591-no-leftovers): closing the window during the install shows no dialog and leaves no {commit}_{epoch-ms} directory on the volume, before or after the container is removed', async () => {
+    const slow = `${variable('HARNESS_DOWNLOADS_LOCAL')}/slow`;
+    await removeTree();
+    await setUserSetting('remote.serverDownloadBaseUrl', slow);
+    const folder = folderOf('c78-close-install');
+    try {
+      const window = await openFolderWindow(folder);
+      await reopenStarted(window);
+      await waitFor(
+        'the installing toast',
+        async () =>
+          (await notifications(window)).some(text => text.includes(INSTALLING)),
+        180_000,
+      );
+      const dialog = await dialogOf(window);
+      await closeWindow(window);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const before = await leftoversOnVolume();
+      await removeContainers(folder);
+      deepStrictEqual(
+        [dialog, before, await leftoversOnVolume()],
+        [undefined, [], []],
+      );
+    } finally {
+      await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
+    }
   });
 
   it('F-0503 AC-20 (s10): Retry with the cause unchanged ends in the same dialog on the same container, and Retry after the source is fixed connects it', async () => {
@@ -656,8 +753,11 @@ describe('F-0503 server install (card containers-41)', function () {
   }
 
   /** The failure dialog of a connect to a container whose glibc is too old, with the window it is in. */
-  async function requirementsDialog(name: string): Promise<string> {
-    const folder = folderOf(name, {image: OLD_GLIBC_IMAGE});
+  async function requirementsDialog(
+    name: string,
+    configuration: Readonly<Record<string, unknown>> = {},
+  ): Promise<string> {
+    const folder = folderOf(name, {image: OLD_GLIBC_IMAGE, ...configuration});
     const window = await openFolderWindow(folder);
     opened.push(window);
     await reopenStarted(window);
@@ -826,6 +926,47 @@ describe('F-0503 server install (card containers-41)', function () {
     deepStrictEqual(
       [results, openedUrls().slice(urlsBefore)],
       [[expected, expected], []],
+    );
+  });
+
+  it.skip('F-0503 AC-15 (s15-learn): Learn More on the requirements dialog opens the project’s own requirements page, leaves the status bar on Disconnected from Dev Container: <name>, and goes on to the five-item recovery quick pick of ruling 14 with Reload Window focused (skipped until the name reaches the failed window, containers-128)', async () => {
+    const urlsBefore = openedUrls().length;
+    const window = await requirementsDialog('c78-requirements-learn', {
+      name: 'Old Glibc',
+    });
+    await answerDialog(window, 'Learn More');
+    await waitForDialog(window, 30_000);
+    await answerDialog(window, 'Open');
+    await waitFor(
+      'the requirements page to be opened',
+      () => openedUrls().length > urlsBefore,
+      30_000,
+    );
+    await waitForQuickPick(window, 30_000);
+    deepStrictEqual(
+      [
+        openedUrls().slice(urlsBefore),
+        (await statusItem(window, 'status.host')).text,
+        (await quickPickFacts(window))?.placeholder,
+        (await quickPickRows(window)).map(entry => [
+          entry.label,
+          entry.focused,
+        ]),
+      ],
+      [
+        [
+          'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md#requirements',
+        ],
+        'Disconnected from Dev Container: Old Glibc',
+        S272,
+        [
+          ['Reload Window', true],
+          ['Rebuild Container', false],
+          ['Edit devcontainer.json Locally', false],
+          ['Open Recent...', false],
+          ['Open Documentation', false],
+        ],
+      ],
     );
   });
 
