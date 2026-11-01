@@ -265,6 +265,34 @@ export async function listeningPorts(containerId: string): Promise<string[]> {
 }
 
 /**
+ * Runs `start`, which gives the way to end the listener, until `port` is among the container's listening ports,
+ * starting it again when a start never ran. Throws when it never did.
+ */
+export async function ensureListening(
+  containerId: string,
+  port: number,
+  start: () => Promise<() => Promise<void>>,
+  tries = 3,
+): Promise<() => Promise<void>> {
+  for (let attempt = 1; attempt <= tries; attempt += 1) {
+    const stop = await start();
+    try {
+      await waitFor(
+        `a listener on ${String(port)}`,
+        async () => (await listeningPorts(containerId)).includes(String(port)),
+        15_000,
+      );
+      return stop;
+    } catch {
+      await stop();
+    }
+  }
+  throw new Error(
+    `the listener on ${String(port)} never ran in ${String(tries)} starts`,
+  );
+}
+
+/**
  * Called inside a `describe`: closes the windows and removes the containers its `connectedWith` made after each row,
  * and gives that function, which opens a folder with `configuration` in a window and connects it to its container.
  */

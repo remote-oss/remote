@@ -25,6 +25,7 @@ import {
   folderOf,
   freePort,
   browserOpens,
+  ensureListening,
   forwardByHand,
   isFree,
   listenInTerminal,
@@ -649,7 +650,9 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     );
     const browserStops = [
       await listenIn(browserContainer, browserDecl),
-      await listenInTerminal(browserWindow, browserContainer, browserDet),
+      await ensureListening(browserContainer, browserDet, () =>
+        listenInTerminal(browserWindow, browserContainer, browserDet),
+      ),
     ];
     const previewWindow = await connectedWith('c73b-ac14b', {
       forwardPorts: [previewDecl, ignored],
@@ -664,7 +667,9 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     );
     const previewStops = [
       await listenIn(previewContainer, previewDecl),
-      await listenInTerminal(previewWindow, previewContainer, previewDet),
+      await ensureListening(previewContainer, previewDet, () =>
+        listenInTerminal(previewWindow, previewContainer, previewDet),
+      ),
       await listenIn(previewContainer, ignored),
     ];
     try {
@@ -780,9 +785,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     try {
       await showPorts(window);
       await rowsWhen(window, shown =>
-        shown.some(
-          each => each.port === String(port) && each.runningProcess !== '',
-        ),
+        shown.some(each => each.port === String(port)),
       );
       await waitFor(
         `a localhost:${String(port)} tab`,
@@ -800,8 +803,12 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
         'cat',
         '/tmp/c73b-ac14p.log',
       ]);
+      const finalRows = await portsRows(window).catch(() => []);
       deepStrictEqual(
         {
+          process: finalRows.some(
+            each => each.port === String(port) && each.runningProcess !== '',
+          ),
           tabOpened,
           tabs: (await editorTabs(window))
             .map(entry => entry.label)
@@ -813,6 +820,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
           browser: browserOpens(logFile),
         },
         {
+          process: true,
           tabOpened: true,
           tabs: [`localhost:${String(port)}`],
           request: true,
@@ -839,14 +847,14 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       otherPortsAttributes: {onAutoForward: 'ignore'},
     });
     const [ignoreId = ''] = await devContainersOf(folderOf('c73b-ac28a'));
-    const stopIgnore = await listenInTerminal(
-      ignoreWindow,
-      ignoreId,
-      ignoredPort,
+    const stopIgnore = await ensureListening(ignoreId, ignoredPort, () =>
+      listenInTerminal(ignoreWindow, ignoreId, ignoredPort),
     );
     const plainWindow = await connectedWith('c73b-ac28b', {});
     const [plainId = ''] = await devContainersOf(folderOf('c73b-ac28b'));
-    const stopPlain = await listenInTerminal(plainWindow, plainId, plainPort);
+    const stopPlain = await ensureListening(plainId, plainPort, () =>
+      listenInTerminal(plainWindow, plainId, plainPort),
+    );
     try {
       await showPorts(ignoreWindow);
       await new Promise(resolve => setTimeout(resolve, 45_000));

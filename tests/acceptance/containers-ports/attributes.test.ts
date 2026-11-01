@@ -12,6 +12,7 @@ import {
 import {dialogOf, notificationCentre} from '../windows/renderer.ts';
 import {
   editConfiguration,
+  ensureListening,
   folderOf,
   freePort,
   listenInTerminal,
@@ -284,7 +285,9 @@ describe('the port attributes of the configuration (card containers-73)', functi
       otherPortsAttributes: {label: 'Other', onAutoForward: 'silent'},
     });
     const [containerId = ''] = await devContainersOf(folderOf('c73b-ac3'));
-    const stop = await listenInTerminal(window, containerId, userPort);
+    const stop = await ensureListening(containerId, userPort, () =>
+      listenInTerminal(window, containerId, userPort),
+    );
     try {
       await showPorts(window);
       const rows = await rowsWhen(window, shown =>
@@ -325,7 +328,9 @@ describe('the port attributes of the configuration (card containers-73)', functi
       },
     });
     const [containerId = ''] = await devContainersOf(folderOf('c73b-ac39'));
-    const stop = await listenInTerminal(window, containerId, port);
+    const stop = await ensureListening(containerId, port, () =>
+      listenInTerminal(window, containerId, port),
+    );
     try {
       const rows = await rowsWhen(window, shown =>
         shown.some(each => each.port.endsWith(`(${String(port)})`)),
