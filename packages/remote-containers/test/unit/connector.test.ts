@@ -1242,6 +1242,22 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(scene.attemptsBegun, 2);
   });
 
+  it('F-0502 BR-20: a folder that no longer exists fails the connect at once with the setup failure, naming the folder, before any read, trust question or engine check', async () => {
+    const scene = sceneOf();
+    scene.folderExists = false;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        'connectionToken' in result,
+        messages(scene).filter(line => line.includes("doesn't exist")),
+        scene.configurationReads.length,
+        scene.trustCalls,
+        scene.engineCalls.length,
+      ],
+      [false, ["the folder /work/proj doesn't exist"], 0, [], 0],
+    );
+  });
+
   it('F-0502 BR-11: a container that was found is told as already running', async () => {
     const scene = sceneOf();
     scene.outcome = {...READY, created: false};
