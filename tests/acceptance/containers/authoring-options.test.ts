@@ -26,7 +26,7 @@ import {
   takenThrough,
   withWindow,
   written,
-} from './authoring-support.ts';
+} from '../windows/authoring-support.ts';
 
 /** What a configuration the options reached holds. */
 interface Written {

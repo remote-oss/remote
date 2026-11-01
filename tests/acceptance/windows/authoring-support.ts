@@ -11,13 +11,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {openFolderWindow} from '../windows/folder-windows.ts';
-import {
-  closeWindow,
-  startInWindow,
-  variable,
-  waitFor,
-} from '../windows/harness.ts';
+import {openFolderWindow} from './folder-windows.ts';
+import {closeWindow, startInWindow, variable, waitFor} from './harness.ts';
 import {
   acceptQuickPick,
   chooseQuickPickRow,
@@ -27,8 +22,8 @@ import {
   quickPickRows,
   type QuickPickRow,
   typeInQuickPick,
-} from '../windows/renderer.ts';
-import {runTemplatesReady} from '../windows/run-templates.ts';
+} from './renderer.ts';
+import {runTemplatesReady} from './run-templates.ts';
 
 /** The command that adds a configuration. */
 export const COMMAND = 'remote-containers.createDevContainerFile';
