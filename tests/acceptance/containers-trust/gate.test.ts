@@ -886,35 +886,52 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
   });
 
   it('F-0501 AC-15 (c74-manage): Manage on core’s dialog leaves the window local, untrusted and unchanged, with nothing run on the host', async () => {
-    const folder = devContainerFolder('c74-manage', {name: 'C74 Manage'});
-    const name = await openFolderWindow(folder);
-    const activated = activations(name);
-    // The Docker log and the initialize marker belong to the whole file, so the rows before this one may have left their traces.
-    const before = await ranOnHost(folder);
-    const running = inWindow(name, 'remote-containers.reopenInContainer');
-    running.catch(() => undefined);
-    const shown = await waitForDialog(name);
-    await answerDialog(name, 'Manage');
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    const state = {
-      shown: [shown.message, shown.buttons],
-      dialog: await dialogOf(name),
-      remoteName: (await windowState(name)).remoteName,
-      trusted: await isTrusted(name),
-      activated: activations(name),
-      title: await windowTitle(name),
-      host: await ranOnHost(folder),
-    };
-    await closeWindow(name);
-    deepStrictEqual(state, {
-      shown: [TRUST_QUESTION, ['Manage', 'Cancel', 'Trust Folder & Continue']],
-      dialog: undefined,
-      remoteName: null,
-      trusted: false,
-      activated,
-      title: `[${name}]`,
-      host: before,
-    });
+    await setUserSetting('dev.containers.dockerPath', dockerRecorder());
+    try {
+      const folder = devContainerFolder('c74-manage', {
+        name: 'C74 Manage',
+        initializeCommand: `touch ${inRun('gate-trust-initialized')}`,
+      });
+      const name = await openFolderWindow(folder);
+      const activated = activations(name);
+      // The Docker log and the initialize marker belong to the whole file, so the rows before this one may have
+      // left their traces: the marker goes, and the log is compared with what it held.
+      rmSync(inRun('gate-trust-initialized'), {force: true});
+      const callsBefore = commandDockerCalls();
+      const running = inWindow(name, 'remote-containers.reopenInContainer');
+      running.catch(() => undefined);
+      const shown = await waitForDialog(name);
+      await answerDialog(name, 'Manage');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const state = {
+        shown: [shown.message, shown.buttons],
+        dialog: await dialogOf(name),
+        remoteName: (await windowState(name)).remoteName,
+        trusted: await isTrusted(name),
+        activated: activations(name),
+        title: await windowTitle(name),
+        newDockerCalls: commandDockerCalls().slice(callsBefore.length),
+        initialized: existsSync(inRun('gate-trust-initialized')),
+        containers: await devContainersOf(folder),
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        shown: [
+          TRUST_QUESTION,
+          ['Manage', 'Cancel', 'Trust Folder & Continue'],
+        ],
+        dialog: undefined,
+        remoteName: null,
+        trusted: false,
+        activated,
+        title: `[${name}]`,
+        newDockerCalls: [],
+        initialized: false,
+        containers: [],
+      });
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
   });
 
   it('F-0501 AC-22 (c74-recent-untrusted): opening the stored entry of a folder that is not trusted switches the title and indicator to the container before core asks, and declining shows S360 with S377, then reopens the same folder locally and restricted', async () => {
