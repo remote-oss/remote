@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {writeFileSync} from 'node:fs';
+import {existsSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   activeEditorOf,
@@ -8,6 +8,8 @@ import {
   devContainerFolder,
   devContainersOf,
   inWindow,
+  reloadWindow,
+  reopenInContainer,
   reopenStarted,
   variable,
   waitFor,
@@ -17,6 +19,7 @@ import {
   answerDialog,
   dialogOf,
   notificationCentre,
+  pageText,
   chooseQuickPickRow,
   editorGroupLabels,
   editorTabs,
@@ -310,6 +313,76 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
           logInSecond: true,
           logPreview: true,
           focused: configuration,
+        },
+      );
+    } finally {
+      await closeWindow(name);
+      await removeContainers(folder);
+    }
+  });
+
+  /** A connected window whose devcontainer.json is deleted on the host and which is reloaded, up to the failure dialog. */
+  async function deletedConfiguration(label: string) {
+    const folder = devContainerFolder(label, {name: label});
+    const name = await openFolderWindow(folder);
+    await reopenInContainer(name);
+    rmSync(path.join(folder, '.devcontainer', 'devcontainer.json'));
+    await reloadWindow(name);
+    const dialog = await waitForDialog(name, 180_000);
+    return {folder, name, dialog};
+  }
+
+  it('F-0410 AC-27 (c77-deleted-edit): after the configuration is deleted and the window reloads, the dialog has the three buttons with S034, and Edit devcontainer.json Locally makes a local window on core’s missing-file placeholder, the log in a second group, no file on disk and nothing else started', async () => {
+    const {folder, name, dialog} =
+      await deletedConfiguration('c77-deleted-edit');
+    const configuration = path.join(
+      folder,
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    try {
+      await answerDialog(name, 'Edit devcontainer.json Locally');
+      await waitFor(
+        'the local window',
+        async () => (await windowState(name)).remoteName === null,
+        60_000,
+      );
+      await waitFor(
+        'the missing-file placeholder',
+        async () =>
+          (await pageText(name)).includes(
+            'The editor could not be opened because the file was not found.',
+          ),
+        60_000,
+      );
+      const groups = await editorGroupLabels(name);
+      const text = await pageText(name);
+      deepStrictEqual(
+        {
+          dialog: [dialog.details, [...dialog.buttons].sort()],
+          remoteName: (await windowState(name)).remoteName,
+          activeTab: (await editorTabs(name)).find(entry => entry.active)
+            ?.label,
+          placeholder: text.includes('Create File'),
+          logInSecond: groups[1]?.[0]?.startsWith('dev-containers-attempt-'),
+          onDisk: existsSync(configuration),
+          pick: await quickPickRows(name),
+          notifications: await notificationCentre(name),
+          dialogAfter: await dialogOf(name),
+        },
+        {
+          dialog: [
+            FAILED_SETUP,
+            ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          ],
+          remoteName: null,
+          activeTab: 'devcontainer',
+          placeholder: true,
+          logInSecond: true,
+          onDisk: false,
+          pick: [],
+          notifications: [],
+          dialogAfter: undefined,
         },
       );
     } finally {

@@ -27,6 +27,8 @@ interface ClientCase {
   checked: string[];
   /** The program the lookup and the connection ran; null when no program was used for either. */
   used: string | null;
+  /** How many times the program ran the connection: the install, and with the server on a socket the tunnel too; one when absent. */
+  connects?: number;
   /** The failure dialog's text, for a case that fails. */
   dialog?: string;
   /** The case's answers. */
@@ -90,7 +92,7 @@ if (launched === undefined) {
     `no client case for "${String(process.env.HARNESS_CLIENT_CASE)}"`,
   );
 }
-const {cite, label, checked, used, dialog} = launched;
+const {cite, label, checked, used, dialog, connects = 1} = launched;
 
 /** The case's record once its dialog's pick of actions was answered, without the display-only lines. */
 let dialogRecord: RecordLine[] = [];
@@ -153,7 +155,7 @@ describe(`the client search of ${label}`, () => {
         : [
             ...checked.map(name => `${name}\tcheck`),
             `${used}\toptions`,
-            `${used}\tconnect`,
+            ...Array.from({length: connects}, () => `${used}\tconnect`),
           ],
     );
   });

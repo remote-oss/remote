@@ -10,7 +10,7 @@ pnpm test:acceptance    # on Linux without a display: xvfb-run --auto-servernum 
 
 The command packages the extensions, then `tools/acceptance.ts`:
 
-1. builds the host image from `host/` (Alpine with OpenSSH's server and libstdc++, key login only, the user `harness` with the
+1. builds the host image from `host/` (Alpine with OpenSSH's server, libstdc++ and git, key login only, the user `harness` with the
    POSIX `sh` login shell, TCP forwarding allowed);
 2. makes an Ed25519 key pair for the run and starts the host with its public key on a free local port;
 3. writes an `ssh_config` whose `Host harness` reaches the host with that key, its own known-hosts file and no agent (and whose `Host 127.0.0.1` block reaches it by the address as typed),
@@ -225,7 +225,7 @@ fields:
 | `settings` | merged over the run's base settings, for this launch only; the base settings are written again before a launch without any |
 | `environment` | added to the extension host's environment for this launch only; a key of the launch overrides the harness variable of the same name |
 | `ownScript` | the launch answers from its own `<label>-script.json` and `<label>-record.jsonl` |
-| `hostSetup` | commands the run runs on the host container, as root, before each attempt of the launch, in order; a command started with `detach` does not block the attempt |
+| `hostSetup` | commands the run runs on the launch's own host container (the harness host's, or its `hostBase`'s), as root, before each attempt of the launch, in order; a command started with `detach` does not block the attempt |
 | `extraExtensions` | further development extensions, folders under `tests/acceptance`, loaded after the runner in the local extension host |
 | `hostExtensions` | development extensions that run in the remote extension host: folders under `tests/acceptance`, copied into the host's home folder before the launches and loaded from there |
 
@@ -527,19 +527,38 @@ not BusyBox's, as on a user's Ubuntu 26.04 machine.
   `contracts V2: finds an Ubuntu 26.04 host to be a glibc Linux with uutils`, and `#1398: an Ubuntu 26.04 host (glibc,
   libstdc++6) connects with no prerequisite message`.
 
-`HARNESS_HOST_BASE` (`alpine`, the default, or `ubuntu-26.04`) picks the image that `startHost` starts the server
-rows' host from; another value fails the run. `pnpm test:acceptance:variants` runs the shell-sensitive files, plus
-`server/install.test.ts` and `server/probe.test.ts`, once on the Ubuntu host (`host base ubuntu-26.04`).
+### The Ubuntu 18.04 and Debian 12 hosts
 
-The VSCodium run starts the Ubuntu host beside its Alpine one only when a chosen launch has `hostBase: 'ubuntu-26.04'`.
-That's `remote-ubuntu`, the `remote` launch on it. The second host gets:
+Two more images, for F-2401's prerequisite rows and F-3902 AC-1 (tooling-35), each pinned by its index digest:
+- `host-ubuntu-18.04/` is `ubuntu:18.04`: glibc 2.27, below the server's, and OpenSSH 7.6, whose `sshd_config` has no
+  `Include`, so its settings are appended to it (`ChallengeResponseAuthentication no` for keyboard-interactive);
+- `host-debian-12/` is `debian:12`: glibc 2.36, above the server's, and OpenSSH 9.2, with its settings in
+  `sshd_config.d/harness.conf`.
+
+Both have the Ubuntu 26.04 host's two users (`harness`, login shell `/bin/sh`, and `harness-mute`, with the Alpine
+host's `mute-shell` from the build context `alpine-host`), key login only, and the Ubuntu 26.04 host's `start-sshd`,
+taken from `host-ubuntu/` (the build context `apt-host`), so neither copies a script. Each has GNU `wget` and `curl`,
+of which `start-sshd` leaves the one `HOST_FETCH` asks for, plus `procps` and the OpenBSD `nc`. Measured: `ldd`
+prints `GLIBC 2.27-3ubuntu1.6` and `GLIBC 2.36-9+deb12u14`. `sshd -T -C user=harness,host=x,addr=127.0.0.1` gives
+password and keyboard-interactive login `no`, public key `yes`, root login `no`, and TCP and agent forwarding `yes`.
+
+`HARNESS_HOST_BASE` (`alpine`, the default, `ubuntu-26.04`, `ubuntu-18.04` or `debian-12`) picks the image that
+`startHost` starts the server rows' host from; another value fails the run. `pnpm test:acceptance:variants` runs the
+shell-sensitive files, plus `server/install.test.ts` and `server/probe.test.ts`, once on the Ubuntu 26.04 host (`host
+base ubuntu-26.04`). The two glibc hosts' rows are their own (F-2401's prerequisite rows, F-3902 AC-1), not that set.
+
+The VSCodium run starts a host of another base beside its Alpine one for each base that a chosen launch names in
+`hostBase`, one host per base. `remote-ubuntu`, the `remote` launch on Ubuntu 26.04, is one such launch. Each such host
+gets:
 - the run's key and password, and the download host's names;
-- its own `ssh_config-ubuntu-26.04` beside the run's, which is the launch's `remote.SSH.configFile` and its
+- its own `ssh_config-<base>` beside the run's, which is the launch's `remote.SSH.configFile` and its
   `HARNESS_SSH_CONFIG`;
-- its own container id, `HARNESS_HOST_UBUNTU_CONTAINER`, which is the launch's `HARNESS_CONTAINER`.
+- its own container id, in `HARNESS_HOST_CONTAINERS` (JSON from base to id), which is the launch's
+  `HARNESS_CONTAINER`;
+- the launch's `hostSetup`, which runs there, not in the run's own host. A launch whose base the run didn't start
+  fails its attempt (`<label>: the run started no host of base <base>`).
 
-A glibc host is served the glibc server by the download host (tooling-68). A launch on another host can't have a
-`hostSetup`, because that runs in the run's own host.
+A glibc host is served the glibc server by the download host (tooling-68).
 
 ## Rows that fail in some runs
 
@@ -583,8 +602,12 @@ Alpine (musl) one and the glibc one. They're cached under `.vscode-test/download
   `server-linux-alpine` (Alpine on x64) or `server-alpine-<arch>`, gets the Alpine server.
 - `linux-<arch>` or `server-linux-<arch>` gets the glibc server, as for a Debian container (`GLIBC_IMAGE`, `debian:bookworm-slim` pinned by its index digest; the run pre-pulls no base image, so the daemon pulls it on the first row that uses it, as it does `OLD_GLIBC_IMAGE`).
 - A path that names no platform, such as `/ok/x`, gets the Alpine server.
-- A platform the run has no archive for, another architecture or another system, gets 404. The HTTPS certificate is the run's own,
-made in Node for `downloads` and `update.code.visualstudio.com` and kept in the run's folder; nothing trusts it. The
+- A platform the run has no archive for, another architecture or another system, gets 404.
+- Under `/machine/`, a `linux-<arch>` or `alpine-<arch>` of any architecture gets the run's archive of that system,
+  for a host whose `uname` reports another machine than the one it runs on (tooling-35). Another system, or a path that
+  names no platform, gets 404 there too.
+
+The HTTPS certificate is the run's own, made in Node for `downloads` and `update.code.visualstudio.com` and kept in the run's folder; nothing trusts it. The
 host's BusyBox `wget` verifies certificates through `ssl_client`, so an HTTPS download from it fails unless
 `--no-check-certificate` is given (measured on the host's image).
 
@@ -622,7 +645,7 @@ answer in the window (`waitForDialog`, `dialogKindOf`, `answerDialog`, `settings
 so a failed download on the host never falls back to a download on the runner. `HARNESS_EDITOR_EXECUTABLE` is the
 executable the launch started, and `editorProduct()` reads the `product.json` beside it.
 
-Nothing reaches Microsoft or GitHub from the rows, in two ways. The host's side is shown by the download host: it
+Nothing reaches Microsoft or GitHub from the rows, other than a launch with `publisherDownloads` (below), in two ways. The host's side is shown by the download host: it
 answers for `update.code.visualstudio.com`, its request log shows what the host asked for, and its TLS log shows which
 names. The client's own traffic (telemetry, the update check, the gallery, experiments, settings search and the
 built-in chat) is not seen there, so the launch turns each off in its settings: `telemetry.telemetryLevel`,
@@ -631,6 +654,26 @@ built-in chat) is not seen there, so the launch turns each off in its settings: 
 to reach the download host: as root on the harness host it adds `<gateway> github.com` to `/etc/hosts` (rewritten in
 place, as the file is a bind mount) and a DNAT rule from port 443 of the gateway to the download host's HTTPS port, and
 removes both in its `finally`. The container's removal at the end of the run is the backstop. If the `finally` failed, a launch after it in the same run (`ssh-no-proposals`) would run with `github.com` routed to the download host; its rows download nothing, so that changes nothing for them.
+
+A launch with `publisherDownloads: true` takes its server from Microsoft's update service, the server of the genuine
+client's own commit, and its rows accept the licence in the product's own modal, as the user decided on 2026-11-01
+(D-104, the genuine job only). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:
+before the launch the run moves the host's line for that name out of `/etc/hosts` into `/etc/hosts.update-service`
+(rewriting the file in place, as it is a bind mount), and before the next launch without the field it puts the line
+back. The log says each change (`acceptance: the harness host resolves update.code.visualstudio.com through DNS`, then
+`… to the download host`). The client's download, as Dev Containers makes it, needs nothing from the run: the runner
+resolves the name itself.
+
+These launches run only in the genuine CI job (D-104; a run on any other machine is outside the user's decision until
+they rule on it). The field also marks every launch whose rows click "Accept and Continue", whether or not its server
+comes from the publisher, so all of them pass the same gate: the run refuses such a launch unless `GITHUB_ACTIONS` is
+`true`, `GITHUB_JOB` is `acceptance-genuine` and `HARNESS_GENUINE_VERSION` is set (`acceptance: <label>: a launch that
+takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): …`). Anyone
+can set those three variables, so the gate guards against an accident, not against intent. The tools rows check the
+rest: every launch whose suite answers a dialog with "Accept and Continue" has the field, only such a launch names
+`update.code.visualstudio.com` or `vscode.download.prss.microsoft.com`, only a genuine launch on the harness host has
+the field, every genuine launch keeps `telemetry.telemetryLevel` off and `update.mode` none, no part of the VSCodium
+job makes a genuine launch, and the genuine job's lists make only genuine launches.
 
     node tools/acceptance.ts --editor vscodium --launches genuine
 
@@ -671,6 +714,7 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
+| `fwd-busy`, `fwd-busy-exit`, `fwd-static`, `fwd-gateway`, `fwd-remote`, `fwd-dynamic`, `fwd-open`, `fwd-noopen` | `harness` | the run's key; each adds forwards to the client's configuration: `LocalForward 13020 127.0.0.1:8660` (`fwd-busy`, and `fwd-busy-exit` with `ExitOnForwardFailure yes`), `LocalForward 13010 127.0.0.1:8657` (`fwd-static`), `GatewayPorts yes` with `LocalForward 13001 127.0.0.1:8661` (`fwd-gateway`), `RemoteForward 19000 127.0.0.1:19101` (`fwd-remote`), `DynamicForward 11080` (`fwd-dynamic`) and a dynamic `RemoteForward` with `PermitRemoteOpen any` (`fwd-open`, port 19201) or `none` (`fwd-noopen`, port 19200) |
 | `i686` | `harness-i686` | the run's key; its `~/.profile` puts a folder first on `PATH` whose `uname -m` prints `i686` (the connect's shell is a login shell) |
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |

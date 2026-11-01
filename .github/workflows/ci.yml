@@ -360,9 +360,12 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
-  # The genuine launches: VS Code runs our VSIX against the run's stand-in download host, with the real dialogs, at the
-  # two versions of ADR-0007: the recorded version and the floor, each on its own runner. Nothing accepts a licence on
-  # the user's behalf, and no server is downloaded from the editor's publisher. It runs on a dispatch (the `genuine`
+  # The genuine launches: VS Code runs our VSIX with the real dialogs, at the two versions of ADR-0007: the recorded
+  # version and the floor, each on its own runner. A launch the table marks `publisherDownloads` takes the server of
+  # the client's own commit from the editor's publisher, and its rows accept the publisher's licence in the product's
+  # own modal, as the user decided on 2026-11-01 for this job alone; the run makes such a launch only under Actions, in
+  # this job (its id), with HARNESS_GENUINE_VERSION set. Every other launch uses the run's stand-in download host,
+  # and the product never accepts a licence on the user's behalf. It runs on a dispatch (the `genuine`
   # input), once a day on main, and on the tag of a release, never on a pull request, and always on X64, the
   # architecture the launch is measured on. Its concurrency follows the VSCodium job's, per version: the daily run keeps
   # one group, each tag its own, and dispatches queue. ssh-no-proposals runs after genuine in the same run (the table's
@@ -386,6 +389,10 @@ jobs:
       group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}-${{ matrix.version }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
+    # Measured on the runners (2026-11-01): a leg takes about 3 minutes. One server from the publisher is 205 MiB at
+    # 1.139.1 and 154 MiB at 1.125.0, and downloaded in 3 to 7 s on the runner or in a container on it. A fresh
+    # profile downloads it once, and the planned launches have four such profiles at most, under a minute in all, so
+    # 30 minutes keeps its margin.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7

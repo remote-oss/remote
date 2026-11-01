@@ -917,4 +917,84 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       ]),
     );
   });
+
+  it('F-0412 AC-14 (c77-two-caches): a two-entry build.cacheFrom array shows a cache import in BuildKit’s trace for each entry', async () => {
+    const folder = devContainerFolder('c77-cache-two', {
+      name: 'Cache Two',
+      image: undefined,
+      build: {
+        dockerfile: 'Dockerfile',
+        cacheFrom: ['c77-cache-one:1', 'c77-cache-two:1'],
+      },
+    });
+    writeDockerfile(folder, `FROM ${base()}\nRUN echo built > /built\n`);
+    const cached = ['c77-cache-one:1', 'c77-cache-two:1'];
+    for (const imageTag of cached) {
+      await buildTag(imageTag, `FROM ${base()}\nRUN echo cached > /cached\n`);
+    }
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const lines = containersLogSince(mark);
+      deepStrictEqual(
+        cached.map(imageTag =>
+          lines.some(line =>
+            line.endsWith(`importing cache manifest from ${imageTag}`),
+          ),
+        ),
+        [true, true],
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder, cached);
+    }
+  });
+
+  it('F-0412 AC-19 (c77-long-name): a folder name of 200 characters makes a tag beyond the engine’s limit, which the engine refuses with its own error in the log, then the generic dialog shows and no container or image exists', async () => {
+    const folder = devContainerFolder(`c77-${'n'.repeat(196)}`, {
+      name: 'Long Name',
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    writeDockerfile(folder, `FROM ${base()}\nRUN echo built > /built\n`);
+    try {
+      const mark = containersLog().length;
+      const name = await openFolderWindow(folder);
+      await reopenStarted(name);
+      const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const lines = containersLogSince(mark);
+      deepStrictEqual(
+        {
+          nameLength: nameOf(folder).length,
+          tagLength: tagOf(folder).length > 255,
+          dialog: [dialog.details, [...dialog.buttons].sort()],
+          engineError: lines.some(line =>
+            line.includes(
+              'repository name must not be more than 255 characters',
+            ),
+          ),
+          fullHash: lines.some(line =>
+            line.includes(
+              `-${createHash('sha256').update(folder).digest('hex')}`,
+            ),
+          ),
+          containers: await devContainersOf(folder),
+          images: await repositoriesStarting(`vsc-${nameOf(folder)}-`),
+        },
+        {
+          nameLength: 200,
+          tagLength: true,
+          dialog: [S034, RECOVERY_BUTTONS],
+          engineError: true,
+          fullHash: true,
+          containers: [],
+          images: [],
+        },
+      );
+      await closeWindow(name);
+    } finally {
+      await cleanUp(folder);
+    }
+  });
 });

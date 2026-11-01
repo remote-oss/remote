@@ -176,6 +176,17 @@ export function pageTitleFor(
 }
 
 /**
+ * Of pages whose titles all fit one folder, those of a remote window when `remote`, else those of a local one: a remote
+ * window's title has the remote name after the folder's, so two windows on one folder, one connected, differ by it.
+ */
+export function pagesOfRemoteness(
+  candidates: readonly DebugTarget[],
+  remote: boolean,
+): DebugTarget[] {
+  return candidates.filter(page => page.title.includes(' [') === remote);
+}
+
+/**
  * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
  * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
  * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
@@ -302,7 +313,14 @@ export async function pageOf(
         workspaceFile: state.workspaceFile,
       });
       const candidates = found.filter(page => matches(page.title));
-      const chosen = pageAmong(candidates, name, REMEMBERED_PAGES, isOpen);
+      const chosen =
+        pageAmong(candidates, name, REMEMBERED_PAGES, isOpen) ??
+        pageAmong(
+          pagesOfRemoteness(candidates, state.remoteName !== null),
+          name,
+          REMEMBERED_PAGES,
+          isOpen,
+        );
       if (chosen === undefined && candidates.length > 1) {
         throw new Error(
           `two pages match the window's state: ${JSON.stringify(candidates.map(page => page.title))}`,
@@ -1289,6 +1307,35 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
     throw new Error(`window ${name}: ${rows}`);
   }
   return rows;
+}
+
+/** The count badge on the tab titled `title` of the panel in window `name`: its text, or nothing when it has none. */
+export async function panelBadge(
+  name: string,
+  title: string,
+): Promise<string | undefined> {
+  const found = await evaluate<string | null>(
+    name,
+    `(() => {
+      const tab = [...document.querySelectorAll('.part.panel .composite-bar .action-item')].find(each => (each.querySelector('.action-label')?.textContent ?? '').trim().startsWith(${JSON.stringify(title)}));
+      return tab === undefined ? null : (tab.querySelector('.badge-content')?.textContent ?? '');
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name} has no panel tab ${title}`);
+  }
+  return found === '' ? undefined : found;
+}
+
+/** The titles of the columns of core's Ports view in window `name`, in order. */
+export async function portsColumns(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression('Ports')};
+      return [...(pane?.querySelectorAll('.monaco-table-th') ?? [])].map(cell => (cell.textContent ?? '').replaceAll('\\u00a0', ' ').trim()).filter(text => text !== '');
+    })()`,
+  );
 }
 
 /** The titles of row `port`'s inline actions on hover, and of its context menu's items, in order. */

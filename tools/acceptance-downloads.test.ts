@@ -5,8 +5,10 @@ import {
   rejects,
   strictEqual,
 } from 'node:assert';
+import {spawnSync} from 'node:child_process';
 import {createHash, X509Certificate} from 'node:crypto';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -35,6 +37,7 @@ import {
   serverArchiveOf,
   startDownloadHost,
   startRunDownloads,
+  updateServicePinCommand,
 } from './acceptance-downloads.ts';
 import {type CommandResult} from './command-runner.ts';
 
@@ -243,6 +246,28 @@ describe('the download host', function () {
   it('tooling-68: a path that names no platform gets the Alpine archive, as before', async () => {
     const received = await get('http', host.httpPort, '/ok/size/check');
     strictEqual(received.body.equals(archive), true);
+  });
+
+  it('tooling-35: under /machine/, a platform of another architecture gets the run’s archive of its system, and a system the run has none of, or no platform, gives 404', async () => {
+    const answers = await Promise.all(
+      [
+        '/machine/linux-arm64/abc',
+        '/machine/linux-armhf/abc',
+        '/machine/commit:abc/server-linux-arm64/stable',
+        '/machine/alpine-arm64/abc',
+        '/machine/darwin-x64/abc',
+        '/machine/size/check',
+      ].map(async pathName => {
+        const received = await get('http', host.httpPort, pathName);
+        if (received.status !== 200) {
+          return received.status;
+        }
+        return received.body.equals(archive)
+          ? 'alpine'
+          : received.body.equals(glibcArchive) && 'glibc';
+      }),
+    );
+    deepStrictEqual(answers, ['glibc', 'glibc', 'glibc', 'alpine', 404, 404]);
   });
 
   it('tooling-68: a platform the run serves no archive for gives 404, from ok, cut and slow alike', async () => {
@@ -844,6 +869,96 @@ describe('the download host in the run', () => {
           ],
         ],
       ],
+    );
+  });
+});
+
+describe('the update service pin on the harness host (card tooling-99)', () => {
+  const HOSTS =
+    '127.0.0.1\tlocalhost\n' +
+    '172.17.0.1\tdownloads\n' +
+    '172.17.0.1\tupdate.code.visualstudio.com\n' +
+    '10.0.0.9\tmirror.update.code.visualstudio.com\n';
+
+  /** A hosts file of its own with `text`, in a folder the row removes. */
+  function hostsFile(text: string): {file: string; remove: () => void} {
+    const folder = mkdtempSync(path.join(tmpdir(), 'update-pin-'));
+    const file = path.join(folder, 'hosts');
+    writeFileSync(file, text);
+    return {
+      file,
+      remove: () => {
+        rmSync(folder, {recursive: true, force: true});
+      },
+    };
+  }
+
+  /** The exit status of `script` in `sh -c`. */
+  function shell(script: string): number | null {
+    return spawnSync('sh', ['-c', script]).status;
+  }
+
+  it('unpinning drops the service’s own line in place and keeps the others, and pinning puts it back', () => {
+    const {file, remove} = hostsFile(HOSTS);
+    try {
+      const inode = statSync(file).ino;
+      const unpinned = shell(updateServicePinCommand(false, file));
+      const afterUnpin = readFileSync(file, 'utf8');
+      const kept = readFileSync(`${file}.update-service`, 'utf8');
+      const pinned = shell(updateServicePinCommand(true, file));
+      deepStrictEqual(
+        [
+          unpinned,
+          afterUnpin,
+          kept,
+          pinned,
+          readFileSync(file, 'utf8')
+            .split('\n')
+            .filter(line => line !== '')
+            .sort(),
+          existsSync(`${file}.update-service`),
+          existsSync(`${file}.next`),
+          statSync(file).ino,
+        ],
+        [
+          0,
+          '127.0.0.1\tlocalhost\n' +
+            '172.17.0.1\tdownloads\n' +
+            '10.0.0.9\tmirror.update.code.visualstudio.com\n',
+          '172.17.0.1\tupdate.code.visualstudio.com\n',
+          0,
+          HOSTS.split('\n')
+            .filter(line => line !== '')
+            .sort(),
+          false,
+          false,
+          inode,
+        ],
+      );
+    } finally {
+      remove();
+    }
+  });
+
+  it('unpinning a hosts file with no line for the service fails and leaves the file as it was', () => {
+    const {file, remove} = hostsFile('127.0.0.1\tlocalhost\n');
+    try {
+      deepStrictEqual(
+        [
+          shell(updateServicePinCommand(false, file)) !== 0,
+          readFileSync(file, 'utf8'),
+        ],
+        [true, '127.0.0.1\tlocalhost\n'],
+      );
+    } finally {
+      remove();
+    }
+  });
+
+  it('pins /etc/hosts when no file is named', () => {
+    deepStrictEqual(
+      updateServicePinCommand(true),
+      'cat /etc/hosts.update-service >> /etc/hosts && rm /etc/hosts.update-service',
     );
   });
 });

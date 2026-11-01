@@ -43,6 +43,7 @@ import {
   type CommandRunner,
   runCommand,
 } from './command-runner.ts';
+import {HOST_BASE_VARIANTS} from './host-variants.ts';
 
 const RUN_ID = '77-2';
 
@@ -330,7 +331,7 @@ describe('the Ubuntu host (card tooling-70)', () => {
           second
             .callsOf('docker')
             .find(argv => argv[0] === 'build')
-            ?.slice(-4),
+            ?.slice(-6),
           second.callsOf('ssh-keygen').length,
           readFileSync(ubuntu.passwordFile, 'utf8') === password,
           second
@@ -344,6 +345,8 @@ describe('the Ubuntu host (card tooling-70)', () => {
             'remote-oss-acceptance-host:77-2-ubuntu-26.04',
             '--build-context',
             `alpine-host=${path.join('/root', 'tests', 'acceptance', 'host')}`,
+            '--build-context',
+            `apt-host=${path.join('/root', 'tests', 'acceptance', 'host-ubuntu')}`,
             path.join('/root', 'tests', 'acceptance', 'host-ubuntu'),
           ],
           0,
@@ -803,8 +806,8 @@ function scriptCleanRun(
   }); // docker network rm
   scripted.passes(); // pkill
   scripted.passes(); // pkill, stale editors
-  for (let index = 0; index < 3; index += 1) {
-    // docker image rm --force, the two host tags (Alpine's, Ubuntu's) and the dev container tag
+  for (let index = 0; index <= HOST_BASE_VARIANTS.length; index += 1) {
+    // docker image rm --force, the host tag of each base and the dev container tag
     if (state.imageGone) {
       scripted.fails(1, 'No such image');
     } else {
@@ -876,15 +879,15 @@ describe('cleanRun (card tooling-10)', () => {
         program: 'docker',
         argv: ['image', 'rm', '--force', 'remote-oss-acceptance-host:77-2'],
       },
-      {
+      ...['ubuntu-26.04', 'ubuntu-18.04', 'debian-12'].map(base => ({
         program: 'docker',
         argv: [
           'image',
           'rm',
           '--force',
-          'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+          `remote-oss-acceptance-host:77-2-${base}`,
         ],
-      },
+      })),
       {
         program: 'docker',
         argv: [
@@ -923,7 +926,7 @@ describe('cleanRun (card tooling-10)', () => {
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 10);
+    strictEqual(scripted.calls.length, 12);
   });
 
   it('tooling-74: a daemon the rows emptied, with no host, registry, network or image left, is clean and nothing is removed', () => {
@@ -975,6 +978,8 @@ describe('cleanRun (card tooling-10)', () => {
         'network rm n2',
         `image rm --force remote-oss-acceptance-host:${RUN_ID}`,
         `image rm --force remote-oss-acceptance-host:${RUN_ID}-ubuntu-26.04`,
+        `image rm --force remote-oss-acceptance-host:${RUN_ID}-ubuntu-18.04`,
+        `image rm --force remote-oss-acceptance-host:${RUN_ID}-debian-12`,
         `image rm --force remote-oss-acceptance-devcontainer:${RUN_ID}`,
       ],
     );
@@ -1058,7 +1063,7 @@ describe('cleanRun (card tooling-10)', () => {
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 10);
+    strictEqual(scripted.calls.length, 12);
   });
 
   it("containers-09: notes the run's dev containers' images before removing the containers, then removes them and the run's dev container tag", () => {
@@ -1073,7 +1078,9 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force, the host
-    scripted.passes(); // docker image rm --force, the Ubuntu host
+    scripted.passes(); // docker image rm --force, the Ubuntu 26.04 host
+    scripted.passes(); // docker image rm --force, the Ubuntu 18.04 host
+    scripted.passes(); // docker image rm --force, the Debian 12 host
     scripted.fails(1, 'image is being used'); // docker image rm --force, the uid image
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps, the second listing
@@ -1090,6 +1097,8 @@ describe('cleanRun (card tooling-10)', () => {
         'c1',
         'remote-oss-acceptance-host:77-2',
         'remote-oss-acceptance-host:77-2-ubuntu-26.04',
+        'remote-oss-acceptance-host:77-2-ubuntu-18.04',
+        'remote-oss-acceptance-host:77-2-debian-12',
         'vsc-gate-image-0123-uid',
         'remote-oss-acceptance-devcontainer:77-2',
       ],

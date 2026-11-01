@@ -49,6 +49,8 @@ import {
   downloadHostArguments,
   type RunDownloads,
   startRunDownloads,
+  UPDATE_SERVICE_NAME,
+  updateServicePinCommand,
 } from './acceptance-downloads.ts';
 import {
   acceptanceRunId,
@@ -63,7 +65,7 @@ import {
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
-import type {HostBase} from './host-variants.ts';
+import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
   controlFolderOf,
@@ -180,8 +182,11 @@ export interface HarnessVariables {
   HARNESS_SSH_CONFIG: string;
   /** The container id, for `docker exec` checks on the host. */
   HARNESS_CONTAINER: string;
-  /** The container id of the run's Ubuntu 26.04 host, when a launch of the run connects to one (`hostBase`). */
-  HARNESS_HOST_UBUNTU_CONTAINER?: string;
+  /**
+   * The container ids of the run's hosts of other bases, as JSON from base to id: one per base that a launch of the run
+   * connects to (`hostBase`), when there is one.
+   */
+  HARNESS_HOST_CONTAINERS?: string;
   /** The host's address on the run network, which the `routed` alias names; a route cut is scoped to it. */
   HARNESS_ROUTED_ADDRESS: string;
   /** The run's folder: user data, extensions, keys. */
@@ -314,6 +319,18 @@ function masterAlias(
   ]);
 }
 
+/**
+ * The container ids of the run's hosts of other bases, by base, from `HARNESS_HOST_CONTAINERS`; none when it is unset.
+ */
+export function baseContainersOf(
+  environment: Readonly<Record<string, string | undefined>>,
+): Partial<Record<HostBase, string>> {
+  const named = environment.HARNESS_HOST_CONTAINERS;
+  return named === undefined
+    ? {}
+    : (JSON.parse(named) as Partial<Record<HostBase, string>>);
+}
+
 /** The ssh_config of the run's host of `base`: the run's own for Alpine's host, `ssh_config-<base>` beside it otherwise. */
 export function sshConfigOf(
   runFolder: string,
@@ -431,6 +448,12 @@ export function harnessSshConfig(
       port,
       runFolder,
       keyLines(runFolder),
+    ),
+    ...FORWARD_ALIASES.flatMap(([alias, user, lines]) =>
+      accountAlias(alias, user, port, runFolder, [
+        ...keyLines(runFolder),
+        ...lines,
+      ]),
     ),
     ...accountAlias(
       'mute',
@@ -621,6 +644,34 @@ function keyLines(runFolder: string): string[] {
     'BatchMode yes',
   ];
 }
+
+/**
+ * The aliases whose configuration forwards ports: `fwd-busy` and `fwd-busy-exit` (a `LocalForward` for a port the row
+ * holds, without and with `ExitOnForwardFailure`), `fwd-static` (a `LocalForward` for the host's port 8657),
+ * `fwd-gateway` (`GatewayPorts yes` with a `LocalForward`), `fwd-remote` (a `RemoteForward` to a port of the client),
+ * `fwd-dynamic` (a `DynamicForward`), and `fwd-open` and `fwd-noopen` (a dynamic `RemoteForward` with `PermitRemoteOpen`
+ * `any` and `none`, an option of the client's configuration). Each is the alias's name, its account and its lines.
+ */
+export const FORWARD_ALIASES: ReadonlyArray<
+  readonly [string, string, readonly string[]]
+> = [
+  ['fwd-busy', 'harness', ['LocalForward 13020 127.0.0.1:8660']],
+  [
+    'fwd-busy-exit',
+    'harness',
+    ['LocalForward 13020 127.0.0.1:8660', 'ExitOnForwardFailure yes'],
+  ],
+  ['fwd-static', 'harness', ['LocalForward 13010 127.0.0.1:8657']],
+  [
+    'fwd-gateway',
+    'harness',
+    ['GatewayPorts yes', 'LocalForward 13001 127.0.0.1:8661'],
+  ],
+  ['fwd-remote', 'harness', ['RemoteForward 19000 127.0.0.1:19101']],
+  ['fwd-dynamic', 'harness', ['DynamicForward 11080']],
+  ['fwd-open', 'harness', ['RemoteForward 19201', 'PermitRemoteOpen any']],
+  ['fwd-noopen', 'harness', ['RemoteForward 19200', 'PermitRemoteOpen none']],
+];
 
 /**
  * One alias of the host's other accounts: the lines every one shares, its own known-hosts file, then `further`. Its
@@ -827,35 +878,37 @@ async function prepare(
   );
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
-  // A launch whose window connects to a host of another base gets that host beside the run's, with the same key and
-  // password, the same download names and its own ssh_config.
-  const ubuntuHost = chosen.some(launch => launch.hostBase === 'ubuntu-26.04')
-    ? startHostContainer(
-        command,
-        root,
-        runId,
-        runFolder,
-        [
-          ...(downloads === undefined ? [] : downloadHostArguments()),
-          ...(keys?.hostArguments ?? []),
-        ],
-        'ubuntu-26.04',
-      )
-    : undefined;
-  if (ubuntuHost !== undefined) {
-    started.push(ubuntuHost.container);
-    const ubuntuConfig = sshConfigOf(runFolder, 'ubuntu-26.04');
+  // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
+  // same key and password, the same download names and its own ssh_config.
+  const baseHosts: Partial<Record<HostBase, string>> = {};
+  for (const base of HOST_BASE_VARIANTS.filter(variant =>
+    chosen.some(launch => launch.hostBase === variant),
+  )) {
+    const baseHost = startHostContainer(
+      command,
+      root,
+      runId,
+      runFolder,
+      [
+        ...(downloads === undefined ? [] : downloadHostArguments()),
+        ...(keys?.hostArguments ?? []),
+      ],
+      base,
+    );
+    started.push(baseHost.container);
+    baseHosts[base] = baseHost.container;
+    const baseConfig = sshConfigOf(runFolder, base);
     writeFileSync(
-      ubuntuConfig,
+      baseConfig,
       harnessSshConfig(
-        ubuntuHost.port,
+        baseHost.port,
         runFolder,
         agentSocket,
-        connectRunNetwork(command, runId, ubuntuHost.container),
+        connectRunNetwork(command, runId, baseHost.container),
         controlFolderOf(runFolder),
       ),
     );
-    await waitForHost(dependencies, ubuntuConfig);
+    await waitForHost(dependencies, baseConfig);
   }
   await dependencies.bundleSuite(root);
   const vscodium =
@@ -960,9 +1013,9 @@ async function prepare(
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
-    ...(ubuntuHost === undefined
+    ...(Object.keys(baseHosts).length === 0
       ? {}
-      : {HARNESS_HOST_UBUNTU_CONTAINER: ubuntuHost.container}),
+      : {HARNESS_HOST_CONTAINERS: JSON.stringify(baseHosts)}),
     HARNESS_ROUTED_ADDRESS: routedAddress,
     HARNESS_RUN_FOLDER: runFolder,
     HARNESS_RUN_ID: runId,
@@ -1091,8 +1144,9 @@ function runHostSetup(
 /**
  * Runs each launch in order and returns their exit codes. The VS Code run has one configuration and needs no label;
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
- * A launch with host setup runs it before each attempt, and waits the helper's grace after the launch before it,
- * so its resolve finds no live helper of the run.
+ * A launch with host setup runs it on its own host before each attempt (the harness host, or the host of its
+ * `hostBase` in `baseContainers`), and waits the helper's grace after the launch before it, so its resolve finds no
+ * live helper of the run.
  */
 export async function runLaunches(
   runFolder: string,
@@ -1109,8 +1163,11 @@ export async function runLaunches(
     console.log(line);
   },
   lock: LaunchLock = NO_LOCK,
+  baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
 ): Promise<number[]> {
   const exitCodes: number[] = [];
+  // The harness host starts with the update service's name pinned to the download host.
+  let pinned = true;
   for (const launch of launches) {
     if (launch !== undefined) {
       // The line a log reader splits the run's output at: tools/flake-ledger.ts reads each launch's rows after it.
@@ -1137,13 +1194,37 @@ export async function runLaunches(
   }
   return exitCodes;
 
+  /** The container of the host the launch's window connects to: the harness host, or the run's host of its base. */
+  function hostContainerOf(launch: Launch): string {
+    if (launch.hostBase === undefined) {
+      return container;
+    }
+    const based = baseContainers[launch.hostBase];
+    if (based === undefined) {
+      throw new Error(
+        `${launch.label}: the run started no host of base ${launch.hostBase}`,
+      );
+    }
+    return based;
+  }
+
   /** The launch's attempts (one, or two after a hung window). */
   function runAttempts(launch: Launch | undefined): Promise<number> {
     return runWithRetry(async () => {
       // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
       if (launch !== undefined) {
+        const wanted = launch.publisherDownloads !== true;
+        if (wanted !== pinned) {
+          runHostSetup(command, container, [
+            {command: updateServicePinCommand(wanted)},
+          ]);
+          pinned = wanted;
+          report(
+            `acceptance: the harness host resolves ${UPDATE_SERVICE_NAME} ${wanted ? 'to the download host' : 'through DNS'}`,
+          );
+        }
         if (launch.hostSetup !== undefined) {
-          runHostSetup(command, container, launch.hostSetup);
+          runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
         }
         writeUserSettings(
           runFolder,
@@ -1239,6 +1320,11 @@ export async function runAcceptance(
     );
     return 2;
   }
+  const refusal = publisherDownloadsRefusal(chosen, process.env);
+  if (refusal !== undefined) {
+    console.error(`acceptance: ${refusal}`);
+    return 2;
+  }
   const runId = acceptanceRunId(process.env, process.pid);
   // The run id in the name lets the clean-up find the editor of a run that was killed.
   const runFolder = mkdtempSync(path.join(tmpdir(), `acceptance-${runId}-`));
@@ -1332,6 +1418,7 @@ export async function runAcceptance(
             console.log(line);
           },
         ),
+        baseContainersOf({...variables}),
       )),
     );
     exitCode = exitCodes.find(code => code !== 0) ?? 0;
@@ -1387,6 +1474,32 @@ export function genuineVersionIn(
     : {
         problem: `HARNESS_GENUINE_VERSION must be ${GENUINE_VERSIONS.join(' or ')}`,
       };
+}
+
+/** The id of the workflow job that alone makes a launch with `publisherDownloads`, as Actions gives it in `GITHUB_JOB`. */
+export const GENUINE_JOB = 'acceptance-genuine';
+
+/**
+ * Why the run refuses its launches, when one of them takes its server from the editor's publisher or accepts its
+ * licence outside the genuine job: the run takes such a launch only under Actions, in that job, with the version named.
+ * Anyone can set the three variables, so this guards against an accident, not against intent.
+ */
+export function publisherDownloadsRefusal(
+  launches: readonly Launch[],
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const named = environment.HARNESS_GENUINE_VERSION;
+  const labels = launches
+    .filter(launch => launch.publisherDownloads === true)
+    .map(launch => launch.label);
+  const genuineJob =
+    environment.GITHUB_ACTIONS === 'true' &&
+    environment.GITHUB_JOB === GENUINE_JOB &&
+    named !== undefined &&
+    named !== '';
+  return labels.length === 0 || genuineJob
+    ? undefined
+    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB ${GENUINE_JOB} and HARNESS_GENUINE_VERSION set`;
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
@@ -1453,7 +1566,8 @@ export function vscodiumConfiguration(
     ...(launch.hostBase === undefined
       ? {}
       : {
-          HARNESS_CONTAINER: environment.HARNESS_HOST_UBUNTU_CONTAINER ?? '',
+          HARNESS_CONTAINER:
+            baseContainersOf(environment)[launch.hostBase] ?? '',
           HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
           HARNESS_HOST_BASE: launch.hostBase,
         }),
