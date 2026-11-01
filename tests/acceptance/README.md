@@ -669,6 +669,8 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
+| `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
+| `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
 | `i686` | `harness-i686` | the run's key; its `~/.profile` puts a folder first on `PATH` whose `uname -m` prints `i686` (the connect's shell is a login shell) |
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |

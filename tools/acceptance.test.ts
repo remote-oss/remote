@@ -733,6 +733,22 @@ describe('acceptance', () => {
     );
   });
 
+  it('connect-97: Host nosocket logs in to harness-nosock with the run key', () => {
+    strictEqual(
+      accountBlock('nosocket'),
+      [...sharedLines('nosocket', 'harness-nosock'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
+    );
+  });
+
+  it('connect-97: Host noall logs in to harness-noall with the run key', () => {
+    strictEqual(
+      accountBlock('noall'),
+      [...sharedLines('noall', 'harness-noall'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
   it('coverage-43: Host harness-fish logs in to harness-fish with the run key', () => {
     strictEqual(
       accountBlock('harness-fish'),

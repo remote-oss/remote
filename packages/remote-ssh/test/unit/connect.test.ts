@@ -824,6 +824,18 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
+  it('F-2410 AC-14: a tunnel that does not open leaves the platform unwritten, so a retry asks again', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openTunnel: tunnelFails,
+      }),
+      options,
+    );
+    deepStrictEqual(recording.calls.includes('rememberPlatform'), false);
+  });
+
   /** A connect whose tunnel step settles `afterMilliseconds` after it starts, on the path named, with a bound of 20 ms. */
   async function connectWithSlowTunnel(
     path: 'socks' | 'secondSsh' | 'socket',
