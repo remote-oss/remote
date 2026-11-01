@@ -23,7 +23,9 @@ import {
 import {
   acceptQuickPick,
   chooseQuickPickRow,
+  type DetailedQuickPickRow,
   detailedQuickPickRows,
+  moveQuickPickFocus,
   pressEscape,
   quickPickFacts,
   quickPickOf,
@@ -369,4 +371,40 @@ export async function startFromPalette(window: string): Promise<void> {
       ),
     30_000,
   );
+}
+
+/** Opens the screen in `window` and gives its rows, leaving it open. */
+export async function screenOf(
+  window: string,
+): Promise<DetailedQuickPickRow[]> {
+  await startCommand(window);
+  await chooseWorkspace(window);
+  return detailedQuickPickRows(window);
+}
+
+/** Types `text` into the screen of `window` and gives the rows once the list has followed. */
+export async function typed(
+  window: string,
+  text: string,
+): Promise<DetailedQuickPickRow[]> {
+  await typeInQuickPick(window, text);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  return detailedQuickPickRows(window);
+}
+
+/** The label of the row that has the focus. */
+export function focusedLabel(
+  rows: readonly DetailedQuickPickRow[],
+): string | undefined {
+  return rows.find(each => each.focused)?.label;
+}
+
+/** The label of the row with the focus after the arrow key `key` was pressed in `window`. */
+export async function focusAfter(
+  window: string,
+  key: 'ArrowUp' | 'ArrowDown',
+): Promise<string | undefined> {
+  await moveQuickPickFocus(window, key);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return focusedLabel(await detailedQuickPickRows(window));
 }

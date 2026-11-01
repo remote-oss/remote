@@ -1000,7 +1000,7 @@ F-0801.AC-3	acceptance
 F-0801.AC-4	acceptance	
 F-0801.AC-5	acceptance	
 F-0801.AC-6	acceptance	
-F-0801.AC-7	deferred	containers release 1: later (multi-root)
+F-0801.AC-7	deferred	containers release 1: later (Compose)
 F-0801.AC-8	acceptance	
 F-0801.AC-9	acceptance	
 F-0801.AC-10	acceptance	
@@ -1041,36 +1041,36 @@ F-0802.AC-1	deferred	containers release 1: later (New Dev Container, F-0806; vol
 F-0802.AC-2	acceptance	
 F-0802.AC-3	acceptance	
 F-0802.AC-4	acceptance	
-F-0802.AC-5	todo	
-F-0802.AC-6	todo	
+F-0802.AC-5	acceptance	
+F-0802.AC-6	acceptance	
 F-0802.AC-7	acceptance	
 F-0802.AC-8	acceptance	
 F-0802.AC-9	acceptance	
 F-0802.AC-10	acceptance	
-F-0802.AC-11	todo	
-F-0802.AC-12	todo	
+F-0802.AC-11	acceptance	
+F-0802.AC-12	acceptance	
 F-0802.AC-13	acceptance	
-F-0802.AC-14	todo	
+F-0802.AC-14	deferred	containers release 1: later (the log terminal, F-0104)
 F-0802.AC-15	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0802.AC-16	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0802.AC-17	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0802.AC-18	todo	
-F-0802.AC-19	todo	
-F-0802.AC-20	todo	
-F-0802.AC-21	todo	
-F-0802.AC-22	todo	
+F-0802.AC-18	acceptance	
+F-0802.AC-19	acceptance	
+F-0802.AC-20	acceptance	
+F-0802.AC-21	acceptance	
+F-0802.AC-22	deferred	containers release 1: later (Compose)
 F-0802.AC-23	deferred	containers release 1: later (Compose)
-F-0802.AC-24	todo	
-F-0802.AC-25	todo	
+F-0802.AC-24	acceptance	
+F-0802.AC-25	acceptance	
 F-0802.AC-26	todo	
-F-0802.AC-27	todo	
-F-0802.AC-28	todo	
+F-0802.AC-27	acceptance	
+F-0802.AC-28	acceptance	
 F-0802.AC-29	todo	
-F-0802.AC-30	todo	
+F-0802.AC-30	acceptance	
 F-0802.AC-31	acceptance	
 F-0802.AC-32	deferred	containers release 1: later (Compose)
-F-0802.AC-33	todo	
-F-0802.AC-34	todo	
+F-0802.AC-33	acceptance	
+F-0802.AC-34	acceptance	
 F-0802.AC-35	todo	
 F-0802.AC-36	deferred	containers release 1: later (Compose)
 F-0802.AC-37	todo	

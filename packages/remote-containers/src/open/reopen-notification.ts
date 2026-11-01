@@ -16,7 +16,7 @@ export const REOPEN_NOTIFICATION_KEY =
 
 /** The English templates of the notification, by their string ids. */
 const REOPEN_TEMPLATES = {
-  S426: `{0} Reopen folder to develop in a container ([learn more](${CONTAINERS_INTRODUCTION})).{1}`,
+  S426: '{0} Reopen folder to develop in a container ([learn more]({2})).{1}',
   S186: 'Folder contains a Dev Container configuration file.',
   S368: 'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.',
   S293: 'Reopen in Container',
@@ -140,6 +140,7 @@ export async function offerReopen(
         kind === 'folder' ? REOPEN_TEMPLATES.S186 : REOPEN_TEMPLATES.S368,
       ),
       '',
+      CONTAINERS_INTRODUCTION,
     ]),
     [reopen, suppress],
   );
