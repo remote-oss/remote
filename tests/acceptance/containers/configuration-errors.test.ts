@@ -14,6 +14,7 @@ import {
 import {
   answerDialog,
   dialogOf,
+  editorGroups,
   editorTabs,
   chooseQuickPickItem,
   pressEscape,
@@ -206,11 +207,23 @@ describe('F-0301 configuration errors (card containers-50)', function () {
       10_000,
     );
     await edited.running.catch(() => undefined);
+    await waitFor(
+      `window ${edited.window} to show the attempt's log beside the configuration`,
+      async () => (await editorGroups(edited.window)).length === 2,
+      10_000,
+    );
     deepStrictEqual(
       [
         [pick.placeholder, pick.items],
         (await windowState(edited.window)).remoteName,
-        (await editorTabs(edited.window)).map(entry => entry.preview),
+        (await editorGroups(edited.window)).map(group =>
+          group.map(entry => [
+            entry.label.startsWith('dev-containers-attempt-')
+              ? 'the attempt log'
+              : entry.label,
+            entry.preview,
+          ]),
+        ),
       ],
       [
         [
@@ -223,7 +236,7 @@ describe('F-0301 configuration errors (card containers-50)', function () {
           ],
         ],
         null,
-        [true],
+        [[['devcontainer', true]], [['the attempt log', true]]],
       ],
     );
   });
