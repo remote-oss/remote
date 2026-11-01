@@ -309,7 +309,7 @@ describe('F-0408 the connect progress (card containers-53)', function () {
     }
   });
 
-  it.only('F-0408 AC-19 (p19): a build that fails shows the dialog with S087 already gone, and nothing of the connect is left in the centre', async () => {
+  it('F-0408 AC-19 (p19): a build that fails shows the dialog with S087 already gone, and nothing of the connect is left in the centre', async () => {
     const folder = slowBuildFolder('c53-fail', 'Progress Fail', 'exit 7');
     const name = await openFolderWindow(folder);
     try {
