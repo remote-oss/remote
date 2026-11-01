@@ -1270,6 +1270,17 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
   return rows;
 }
 
+/** The titles of the columns of core's Ports view in window `name`, in order. */
+export async function portsColumns(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression('Ports')};
+      return [...(pane?.querySelectorAll('.monaco-table-th') ?? [])].map(cell => (cell.textContent ?? '').replaceAll('\\u00a0', ' ').trim()).filter(text => text !== '');
+    })()`,
+  );
+}
+
 /** The titles of row `port`'s inline actions on hover, and of its context menu's items, in order. */
 export async function portRowActions(
   name: string,
