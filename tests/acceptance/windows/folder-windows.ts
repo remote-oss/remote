@@ -27,23 +27,45 @@ export function activations(name: string): number {
   return windowEvents(name).filter(each => each.event === 'activated').length;
 }
 
-/** Opens a local window on `target` from the local window, and waits for the agent of the window named `name`. */
+/** How many names a window on one folder can take: the folder's name, then with -2, -3, … up to this many. */
+const NAMES_PER_FOLDER = 8;
+
+/**
+ * Opens a local window on `target` from the local window, and waits for its agent. The agent names the window `name`
+ * when no live window holds it, and `name-2`, `name-3`, … otherwise; the call gives the name whose agent activated.
+ */
 async function openLocalWindow(target: string, name: string): Promise<string> {
-  const before = activations(name);
+  const candidates = [
+    name,
+    ...[...Array(NAMES_PER_FOLDER - 1).keys()].map(
+      position => `${name}-${String(position + 2)}`,
+    ),
+  ];
+  const before = candidates.map(candidate => activations(candidate));
   await inWindow(
     'local',
     'acceptance.agent.openWindow',
     target === 'memfs:/' ? target : pathToFileURL(target).href,
   );
+  const taken = {name};
   await waitFor(
-    `window ${name} to activate its agent`,
-    () => activations(name) > before,
+    `a window named ${name} to activate its agent`,
+    () => {
+      const grown = candidates.find(
+        (candidate, position) =>
+          activations(candidate) > (before[position] ?? 0),
+      );
+      if (grown !== undefined) {
+        taken.name = grown;
+      }
+      return grown !== undefined;
+    },
     60_000,
   );
-  return name;
+  return taken.name;
 }
 
-/** Opens a local window on `folder` and waits for its agent; the window is named after the folder. */
+/** Opens a local window on `folder` and waits for its agent; the window is named after the folder, with a number when another live window has that name. */
 export function openFolderWindow(folder: string): Promise<string> {
   return openLocalWindow(folder, path.basename(folder));
 }

@@ -1155,6 +1155,43 @@ describe("the resolver host: the window's connection (F-8201.BR-3)", () => {
   });
 });
 
+describe('the resolver host: the first resolve start is announced (card connect-100)', () => {
+  it('F-2410 AC-12: onFirstResolveStarted is called once, with the decoded target, at the first resolve start, before its outcome', async () => {
+    const context = await setup();
+    const started: Array<string | undefined> = [];
+    let atConnectStart: number | undefined;
+    handleOf(context.registration).onFirstResolveStarted(target => {
+      started.push(target.rawHostString);
+    });
+    context.connector.during = () => {
+      atConnectStart = started.length;
+    };
+    await resolve(context);
+    deepStrictEqual([atConnectStart, started], [1, ['my-alias']]);
+  });
+
+  it('F-2410 AC-12: it is not called again for a second resolve', async () => {
+    const context = await setup();
+    let calls = 0;
+    handleOf(context.registration).onFirstResolveStarted(() => {
+      calls += 1;
+    });
+    await resolve(context, AUTHORITY, 1);
+    await resolve(context, AUTHORITY, 2);
+    deepStrictEqual(calls, 1);
+  });
+
+  it('F-2410 AC-12: a listener added after the start is called at once, with the first started target', async () => {
+    const context = await setup();
+    await resolve(context);
+    const started: Array<string | undefined> = [];
+    handleOf(context.registration).onFirstResolveStarted(target => {
+      started.push(target.rawHostString);
+    });
+    deepStrictEqual(started, ['my-alias']);
+  });
+});
+
 describe('the resolver host: every settled resolve is announced (card containers-35)', () => {
   it('card containers-35: onResolveSettled fires once per resolve that settles, the first and a later one, connected or not', async () => {
     const context = await setup();

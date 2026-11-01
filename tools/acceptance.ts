@@ -63,7 +63,7 @@ import {
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
-import type {HostBase} from './host-variants.ts';
+import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
   controlFolderOf,
@@ -180,8 +180,11 @@ export interface HarnessVariables {
   HARNESS_SSH_CONFIG: string;
   /** The container id, for `docker exec` checks on the host. */
   HARNESS_CONTAINER: string;
-  /** The container id of the run's Ubuntu 26.04 host, when a launch of the run connects to one (`hostBase`). */
-  HARNESS_HOST_UBUNTU_CONTAINER?: string;
+  /**
+   * The container ids of the run's hosts of other bases, as JSON from base to id: one per base that a launch of the run
+   * connects to (`hostBase`), when there is one.
+   */
+  HARNESS_HOST_CONTAINERS?: string;
   /** The host's address on the run network, which the `routed` alias names; a route cut is scoped to it. */
   HARNESS_ROUTED_ADDRESS: string;
   /** The run's folder: user data, extensions, keys. */
@@ -314,6 +317,18 @@ function masterAlias(
   ]);
 }
 
+/**
+ * The container ids of the run's hosts of other bases, by base, from `HARNESS_HOST_CONTAINERS`; none when it is unset.
+ */
+export function baseContainersOf(
+  environment: Readonly<Record<string, string | undefined>>,
+): Partial<Record<HostBase, string>> {
+  const named = environment.HARNESS_HOST_CONTAINERS;
+  return named === undefined
+    ? {}
+    : (JSON.parse(named) as Partial<Record<HostBase, string>>);
+}
+
 /** The ssh_config of the run's host of `base`: the run's own for Alpine's host, `ssh_config-<base>` beside it otherwise. */
 export function sshConfigOf(
   runFolder: string,
@@ -332,7 +347,7 @@ export function sshConfigOf(
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
- * forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
+ * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
  * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
@@ -414,6 +429,20 @@ export function harnessSshConfig(
     ...accountAlias(
       'noforward',
       'harness-nofwd',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'nosocket',
+      'harness-nosock',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'noall',
+      'harness-noall',
       port,
       runFolder,
       keyLines(runFolder),
@@ -813,35 +842,37 @@ async function prepare(
   );
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
-  // A launch whose window connects to a host of another base gets that host beside the run's, with the same key and
-  // password, the same download names and its own ssh_config.
-  const ubuntuHost = chosen.some(launch => launch.hostBase === 'ubuntu-26.04')
-    ? startHostContainer(
-        command,
-        root,
-        runId,
-        runFolder,
-        [
-          ...(downloads === undefined ? [] : downloadHostArguments()),
-          ...(keys?.hostArguments ?? []),
-        ],
-        'ubuntu-26.04',
-      )
-    : undefined;
-  if (ubuntuHost !== undefined) {
-    started.push(ubuntuHost.container);
-    const ubuntuConfig = sshConfigOf(runFolder, 'ubuntu-26.04');
+  // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
+  // same key and password, the same download names and its own ssh_config.
+  const baseHosts: Partial<Record<HostBase, string>> = {};
+  for (const base of HOST_BASE_VARIANTS.filter(variant =>
+    chosen.some(launch => launch.hostBase === variant),
+  )) {
+    const baseHost = startHostContainer(
+      command,
+      root,
+      runId,
+      runFolder,
+      [
+        ...(downloads === undefined ? [] : downloadHostArguments()),
+        ...(keys?.hostArguments ?? []),
+      ],
+      base,
+    );
+    started.push(baseHost.container);
+    baseHosts[base] = baseHost.container;
+    const baseConfig = sshConfigOf(runFolder, base);
     writeFileSync(
-      ubuntuConfig,
+      baseConfig,
       harnessSshConfig(
-        ubuntuHost.port,
+        baseHost.port,
         runFolder,
         agentSocket,
-        connectRunNetwork(command, runId, ubuntuHost.container),
+        connectRunNetwork(command, runId, baseHost.container),
         controlFolderOf(runFolder),
       ),
     );
-    await waitForHost(dependencies, ubuntuConfig);
+    await waitForHost(dependencies, baseConfig);
   }
   await dependencies.bundleSuite(root);
   const vscodium =
@@ -946,9 +977,9 @@ async function prepare(
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
-    ...(ubuntuHost === undefined
+    ...(Object.keys(baseHosts).length === 0
       ? {}
-      : {HARNESS_HOST_UBUNTU_CONTAINER: ubuntuHost.container}),
+      : {HARNESS_HOST_CONTAINERS: JSON.stringify(baseHosts)}),
     HARNESS_ROUTED_ADDRESS: routedAddress,
     HARNESS_RUN_FOLDER: runFolder,
     HARNESS_RUN_ID: runId,
@@ -1077,8 +1108,9 @@ function runHostSetup(
 /**
  * Runs each launch in order and returns their exit codes. The VS Code run has one configuration and needs no label;
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
- * A launch with host setup runs it before each attempt, and waits the helper's grace after the launch before it,
- * so its resolve finds no live helper of the run.
+ * A launch with host setup runs it on its own host before each attempt (the harness host, or the host of its
+ * `hostBase` in `baseContainers`), and waits the helper's grace after the launch before it, so its resolve finds no
+ * live helper of the run.
  */
 export async function runLaunches(
   runFolder: string,
@@ -1095,6 +1127,7 @@ export async function runLaunches(
     console.log(line);
   },
   lock: LaunchLock = NO_LOCK,
+  baseContainers: Readonly<Partial<Record<HostBase, string>>> = {},
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -1123,13 +1156,27 @@ export async function runLaunches(
   }
   return exitCodes;
 
+  /** The container of the host the launch's window connects to: the harness host, or the run's host of its base. */
+  function hostContainerOf(launch: Launch): string {
+    if (launch.hostBase === undefined) {
+      return container;
+    }
+    const based = baseContainers[launch.hostBase];
+    if (based === undefined) {
+      throw new Error(
+        `${launch.label}: the run started no host of base ${launch.hostBase}`,
+      );
+    }
+    return based;
+  }
+
   /** The launch's attempts (one, or two after a hung window). */
   function runAttempts(launch: Launch | undefined): Promise<number> {
     return runWithRetry(async () => {
       // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
       if (launch !== undefined) {
         if (launch.hostSetup !== undefined) {
-          runHostSetup(command, container, launch.hostSetup);
+          runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
         }
         writeUserSettings(
           runFolder,
@@ -1318,6 +1365,7 @@ export async function runAcceptance(
             console.log(line);
           },
         ),
+        baseContainersOf({...variables}),
       )),
     );
     exitCode = exitCodes.find(code => code !== 0) ?? 0;
@@ -1439,7 +1487,8 @@ export function vscodiumConfiguration(
     ...(launch.hostBase === undefined
       ? {}
       : {
-          HARNESS_CONTAINER: environment.HARNESS_HOST_UBUNTU_CONTAINER ?? '',
+          HARNESS_CONTAINER:
+            baseContainersOf(environment)[launch.hostBase] ?? '',
           HARNESS_SSH_CONFIG: sshConfigOf(runFolder, launch.hostBase),
           HARNESS_HOST_BASE: launch.hostBase,
         }),

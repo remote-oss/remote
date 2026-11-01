@@ -3,6 +3,7 @@ import {
   FETCH_VARIANTS,
   fetchVariantOf,
   HOST_BASE_VARIANTS,
+  VARIANT_HOST_BASES,
   hostBaseIs,
   hostBaseOf,
   fetchVariantsToRun,
@@ -121,8 +122,14 @@ describe('the host variants of a run', () => {
     );
   });
 
-  it('tooling-70: the host bases are Alpine and Ubuntu 26.04, in that order', () => {
-    deepStrictEqual(HOST_BASE_VARIANTS, ['alpine', 'ubuntu-26.04']);
+  it('tooling-70, tooling-35: the host bases are Alpine, Ubuntu 26.04, Ubuntu 18.04 and Debian 12, in that order, and the variant run takes the host-base rows to Ubuntu 26.04 only', () => {
+    deepStrictEqual(
+      [HOST_BASE_VARIANTS, VARIANT_HOST_BASES],
+      [
+        ['alpine', 'ubuntu-26.04', 'ubuntu-18.04', 'debian-12'],
+        ['ubuntu-26.04'],
+      ],
+    );
   });
 
   it('tooling-75: an unset host base is Alpine, and a named one is that base only', () => {

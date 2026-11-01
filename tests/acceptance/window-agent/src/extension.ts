@@ -4,6 +4,9 @@ import * as vscode from 'vscode';
 import {MEMORY_SCHEME, MemoryFileSystem} from './memory-file-system.ts';
 import {
   claimWindowName,
+  folderWindowName,
+  processRuns,
+  recordedWindowNames,
   recordWindowName,
   windowNameOf,
 } from './window-name.ts';
@@ -53,7 +56,12 @@ function activationName(agentFolder: string): string {
   const name =
     first === undefined
       ? claimWindowName(path.join(agentFolder, 'claims'))
-      : windowNameOf(first);
+      : folderWindowName(
+          windowNameOf(first),
+          recordedWindowNames(path.join(agentFolder, 'pids')),
+          processRuns,
+          process.pid,
+        );
   recordWindowName(path.join(agentFolder, 'pids'), process.pid, name);
   return name;
 }

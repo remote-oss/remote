@@ -417,6 +417,14 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
         await reopenInContainer(name);
         gate.done = true;
         await sampler;
+        await waitFor(
+          `window ${name}'s remote indicator to leave Opening Remote...`,
+          async () =>
+            !(await statusBarText(name, 'status.host')).startsWith(
+              'Opening Remote',
+            ),
+          30_000,
+        );
         looks.push({
           toasts: [...toasts].sort(),
           indicator: await statusBarText(name, 'status.host'),

@@ -6,12 +6,15 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
+  containersLogSince,
   devContainerFolder,
   devContainersOf,
   reloadWindow,
   reopenInContainer,
   reopenStarted,
   runLabelArguments,
+  startInWindow,
   variable,
   waitFor,
   windowState,
@@ -440,6 +443,57 @@ describe('F-0409 the container of a folder: stops, removals, failures and worksp
         [folder, [containerId], 'running'],
       );
       await closeWindow(second);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0417 AC-45 (c91-two-windows): a second window on the folder of a connected window, which has a name of its own, stays local and unchanged when it runs Reopen in Container, and no second container is made', async () => {
+    const folder = devContainerFolder('c91-two-windows', {name: 'Two Windows'});
+    try {
+      const first = await openFolderWindow(folder);
+      await reopenInContainer(first);
+      const second = await openFolderWindow(folder);
+      const titleBefore = await windowTitle(second);
+      const mark = containersLog().length;
+      await startInWindow(second, 'remote-containers.reopenInContainer');
+      await waitFor(
+        'the second window to read its configuration',
+        () =>
+          Promise.resolve(
+            containersLogSince(mark).some(line =>
+              line.startsWith('Reading configuration:'),
+            ),
+          ),
+        60_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+      deepStrictEqual(
+        {
+          names: [first, second],
+          secondRemote: (await windowState(second)).remoteName,
+          titleBefore,
+          titleAfter: await windowTitle(second),
+          dialog: await dialogOf(second),
+          notifications: await notifications(second),
+          firstRemote: (await windowState(first)).remoteName,
+          containers: (await devContainersOf(folder)).length,
+        },
+        {
+          names: ['c91-two-windows', 'c91-two-windows-2'],
+          secondRemote: null,
+          titleBefore: '[c91-two-windows]',
+          titleAfter: '[c91-two-windows]',
+          dialog: undefined,
+          notifications: [
+            'Folder contains a Dev Container configuration file. Reopen folder to develop in a container (learn more).',
+          ],
+          firstRemote: 'dev-container',
+          containers: 1,
+        },
+      );
+      await closeWindow(second);
+      await closeWindow(first);
     } finally {
       await removeContainers(folder);
     }

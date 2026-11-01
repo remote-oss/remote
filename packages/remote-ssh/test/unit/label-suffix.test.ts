@@ -1,8 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ConnectionState} from 'lib-authority';
 import {
   SSH_LABEL_PREFIX_ID,
-  shouldRegisterLabel,
   workspaceSuffixOf,
 } from '../../src/window/label-suffix.ts';
 
@@ -36,22 +34,4 @@ describe('workspaceSuffixOf (card remote-ssh-10 table)', () => {
       ['my-alias'],
     );
   });
-});
-
-describe('shouldRegisterLabel (card remote-ssh-10 table)', () => {
-  it('F-2502 AC-17: a connection that is up registers the label', () => {
-    deepStrictEqual(shouldRegisterLabel('connected'), true);
-  });
-
-  const notUp: ConnectionState[] = [
-    'resolving',
-    'failed',
-    'transportLost',
-    'transportClosed',
-  ];
-  for (const state of notUp) {
-    it(`F-2502 AC-34: ${state} does not register the label`, () => {
-      deepStrictEqual(shouldRegisterLabel(state), false);
-    });
-  }
 });

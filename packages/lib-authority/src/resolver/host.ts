@@ -189,6 +189,8 @@ export interface ResolverHandle {
     {decodedTarget: DecodedTarget; state: ConnectionState} | undefined;
   /** How the last settled resolve of this window ended, from the tracker. */
   lastResolve(): LastResolve;
+  /** Calls `listener` once, with the decoded target, when the first resolve of this extension host starts; at once when it has started already. */
+  onFirstResolveStarted(listener: (target: DecodedTarget) => void): void;
   /** Calls `listener` once, when the first resolve of this extension host settles. */
   onFirstResolveSettled(listener: () => void): void;
   /** Calls `listener` after every resolve of this window settles, the first and each later one, in success or in failure. */
@@ -238,6 +240,9 @@ export interface Readiness {
 /** What the host remembers between two resolves of one window. */
 interface Memory {
   connectedBefore: boolean;
+  /** The first started target, so a listener added after the start is called at once. */
+  started: DecodedTarget | undefined;
+  startListeners: Array<(target: DecodedTarget) => void>;
   settled: boolean;
   listeners: Array<() => void>;
   settledListeners: Array<() => void>;
@@ -279,6 +284,8 @@ export async function registerResolver(
   const tracker = new ConnectionTracker();
   const memory: Memory = {
     connectedBefore: false,
+    started: undefined,
+    startListeners: [],
     settled: false,
     listeners: [],
     settledListeners: [],
@@ -459,6 +466,12 @@ export async function registerResolver(
       target: decoded,
       attempt: context.resolveAttempt,
     });
+    if (memory.started === undefined) {
+      memory.started = decoded;
+      for (const listener of memory.startListeners.splice(0)) {
+        listener(decoded);
+      }
+    }
     let result: Connected | Failed;
     try {
       result = await connect(decoded, {
@@ -530,6 +543,13 @@ export async function registerResolver(
           : {decodedTarget: current.target, state: current.state};
       },
       lastResolve: () => tracker.lastResolve(),
+      onFirstResolveStarted: listener => {
+        if (memory.started !== undefined) {
+          listener(memory.started);
+        } else {
+          memory.startListeners.push(listener);
+        }
+      },
       onFirstResolveSettled: listener => {
         if (memory.settled) {
           listener();

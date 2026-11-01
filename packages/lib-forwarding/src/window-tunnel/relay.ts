@@ -30,6 +30,8 @@ export type WindowTunnelOutcome =
       onClosed: (listener: (detail: string) => void) => void;
     }
   | {kind: 'tunnelNotReady'}
+  /** The port accepted a connection and closed it at once: the host refuses the forward the session set up. */
+  | {kind: 'forwardRefused'}
   | {kind: 'listenFailed'; detail: string};
 
 /** Everything a relay tunnel is made from. */

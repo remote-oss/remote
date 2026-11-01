@@ -19,6 +19,7 @@ import {
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
+  CONNECTION_CLOSED_TEXT,
   connectWaitMilliseconds,
   type Forward,
   type Invocation,
@@ -74,6 +75,13 @@ export interface TunnelStepDependencies {
 
 /** How long the second `ssh`'s port may take to accept a connection once its forwards are set up. */
 const FORWARD_READY_MILLISECONDS = 10_000;
+
+/**
+ * How long the connection that proves the second `ssh`'s port accepting stays open on a first resolve, before the
+ * forward counts as carrying it. A host that refuses the forward has ssh close such a connection within a few
+ * milliseconds (measured 10 ms on a local host), so the bound covers a slow link.
+ */
+const FORWARD_REFUSAL_MILLISECONDS = 500;
 
 /** The reason of a tunnel whose port never accepted: "Error establishing tunnel (Max wait time exhausted)." */
 const MAX_WAIT_EXHAUSTED = {
@@ -254,6 +262,10 @@ async function openTerminalTunnel(
       ...dependencies.limits,
       readyMilliseconds: FORWARD_READY_MILLISECONDS,
     },
+    // After a connect has worked the refusal stays a reconnection, which is how the window recovers a lost one.
+    ...(input.isReconnection
+      ? {}
+      : {refusalMilliseconds: FORWARD_REFUSAL_MILLISECONDS}),
     stopSession: () => {
       session.stop();
     },
@@ -263,6 +275,18 @@ async function openTerminalTunnel(
     // The session is the tunnel: stopped, there is nothing left for the wait to hand over, and it ends at its bound.
     session.stop();
     return CANCELLED;
+  }
+  if (outcome.kind === 'forwardRefused') {
+    dependencies.logger.warn(
+      'the host refused the forward of the tunnel: the port closed the connection that proved it accepting',
+    );
+    return {
+      kind: 'failed',
+      failure: {
+        kind: 'channelClosed',
+        reason: {text: CONNECTION_CLOSED_TEXT},
+      },
+    };
   }
   if (outcome.kind !== 'open') {
     return {

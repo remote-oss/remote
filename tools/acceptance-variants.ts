@@ -14,7 +14,7 @@
 import {spawn} from 'node:child_process';
 import {
   FETCH_VARIANTS,
-  HOST_BASE_VARIANTS,
+  VARIANT_HOST_BASES,
   SHELL_VARIANTS,
 } from './host-variants.ts';
 import {isMainModule, REPOSITORY_ROOT, resolveBinary} from './repository.ts';
@@ -57,7 +57,7 @@ export function variantRuns(): VariantRun[] {
       testFiles: ['tests/acceptance/server/fetch-tools.test.ts'],
       environment: {HARNESS_HOST_FETCH: variant},
     })),
-    ...HOST_BASE_VARIANTS.filter(base => base !== 'alpine').map(base => ({
+    ...VARIANT_HOST_BASES.map(base => ({
       label: `host base ${base}`,
       testFiles: HOST_BASE_ROWS,
       environment: {HARNESS_HOST_BASE: base},

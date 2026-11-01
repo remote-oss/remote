@@ -67,6 +67,7 @@ function stepWith(
     connectWait?: ConnectWaitSettings;
     retryMilliseconds?: number;
     input?: string;
+    reconnection?: boolean;
   } = {},
 ) {
   const clock = new FakeClock();
@@ -139,7 +140,9 @@ function stepWith(
     tunnelPath: () => step.tunnelPath(),
     open: () =>
       step.openTunnel(
-        INPUT,
+        options.reconnection === true
+          ? {...INPUT, isReconnection: true}
+          : INPUT,
         lease,
         options.server ?? STARTED.server,
         () => {
@@ -409,7 +412,7 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     const pending = context.open();
     await settled();
     context.opened().write(`${TUNNEL_SUCCESS_LINE}\n`);
-    await advance(context.clock, 30);
+    await advance(context.clock, 550);
     const result = await pending;
     if (result.kind !== 'done') {
       throw new Error('the tunnel did not open');
@@ -423,6 +426,68 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
       host: '127.0.0.1',
       port: LOCAL_PORT,
     });
+  });
+
+  /** The step of a socket-mode window, at the moment the login printed the success line and the port accepted. */
+  async function accepted(reconnection: boolean) {
+    const context = stepWith({
+      settings: SOCKET,
+      server: SOCKET_SERVER,
+      reconnection,
+    });
+    const pending = context.open();
+    await settled();
+    context.opened().write(`${TUNNEL_SUCCESS_LINE}\n`);
+    await advance(context.clock, 30);
+    return {...context, pending};
+  }
+
+  it('F-2410 7.E1: on a first resolve, a port that closes the connection that proved it accepting fails the step with the reason "Connection closed."', async () => {
+    const {pending, local} = await accepted(false);
+    local.probes[0]?.close();
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {
+        kind: 'channelClosed',
+        reason: {text: 'Connection closed.'},
+      },
+    });
+  });
+
+  it('F-2410 7.E1: that failure stops the session and opens no second tunnel', async () => {
+    const {pending, local, opened, terminals} = await accepted(false);
+    local.probes[0]?.close();
+    await pending;
+    deepStrictEqual([opened().disposed, terminals.opened.length], [true, 1]);
+  });
+
+  it('F-2410 7.E1: that failure is logged as the refused forward', async () => {
+    const {pending, local, sink} = await accepted(false);
+    local.probes[0]?.close();
+    await pending;
+    deepStrictEqual(
+      sink.lines.some(line =>
+        line.message.includes('the host refused the forward of the tunnel'),
+      ),
+      true,
+    );
+  });
+
+  it('F-2410 7.E1: on a first resolve, a connection that stays open for 500 ms is a forward that works, and the step closes it', async () => {
+    const {pending, local, clock} = await accepted(false);
+    await advance(clock, 520);
+    deepStrictEqual(
+      [(await pending).kind, local.probes.map(probe => probe.closed)],
+      ['done', [true]],
+    );
+  });
+
+  it('F-2410 7.E1: after the window has connected, the same refusal is no failure of the step: it opens at once and the window reconnects', async () => {
+    const {pending, local} = await accepted(true);
+    deepStrictEqual(
+      [(await pending).kind, local.probes.map(probe => probe.closed)],
+      ['done', [true]],
+    );
   });
 
   it('#299 ruling 1b: the handshake line the test prints is the one the reader knows', () => {

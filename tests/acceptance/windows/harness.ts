@@ -161,6 +161,8 @@ export interface RecordLine {
   detail?: string;
   /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
   items?: string[];
+  /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
+  active?: string | undefined;
   time: number;
 }
 
@@ -456,8 +458,9 @@ export async function terminalsOf(name: string): Promise<string[] | undefined> {
 async function waitUntil(
   description: string | (() => string),
   ready: () => boolean,
+  milliseconds = WAIT_MILLISECONDS,
 ): Promise<void> {
-  const deadline = Date.now() + WAIT_MILLISECONDS;
+  const deadline = Date.now() + milliseconds;
   while (!ready()) {
     if (Date.now() > deadline) {
       throw new Error(
@@ -1139,14 +1142,35 @@ export async function killWindow(
   }
 }
 
-/** Closes window `name` and resolves once its agent has deactivated. */
-export async function closeWindow(name: string): Promise<void> {
+/**
+ * Closes window `name` and resolves once it's gone: its agent reports `deactivated`, or the extension host it recorded
+ * has exited. Some closes never get the event (8 of 576 in a full containers launch, 2026-11-01): the extension host
+ * ends before its agent writes it. A window whose extension host still runs after the wait fails, naming it.
+ */
+export async function closeWindow(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<void> {
   const before = countOf(name, 'deactivated');
+  const extensionHost = liveProcessIdOf(name);
   send(name, 'workbench.action.closeWindow', []);
   await waitUntil(
-    `window ${name} to deactivate`,
-    () => countOf(name, 'deactivated') > before,
+    () =>
+      `window ${name} to deactivate${extensionHost === undefined ? '' : `: its extension host ${String(extensionHost)} is still running`}`,
+    () =>
+      countOf(name, 'deactivated') > before ||
+      (extensionHost !== undefined && processIsGone(extensionHost)),
+    milliseconds,
   );
+}
+
+/** The process id of window `name`'s live extension host, or undefined when it has none. */
+function liveProcessIdOf(name: string): number | undefined {
+  try {
+    return windowProcessId(name);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Has window `name` run the agent's `command`, which reports one `event`, and gives that report. */

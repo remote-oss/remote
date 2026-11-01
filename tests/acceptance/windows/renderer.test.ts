@@ -3,6 +3,7 @@ import {
   pageAmong,
   pageTitleByName,
   pageTitleFor,
+  pagesOfRemoteness,
   pressUntilClosed,
   type FolderDialogReading,
 } from './renderer.ts';
@@ -340,5 +341,22 @@ describe('pressUntilClosed', () => {
       ...Array<string>(11).fill('/work/inner'),
     ]);
     deepStrictEqual((await outcomeOf(changed, 1)).presses, 1);
+  });
+});
+
+describe('pagesOfRemoteness', () => {
+  const LOCAL = {id: 'p1', type: 'page', title: '[proj]'};
+  const REMOTE = {
+    id: 'p2',
+    type: 'page',
+    title: '[proj [Dev Container: Proj]]',
+  };
+
+  it('tooling-91: of a local and a connected window on one folder, a local window keeps the page without a remote part', () => {
+    deepStrictEqual(pagesOfRemoteness([LOCAL, REMOTE], false), [LOCAL]);
+  });
+
+  it('tooling-91: of a local and a connected window on one folder, a remote window keeps the page with a remote part', () => {
+    deepStrictEqual(pagesOfRemoteness([LOCAL, REMOTE], true), [REMOTE]);
   });
 });

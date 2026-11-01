@@ -30,6 +30,8 @@ function fakeResolver() {
     onFirstResolveSettled: (callback: () => void): void => {
       firstSettle = callback;
     },
+    // The rows never start a resolve, so the start listener never runs.
+    onFirstResolveStarted: (): void => undefined,
     currentConnection: (): CurrentConnection | undefined => connection,
   };
   function settled(value: CurrentConnection | undefined): void {

@@ -72,6 +72,27 @@ async function settled<Value>(
   }
 }
 
+/**
+ * The messages of the toasts shown by every page of the editor, whatever its title: a window that reloads onto another
+ * folder has the title `[]` while it resolves, so no harness name reaches its page.
+ */
+export async function toastsOfPages(): Promise<string[]> {
+  const messages: string[] = [];
+  for (const page of await pages()) {
+    if (page.webSocketDebuggerUrl === undefined) {
+      continue;
+    }
+    messages.push(
+      ...(await evaluateAt<string[]>(
+        page.webSocketDebuggerUrl,
+        'a page',
+        `[...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(each => each.textContent ?? '')`,
+      )),
+    );
+  }
+  return messages;
+}
+
 /** The port the editor chose, from the file it writes in the launch's user-data folder. */
 async function debuggingPort(): Promise<number> {
   const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
@@ -152,6 +173,17 @@ export function pageTitleFor(
     );
   }
   return matching[0];
+}
+
+/**
+ * Of pages whose titles all fit one folder, those of a remote window when `remote`, else those of a local one: a remote
+ * window's title has the remote name after the folder's, so two windows on one folder, one connected, differ by it.
+ */
+export function pagesOfRemoteness(
+  candidates: readonly DebugTarget[],
+  remote: boolean,
+): DebugTarget[] {
+  return candidates.filter(page => page.title.includes(' [') === remote);
 }
 
 /**
@@ -281,7 +313,14 @@ export async function pageOf(
         workspaceFile: state.workspaceFile,
       });
       const candidates = found.filter(page => matches(page.title));
-      const chosen = pageAmong(candidates, name, REMEMBERED_PAGES, isOpen);
+      const chosen =
+        pageAmong(candidates, name, REMEMBERED_PAGES, isOpen) ??
+        pageAmong(
+          pagesOfRemoteness(candidates, state.remoteName !== null),
+          name,
+          REMEMBERED_PAGES,
+          isOpen,
+        );
       if (chosen === undefined && candidates.length > 1) {
         throw new Error(
           `two pages match the window's state: ${JSON.stringify(candidates.map(page => page.title))}`,
@@ -1268,6 +1307,17 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
     throw new Error(`window ${name}: ${rows}`);
   }
   return rows;
+}
+
+/** The titles of the columns of core's Ports view in window `name`, in order. */
+export async function portsColumns(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const pane = ${paneExpression('Ports')};
+      return [...(pane?.querySelectorAll('.monaco-table-th') ?? [])].map(cell => (cell.textContent ?? '').replaceAll('\\u00a0', ' ').trim()).filter(text => text !== '');
+    })()`,
+  );
 }
 
 /** The titles of row `port`'s inline actions on hover, and of its context menu's items, in order. */

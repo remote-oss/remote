@@ -1110,10 +1110,10 @@ describe('the client-search launches', () => {
     launch.label.startsWith('client-'),
   );
 
-  it('coverage-31: there are 21, one for each case of the cases file', () => {
+  it('coverage-31: there are 22, one for each case of the cases file', () => {
     deepStrictEqual(
       [searches.length, clientCases(REPOSITORY_ROOT).length],
-      [21, 21],
+      [22, 22],
     );
   });
 
@@ -1171,10 +1171,10 @@ describe('the client-search launches', () => {
     );
   });
 
-  it('coverage-11: every case cites a criterion of F-2101', () => {
+  it('coverage-11: every case cites a criterion of F-2101, or F-2410 AC-18 for the old client with the server on a socket', () => {
     deepStrictEqual(
       clientCases(REPOSITORY_ROOT).filter(
-        each => !/^F-2101 AC-\d+$/.test(each.cite),
+        each => !/^(F-2101 AC-\d+|F-2410 AC-18)$/.test(each.cite),
       ),
       [],
     );

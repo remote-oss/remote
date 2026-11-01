@@ -221,7 +221,10 @@ describe('the window tunnel through the relay', () => {
 });
 
 describe('the window tunnel of a second ssh session', () => {
-  function forwarded(connectScript: readonly Answer[]): {
+  function forwarded(
+    connectScript: readonly Answer[],
+    refusalMilliseconds?: number,
+  ): {
     clock: FakeClock;
     local: FakeLocalPort;
     stops: number[];
@@ -240,6 +243,7 @@ describe('the window tunnel of a second ssh session', () => {
           scheduler: clock.scheduler(),
           localPort: 50001,
           limits: LIMITS,
+          ...(refusalMilliseconds === undefined ? {} : {refusalMilliseconds}),
           stopSession: () => {
             stops.push(stops.length + 1);
           },
@@ -257,6 +261,35 @@ describe('the window tunnel of a second ssh session', () => {
       ],
       [{host: '127.0.0.1', port: 50001}, [true]],
     );
+  });
+
+  it('with a refusal bound, a probe the port closes within it is a refused forward, and the session ends', async () => {
+    const {open, local, stops} = forwarded(['work'], 500);
+    const pending = open();
+    await settled();
+    local.probes[0]?.close();
+    deepStrictEqual([(await pending).kind, stops], ['forwardRefused', [1]]);
+  });
+
+  it('with a refusal bound, a probe that stays open for it is closed and the tunnel opens', async () => {
+    const {open, local, clock, stops} = forwarded(['work'], 500);
+    const pending = open();
+    await settled();
+    await advanced(clock, 500);
+    deepStrictEqual(
+      [(await pending).kind, local.probes.map(probe => probe.closed), stops],
+      ['open', [true], []],
+    );
+  });
+
+  it('with a refusal bound, the bound does not start until the port has accepted', async () => {
+    const {open, local, clock} = forwarded(['fail', 'work'], 500);
+    const pending = open();
+    await settled();
+    await advanced(clock, LIMITS.retryMilliseconds);
+    await advanced(clock, 1);
+    local.probes[0]?.close();
+    deepStrictEqual((await pending).kind, 'forwardRefused');
   });
 
   it('waits for the port, trying again after each refusal', async () => {
