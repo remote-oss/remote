@@ -280,7 +280,7 @@ describe('the port attributes of the configuration (card containers-73)', functi
     );
   });
 
-  it("F-1101 AC-3 (ruling-1558-own-port): a detected port no key matches is labelled Other (<port>) with no notice, and the server's own listening port gets no row", async () => {
+  it("F-1101 AC-3 (other-label): a detected port no key matches is labelled Other (<port>) with no notice, and the server's own listening port gets no row", async () => {
     const userPort = await freePort();
     const window = await connectedWith('c73b-ac3', {
       otherPortsAttributes: {label: 'Other', onAutoForward: 'silent'},
