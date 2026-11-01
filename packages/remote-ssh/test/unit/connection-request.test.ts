@@ -271,6 +271,19 @@ describe("the install connection's request in terminal mode (card connect-17)", 
     );
   });
 
+  it('F-2107 BR-1: with a RemoteCommand in effect the request carries no remote program', () => {
+    const request = installRequestOf(
+      {...INPUT, target: {kind: 'plain', text: 'alex@dev:2222'}},
+      {...TERMS, remoteCommandInEffect: true},
+      STATE,
+      SETTINGS,
+      ENVIRONMENT,
+      undefined,
+      WAIT,
+    );
+    deepStrictEqual('remoteProgram' in request, false);
+  });
+
   it('F-2104 6.3: with a SOCKS port it holds the dynamic forward and keeps the user forwards', () => {
     const request = installWith(41000);
     deepStrictEqual(

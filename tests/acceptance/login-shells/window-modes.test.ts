@@ -202,6 +202,24 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
     });
   });
 
+  it('F-2107 BR-1 (socket-mode-remote-command): in socket mode a host with RemoteCommand exec zsh -l connects while remote.SSH.enableRemoteCommand is on, and the .zshenv export reaches a task', async () => {
+    await withRemoteCommands({'rc-zsh': 'exec zsh -l'}, async () => {
+      await freshServer('harness-bash');
+      await setting('remote.SSH.enableRemoteCommand', true);
+      await setting('remote.SSH.remoteServerListenOnSocket', true);
+      await writeHomeFile('harness-bash', '.zshenv', 'export F2107_SOCKET=1\n');
+      try {
+        const environment = await withWindow('rc-zsh', 'wm-br1-socket', () =>
+          taskEnvironment('wm-br1-socket', 'harness-bash', 'wm-br1-socket'),
+        );
+        deepStrictEqual(environment.F2107_SOCKET, '1');
+      } finally {
+        await setting('remote.SSH.remoteServerListenOnSocket', undefined);
+        await removeHomeFiles('harness-bash', '.zshenv');
+      }
+    });
+  });
+
   it('F-2704 AC-31 (remote-command-echo): a host with RemoteCommand echo hi and enableRemoteCommand on fails within 5 s with the dialog of AC-13 and no notice', async () => {
     await withRemoteCommands({'rc-end': 'echo hi'}, async () => {
       await freshServer('harness-bash');

@@ -10,6 +10,7 @@ import {
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
 import {posixQuote} from 'lib-host';
+import {TUNNEL_COMMAND} from '../arguments/invocation.ts';
 import {preludeProgram} from '../process/remote-program.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
@@ -124,6 +125,20 @@ export function connectionStart(
         prelude: `exec ${start.remoteProgram}\n${start.prelude}`,
       }
     : start;
+}
+
+/**
+ * The start of the tunnel `ssh`: its fixed command as the remote program, or, with the host's RemoteCommand in effect,
+ * no remote program (ssh refuses one beside it) and the command as one line for the shell the RemoteCommand starts to
+ * read from its input.
+ */
+export function tunnelStart(remoteCommandInEffect: boolean): {
+  remoteProgram?: string;
+  input?: string;
+} {
+  return remoteCommandInEffect
+    ? {input: `exec sh -c ${posixQuote(TUNNEL_COMMAND)}\n`}
+    : {remoteProgram: TUNNEL_COMMAND};
 }
 
 /** What the first lines of a session's output say about the bootstrap. */

@@ -421,6 +421,37 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     );
   });
 
+  it('F-2704 AC-30: a connection request that carries a remote program while a RemoteCommand is in effect is refused, and a connection without a program or any other purpose is not', () => {
+    const connection = makeRequest({
+      effective: {remoteCommand: 'exec zsh -l'},
+      remoteCommandInEffect: true,
+    });
+    deepStrictEqual(
+      [
+        () => buildInvocation({...connection, remoteProgram: 'sh -c prog'}),
+        () => buildInvocation(connection),
+        () =>
+          buildInvocation({
+            ...connection,
+            purpose: 'oneShot',
+            remoteProgram: 'true',
+          }),
+      ].map(call => {
+        try {
+          call();
+          return 'built';
+        } catch (caught) {
+          return (caught as Error).message;
+        }
+      }),
+      [
+        'a connection whose RemoteCommand is in effect takes no remote program',
+        'built',
+        'built',
+      ],
+    );
+  });
+
   it('F-2107.BR-1: no remote command adds no RemoteCommand', () => {
     const invocation = buildInvocation(
       makeRequest({remoteCommandInEffect: false}),
@@ -777,6 +808,32 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
       'alias',
       TUNNEL_COMMAND,
     ]);
+  });
+
+  it('F-2107 BR-1: a tunnel run with a RemoteCommand in effect has no remote command and ends with the host, and with none in effect it ends with its own command and RemoteCommand=none', () => {
+    const inEffect = buildInvocation(
+      makeRequest({
+        purpose: 'tunnel',
+        effective: {remoteCommand: 'exec zsh -l'},
+        remoteCommandInEffect: true,
+      }),
+    );
+    const disabled = buildInvocation(
+      makeRequest({
+        purpose: 'tunnel',
+        effective: {remoteCommand: 'exec zsh -l'},
+        remoteCommandInEffect: false,
+      }),
+    );
+    deepStrictEqual(
+      [
+        inEffect.arguments.at(-1),
+        inEffect.arguments.includes('RemoteCommand=none'),
+        disabled.arguments.at(-1) === TUNNEL_COMMAND,
+        disabled.arguments.includes('RemoteCommand=none'),
+      ],
+      ['alias', false, true, true],
+    );
   });
 
   it('brief, #299: a tunnel run ignores a remoteProgram', () => {

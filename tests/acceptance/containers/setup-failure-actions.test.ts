@@ -237,7 +237,7 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
     }
   });
 
-  it.skip('F-0502 AC-29 (c43-edit-locally): Edit devcontainer.json Locally after a failed setup reloads the same window as the local folder with devcontainer.json open and focused, and the failed attempt’s log in a second editor group as a preview tab (skipped until #1479)', async () => {
+  it('F-0502 AC-29 (c43-edit-locally): Edit devcontainer.json Locally after a failed setup reloads the same window as the local folder with devcontainer.json open and focused, and the failed attempt’s log in a second editor group as a preview tab', async () => {
     const folder = failingBuildFolder('c43-edit-locally');
     const name = await failedSetup(folder);
     try {

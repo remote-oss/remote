@@ -1,6 +1,7 @@
 import {appendFileSync, existsSync, mkdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import {MEMORY_SCHEME, MemoryFileSystem} from './memory-file-system.ts';
 import {
   claimWindowName,
   recordWindowName,
@@ -47,7 +48,8 @@ function agentFolderOf(): string | undefined {
  * process id never carries the name of the window that ran in it before.
  */
 function activationName(agentFolder: string): string {
-  const first = vscode.workspace.workspaceFolders?.[0]?.uri.path;
+  const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  const first = folder?.scheme === MEMORY_SCHEME ? MEMORY_SCHEME : folder?.path;
   const name =
     first === undefined
       ? claimWindowName(path.join(agentFolder, 'claims'))
@@ -201,6 +203,12 @@ export function activate(context: vscode.ExtensionContext): void {
   if (agentFolder === undefined) {
     return;
   }
+  const memory = new MemoryFileSystem();
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider(MEMORY_SCHEME, memory, {
+      isCaseSensitive: true,
+    }),
+  );
   const name = activationName(agentFolder);
   windowName = name;
   report(agentFolder, name, {event: 'activated'});
@@ -210,7 +218,10 @@ export function activate(context: vscode.ExtensionContext): void {
       (uri: string) => {
         // The open is not awaited: the command ends in this window, and the new window's own agent serves it.
         const address = vscode.Uri.parse(uri);
-        if (address.path === '' || address.path === '/') {
+        if (
+          address.scheme !== MEMORY_SCHEME &&
+          (address.path === '' || address.path === '/')
+        ) {
           // An authority with no folder opens an empty window on it, the way the connect commands do.
           void vscode.commands.executeCommand('vscode.newWindow', {
             remoteAuthority:
@@ -519,6 +530,15 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!updated) {
           throw new Error('the workspace folders were not updated');
         }
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.memoryWrite',
+      (file: string, text: string) => {
+        memory.writeFile(
+          vscode.Uri.from({scheme: MEMORY_SCHEME, path: file}),
+          new TextEncoder().encode(text),
+        );
       },
     ),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {

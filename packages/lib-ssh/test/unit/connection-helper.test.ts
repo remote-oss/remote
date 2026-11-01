@@ -1,4 +1,4 @@
-import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
@@ -233,20 +233,6 @@ describe('connection helper', () => {
         input?.startsWith('exec sh -c '),
       ],
       ['h.invalid', false, true],
-    );
-  });
-
-  it('F-2704 AC-30: a request that carries a remote program while a RemoteCommand is in effect is refused', async () => {
-    await rejects(
-      start({
-        ...REQUEST,
-        remoteProgram: 'sh',
-        settings: {...REQUEST.settings, remoteCommandInEffect: true},
-      }),
-      {
-        message:
-          'a shared connection whose RemoteCommand is in effect takes no remote program',
-      },
     );
   });
 
