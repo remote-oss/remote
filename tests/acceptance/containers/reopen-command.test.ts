@@ -42,7 +42,7 @@ async function sampleOf(name: string): Promise<Sample> {
 describe('F-0401 the reopen command (card containers-40)', function () {
   this.timeout(600_000);
 
-  it('F-0401 AC-1, AC-2 (b1): the connect shows one "Connecting to Dev Container (show log)" toast that never doubles, and the window ends titled and labelled with the container\'s name', async () => {
+  it('F-0401 AC-1, AC-2, F-0101 AC-5 (b1): the connect shows one "Connecting to Dev Container (show log)" toast that never doubles, and the window ends titled and labelled with the container\'s name', async () => {
     const folder = devContainerFolder('c40-reopen', {name: 'Reopen One'});
     const name = await openFolderWindow(folder);
     try {
