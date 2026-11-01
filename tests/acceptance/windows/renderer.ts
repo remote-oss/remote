@@ -72,6 +72,27 @@ async function settled<Value>(
   }
 }
 
+/**
+ * The messages of the toasts shown by every page of the editor, whatever its title: a window that reloads onto another
+ * folder has the title `[]` while it resolves, so no harness name reaches its page.
+ */
+export async function toastsOfPages(): Promise<string[]> {
+  const messages: string[] = [];
+  for (const page of await pages()) {
+    if (page.webSocketDebuggerUrl === undefined) {
+      continue;
+    }
+    messages.push(
+      ...(await evaluateAt<string[]>(
+        page.webSocketDebuggerUrl,
+        'a page',
+        `[...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(each => each.textContent ?? '')`,
+      )),
+    );
+  }
+  return messages;
+}
+
 /** The port the editor chose, from the file it writes in the launch's user-data folder. */
 async function debuggingPort(): Promise<number> {
   const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
