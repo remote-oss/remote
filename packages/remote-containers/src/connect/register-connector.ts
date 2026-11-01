@@ -194,6 +194,7 @@ export async function registerContainerResolver(
             translate,
             served.logger,
             folder,
+            connector.heldIdentity()?.context,
           );
         }
       } else {
