@@ -340,6 +340,7 @@ describe('the port attributes of the configuration (card containers-73)', functi
       listenInTerminal(window, containerId, port),
     );
     try {
+      await showPorts(window);
       const rows = await rowsWhen(window, shown =>
         shown.some(each => each.port.endsWith(`(${String(port)})`)),
       );

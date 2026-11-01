@@ -41,6 +41,9 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/** How long after a declared port's row shows core has surely made its first scan of the listening ports. */
+const INITIAL_SCAN_MILLISECONDS = 10_000;
+
 /** The addresses the host listens on for local port `port`, as `ss -ltn` writes them. */
 async function listeningFor(port: number): Promise<string[]> {
   const {stdout} = await execFileAsync('ss', ['-ltn']);
@@ -775,20 +778,26 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
       portsAttributes: {[String(port)]: {onAutoForward: 'openPreview'}},
     });
     const [containerId = ''] = await devContainersOf(folderOf('c73b-ac14p'));
-    await execFileAsync('docker', [
-      'exec',
-      '-d',
-      containerId,
-      'sh',
-      '-c',
-      `nc -lk -p ${String(port)} >> /tmp/c73b-ac14p.log`,
-    ]);
     let tabOpened = false;
     try {
       await showPorts(window);
       await rowsWhen(window, shown =>
         shown.some(each => each.port === String(port)),
       );
+      // A port that already listens when core makes its first scan is one of its initial candidates, which core does
+      // not act on; the criterion is about a process that is detected later.
+      await new Promise(resolve =>
+        setTimeout(resolve, INITIAL_SCAN_MILLISECONDS),
+      );
+      await execFileAsync('docker', [
+        'exec',
+        '-d',
+        containerId,
+        'sh',
+        '-c',
+        // tee keeps what a connection sends in the log as it arrives, and gives it back.
+        `: > /tmp/c73b-ac14p.log; nc -lk -p ${String(port)} -e tee -a /tmp/c73b-ac14p.log`,
+      ]);
       await waitFor(
         `a localhost:${String(port)} tab`,
         async () => {
@@ -799,12 +808,22 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
         },
         120_000,
       ).catch(() => undefined);
-      const received = await execFileAsync('docker', [
-        'exec',
-        containerId,
-        'cat',
-        '/tmp/c73b-ac14p.log',
-      ]);
+      async function requestLog(): Promise<string> {
+        const {stdout} = await execFileAsync('docker', [
+          'exec',
+          containerId,
+          'cat',
+          '/tmp/c73b-ac14p.log',
+        ]);
+        return stdout;
+      }
+      // The preview tab asks for the page when it has loaded, a moment after it opens.
+      await waitFor(
+        'the preview’s request at the listener',
+        async () => (await requestLog()).includes('GET /'),
+        30_000,
+      ).catch(() => undefined);
+      const received = {stdout: await requestLog()};
       const finalRows = await portsRows(window).catch(() => []);
       deepStrictEqual(
         {
@@ -854,6 +873,7 @@ describe('port forwarding stays core’s (card containers-75, F-1102)', function
     );
     try {
       await showPorts(ignoreWindow);
+      await showPorts(plainWindow);
       await new Promise(resolve => setTimeout(resolve, 45_000));
       const never = portsOf(await portsRows(ignoreWindow).catch(() => []));
       const status = await statusItem(ignoreWindow, 'status.forwardedPorts');

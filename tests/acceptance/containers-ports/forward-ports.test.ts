@@ -40,6 +40,9 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/** How long after its start a window's tunnel model may show the could-not-be-used dialog again (core's 10 s), plus a margin. */
+const MISMATCH_COOLDOWN_MILLISECONDS = 12_000;
+
 describe('the declared forwardPorts (card containers-72)', function () {
   this.timeout(900_000);
   const {connectedWith, closeNow} = portsWindows();
@@ -349,6 +352,11 @@ describe('the declared forwardPorts (card containers-72)', function () {
       const window = await connectedWith('c73b-ac8', {
         otherPortsAttributes: {requireLocalPort: true},
       });
+      // Core shows this dialog at most once in 10 s, counted from when the window's tunnel model began, so a forward
+      // made in the first seconds of the window gets the fallback port and no dialog.
+      await new Promise(resolve =>
+        setTimeout(resolve, MISMATCH_COOLDOWN_MILLISECONDS),
+      );
       await forwardByHand(window, port);
       const dialog = await waitForDialog(window, 30_000).catch(() => undefined);
       if (dialog !== undefined) {
@@ -372,13 +380,13 @@ describe('the declared forwardPorts (card containers-72)', function () {
           buttons: dialog?.buttons ?? [],
           message:
             message === undefined ? undefined : message.replace(/\. /g, '.'),
-          localIsFallback: local === port,
+          fallbackTaken: local !== port,
           origin: entry?.origin,
         },
         {
           buttons: ['OK'],
           message: expected,
-          localIsFallback: false,
+          fallbackTaken: true,
           origin: 'User Forwarded',
         },
       );
