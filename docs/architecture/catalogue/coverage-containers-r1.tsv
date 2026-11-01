@@ -1316,7 +1316,7 @@ F-0906.AC-12	core	core: the target-type filter, the dropdown and the indicator m
 F-0906.AC-13	core	core: the dropdown, the stored remote.explorerType and its restore
 F-0906.AC-14	core	core: the target-type filter of a virtual workspace
 F-0906.AC-15	core	core: a stored remote.explorerType that matches no view
-F-0906.AC-16	todo	
+F-0906.AC-16	acceptance	
 F-0906.AC-17	deferred	containers 0.4: F-0504 BR-8 later
 F-0906.AC-18	deferred	containers 0.4: F-0904 later
 F-0906.AC-19	deferred	containers 0.4: C12 attach later

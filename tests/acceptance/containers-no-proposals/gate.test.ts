@@ -155,7 +155,7 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
     );
   });
 
-  it.skip('F-0906 AC-16 (whole): the Remote Explorer has no section and no dropdown option of ours, no error notification shows, and core logs the remote view container’s proposal warning', async () => {
+  it('F-0906 AC-16 (whole): the Remote Explorer has no section and no dropdown option of ours, no error notification shows, and core logs the remote view container’s proposal warning', async () => {
     await inWindow(WINDOW, 'workbench.view.remote');
     await new Promise(resolve => setTimeout(resolve, 5_000));
     deepStrictEqual(
