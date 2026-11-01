@@ -6,7 +6,14 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
-import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {
@@ -16,6 +23,7 @@ import {
   type Launch,
 } from './acceptance-launches.ts';
 import {resolveBinary} from './repository.ts';
+import {windowNameOf} from '../tests/acceptance/window-agent/src/window-name.ts';
 
 /** The extensions under test that use proposed API, enabled for them on the command line. */
 const PROPOSED_API_EXTENSIONS: readonly string[] = [
@@ -230,7 +238,11 @@ export async function packageWindowAgent(
     ),
   );
   writeFileSync(path.join(folder, 'LICENSE'), 'MIT\n');
-  const vsix = path.join(runFolder, 'window-agent.vsix');
+  return packedVsix(folder, path.join(runFolder, 'window-agent.vsix'));
+}
+
+/** Packages the folder with `vsce` into the VSIX file `vsix`, and gives the file; it fails with what `vsce` said. */
+function packedVsix(folder: string, vsix: string): string {
   const result = spawnSync(
     process.execPath,
     [
@@ -246,10 +258,79 @@ export async function packageWindowAgent(
   );
   if (result.status !== 0) {
     throw new Error(
-      `vsce package of the window agent failed: ${result.stderr.trim()}`,
+      `vsce package of ${path.basename(folder)} failed: ${result.stderr.trim()}`,
     );
   }
   return vsix;
+}
+
+/** The VSIX file of the fixture language pack for `language` that a launch with a `languagePack` installs. */
+export function languagePackVsixOf(
+  runFolder: string,
+  language: string,
+): string {
+  return path.join(runFolder, `language-pack-${language}.vsix`);
+}
+
+/**
+ * Registers the fixture language pack for `language` the way a running editor does when it installs one: the
+ * `languagepacks.json` of the launch's user-data folder names the pack's translations, which the editor reads at start.
+ * The command-line install, which the harness uses, leaves the file unwritten.
+ */
+export function registerLanguagePack(
+  runFolder: string,
+  launch: Launch,
+  language: string,
+): void {
+  const extensionId = `remote-oss-test.language-pack-${language}`;
+  const userData = userDataFolderOf(runFolder, launch);
+  mkdirSync(userData, {recursive: true});
+  writeFileSync(
+    path.join(userData, 'languagepacks.json'),
+    JSON.stringify({
+      [language]: {
+        hash: `fixture-${language}`,
+        extensions: [
+          {extensionIdentifier: {id: extensionId}, version: '0.0.1'},
+        ],
+        translations: {
+          vscode: path.join(
+            extensionsFolderOf(runFolder, launch),
+            `${extensionId}-0.0.1`,
+            'translations',
+            'main.i18n.json',
+          ),
+        },
+        label: language,
+      },
+    }),
+  );
+}
+
+/**
+ * Packages the fixture language pack for `language`, which carries no translation, from the language suite's fixtures
+ * into a VSIX file in the run's folder. Returns the file.
+ */
+export function packageLanguagePack(
+  root: string,
+  runFolder: string,
+  language: string,
+): string {
+  const folder = path.join(runFolder, `language-pack-${language}`);
+  cpSync(
+    path.join(
+      root,
+      'tests',
+      'acceptance',
+      'extensionpack-language',
+      'fixtures',
+      `language-pack-${language}`,
+    ),
+    folder,
+    {recursive: true},
+  );
+  writeFileSync(path.join(folder, 'LICENSE'), 'MIT\n');
+  return packedVsix(folder, languagePackVsixOf(runFolder, language));
 }
 
 /** A program to start: its file, its arguments and its environment. */
@@ -427,6 +508,109 @@ export function startDetached(
   };
 }
 
+/** The folder whose files carry a row's request to relaunch the editor and the harness's answer. */
+function relaunchFolderOf(runFolder: string, label: string): string {
+  return path.join(runFolder, label, 'relaunch');
+}
+
+/** A row's request: restart the editor with `environment` added to the launch's own. */
+export interface RelaunchRequest {
+  id: string;
+  /** The variables to set; a `null` removes the launch's own. */
+  environment: Record<string, string | null>;
+}
+
+/** The harness's answer to a request. */
+interface RelaunchAnswer {
+  id: string;
+  succeeded: boolean;
+  /** The name of the launch's own window, which the restarted editor opens first and a row opens its target from. */
+  own: string;
+  message?: string;
+}
+
+/** What restarting the editor needs besides the start: the launch's own window, how many times a window activated, and the wait's bounds. */
+export interface RelaunchSteps {
+  start: (program: Program) => Started;
+  ownWindow: string;
+  activations: (name: string) => number;
+  activationMilliseconds: number;
+  pollMilliseconds: number;
+}
+
+/**
+ * Answers the request in `folder` when there is a new one: stops the editor in `current`, starts the program the
+ * request makes of the launch's, and waits until the window the request names activates again. Whatever happens, the
+ * answer is written for the row.
+ */
+export async function answerRelaunch(
+  folder: string,
+  current: {editor: Started},
+  programOf: (request: RelaunchRequest) => Program,
+  steps: RelaunchSteps,
+  handled: Set<string>,
+): Promise<void> {
+  const file = path.join(folder, 'request.json');
+  if (!existsSync(file)) {
+    return;
+  }
+  let request: RelaunchRequest;
+  try {
+    request = JSON.parse(readFileSync(file, 'utf8')) as RelaunchRequest;
+  } catch {
+    return;
+  }
+  if (handled.has(request.id)) {
+    return;
+  }
+  handled.add(request.id);
+  const answer: RelaunchAnswer = {
+    id: request.id,
+    succeeded: true,
+    own: steps.ownWindow,
+  };
+  try {
+    const before = steps.activations(steps.ownWindow);
+    await current.editor.stop();
+    current.editor = steps.start(programOf(request));
+    const activated = await waitUntil(
+      () => steps.activations(steps.ownWindow) > before,
+      steps.activationMilliseconds,
+      steps.pollMilliseconds,
+    );
+    if (!activated) {
+      answer.succeeded = false;
+      answer.message = `window ${steps.ownWindow} did not activate within ${String(steps.activationMilliseconds)} ms`;
+    }
+  } catch (caught) {
+    answer.succeeded = false;
+    answer.message = String(caught);
+  }
+  writeFileSync(path.join(folder, 'response.json'), JSON.stringify(answer));
+}
+
+/** The ids of the requests `folder` already holds: none when it has no request or one that does not parse. */
+function staleRequestIds(folder: string): string[] {
+  const file = path.join(folder, 'request.json');
+  try {
+    return existsSync(file)
+      ? [(JSON.parse(readFileSync(file, 'utf8')) as RelaunchRequest).id]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** How many times the agent of window `name` reported `activated`, from its events file in `agentFolder`. */
+export function activationsIn(agentFolder: string, name: string): number {
+  const file = path.join(agentFolder, `${name}.events.jsonl`);
+  return existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(line => line.includes('"event":"activated"')).length
+    : 0;
+}
+
 /** What a plain launch needs of the run: its folder, the editor's program, and the variables its processes share. */
 export interface PlainRun {
   runFolder: string;
@@ -438,7 +622,21 @@ export interface PlainRun {
 export interface PlainSteps {
   start: (program: Program) => Started;
   runTests: (program: Program) => Promise<{exitCode: number; output: string}>;
+  /** How many times window `name` of the launch activated its agent; the files of its agent folder by default. */
+  activations?: (name: string) => number;
 }
+
+/** The name the window agent gives the window the launch's own arguments open first: its folder's name, or `local` for none. */
+function ownWindowOf(launch: Launch): string {
+  return windowNameOf(
+    launch.folderUri === undefined
+      ? undefined
+      : new URL(launch.folderUri).pathname,
+  );
+}
+
+/** How long a relaunched editor has to activate its window again, in milliseconds. */
+const RELAUNCH_ACTIVATION_MILLISECONDS = 120_000;
 
 /**
  * Runs a launch with no runner: starts the editor, runs the Node tests against it, and stops the editor whatever the
@@ -483,16 +681,68 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
+    REMOTE_OSS_ACCEPTANCE_RELAUNCH: relaunchFolderOf(
+      session.runFolder,
+      launch.label,
+    ),
     ...launchEnvironment,
   };
   // A port file an earlier attempt left would name a port nobody listens on.
   rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
-  const editor = steps.start(
-    plainEditorOf(session.executable, session.runFolder, launch, environment),
-  );
+  const relaunchFolder = relaunchFolderOf(session.runFolder, launch.label);
+  // A request an earlier attempt left would restart the editor for a row that is gone, so it counts as answered. The
+  // folder itself is the row's to make and is not touched here: the run folder may be a path the harness cannot write.
+  const handled = new Set<string>(staleRequestIds(relaunchFolder));
+  const current = {
+    editor: steps.start(
+      plainEditorOf(session.executable, session.runFolder, launch, environment),
+    ),
+  };
+  const agentFolder = path.join(session.runFolder, launch.label, 'agent');
+  let answering: Promise<void> | undefined;
+  const watching = setInterval(() => {
+    if (answering !== undefined) {
+      return;
+    }
+    answering = answerRelaunch(
+      relaunchFolder,
+      current,
+      request => {
+        rmSync(debuggingPortFile(session.runFolder, launch), {force: true});
+        // The names the stopped editor's windows claimed are free again: its empty window is `local` once more.
+        rmSync(path.join(agentFolder, 'claims'), {
+          recursive: true,
+          force: true,
+        });
+        return plainEditorOf(session.executable, session.runFolder, launch, {
+          ...environment,
+          ...Object.fromEntries(
+            Object.entries(request.environment).map(([key, value]) => [
+              key,
+              value ?? undefined,
+            ]),
+          ),
+        });
+      },
+      {
+        start: steps.start,
+        ownWindow: ownWindowOf(launch),
+        activations:
+          steps.activations ?? (name => activationsIn(agentFolder, name)),
+        activationMilliseconds: RELAUNCH_ACTIVATION_MILLISECONDS,
+        pollMilliseconds: 200,
+      },
+      handled,
+    ).finally(() => {
+      answering = undefined;
+    });
+  }, 200);
   try {
     return await steps.runTests(plainTestsOf(root, launch, environment));
   } finally {
-    await editor.stop();
+    clearInterval(watching);
+    // A relaunch still being answered owns the editor until it has started the next one.
+    await answering;
+    await current.editor.stop();
   }
 }

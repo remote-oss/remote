@@ -63,7 +63,8 @@ export interface AgentEvent {
     | 'taskEnded'
     | 'terminalNames'
     | 'untitledDocuments'
-    | 'tunnels';
+    | 'tunnels'
+    | 'environment';
   time: number;
   id?: string;
   message?: string;
@@ -770,6 +771,65 @@ export async function reloadingCommand(
 }
 
 /**
+ * Restarts the launch's editor with `environment` added to its own (a `null` removes a variable) and reopens window `name` on what it showed, a
+ * folder or a workspace file, remote or not: the editor opens the launch's own window, and this opens the target from
+ * it. Resolves once window `name` has activated its agent again. Only a plain launch can: its harness answers, and a
+ * launch of the runner fails here.
+ */
+export async function relaunch(
+  name: string,
+  options: {environment: Readonly<Record<string, string | null>>},
+): Promise<void> {
+  const folder = process.env.REMOTE_OSS_ACCEPTANCE_RELAUNCH;
+  if (folder === undefined || folder === '') {
+    throw new Error('relaunch is for plain launches');
+  }
+  const state = await windowState(name);
+  const target = state.workspaceFile ?? state.folders[0];
+  const before = countOf(name, 'activated');
+  const requestId = `${String(Date.now())}-${String(process.pid)}`;
+  const answerFile = path.join(folder, 'response.json');
+  mkdirSync(folder, {recursive: true});
+  rmSync(answerFile, {force: true});
+  writeFileSync(
+    path.join(folder, 'request.json'),
+    JSON.stringify({id: requestId, environment: options.environment}),
+  );
+  let own = '';
+  await waitFor(
+    `the harness to relaunch the editor for window ${name}`,
+    () => {
+      if (!existsSync(answerFile)) {
+        return false;
+      }
+      const answer = JSON.parse(readFileSync(answerFile, 'utf8')) as {
+        id: string;
+        succeeded: boolean;
+        own: string;
+        message?: string;
+      };
+      if (answer.id !== requestId) {
+        return false;
+      }
+      if (!answer.succeeded) {
+        throw new Error(answer.message ?? 'the relaunch failed');
+      }
+      own = answer.own;
+      return true;
+    },
+    300_000,
+  );
+  if (own !== name && target !== undefined) {
+    await inWindow(own, 'acceptance.agent.openWindow', target);
+  }
+  await waitFor(
+    `window ${name} to activate its agent again`,
+    () => countOf(name, 'activated') > before,
+    120_000,
+  );
+}
+
+/**
  * Runs the command in window `name`, Reopen in Container unless `command` says another, and resolves once the window
  * is connected to its container: the window reads its workspace folder through the container's file system, which it
  * can't before the connect is done.
@@ -783,23 +843,47 @@ export async function reopenInContainer(
   await connectedToContainer(name, milliseconds);
 }
 
-/** Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file system. */
+/** How many lines of the Dev Containers log a connect that times out carries. */
+const CONNECT_LOG_LINES = 40;
+
+/** `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none. */
+export function withLogTail(message: string, lines: readonly string[]): string {
+  const tail = lines.slice(-CONNECT_LOG_LINES);
+  return tail.length === 0 ? message : `${message}\n${tail.join('\n')}`;
+}
+
+/**
+ * Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file
+ * system. When the wait times out, its error also carries the last lines of the Dev Containers log written since the wait
+ * began, so that a hang shows the step it stopped at.
+ */
 export async function connectedToContainer(
   name: string,
   milliseconds = 300_000,
 ): Promise<void> {
-  await waitFor(
-    `window ${name} to connect to its container`,
-    async () => {
-      try {
-        await inWindow(name, 'acceptance.agent.statFolder');
-        return (await windowState(name)).remoteName === 'dev-container';
-      } catch {
-        return false;
-      }
-    },
-    milliseconds,
-  );
+  const mark = containersLog().length;
+  try {
+    await waitFor(
+      `window ${name} to connect to its container`,
+      async () => {
+        try {
+          await inWindow(name, 'acceptance.agent.statFolder');
+          return (await windowState(name)).remoteName === 'dev-container';
+        } catch {
+          return false;
+        }
+      },
+      milliseconds,
+    );
+  } catch (caught) {
+    throw new Error(
+      withLogTail(
+        caught instanceof Error ? caught.message : String(caught),
+        containersLogSince(mark),
+      ),
+      {cause: caught},
+    );
+  }
 }
 
 /** `base` scoped to this run, so that a container name never clashes with another run's or a leftover's. */
@@ -1081,6 +1165,22 @@ async function reported(
   return windowEvents(name)
     .filter(each => each.event === event)
     .at(-1);
+}
+
+/** The value of the environment variable `variableName` in the extension host of window `name`, or null when it has none. */
+export async function environmentOf(
+  name: string,
+  variableName: string,
+): Promise<string | null> {
+  const value = (
+    await reported(
+      name,
+      'environment',
+      'acceptance.agent.environment',
+      variableName,
+    )
+  )?.value;
+  return typeof value === 'string' ? value : null;
 }
 
 /** Has window `name` report its state once, and gives that report. */

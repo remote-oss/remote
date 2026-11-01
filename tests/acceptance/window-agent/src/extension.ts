@@ -541,6 +541,15 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.environment',
+      (variableName: string) => {
+        report(agentFolder, name, {
+          event: 'environment',
+          value: process.env[variableName] ?? null,
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {

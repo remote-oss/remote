@@ -175,7 +175,7 @@ describe('the extension pack in the Extensions view (card coverage-76)', functio
     };
   }
 
-  it('F-9001 AC-7, AC-16 (row): with no gallery data the pack’s row shows its name, its description and the publisher id, and nothing interrupts', async () => {
+  it('F-9001 AC-7, AC-16, F-9101 AC-25 (row): with no gallery data the pack’s row shows its name, its description and the publisher id, and nothing interrupts', async () => {
     await showInstalled();
     deepStrictEqual(
       {
@@ -188,6 +188,7 @@ describe('the extension pack in the Extensions view (card coverage-76)', functio
           description: DESCRIPTION,
           publisher: 'remote-oss',
           badge: String(MANIFEST.extensionPack.length),
+          actions: ['Manage'],
         },
         interrupted: {notifications: [], dialog: undefined},
       },
@@ -208,7 +209,7 @@ describe('the extension pack in the Extensions view (card coverage-76)', functio
     );
   });
 
-  it('F-9001 AC-9, AC-16, F-9002 AC-2, AC-4 (page): the pack’s page opens in the current window with the title, the publisher id, the description, the two category chips and the Details and Features tabs, the member header above the README, no Marketplace or Resources block, and nothing interrupts', async () => {
+  it('F-9001 AC-9, AC-16, F-9002 AC-2, AC-4, F-9101 AC-8, AC-15, AC-25 (page): the pack’s page opens in the current window with the title, the publisher id, the description, the two category chips and the Details and Features tabs, the member header above the README with every member in manifest order, the Disable, Uninstall and Manage actions and no Install, no Marketplace or Resources block, and nothing interrupts', async () => {
     await showInstalled();
     const page = await extensionPageOf(window, PACK);
     deepStrictEqual(
@@ -228,6 +229,7 @@ describe('the extension pack in the Extensions view (card coverage-76)', functio
           packHeader: `Extension Pack (${String(MANIFEST.extensionPack.length)})`,
           pack: ['Dev Containers', 'Remote - SSH'],
           packAboveReadme: true,
+          actions: ['Disable this extension', 'Uninstall', 'Manage'],
         },
         editors: [`Extension: ${PACK}`],
         interrupted: {notifications: [], dialog: undefined},
@@ -310,7 +312,7 @@ describe('the extension pack in the Extensions view (card coverage-76)', functio
     );
   });
 
-  it('F-9001 AC-18, F-9002 AC-19 (no-writes): after every flow of the rows, the pack has written no file, log folder, setting or state key of its own, and nothing interrupted', async () => {
+  it('F-9001 AC-18, F-9002 AC-19, F-9101 AC-19 (no-writes): after every flow of the rows, the pack has written no file, log folder, setting or state key of its own, and nothing interrupted', async () => {
     const userData = variable('HARNESS_USER_DATA');
     deepStrictEqual(
       {

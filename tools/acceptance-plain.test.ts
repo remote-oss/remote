@@ -1,13 +1,26 @@
 import {deepStrictEqual, doesNotThrow, strictEqual, throws} from 'node:assert';
-import {existsSync, readFileSync, statSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
+  activationsIn,
+  answerRelaunch,
   debuggingPortFile,
   editorArguments,
   editorLogsEnvironment,
   extensionsFolderOf,
   launchFiles,
+  languagePackVsixOf,
+  packageLanguagePack,
   packageWindowAgent,
+  type RelaunchRequest,
+  registerLanguagePack,
   type PlainSteps,
   plainEditorOf,
   plainTestsOf,
@@ -1022,6 +1035,68 @@ describe('packageWindowAgent', () => {
   });
 });
 
+describe('the fixture language packs (card coverage-76)', () => {
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('language-pack');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  it('coverage-76: a language pack is packaged into a VSIX of the run’s folder, named by its language', () => {
+    const vsix = packageLanguagePack(REPOSITORY_ROOT, workspace.root, 'de');
+    deepStrictEqual(
+      [vsix, existsSync(vsix)],
+      [languagePackVsixOf(workspace.root, 'de'), true],
+    );
+  });
+
+  it('coverage-76: registering a language pack writes the record the editor reads, naming the translations the install leaves in the launch’s extensions folder', () => {
+    const launch: PlainLaunch = {
+      label: 'packed',
+      kind: 'plain',
+      suite: 'packed',
+      withExtensions: ['remote-oss.remote-containers'],
+    };
+    registerLanguagePack(workspace.root, launch, 'hu');
+    deepStrictEqual(
+      JSON.parse(
+        readFileSync(
+          path.join(
+            userDataFolderOf(workspace.root, launch),
+            'languagepacks.json',
+          ),
+          'utf8',
+        ),
+      ),
+      {
+        ['hu']: {
+          hash: 'fixture-hu',
+          extensions: [
+            {
+              extensionIdentifier: {id: 'remote-oss-test.language-pack-hu'},
+              version: '0.0.1',
+            },
+          ],
+          translations: {
+            vscode: path.join(
+              workspace.root,
+              'extensions-packed',
+              'remote-oss-test.language-pack-hu-0.0.1',
+              'translations',
+              'main.i18n.json',
+            ),
+          },
+          label: 'hu',
+        },
+      },
+    );
+  });
+});
+
 describe('the stand-ins of a launch (card containers-09)', () => {
   const STAND_IN: PlainLaunch = {
     label: 'standing',
@@ -1059,5 +1134,294 @@ describe('the stand-ins of a launch (card containers-09)', () => {
         message: `${path.join(workspace.root, 'extensions-standing', 'extensions.json')} lists no extension to copy a stand-in's entry from`,
       },
     );
+  });
+});
+
+describe('answerRelaunch (card tooling-88)', () => {
+  const REQUEST: RelaunchRequest = {
+    id: 'one',
+    environment: {CHANGED: 'yes'},
+  };
+  const PROGRAM: Program = {
+    file: '/editor',
+    programArguments: [],
+    environment: {},
+  };
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('relaunch');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  /** Runs one answer with scripted steps: the happenings, the editor it left, and the answer file's text. */
+  async function answered(
+    request: string | undefined,
+    activate: boolean,
+    handled = new Set<string>(),
+  ) {
+    const happened: string[] = [];
+    for (const file of ['request.json', 'response.json']) {
+      rmSync(path.join(workspace.root, file), {force: true});
+    }
+    if (request !== undefined) {
+      writeFileSync(path.join(workspace.root, 'request.json'), request);
+    }
+    let activations = 0;
+    const current = {
+      editor: {
+        stop: () => {
+          happened.push('stop old');
+          return Promise.resolve();
+        },
+      },
+    };
+    await answerRelaunch(
+      workspace.root,
+      current,
+      request2 => {
+        happened.push(`program ${JSON.stringify(request2.environment)}`);
+        return PROGRAM;
+      },
+      {
+        start: () => {
+          happened.push('start');
+          if (activate) {
+            activations += 1;
+          }
+          return {
+            stop: () => {
+              happened.push('stop new');
+              return Promise.resolve();
+            },
+          };
+        },
+        ownWindow: 'local',
+        activations: () => activations,
+        activationMilliseconds: 50,
+        pollMilliseconds: 5,
+      },
+      handled,
+    );
+    await current.editor.stop();
+    const file = path.join(workspace.root, 'response.json');
+    return {
+      happened,
+      answer: existsSync(file) ? readFileSync(file, 'utf8') : undefined,
+    };
+  }
+
+  it('tooling-88: it stops the editor, starts the program the request makes, waits for the window and answers success', async () => {
+    const outcome = await answered(JSON.stringify(REQUEST), true);
+    deepStrictEqual(outcome, {
+      happened: ['stop old', 'program {"CHANGED":"yes"}', 'start', 'stop new'],
+      answer: JSON.stringify({id: 'one', succeeded: true, own: 'local'}),
+    });
+  });
+
+  it('tooling-88: a window that does not activate within the bound is answered as a failure naming the window', async () => {
+    const outcome = await answered(JSON.stringify(REQUEST), false);
+    deepStrictEqual(
+      outcome.answer,
+      JSON.stringify({
+        id: 'one',
+        succeeded: false,
+        own: 'local',
+        message: 'window local did not activate within 50 ms',
+      }),
+    );
+  });
+
+  it('tooling-88: a request already answered, no request and a request that is not JSON are left alone', async () => {
+    const results = [
+      await answered(JSON.stringify(REQUEST), true, new Set(['one'])),
+      await answered(undefined, true),
+      await answered('{not json', true),
+    ];
+    deepStrictEqual(
+      results.map(each => each.answer),
+      [undefined, undefined, undefined],
+    );
+  });
+
+  it('tooling-88: a start that throws is answered as a failure with the error', async () => {
+    writeFileSync(
+      path.join(workspace.root, 'request.json'),
+      JSON.stringify(REQUEST),
+    );
+    await answerRelaunch(
+      workspace.root,
+      {editor: {stop: () => Promise.reject(new Error('cannot stop'))}},
+      () => PROGRAM,
+      {
+        start: () => ({stop: () => Promise.resolve()}),
+        ownWindow: 'local',
+        activations: () => 0,
+        activationMilliseconds: 50,
+        pollMilliseconds: 5,
+      },
+      new Set(),
+    );
+    strictEqual(
+      (
+        JSON.parse(
+          readFileSync(path.join(workspace.root, 'response.json'), 'utf8'),
+        ) as {message: string}
+      ).message,
+      'Error: cannot stop',
+    );
+  });
+
+  it('tooling-88: the activations of a window are the activated lines of its events file', () => {
+    mkdirSync(workspace.root, {recursive: true});
+    writeFileSync(
+      path.join(workspace.root, 'folder.events.jsonl'),
+      '{"event":"activated"}\n{"event":"done"}\n{"event":"activated"}\n',
+    );
+    deepStrictEqual(
+      [
+        activationsIn(workspace.root, 'folder'),
+        activationsIn(workspace.root, 'none'),
+      ],
+      [2, 0],
+    );
+  });
+});
+
+describe('runPlainLaunch relaunch (card tooling-88)', () => {
+  /** Runs a launch whose tests ask for one relaunch, and gives the answer, the programs started and what stopped. */
+  async function relaunched(
+    folderUri: string | undefined,
+    requested: Record<string, string | null> = {CHANGED: 'yes'},
+  ) {
+    const workspace = new TemporaryWorkspace('relaunch-run');
+    try {
+      const launch: PlainLaunch = {
+        ...LAUNCH,
+        ...(folderUri === undefined ? {} : {folderUri}),
+      };
+      const programs: Program[] = [];
+      const stopped: number[] = [];
+      let activations = 0;
+      let answer = '';
+      const steps: PlainSteps = {
+        start: program => {
+          programs.push(program);
+          const index = programs.length;
+          // The restarted editor's window activates as soon as it starts.
+          activations += index > 1 ? 1 : 0;
+          return {
+            stop: () => {
+              stopped.push(index);
+              return Promise.resolve();
+            },
+          };
+        },
+        activations: () => activations,
+        runTests: async () => {
+          const folder = path.join(workspace.root, launch.label, 'relaunch');
+          mkdirSync(folder, {recursive: true});
+          writeFileSync(
+            path.join(folder, 'request.json'),
+            JSON.stringify({id: 'r', environment: requested}),
+          );
+          const file = path.join(folder, 'response.json');
+          for (let wait = 0; wait < 100 && !existsSync(file); wait += 1) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          answer = readFileSync(file, 'utf8');
+          return {exitCode: 0, output: ''};
+        },
+      };
+      await runPlainLaunch(
+        '/repo',
+        {
+          runFolder: workspace.root,
+          executable: '/editor',
+          environment: {HARNESS_RUN_FOLDER: workspace.root},
+        },
+        launch,
+        steps,
+      );
+      return {
+        answer,
+        stopped,
+        folders: programs.map(program =>
+          program.programArguments.filter(each => each.startsWith('file:')),
+        ),
+        changed: programs.map(program => program.environment.CHANGED),
+        runFolder: programs.map(
+          program => program.environment.HARNESS_RUN_FOLDER === undefined,
+        ),
+      };
+    } finally {
+      workspace.remove();
+    }
+  }
+
+  it('tooling-88: the editor is restarted with the launch’s own windows and the merged environment, and the answer names the launch’s own window', async () => {
+    deepStrictEqual(await relaunched('file:///work/proj'), {
+      answer: JSON.stringify({id: 'r', succeeded: true, own: 'proj'}),
+      stopped: [1, 2],
+      folders: [['file:///work/proj'], ['file:///work/proj']],
+      changed: [undefined, 'yes'],
+      runFolder: [false, false],
+    });
+  });
+
+  it('tooling-88: a null in the request removes the launch’s own variable from the restarted editor', async () => {
+    const outcome = await relaunched('file:///work/proj', {
+      HARNESS_RUN_FOLDER: null,
+    });
+    deepStrictEqual(outcome.runFolder, [false, true]);
+  });
+
+  it('tooling-88: a launch with no folder of its own restarts with its empty window, named local', async () => {
+    const outcome = await relaunched(undefined);
+    deepStrictEqual(
+      [JSON.parse(outcome.answer), outcome.folders],
+      [{id: 'r', succeeded: true, own: 'local'}, [[], []]],
+    );
+  });
+
+  it('tooling-88: a request left by an earlier attempt is not answered, and the launch touches no folder of its own for relaunches', async () => {
+    const workspace = new TemporaryWorkspace('relaunch-stale');
+    try {
+      const folder = path.join(workspace.root, LAUNCH.label, 'relaunch');
+      mkdirSync(folder, {recursive: true});
+      writeFileSync(
+        path.join(folder, 'request.json'),
+        JSON.stringify({id: 'old', environment: {}}),
+      );
+      const started: Program[] = [];
+      await runPlainLaunch(
+        '/repo',
+        {
+          runFolder: workspace.root,
+          executable: '/editor',
+          environment: {HARNESS_RUN_FOLDER: workspace.root},
+        },
+        LAUNCH,
+        {
+          start: program => {
+            started.push(program);
+            return {stop: () => Promise.resolve()};
+          },
+          runTests: async () => {
+            await new Promise(resolve => setTimeout(resolve, 600));
+            return {exitCode: 0, output: ''};
+          },
+        },
+      );
+      deepStrictEqual(
+        [started.length, existsSync(path.join(folder, 'response.json'))],
+        [1, false],
+      );
+    } finally {
+      workspace.remove();
+    }
   });
 });
