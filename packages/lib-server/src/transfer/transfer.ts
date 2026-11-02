@@ -5,7 +5,13 @@
  */
 
 import path from 'node:path';
-import {hostPathOf, type ChannelFailure, type HostChannel} from 'lib-host';
+import {
+  hostPathOf,
+  posixQuote,
+  type ChannelFailure,
+  type CopyOutcome,
+  type HostChannel,
+} from 'lib-host';
 import type {Logger} from 'lib-log';
 import {redirectAllows} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
@@ -72,6 +78,8 @@ export interface TransferInput {
   cache: ArchiveCache;
   /** The limits of a download on the client, from the policy. */
   downloadBounds: DownloadBounds;
+  /** How long the copy to the host may go without growing before it is ended; none means no bound. */
+  copyStallMilliseconds?: number;
   /**
    * Makes the names of the transfer's files differ from those of every other transfer, in this window and in the
    * others, as the process id and a counter do; the epoch alone is shared by two starts in one millisecond.
@@ -119,6 +127,7 @@ export type TransferFailure =
   | {kind: 'unpack'}
   | {kind: 'copy'; failure: ChannelFailure}
   | {kind: 'copyToolMissing'}
+  | {kind: 'copyStalled'}
   | {kind: 'cancelled'}
   | {kind: 'retriesExhausted'; attempts: number; lockPath?: string}
   | {
@@ -368,11 +377,11 @@ async function deliver(
   }
   dependencies.onPhase({kind: 'copying'});
   const remotePath = `${input.hostFolder}/${archiveName(input)}`;
-  const copied = await dependencies.channel.copyToHost({
-    localFile,
-    remotePath,
-    cancellation: input.cancellation,
-  });
+  const copied = await copyWatched(input, dependencies, localFile, remotePath);
+  if (copied.kind === 'stalled') {
+    await discardCopy(input, dependencies, remotePath);
+    return failed({kind: 'copyStalled'});
+  }
   if (copied.kind === 'failed') {
     await discardCopy(input, dependencies, remotePath);
     return failed(
@@ -390,6 +399,124 @@ async function deliver(
     await discardCopy(input, dependencies, remotePath);
   }
   return outcome;
+}
+
+/** How often the growth of a copied file is looked at, at the most; a shorter stall bound is looked at three times. */
+const COPY_PROBE_MILLISECONDS = 5000;
+
+/** The size in bytes of the file at `remotePath`, or none when the host does not say. */
+async function sizeOnHost(
+  channel: HostChannel,
+  remotePath: string,
+  cancellation: AbortSignal,
+): Promise<number | undefined> {
+  const windows = channel.platformHint() === 'windows';
+  let size: number | undefined;
+  const outcome = await channel.runScript(
+    {
+      script: windows
+        ? `(Get-Item -LiteralPath ${powershellQuote(remotePath)}).Length`
+        : `wc -c < ${posixQuote(remotePath)}`,
+      interpreter: windows ? 'powershell' : 'posixShell',
+      environment: {},
+      input: {kind: 'text', text: ''},
+      cancellation,
+    },
+    line => {
+      const parsed = Number(line.trim());
+      if (line.trim() !== '' && Number.isInteger(parsed)) {
+        size = parsed;
+      }
+    },
+  );
+  return outcome.kind === 'exited' ? size : undefined;
+}
+
+/** A PowerShell single-quoted literal. */
+function powershellQuote(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Copies the archive to the host. With a stall bound, the file the copy writes is looked at while it runs: when it has
+ * not grown for the bound, the copy is cancelled and the result is `stalled`. A probe that fails counts as no growth.
+ */
+async function copyWatched(
+  input: TransferInput,
+  dependencies: TransferDependencies,
+  localFile: string,
+  remotePath: string,
+): Promise<CopyOutcome | {kind: 'stalled'}> {
+  const bound = input.copyStallMilliseconds;
+  if (bound === undefined) {
+    return dependencies.channel.copyToHost({
+      localFile,
+      remotePath,
+      cancellation: input.cancellation,
+    });
+  }
+  const stopped = new AbortController();
+  const ended = new AbortController();
+  const state = {stalled: false, inputs: 0, grew: Date.now()};
+  function isEnded(): boolean {
+    return ended.signal.aborted;
+  }
+  const copy = dependencies.channel.copyToHost({
+    localFile,
+    remotePath,
+    cancellation: AbortSignal.any([input.cancellation, stopped.signal]),
+    onInput: open => {
+      if (open) {
+        state.inputs += 1;
+      } else {
+        state.inputs = Math.max(0, state.inputs - 1);
+        state.grew = Date.now();
+      }
+    },
+  });
+  const watching = (async () => {
+    const interval = Math.min(COPY_PROBE_MILLISECONDS, bound / 3);
+    let largest = -1;
+    while (!isEnded()) {
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, interval);
+        ended.signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          {once: true},
+        );
+      });
+      if (isEnded()) {
+        return;
+      }
+      if (state.inputs > 0) {
+        state.grew = Date.now();
+        continue;
+      }
+      const size = await sizeOnHost(
+        dependencies.channel,
+        remotePath,
+        AbortSignal.any([ended.signal, AbortSignal.timeout(interval)]),
+      ).catch(() => undefined);
+      if (size !== undefined && size > largest) {
+        largest = size;
+        state.grew = Date.now();
+      } else if (Date.now() - state.grew >= bound) {
+        state.stalled = true;
+        stopped.abort();
+        return;
+      }
+    }
+  })();
+  const outcome = await copy;
+  ended.abort();
+  await watching;
+  return state.stalled && outcome.kind === 'failed'
+    ? {kind: 'stalled'}
+    : outcome;
 }
 
 /** Why the downloaded archive was not kept, or nothing when the rename made it the cache entry. */

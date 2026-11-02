@@ -199,6 +199,46 @@ describe('policy record (card server-01 table)', () => {
     });
   });
 
+  it('F-2405 AC-21: downloadStallMilliseconds 0 -> problem path downloadStallMilliseconds', () => {
+    deepStrictEqual(
+      validatePolicyRecord(recordWith({downloadStallMilliseconds: 0})),
+      {
+        problems: [
+          {
+            path: 'downloadStallMilliseconds',
+            problem: 'must be a positive integer',
+          },
+        ],
+      },
+    );
+  });
+
+  it('F-2405 AC-21: transferStallMilliseconds 0 -> problem path transferStallMilliseconds', () => {
+    deepStrictEqual(
+      validatePolicyRecord(recordWith({transferStallMilliseconds: 0})),
+      {
+        problems: [
+          {
+            path: 'transferStallMilliseconds',
+            problem: 'must be a positive integer',
+          },
+        ],
+      },
+    );
+  });
+
+  it('F-2405 AC-21: the SSH policy waits 30 s on a download and on a copy, and containers 60 s and no bound on a copy', () => {
+    deepStrictEqual(
+      [
+        SSH_POLICY.downloadStallMilliseconds,
+        SSH_POLICY.transferStallMilliseconds,
+        CONTAINERS_POLICY.downloadStallMilliseconds,
+        CONTAINERS_POLICY.transferStallMilliseconds,
+      ],
+      [30_000, 30_000, 60_000, undefined],
+    );
+  });
+
   it('installUmask: 022 -> {record}', () => {
     const candidate = recordWith({installUmask: '022'});
     deepStrictEqual(validatePolicyRecord(candidate), {record: candidate});

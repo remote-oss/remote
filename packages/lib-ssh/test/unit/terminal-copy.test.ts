@@ -22,6 +22,8 @@ interface Fixture {
   /** The timers the copy armed and cancelled, so a take-down that leaves one running can be seen. */
   timers: {armed: number; cancelled: number; fired: number};
   copy(controller?: AbortController): Promise<CopyOutcome>;
+  /** What the copy's request was told of its login's inputs. */
+  inputs: boolean[];
 }
 
 function fixture(options: {reveal?: boolean} = {}): Fixture {
@@ -31,6 +33,7 @@ function fixture(options: {reveal?: boolean} = {}): Fixture {
   const logins: TerminalLogin[] = [];
   const state = {disposed: 0};
   const timers = {armed: 0, cancelled: 0, fired: 0};
+  const inputs: boolean[] = [];
   const clockScheduler = clock.scheduler();
   const copier = terminalCopierOf({
     terminals,
@@ -75,11 +78,15 @@ function fixture(options: {reveal?: boolean} = {}): Fixture {
       return state.disposed;
     },
     timers,
+    inputs,
     copy: controller =>
       copier({
         localFile: '/local/a',
         remotePath: 'b',
         cancellation: (controller ?? new AbortController()).signal,
+        onInput: open => {
+          inputs.push(open);
+        },
       }),
   };
 }
@@ -120,6 +127,16 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
   it('F-2308 BR-3: a terminal is revealed at open when the setting says so', async () => {
     const {terminal} = await started(fixture({reveal: true}));
     deepStrictEqual(terminal.revealedAtOpen, true);
+  });
+
+  it('F-2405 AC-21: the inputs the copy login shows are told to the request when they open and when they close', async () => {
+    const made = fixture();
+    const {terminal} = await started(made);
+    const [login] = made.logins;
+    login?.reader.inputOpened();
+    login?.reader.inputClosed();
+    terminal.end(0);
+    deepStrictEqual(made.inputs, [true, false]);
   });
 
   it('F-2405 5.0 step 7: a terminal that ends with code 0 has copied the file', async () => {
