@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readdirSync} from 'node:fs';
+import {readdirSync, rmSync} from 'node:fs';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import {
@@ -21,7 +21,7 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
-import {hostSessionIds} from '../windows/pty-support.ts';
+import {hostSessionIds, hostSessions} from '../windows/pty-support.ts';
 import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 import {
@@ -76,6 +76,23 @@ async function newWindowFrom(name: string): Promise<string> {
   } catch (caught) {
     throw new Error(
       `${String(caught)}; the windows: ${JSON.stringify(windowNames())}; ${name}'s last events: ${JSON.stringify(windowEvents(name).slice(-6))}\nthe log:\n${connectionLog().slice(-40).join('\n')}`,
+      {cause: caught},
+    );
+  }
+}
+
+/** Waits until none of the sessions `before` of the account `harness` runs on the host any more (a reconnection may already have opened others); a wait that runs out names the sessions and the processes of ssh that remain. */
+async function sessionsEnded(before: readonly string[]): Promise<void> {
+  try {
+    await waitFor(
+      'the sessions to end',
+      async () =>
+        (await hostSessionIds()).every(session => !before.includes(session)),
+      60_000,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; the sessions: ${(await hostSessions()).join(' | ')}; the processes: ${await onHostAs('harness', 'sh', '-c', "ps -o pid,ppid,etime,args | grep -E 'ssh|sleep' | grep -v grep; true")}`,
       {cause: caught},
     );
   }
@@ -379,12 +396,9 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
           window: 'local',
         },
       ]);
+      const before = await hostSessionIds();
       await inWindow('local', 'opensshremotes.cleanLocalServer');
-      await waitFor(
-        'the sessions to end',
-        async () => (await hostSessionIds()).length === 0,
-        60_000,
-      );
+      await sessionsEnded(before);
       await openWindow('harness', 'c84-ended-b');
       await connectedWithin('c84-ended-b', 90_000);
       const terminal = await inTerminal('c84-ended-b', DISPLAY_PROBE);
@@ -499,6 +513,11 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
         await x11Close('c84-writes');
         return listed.split('\n').filter(line => line !== '');
       }
+      // Earlier rows of the file leave the host's .Xauthority and the alias's known hosts behind: start without them.
+      await onHostAs('harness', 'rm', '-f', '/home/harness/.Xauthority');
+      rmSync(path.join(variable('HARNESS_RUN_FOLDER'), 'known_hosts_x11fwd'), {
+        force: true,
+      });
       const clientBefore = clientFileKinds();
       const without = await hostFilesAfter('harness');
       const clientPlain = clientFileKinds();
@@ -535,15 +554,13 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
           window: 'c84-new-connection',
         },
       ]);
+      const before = await hostSessionIds();
       await inWindow('c84-new-connection', 'opensshremotes.cleanLocalServer');
-      await waitFor(
-        'the sessions to end',
-        async () => (await hostSessionIds()).length === 0,
-        60_000,
-      );
+      await sessionsEnded(before);
       await waitFor(
         'the reconnection',
-        async () => (await hostSessionIds()).length > 0,
+        async () =>
+          (await hostSessionIds()).some(session => !before.includes(session)),
         120_000,
       );
       await connectedWithin('c84-new-connection', 120_000);
@@ -588,12 +605,9 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
             window: name,
           },
         ]);
+        const before = await hostSessionIds();
         await inWindow(name, 'opensshremotes.cleanLocalServer');
-        await waitFor(
-          'the sessions to end',
-          async () => (await hostSessionIds()).length === 0,
-          60_000,
-        );
+        await sessionsEnded(before);
         await waitFor(
           'the contribution to name another display',
           async () =>
