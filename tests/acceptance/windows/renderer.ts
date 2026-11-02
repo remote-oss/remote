@@ -1861,6 +1861,14 @@ export async function statusBarText(
   );
 }
 
+/** The DOM ids of every status bar item window `name` shows, in the order of the bar. */
+export async function statusBarItemIds(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.statusbar-item')].map(each => each.id)`,
+  );
+}
+
 /** The remote indicator's text and the text of each notification toast of window `name`, read in one go so that a sample is quick. */
 export async function connectSurface(
   name: string,

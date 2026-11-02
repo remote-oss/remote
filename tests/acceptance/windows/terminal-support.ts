@@ -29,11 +29,21 @@ export async function printedAfter(
   return found;
 }
 
-/** Opens a window on `alias` (the host's default account unless given) in a new folder `folder` with a terminal in it. */
+/** Opens a window on `alias` (the host's default account unless given) in a new folder `folder` of the home of `user` with a terminal in it. */
 export async function windowWithTerminal(
   folder: string,
   alias = 'harness',
+  user = 'harness',
 ): Promise<void> {
-  await openWindow(alias, folder);
+  await openWindow(alias, folder, user);
   await inWindow(folder, 'workbench.action.terminal.new');
+}
+
+/** What `ssh-add -l` prints first in a new terminal of window `name`, its spaces written as underscores. */
+export async function listedKeys(name: string): Promise<string> {
+  return printedAfter(
+    name,
+    'KEYS',
+    '$(ssh-add -l 2>&1 | head -1 | tr " " "_")',
+  );
 }

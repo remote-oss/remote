@@ -311,6 +311,9 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
+const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
+
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-container.test.ts',
@@ -949,6 +952,14 @@ export function launchesOf(root: string): Launch[] {
       environment: {HOME: '<run>/home-secrets'},
       // Each attempt starts from the same accounts: a forced change gives harness-expired a new password.
       hostSetup: [{command: SECRETS_ACCOUNTS_RESET}],
+    },
+    {
+      // The account that may not create agent links in /tmp, on the Ubuntu 26.04 host; each attempt starts with its ACL entry.
+      ...RENDERER_LAUNCH,
+      label: 'agent-notmp',
+      suite: 'agent-notmp',
+      hostBase: 'ubuntu-26.04',
+      hostSetup: [{command: AGENT_NOTMP_ACL}],
     },
     {
       ...RENDERER_LAUNCH,
