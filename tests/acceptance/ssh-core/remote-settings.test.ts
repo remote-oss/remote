@@ -9,15 +9,8 @@ import {
   openWindow,
   waitFor,
 } from '../windows/harness.ts';
-import {paletteItems} from '../windows/palette.ts';
-import {startInWindow} from '../windows/harness.ts';
-import {
-  chooseQuickPickRow,
-  pageText,
-  settingsTabs,
-  typeInQuickPick,
-  waitForQuickPick,
-} from '../windows/renderer.ts';
+import {paletteItems, runFromPalette} from '../windows/palette.ts';
+import {pageText, settingsTabs} from '../windows/renderer.ts';
 
 /** The host file of the remote settings, in the server folder the running client's product names. */
 function remoteSettingsFile(): string {
@@ -44,15 +37,6 @@ async function labelledWindow(folder: string): Promise<void> {
   );
 }
 
-/** Runs the command of the Command Palette whose title is exactly `title` in window `name`, not the first match. */
-async function runTitled(name: string, title: string): Promise<void> {
-  await startInWindow(name, 'workbench.action.showCommands');
-  await waitForQuickPick(name, 30_000);
-  await typeInQuickPick(name, `>${title}`);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  await chooseQuickPickRow(name, title);
-}
-
 describe('the remote settings and the Extensions view in an SSH window (card coverage-80)', function () {
   this.timeout(300_000);
 
@@ -74,7 +58,7 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
     await labelledWindow('c80-file');
     try {
       await onHost('rm', '-f', remoteSettingsFile());
-      await runTitled('c80-file', JSON_COMMAND);
+      await runFromPalette('c80-file', JSON_COMMAND);
       await waitFor(
         'the settings file to be the active editor',
         async () => (await activeEditorOf('c80-file')) === remoteSettingsFile(),
@@ -92,7 +76,7 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
   it('F-2508 AC-11 (c80-settings-tabs): the Settings editor opened by the remote command has the scope tabs User, Remote [SSH: harness] (selected) and Workspace', async () => {
     await labelledWindow('c80-tabs');
     try {
-      await runTitled('c80-tabs', SETTINGS_COMMAND);
+      await runFromPalette('c80-tabs', SETTINGS_COMMAND);
       await waitFor(
         'the scope tabs',
         async () => (await settingsTabs('c80-tabs')).length > 0,
@@ -113,7 +97,7 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
     await labelledWindow('c80-save-b');
     try {
       await onHost('rm', '-f', remoteSettingsFile());
-      await runTitled('c80-save-a', JSON_COMMAND);
+      await runFromPalette('c80-save-a', JSON_COMMAND);
       await waitFor(
         'the settings file to be open',
         async () =>
@@ -125,7 +109,7 @@ describe('the remote settings and the Extensions view in an SSH window (card cov
         'acceptance.agent.writeActiveEditor',
         '{"editor.tabSize": 6}\n',
       );
-      await runTitled('c80-save-b', JSON_COMMAND);
+      await runFromPalette('c80-save-b', JSON_COMMAND);
       await waitFor(
         'the second window to show the file',
         async () =>
