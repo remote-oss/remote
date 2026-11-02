@@ -5,6 +5,7 @@ import {sshRemoteCodec} from 'lib-authority';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   acceptedPasswords,
+  isQuestion,
   appendScript,
   closeWindow,
   connectedWithin,
@@ -189,6 +190,7 @@ describe('New Window on Active Host (card coverage-42)', function () {
     const stateOfSecond = await windowState(second);
     const lines = recordLines()
       .slice(mark)
+      .filter(isQuestion)
       .map(line => `${line.window}:${line.surface}`);
     opened.second = second;
     deepStrictEqual(
@@ -296,7 +298,7 @@ describe('New Window on Active Host (card coverage-42)', function () {
         recordLines('maskedInput', next).filter(line => line.time > 0).length,
         recordLines()
           .slice(mark)
-          .filter(line => line.window === next).length,
+          .filter(line => line.window === next && isQuestion(line)).length,
         (await acceptedPasswords()) - before,
       ],
       [0, 0, 0],
