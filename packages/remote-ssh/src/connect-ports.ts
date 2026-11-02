@@ -532,6 +532,11 @@ export function connectAssemblyOf(
         return textOfId(title.id as FailureStringId, translate, title.values);
       },
       titleOf: phase => {
+        if (phase.name === 'startingServer') {
+          // The stage with no text: the progress shows the host alone, whatever stage came before it.
+          shownTitle = '';
+          return shownTitle;
+        }
         const title = phaseTitleOf(phase);
         // A stage without a message of its own keeps the one shown before it.
         if (title !== undefined) {

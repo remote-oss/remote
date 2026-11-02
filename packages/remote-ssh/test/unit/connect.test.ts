@@ -308,7 +308,8 @@ describe('the connect pipeline, when it works', () => {
     await connect(
       INPUT,
       steps(recording, {
-        openTunnel: (input, lease, server, onWaiting) => {
+        openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+          onSettingUp?.();
           onWaiting();
           return Promise.resolve({
             kind: 'done',

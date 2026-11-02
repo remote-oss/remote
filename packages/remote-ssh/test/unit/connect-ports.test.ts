@@ -334,6 +334,16 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it('connect-107: the stage with no text resets the message, so that the progress opened by it shows the host alone', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    options.titleOf({name: 'initializing'}, decoded('dev'));
+    deepStrictEqual(
+      options.titleOf({name: 'startingServer'}, decoded('dev')),
+      '',
+    );
+  });
+
   it("F-2304: a new connect's share downloaded does not keep the last connect's message", () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));

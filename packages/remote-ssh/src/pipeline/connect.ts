@@ -485,7 +485,6 @@ async function runSteps(
       steps.installExtensions(input, lease, cancellation),
     );
   }
-  options.onPhase({kind: 'settingUpTunnel'});
   const tunnel = await runBounded(
     signal =>
       steps.openTunnel(
@@ -496,6 +495,9 @@ async function runSteps(
           options.onPhase({kind: 'waitingForForwarding'});
         },
         signal,
+        () => {
+          options.onPhase({kind: 'settingUpTunnel'});
+        },
       ),
     // A second `ssh` has bounds of its own and a login to wait for, which a limit sized for the relay would cut off.
     steps.tunnelPath() === 'socks' ? waits.tunnelMilliseconds : undefined,
