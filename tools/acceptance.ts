@@ -703,6 +703,17 @@ export function harnessSshConfig(
     ),
     // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
     ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
+    // The harness account with a RequestTTY of its own.
+    ...['force', 'yes', 'no'].flatMap(request =>
+      keyAlias(
+        `pty-${request}`,
+        'harness',
+        port,
+        runFolder,
+        ['id_ed25519'],
+        ['BatchMode yes', 'IdentityAgent none', `RequestTTY ${request}`],
+      ),
+    ),
     ...keyAlias('several-files', 'harness', port, runFolder, [
       'id_missing',
       'id_passphrase_stranger',
