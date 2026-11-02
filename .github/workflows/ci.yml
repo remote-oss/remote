@@ -305,16 +305,18 @@ jobs:
   acceptance-vscodium:
     name: acceptance (vscodium, ${{ matrix.launches }})
     if: inputs.vscodium || github.event.schedule == '17 */2 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    # Every launch of the suite (`all`) runs as five parts on five runners at once: the ssh launches; the two parts of the
-    # `containers` launch, containers-a and containers-b, about an hour each (half the suite's files each); the other
-    # containers launches; and the explorer and host-case launches together. Each runner has its own Docker daemon, so
+    # Every launch of the suite (`all`) runs as six parts on six runners at once: the ssh launches in two, ssh-core and
+    # windows (about 40 and 30 minutes) and the rest of the group (about an hour), since the group outgrew the job's 120
+    # minutes on 2026-11-02 (41428931974 was cancelled with three launches left); the two parts of the `containers`
+    # launch, containers-a and containers-b, about an hour each (half the suite's files each); the other containers
+    # launches; and the explorer and host-case launches together. Each runner has its own Docker daemon, so
     # the containers parts never wait for each other's lock. The genuine group
     # has its own job. A dispatch that names its launches runs them as one part; one whose launches input is empty runs
     # all.
     strategy:
       fail-fast: false
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
