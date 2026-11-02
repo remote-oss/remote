@@ -787,7 +787,7 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
-            'remote.SSH.remotePlatform': {harness: 'linux'},
+            'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
           },
         ],
         [
