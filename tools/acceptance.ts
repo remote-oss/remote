@@ -678,8 +678,10 @@ function keyLines(runFolder: string): string[] {
  * The aliases whose configuration forwards ports: `fwd-busy` and `fwd-busy-exit` (a `LocalForward` for a port the row
  * holds, without and with `ExitOnForwardFailure`), `fwd-static` (a `LocalForward` for the host's port 8657),
  * `fwd-gateway` (`GatewayPorts yes` with a `LocalForward`), `fwd-remote` (a `RemoteForward` to a port of the client),
- * `fwd-dynamic` (a `DynamicForward`), and `fwd-open` and `fwd-noopen` (a dynamic `RemoteForward` with `PermitRemoteOpen`
- * `any` and `none`, an option of the client's configuration). Each is the alias's name, its account and its lines.
+ * `fwd-dynamic` (a `DynamicForward`), `fwd-open` and `fwd-noopen` (a dynamic `RemoteForward` with `PermitRemoteOpen`
+ * `any` and `none`, an option of the client's configuration), `fwd-clearall` (`ClearAllForwardings yes`), `fwd-exit`
+ * (`ExitOnForwardFailure yes` alone) and `fwd-dynamic-exit` (a `DynamicForward` for a port the row holds, with
+ * `ExitOnForwardFailure yes`). Each is the alias's name, its account and its lines.
  */
 export const FORWARD_ALIASES: ReadonlyArray<
   readonly [string, string, readonly string[]]
@@ -700,6 +702,13 @@ export const FORWARD_ALIASES: ReadonlyArray<
   ['fwd-dynamic', 'harness', ['DynamicForward 11080']],
   ['fwd-open', 'harness', ['RemoteForward 19201', 'PermitRemoteOpen any']],
   ['fwd-noopen', 'harness', ['RemoteForward 19200', 'PermitRemoteOpen none']],
+  ['fwd-clearall', 'harness', ['ClearAllForwardings yes']],
+  ['fwd-exit', 'harness', ['ExitOnForwardFailure yes']],
+  [
+    'fwd-dynamic-exit',
+    'harness',
+    ['DynamicForward 13030', 'ExitOnForwardFailure yes'],
+  ],
 ];
 
 /**

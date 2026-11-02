@@ -69,9 +69,24 @@ export interface Connected {
   added: Listener[];
 }
 
+/** The hosts whose platform the rows store, so that terminal mode asks no pick. */
+const LINUX_ALIASES = [
+  'harness',
+  'password',
+  'noforward',
+  'nosocket',
+  'noall',
+  'fwd-clearall',
+  'fwd-exit',
+  'fwd-busy-exit',
+  'fwd-dynamic-exit',
+];
+
 /** The settings of the rows: the platform of the hosts is stored, so that terminal mode asks no pick. */
-const PLATFORMS = {
-  'remote.SSH.remotePlatform': {harness: 'linux', password: 'linux'},
+export const PLATFORMS = {
+  'remote.SSH.remotePlatform': Object.fromEntries(
+    LINUX_ALIASES.map(alias => [alias, 'linux']),
+  ),
 };
 
 /**
@@ -80,7 +95,7 @@ const PLATFORMS = {
  */
 export async function connectedWith(
   name: string,
-  alias: 'harness' | 'password',
+  alias: string,
   settings: Readonly<Record<string, unknown>>,
 ): Promise<Connected> {
   await userSettings({...PLATFORMS, ...settings});
