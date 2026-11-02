@@ -43,6 +43,8 @@ import type {
 export type PhaseEvent =
   | {kind: 'initializing'; quiet?: true}
   | {kind: 'promptShown'}
+  /** The stage that has no text: it opens the progress with the host's title alone. */
+  | {kind: 'startingServer'}
   | {kind: 'runningPreconnectScript'}
   | {kind: 'waitingForOtherWindow'}
   | {kind: 'downloading'}
@@ -328,6 +330,11 @@ async function runSteps(
   }
   const lease = connection.value;
   held.lease = lease;
+  if (lease.storedRecord === undefined) {
+    // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
+    // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
+    options.onPhase({kind: 'startingServer'});
+  }
   waits ??= lease.waits;
   if (waits === undefined) {
     throw new Error('the connection was opened with no waits and no lookup');
