@@ -150,7 +150,7 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-15: a joiner that logs the refused-channel lines still gets them in its log', () => {
+  it('F-2604 AC-15 (ruling-1773-joiner-lines): a joiner that logs the refused-channel lines still gets them in its log', () => {
     const {watch, sink} = watching();
     watch.begin();
     watch.attach(false);
