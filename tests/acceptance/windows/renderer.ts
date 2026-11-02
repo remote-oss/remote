@@ -2438,6 +2438,43 @@ export async function quickPickOf(
   );
 }
 
+/** What an input box of the quick input shows: its placeholder, its value as the box holds it, whether it masks, and its title, message and item rows. */
+export interface ShownInputBox {
+  placeholder: string;
+  value: string;
+  masked: boolean;
+  title: string;
+  message: string;
+  items: number;
+}
+
+/** The input box open in window `name`, or `undefined` when the quick input is closed. */
+export async function inputBoxOf(
+  name: string,
+): Promise<ShownInputBox | undefined> {
+  return (
+    (await evaluate<ShownInputBox | null>(
+      name,
+      `(() => {
+  const widget = document.querySelector('${QUICK_WIDGET}');
+  if (widget === null || widget.style.display === 'none') {
+    return null;
+  }
+  const box = widget.querySelector('.quick-input-box input');
+  const visible = element => element !== null && element.getBoundingClientRect().height > 0;
+  return {
+    placeholder: box?.getAttribute('placeholder') ?? '',
+    value: box?.value ?? '',
+    masked: box?.getAttribute('type') === 'password',
+    title: (visible(widget.querySelector('.quick-input-title')) ? widget.querySelector('.quick-input-title')?.textContent : '') ?? '',
+    message: (widget.querySelector('.quick-input-message')?.textContent ?? '').trim(),
+    items: widget.querySelectorAll('.quick-input-list .monaco-list-row').length,
+  };
+})()`,
+    )) ?? undefined
+  );
+}
+
 /** One row of a quick pick: its label, its description, the buttons beside it, and whether the list has it focused. */
 export interface QuickPickRow {
   label: string;

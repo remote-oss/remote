@@ -226,10 +226,7 @@ describe('the local port range of a window (card coverage-79)', function () {
             indicator: (await statusItem(name, 'status.host')).text,
           },
           {
-            retryProgress: [
-              ['Setting up SSH Host harness', undefined],
-              ['', false],
-            ],
+            retryProgress: [['Setting up SSH Host harness', undefined]],
             dialogs: [
               [busyDialog('41070-41071'), BUTTONS],
               [busyDialog('41070-41071'), BUTTONS],

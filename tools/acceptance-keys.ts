@@ -19,6 +19,16 @@ import {type Started, startDetached} from './acceptance-plain.ts';
 /** The principal the run's certificate is signed for: the host's certificate-only account. */
 export const CERTIFIED_PRINCIPAL = 'harness-cert';
 
+/** How many aliases of the passphrase key a run has besides `passkey`, named `passkey-1` and on: one for each row that needs a connection of its own. */
+const PASSKEY_COPIES = 12;
+
+/** The names of the copies of the passphrase key's alias: `passkey-1` to the last. */
+export function passkeyCopies(): string[] {
+  return [...Array(PASSKEY_COPIES).keys()].map(
+    index => `passkey-${String(index + 1)}`,
+  );
+}
+
 /** The comment of the passphrase key, which ssh shows when it offers to add the key to an agent. */
 export const PASSPHRASE_KEY_COMMENT = 'acceptance-passphrase';
 
