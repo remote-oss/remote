@@ -735,12 +735,17 @@ describe('acceptance', () => {
     );
   });
 
-  it('tooling-34: Host twofactor and Host expired log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
+  it('tooling-34, coverage-82: Host twofactor, Host expired and Host ask-odd log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
     deepStrictEqual(
-      [accountBlock('twofactor'), accountBlock('expired')],
+      [
+        accountBlock('twofactor'),
+        accountBlock('expired'),
+        accountBlock('ask-odd'),
+      ],
       [
         ['twofactor', 'harness-2fa'],
         ['expired', 'harness-expired'],
+        ['ask-odd', 'harness-odd'],
       ].map(([name = '', user = '']) =>
         [
           ...sharedLines(name, user),
