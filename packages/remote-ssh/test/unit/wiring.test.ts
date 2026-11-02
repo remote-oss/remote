@@ -1980,11 +1980,14 @@ describe("the lookup inside the shared connection's acquire (card connect-57)", 
       new AbortController().signal,
     );
     seen.clock.advance(5_000);
-    const early = seen.trustListeners.length;
+    const early = [
+      seen.trustListeners.length,
+      seen.terminals.opened.map(terminal => [terminal.name, terminal.disposed]),
+    ];
     seen.trustListeners[0]?.();
     deepStrictEqual(
-      [await held, early, seen.trustListeners.length],
-      [LOOKUP_FAILURE, 1, 0],
+      [await held, early, seen.terminals.opened[0]?.disposed],
+      [LOOKUP_FAILURE, [1, [['install', false]]], true],
     );
   });
 
@@ -2001,8 +2004,12 @@ describe("the lookup inside the shared connection's acquire (card connect-57)", 
     seen.clock.advance(11_999);
     seen.clock.advance(1);
     deepStrictEqual(
-      [await held, seen.trustListeners.length],
-      [CONNECT_WAIT_TIMEOUT, 0],
+      [
+        await held,
+        seen.trustListeners.length,
+        seen.terminals.opened.map(terminal => terminal.disposed),
+      ],
+      [CONNECT_WAIT_TIMEOUT, 0, [true]],
     );
   });
 
@@ -2015,8 +2022,9 @@ describe("the lookup inside the shared connection's acquire (card connect-57)", 
           new AbortController().signal,
         ),
         seen.trustListeners.length,
+        seen.terminals.opened.length,
       ],
-      [LOOKUP_FAILURE, 0],
+      [LOOKUP_FAILURE, 0, 0],
     );
   });
 
@@ -2031,8 +2039,9 @@ describe("the lookup inside the shared connection's acquire (card connect-57)", 
           cancellation.signal,
         ),
         seen.trustListeners.length,
+        seen.terminals.opened.length,
       ],
-      [LOOKUP_FAILURE, 0],
+      [LOOKUP_FAILURE, 0, 0],
     );
   });
 
@@ -2045,8 +2054,12 @@ describe("the lookup inside the shared connection's acquire (card connect-57)", 
     );
     cancellation.abort();
     deepStrictEqual(
-      [await held, seen.trustListeners.length],
-      [{kind: 'cancelled'}, 0],
+      [
+        await held,
+        seen.trustListeners.length,
+        seen.terminals.opened.map(terminal => terminal.disposed),
+      ],
+      [{kind: 'cancelled'}, 0, [true]],
     );
   });
 });

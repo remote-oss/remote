@@ -479,6 +479,17 @@ export function stepsOf(
       if (ports.trust.isTrusted() || cancellation.aborted) {
         return Promise.resolve(failed);
       }
+      // Core holds the creation of a terminal process in an untrusted workspace for the trust question, so the held
+      // failure opens the login terminal, with a program that does nothing, as the question's cause.
+      const terminal = ports.terminal.terminals.open(
+        {
+          program: ports.requestEnvironment.runtime,
+          arguments: ['-e', ''],
+          environment: {ELECTRON_RUN_AS_NODE: '1'},
+        },
+        ports.terminal.terminalName(),
+        ports.terminal.revealLoginTerminals(),
+      );
       return new Promise<StepFailure>(settle => {
         const wait = new ConnectWait(
           terminalWaitOf(undefined, connectionSettings().connectTimeout),
@@ -493,6 +504,7 @@ export function stepsOf(
         function end(failure: StepFailure): void {
           wait.stop();
           grant.dispose();
+          terminal.dispose();
           cancellation.removeEventListener('abort', onAbort);
           settle(failure);
         }
