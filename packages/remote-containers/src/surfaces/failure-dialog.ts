@@ -99,7 +99,7 @@ export function failureDialogOf(
   };
 }
 
-/** The quick pick that More Actions... opens; it offers a rebuild when the failed connect found a container. */
+/** The quick pick that More Actions... opens; it offers a rebuild when the failed connect found a container and its configuration file is there. */
 export function quickPickOf(
   target: DevContainerFolder | undefined,
   containerFound: boolean,

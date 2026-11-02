@@ -55,6 +55,8 @@ export interface RecoveryPorts {
     placeholder: string,
     labels: readonly string[],
   ): PromiseLike<string | undefined>;
+  /** Whether a file exists on this machine. */
+  fileExists(file: string): PromiseLike<boolean>;
   /** Writes the failed attempt's log to a file and gives its path; none when it could not be written. */
   writeAttemptLog(): PromiseLike<string | undefined>;
   /** Keeps the configuration file, and the attempt's log file when there is one, for the window that opens `folder` next. */
@@ -126,7 +128,11 @@ export function recoveryPresenterOf(
     const folder = target();
     const pick = quickPickOf(
       folder,
-      failedContainer() !== undefined,
+      failedContainer() !== undefined &&
+        (folder === undefined ||
+          (await ports.fileExists(
+            folder.configFile.fsPath ?? folder.configFile.path,
+          ))),
       translate,
     );
     const chosen = await ports.pick(
