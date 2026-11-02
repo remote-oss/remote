@@ -46,7 +46,7 @@ export function phaseTitleOf(phase: ConnectPhase): StringRef | undefined {
 
 /** The tooltip of the "(details)" link of a stage: "Show details in terminal" for the tunnel stage in the terminal mode, and none otherwise. */
 export function detailsTitleOf(
-  stage: string,
+  stage: PhaseName,
   terminalMode: boolean,
 ): StringRef | undefined {
   return stage === 'settingUpTunnel' && terminalMode
