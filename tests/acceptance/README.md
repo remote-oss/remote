@@ -360,7 +360,11 @@ default: dismiss the dialog and its pick). An install case that keeps nothing al
 `/home/harness/.vscodium-server-insiders` and `/tmp/srv`. A case's settings may name the download host's bases as
 `${HARNESS_DOWNLOADS_HTTP}`, `${HARNESS_DOWNLOADS_HTTPS}`, `${HARNESS_DOWNLOADS_LICENSED}` and
 `${HARNESS_DOWNLOADS_LOCAL}`; the run puts them in when it writes the launch's settings, and leaves the product's own
-`${…}` placeholders as written. Before each launch the run notes how many requests the download host has logged, in
+`${…}` placeholders as written. The same names, and `${HARNESS_DOWNLOADS_PORT}` (the download host's port), are put into a
+case's `setup` commands: the cases `host-404-fallback` and `host-junk-fallback` start a relay on the host's loopback
+(`nc -lk -p <port> -e nc downloads <port>`) so that one template URL, on the client-only base, reaches the download host
+from both sides; the download host's `hostrefused` and `hostjunk` sources answer the host's `wget` or `curl` with a 404 or
+with junk and any other client with the archive. Before each launch the run notes how many requests the download host has logged, in
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 

@@ -89,6 +89,7 @@ function get(
   scheme: 'http' | 'https',
   port: number,
   pathName: string,
+  agent = 'unit-row',
 ): Promise<Received> {
   return new Promise((resolve, reject) => {
     const send = scheme === 'http' ? httpRequest : httpsRequest;
@@ -98,7 +99,7 @@ function get(
         port,
         path: pathName,
         rejectUnauthorized: false,
-        headers: {'user-agent': 'unit-row'},
+        headers: {'user-agent': agent},
       },
       response => {
         const chunks: Buffer[] = [];
@@ -321,6 +322,37 @@ describe('the download host', function () {
       [
         [404, 0, '*'],
         [404, 0, undefined],
+      ],
+    );
+  });
+
+  it('coverage-87: hostrefused gives the downloaders of a host an empty 404 and any other client the archive', async () => {
+    const answers = await Promise.all(
+      ['Wget', 'curl/8.0', 'node'].map(agent =>
+        get('http', host.httpPort, '/hostrefused/linux-x64/abc', agent),
+      ),
+    );
+    deepStrictEqual(
+      answers.map(each => [each.status, each.body.length === 0]),
+      [
+        [404, true],
+        [404, true],
+        [200, false],
+      ],
+    );
+  });
+
+  it('coverage-87: hostjunk gives the downloaders of a host bytes that are not the archive and any other client the archive', async () => {
+    const answers = await Promise.all(
+      ['Wget', 'node'].map(agent =>
+        get('http', host.httpPort, '/hostjunk/linux-x64/abc', agent),
+      ),
+    );
+    deepStrictEqual(
+      answers.map(each => [each.status, each.body.equals(glibcArchive)]),
+      [
+        [200, false],
+        [200, true],
       ],
     );
   });
@@ -924,6 +956,7 @@ describe('the download host in the run', () => {
         HARNESS_DOWNLOADS_LICENSED: 'https://update.code.visualstudio.com:8443',
         HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
         HARNESS_DOWNLOADS_LOG: '/run/requests.log',
+        HARNESS_DOWNLOADS_PORT: '8080',
         HARNESS_DOWNLOADS_TLS_LOG: '/run/downloads-tls.log',
       },
     );

@@ -528,6 +528,29 @@ function answerArchive(
   }
 }
 
+/**
+ * The answer of `hostrefused` and `hostjunk`, which fail only the downloaders of a host (`wget` and `curl`): an empty
+ * 404 for the first, bytes that are not the archive for the second; any other client gets the archive whole.
+ */
+function answerToDownloaders(
+  request: IncomingMessage,
+  response: ServerResponse,
+  archiveFile: string | undefined,
+  held: Set<Socket>,
+): void {
+  if (!/wget|curl/i.test(String(request.headers['user-agent'] ?? ''))) {
+    answerArchive(request, response, archiveFile, held);
+    return;
+  }
+  if (String(request.url).split('/')[1] === 'hostrefused') {
+    response.writeHead(404, {'Content-Length': 0});
+    response.end();
+    return;
+  }
+  response.writeHead(200, {'Content-Length': JUNK_BYTES});
+  response.end(randomBytes(JUNK_BYTES));
+}
+
 /** The answer to one request, chosen by the first segment of its path. */
 function answer(
   request: IncomingMessage,
@@ -557,6 +580,15 @@ function answer(
     case 'stall':
     case 'slow':
       answerArchive(
+        request,
+        response,
+        archiveFileOf(String(request.url), options),
+        held,
+      );
+      return;
+    case 'hostrefused':
+    case 'hostjunk':
+      answerToDownloaders(
         request,
         response,
         archiveFileOf(String(request.url), options),
@@ -763,6 +795,7 @@ export function downloadVariables(
     HARNESS_DOWNLOADS_LICENSED: `https://${UPDATE_SERVICE_NAME}:${String(host.httpsPort)}`,
     HARNESS_DOWNLOADS_LOCAL: `http://127.0.0.1:${String(host.httpPort)}`,
     HARNESS_DOWNLOADS_LOG: logFile,
+    HARNESS_DOWNLOADS_PORT: String(host.httpPort),
     HARNESS_DOWNLOADS_TLS_LOG: tlsLogFile,
   };
 }

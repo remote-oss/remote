@@ -1465,7 +1465,11 @@ export async function runLaunches(
           );
         }
         if (launch.hostSetup !== undefined) {
-          runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
+          runHostSetup(
+            command,
+            hostContainerOf(launch),
+            withHarnessBases(launch.hostSetup, bases),
+          );
         }
         writeUserSettings(
           runFolder,
