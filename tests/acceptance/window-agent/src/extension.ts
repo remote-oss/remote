@@ -51,7 +51,13 @@ function agentFolderOf(): string | undefined {
  * process id never carries the name of the window that ran in it before.
  */
 function activationName(agentFolder: string): string {
-  const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  // A remote workspace window has no folders yet when its extensions activate, so its workspace file's own folder names it.
+  const workspaceFile = vscode.workspace.workspaceFile;
+  const folder =
+    vscode.workspace.workspaceFolders?.[0]?.uri ??
+    (workspaceFile?.scheme === 'untitled'
+      ? undefined
+      : workspaceFile && vscode.Uri.joinPath(workspaceFile, '..'));
   const first = folder?.scheme === MEMORY_SCHEME ? MEMORY_SCHEME : folder?.path;
   const name =
     first === undefined

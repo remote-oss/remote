@@ -179,5 +179,6 @@
   "Workspace contains a Dev Container configuration file.": "Workspace contains a Dev Container configuration file.",
   "Don't show again for the current workspace or for any workspace?": "Don't show again for the current workspace or for any workspace?",
   "Any Workspace": "Any Workspace",
-  "Current Workspace": "Current Workspace"
+  "Current Workspace": "Current Workspace",
+  "You need to first save your workspace in a folder containing all its workspace folders.": "You need to first save your workspace in a folder containing all its workspace folders."
 }

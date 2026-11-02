@@ -83,6 +83,14 @@ const READING = [
   'info: Reading configuration: 0 ms',
 ];
 
+/** The host path the dev-container authority of the first open command names. */
+function hostPathOpened(state: Setup): string | undefined {
+  const authority = (state.commands[0]?.parameters[0] as {authority: string})
+    .authority;
+  const target = devContainerTargetOf(authority.slice('dev-container+'.length));
+  return 'hostPath' in target ? target.hostPath : undefined;
+}
+
 describe('Reopen in Container', () => {
   it('F-0401 BR-1: a local window reloads on the dev-container authority of its folder, in the order of the flow', async () => {
     const state = setup();
@@ -176,6 +184,157 @@ describe('Reopen in Container', () => {
     await reopened(state);
     const target = openedTarget(state);
     deepStrictEqual('context' in target ? target.context : target, 'ctx1');
+  });
+
+  it('F-0401 6.5: a saved workspace, of one root or of two, reopens on the configuration beside its file, mounted from that folder, at the workspace file inside the mount', async () => {
+    const seen = [];
+    for (const roots of [1, 2]) {
+      const state = setup();
+      state.workspaceFile = {
+        scheme: 'file',
+        fsPath: '/w/p/team.code-workspace',
+      };
+      state.folders = ['/w/p/a', '/w/p/b']
+        .slice(0, roots)
+        .map(fsPath => ({scheme: 'file', fsPath}));
+      await reopened(state);
+      seen.push([
+        state.calls,
+        state.commands.map(each => each.command),
+        (state.commands[0]?.parameters[0] as {path: string}).path,
+        hostPathOpened(state),
+        state.modals,
+      ]);
+    }
+    const expected = [
+      [
+        'ensureTrusted',
+        'firstCheck /w/p',
+        'readConfiguration /w/p',
+        'pinnedEngine',
+      ],
+      ['vscode.openFolder'],
+      '/workspaces/p/team.code-workspace',
+      '/w/p',
+      [],
+    ];
+    deepStrictEqual(seen, [expected, expected]);
+  });
+
+  it('F-0401 6.5: the folder of a workspace file in a subfolder is that subfolder, and its configuration is the one found there', async () => {
+    const state = setup();
+    state.workspaceFile = {
+      scheme: 'file',
+      fsPath: '/w/p/ws/team.code-workspace',
+    };
+    state.folders = [{scheme: 'file', fsPath: '/w/p/ws/a'}];
+    state.existing = ['/w/p/ws/.devcontainer/devcontainer.json'];
+    state.read = {...CONFIGURATION, workspaceFolder: '/workspaces/ws'};
+    await reopened(state);
+    deepStrictEqual(
+      [state.calls, (state.commands[0]?.parameters[0] as {path: string}).path],
+      [
+        [
+          'ensureTrusted',
+          'firstCheck /w/p/ws',
+          'readConfiguration /w/p/ws',
+          'pinnedEngine',
+        ],
+        '/workspaces/ws/team.code-workspace',
+      ],
+    );
+  });
+
+  it('F-0301 AC-22, F-0106 AC-44: the configurations of the roots are not consulted: roots that have one and a workspace folder that has none give the wizard', async () => {
+    const state = setup();
+    state.workspaceFile = {scheme: 'file', fsPath: '/w/p/team.code-workspace'};
+    state.folders = [
+      {scheme: 'file', fsPath: '/w/p/a'},
+      {scheme: 'file', fsPath: '/w/p/b'},
+    ];
+    state.existing = [
+      '/w/p/a/.devcontainer/devcontainer.json',
+      '/w/p/b/.devcontainer/devcontainer.json',
+    ];
+    await reopened(state);
+    deepStrictEqual(
+      [state.calls, state.commands],
+      [['ensureTrusted', 'firstCheck /w/p', 'wizard /w/p'], []],
+    );
+  });
+
+  it('F-0301 5.0 step 4: two configurations beside the workspace file show the picker, and the one picked is what the workspace reloads on', async () => {
+    const state = setup();
+    state.workspaceFile = {scheme: 'file', fsPath: '/w/p/team.code-workspace'};
+    state.folders = [{scheme: 'file', fsPath: '/w/p/a'}];
+    state.existing = [CONFIG, '/w/p/.devcontainer/other/devcontainer.json'];
+    state.pick = {kind: 'picked', index: 1};
+    await reopened(state);
+    deepStrictEqual(
+      [
+        state.shown,
+        state.targets.map(each => (each as {configFile: string}).configFile),
+        (state.commands[0]?.parameters[0] as {path: string}).path,
+      ],
+      [
+        ['pick 2'],
+        ['/w/p/.devcontainer/other/devcontainer.json'],
+        '/workspaces/p/team.code-workspace',
+      ],
+    );
+  });
+
+  it('F-0401 6.5 step 1, 7.E3: an unsaved workspace shows S415 in a modal and the command stops there: no trust request, no check, no open', async () => {
+    const state = setup();
+    state.workspaceFile = {scheme: 'untitled', fsPath: '/Untitled-1'};
+    state.folders = [
+      {scheme: 'file', fsPath: '/w/p/a'},
+      {scheme: 'file', fsPath: '/w/p/b'},
+    ];
+    const {lines} = await reopened(state);
+    deepStrictEqual(
+      [state.modals, state.calls, state.commands, lines],
+      [
+        [
+          'You need to first save your workspace in a folder containing all its workspace folders.',
+        ],
+        [],
+        [],
+        [],
+      ],
+    );
+  });
+
+  it('F-0405 AC-35: a saved or an unsaved workspace with a root that is not a local folder does nothing and shows nothing', async () => {
+    const seen = [];
+    for (const workspaceFile of [
+      {scheme: 'file', fsPath: '/w/p/team.code-workspace'},
+      {scheme: 'untitled', fsPath: '/Untitled-1'},
+    ]) {
+      const state = setup();
+      state.workspaceFile = workspaceFile;
+      state.folders = [{scheme: 'memfs', fsPath: '/'}];
+      const {lines} = await reopened(state);
+      seen.push([state.modals, state.calls, state.commands, lines]);
+    }
+    const nothing = [
+      [],
+      [],
+      [],
+      ['info: Reopen in Container does nothing in this window'],
+    ];
+    deepStrictEqual(seen, [nothing, nothing]);
+  });
+
+  it('F-0401 6.5: a remote window with a workspace file does nothing and shows nothing', async () => {
+    const state = setup();
+    state.remoteName = 'dev-container';
+    state.workspaceFile = {scheme: 'file', fsPath: '/w/p/team.code-workspace'};
+    const {lines} = await reopened(state);
+    deepStrictEqual(
+      [state.modals, state.calls, state.commands, lines],
+      [[], [], [], ['info: Reopen in Container does nothing in this window']],
+    );
   });
 
   it('F-0401 AC-23: a remote window, a window without a folder, a window with two folders and a folder of another scheme do nothing and open nothing', async () => {
