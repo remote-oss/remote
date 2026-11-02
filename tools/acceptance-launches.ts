@@ -872,7 +872,11 @@ export function launchesOf(root: string): Launch[] {
           ].map(alias => [alias, 'linux']),
         ),
       },
-      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+      // The user's home is the run's own, so that a search for the passphrase reads only what the run wrote.
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        HOME: '<run>/home-passphrase',
+      },
     },
     {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
     {
