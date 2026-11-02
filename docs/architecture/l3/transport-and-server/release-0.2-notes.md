@@ -19,6 +19,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     resolve's start, everywhere (athena's ruling on #1681; spec question on remote-oss/remote-ssh#40). Rows:
     `ruling-1681-first-label`.
 
+- **A question that Remote - SSH does not recognise, left unanswered in a hidden login terminal, ends in the connection failure dialog after the connect wait**; the reference waits for the server to drop the login.
+  - F-2308 AC-12 (and 7.E3) have the dialog appear when the user answers only after the server dropped the login. Ours
+    bounds a question nobody can reach by the connect wait (the connect timeout and a margin of 2 seconds, BR-5), so the
+    dialog is already there when the server drops the login. Brief ruling 3 for the terminal mode (daedalus on #299,
+    corrected by athena on #385) and R-79; spec question on remote-oss/remote-ssh#41. Rows: `ruling-299-question-bound`.
+
 - **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
   - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
     family's floor (ADR-0007 as amended, the user's decision D-102 on #1368). The proposed APIs it uses read the same
