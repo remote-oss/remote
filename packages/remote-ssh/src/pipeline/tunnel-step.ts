@@ -247,8 +247,27 @@ async function openTerminalTunnel(
   }
   if (gate.kind === 'forwardFailed') {
     dependencies.logger.warn(`the tunnel's forward failed: ${gate.line}`);
+    // The port is never probed or connected, since nothing here listens on it. The window waits as for a port that never
+    // accepts, for the same fixed bound whatever the connect timeout is, and fails with the same reason.
     session.stop();
-    return NOT_OPENED;
+    onWaiting();
+    const hold: {cancel?: () => void} = {};
+    const elapsed = new Promise<'elapsed'>(resolve => {
+      hold.cancel = dependencies.scheduler.setTimer(
+        FORWARD_READY_MILLISECONDS,
+        () => {
+          resolve('elapsed');
+        },
+      );
+    });
+    const held = await Promise.race([elapsed, cancelled]);
+    hold.cancel?.();
+    return held === 'cancelled'
+      ? CANCELLED
+      : {
+          kind: 'failed',
+          failure: {kind: 'unknown', reason: MAX_WAIT_EXHAUSTED},
+        };
   }
   if (gate.kind === 'ended') {
     return NOT_OPENED;
