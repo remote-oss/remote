@@ -1,10 +1,10 @@
 ac	tag	reason
 F-2001.AC-1	todo	
-F-2001.AC-2	todo	
-F-2001.AC-3	todo	
-F-2001.AC-4	todo	
-F-2001.AC-5	todo	
-F-2001.AC-6	todo	
+F-2001.AC-2	acceptance	
+F-2001.AC-3	acceptance	
+F-2001.AC-4	acceptance	
+F-2001.AC-5	acceptance	
+F-2001.AC-6	acceptance	
 F-2001.AC-7	core	core: Developer: Show Running Extensions' list, its activation time and host marker
 F-2001.AC-8	todo	
 F-2001.AC-9	todo	
@@ -20,7 +20,7 @@ F-2001.AC-18	todo
 F-2001.AC-19	unit	
 F-2001.AC-20	todo	
 F-2001.AC-21	core	core: hiding commands and the menu group by extensions.supportUntrustedWorkspaces
-F-2001.AC-22	todo	
+F-2001.AC-22	acceptance	
 F-2001.AC-23	todo	
 F-2001.AC-24	core	core: the "OK to enable?" notification, "Enable and Reload" and the reload
 F-2001.AC-25	core	core: the "Do you want to install the extension?" notification and "Install and Reload"

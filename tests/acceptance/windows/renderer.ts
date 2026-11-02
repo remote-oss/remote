@@ -2320,6 +2320,36 @@ export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
   );
 }
 
+/** A row of a quick pick with the separator that starts its group, when it starts one. */
+export interface GroupedQuickPickRow {
+  label: string;
+  separator: string | undefined;
+}
+
+/** The rows of the quick pick open in window `name` with the separator that opens each group; none when no quick pick is open. */
+export async function groupedQuickPickRows(
+  name: string,
+): Promise<GroupedQuickPickRow[]> {
+  return evaluate<GroupedQuickPickRow[]>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      separator: row.querySelector('.quick-input-list-separator')?.textContent ?? undefined,
+    }))`,
+  );
+}
+
+/** The name of the output channel the Output panel of window `name` shows, or nothing when the panel shows none. */
+export async function outputChannelOf(
+  name: string,
+): Promise<string | undefined> {
+  const shown = await evaluate<string | null>(
+    name,
+    `document.querySelector('.part.panel select')?.selectedOptions[0]?.textContent ?? null`,
+  );
+  return shown ?? undefined;
+}
+
 /** The rows of the quick pick open in window `name` with their second lines and codicons as well; none when no quick pick is open. */
 export async function detailedQuickPickRows(
   name: string,

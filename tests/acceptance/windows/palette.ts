@@ -1,5 +1,6 @@
 import {startInWindow} from './harness.ts';
 import {
+  chooseQuickPickRow,
   pressEscape,
   quickPickOf,
   typeInQuickPick,
@@ -28,4 +29,16 @@ export async function paletteItems(
   }
   await pressEscape(name);
   return items;
+}
+
+/** Runs the command of the Command Palette whose title is exactly `title` in window `name`, not the first match. */
+export async function runFromPalette(
+  name: string,
+  title: string,
+): Promise<void> {
+  await startInWindow(name, 'workbench.action.showCommands');
+  await waitForQuickPick(name, 30_000);
+  await typeInQuickPick(name, `>${title}`);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  await chooseQuickPickRow(name, title);
 }
