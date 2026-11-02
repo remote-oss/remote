@@ -279,6 +279,8 @@ export interface ConnectSteps {
     server: StartedServer,
     onWaiting: () => void,
     cancellation: AbortSignal,
+    /** Takes the pipeline's bound off the step, for a step that waits on purpose until the connect is cancelled. */
+    disarmBound?: () => void,
   ): Promise<StepResult<TunnelOpening>>;
   /** Writes the platform the host reported to the settings after a connect has worked, where the settings ask for it. */
   rememberPlatform(

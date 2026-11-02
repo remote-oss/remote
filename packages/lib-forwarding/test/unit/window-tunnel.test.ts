@@ -85,6 +85,34 @@ describe('the window tunnel through the relay', () => {
     );
   });
 
+  it('connect-106: twenty probes in a row closed by the relay before its reply are a refused forward, before the bound, and close the port', async () => {
+    const {open, clock, local} = relay(['closedBeforeReply']);
+    const pending = open();
+    for (let round = 0; round < 20; round++) {
+      await advanced(clock, 500);
+    }
+    deepStrictEqual(
+      [(await pending).kind, local.closedPorts],
+      ['relayRefused', [50000]],
+    );
+  });
+
+  it('connect-106: twenty probes in a row that find nothing at the relay’s port are a refused forward too', async () => {
+    const {open, clock} = relay(['unreachable']);
+    const pending = open();
+    for (let round = 0; round < 20; round++) {
+      await advanced(clock, 500);
+    }
+    deepStrictEqual((await pending).kind, 'relayRefused');
+  });
+
+  it('connect-106: one probe that fails otherwise among those closed before the reply keeps the outcome not ready', async () => {
+    const {open, clock} = relay(['closedBeforeReply', 'fail']);
+    const pending = open();
+    await advanced(clock, 10_000);
+    deepStrictEqual((await pending).kind, 'tunnelNotReady');
+  });
+
   it('is not ready at the bound when the dialer never answers, never a hang', async () => {
     const {open, clock} = relay(['hang']);
     const pending = open();

@@ -54,6 +54,8 @@ function stepWith(
     port?: number | undefined;
     busyRange?: {first: number; last: number};
     onWaiting?: () => void;
+    cancellation?: AbortSignal;
+    limits?: typeof LIMITS;
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
@@ -62,11 +64,16 @@ function stepWith(
   socksPorts: number[];
   sink: MemorySink;
   clock: FakeClock;
+  /** How often the step told the window that the host refuses the forwarding, and took the bound off. */
+  refused: number[];
+  disarmed: number[];
 } {
   const clock = new FakeClock();
   const local = new FakeLocalPort();
   const dialer = new FakeDialer(options.dialScript ?? ['work']);
   const socksPorts: number[] = [];
+  const refused: number[] = [];
+  const disarmed: number[] = [];
   const sink = new MemorySink();
   const port = 'port' in options ? options.port : 50000;
   const choice: PortChoice =
@@ -79,13 +86,16 @@ function stepWith(
     settings: () => options.settings ?? SOCKS_SETTINGS,
     local,
     scheduler: clock.scheduler(),
-    limits: LIMITS,
+    limits: options.limits ?? LIMITS,
     dialerFor: socksPort => {
       socksPorts.push(socksPort);
       return dialer;
     },
     chooseLocalPort: () => Promise.resolve(choice),
     environment: () => ENVIRONMENT,
+    forwardRefused: () => {
+      refused.push(1);
+    },
     ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
@@ -97,17 +107,61 @@ function stepWith(
         lease,
         STARTED.server,
         options.onWaiting ?? (() => undefined),
-        new AbortController().signal,
+        options.cancellation ?? new AbortController().signal,
+        () => {
+          disarmed.push(1);
+        },
       ),
     local,
     dialer,
     socksPorts,
     sink,
     clock,
+    refused,
+    disarmed,
   };
 }
 
+/** Lets the clock run past the wait of the relay, a turn of the event loop at a time. */
+async function pastTheBound(clock: FakeClock): Promise<void> {
+  for (let round = 0; round < 400; round++) {
+    await Promise.resolve();
+    clock.advance(50);
+  }
+}
+
 describe('the step that opens the window tunnel', () => {
+  it('connect-106: a relay that closes every probe before its reply tells the window once, takes the bound off and waits until the connect is cancelled', async () => {
+    const controller = new AbortController();
+    const {open, clock, refused, disarmed} = stepWith({
+      dialScript: ['closedBeforeReply'],
+      cancellation: controller.signal,
+      limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
+    });
+    let result: Awaited<ReturnType<typeof open>> | undefined;
+    const pending = open().then(value => {
+      result = value;
+    });
+    await pastTheBound(clock);
+    const before = [refused.length, disarmed.length, result];
+    controller.abort();
+    await pending;
+    deepStrictEqual(
+      [before, result],
+      [[1, 1, undefined], {kind: 'failed', failure: {kind: 'cancelled'}}],
+    );
+  });
+
+  it('connect-106: probes that fail in another way are the failure of an unready tunnel, with no notice and the bound kept', async () => {
+    const {open, clock, refused, disarmed} = stepWith({dialScript: ['fail']});
+    const pending = open();
+    await pastTheBound(clock);
+    deepStrictEqual(
+      [(await pending).kind, refused.length, disarmed.length],
+      ['failed', 0, 0],
+    );
+  });
+
   it('F-2104 BR-1: the socks path gives the window the local address', async () => {
     const result = await stepWith().open();
     deepStrictEqual(

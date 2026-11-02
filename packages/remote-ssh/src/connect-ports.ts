@@ -68,6 +68,7 @@ import {announcePlatform} from './connect/platform-notice.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
+import {ownText} from './surfaces/own-strings.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -258,6 +259,7 @@ export function wiringPortsOf(
   logger: Logger,
 ): WiringPorts {
   const {settings} = surfaces;
+  let refusedTold = false;
   /** What every login terminal shares: its questions, and whether it is shown. */
   const loginSurfaces = {
     attachQuestions: (login: TerminalLogin, input: ConnectInput) =>
@@ -444,6 +446,30 @@ export function wiringPortsOf(
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
       chooseLocalPort: chooseWindowPort,
+      forwardRefused: () => {
+        // The extension host is the window's, so a flag of this assembly is a flag of the window.
+        if (refusedTold) {
+          return;
+        }
+        refusedTold = true;
+        const showLog = ownText(
+          {id: 'showLogButton', values: []},
+          surfaces.translate,
+        );
+        void surfaces.notice
+          .showError(
+            ownText(
+              {id: 'socksForwardingFailedNotice', values: []},
+              surfaces.translate,
+            ),
+            [showLog],
+          )
+          .then(taken => {
+            if (taken === showLog) {
+              surfaces.revealLog();
+            }
+          });
+      },
       logger,
     },
     logger,

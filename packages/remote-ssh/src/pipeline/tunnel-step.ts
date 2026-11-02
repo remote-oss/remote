@@ -66,6 +66,8 @@ export interface TunnelStepDependencies {
     login: TerminalLogin,
     input: ConnectInput,
   ): {onQuestion(text: string): void; dispose(): void};
+  /** Tells the user, once for the window, that the host refuses the forwarding the SOCKS relay needs. */
+  forwardRefused(): void;
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
   /** What decides the length of the connect wait, which also bounds a question of the tunnel login that nobody can see. */
@@ -336,7 +338,7 @@ export function openTunnelStep(
   async function openTunnel(
     ...given: Parameters<ConnectSteps['openTunnel']>
   ): Promise<TunnelResult> {
-    const [, lease, server, onWaiting] = given;
+    const [, lease, server, onWaiting, cancellation, disarmBound] = given;
     const path = tunnelPath();
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
@@ -356,6 +358,24 @@ export function openTunnelStep(
       limits: dependencies.limits,
       onWaiting,
     });
+    if (outcome.kind === 'relayRefused') {
+      dependencies.logger.warn(
+        'the host refuses the forwarding of the SOCKS relay: every connection through it was closed with no reply',
+      );
+      dependencies.forwardRefused();
+      // The connect goes on waiting, with its progress, until the window is closed or reloaded: no dialog, no retry.
+      disarmBound?.();
+      await new Promise<void>(resolve => {
+        if (isAborted(cancellation)) {
+          resolve();
+        } else {
+          cancellation.addEventListener('abort', () => {
+            resolve();
+          });
+        }
+      });
+      return CANCELLED;
+    }
     if (outcome.kind !== 'open') {
       return NOT_OPENED;
     }

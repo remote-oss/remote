@@ -3,6 +3,10 @@
  * loopback that answer from a script, and hooks to deliver bytes and incoming connections as the other end would.
  */
 
+import {
+  RelayClosedBeforeReply,
+  RelayUnreachable,
+} from '../window-tunnel/socks.ts';
 import type {
   Dialer,
   Duplex,
@@ -89,7 +93,7 @@ export class FakeConnection implements Duplex {
 }
 
 /** How a scripted dial ends: like any operation, or later, when the test lets it open. */
-export type DialAnswer = Answer | 'later';
+export type DialAnswer = Answer | 'later' | 'closedBeforeReply' | 'unreachable';
 
 /** The answer for the `count`-th call: the script's entry, and its last entry for every call after it. */
 function answerAt<Scripted extends string>(
@@ -142,6 +146,12 @@ export class FakeDialer implements Dialer {
     }
     if (answer === 'fail') {
       return Promise.reject(new Error('the dialer cannot reach the host'));
+    }
+    if (answer === 'unreachable') {
+      return Promise.reject(new RelayUnreachable('connection refused'));
+    }
+    if (answer === 'closedBeforeReply') {
+      return Promise.reject(new RelayClosedBeforeReply());
     }
     const connection = new FakeConnection();
     this.connections.push(connection);

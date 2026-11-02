@@ -12,7 +12,14 @@ import type {
   LocalPort,
   TunnelTarget,
 } from './ports.ts';
+import {RelayClosedBeforeReply, RelayUnreachable} from './socks.ts';
 import {succeedsWithin, type WaitLimits} from './wait.ts';
+
+/**
+ * How many probes in a row the relay closes before replying for the host to be taken as refusing the forward: at the
+ * probe pause of a tenth of a second, about two seconds.
+ */
+const REFUSAL_PROBES = 20;
 
 /** The address the window connects to. */
 export interface WindowAddress {
@@ -30,6 +37,8 @@ export type WindowTunnelOutcome =
       onClosed: (listener: (detail: string) => void) => void;
     }
   | {kind: 'tunnelNotReady'}
+  /** Twenty probes in a row were closed by the relay with no reply, or found nothing at its port: the forward the relay needs is refused or missing. */
+  | {kind: 'relayRefused'}
   /** The port accepted a connection and closed it at once: the host refuses the forward the session set up. */
   | {kind: 'forwardRefused'}
   | {kind: 'listenFailed'; detail: string};
@@ -123,7 +132,8 @@ function bridge(
 
 /**
  * Opens the tunnel. The result is `tunnelNotReady` when no probe through the dialer worked within the bound, even if
- * the dialer never answered; the port is closed again then.
+ * the dialer never answered; the port is closed again then. It is `relayRefused` as soon as twenty probes in a row were
+ * closed by the relay before its reply or found no relay to connect to.
  */
 export async function openRelayTunnel(
   request: RelayTunnelRequest,
@@ -180,11 +190,24 @@ export async function openRelayTunnel(
     closeConnections();
   }
   let waitingTold = false;
+  const failures = {closedInARow: 0};
+  const refusal = new AbortController();
   const ready = await succeedsWithin(
     async () => {
       try {
         (await dialer.dial(target)).close();
       } catch (caught) {
+        if (
+          caught instanceof RelayClosedBeforeReply ||
+          caught instanceof RelayUnreachable
+        ) {
+          failures.closedInARow += 1;
+          if (failures.closedInARow >= REFUSAL_PROBES) {
+            refusal.abort();
+          }
+        } else {
+          failures.closedInARow = 0;
+        }
         if (!waitingTold) {
           waitingTold = true;
           request.onWaiting?.();
@@ -194,13 +217,16 @@ export async function openRelayTunnel(
     },
     request.limits,
     request.scheduler,
+    refusal.signal,
   );
   if (ended !== undefined) {
     return {kind: 'listenFailed', detail: ended.detail};
   }
   if (!ready) {
     close();
-    return {kind: 'tunnelNotReady'};
+    return failures.closedInARow >= REFUSAL_PROBES
+      ? {kind: 'relayRefused'}
+      : {kind: 'tunnelNotReady'};
   }
   return {
     kind: 'open',

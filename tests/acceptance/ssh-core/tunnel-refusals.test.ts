@@ -3,6 +3,7 @@ import {
   acceptedKeyLogins,
   appendScript,
   closeWindow,
+  connectionLog,
   emptyWindows,
   inWindow,
   onHost,
@@ -12,10 +13,11 @@ import {
   userSettings,
   variable,
   waitFor,
+  windowEvents,
   windowState,
 } from '../windows/harness.ts';
 import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
-import {portsRows, statusItem} from '../windows/renderer.ts';
+import {notifications, portsRows, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
   connectedWith,
@@ -173,6 +175,93 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     deepStrictEqual(seen, [
       [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
       [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
+    ]);
+  });
+
+  it('F-2104 AC-20, AC-21, AC-22, AC-47 (c79-socks-refused): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with Show log that opens the Remote - SSH channel holding the refusal, and its progress waits for port forwarding with no dialog and no success for a minute', async () => {
+    const seen: Array<{
+      notices: Array<[string, string[] | undefined]>;
+      toast: string[];
+      indicator: string;
+      dialogs: number;
+      channel: string | null | undefined;
+      refusal: boolean;
+      later: number;
+      stillWaiting: boolean;
+    }> = [];
+    for (const alias of ['noforward', 'fwd-clearall']) {
+      await closeAllButLocal();
+      await keepingSettings(async () => {
+        await userSettings({...PLATFORMS});
+        const name = `c79-socks-${alias}`;
+        appendScript([
+          {
+            surface: 'notice',
+            match: 'Failed to set up',
+            answer: {button: 'Show log'},
+            window: name,
+          },
+        ]);
+        await openWindow(alias, name);
+        await waitFor(
+          'the notification',
+          () => recordLines('notice', name).length > 0,
+          120_000,
+        );
+        async function toasts(): Promise<string[]> {
+          return (await notifications(name)).filter(text =>
+            text.includes('Waiting'),
+          );
+        }
+        const toast = await toasts();
+        const indicator = (await statusItem(name, 'status.host')).text;
+        await windowState(name);
+        const channel = windowEvents(name)
+          .filter(entry => entry.event === 'state')
+          .at(-1)?.visibleOutputChannel;
+        const first = recordLines('notice', name).length;
+        await new Promise(resolve => setTimeout(resolve, 60_000));
+        seen.push({
+          notices: recordLines('notice', name).map(line => [
+            line.question,
+            line.buttons,
+          ]),
+          toast,
+          indicator,
+          dialogs: recordLines('failureDialog', name).length,
+          channel,
+          refusal: connectionLog().some(line =>
+            line.includes('administratively prohibited'),
+          ),
+          later: recordLines('notice', name).length - first,
+          stillWaiting: (await toasts()).length > 0,
+        });
+        await closeWindow(name);
+      });
+    }
+    const expected = {
+      notices: [
+        [
+          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server.',
+          ['Show log'],
+        ],
+      ],
+      toast: [
+        'Setting up SSH Host ALIAS: Waiting for port forwarding to be ready',
+      ],
+      indicator: 'Opening Remote...',
+      dialogs: 0,
+      channel: 'Remote - SSH',
+      refusal: true,
+      later: 0,
+      stillWaiting: true,
+    };
+    deepStrictEqual(seen, [
+      {...expected, toast: [expected.toast[0]?.replace('ALIAS', 'noforward')]},
+      {
+        ...expected,
+        toast: [expected.toast[0]?.replace('ALIAS', 'fwd-clearall')],
+      },
     ]);
   });
 
@@ -409,11 +498,8 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       });
     }
     deepStrictEqual(seen, [
-      [
-        'Disconnected from SSH: harness',
-        'Could not establish connection to "harness".',
-        true,
-      ],
+      // On the SOCKS path the refused forward keeps the progress and shows the notification, with no dialog.
+      ['Opening Remote...', undefined, true],
       [
         'Disconnected from SSH: harness',
         'Could not establish connection to "harness".',
