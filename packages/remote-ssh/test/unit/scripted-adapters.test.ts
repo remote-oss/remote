@@ -14,6 +14,7 @@ import type {
   EditorResolver,
   ProgressPort,
   ProgressRequest,
+  ProgressUpdate,
   ResolvedConnection,
   ResolverEditor,
 } from 'lib-authority';
@@ -1017,17 +1018,20 @@ const REQUEST: ProgressRequest = {
 class NotingProgress implements ProgressPort {
   readonly updates: Array<[string, boolean]> = [];
 
+  readonly reports: Array<
+    [string, boolean, number | undefined, string | undefined]
+  > = [];
+
   requests: ProgressRequest[] = [];
 
   withProgress<Result>(
     request: ProgressRequest,
-    task: (
-      update: (title: string, details: boolean) => void,
-    ) => Promise<Result>,
+    task: (update: ProgressUpdate) => Promise<Result>,
   ): Promise<Result> {
     this.requests.push(request);
-    return task((title, details) => {
+    return task((title, details, increment, stage) => {
       this.updates.push([title, details]);
+      this.reports.push([title, details, increment, stage]);
     });
   }
 }
@@ -1335,6 +1339,22 @@ describe('progressFor (card tooling-18)', () => {
       ),
       real,
     );
+  });
+
+  it('connect-113: a report reaches the real port whole, with its increment and the stage it names', async () => {
+    const real = new NotingProgress();
+    await progressFor(
+      SWITCHED_RECORD,
+      real,
+      new AppendedFiles(),
+      WINDOW,
+    ).withProgress(REQUEST, update => {
+      update('Setting up SSH tunnel', true, 40, 'settingUpTunnel');
+      return Promise.resolve();
+    });
+    deepStrictEqual(real.reports, [
+      ['Setting up SSH tunnel', true, 40, 'settingUpTunnel'],
+    ]);
   });
 
   it('D-85: the record holds the title, then each phase with its details flag, in order', async () => {
