@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# install-pwsh: PowerShell 7 (pwsh) and the PSScriptAnalyzer module, at the versions pinned below, for the unit rows
+# of the PowerShell host scripts and their syntax check. Both are MIT.
+#
+#   tools/install-pwsh    install both, or nothing when they are already there, and print the two versions
+#
+# PowerShell's release archive and the module's package are each checked against their pinned sha256 before anything
+# is unpacked. pwsh goes into ~/.local/lib/pwsh-<version> and is linked as ~/.local/bin/pwsh, which must come first on
+# the PATH (CI adds it); the module goes into pwsh's own user module folder. No root is needed, on Linux x86_64 and
+# aarch64, Fedora- or Debian-based, with curl, tar and unzip. A version change here is the only way the pins move.
+set -euo pipefail
+
+PWSH_VERSION=7.6.7
+PWSH_SHA256_X64=6896f9e3a6b0a354bf470835a96da76d2f801cd50dcf047ad7c4563bf93bf431
+PWSH_SHA256_ARM64=ba465efdfb0984c1c5dc5ed9eb0b79a7e91a1b52c45f99377058c0659b84d3f1
+PSSA_VERSION=1.25.0
+PSSA_SHA256=14e634c828eb98efb9f40b2918ba90f139ed5eccdf663a2a747736d996995d60
+
+case "$(uname -m)" in
+  x86_64) arch=x64 pwsh_sha256=$PWSH_SHA256_X64 ;;
+  aarch64 | arm64) arch=arm64 pwsh_sha256=$PWSH_SHA256_ARM64 ;;
+  *)
+    echo "install-pwsh: no pinned PowerShell for $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+for program in curl tar unzip sha256sum; do
+  command -v "$program" >/dev/null || {
+    echo "install-pwsh: $program is needed and not installed" >&2
+    exit 1
+  }
+done
+
+prefix="$HOME/.local/lib/pwsh-$PWSH_VERSION"
+bin="$HOME/.local/bin"
+module="${XDG_DATA_HOME:-$HOME/.local/share}/powershell/Modules/PSScriptAnalyzer/$PSSA_VERSION"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# Downloads $1 into $2 and stops unless its sha256 is $3.
+fetch() {
+  curl -fsSL --retry 3 -o "$2" "$1"
+  echo "$3  $2" | sha256sum --check --quiet - || {
+    echo "install-pwsh: $1 does not match its pinned sha256" >&2
+    exit 1
+  }
+}
+
+if [ ! -x "$prefix/pwsh" ]; then
+  fetch "https://github.com/PowerShell/PowerShell/releases/download/v$PWSH_VERSION/powershell-$PWSH_VERSION-linux-$arch.tar.gz" \
+    "$work/pwsh.tar.gz" "$pwsh_sha256"
+  # Unpacked beside its final place and moved there whole, so an interrupted run never leaves a partial pwsh.
+  rm -rf "$prefix.partial"
+  mkdir -p "$prefix.partial"
+  tar -xzf "$work/pwsh.tar.gz" -C "$prefix.partial"
+  chmod 755 "$prefix.partial/pwsh"
+  mv "$prefix.partial" "$prefix"
+fi
+mkdir -p "$bin"
+ln -sfn "$prefix/pwsh" "$bin/pwsh"
+
+if [ ! -f "$module/PSScriptAnalyzer.psd1" ]; then
+  fetch "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer/$PSSA_VERSION" "$work/pssa.nupkg" "$PSSA_SHA256"
+  rm -rf "$module.partial"
+  mkdir -p "$module.partial"
+  unzip -q "$work/pssa.nupkg" -d "$module.partial"
+  # The package's own NuGet files are not part of the module.
+  rm -rf "$module.partial/_rels" "$module.partial/package" "$module.partial/[Content_Types].xml" \
+    "$module.partial/PSScriptAnalyzer.nuspec" "$module.partial/.signature.p7s"
+  mv "$module.partial" "$module"
+fi
+
+"$bin/pwsh" -NoLogo -NoProfile -NonInteractive -Command \
+  "'pwsh ' + \$PSVersionTable.PSVersion.ToString(); 'PSScriptAnalyzer ' + (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '$PSSA_VERSION').Version.ToString()"
