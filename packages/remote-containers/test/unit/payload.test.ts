@@ -66,6 +66,21 @@ describe('the dev-container payload', () => {
     );
   });
 
+  it('F-0205 AC-51: a host and its TLS members sit in the settings member, in a fixed order', () => {
+    const text = textOf(
+      devContainerPayloadOf({
+        ...FOLDER,
+        tlsVerify: '1',
+        host: 'tcp://h:1',
+        certPath: '/c',
+      }),
+    );
+    deepStrictEqual(
+      Object.keys((JSON.parse(text) as {settings: object}).settings),
+      ['host', 'certPath', 'tlsVerify'],
+    );
+  });
+
   it('F-0501 BR-2a: a host path with a space, a hash, a non-ASCII letter and a quote survives the round trip', () => {
     const target = {...FOLDER, hostPath: '/home/u/h #é "x"'};
     deepStrictEqual(
@@ -77,6 +92,15 @@ describe('the dev-container payload', () => {
   for (const [name, target] of [
     ['no context', FOLDER],
     ['a context', {...FOLDER, context: 'ctx1'}],
+    [
+      'a host with its certificates',
+      {
+        ...FOLDER,
+        host: 'tcp://10.0.0.5:2376',
+        certPath: '/certs',
+        tlsVerify: '1',
+      },
+    ],
     ['the SSH variant of the configuration file', SSH_FOLDER],
   ] as const) {
     it(`F-0501 BR-2a: the round trip of ${name} is the target`, () => {
@@ -154,6 +178,9 @@ describe('the dev-container payload', () => {
       {...base, localDocker: 'no'},
       {...base, settings: []},
       {...base, settings: {context: ''}},
+      {...base, settings: {}},
+      {...base, settings: {host: 5}},
+      {...base, settings: {context: 'c', certPath: ''}},
       {hostPath: '/p', localDocker: false},
       {...base, configFile: {scheme: 'file'}},
       {...base, configFile: {path: CONFIG_PATH, scheme: 3}},

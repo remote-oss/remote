@@ -234,7 +234,7 @@ describe('Open Folder in Container', () => {
           'firstCheck undefined',
           'pickFolder',
           'readConfiguration /w/p',
-          'currentContext',
+          'pinnedEngine',
         ],
         ['vscode.openFolder'],
         {forceNewWindow: false, forceReuseWindow: true},

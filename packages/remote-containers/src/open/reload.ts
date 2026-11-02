@@ -12,6 +12,7 @@ import {
 } from '../authority/payload.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import type {PreReloadProgress} from './pre-reload-progress.ts';
+import type {PinnedEngine} from '../engine/effective-engine.ts';
 import {type RebuildOptions, storeRebuildIntent} from './rebuild-intent.ts';
 
 /** What the reload reads of the editor and calls. */
@@ -21,8 +22,8 @@ export interface ReloadPorts {
     serializedFile(file: string): SerializedUri;
   };
   engine: {
-    /** The name of the current Docker context; none for the default one. */
-    currentContext(dockerFile: string): Promise<string | undefined>;
+    /** The engine the window is pinned to, as the settings and the current context choose it; empty for the default one. */
+    pinnedEngine(dockerFile: string): Promise<PinnedEngine>;
   };
   opener: OpenerHost;
   shutdown: {
@@ -56,12 +57,12 @@ export async function reloadIntoContainer(
 ): Promise<void> {
   const {logger} = ports;
   const {title, folder, chosen, rebuild} = request;
-  const context = await ports.engine.currentContext(request.dockerFile);
+  const engine = await ports.engine.pinnedEngine(request.dockerFile);
   const payload = devContainerPayloadOf({
     kind: 'folder',
     hostPath: folder,
     localDocker: false,
-    ...(context === undefined ? {} : {context}),
+    ...engine,
     configFile: ports.window.serializedFile(chosen.configFile),
   });
   if (rebuild !== undefined) {

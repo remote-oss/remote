@@ -12,6 +12,7 @@ import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
+import type {PinnedEngine} from '../engine/effective-engine.ts';
 import type {AuthoringPort} from './author-first.ts';
 import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
@@ -33,8 +34,8 @@ interface EnginePort {
     dialogs: EngineDialogPort,
     cancellation?: AbortSignal,
   ): Promise<FirstCheckResult>;
-  /** The name of the current Docker context; none for the default one. */
-  currentContext(dockerFile: string): Promise<string | undefined>;
+  /** The engine the window is pinned to; empty for the default one. */
+  pinnedEngine(dockerFile: string): Promise<PinnedEngine>;
 }
 
 /** Everything the command needs. */
