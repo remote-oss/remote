@@ -71,6 +71,7 @@ import {
   controlFolderOf,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
+  passkeyCopies,
   startRunAgent,
 } from './acceptance-keys.ts';
 import {
@@ -596,6 +597,10 @@ export function harnessSshConfig(
       controlFolder,
     ),
     ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
+    // The same alias again under other names, so that a row finds no shared connection a row before it left.
+    ...passkeyCopies().flatMap(alias =>
+      keyAlias(alias, 'harness', port, runFolder, ['id_passphrase']),
+    ),
     ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
       'id_passphrase',
       'id_second',
