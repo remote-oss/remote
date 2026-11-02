@@ -82,7 +82,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `vscode-remote://ssh-remote+agentfwd/home/harness` (`ForwardAgent` with the run's agent socket; `agent-off` on
   `agentfwd-off`, the same alias under another name so that it finds no connection of `agent`, with
   `remote.SSH.enableAgentForwarding` false) and `vscode-remote://ssh-remote+x11fwd/home/harness` (`ForwardX11`). They
-  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case;
+  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case; `x11-noxauth` is
+  the `x11` window on the Debian 12 host, which has no `xauth`;
 - `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
   `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the

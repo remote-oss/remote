@@ -260,7 +260,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -270,6 +270,7 @@ describe('the launches of the VSCodium run', () => {
         'agent',
         'agent-off',
         'x11',
+        'x11-noxauth',
         ...failureCases(REPOSITORY_ROOT).map(
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
@@ -347,6 +348,12 @@ describe('the launches of the VSCodium run', () => {
           'x11',
           'vscode-remote://ssh-remote+x11fwd/home/harness',
           {HARNESS_FORWARDING_CASE: 'x11'},
+          undefined,
+        ],
+        [
+          'x11-noxauth',
+          'vscode-remote://ssh-remote+x11fwd/home/harness',
+          {HARNESS_FORWARDING_CASE: 'x11-noxauth'},
           undefined,
         ],
       ],
