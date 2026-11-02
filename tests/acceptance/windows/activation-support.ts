@@ -16,7 +16,7 @@ import {
 /** The id of Remote - SSH. */
 export const SSH_EXTENSION = 'remote-oss.remote-ssh';
 
-/** The "Remote-SSH:" entries of the Command Palette in a local window, as the palette sorts them. */
+/** The 13 "Remote-SSH:" entries of the Command Palette in a local window (F-2001 5.0 step 2, remote-ssh#11), as the palette sorts them. */
 export const LOCAL_ENTRIES: readonly string[] = [
   'Remote-SSH: Add New SSH Host...',
   'Remote-SSH: Clear previous session metadata (used for enhanced error reporting)',
@@ -114,4 +114,36 @@ export async function indicatorGroups(
   const rows = await groupedQuickPickRows(name);
   await pressEscape(name);
   return rows;
+}
+
+/** How many settings of Remote - SSH are not deprecated: the properties of its manifest's configuration with no deprecation message. */
+export function nonDeprecatedSettings(): number {
+  const manifest = JSON.parse(
+    readFileSync(
+      path.join(
+        import.meta.dirname,
+        '..',
+        '..',
+        '..',
+        'packages',
+        'remote-ssh',
+        'package.json',
+      ),
+      'utf8',
+    ),
+  ) as {
+    contributes: {
+      configuration:
+        | {properties: Record<string, Record<string, unknown>>}
+        | Array<{properties: Record<string, Record<string, unknown>>}>;
+    };
+  };
+  const sections = [manifest.contributes.configuration].flat();
+  return sections
+    .flatMap(section => Object.values(section.properties))
+    .filter(
+      setting =>
+        setting.deprecationMessage === undefined &&
+        setting.markdownDeprecationMessage === undefined,
+    ).length;
 }

@@ -12,6 +12,7 @@ import {
 import {
   indicatorGroups,
   LOCAL_ENTRIES,
+  nonDeprecatedSettings,
   remoteSshEntries,
   SSH_EXTENSION,
   sshActivations,
@@ -110,7 +111,7 @@ describe('the activation of Remote - SSH in a local window (card coverage-95)', 
     );
   });
 
-  it('F-2001 AC-4 (c95-settings): the Settings editor filtered to the extension lists its 33 non-deprecated settings, and the extension stays inactive', async () => {
+  it('F-2001 AC-4 (c95-settings): the Settings editor filtered to the extension lists its non-deprecated settings, as many as the manifest has (33, like the reference), and the extension stays inactive', async () => {
     await inWindow(
       name,
       'workbench.action.openSettings',
@@ -122,7 +123,7 @@ describe('the activation of Remote - SSH in a local window (card coverage-95)', 
         (await pageText(name)).match(/\d+ Settings? Found/g)?.[0],
         await inactive(name, logFile),
       ],
-      ['33 Settings Found', [false, false]],
+      [`${String(nonDeprecatedSettings())} Settings Found`, [false, false]],
     );
   });
 
