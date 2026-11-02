@@ -137,4 +137,29 @@ describe('the hint recorder (card connect-119)', () => {
     await settled();
     deepStrictEqual([stored.value?.records.length, attempts.length], [1, 2]);
   });
+
+  it('F-2405 AC-20: the two download mitigations are filled with the setting', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.record({
+      status: 'ServerDownloadFailed',
+      message: 'Error: ServerDownloadFailed',
+      mitigations: [
+        {id: 'S049', values: ['remote.SSH.localServerDownload']},
+        {id: 'S050', values: ['remote.SSH.localServerDownload']},
+      ],
+      resources: [],
+    });
+    await settled();
+    deepStrictEqual(
+      stored.value?.records[0]?.hints.map(hint =>
+        hint.kind === 'error' ? hint.mitigations : undefined,
+      ),
+      [
+        [
+          'Enable remote.SSH.localServerDownload to allow VS Code to download the required resources locally',
+          'Enable remote.SSH.localServerDownload to allow VS Code to download the required resources via your local machine and then upload them to the remote server',
+        ],
+      ],
+    );
+  });
 });
