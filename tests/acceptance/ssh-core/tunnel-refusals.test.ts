@@ -136,7 +136,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
 
   it('F-2104 AC-23 (c79-max-wait): with the second ssh and every forward cleared, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
     const seen: Array<
-      [number, string | undefined, string[] | undefined, string]
+      [boolean, number, string | undefined, string[] | undefined, string]
     > = [];
     for (const settings of [
       SECOND_SSH,
@@ -156,7 +156,10 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         );
         const dialog = dialogsOf(failed)[0];
         seen.push([
-          Math.round(((dialog?.elapsed ?? 0) - (waiting?.elapsed ?? 0)) / 1000),
+          waiting !== undefined,
+          Math.round(
+            ((dialog?.elapsed ?? 0) - (waiting?.elapsed ?? Number.NaN)) / 1000,
+          ),
           dialog?.question,
           dialog?.buttons,
           failed.indicator,
@@ -166,8 +169,8 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     const exhausted =
       'Could not establish connection to "fwd-clearall": Error establishing tunnel (Max wait time exhausted).';
     deepStrictEqual(seen, [
-      [10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
-      [10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
+      [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
+      [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
     ]);
   });
 
@@ -399,13 +402,16 @@ describe('the tunnel of a window that its host or its configuration refuses (car
           connected.prompts,
           connected.logins,
           connected.sequence.indexOf('progress:Setting up SSH tunnel') < second,
+          recordLines('progress', 'c79-socket-pw').find(
+            line => line.question === 'Setting up SSH tunnel',
+          )?.details,
           connected.sequence.indexOf(
             'progress:Waiting for port forwarding to be ready',
           ) > second,
           sshListeners.map(each => each.address),
           (await statusItem('c79-socket-pw', 'status.host')).text,
         ],
-        [2, 2, true, true, ['127.0.0.1'], 'SSH: password'],
+        [2, 2, true, true, true, ['127.0.0.1'], 'SSH: password'],
       );
       await closeWindow('c79-socket-pw');
     });
