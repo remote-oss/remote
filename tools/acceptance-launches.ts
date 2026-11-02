@@ -710,7 +710,7 @@ function forwardingLaunch(
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); `agent`,
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
- * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
+ * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
  * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
@@ -754,6 +754,7 @@ export function launchesOf(root: string): Launch[] {
       'remote.SSH.enableAgentForwarding': false,
     }),
     forwardingLaunch('x11', 'x11fwd'),
+    {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
       label: failureLabel(failure.label ?? failure.alias),
       runner: 'runner-remote',
