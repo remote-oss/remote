@@ -80,4 +80,26 @@ describe('ssh’s lines in the log (card connect-66)', () => {
       [true, true, true, true, false, false, false, false],
     );
   });
+
+  it('F-2604 BR-2: a logger that takes the bare lines gets each one after it is logged, without its carriage return', () => {
+    const taken: string[] = [];
+    const sink = new MemorySink();
+    const logger = createLogger(sink, {minimumLevel: () => 'trace'});
+    logSshLines(
+      {
+        info: message => {
+          logger.info(message);
+        },
+        trace: message => {
+          logger.trace(message);
+        },
+        sshLines: lines => {
+          taken.push(`${String(sink.lines.length)}:${lines.join('|')}`);
+        },
+      },
+      ['first\r', 'second'],
+      undefined,
+    );
+    deepStrictEqual(taken, ['1:first', '2:second']);
+  });
 });
