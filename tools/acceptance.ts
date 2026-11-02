@@ -767,6 +767,11 @@ export function harnessSshConfig(
         agentSocket,
       ),
     ),
+    // ForwardAgent given as no, which forwards nothing, as unset does.
+    ...accountAlias('agentfwd-no', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardAgent no',
+    ]),
     ...accountAlias('x11fwd', 'harness', port, runFolder, [
       ...keyLines(runFolder),
       'ForwardX11 yes',

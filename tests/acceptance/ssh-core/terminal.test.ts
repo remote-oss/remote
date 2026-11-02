@@ -3,40 +3,9 @@ import {
   closeWindow,
   inWindow,
   onHost,
-  openWindow,
   terminalNames,
-  waitFor,
 } from '../windows/harness.ts';
-import {terminalText, typeInTerminal} from '../windows/renderer.ts';
-
-/** The prefix of the line a terminal prints for the label `label`, and the text after it. */
-async function printedAfter(
-  window: string,
-  label: string,
-  expression: string,
-): Promise<string> {
-  await typeInTerminal(window, `echo "${label}:${expression}"\n`);
-  let found = '';
-  await waitFor(
-    `the line ${label}: in window ${window}`,
-    async () => {
-      const lines = (await terminalText(window)).split('\n');
-      const printed = lines.find(
-        line => line.startsWith(`${label}:`) && !line.includes('$'),
-      );
-      found = printed?.slice(label.length + 1) ?? '';
-      return printed !== undefined;
-    },
-    40_000,
-  );
-  return found;
-}
-
-/** Opens a window on the host in a new folder `folder` with a terminal in it. */
-async function windowWithTerminal(folder: string): Promise<void> {
-  await openWindow('harness', folder);
-  await inWindow(folder, 'workbench.action.terminal.new');
-}
+import {printedAfter, windowWithTerminal} from '../windows/terminal-support.ts';
 
 describe('the terminal in an SSH window (card coverage-80)', function () {
   this.timeout(300_000);
