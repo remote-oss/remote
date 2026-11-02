@@ -29,6 +29,14 @@ const ENGINE_PROPERTY = 'Microsoft.VisualStudio.Code.Engine';
 const PRERELEASE_PROPERTY = 'Microsoft.VisualStudio.Code.PreRelease';
 const UNIVERSAL = 'universal';
 
+/** What a gallery id, a version and a target platform may hold, so that a file name made of them stays one name. */
+const EXTENSION_ID = /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/i;
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const TARGET = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** How long one gallery query may take before the extension is left to the server, in milliseconds. */
+export const GALLERY_QUERY_MILLISECONDS = 15_000;
+
 /** The version of an extension chosen for a container: its package, and the file name the cache keeps it under. */
 export interface GalleryPick {
   id: string;
@@ -114,7 +122,8 @@ function propertyOf(
 
 /**
  * The newest version of the gallery's answer for `extensionId` that the container can install: for its target or universal,
- * not a pre-release, with an engine the product's version meets, and with a package to download. None otherwise.
+ * not a pre-release, with an engine the product's version meets, and with a package to download. A version or target
+ * that isn't a plain version or platform name is passed over, so the file name stays inside its folder. None otherwise.
  */
 export function pickOf(
   answer: unknown,
@@ -138,6 +147,8 @@ export function pickOf(
     if (
       version === undefined ||
       typeof versionText !== 'string' ||
+      !VERSION.test(versionText) ||
+      !TARGET.test(versionTarget) ||
       typeof packageAddress !== 'string' ||
       (versionTarget !== target && versionTarget !== UNIVERSAL) ||
       propertyOf(version, PRERELEASE_PROPERTY) === 'true' ||
@@ -226,6 +237,8 @@ export interface ExtensionCacheRequest {
   clientFolder: string;
   /** The container's own cache folder, in the server's data folder. */
   ownFolder: string;
+  /** How long one gallery query may take. */
+  queryMilliseconds: number;
   cancellation: AbortSignal;
 }
 
@@ -431,10 +444,20 @@ export async function cacheExtensions(
 ): Promise<string[]> {
   const installs: string[] = [];
   for (const extensionId of request.extensions) {
+    if (!EXTENSION_ID.test(extensionId)) {
+      ports.logger.info(
+        `${extensionId} isn't a plain gallery id; the server installs it`,
+      );
+      installs.push(extensionId);
+      continue;
+    }
     const answer = await ports.queryGallery(
       `${request.serviceUrl}/extensionquery`,
       galleryQueryOf(extensionId),
-      request.cancellation,
+      AbortSignal.any([
+        request.cancellation,
+        AbortSignal.timeout(request.queryMilliseconds),
+      ]),
     );
     const pick = pickOf(
       answer,

@@ -136,6 +136,22 @@ describe('the extensions cache', () => {
       );
     });
 
+    it('F-0419: a version or target that would leave the cache folder is passed over', () => {
+      deepStrictEqual(
+        pickOf(
+          answerOf(
+            versionEntry('1.0.0/../../x', 'universal'),
+            versionEntry('1.1.0', '../linux-x64'),
+            versionEntry('1.0.0', 'universal'),
+          ),
+          'acme.tool',
+          'linux-x64',
+          '1.140.0',
+        )?.fileName,
+        'acme.tool-1.0.0.vsix',
+      );
+    });
+
     it('F-0419: an answer with nothing to install gives no pick', () => {
       deepStrictEqual(
         [
@@ -297,6 +313,7 @@ describe('the extensions cache', () => {
         sharedFolder: shared ? sharedFolder : undefined,
         clientFolder: client,
         ownFolder: path.join(root, 'own'),
+        queryMilliseconds: 1000,
         cancellation: new AbortController().signal,
       };
     }
@@ -487,6 +504,54 @@ describe('the extensions cache', () => {
             ),
           ),
         ],
+        [['acme.tool'], true],
+      );
+    });
+
+    it("F-0505: an entry that isn't a plain gallery id, a pinned version included, is left to the server unasked", async () => {
+      const {channel} = containerOf();
+      const {ports, sink} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      let queries = 0;
+      const installs = await cacheExtensions(
+        {
+          ...ports,
+          queryGallery: () => {
+            queries += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+        {...requestOf(true), extensions: ['acme.tool@1.0.0', '../acme.tool']},
+      );
+      deepStrictEqual(
+        [
+          installs,
+          queries,
+          sink.lines.filter(({message}) =>
+            message.includes("isn't a plain gallery id"),
+          ).length,
+        ],
+        [['acme.tool@1.0.0', '../acme.tool'], 0, 2],
+      );
+    });
+
+    it("F-0419: a gallery that doesn't answer in time leaves the extension to the server", async () => {
+      const {channel} = containerOf();
+      const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      const started = Date.now();
+      const installs = await cacheExtensions(
+        {
+          ...ports,
+          queryGallery: (...[, , cancellation]) =>
+            new Promise(resolve => {
+              cancellation.addEventListener('abort', () => {
+                resolve(undefined);
+              });
+            }),
+        },
+        {...requestOf(true), queryMilliseconds: 20},
+      );
+      deepStrictEqual(
+        [installs, Date.now() - started < 1000],
         [['acme.tool'], true],
       );
     });

@@ -59,7 +59,11 @@ import {
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {PREVIEW_TEMPLATES, previewNoteOf} from './preview-note.ts';
-import {cacheExtensions, type ExtensionCachePorts} from './extension-cache.ts';
+import {
+  cacheExtensions,
+  type ExtensionCachePorts,
+  GALLERY_QUERY_MILLISECONDS,
+} from './extension-cache.ts';
 import {prepareVolumeFolders} from './volume-folders.ts';
 
 /** How long the server may take to report its port, in seconds. */
@@ -645,6 +649,7 @@ export async function runServerSteps(
               : undefined,
             clientFolder: `${cacheRootOf(dependencies)}/extensionsCache`,
             ownFolder: `${dataFolder}/extensionsCache`,
+            queryMilliseconds: GALLERY_QUERY_MILLISECONDS,
             cancellation,
           },
         );
