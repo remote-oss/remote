@@ -180,5 +180,13 @@
   "Don't show again for the current workspace or for any workspace?": "Don't show again for the current workspace or for any workspace?",
   "Any Workspace": "Any Workspace",
   "Current Workspace": "Current Workspace",
-  "You need to first save your workspace in a folder containing all its workspace folders.": "You need to first save your workspace in a folder containing all its workspace folders."
+  "You need to first save your workspace in a folder containing all its workspace folders.": "You need to first save your workspace in a folder containing all its workspace folders.",
+  "Folder '{0}' is not a subfolder of shared root folder '{1}'.": "Folder '{0}' is not a subfolder of shared root folder '{1}'.",
+  "Problems loading workspace file {0}: {1}": "Problems loading workspace file {0}: {1}",
+  "The workspace could fail to open in a container: {0}": "The workspace could fail to open in a container: {0}",
+  "Workspace contains a folder that defines neither a path nor a URI.": "Workspace contains a folder that defines neither a path nor a URI.",
+  "Workspace contains an absolute folder path '{0}'.": "Workspace contains an absolute folder path '{0}'.",
+  "Workspace contains folder '{0}' not on the local file system.": "Workspace contains folder '{0}' not on the local file system.",
+  "Workspace does not define any folders": "Workspace does not define any folders",
+  "Continue": "Continue"
 }

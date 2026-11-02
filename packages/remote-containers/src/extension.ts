@@ -864,6 +864,27 @@ export async function activate(
             modal: true,
             detail: text,
           }),
+        readWorkspaceFile: async file => {
+          try {
+            return {kind: 'text', text: await readFile(file, 'utf8')};
+          } catch (caught) {
+            return {
+              kind: 'unreadable',
+              message:
+                caught instanceof Error ? caught.message : String(caught),
+            };
+          }
+        },
+        confirmModal: async text => {
+          const proceed = translate('Continue');
+          return (
+            (await vscode.window.showInformationMessage(
+              '',
+              {modal: true, detail: text},
+              proceed,
+            )) === proceed
+          );
+        },
         translate,
         ensureTrusted: commandTitle =>
           ensureTrusted(served.trust, {
