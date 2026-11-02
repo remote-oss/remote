@@ -101,6 +101,18 @@ export function remoteCommandInEffect(
   );
 }
 
+/** The platform the editor names for an operating system the probe reports. */
+export const PLATFORM_OF_PROBE = {linux: 'linux', darwin: 'macOS'} as const;
+
+/** The platform a stored record's operating system names, or `unknown` for one the editor has no name for. */
+export function platformOfRecord(
+  operatingSystem: string,
+): RemotePlatform | 'unknown' {
+  return operatingSystem === 'linux' || operatingSystem === 'darwin'
+    ? PLATFORM_OF_PROBE[operatingSystem]
+    : 'unknown';
+}
+
 /** What to write to `remote.SSH.remotePlatform` after a connect worked: nothing, or the exact key with the platform. */
 export type PlatformWrite =
   {kind: 'none'} | {kind: 'set'; platform: RemotePlatform};
