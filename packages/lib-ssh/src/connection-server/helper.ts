@@ -55,6 +55,8 @@ export interface ConnectionHelperEnvironment {
   /** A new secret for the askpass endpoint, unguessable and different on every call. */
   newNonce: () => string;
   spawner: ProcessSpawner;
+  /** The Node platform the helper runs on, which the askpass endpoint's form depends on. */
+  platform: string;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   helloLimitMilliseconds: number;
   logLine: (line: string) => void;
@@ -71,6 +73,7 @@ export async function runConnectionHelper(
     const request = JSON.parse(options.request) as SshRequest;
     const askpassNonce = environment.newNonce();
     const askpassSocket = askpassEndpointPath(
+      environment.platform,
       options.runtimeFolder,
       parameters.endpoint,
       askpassNonce,

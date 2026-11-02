@@ -1,6 +1,6 @@
 /**
- * @fileoverview Where a helper's endpoint lives: a socket file in the user's runtime folder, named by a digest so
- * that the path stays short and shows nothing of what the helper serves.
+ * @fileoverview Where a helper's endpoint lives: a socket file in the user's runtime folder, or on Windows a named pipe,
+ * named by a digest so that the name stays short and shows nothing of what the helper serves.
  */
 
 import {createHash} from 'node:crypto';
@@ -21,8 +21,12 @@ export function runtimeFolder(
   return platform === 'linux' && xdgFolder !== '' ? xdgFolder : temporaryFolder;
 }
 
-/** The endpoint of one helper: `rh-` and 16 hex digits of a digest of its namespace, key and nonce. */
+/**
+ * The endpoint of one helper: `rh-` and 16 hex digits of a digest of its namespace, key and nonce, as the named pipe
+ * `\\.\pipe\rh-…` on `win32` and as a `.sock` file in `folder` elsewhere.
+ */
 export function endpointPath(
+  platform: string,
   folder: string,
   namespace: string,
   helperKey: string,
@@ -31,5 +35,8 @@ export function endpointPath(
   const digest = createHash('sha256')
     .update(JSON.stringify([namespace, helperKey, nonce]))
     .digest('hex');
-  return path.join(folder, `rh-${digest.slice(0, NAME_DIGEST_LENGTH)}.sock`);
+  const name = `rh-${digest.slice(0, NAME_DIGEST_LENGTH)}`;
+  return platform === 'win32'
+    ? `\\\\.\\pipe\\${name}`
+    : path.posix.join(folder, `${name}.sock`);
 }
