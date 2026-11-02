@@ -738,6 +738,7 @@ Besides `harness`, the host image has fourteen users, and the run's `ssh_config`
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
+| `noforward-key` | `harness` | a key of its own (`id_noportfwd`), given to the key accounts with `no-port-forwarding` on its `authorized_keys` line: sshd allows forwarding, and the key's sessions get none |
 | `changedkey` | `harness` | the run's key against its own `known_hosts_changedkey`, which pins another key under `HostKeyAlias changedkey`, with `StrictHostKeyChecking no`: ssh finds the host key changed, connects, and disables password and keyboard-interactive login and every forward ("Port forwarding is disabled to avoid man-in-the-middle attacks.") |
 | `fwd-busy`, `fwd-busy-exit`, `fwd-static`, `fwd-gateway`, `fwd-remote`, `fwd-dynamic`, `fwd-open`, `fwd-noopen`, `fwd-clearall`, `fwd-exit`, `fwd-dynamic-exit` | `harness` | the run's key; each adds forwards to the client's configuration: `LocalForward 13020 127.0.0.1:8660` (`fwd-busy`, and `fwd-busy-exit` with `ExitOnForwardFailure yes`), `LocalForward 13010 127.0.0.1:8657` (`fwd-static`), `GatewayPorts yes` with `LocalForward 13001 127.0.0.1:8661` (`fwd-gateway`), `RemoteForward 19000 127.0.0.1:19101` (`fwd-remote`), `DynamicForward 11080` (`fwd-dynamic`) and a dynamic `RemoteForward` with `PermitRemoteOpen any` (`fwd-open`, port 19201) or `none` (`fwd-noopen`, port 19200), `ClearAllForwardings yes` (`fwd-clearall`), `ExitOnForwardFailure yes` alone (`fwd-exit`) and `DynamicForward 13030` with `ExitOnForwardFailure yes` (`fwd-dynamic-exit`) |
 | `i686` | `harness-i686` | the run's key; its `~/.profile` puts a folder first on `PATH` whose `uname -m` prints `i686` (the connect's shell is a login shell) |
@@ -771,8 +772,11 @@ The VSCodium run also makes further keys in its folder (`tools/acceptance-keys.t
 | `id_second` | ed25519 without a passphrase |
 | `id_loose` | a copy of `id_second` with mode 0644, which ssh refuses to use |
 | `ca`, `id_certified`, `id_certified-cert.pub` | the run's own authority, and a key it signed for the principal `harness-cert` |
+| `id_noportfwd` | ed25519 without a passphrase, comment `acceptance-no-port-forwarding` |
+| `changed_host_key`, `known_hosts_changedkey` | a throwaway key the host never has, and the known-hosts file of `changedkey` that pins it |
 
-The host accepts `id_passphrase` and `id_second` for its key accounts (`AUTHORIZED_KEYS_FURTHER`), and the user
+The host accepts `id_passphrase` and `id_second` for its key accounts (`AUTHORIZED_KEYS_FURTHER`), `id_noportfwd` for them
+with `no-port-forwarding` before it on its line, and the user
 `harness-cert` accepts only a certificate of the run's authority (`TrustedUserCAKeys`, from `CA_PUBLIC_KEY`). Their
 aliases leave the agent to the environment and set no `BatchMode`, so ssh may ask for a passphrase:
 

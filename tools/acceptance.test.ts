@@ -720,6 +720,23 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-85: Host noforward-key is the harness account with the key whose line on the host refuses port forwarding', () => {
+    strictEqual(
+      accountBlock('noforward-key'),
+      [
+        'Host noforward-key',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_noportfwd',
+        '  IdentitiesOnly yes',
+        '  StrictHostKeyChecking accept-new',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [

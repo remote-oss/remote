@@ -1,7 +1,7 @@
 /**
  * @fileoverview The further keys of an acceptance run: a key protected by the run's passphrase, a second key, a copy
- * of the second key whose file anyone may read, a certificate signed by the run's own authority, and a known-hosts file
- * that pins a key the host doesn't have. The passphrase reaches `ssh-keygen` through an askpass script that reads it
+ * of the second key whose file anyone may read, a certificate signed by the run's own authority, a key whose line on
+ * the host refuses port forwarding, and a known-hosts file that pins a key the host doesn't have. The passphrase reaches `ssh-keygen` through an askpass script that reads it
  * from a file, so no command line ever holds it.
  */
 
@@ -75,6 +75,8 @@ export interface RunKeys {
   looseKey: string;
   /** The key the certificate is for; its certificate is `<file>-cert.pub`. */
   certifiedKey: string;
+  /** A key without a passphrase that the host accepts with `no-port-forwarding` on its line. */
+  noForwardingKey: string;
   /** The `docker run` arguments that give the host the further public keys and the authority. */
   hostArguments: string[];
 }
@@ -123,7 +125,8 @@ function plainKey(command: CommandRunner, file: string, comment: string): void {
 
 /**
  * Makes the run's further keys in `runFolder`. The host is to accept the passphrase key and the second key (so also its
- * loose copy) for its key accounts, and the certificate for `harness-cert`.
+ * loose copy) for its key accounts, the no-forwarding key for them with `no-port-forwarding`, and the certificate for
+ * `harness-cert`.
  */
 export function makeRunKeys(
   command: CommandRunner,
@@ -156,6 +159,8 @@ export function makeRunKeys(
   plainKey(command, authority, 'acceptance-ca');
   const certifiedKey = path.join(runFolder, 'id_certified');
   plainKey(command, certifiedKey, 'acceptance-certified');
+  const noForwardingKey = path.join(runFolder, 'id_noportfwd');
+  plainKey(command, noForwardingKey, 'acceptance-no-port-forwarding');
   // A key the host never has, pinned as the changed-key alias's host key, so ssh finds the host's own key changed.
   const pinnedKey = path.join(runFolder, 'changed_host_key');
   plainKey(command, pinnedKey, 'acceptance-changed-host');
@@ -182,9 +187,13 @@ export function makeRunKeys(
     secondKey,
     looseKey,
     certifiedKey,
+    noForwardingKey,
     hostArguments: [
       '--env',
-      `AUTHORIZED_KEYS_FURTHER=${[passphraseKey, secondKey].map(publicKeyOf).join('\n')}`,
+      `AUTHORIZED_KEYS_FURTHER=${[
+        ...[passphraseKey, secondKey].map(publicKeyOf),
+        `no-port-forwarding ${publicKeyOf(noForwardingKey)}`,
+      ].join('\n')}`,
       '--env',
       `CA_PUBLIC_KEY=${publicKeyOf(authority)}`,
     ],

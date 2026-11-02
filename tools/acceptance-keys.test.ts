@@ -180,10 +180,10 @@ describe('makeRunKeys', function () {
     );
   });
 
-  it('tooling-29: the host is given the passphrase and second public keys, and the authority', () => {
+  it('tooling-29, coverage-85: the host is given the passphrase and second public keys, the no-forwarding key with its option, and the authority', () => {
     deepStrictEqual(keys.hostArguments, [
       '--env',
-      `AUTHORIZED_KEYS_FURTHER=${publicKeyOf(keys.passphraseKey)}\n${publicKeyOf(keys.secondKey)}`,
+      `AUTHORIZED_KEYS_FURTHER=${publicKeyOf(keys.passphraseKey)}\n${publicKeyOf(keys.secondKey)}\nno-port-forwarding ${publicKeyOf(keys.noForwardingKey)}`,
       '--env',
       `CA_PUBLIC_KEY=${publicKeyOf(path.join(folder, 'ca'))}`,
     ]);

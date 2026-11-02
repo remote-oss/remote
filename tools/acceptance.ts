@@ -370,7 +370,8 @@ export function sshConfigOf(
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
- * harness host whose known-hosts file pins another key, so ssh finds the key changed); and the aliases of the
+ * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
+ * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
@@ -698,6 +699,8 @@ export function harnessSshConfig(
       [],
       false,
     ),
+    // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
+    ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
     ...keyAlias('several-files', 'harness', port, runFolder, [
       'id_missing',
       'id_passphrase_stranger',
