@@ -29,15 +29,24 @@ remote-oss/remote-containers#47 (F-0303, `spec:reviewed`), seeded in `coverage-c
   key of ours (R-27), with the observed shape: `{"configurationState": {"contentHashes": {"<identifier>": "<hash>"}}}`.
   The identifier is the file's `{0}` text (BR-3).
 - **How it changes:**
-  - **Seeding (BR-9, BR-9a):** at every successful connect of the window, whether something was built or an existing
-    container was reused, a file with no stored hash takes its current hash, with no notification. After a successful
-    rebuild, every watched file takes its current hash. So a missing hash is never "diverged".
+  - **Seeding (BR-9, BR-9a), corrected on #1892 (daedalus's reading):** every watched file takes its current hash, with
+    no notification, on two occasions only:
+    - a successful connect that created the container (a first build or a successful rebuild, BR-9);
+    - a successful connect whose workspace holds no `contentHashes` at all (BR-9a).
+
+    At any other connect, a watched file with no stored hash is diverged. That's a newly referenced file: BR-11 repeats
+    its notification at a reload before it's acted on, and VS-17 step 3 names the new Dockerfile. A departing file is a
+    stored identifier the configuration no longer names, and acting on its notification deletes the entry.
   - **Ignore:** the files named in that notification take their current hashes, and only those (BR-8).
   - **Rebuild:** the click changes nothing. The successful connect after the rebuild seeds every watched file (BR-8,
     BR-9). A rebuild that fails never connects, so the acknowledgment stays exactly as it was (BR-10, 7.E4).
   - **Dismissal** changes nothing (6.4).
 - **Shown once per combination:** an in-memory set, per activation, of the exact `{0}` lists already shown. It's
   forgotten at the next activation (BR-4 b, 7.E3).
+  - Acting on a notification (Ignore or Rebuild) removes its `{0}` from the set, so a later change in the same
+    activation shows it again (#1892). F-0405 AC-9 has the notification re-appear "on the next change, even a change
+    that restores the previous content", and in VS-15 steps 3 and 5 a key reorder after an Ignore shows
+    `devcontainer.json` again. The set only stops a repeat of a notification nobody has acted on (7.E3).
 
 ## 3. The watched set and when each file is checked (BR-1, BR-2, BR-11)
 
