@@ -7,6 +7,7 @@ import {
   recordLines,
   reloadWindow,
   userSettings,
+  waitFor,
   windowState,
 } from './harness.ts';
 import {closeAllButLocal} from './maintenance.ts';
@@ -59,7 +60,18 @@ describe('the tunnel of a window under the default settings and their combinatio
       const socksBefore = portsOf(connected.added, 'ssh');
       const loginsBefore = await acceptedPasswords();
       await reloadWindow('c79-reload');
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      // The old window's editor port goes when its editor process ends, which on a loaded machine is later than a fixed wait.
+      await waitFor(
+        'the old editor ports to go and a new one to listen',
+        () => {
+          const now = portsOf(listeners(), 'editor');
+          return (
+            now.length > 0 && !editorBefore.some(port => now.includes(port))
+          );
+        },
+        60_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 3000));
       const after = listeners();
       const answered = recordLines('maskedInput', 'c79-reload').filter(
         line => line.answer === '<supplied>',

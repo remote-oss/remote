@@ -240,6 +240,7 @@
     "lib-companion": "workspace:*",
     "lib-identifiers": "workspace:*",
     "lib-product": "workspace:*",
+    "lib-ssh": "workspace:*",
     "lib-standdown": "workspace:*"
   }
 }

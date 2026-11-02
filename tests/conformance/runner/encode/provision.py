@@ -500,15 +500,16 @@ class Run:
             raise ProvisionError("keybindings.json: the profile's file is not a plain JSON list: "
                                  + (p.stderr or p.stdout).strip()[-200:])
 
-    def client_listeners(self, holder=None):
+    def client_listeners(self, holder=None, address=None):
         """The listening addresses and ports of this window's editor and every process below it, and of the ssh
         processes connected to the case's own SSH target wherever they run, with each holder's name (kit #289, K2),
-        read from this machine's process and socket tables; with `holder`, that holder's only."""
+        read from this machine's process and socket tables; with `holder`, that holder's only, and with `address`, those
+        on that address only."""
         if self.remote:
             return {"error": "client_listeners: the window runs on another host, and its sockets are read on this one"}
-        address = self.ph.get("SSH_TARGET_ADDR") if self.ssh_run else None
-        return clientlisteners.window_listeners(f"{self.slot_dir}/user-data", target_address=address, holder=holder,
-                                                lab_ports={LAB_DEBUGGING_PORT + int(self.slot)})
+        target = self.ph.get("SSH_TARGET_ADDR") if self.ssh_run else None
+        return clientlisteners.window_listeners(f"{self.slot_dir}/user-data", target_address=target, holder=holder,
+                                                lab_ports={LAB_DEBUGGING_PORT + int(self.slot)}, address=address)
 
     def read_user_settings(self, keys):
         """athena on kit #227 (item 3): the named keys of the slot profile's settings.json, as {key: value}, with a key

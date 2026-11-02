@@ -125,8 +125,15 @@ jobs:
       - id: select
         env:
           BEFORE: ${{ github.event.before }}
+        # A push whose `before` is no commit in this clone (all zeros, or a main rewritten by a force push) has no range
+        # to select from: the output is then empty, which the VSCodium job's matrix reads as its default, every part.
         run: |
-          parts=$(node tools/acceptance-select.ts --base "$BEFORE" --head "$GITHUB_SHA" --parts)
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            parts=$(node tools/acceptance-select.ts --base "$BEFORE" --head "$GITHUB_SHA" --parts)
+          else
+            echo "::notice::the push's before ($BEFORE) is no commit here: every part runs"
+            parts=''
+          fi
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
 
   checks:
@@ -183,6 +190,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the pinned pwsh and PSScriptAnalyzer, first on the PATH, for the unit rows of the PowerShell host scripts
+      - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: pnpm test:unit --parallel --jobs 4
         env:
           TMPDIR: ${{ runner.temp }}
@@ -210,6 +219,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm identifiers
+      - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH" # as the unit job
       - run: pnpm coverage --shard ${{ matrix.shard }}/4
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job

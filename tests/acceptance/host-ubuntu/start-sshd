@@ -1,13 +1,20 @@
 #!/bin/sh
 # Installs the run's public key, given in AUTHORIZED_KEY, and the further keys of AUTHORIZED_KEYS_FURTHER (one per line,
-# may be empty) for the users harness and harness-mute, and writes CA_PUBLIC_KEY (may be empty) to /etc/ssh/ca.pub. On an
+# may be empty) for the users harness and harness-mute (and harness-notmp where the image has it, with its ACL entry
+# on /tmp that allows no write), and writes CA_PUBLIC_KEY (may be empty) to /etc/ssh/ca.pub. On an
 # image with the keyboard-interactive accounts, it gives the three HOST_PASSWORD, marks harness-expired's expired and writes
 # harness-2fa's one-time-code file from HOST_TOTP_SECRET; then it forgets both variables. It leaves the host with the
 # download tool HOST_FETCH names (gnu-wget, the default; curl; none; BusyBox's wget is the Alpine host's), sets
 # HOST_SHELL as harness's login shell when given, then runs sshd in the foreground. It is the Alpine host's start-sshd
 # for the accounts this image has.
 set -eu
-for account in harness harness-mute; do
+accounts='harness harness-mute'
+# Only the Ubuntu 26.04 image has harness-notmp; the images that share this script have none.
+if id harness-notmp >/dev/null 2>&1; then
+  accounts="$accounts harness-notmp"
+  setfacl -m u:harness-notmp:r-x /tmp
+fi
+for account in $accounts; do
   install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
   printf '%s\n' "$AUTHORIZED_KEY" "${AUTHORIZED_KEYS_FURTHER:-}" > "/home/$account/.ssh/authorized_keys"
   chown "$account:$account" "/home/$account/.ssh/authorized_keys"

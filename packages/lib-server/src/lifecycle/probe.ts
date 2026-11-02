@@ -24,7 +24,7 @@ export type HostArchitecture = (typeof ARCHITECTURES)[number];
 
 /** What the probe found on a host that can run a server. */
 export interface ProbedHost {
-  operatingSystem: 'linux' | 'darwin';
+  operatingSystem: 'linux' | 'darwin' | 'win32';
   architecture: HostArchitecture;
   libc: 'glibc' | 'musl' | 'unknown';
   release: string;
@@ -64,12 +64,12 @@ export type ProbeFailure =
 export type ProbeOutcome =
   {kind: 'probed'; host: ProbedHost} | {kind: 'failed'; failure: ProbeFailure};
 
-/** The tools a host must have for any server install: the archive is a tar file. */
+/** The tools a POSIX host must have for any server install: its archive is a tar file. A Windows host needs none. */
 const REQUIRED_TOOLS = ['tar'];
 
 const TOOL_NAMES = ['wget', 'curl', 'tar', 'unzip', 'flock', 'gzip'];
 
-const OPERATING_SYSTEMS = ['linux', 'darwin'] as const;
+const OPERATING_SYSTEMS = ['linux', 'darwin', 'win32'] as const;
 
 /** The C library a fact names; any other value is unknown. */
 function libcOf(fact: string | undefined): 'glibc' | 'musl' | 'unknown' {
@@ -173,7 +173,8 @@ export async function probe(
     };
   }
   const {host} = read;
-  const missing = REQUIRED_TOOLS.filter(name => !host.tools.includes(name));
+  const required = host.operatingSystem === 'win32' ? [] : REQUIRED_TOOLS;
+  const missing = required.filter(name => !host.tools.includes(name));
   return missing.length > 0
     ? {kind: 'failed', failure: {kind: 'prerequisiteMissing', missing}}
     : {kind: 'probed', host};

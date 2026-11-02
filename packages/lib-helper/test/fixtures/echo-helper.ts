@@ -10,4 +10,5 @@ void runHelper(
     runAction: () => Promise.resolve(),
   },
   () => undefined,
+  process.platform,
 );

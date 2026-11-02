@@ -82,7 +82,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `vscode-remote://ssh-remote+agentfwd/home/harness` (`ForwardAgent` with the run's agent socket; `agent-off` on
   `agentfwd-off`, the same alias under another name so that it finds no connection of `agent`, with
   `remote.SSH.enableAgentForwarding` false) and `vscode-remote://ssh-remote+x11fwd/home/harness` (`ForwardX11`). They
-  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case;
+  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case; `x11-noxauth` is
+  the `x11` window on the Debian 12 host, which has no `xauth`;
 - `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
   `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the
@@ -128,7 +129,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `add-host`: an explorer launch (Remote Explorer installed, a debugging port) whose editor has `HOME=<run>/add-host-home`, so the user file that "Remote-SSH: Add New SSH Host..." writes is the run's own; `add-host/add-host.test.ts` answers the input, the file pick and the notice from the script, sets `remote.SSH.configFile` to `''`, and reads the written file, the window's tabs and the explorer's hosts view (F-2204's rows).
 
-- `explorer`, `explorer-alone`, `explorer-trust`, `explorer-home`, `explorer-rows`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-trust` with workspace trust on, so a new folder window is in Restricted Mode, `explorer-home` with the run's own HOME (`<run>/home`), where its rows write the user's SSH configuration, `explorer-rows` with the view's own rows (activation, the hosts of a file, Refresh and SSH windows) apart from `explorer`'s gate rows, whose Connect in Current Window reloads the launch's window, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
+- `explorer`, `explorer-alone`, `explorer-trust`, `explorer-home`, `explorer-rows`, `explorer-folders`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-trust` with workspace trust on, so a new folder window is in Restricted Mode, `explorer-home` with the run's own HOME (`<run>/home`), where its rows write the user's SSH configuration, `explorer-rows` with the view's own rows (activation, the hosts of a file, Refresh and SSH windows) apart from `explorer`'s gate rows, whose Connect in Current Window reloads the launch's window, `explorer-folders` with the recent folders under the host rows (Remote - SSH's folder history as the view shows it; each row names its folders with a prefix of its own, because the history of a run outlives a row) and core's dialogs drawn in the window, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
@@ -360,7 +361,11 @@ default: dismiss the dialog and its pick). An install case that keeps nothing al
 `/home/harness/.vscodium-server-insiders` and `/tmp/srv`. A case's settings may name the download host's bases as
 `${HARNESS_DOWNLOADS_HTTP}`, `${HARNESS_DOWNLOADS_HTTPS}`, `${HARNESS_DOWNLOADS_LICENSED}` and
 `${HARNESS_DOWNLOADS_LOCAL}`; the run puts them in when it writes the launch's settings, and leaves the product's own
-`${…}` placeholders as written. Before each launch the run notes how many requests the download host has logged, in
+`${…}` placeholders as written. The same names, and `${HARNESS_DOWNLOADS_PORT}` (the download host's port), are put into a
+case's `setup` commands: the cases `host-404-fallback` and `host-junk-fallback` start a relay on the host's loopback
+(`nc -lk -p <port> -e nc downloads <port>`) so that one template URL, on the client-only base, reaches the download host
+from both sides; the download host's `hostrefused` and `hostjunk` sources answer the host's `wget` or `curl` with a 404 or
+with junk and any other client with the archive. Before each launch the run notes how many requests the download host has logged, in
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 
@@ -737,6 +742,8 @@ Besides `harness`, the host image has fifteen users, and the run's `ssh_config` 
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
+| `agentfwd-tmpdir` | `harness-tmpdir` | the run's key, forwarding the run's agent as `agentfwd` does; the login shell (`tmpdir-shell`) sets `TMPDIR` to `~/tmp`, a folder of the account's own, then is `sh`, for a command, a script on standard input and a login terminal alike |
+| `agentfwd-notmp` | `harness-notmp` | the Ubuntu 26.04 host only: the run's key, forwarding the run's agent; an ACL entry on `/tmp` (`u:harness-notmp:r-x`) lets the account create nothing there, while OpenSSH 10.2 keeps the forwarded socket under `~/.ssh/agent`, so the agent still works; a row lifts it as root with `setfacl -x u:harness-notmp /tmp` and puts it back with `setfacl -m u:harness-notmp:r-x /tmp` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |

@@ -48,6 +48,7 @@
         "login-shells/*.test.ts",
         "config-files/*.test.ts",
         "secrets/*.test.ts",
+        "agent-notmp/*.test.ts",
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
         "ssh-core/*.test.ts",
@@ -59,6 +60,7 @@
         "explorer-home/*.test.ts",
         "add-host/*.test.ts",
         "explorer-rows/*.test.ts",
+        "explorer-folders/*.test.ts",
         "explorer-no-proposals/*.test.ts",
         "explorer-standdown/*.test.ts",
         "trust/*.test.ts",
@@ -128,8 +130,8 @@
     "packages/*/src/extension.ts": ["exports"],
     "packages/*/src/web-extension.ts": ["exports"],
   },
-  // System tools the tests run, which no package provides.
-  "ignoreBinaries": ["shellcheck", "ssh-add", "ssh-agent", "ss"],
+  // System tools the tests and checks run, which no package provides.
+  "ignoreBinaries": ["pwsh", "shellcheck", "ssh-add", "ssh-agent", "ss"],
   "ignoreDependencies": [
     // The editor provides it to the acceptance tests at run time; @types/vscode types it.
     "vscode",

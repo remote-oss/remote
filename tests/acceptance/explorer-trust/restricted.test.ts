@@ -14,6 +14,17 @@ import {
   VIEW,
 } from '../windows/explorer-rows.ts';
 import {
+  appearsAfter,
+  connectedTo,
+  foldersSettled,
+  closeIfOpen,
+  HOME,
+  ownPathsOf,
+  pathsOf,
+  viewWindow,
+  visit,
+} from '../windows/explorer-folders.ts';
+import {
   closeWindow,
   hostAliases,
   inWindow,
@@ -21,9 +32,12 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {activations} from '../windows/folder-windows.ts';
 import {
   extensionsViewSections,
   extensionStatusShown,
+  rowAction,
+  rowMenuAction,
   titleAction,
 } from '../windows/renderer.ts';
 
@@ -93,6 +107,44 @@ describe('the explorer in Restricted Mode (card coverage-25c, part b)', function
       );
     } finally {
       await closeWindow(name);
+    }
+  });
+
+  it('F-2503 AC-24 (restricted): in a window in Restricted Mode the recent folders are opened, listed, removed and connected to as in a trusted one', async function () {
+    this.timeout(900_000);
+    const first = `${HOME}/c102-rm1`;
+    const second = `${HOME}/c102-rm2`;
+    let window = '';
+    try {
+      await visit('harness', 'c102-rm1');
+      await visit('harness', 'c102-rm2');
+      window = await viewWindow('c102-restricted');
+      const trusted = await isTrusted(window);
+      await foldersSettled(
+        window,
+        'harness',
+        [second, first],
+        `${HOME}/c102-rm`,
+      );
+      await rowMenuAction(window, VIEW, 'c102-rm2', 'Remove from Recent List');
+      await foldersSettled(window, 'harness', [first], `${HOME}/c102-rm`);
+      const before = activations('c102-rm1');
+      await rowAction(window, VIEW, 'c102-rm1', 'Connect in New Window...');
+      await appearsAfter('c102-rm1', before);
+      await connectedTo('c102-rm1', 'harness');
+      await waitFor(
+        'the entry to be first',
+        async () => (await pathsOf('harness'))[0] === first,
+        30_000,
+      );
+      await closeIfOpen('c102-rm1');
+      deepStrictEqual(
+        [trusted, await ownPathsOf('harness', `${HOME}/c102-rm`)],
+        [false, [first]],
+      );
+    } finally {
+      await closeIfOpen('c102-rm1');
+      await closeIfOpen(window);
     }
   });
 });

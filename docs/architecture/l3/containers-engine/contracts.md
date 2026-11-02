@@ -54,13 +54,24 @@ reconnection rules). `diagnostics` never hold the token.
 **`cancel()`** ends C3's and C2's processes and the exec relays. **`onTransportLost`** fires when the relay's exec
 process ends while the container runs, and **`onTransportClosed`** when the container stops.
 
+**The effective engine (F-0205; containers-133, #1811).** C2 alone resolves the engine coordinate, in
+`engine/effective-engine.ts`: the variables `DOCKER_HOST`, `DOCKER_CONTEXT`, `DOCKER_CERT_PATH` and
+`DOCKER_TLS_VERIFY`, each from the first of `containers.environment`, `docker.environment`, the `docker.host`,
+`docker.certPath` and `docker.tlsVerify` settings, and the editor's environment that holds it; no other variable of an
+environment setting is taken. A host wins over a context, and a context brings its own certificates. The current context
+joins only when nothing else picks the engine. C3, C11, C15 and the shutdown helper spawn with the coordinate and never
+read the settings; a connected window's engine comes from its payload.
+
 ## 3. The `dev-container` payload (F-0501 BR-2a)
 
 lib-authority's `containerCodec('dev-container', …)` carries the payload as an opaque string. remote-containers owns
 its content:
 - **The text:** lowercase hex of the UTF-8 JSON `{"hostPath": <folder>, "localDocker": false, "configFile": {"$mid": 1,
   "fsPath", "external", "path", "scheme"}}`, with `"settings": {"context": <name>}` when a non-default Docker context
-  is current. Field order and spelling are F-0501's.
+  is current. Field order and spelling are F-0501's. The same member also holds `"host"`, `"certPath"` and
+  `"tlsVerify"` (in that order, after `"context"`) when the effective engine of §2 names a host: the window is pinned
+  to the engine it was opened on, and a reload, a rebuild and the window's title use it whatever the settings say then
+  (F-0205 BR-19; containers-133, #1811).
 - **The rebuild intent** (C6 → C7) isn't part of the authority, which must stay stable (F-1102 §16). The reloaded
   window has another workspace identity, so its workspace state can't carry it. C6 stores it in the extension's
   `globalState` under a key of ours (R-27), keyed by the payload, with the time, before the reload. C10 takes it once at

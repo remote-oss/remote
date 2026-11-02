@@ -11,15 +11,16 @@ import {
   systemTimers,
 } from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
+import type {ClientPlatform} from 'lib-ssh';
 import {standDownHost} from 'lib-standdown';
 import type * as vscode from 'vscode';
 import {activateExplorer, silentHandlers} from './activation.ts';
 import {serveInbox} from './companion/inbox.ts';
+import type {PushRecorder} from './companion/push-record.ts';
 import {commands, standDown, views} from './identifiers.generated.ts';
 import {companionCallsOf} from './view/companion-calls.ts';
 import {connectHandlers} from './view/connect.ts';
 import {handOverHandlers} from './view/hand-overs.ts';
-import type {ClientPlatform} from './model/ssh-group.ts';
 import {createTargets, type ViewSession} from './view/targets.ts';
 import {
   configFileChangesOf,
@@ -45,13 +46,15 @@ export type WindowEditor = TreeEditor &
 
 /**
  * Activates the explorer in this window: the stand-down guard, `setup`, then the commands. On `serving` the end of
- * the registration is added to `context.subscriptions`. `clientPlatform` is the platform the editor's client runs on.
+ * the registration is added to `context.subscriptions`. `clientPlatform` is the platform the editor's client runs on;
+ * `record`, when the entry has one, is told each push the inbox receives.
  */
 export async function activateInWindow(
   editor: WindowEditor,
   context: Pick<vscode.ExtensionContext, 'subscriptions' | 'extension'>,
   setup: () => PromiseLike<unknown>,
   clientPlatform: ClientPlatform,
+  record?: PushRecorder,
 ): Promise<void> {
   let session: ViewSession | undefined = undefined;
   const result = await activateExplorer({
@@ -83,7 +86,9 @@ export async function activateInWindow(
     bus: commandBus(editor),
     timers: systemTimers,
   });
-  context.subscriptions.push(serveInbox(protocol, () => session?.targets));
+  context.subscriptions.push(
+    serveInbox(protocol, () => session?.targets, record),
+  );
   const calls = companionCallsOf(protocol);
   const detector = createDetector(extensionLookup(editor));
   const targets = createTargets({

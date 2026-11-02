@@ -11,6 +11,7 @@ import {
   freshServer,
   surfaceLines,
   taskEnvironment,
+  windowFace,
   withWindow,
   writeHomeFile,
 } from './shell-support.ts';
@@ -25,15 +26,21 @@ function marked(environment: Record<string, string>, prefix: string): string[] {
 describe('login shells and their startup files: which files the connect reads (F-2704)', function () {
   this.timeout(900_000);
 
-  it('F-2704 AC-1 (bash-default): a bash host in the default mode connects with no notice and no dialog', async () => {
+  it('F-2704 AC-1 (reading-1608-title): a bash host in the default mode connects with the window titled with its folder and the host and the indicator naming the host, and no notice, toast or dialog', async () => {
     await freshServer('harness-bash');
     const state = await withWindow('harness-bash', 'sf-ac1', async () => ({
       remoteName: (await windowState('sf-ac1')).remoteName,
+      face: await windowFace('sf-ac1', 'SSH: harness-bash'),
       notices: surfaceLines('sf-ac1', 'notice'),
       dialogs: surfaceLines('sf-ac1', 'failureDialog'),
     }));
     deepStrictEqual(state, {
       remoteName: 'ssh-remote',
+      face: {
+        title: '[sf-ac1 [SSH: harness-bash]]',
+        indicator: 'SSH: harness-bash',
+        toasts: [],
+      },
       notices: [],
       dialogs: [],
     });

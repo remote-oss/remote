@@ -67,12 +67,16 @@ export async function helloAnswered(
 
 /** This machine: lib-helper's stop and hello over real sockets, /proc and real signals. */
 function nodeHelperStopWorld(): HelperStopWorld {
-  const environment = nodeClientEnvironment(process.execPath, {
-    helloLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
-    startLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
-    retryMilliseconds: 100,
-  });
-  const endpoints = nodeEndpointPort();
+  const environment = nodeClientEnvironment(
+    process.execPath,
+    {
+      helloLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
+      startLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
+      retryMilliseconds: 100,
+    },
+    process.platform,
+  );
+  const endpoints = nodeEndpointPort(process.platform);
   return {
     stop: (folder, namespace, recordKey) =>
       stop(environment, folder, namespace, recordKey),

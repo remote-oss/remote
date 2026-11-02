@@ -11,11 +11,15 @@ const [registryFolder = '', endpointFolder = ''] = process.argv.slice(2);
 
 void acquire(
   {
-    ...nodeClientEnvironment(process.execPath, {
-      helloLimitMilliseconds: 2000,
-      startLimitMilliseconds: 10000,
-      retryMilliseconds: 100,
-    }),
+    ...nodeClientEnvironment(
+      process.execPath,
+      {
+        helloLimitMilliseconds: 2000,
+        startLimitMilliseconds: 10000,
+        retryMilliseconds: 100,
+      },
+      process.platform,
+    ),
     endpointFolder,
   },
   {

@@ -23,7 +23,7 @@ import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
-import {serializedUriOf} from './authority/payload.ts';
+import {serializedUriOf, windowOriginOf} from './authority/payload.ts';
 import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
 import {
@@ -69,11 +69,20 @@ import {
 } from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
 import {folderDialogOptions} from './open/folder-dialog.ts';
+import {reopenOriginHandlersOf} from './open/reopen-origin.ts';
+import {
+  type EngineSources,
+  engineEnvironment,
+  pinnedEngineOf,
+  withAmbientContext,
+  withEnvironment,
+} from './engine/effective-engine.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
 import {
   commands,
+  contextKeys,
   enabledApiProposals,
   settings,
   standDown,
@@ -128,6 +137,7 @@ import {
 } from './surfaces/lifecycle-terminal.ts';
 import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
 import {ensureTrusted} from './trust/trust-gate.ts';
+import {openOwnSettings} from './settings/settings-command.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -470,6 +480,19 @@ function featureDiagnosticsHost(): DiagnosticsHost {
   };
 }
 
+/** The sources of the effective engine, read from the editor as they are now. */
+function engineSources(): EngineSources {
+  const configuration = vscode.workspace.getConfiguration();
+  return {
+    containersEnvironment: configuration.get('containers.environment'),
+    dockerEnvironment: configuration.get('docker.environment'),
+    dockerHost: configuration.get('docker.host'),
+    certPath: configuration.get('docker.certPath'),
+    tlsVerify: configuration.get('docker.tlsVerify'),
+    processEnvironment: process.env,
+  };
+}
+
 /** Called by the editor when the extension activates. */
 export async function activate(
   context: vscode.ExtensionContext,
@@ -546,7 +569,12 @@ export async function activate(
       {
         window: {
           remote: vscode.env.remoteName !== undefined,
-          workspaceFile: vscode.workspace.workspaceFile !== undefined,
+          workspace:
+            vscode.workspace.workspaceFile === undefined
+              ? 'none'
+              : vscode.workspace.workspaceFile.scheme === 'file'
+                ? 'saved'
+                : 'untitled',
           folders: windowFolders(),
         },
         global: context.globalState,
@@ -609,11 +637,16 @@ export async function activate(
         viewIds: [views.targetsContainers],
         templates: SETUP_TEXT_TEMPLATES,
         translate,
+        homeFolder: os.homedir(),
+        platform: process.platform,
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
     preflight: logger => ({
-      engineFor: nodeEngineHost,
+      engineFor: file =>
+        withEnvironment(nodeEngineHost(file), () =>
+          engineEnvironment(engineSources()),
+        ),
       dockerPath: () =>
         vscode.workspace.getConfiguration().get(settings.dockerPath.id),
       dialogs: {
@@ -883,11 +916,16 @@ export async function activate(
               base,
               cancellation ?? new AbortController().signal,
             ),
-          currentContext: () =>
-            currentContext(
-              served.preflight,
-              firstFolder(),
-              new AbortController().signal,
+          pinnedEngine: async () =>
+            pinnedEngineOf(
+              withAmbientContext(
+                engineEnvironment(engineSources()),
+                await currentContext(
+                  served.preflight,
+                  firstFolder(),
+                  new AbortController().signal,
+                ),
+              ),
             ),
         },
         dialogs: served.preflight.dialogs,
@@ -981,8 +1019,24 @@ export async function activate(
             : {scheme: picked.scheme, fsPath: picked.fsPath};
         },
       });
+      const reopenOrigin = reopenOriginHandlersOf({
+        origin: () =>
+          served.missing.includes('resolvers')
+            ? undefined
+            : windowOriginOf(vscode.env.remoteAuthority),
+        folderOpen: () => (vscode.workspace.workspaceFolders ?? []).length > 0,
+        opener: reopenPorts.opener,
+        inform: text => {
+          void vscode.window.showInformationMessage(text);
+        },
+        translate,
+      });
       return {
         reopenInContainer: {execute: reopenHandler()},
+        reopenLocally: {execute: reopenOrigin.reopenLocally},
+        reopenInSSH: {execute: reopenOrigin.reopenInSSH},
+        reopenInWSL: {execute: reopenOrigin.reopenInWSL},
+        reopenInTunnel: {execute: reopenOrigin.reopenInTunnel},
         openFolder: {execute: openFolder},
         createDevContainerFile: {
           execute: createDevContainerFile({
@@ -1003,6 +1057,13 @@ export async function activate(
               ),
             translate,
           }),
+        },
+        settings: {
+          execute: openOwnSettings(
+            (command, ...parameters) =>
+              vscode.commands.executeCommand(command, ...parameters),
+            context.extension.id,
+          ),
         },
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
@@ -1107,6 +1168,7 @@ export async function activate(
     const shutdownHelper = nodeClientEnvironment(
       process.execPath,
       SHUTDOWN_CLIENT_WAITS,
+      process.platform,
     );
     const connector = containerConnectorOf({
       shutdown: createWindowLease({
@@ -1124,7 +1186,7 @@ export async function activate(
         logger,
       }),
       newConnectionId: randomUUID,
-      engineFor: file => served.preflight.engineFor(file),
+      engineFor: nodeEngineHost,
       cliFor: environment => bridgeFor(environment, logger),
       lifecycleFor: (engine, bridge, presenter) =>
         containerLifecycleOf({
@@ -1233,6 +1295,30 @@ export async function activate(
             clock,
             newTemporaryToken: () =>
               `${String(process.pid)}-${String(clock.now())}`,
+            // The editor's fetch, so that its proxy settings apply as for the server's download.
+            queryGallery: async (address, query, cancellation) => {
+              try {
+                const response = await fetch(address, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json;api-version=3.0-preview.1',
+                  },
+                  body: JSON.stringify(query),
+                  signal: cancellation,
+                });
+                return response.ok ? await response.json() : undefined;
+              } catch {
+                return undefined;
+              }
+            },
+            readText: async file => {
+              try {
+                return await readFile(file, 'utf8');
+              } catch {
+                return undefined;
+              }
+            },
             logger,
             translate,
           },
@@ -1256,10 +1342,18 @@ export async function activate(
     });
     windowShutdown.leave = () => connector.leaveShutdown();
     // `env.remoteAuthority` belongs to the resolvers proposal: reading it without the grant throws.
+    const windowOrigin = served.missing.includes('resolvers')
+      ? undefined
+      : windowOriginOf(vscode.env.remoteAuthority);
     connector.announceShutdown(
       served.missing.includes('resolvers')
         ? undefined
         : vscode.env.remoteAuthority,
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      contextKeys.canReopenLocally.id,
+      windowOrigin?.kind === 'local',
     );
     if (served.missing.length === 0) {
       offerReopenFor(logger).catch((caught: unknown) => {

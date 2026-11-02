@@ -143,6 +143,7 @@ function labelsFromExplorer(): string[] {
     'explorer-trust',
     'explorer-home',
     'explorer-rows',
+    'explorer-folders',
     'explorer-no-proposals',
     'add-host',
     'explorer-standdown',
@@ -222,7 +223,7 @@ describe('the launches of the VSCodium run', () => {
 
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('tooling-70, tooling-34: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and secrets is the one launch on another host with a host setup', () => {
+  it('tooling-70, tooling-34: remote-ubuntu is the remote launch on the Ubuntu 26.04 host, and secrets and agent-notmp are the launches on another host with a host setup', () => {
     const remote = launches.find(launch => launch.label === 'remote');
     deepStrictEqual(
       [
@@ -236,7 +237,7 @@ describe('the launches of the VSCodium run', () => {
       ],
       [
         {...remote, label: 'remote-ubuntu', hostBase: 'ubuntu-26.04'},
-        ['secrets'],
+        ['secrets', 'agent-notmp'],
       ],
     );
   });
@@ -260,7 +261,22 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('coverage-99: the agent-notmp launch is a renderer launch on the Ubuntu 26.04 host whose host setup puts back the ACL entry that keeps harness-notmp from creating links in /tmp', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'agent-notmp'),
+      {
+        kind: 'plain',
+        debuggingPort: true,
+        settings: {'window.title': '[${rootName}]'},
+        label: 'agent-notmp',
+        suite: 'agent-notmp',
+        hostBase: 'ubuntu-26.04',
+        hostSetup: [{command: 'setfacl -m u:harness-notmp:r-x /tmp'}],
+      },
+    );
+  });
+
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the eight explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -270,6 +286,7 @@ describe('the launches of the VSCodium run', () => {
         'agent',
         'agent-off',
         'x11',
+        'x11-noxauth',
         ...failureCases(REPOSITORY_ROOT).map(
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
@@ -288,6 +305,7 @@ describe('the launches of the VSCodium run', () => {
         'preconnect',
         'config-files',
         'secrets',
+        'agent-notmp',
         'default-ports',
         'ssh-core',
         'no-proposals',
@@ -349,11 +367,17 @@ describe('the launches of the VSCodium run', () => {
           {HARNESS_FORWARDING_CASE: 'x11'},
           undefined,
         ],
+        [
+          'x11-noxauth',
+          'vscode-remote://ssh-remote+x11fwd/home/harness',
+          {HARNESS_FORWARDING_CASE: 'x11-noxauth'},
+          undefined,
+        ],
       ],
     );
   });
 
-  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches, terminal-login and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -375,6 +399,8 @@ describe('the launches of the VSCodium run', () => {
         ['passphrase-input', undefined, true, undefined],
         ['terminal-odd', undefined, true, undefined],
         ['passphrase-late', undefined, true, undefined],
+        ['login-shells', undefined, true, undefined],
+        ['agent-notmp', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
@@ -387,6 +413,7 @@ describe('the launches of the VSCodium run', () => {
         ['explorer-trust', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-home', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-rows', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-folders', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-no-proposals',
           ['remote-oss.remote-explorer'],
@@ -662,6 +689,33 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('tooling-107: the explorer launches, and only they, record the pushes their inbox receives in a file of the run', () => {
+    const named = launchesOf(REPOSITORY_ROOT)
+      .filter(
+        launch =>
+          launch.environment?.REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD !==
+          undefined,
+      )
+      .map(launch => [
+        launch.label,
+        launch.environment?.REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD,
+      ]);
+    deepStrictEqual(
+      named,
+      [
+        'explorer',
+        'explorer-alone',
+        'explorer-trust',
+        'explorer-home',
+        'explorer-rows',
+        'explorer-folders',
+        'explorer-no-proposals',
+        'add-host',
+        'explorer-standdown',
+      ].map(label => [label, '<run>/companion-record.jsonl']),
+    );
+  });
+
   it('coverage-25b: the explorer-standdown launch installs Remote Explorer and carries the reference explorer’s stand-in', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
@@ -733,7 +787,7 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
-            'remote.SSH.remotePlatform': {harness: 'linux'},
+            'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
           },
         ],
         [
@@ -1039,7 +1093,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1058,6 +1112,8 @@ describe('the launches of the VSCodium run', () => {
         'passphrase-input',
         'terminal-odd',
         'passphrase-late',
+        'login-shells',
+        'agent-notmp',
         'default-ports',
         'ssh-core',
         ...labelsFromExplorer(),
@@ -1069,10 +1125,8 @@ describe('the launches of the VSCodium run', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('explorer'))
-        .map(launch => launch.settings),
-      Array.from({length: 7}, () => ({
-        'window.title': '[${rootName}]${remoteName}',
-      })),
+        .map(launch => launch.settings?.['window.title']),
+      Array.from({length: 8}, () => '[${rootName}]${remoteName}'),
     );
   });
 
@@ -1575,6 +1629,8 @@ describe('the launch with no runner', () => {
           label: 'login-shells',
           kind: 'plain',
           suite: 'login-shells',
+          debuggingPort: true,
+          settings: {'window.title': '[${rootName}]'},
         },
       ],
     );

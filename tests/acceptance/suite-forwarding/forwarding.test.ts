@@ -2,17 +2,15 @@ import {deepStrictEqual, match, strictEqual} from 'node:assert';
 import {lstatSync} from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import {connectionLog, onHost} from '../suite/harness.ts';
+import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import {agentAdd, fingerprintOf} from '../windows/harness.ts';
+import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 
-/** The case of this launch: `agent`, `agent-off` or `x11`. */
+/** The case of this launch: `agent`, `agent-off`, `x11` or `x11-noxauth`. */
 const FORWARDING_CASE = process.env.HARNESS_FORWARDING_CASE ?? '';
 
 /** How long a terminal of the window has to write what it saw. */
 const TERMINAL_MILLISECONDS = 15_000;
-
-/** The form of an agent link's path. */
-const LINK_PATTERN = '/tmp/vscode-ssh-auth-sock-*';
 
 /** The log lines of this window's forwarding plans, which a failed assertion shows. */
 function forwardingLines(): string {
@@ -50,16 +48,6 @@ async function terminalWrites(command: string, file: string): Promise<string> {
   throw new Error(
     `the terminal wrote no ${file} within ${String(TERMINAL_MILLISECONDS)} ms\n${forwardingLines()}`,
   );
-}
-
-/** The agent links in /tmp of the host, each with its owner, as `<owner> <path>`. */
-async function hostLinks(): Promise<string[]> {
-  const listed = await onHost(
-    'sh',
-    '-c',
-    `for name in ${LINK_PATTERN}; do [ -L "$name" ] && stat -c '%U %n' "$name"; done; true`,
-  );
-  return listed.split('\n').filter(line => line !== '');
 }
 
 /**
@@ -142,6 +130,29 @@ const ROWS: Readonly<Record<string, () => void>> = {
       deepStrictEqual(
         {socket, links: await hostLinks()},
         {socket: '', links: []},
+        forwardingLines(),
+      );
+    });
+  },
+  'x11-noxauth': () => {
+    it('F-2312 AC-19 (c110-noxauth): on a host without xauth the connection succeeds with no UI, no DISPLAY is contributed and a new terminal on a freshly started server has an empty DISPLAY', async () => {
+      const display = await terminalWrites(
+        'echo "DISPLAY=[$DISPLAY]"',
+        'display-noxauth.txt',
+      );
+      await vscode.commands.executeCommand(
+        'workbench.action.terminal.showEnvironmentContributions',
+      );
+      const contributions =
+        vscode.window.activeTextEditor?.document.getText() ?? '';
+      deepStrictEqual(
+        [
+          display,
+          contributions.includes('remote-oss.remote-ssh'),
+          recordLines('notice').length,
+          recordLines('failureDialog').length,
+        ],
+        ['DISPLAY=[]', false, 0, 0],
         forwardingLines(),
       );
     });

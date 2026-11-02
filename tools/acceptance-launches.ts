@@ -21,6 +21,8 @@ interface LaunchCommon {
   settings?: Readonly<Record<string, unknown>>;
   /** Text written after the last member of the user settings file with no comma before it: a syntax error after the members. */
   settingsTail?: string;
+  /** Whether the run fetches the earlier VSCodium release's server archives and serves them under `/earlier/`; only the launch that connects to another commit's server asks. */
+  earlierServerArchive?: boolean;
   /** Variables added to the extension host's environment for this launch only. */
   environment?: Readonly<Record<string, string>>;
   /** Whether the editor is started with the proposed API enabled for the extensions under test; true when absent. */
@@ -172,6 +174,10 @@ const EXPLORER_LAUNCH = {
   withExtensions: ['remote-oss.remote-explorer'],
   // The remote name after the folder, as core's own label gives it, so a claimed window's page is found by its state.
   settings: {'window.title': '[${rootName}]${remoteName}'},
+  // The explorer appends each push its inbox receives from Remote - SSH to this file, which `companionCalls` reads.
+  environment: {
+    REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD: '<run>/companion-record.jsonl',
+  },
 } as const;
 
 /** The editor's gallery variables pointed at a closed port, so that the Extensions view has no gallery data. */
@@ -305,6 +311,9 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
+const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
+
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-container.test.ts',
@@ -313,9 +322,11 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-flows.test.ts',
   'authoring-optional.test.ts',
   'authoring-options.test.ts',
+  'authoring-pick.test.ts',
   'authoring-sweep.test.ts',
   'authoring-templates.test.ts',
   'authoring-user-data.test.ts',
+  'authoring-where.test.ts',
   'authoring.test.ts',
   'cache-volume.test.ts',
   'configuration-errors.test.ts',
@@ -432,12 +443,13 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases and its certificate file. */
+/** The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases, its port and its certificate file. */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
   'HARNESS_DOWNLOADS_LICENSED',
   'HARNESS_DOWNLOADS_LOCAL',
+  'HARNESS_DOWNLOADS_PORT',
   'HARNESS_DOWNLOADS_CERTIFICATE',
 ];
 
@@ -710,7 +722,7 @@ function forwardingLaunch(
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); `agent`,
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
- * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
+ * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
  * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
@@ -754,6 +766,7 @@ export function launchesOf(root: string): Launch[] {
       'remote.SSH.enableAgentForwarding': false,
     }),
     forwardingLaunch('x11', 'x11fwd'),
+    {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
       label: failureLabel(failure.label ?? failure.alias),
       runner: 'runner-remote',
@@ -907,7 +920,8 @@ export function launchesOf(root: string): Launch[] {
         SSH_AUTH_SOCK: '<run>/late-agent.sock',
       },
     },
-    {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
+    // Its rows read the window's title and remote indicator, as the renderer helpers do.
+    {...RENDERER_LAUNCH, label: 'login-shells', suite: 'login-shells'},
     {
       label: 'preconnect',
       kind: 'plain',
@@ -938,6 +952,14 @@ export function launchesOf(root: string): Launch[] {
       environment: {HOME: '<run>/home-secrets'},
       // Each attempt starts from the same accounts: a forced change gives harness-expired a new password.
       hostSetup: [{command: SECRETS_ACCOUNTS_RESET}],
+    },
+    {
+      // The account that may not create agent links in /tmp, on the Ubuntu 26.04 host; each attempt starts with its ACL entry.
+      ...RENDERER_LAUNCH,
+      label: 'agent-notmp',
+      suite: 'agent-notmp',
+      hostBase: 'ubuntu-26.04',
+      hostSetup: [{command: AGENT_NOTMP_ACL}],
     },
     {
       ...RENDERER_LAUNCH,
@@ -975,12 +997,19 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
-      environment: {HOME: '<run>/home'},
+      environment: {...EXPLORER_LAUNCH.environment, HOME: '<run>/home'},
     },
     {
       ...EXPLORER_LAUNCH,
       label: 'explorer-rows',
       suite: 'explorer-rows',
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-folders',
+      suite: 'explorer-folders',
+      // The confirmation of File: Clear Recently Opened... is drawn in the window, where the renderer helpers read it.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
     },
     {
       ...EXPLORER_LAUNCH,
@@ -993,7 +1022,10 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'add-host',
       suite: 'add-host',
-      environment: {HOME: '<run>/add-host-home'},
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/add-host-home',
+      },
     },
     {
       ...EXPLORER_LAUNCH,
@@ -1018,7 +1050,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
-        'remote.SSH.remotePlatform': {harness: 'linux'},
+        'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
     {

@@ -3,13 +3,19 @@ import {
   acceptanceCriteriaOf,
   CONTAINERS_RELEASE_ONE_FEATURES,
   CONTAINERS_RELEASE_ONE_SCOPE,
+  CONTAINERS_RELEASE_TWO_FEATURES,
+  CONTAINERS_RELEASE_TWO_SCOPE,
   COVERAGE_SCOPES,
+  EXPLORER_RELEASE_TWO_SCOPE,
   EXPLORER_SLICE_ONE_FEATURES,
   EXPLORER_SLICE_ONE_SCOPE,
   EXTENSIONPACK_RELEASE_ONE_FEATURES,
   EXTENSIONPACK_RELEASE_ONE_SCOPE,
+  EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SLICE_ONE_FEATURES,
   SLICE_ONE_SCOPE,
+  SSH_RELEASE_TWO_FEATURES,
+  SSH_RELEASE_TWO_SCOPE,
 } from './spec-acceptance-criteria.ts';
 
 const BODY = [
@@ -139,7 +145,7 @@ describe('acceptanceCriteriaOf, the forms of Remote - Containers', () => {
 });
 
 describe('the coverage files', () => {
-  it('coverage-25a: the first slice, containers release 1, the explorer slice and the pack, each with its features and repository', () => {
+  it('coverage-25a, seed-01: the four release 1 files and the four release 2 files, each with its features and repository', () => {
     deepStrictEqual(
       COVERAGE_SCOPES.map(scope => [
         scope.file,
@@ -163,15 +169,28 @@ describe('the coverage files', () => {
           EXTENSIONPACK_RELEASE_ONE_FEATURES.length,
           'remote-extensionpack',
         ],
+        [
+          CONTAINERS_RELEASE_TWO_SCOPE.file,
+          CONTAINERS_RELEASE_TWO_FEATURES.length,
+          'remote-containers',
+        ],
+        [EXPLORER_RELEASE_TWO_SCOPE.file, 4, 'remote-explorer'],
+        [EXTENSIONPACK_RELEASE_TWO_SCOPE.file, 2, 'remote-extensionpack'],
+        [
+          SSH_RELEASE_TWO_SCOPE.file,
+          SSH_RELEASE_TWO_FEATURES.length,
+          'remote-ssh',
+        ],
       ],
     );
   });
 
-  it('containers release 1: thirty-nine features, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
+  it('containers release 1: forty features, F-0205, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
     deepStrictEqual(
       [
         CONTAINERS_RELEASE_ONE_FEATURES.length,
         [
+          'F-0205',
           'F-0416',
           'F-0419',
           'F-0106',
@@ -181,7 +200,7 @@ describe('the coverage files', () => {
           'F-0906',
         ].every(feature => CONTAINERS_RELEASE_ONE_FEATURES.includes(feature)),
       ],
-      [39, true],
+      [40, true],
     );
   });
 });

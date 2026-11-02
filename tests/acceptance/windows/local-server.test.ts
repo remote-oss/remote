@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {sshRemoteCodec} from 'lib-authority';
 import {
+  acceptedPasswords,
   appendScript,
   closeWindow,
   connected,
@@ -10,6 +11,7 @@ import {
   goneWithin,
   hostAliases,
   hostAnswer,
+  hostPassword,
   inWindow,
   isOpen,
   kill,
@@ -75,8 +77,6 @@ describe('the local connection server on a key host (card coverage-14)', functio
         answer: 'dismiss',
         window: 'k1',
       },
-      hostAnswer('k1', {label: 'harness'}),
-      hostAnswer('k1', {label: 'harness'}),
       hostAnswer('k1', {label: 'harness'}),
     ]);
   });
@@ -259,8 +259,85 @@ describe('the local connection server on a key host (card coverage-14)', functio
     );
   });
 
-  it('F-2102 AC-21: with the local server off Kill runs from a keybinding, changes no file, and the windows keep working', async () => {
+  it('F-2102 AC-19 (c97-per-window): with the setting off, a window on the password host asks once, starts no helper, and a reload asks again', async () => {
     await closeWindow('k1');
+    await noHelperWithin(60_000);
+    const before = await acceptedPasswords();
+    await userSettings({
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.remotePlatform': {password: 'linux'},
+    });
+    appendScript([
+      {
+        surface: 'maskedInput',
+        match: 'Enter password',
+        answer: {text: hostPassword()},
+        window: 'k4',
+      },
+    ]);
+    await openWindow('password', 'k4');
+    await connectedWithin('k4', 60_000);
+    const afterFirst = [
+      await connectionHelpers(),
+      await acceptedPasswords(),
+      recordLines('maskedInput', 'k4').length,
+    ];
+    appendScript([
+      {
+        surface: 'maskedInput',
+        match: 'Enter password',
+        answer: {text: hostPassword()},
+        window: 'k4',
+      },
+    ]);
+    await reloadWindow('k4');
+    await connectedWithin('k4', 60_000);
+    deepStrictEqual(
+      [
+        afterFirst,
+        await connectionHelpers(),
+        await acceptedPasswords(),
+        recordLines('maskedInput', 'k4').length,
+      ],
+      [[[], before + 1, 1], [], before + 2, 2],
+    );
+  });
+
+  it('F-2102 AC-20 (c97-per-window-two): a second window asks on its own, and no window waits for another', async () => {
+    const before = await acceptedPasswords();
+    const askedBefore = recordLines('maskedInput', 'k4').length;
+    appendScript([
+      {
+        surface: 'maskedInput',
+        match: 'Enter password',
+        answer: {text: hostPassword()},
+        window: 'k5',
+      },
+    ]);
+    await openWindow('password', 'k5');
+    await connectedWithin('k5', 60_000);
+    deepStrictEqual(
+      [
+        await connectionHelpers(),
+        await acceptedPasswords(),
+        recordLines('maskedInput', 'k4').length,
+        recordLines('maskedInput', 'k5').length,
+        recordLines('progress')
+          .filter(line => ['k4', 'k5'].includes(line.window))
+          .filter(
+            line => line.question === 'Waiting for other windows to connect',
+          ).length,
+      ],
+      [[], before + 1, askedBefore, 1, 0],
+    );
+    await closeWindow('k5');
+    await closeWindow('k4');
+  });
+
+  it('F-2102 AC-21: with the local server off Kill runs from a keybinding, changes no file, and the windows keep working', async () => {
+    if (isOpen('k1')) {
+      await closeWindow('k1');
+    }
     await noHelperWithin(60_000);
     await userSettings(PER_WINDOW);
     await openWindow('harness', 'k1');
@@ -274,6 +351,7 @@ describe('the local connection server on a key host (card coverage-14)', functio
     const config = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
     mark = recordLines().length;
     const helpersDuring = await connectionHelpers();
+    appendScript([hostAnswer('k1', {label: 'harness'})]);
     await kill('k1');
     deepStrictEqual(
       [
@@ -314,6 +392,7 @@ describe('the local connection server on a key host (card coverage-14)', functio
         (await settingIn('k1', 'remote.SSH.useLocalServer')) === false,
       10_000,
     );
+    appendScript([hostAnswer('k1', {label: 'harness'})]);
     await kill('k1');
     await goneWithin(started, 2000);
     await connectedWithin('k1', 10_000);
@@ -321,7 +400,7 @@ describe('the local connection server on a key host (card coverage-14)', functio
   });
 
   after(async () => {
-    for (const name of ['k1', 'k2', 'k3']) {
+    for (const name of ['k1', 'k2', 'k3', 'k4', 'k5']) {
       if (isOpen(name)) {
         await closeWindow(name);
       }

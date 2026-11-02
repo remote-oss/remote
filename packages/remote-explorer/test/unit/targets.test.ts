@@ -186,7 +186,7 @@ function setup(present = true): Setup {
     },
     connectedText: 'connected',
     folderSettings: () => ({...settings}),
-    clientPlatform: 'other',
+    clientPlatform: 'linux',
   });
   const changes: number[] = [];
   targets.onDidChange(() => changes.push(changes.length));
@@ -426,7 +426,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
       configFileChanges: () => ({dispose: () => undefined}),
       connectedText: 'connected',
       folderSettings: () => ({sortOrder: undefined, collapse: undefined}),
-      clientPlatform: 'other',
+      clientPlatform: 'linux',
     });
     const changes: number[] = [];
     targets.onDidChange(() => changes.push(1));
@@ -849,6 +849,47 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     const first = await idsOf();
     await hostsFor(scenario, historyOf(['a', '/w/x', '/w/y']), 'a', 'b');
     deepStrictEqual(await idsOf(), first);
+  });
+
+  it('F-5104.BR-7, AC-1, AC-2: a host row has one id while it is a leaf and another once it has folders, the same while it stays either, so core starts it as its state says', async () => {
+    const scenario = setup();
+    async function stateOfHost(history: FoldersHistory): Promise<string[]> {
+      const [host] = await hostsFor(scenario, history, 'a');
+      const item =
+        host === undefined ? undefined : scenario.targets.itemOf(host);
+      return [item?.id ?? '', item?.collapsibleState ?? ''];
+    }
+    const leaf = await stateOfHost(historyOf());
+    const leafAgain = await stateOfHost(historyOf());
+    const parent = await stateOfHost(historyOf(['a', '/w/x']));
+    const parentAgain = await stateOfHost(historyOf(['a', '/w/x', '/w/y']));
+    const leafBack = await stateOfHost(historyOf());
+    deepStrictEqual(
+      [leaf, leafAgain, parent, parentAgain, leafBack],
+      [
+        ['ssh-host:a', 'none'],
+        ['ssh-host:a', 'none'],
+        ['ssh-host:a:folders', 'expanded'],
+        ['ssh-host:a:folders', 'expanded'],
+        ['ssh-host:a', 'none'],
+      ],
+    );
+  });
+
+  it('F-5104.BR-7: under the collapse setting a host row is collapsed with or without folders, and its id still changes with them', async () => {
+    const scenario = setup();
+    scenario.settings.collapse = true;
+    const seen: string[][] = [];
+    for (const history of [historyOf(), historyOf(['a', '/w/x'])]) {
+      const [host] = await hostsFor(scenario, history, 'a');
+      const item =
+        host === undefined ? undefined : scenario.targets.itemOf(host);
+      seen.push([item?.id ?? '', item?.collapsibleState ?? '']);
+    }
+    deepStrictEqual(seen, [
+      ['ssh-host:a', 'collapsed'],
+      ['ssh-host:a:folders', 'collapsed'],
+    ]);
   });
 
   it('F-5104.BR-13: dropFolder removes every row of the path under the host at once, with one change and no new call, and leaves the other hosts alone', async () => {

@@ -3,10 +3,13 @@ import {
   appendScript,
   batchLogin,
   closeWindow,
+  connected,
   connectedWithin,
   connectionHelpers,
+  hostAnswer,
   hostPassword,
   isOpen,
+  kill,
   masterCheck,
   masterExit,
   noHelperWithin,
@@ -88,11 +91,84 @@ describe('the local connection server beside an OpenSSH ControlMaster (card cove
     );
   });
 
-  it('F-2102 AC-25: a reload keeps the master and asks for no password', async () => {
+  it('F-2102 AC-25 (c97-master-kill): a kill of the local server leaves the master and the window, and the reload asks for no password', async () => {
+    const asked = questions('m1');
+    appendScript([hostAnswer('m1', {label: 'master'})]);
+    await kill('m1');
+    await waitFor(
+      'm1 to stay connected through the kill',
+      () => connected('m1'),
+      60_000,
+    );
+    const afterKill = [await masterCheck('master'), questions('m1')];
+    await reloadWindow('m1');
+    await connectedWithin('m1', 60_000);
+    deepStrictEqual(
+      [afterKill, questions('m1'), (await connectionHelpers()).length],
+      [[true, asked], asked, 1],
+    );
+  });
+
+  it('F-2102 AC-26 (c97-master-perwindow): with the setting off and a live master, a reload connects without a password', async () => {
+    await userSettings({
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.remotePlatform': {master: 'linux'},
+    });
     const asked = questions('m1');
     await reloadWindow('m1');
     await connectedWithin('m1', 60_000);
-    deepStrictEqual(questions('m1'), asked);
+    deepStrictEqual(
+      [questions('m1'), await masterCheck('master')],
+      [asked, true],
+    );
+  });
+
+  it('F-2102 AC-39 (c97-master-ask): with ControlMaster ask, the shared-connection confirmation is a masked input of the same window, and yes connects it', async () => {
+    await clean();
+    appendScript([
+      password('m1'),
+      {
+        surface: 'maskedInput',
+        match: 'Allow shared connection',
+        answer: {text: 'yes'},
+        window: 'm1',
+      },
+    ]);
+    await openWindow('master-ask', 'm1');
+    await connectedWithin('m1', 60_000);
+    const texts = recordLines('maskedInput', 'm1')
+      .slice(-2)
+      .map(line => line.question);
+    deepStrictEqual(
+      [
+        texts.length,
+        texts[1]?.includes('Allow shared connection') === true,
+        await masterCheck('master-ask'),
+      ],
+      [2, true, true],
+    );
+  });
+
+  it('F-2102 AC-40 (c97-master-yes): with ControlMaster yes, a kill and a reload ask for the password again', async () => {
+    await clean();
+    appendScript([
+      password('m1'),
+      hostAnswer('m1', {label: 'master-yes'}),
+      password('m1'),
+    ]);
+    await openWindow('master-yes', 'm1');
+    await connectedWithin('m1', 60_000);
+    const masterLive = await masterCheck('master-yes');
+    const asked = questions('m1');
+    await kill('m1');
+    await waitFor(
+      'm1 to stay connected through the kill',
+      () => connected('m1'),
+      60_000,
+    );
+    await reloadWindow('m1');
+    await connectedWithin('m1', 60_000);
+    deepStrictEqual([masterLive, questions('m1') - asked], [true, 1]);
   });
 
   it('F-2102 AC-30: after the master ends, the window connects again with one new password question and a new master', async () => {
@@ -113,6 +189,31 @@ describe('the local connection server beside an OpenSSH ControlMaster (card cove
     deepStrictEqual(
       [questions('m1') - asked, await masterCheck('master')],
       [1, true],
+    );
+  });
+
+  it('F-2102 AC-40 (c129-master-autoask): with ControlMaster autoask, Kill Local Connection Server and a reload connect again with no password and no confirmation, through the same master', async () => {
+    restoreUserSettings(savedSettings);
+    await clean();
+    appendScript([
+      password('m1'),
+      {
+        surface: 'maskedInput',
+        match: 'Allow shared connection',
+        answer: {text: 'yes'},
+        window: 'm1',
+      },
+    ]);
+    await openWindow('master-autoask', 'm1');
+    await connectedWithin('m1', 60_000);
+    const asked = questions('m1');
+    appendScript([hostAnswer('m1', {label: 'master-autoask'})]);
+    await kill('m1');
+    await reloadWindow('m1');
+    await connectedWithin('m1', 60_000);
+    deepStrictEqual(
+      [questions('m1') - asked, await masterCheck('master-autoask')],
+      [0, true],
     );
   });
 });

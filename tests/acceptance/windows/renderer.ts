@@ -1861,6 +1861,14 @@ export async function statusBarText(
   );
 }
 
+/** The DOM ids of every status bar item window `name` shows, in the order of the bar. */
+export async function statusBarItemIds(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.statusbar-item')].map(each => each.id)`,
+  );
+}
+
 /** The remote indicator's text and the text of each notification toast of window `name`, read in one go so that a sample is quick. */
 export async function connectSurface(
   name: string,
@@ -1894,6 +1902,33 @@ export async function toastDetails(name: string): Promise<ToastDetails[]> {
   buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => each.textContent ?? ''),
   toolbar: [...item.querySelectorAll('.notification-list-item-toolbar-container .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
   progress: ${TOAST_PROGRESS},
+}))`,
+  );
+}
+
+/** One notification toast with what its chrome says besides its words: its source, its severity and which button is primary. */
+export interface ToastFacts {
+  message: string;
+  /** The extension or area that raised it, as the toast prints it. */
+  source: string;
+  /** `info`, `warning` or `error`, from the toast's icon. */
+  severity: string;
+  /** The links of the message: their words and addresses. */
+  links: NotificationLink[];
+  /** The buttons in order, each with whether it is drawn as the primary one. */
+  buttons: Array<{label: string; primary: boolean}>;
+}
+
+/** The notifications on screen of window `name` (its toasts, or the centre once that is open) in the order shown, each with its source, severity, links and buttons. */
+export async function toastFacts(name: string): Promise<ToastFacts[]> {
+  return evaluate<ToastFacts[]>(
+    name,
+    `[...document.querySelectorAll('.notifications-toasts .notification-list-item, .notifications-center.visible .notification-list-item')].map(item => ({
+  message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+  source: (item.querySelector('.notification-list-item-details-row .monaco-button-dropdown, .notification-list-item-source')?.textContent ?? '').trim(),
+  severity: ['info', 'warning', 'error'].find(each => item.querySelector('.notification-list-item-icon.codicon-' + each) !== null) ?? '',
+  links: [...item.querySelectorAll('.notification-list-item-message a')].map(each => ({text: each.textContent ?? '', href: each.getAttribute('href') ?? each.getAttribute('data-href') ?? ''})),
+  buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => ({label: each.textContent ?? '', primary: !each.classList.contains('secondary')})),
 }))`,
   );
 }

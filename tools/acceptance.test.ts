@@ -241,7 +241,13 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('localhost:5000');
   };
 
-  readonly startDownloads = (): Promise<RunDownloads> => {
+  /** Whether each start of the download host was asked for the earlier release's archives. */
+  readonly earlierAsked: boolean[] = [];
+
+  readonly startDownloads = (
+    ...asked: [root?: string, runFolder?: string, earlier?: boolean]
+  ): Promise<RunDownloads> => {
+    this.earlierAsked.push(asked[2] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -415,6 +421,7 @@ const LAUNCH_ORDER = [
   'agent',
   'agent-off',
   'x11',
+  'x11-noxauth',
   'failure-refused',
   'terminal',
   'socket',
@@ -431,6 +438,7 @@ const LAUNCH_ORDER = [
   'preconnect',
   'config-files',
   'secrets',
+  'agent-notmp',
   'default-ports',
   'ssh-core',
   'no-proposals',
@@ -439,6 +447,7 @@ const LAUNCH_ORDER = [
   'explorer-trust',
   'explorer-home',
   'explorer-rows',
+  'explorer-folders',
   'explorer-no-proposals',
   'add-host',
   'explorer-standdown',
@@ -694,6 +703,26 @@ describe('acceptance', () => {
         '  StrictHostKeyChecking accept-new',
         '  BatchMode yes',
         '  UserKnownHostsFile /run/known_hosts_routed',
+      ].join('\n'),
+    );
+  });
+
+  it("coverage-100: the run's ssh_config has the jumped alias, the harness account through the harness host as a jump host, with its own known-hosts file", () => {
+    strictEqual(
+      accountBlock('jumped'),
+      [
+        'Host jumped',
+        '  HostName 127.0.0.1',
+        '  Port 22',
+        '  User harness',
+        '  ProxyJump harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking accept-new',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_jumped',
       ].join('\n'),
     );
   });
@@ -969,6 +998,37 @@ describe('acceptance', () => {
       ['agentfwd', 'agentfwd-off'].map(alias =>
         [
           ...sharedLines(alias, 'harness').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
+    );
+  });
+
+  it('coverage-99: Host agentfwd-no logs in to harness with the run key and gives ForwardAgent no', () => {
+    strictEqual(
+      accountBlock('agentfwd-no'),
+      [
+        ...sharedLines('agentfwd-no', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardAgent no',
+      ].join('\n'),
+    );
+  });
+
+  it("F-2311: Hosts agentfwd-tmpdir and agentfwd-notmp log in to harness-tmpdir and harness-notmp with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd-tmpdir', 'agentfwd-notmp'].map(alias => accountBlock(alias)),
+      [
+        ['agentfwd-tmpdir', 'harness-tmpdir'],
+        ['agentfwd-notmp', 'harness-notmp'],
+      ].map(([alias, user]) =>
+        [
+          ...sharedLines(alias ?? '', user ?? '').map(line =>
             line === '  IdentityAgent none'
               ? '  IdentityAgent /run/agent.sock'
               : line,
@@ -1337,6 +1397,7 @@ describe('acceptance', () => {
             'explorer-trust',
             'explorer-home',
             'explorer-rows',
+            'explorer-folders',
             'explorer-no-proposals',
             'add-host',
             'explorer-standdown',
@@ -1827,10 +1888,11 @@ describe('acceptance', () => {
           'ssh -F',
           'bundle suite',
           `docker rm`,
-          // the clean-up of what the run's label holds: containers, networks, editors, images, then the check
+          // the clean-up of what the run's label holds: containers, networks, volumes, editors, images, then the check
           'docker ps',
           'docker ps',
           'docker network',
+          'docker volume',
           'pkill -f',
           'pkill -O',
           'docker image',
@@ -1840,6 +1902,7 @@ describe('acceptance', () => {
           'docker image',
           'docker ps',
           'docker network',
+          'docker volume',
         ],
       );
     });
@@ -2653,6 +2716,34 @@ describe('acceptance', () => {
       );
     });
 
+    it("coverage-87: a launch's host setup has the run's download port put in", async () => {
+      const seen: string[] = [];
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [
+          {
+            ...PORTS,
+            hostSetup: [{command: 'nc -lk -p ${HARNESS_DOWNLOADS_PORT}'}],
+          },
+        ],
+        (program, programArguments) => {
+          seen.push([program, ...programArguments].join(' '));
+          return {status: 0, stdout: '', stderr: ''};
+        },
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {HARNESS_DOWNLOADS_PORT: '8080'},
+      );
+      deepStrictEqual(
+        seen.filter(call => call.startsWith('docker')),
+        ['docker exec --user root c0ffee sh -c nc -lk -p 8080'],
+      );
+    });
+
     const DEBIAN_PORTS: Launch = {
       ...PORTS,
       label: 'ports-debian',
@@ -3094,6 +3185,19 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-108: the download host is asked for the earlier release only when a chosen launch asks, and no launch asks yet', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        [
+          harness.earlierAsked,
+          launchesOf(workspace.root).filter(
+            launch => launch.earlierServerArchive === true,
+          ),
+        ],
+        [[false], []],
+      );
+    });
+
     it("containers-09, tooling-76: the VSCodium run sweeps other runs' stale containers, then builds the run's dev container image, and passes its tag", async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       const sweep = harness.calls.indexOf(
@@ -3387,7 +3491,7 @@ describe('acceptance', () => {
     });
 
     it('ruling 1: a failing connect opens a window on its alias', () => {
-      deepStrictEqual(configurations()[6]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+refused/home/harness',
       ]);
@@ -3396,8 +3500,8 @@ describe('acceptance', () => {
     it('ruling 1: a failing connect answers from its own script and record', () => {
       deepStrictEqual(
         [
-          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
-          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
+          configurations()[7]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
+          configurations()[7]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
         ],
         [
           path.join('/run', 'failure-refused-script.json'),
@@ -3459,9 +3563,12 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets launch and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000, 3000]);
+      deepStrictEqual(
+        harness.sleeps,
+        [3000, 5000, 3000, 3000, 3000, 3000, 3000],
+      );
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -3532,7 +3639,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 15}, () => EXECUTABLE),
+        Array.from({length: 16}, () => EXECUTABLE),
       );
     });
 
@@ -3543,7 +3650,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 15}, () => true),
+        Array.from({length: 16}, () => true),
       );
     });
 
@@ -3560,6 +3667,7 @@ describe('acceptance', () => {
           ['agent', 'dist-forwarding/**/*.test.cjs'],
           ['agent-off', 'dist-forwarding/**/*.test.cjs'],
           ['x11', 'dist-forwarding/**/*.test.cjs'],
+          ['x11-noxauth', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
@@ -3574,7 +3682,7 @@ describe('acceptance', () => {
     });
 
     it('D-85: the terminal launch opens the folder on ssh-remote+harness', () => {
-      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[8]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+harness/home/harness',
       ]);
@@ -3780,7 +3888,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[9]?.launchArgs.filter(argument =>
+        configurations()[10]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -3829,6 +3937,7 @@ describe('acceptance', () => {
           'agent',
           'agent-off',
           'x11',
+          'x11-noxauth',
           'failure-refused',
           'terminal',
           'socket',
@@ -3854,6 +3963,7 @@ describe('acceptance', () => {
           'agent',
           'agent-off',
           'x11',
+          'x11-noxauth',
           'failure-refused',
           'terminal',
           'socket',
@@ -3874,7 +3984,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 14}, () =>
+        Array.from({length: 15}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );

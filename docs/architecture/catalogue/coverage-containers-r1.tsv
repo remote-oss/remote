@@ -1,7 +1,7 @@
 ac	tag	reason
 F-0101.AC-1	deferred	containers release 1: the full contribution set comes with later increments
 F-0101.AC-2	deferred	containers release 1: the full contribution set comes with later increments
-F-0101.AC-3	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0101.AC-3	acceptance	
 F-0101.AC-3b	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-4	todo	
 F-0101.AC-5	acceptance	
@@ -17,12 +17,12 @@ F-0101.AC-15	acceptance
 F-0101.AC-17	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-17b	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-18	acceptance	
-F-0101.AC-19	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0101.AC-19	acceptance	
 F-0101.AC-20	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-21	deferred	containers release 1: the full contribution set comes with later increments
 F-0101.AC-22	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0106.AC-1	unit	
-F-0106.AC-2	deferred	containers release 1: increment 2 (authoring)
+F-0106.AC-2	acceptance	
 F-0106.AC-3	acceptance	
 F-0106.AC-4	acceptance	
 F-0106.AC-5	unit	
@@ -68,7 +68,7 @@ F-0106.AC-40	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0106.AC-41	acceptance	
 F-0106.AC-42	acceptance	
 F-0106.AC-43	deferred	containers release 1: later (attach)
-F-0106.AC-44	deferred	containers release 1: increment 2 (authoring)
+F-0106.AC-44	deferred	containers release 1: later (multi-root)
 F-0201.AC-1	acceptance	
 F-0201.AC-2	acceptance	
 F-0201.AC-3	unit	
@@ -124,6 +124,74 @@ F-0201.AC-53	deferred	containers release 1: later (multi-root)
 F-0201.AC-54	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0201.AC-55	acceptance	
 F-0201.AC-56	acceptance	
+F-0205.AC-1	deferred	containers release 1: later (remote engines)
+F-0205.AC-2	deferred	containers release 1: later (remote engines)
+F-0205.AC-2a	deferred	containers release 1: later (remote engines)
+F-0205.AC-3	deferred	containers release 1: later (remote engines)
+F-0205.AC-4	deferred	containers release 1: later (remote engines)
+F-0205.AC-5	deferred	containers release 1: later (remote engines)
+F-0205.AC-6	deferred	containers release 1: later (remote engines)
+F-0205.AC-6a	deferred	containers release 1: later (remote engines)
+F-0205.AC-6b	deferred	containers release 1: later (remote engines)
+F-0205.AC-7	deferred	containers release 1: later (remote engines)
+F-0205.AC-7a	deferred	containers release 1: later (Windows, WSL and macOS)
+F-0205.AC-7b	deferred	containers release 1: later (Windows, WSL and macOS)
+F-0205.AC-7c	deferred	containers release 1: later (Windows, WSL and macOS)
+F-0205.AC-7d	deferred	containers release 1: later (Windows, WSL and macOS)
+F-0205.AC-8	deferred	containers release 1: later (remote engines)
+F-0205.AC-9	deferred	containers release 1: later (remote engines)
+F-0205.AC-10	deferred	containers release 1: later (remote engines)
+F-0205.AC-11	deferred	containers release 1: later (remote engines)
+F-0205.AC-12	deferred	containers release 1: later (remote engines)
+F-0205.AC-12a	deferred	containers release 1: later (remote engines)
+F-0205.AC-13	deferred	containers release 1: later (remote engines)
+F-0205.AC-14	deferred	containers release 1: later (remote engines)
+F-0205.AC-14a	todo	
+F-0205.AC-14b	todo	
+F-0205.AC-14c	todo	
+F-0205.AC-14d	todo	
+F-0205.AC-15	todo	
+F-0205.AC-15a	deferred	containers release 1: later (remote engines)
+F-0205.AC-16	todo	
+F-0205.AC-17	todo	
+F-0205.AC-18	deferred	containers release 1: later (remote engines)
+F-0205.AC-19	deferred	containers release 1: later (remote engines)
+F-0205.AC-20	deferred	containers release 1: later (remote engines)
+F-0205.AC-21	deferred	containers release 1: later (remote engines)
+F-0205.AC-22	deferred	containers release 1: later (remote engines)
+F-0205.AC-23	deferred	containers release 1: later (remote engines)
+F-0205.AC-24	deferred	containers release 1: later (remote engines)
+F-0205.AC-25	deferred	containers release 1: later (remote engines)
+F-0205.AC-26	deferred	containers release 1: later (remote engines)
+F-0205.AC-27	deferred	containers release 1: later (remote engines)
+F-0205.AC-28	deferred	containers release 1: later (remote engines)
+F-0205.AC-29	acceptance	
+F-0205.AC-30	acceptance	
+F-0205.AC-31	acceptance	
+F-0205.AC-32	todo	
+F-0205.AC-33	acceptance	
+F-0205.AC-34	todo	
+F-0205.AC-35	todo	
+F-0205.AC-36	deferred	containers release 1: later (Windows, WSL and macOS)
+F-0205.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
+F-0205.AC-38	todo	
+F-0205.AC-39	todo	
+F-0205.AC-40	deferred	containers release 1: later (remote engines)
+F-0205.AC-41	acceptance	
+F-0205.AC-42	todo	
+F-0205.AC-43	deferred	containers release 1: later (remote engines)
+F-0205.AC-44	deferred	containers release 1: later (remote engines)
+F-0205.AC-45	todo	
+F-0205.AC-46	deferred	containers release 1: later (remote engines)
+F-0205.AC-47	deferred	containers release 1: later (remote engines)
+F-0205.AC-48	deferred	containers release 1: later (remote engines)
+F-0205.AC-49	todo	
+F-0205.AC-50	todo	
+F-0205.AC-51	todo	
+F-0205.AC-52	todo	
+F-0205.AC-53	deferred	containers release 1: later (remote engines)
+F-0205.AC-54	deferred	containers release 1: later (remote engines)
+F-0205.AC-55	deferred	containers release 1: later (remote engines)
 F-0301.AC-1	acceptance	
 F-0301.AC-2	acceptance	
 F-0301.AC-3	acceptance	
@@ -140,19 +208,19 @@ F-0301.AC-13	acceptance
 F-0301.AC-14	acceptance	
 F-0301.AC-15	unit	
 F-0301.AC-16	acceptance	
-F-0301.AC-17	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
-F-0301.AC-18	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-17	acceptance	
+F-0301.AC-18	acceptance	
 F-0301.AC-19	deferred	containers release 1: later (Open Container Configuration File, F-0812)
 F-0301.AC-20	deferred	containers release 1: later (Compose)
-F-0301.AC-21	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
-F-0301.AC-22	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-21	acceptance	
+F-0301.AC-22	deferred	containers release 1: later (multi-root)
 F-0301.AC-23	deferred	containers release 1: later (multi-root)
 F-0301.AC-24	deferred	containers release 1: later (multi-root)
 F-0301.AC-25	acceptance	
 F-0301.AC-26	unit	
 F-0301.AC-27	deferred	containers release 1: later (virtual workspaces)
 F-0301.AC-28	deferred	containers release 1: later (Open Container Configuration File, F-0812)
-F-0301.AC-29	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-29	acceptance	
 F-0301.AC-30	unit	
 F-0301.AC-31	unit	
 F-0301.AC-32	unit	
@@ -183,13 +251,13 @@ F-0301.AC-62	acceptance
 F-0301.AC-63	deferred	containers release 1: later (Compose)
 F-0301.AC-64	deferred	containers release 1: later (Compose)
 F-0301.AC-65	deferred	containers release 1: later (Open Container Configuration File, F-0812)
-F-0301.AC-66	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-66	acceptance	
 F-0301.AC-67	deferred	containers release 1: later (multi-root)
 F-0301.AC-68	acceptance	
 F-0301.AC-69	acceptance	
-F-0301.AC-70	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-70	deferred	containers release 1: later (Compose)
 F-0301.AC-71	deferred	containers release 1: later (multi-root)
-F-0301.AC-72	deferred	containers release 1: increment 2 (authoring)
+F-0301.AC-72	acceptance	
 F-0301.AC-73	deferred	containers release 1: later (virtual workspaces)
 F-0301.AC-74	unit	
 F-0301.AC-75	acceptance	
@@ -247,7 +315,7 @@ F-0401.AC-4	unit
 F-0401.AC-5	unit	
 F-0401.AC-6	unit	
 F-0401.AC-7	acceptance	
-F-0401.AC-8	deferred	containers release 1: increment 2 (authoring)
+F-0401.AC-8	acceptance	
 F-0401.AC-9	deferred	containers release 1: later (multi-root)
 F-0401.AC-10	deferred	containers release 1: later (multi-root)
 F-0401.AC-11	acceptance	
@@ -283,12 +351,12 @@ F-0403.AC-1	acceptance
 F-0403.AC-2	acceptance	
 F-0403.AC-3	core	core: the folder dialog's typing, descending, .. and confirming are core's file dialog
 F-0403.AC-4	deferred	containers 0.4: C12 attach later
-F-0403.AC-5	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-6	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-7	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-8	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-9	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-10	deferred	containers release 1: increment 2 (authoring)
+F-0403.AC-5	todo	
+F-0403.AC-6	acceptance	
+F-0403.AC-7	acceptance	
+F-0403.AC-8	todo	
+F-0403.AC-9	acceptance	
+F-0403.AC-10	acceptance	
 F-0403.AC-11	deferred	containers release 1: later (personalization and relays)
 F-0403.AC-12	acceptance	
 F-0403.AC-13	acceptance	
@@ -301,7 +369,7 @@ F-0403.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-20	acceptance	
 F-0403.AC-21	deferred	containers release 1: later (the log terminal, F-0104)
 F-0403.AC-22	deferred	containers release 1: later (remote engines)
-F-0403.AC-23	deferred	containers release 1: increment 2 (authoring)
+F-0403.AC-23	acceptance	
 F-0403.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-25	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -319,7 +387,7 @@ F-0405.AC-9	deferred	containers release 1: F-0303's notification is increment 2
 F-0405.AC-10	acceptance	
 F-0405.AC-11	acceptance	
 F-0405.AC-12	acceptance	
-F-0405.AC-13	deferred	containers release 1: increment 2 (authoring)
+F-0405.AC-13	acceptance	
 F-0405.AC-14	deferred	containers release 1: later (remote engines)
 F-0405.AC-15	deferred	containers release 1: later (remote engines)
 F-0405.AC-16	acceptance	
@@ -338,7 +406,7 @@ F-0405.AC-28	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-29	unit	
 F-0405.AC-30	unit	
 F-0405.AC-31	acceptance	
-F-0405.AC-32	deferred	containers release 1: increment 2 (authoring)
+F-0405.AC-32	acceptance	
 F-0405.AC-33	deferred	containers release 1: later (Reopen Folder Locally)
 F-0405.AC-34	acceptance	
 F-0405.AC-35	acceptance	
@@ -374,7 +442,7 @@ F-0409.AC-1	unit
 F-0409.AC-2	acceptance	
 F-0409.AC-3	acceptance	
 F-0409.AC-4	acceptance	
-F-0409.AC-5	deferred	containers release 1: increment 2 (shutdown)
+F-0409.AC-5	acceptance	
 F-0409.AC-6	acceptance	
 F-0409.AC-7	acceptance	
 F-0409.AC-8	acceptance	
@@ -633,7 +701,7 @@ F-0415.AC-35	unit
 F-0415.AC-36	acceptance	
 F-0415.AC-37	unit	
 F-0415.AC-38	unit	
-F-0415.AC-39	deferred	containers release 1: increment 2 (shutdown)
+F-0415.AC-39	acceptance	
 F-0415.AC-40	deferred	containers 0.4: F-0407 later
 F-0415.AC-41	unit	
 F-0416.AC-1	acceptance	
@@ -812,11 +880,11 @@ F-0501.AC-8	acceptance
 F-0501.AC-9	core	core: an authority nothing resolves opens a local empty window
 F-0501.AC-10	core	core: a single-colon vscode-remote argument read as a local path
 F-0501.AC-11	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
-F-0501.AC-12	deferred	containers release 1: increment 2 (shutdown)
+F-0501.AC-12	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-13	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-14	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-15	acceptance	
-F-0501.AC-16	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0501.AC-16	acceptance	
 F-0501.AC-17	deferred	containers release 1: the full contribution set comes with later increments
 F-0501.AC-18	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-19	deferred	containers release 1: the full contribution set comes with later increments
@@ -842,7 +910,7 @@ F-0502.AC-10	acceptance
 F-0502.AC-11	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-12	acceptance	
 F-0502.AC-13	acceptance	
-F-0502.AC-14	deferred	containers release 1: increment 2 (shutdown)
+F-0502.AC-14	core	core: the title and indicator of a window with no authority are core's; the row proves Close Remote Connection leaves an empty local window and the container exits with code 0
 F-0502.AC-15	acceptance	
 F-0502.AC-16	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-17	deferred	containers 0.4: C12 attach later
@@ -863,7 +931,7 @@ F-0502.AC-31	acceptance
 F-0502.AC-32	acceptance	
 F-0502.AC-33	acceptance	
 F-0502.AC-34	deferred	containers release 1: the full contribution set comes with later increments
-F-0502.AC-35	deferred	containers release 1: increment 2 (shutdown)
+F-0502.AC-35	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-36	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-37	deferred	containers release 1: the full contribution set comes with later increments
 F-0502.AC-38	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -893,7 +961,7 @@ F-0503.AC-19	acceptance
 F-0503.AC-20	acceptance	
 F-0503.AC-21	acceptance	
 F-0503.AC-22	deferred	containers release 1: later (attach)
-F-0503.AC-23	deferred	containers release 1: increment 2 (shutdown)
+F-0503.AC-23	acceptance	
 F-0503.AC-24	deferred	containers release 1: later (attach)
 F-0503.AC-25	unit	
 F-0503.AC-26	unit	

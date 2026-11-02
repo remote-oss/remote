@@ -238,6 +238,7 @@ function portsOf(
     },
     locate: {
       settingValue: () => '',
+      ptySetting: () => false,
       mode: () => changes.mode ?? 'shared',
       environment: {searchPath: '/usr/bin', programFilesFolder: ''},
       platform: 'linux',

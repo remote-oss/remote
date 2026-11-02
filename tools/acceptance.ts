@@ -47,6 +47,7 @@ import {
 import {build} from 'esbuild';
 import {
   downloadHostArguments,
+  EARLIER_SERVER_ARCHIVE,
   type RunDownloads,
   startRunDownloads,
   UPDATE_SERVICE_NAME,
@@ -288,7 +289,12 @@ export interface HarnessDependencies {
     launch: Launch,
   ) => Promise<AttemptResult>;
   /** Starts the run's download host in the run's folder; the VSCodium run only. */
-  startDownloads: (root: string, runFolder: string) => Promise<RunDownloads>;
+  /** Starts the download host; `earlier` says whether a launch of the run asks for the earlier release's archives. */
+  startDownloads: (
+    root: string,
+    runFolder: string,
+    earlier: boolean,
+  ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
@@ -368,7 +374,7 @@ export function sshConfigOf(
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `jumped` (the harness account through the harness host as a `ProxyJump`); `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
  * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
  * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
@@ -376,7 +382,9 @@ export function sshConfigOf(
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
- * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11, and
+ * `agentfwd-tmpdir` and `agentfwd-notmp`, forwarding it for an account whose login shell sets TMPDIR (the Alpine host's)
+ * and for one that may not create links in /tmp (the Ubuntu 26.04 host's); three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
  * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
  * sockets of the ControlMaster aliases are in `controlFolder`.
@@ -441,6 +449,20 @@ export function harnessSshConfig(
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    '',
+    // The harness account reached through the harness host as a jump host: the target is the host's own sshd, at the port it listens on inside.
+    'Host jumped',
+    '  HostName 127.0.0.1',
+    '  Port 22',
+    '  User harness',
+    '  ProxyJump harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
     '',
     // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
     // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
@@ -767,6 +789,26 @@ export function harnessSshConfig(
         agentSocket,
       ),
     ),
+    // ForwardAgent given as no, which forwards nothing, as unset does.
+    ...accountAlias('agentfwd-no', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardAgent no',
+    ]),
+    // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
+    // for one that may not create links in /tmp (the Ubuntu 26.04 host's).
+    ...[
+      ['agentfwd-tmpdir', 'harness-tmpdir'],
+      ['agentfwd-notmp', 'harness-notmp'],
+    ].flatMap(([alias, user]) =>
+      accountAlias(
+        alias ?? '',
+        user ?? '',
+        port,
+        runFolder,
+        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
+        agentSocket,
+      ),
+    ),
     ...accountAlias('x11fwd', 'harness', port, runFolder, [
       ...keyLines(runFolder),
       'ForwardX11 yes',
@@ -1086,7 +1128,11 @@ async function prepare(
   }
   const downloads =
     editor === 'vscodium'
-      ? await dependencies.startDownloads(root, runFolder)
+      ? await dependencies.startDownloads(
+          root,
+          runFolder,
+          chosen.some(launch => launch.earlierServerArchive === true),
+        )
       : undefined;
   if (downloads !== undefined) {
     stops.push(() => downloads.stop());
@@ -1465,7 +1511,11 @@ export async function runLaunches(
           );
         }
         if (launch.hostSetup !== undefined) {
-          runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
+          runHostSetup(
+            command,
+            hostContainerOf(launch),
+            withHarnessBases(launch.hostSetup, bases),
+          );
         }
         writeUserSettings(
           runFolder,
@@ -2491,11 +2541,16 @@ if (isMainModule(import.meta.url)) {
             undefined,
             devContainerImage,
           ),
-        startDownloads: startRunDownloads.bind(
-          undefined,
-          runCommand,
-          downloadWithRetry,
-        ),
+        startDownloads: (root, runFolder, earlier) =>
+          startRunDownloads(
+            runCommand,
+            downloadWithRetry,
+            root,
+            runFolder,
+            undefined,
+            undefined,
+            earlier ? EARLIER_SERVER_ARCHIVE : undefined,
+          ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
             root,

@@ -1,12 +1,24 @@
 import {deepStrictEqual} from 'node:assert';
-import {setUserSetting} from '../windows/folder-windows.ts';
-import {isTrusted} from '../windows/harness.ts';
-import {dialogOf} from '../windows/renderer.ts';
+import {activations, setUserSetting} from '../windows/folder-windows.ts';
+import {isTrusted, waitFor, windowState} from '../windows/harness.ts';
+import {
+  answerDialog,
+  dialogOf,
+  quickPickFacts,
+  waitForDialog,
+} from '../windows/renderer.ts';
 import {
   closeScreen,
   screenOf,
+  startCommand,
   withWindow,
 } from '../windows/authoring-support.ts';
+
+const REOPEN = 'remote-containers.reopenInContainer';
+
+/** The placeholder of the pick that asks where to create the configuration. */
+const WHERE_PLACEHOLDER =
+  'Where would you like to create your container configuration?';
 
 const TRUST_SETTING = 'security.workspace.trust.enabled';
 
@@ -70,5 +82,29 @@ describe('the template screen in Restricted Mode (card coverage-72)', function (
         false,
       ],
     );
+  });
+
+  it('F-0106 AC-2 (c101-trust-continue): in an untrusted folder with no configuration, Trust Folder & Continue makes the folder trusted with no reload of the window and the flow goes on to the location pick', async () => {
+    await withWindow('c101-trust-continue', {}, async window => {
+      const activated = activations(window);
+      const before = await isTrusted(window);
+      await startCommand(window, REOPEN);
+      await waitForDialog(window, 60_000);
+      await answerDialog(window, 'Trust Folder & Continue');
+      await waitFor(
+        'the location pick',
+        async () =>
+          (await quickPickFacts(window))?.placeholder === WHERE_PLACEHOLDER,
+        60_000,
+      );
+      const seen = [
+        before,
+        await isTrusted(window),
+        activations(window) === activated,
+        (await windowState(window)).remoteName,
+      ];
+      await closeScreen(window);
+      deepStrictEqual(seen, [false, true, true, null]);
+    });
   });
 });

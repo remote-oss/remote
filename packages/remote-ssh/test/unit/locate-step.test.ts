@@ -29,6 +29,7 @@ interface Scenario {
   checks?: Readonly<Record<string, Answer>>;
   lookup?: Answer;
   settingValue?: string;
+  ptySetting?: unknown;
   searchPath?: string;
   platform?: 'linux' | 'windows' | 'macOS';
   configFile?: string;
@@ -54,6 +55,7 @@ async function located(scenario: Scenario = {}): Promise<{
   const sink = new MemorySink();
   const step = locateClientStep({
     settingValue: () => scenario.settingValue ?? '',
+    ptySetting: () => scenario.ptySetting,
     configFile: () => scenario.configFile ?? '',
     mode: () => scenario.mode ?? 'shared',
     connectTimeout: () => scenario.connectTimeout,
@@ -426,6 +428,7 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     });
     deepStrictEqual(searched, [
       'remote.SSH.path = "/opt/ssh/bin/ssh"',
+      'remote.SSH.permitPtyAllocation = false',
       'Checking ssh client: /opt/ssh/bin/ssh',
       `ssh client: ${BANNER}`,
       'Using ssh client: /opt/ssh/bin/ssh',
@@ -439,6 +442,7 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     });
     deepStrictEqual(searched, [
       'remote.SSH.path = "/nowhere/ssh"',
+      'remote.SSH.permitPtyAllocation = false',
       'Checking ssh client: /nowhere/ssh',
       'ssh client: (no banner)',
       'ssh client /nowhere/ssh was rejected: it could not be started: not found',
@@ -454,11 +458,25 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     const {searched} = await located();
     deepStrictEqual(searched, [
       'remote.SSH.path = ""',
+      'remote.SSH.permitPtyAllocation = false',
       'Searched for ssh in: /usr/bin',
       'Checking ssh client: ssh',
       `ssh client: ${BANNER}`,
       'Using ssh client: ssh',
     ]);
+  });
+
+  it('F-2106 AC-13: the pty line logs right after the path line', async () => {
+    const {searched} = await located({ptySetting: true});
+    deepStrictEqual(searched.slice(0, 2), [
+      'remote.SSH.path = ""',
+      'remote.SSH.permitPtyAllocation = true',
+    ]);
+  });
+
+  it('F-2106 BR-7: an unset pty allocation logs false', async () => {
+    const {searched} = await located();
+    deepStrictEqual(searched[1], 'remote.SSH.permitPtyAllocation = false');
   });
 
   it('F-2101 §9: an unset setting is logged as ""', async () => {
@@ -468,7 +486,7 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
 
   it('F-2101 §9: every folder of the search path is a line, in order', async () => {
     const {searched} = await located({searchPath: '/usr/local/bin:/usr/bin'});
-    deepStrictEqual(searched.slice(1, 3), [
+    deepStrictEqual(searched.slice(2, 4), [
       'Searched for ssh in: /usr/local/bin',
       'Searched for ssh in: /usr/bin',
     ]);
@@ -479,7 +497,7 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
       platform: 'windows',
       searchPath: 'C:\\Windows;C:\\Tools',
     });
-    deepStrictEqual(searched.slice(1, 3), [
+    deepStrictEqual(searched.slice(2, 4), [
       'Searched for ssh in: C:\\Windows',
       'Searched for ssh in: C:\\Tools',
     ]);
@@ -633,6 +651,7 @@ describe('the scp the connect copies with (card connect-120)', () => {
     }
     const check = scpStartableOf({
       settingValue: () => '',
+      ptySetting: () => false,
       configFile: () => '',
       mode: () => 'shared',
       connectTimeout: () => undefined,

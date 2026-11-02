@@ -1,7 +1,7 @@
 /**
  * @fileoverview The 95 ssh_config keywords the completion list offers, in their order, each with its
  * documentation. Most texts are taken from the KEYWORDS section of the OpenSSH 10.2p1 ssh_config(5) manual page
- * (BSD licence, see ThirdPartyNotices.txt); keywords the current manual no longer describes have shorter texts.
+ * (BSD licence, see NOTICE.md); keywords the current manual no longer describes have shorter texts.
  * Paragraphs are separated by one line feed.
  */
 

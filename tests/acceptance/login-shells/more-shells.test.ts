@@ -13,6 +13,7 @@ import {
   removeHomeFiles,
   surfaceLines,
   taskEnvironment,
+  windowFace,
   withWindow,
   writeHomeFile,
 } from './shell-support.ts';
@@ -144,15 +145,20 @@ describe('login shells: the shell the host reports, the other shells and the oth
     }
   });
 
-  it('F-2704 AC-33 (other-shells): ksh, csh and tcsh hosts connect with the exec server on and off, and the log names the shell', async () => {
+  it('F-2704 AC-33 (reading-1608-title): ksh, csh and tcsh hosts connect with the exec server on and off, the window shows its folder and the host, and the log names the shell', async () => {
     const seen: Array<[string, string]> = [];
+    const faces: string[] = [];
     for (const execServer of [true, false]) {
       await setting('remote.SSH.useExecServer', execServer);
       for (const shell of ['ksh', 'csh', 'tcsh']) {
         const user = `harness-${shell}`;
+        const window = `ms-ac33-${shell}`;
         await freshServer(user);
         const mark = connectionLog().length;
-        await withWindow(user, `ms-ac33-${shell}`, () => Promise.resolve());
+        const face = await withWindow(user, window, () =>
+          windowFace(window, `SSH: ${user}`),
+        );
+        faces.push(`${face.title} ${face.indicator}`);
         seen.push([
           `${shell} ${String(execServer)}`,
           logSince(mark).find(line => line.includes('login shell is')) ?? '',
@@ -161,14 +167,23 @@ describe('login shells: the shell the host reports, the other shells and the oth
     }
     await setting('remote.SSH.useExecServer', undefined);
     // The host's csh is tcsh (Alpine links one to the other), and tcsh sets $SHELL to itself: its line names tcsh.
-    deepStrictEqual(seen, [
-      ['ksh true', "the host's login shell is /bin/ksh (ksh)"],
-      ['csh true', "the host's login shell is /bin/tcsh (tcsh)"],
-      ['tcsh true', "the host's login shell is /bin/tcsh (tcsh)"],
-      ['ksh false', "the host's login shell is /bin/ksh (ksh)"],
-      ['csh false', "the host's login shell is /bin/tcsh (tcsh)"],
-      ['tcsh false', "the host's login shell is /bin/tcsh (tcsh)"],
-    ]);
+    deepStrictEqual(
+      {seen, faces},
+      {
+        seen: [
+          ['ksh true', "the host's login shell is /bin/ksh (ksh)"],
+          ['csh true', "the host's login shell is /bin/tcsh (tcsh)"],
+          ['tcsh true', "the host's login shell is /bin/tcsh (tcsh)"],
+          ['ksh false', "the host's login shell is /bin/ksh (ksh)"],
+          ['csh false', "the host's login shell is /bin/tcsh (tcsh)"],
+          ['tcsh false', "the host's login shell is /bin/tcsh (tcsh)"],
+        ],
+        faces: ['ksh', 'csh', 'tcsh', 'ksh', 'csh', 'tcsh'].map(
+          shell =>
+            `[ms-ac33-${shell} [SSH: harness-${shell}]] SSH: harness-${shell}`,
+        ),
+      },
+    );
   });
 
   it('F-2704 AC-15 (fish-per-window): a fish host connects with no local server once the platform is picked, opens a fish terminal, and the config.fish export reaches a task while the .profile export does not', async () => {

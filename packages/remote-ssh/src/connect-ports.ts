@@ -339,6 +339,7 @@ export function wiringPortsOf(
     },
     locate: {
       settingValue: () => textOf(settings, 'path'),
+      ptySetting: () => valueOf(settings, 'permitPtyAllocation'),
       mode: () => (terminalModeOf(settings) ? 'terminal' : 'shared'),
       environment: machine.clientSearch,
       platform: machine.platform,

@@ -84,6 +84,16 @@ function rowWhen(token: string, extra = ''): string {
   return `view == targetsContainers && viewItem =~ /(^| )${token}( |$)/${extra} && !remote-containers:standingDown`;
 }
 
+/** The `when` of a Reopen Folder entry: its own context key, the connect-commands clause and the stand-down clause. */
+function reopenWhen(key: string): string {
+  return `${key} && !hideConnectCommands && !remote-containers:standingDown`;
+}
+
+/** The row-menu form of it: the window's own dev container row first. */
+function reopenRowWhen(key: string): string {
+  return `view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && ${reopenWhen(key)}`;
+}
+
 /** The entries slice B adds to the row menu, in the manifest's order; every entry carries the clauses of its token and none is staged any more. */
 const ROW_ACTION_ENTRIES = [
   ['openFolderInContainerInCurrentWindow', '1_folder@1', 'openFolder', false],
@@ -102,6 +112,30 @@ const ROW_ACTION_ENTRIES = [
   group: String(group),
   when: rowWhen(String(token), later === true ? ' && false' : ''),
 }));
+
+/** The entries the four Reopen Folder commands add to the row menu, in the manifest's order. */
+const REOPEN_ROW_ENTRIES = [
+  {
+    command: 'remote-containers.reopenLocally',
+    group: '1_folder@1',
+    when: reopenRowWhen('canReopenLocally'),
+  },
+  {
+    command: 'remote-containers.reopenInWSL',
+    group: '1_folder@1',
+    when: reopenRowWhen('canReopenInWSL'),
+  },
+  {
+    command: 'remote-containers.reopenInSSH',
+    group: '1_folder@1',
+    when: reopenRowWhen('canReopenInSSH'),
+  },
+  {
+    command: 'remote-containers.reopenInTunnel',
+    group: '1_folder@1',
+    when: reopenRowWhen('canReopenInTunnel'),
+  },
+];
 
 /** The Inspect entry of the Details view's Image row. */
 const DETAILS_IMAGE_INSPECT = {
@@ -132,6 +166,10 @@ const ENGLISH = {
     'Opening a folder in a container requires workspace trust.',
   'configuration.title': 'Dev Containers',
   'commands.Reopenincontainer.title': 'Reopen in Container',
+  'commands.Reopenlocally.title': 'Reopen Folder Locally',
+  'commands.Reopeninwsl.title': 'Reopen Folder in WSL',
+  'commands.Reopeninssh.title': 'Reopen Folder in SSH',
+  'commands.Reopenintunnel.title': 'Reopen Folder in Tunnel',
   'commands.Openfolder.title': 'Open Folder in Container...',
   'commands.Createdevcontainerfile.title':
     'Add Dev Container Configuration Files...',
@@ -159,6 +197,7 @@ const ENGLISH = {
     'Rebuild and Reopen in Container',
   'commands.Rebuildwithoutcacheandreopenincontainer.title':
     'Rebuild Without Cache and Reopen in Container',
+  'commands.Settings.title': 'Settings',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -310,6 +349,26 @@ describe('the manifest', () => {
           },
           ...REBUILD_COMMANDS,
           {
+            command: 'remote-containers.reopenLocally',
+            title: '%commands.Reopenlocally.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.reopenInWSL',
+            title: '%commands.Reopeninwsl.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.reopenInSSH',
+            title: '%commands.Reopeninssh.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.reopenInTunnel',
+            title: '%commands.Reopenintunnel.title%',
+            category: 'Dev Containers',
+          },
+          {
             command: 'remote-containers.showReopenInContainerNotificationReset',
             title: '%commands.Showreopenincontainernotificationreset.title%',
             category: 'Dev Containers',
@@ -382,6 +441,11 @@ describe('the manifest', () => {
               dark: 'resources/dark/refresh.svg',
             },
           },
+          {
+            command: 'remote-containers.settings',
+            title: '%commands.Settings.title%',
+            category: 'Dev Containers',
+          },
         ],
         menus: {
           commandPalette: [
@@ -414,6 +478,22 @@ describe('the manifest', () => {
               when: REBUILD_REOPEN_WHEN,
             },
             {
+              command: 'remote-containers.reopenLocally',
+              when: reopenWhen('canReopenLocally'),
+            },
+            {
+              command: 'remote-containers.reopenInWSL',
+              when: reopenWhen('canReopenInWSL'),
+            },
+            {
+              command: 'remote-containers.reopenInSSH',
+              when: reopenWhen('canReopenInSSH'),
+            },
+            {
+              command: 'remote-containers.reopenInTunnel',
+              when: reopenWhen('canReopenInTunnel'),
+            },
+            {
               command: 'remote-containers.explorerTargetsRefresh',
               when: 'false',
             },
@@ -435,6 +515,10 @@ describe('the manifest', () => {
             {command: 'remote-containers.showDetails', when: 'false'},
             {command: 'remote-containers.inspectDockerResource', when: 'false'},
             {command: 'remote-containers.showContainerLog', when: 'false'},
+            {
+              command: 'remote-containers.settings',
+              when: '!remote-containers:standingDown',
+            },
           ],
           'view/title': [
             {
@@ -464,6 +548,7 @@ describe('the manifest', () => {
               group: '2_container@1',
               when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
             },
+            ...REOPEN_ROW_ENTRIES,
             ...ROW_ACTION_ENTRIES,
             DETAILS_IMAGE_INSPECT,
           ],
@@ -477,6 +562,26 @@ describe('the manifest', () => {
               command: 'remote-containers.openFolder',
               group: 'remote_30_dev-container_2_actions@8',
               when: OPEN_FOLDER_INDICATOR_WHEN,
+            },
+            {
+              command: 'remote-containers.reopenLocally',
+              group: 'remote_30_dev-container_2_actions@7',
+              when: reopenWhen('canReopenLocally'),
+            },
+            {
+              command: 'remote-containers.reopenInWSL',
+              group: 'remote_30_dev-container_2_actions@7',
+              when: reopenWhen('canReopenInWSL'),
+            },
+            {
+              command: 'remote-containers.reopenInSSH',
+              group: 'remote_30_dev-container_2_actions@7',
+              when: reopenWhen('canReopenInSSH'),
+            },
+            {
+              command: 'remote-containers.reopenInTunnel',
+              group: 'remote_30_dev-container_2_actions@7',
+              when: reopenWhen('canReopenInTunnel'),
             },
             {
               command: 'remote-containers.createDevContainerFile',
@@ -1022,7 +1127,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [20, true, false],
+      [24, true, false],
     );
   });
 
@@ -1113,7 +1218,7 @@ describe('the manifest', () => {
           ),
       ],
       [
-        ROW_ACTION_ENTRIES,
+        [...REOPEN_ROW_ENTRIES, ...ROW_ACTION_ENTRIES],
         [
           'remote-containers.startContainer',
           'remote-containers.stopContainer',
@@ -1228,6 +1333,10 @@ describe('the manifest', () => {
         {id: 'remote-containers:standingDown', setter: 'extension'},
         {id: 'hideConnectCommands', setter: 'extension'},
         {id: 'hideRebuildCommands', setter: 'extension'},
+        {id: 'canReopenLocally', setter: 'extension'},
+        {id: 'canReopenInWSL', setter: 'extension'},
+        {id: 'canReopenInSSH', setter: 'extension'},
+        {id: 'canReopenInTunnel', setter: 'extension'},
         {
           id: 'remote-containers:needsDockerStartOrInstall',
           setter: 'extension',

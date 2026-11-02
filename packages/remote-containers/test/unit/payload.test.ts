@@ -8,6 +8,7 @@ import {
   folderTargetOf,
   type SerializedUri,
   serializedUriOf,
+  windowOriginOf,
 } from '../../src/authority/payload.ts';
 
 const CONFIG_PATH = '/home/u/p/.devcontainer/devcontainer.json';
@@ -66,6 +67,21 @@ describe('the dev-container payload', () => {
     );
   });
 
+  it('F-0205 AC-51: a host and its TLS members sit in the settings member, in a fixed order', () => {
+    const text = textOf(
+      devContainerPayloadOf({
+        ...FOLDER,
+        tlsVerify: '1',
+        host: 'tcp://h:1',
+        certPath: '/c',
+      }),
+    );
+    deepStrictEqual(
+      Object.keys((JSON.parse(text) as {settings: object}).settings),
+      ['host', 'certPath', 'tlsVerify'],
+    );
+  });
+
   it('F-0501 BR-2a: a host path with a space, a hash, a non-ASCII letter and a quote survives the round trip', () => {
     const target = {...FOLDER, hostPath: '/home/u/h #é "x"'};
     deepStrictEqual(
@@ -77,6 +93,15 @@ describe('the dev-container payload', () => {
   for (const [name, target] of [
     ['no context', FOLDER],
     ['a context', {...FOLDER, context: 'ctx1'}],
+    [
+      'a host with its certificates',
+      {
+        ...FOLDER,
+        host: 'tcp://10.0.0.5:2376',
+        certPath: '/certs',
+        tlsVerify: '1',
+      },
+    ],
     ['the SSH variant of the configuration file', SSH_FOLDER],
   ] as const) {
     it(`F-0501 BR-2a: the round trip of ${name} is the target`, () => {
@@ -154,6 +179,9 @@ describe('the dev-container payload', () => {
       {...base, localDocker: 'no'},
       {...base, settings: []},
       {...base, settings: {context: ''}},
+      {...base, settings: {}},
+      {...base, settings: {host: 5}},
+      {...base, settings: {context: 'c', certPath: ''}},
       {hostPath: '/p', localDocker: false},
       {...base, configFile: {scheme: 'file'}},
       {...base, configFile: {path: CONFIG_PATH, scheme: 3}},
@@ -222,6 +250,72 @@ describe('the folder of a window’s decoded target (card containers-11)', () =>
         decodedFolderOf(containerTarget('zz')),
       ],
       [undefined, undefined, undefined, undefined],
+    );
+  });
+});
+
+describe('the origin a window reopens at, from its own authority (card containers-135)', () => {
+  /** A dev-container authority over the payload. */
+  function containerAuthority(payload: string): string {
+    return encodeAuthority({
+      family: 'dev-container',
+      target: {payload},
+      rawHostString: payload,
+    });
+  }
+
+  it('F-0406 BR-13: a window with no authority names no origin', () => {
+    deepStrictEqual(windowOriginOf(undefined), undefined);
+  });
+
+  it('F-0406 BR-13: an authority that is not a dev container names no origin', () => {
+    deepStrictEqual(
+      [
+        windowOriginOf(
+          encodeAuthority({
+            family: 'ssh-remote',
+            target: {kind: 'plain', text: 'u@h'},
+            rawHostString: 'u@h',
+          }),
+        ),
+        windowOriginOf(
+          encodeAuthority({
+            family: 'attached-container',
+            target: {payload: '7b7d'},
+            rawHostString: '7b7d',
+          }),
+        ),
+      ],
+      [undefined, undefined],
+    );
+  });
+
+  it('F-0406 BR-13: a payload that is not a hex names no origin', () => {
+    deepStrictEqual(windowOriginOf(containerAuthority('zz')), undefined);
+  });
+
+  it('F-0406 BR-13: a legacy payload names its host folder', () => {
+    deepStrictEqual(
+      windowOriginOf(containerAuthority(hexOf('/home/user/project'))),
+      {kind: 'local', folder: '/home/user/project'},
+    );
+  });
+
+  it('F-0406 BR-13: a folder payload with a file configuration names its host folder, with a context', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(
+          devContainerPayloadOf({...FOLDER, context: 'desktop-linux'}),
+        ),
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-13: a folder payload whose configuration is not on this machine names no origin', () => {
+    deepStrictEqual(
+      windowOriginOf(containerAuthority(devContainerPayloadOf(SSH_FOLDER))),
+      undefined,
     );
   });
 });

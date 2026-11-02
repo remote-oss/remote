@@ -6,19 +6,19 @@
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import {type ProductProfile, volumeServerFolder} from 'lib-product';
-import {parseResult, RESULT_BEGIN, RESULT_END} from 'lib-server';
+import {cacheFolders, parseResult, RESULT_BEGIN, RESULT_END} from 'lib-server';
 
 /** The platforms whose names may be a folder on the volume. */
 const PLATFORM_FOLDER = /^[a-z0-9-]+$/;
 
-/** The fixed script that makes each missing shared folder 0777 as root; its folders come in SHARED_FOLDER_1 to 3. */
+/** The fixed script that makes each missing shared folder 0777 as root; its folders come in SHARED_FOLDER_1 to 4. */
 export const VOLUME_FOLDERS_SCRIPT = [
   'set -u',
   'status=Ok',
   'created=',
   'failedPath=',
   'failedError=',
-  'for folder in "$SHARED_FOLDER_1" "$SHARED_FOLDER_2" "$SHARED_FOLDER_3"; do',
+  'for folder in "$SHARED_FOLDER_1" "$SHARED_FOLDER_2" "$SHARED_FOLDER_3" "$SHARED_FOLDER_4"; do',
   '  [ -e "$folder" ] && continue',
   '  if output=$(mkdir -- "$folder" 2>&1); then',
   '    if output=$(chmod 0777 -- "$folder" 2>&1); then',
@@ -42,7 +42,10 @@ export const VOLUME_FOLDERS_SCRIPT = [
   '',
 ].join('\n');
 
-/** The volume's shared folders for `platform`, parents first (contracts §5.2); nothing for a platform that isn't a folder name. */
+/**
+ * The volume's shared folders for `platform`, parents first (contracts §5.2), and the shared extensions cache; nothing
+ * for a platform that isn't a folder name.
+ */
 export function sharedFoldersOf(
   profile: ProductProfile,
   platform: string,
@@ -55,6 +58,7 @@ export function sharedFoldersOf(
     serverFolder,
     `${serverFolder}/bin`,
     `${serverFolder}/bin/${platform}`,
+    cacheFolders(profile, profile.commit, platform, true).extensionsCache,
   ];
 }
 

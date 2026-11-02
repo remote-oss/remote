@@ -31,6 +31,15 @@ describe('login ownership (F-2102 BR-4, BR-5)', () => {
     deepStrictEqual([ownership.current(), changes], [2, [1, 2]]);
   });
 
+  it('F-2102 AC-36: a waiting lease that closes changes nothing: the owner stays, and no one is told', () => {
+    ownership.leasesChanged([1, 2]);
+    ownership.leasesChanged([1]);
+    deepStrictEqual(
+      [ownership.current(), ownership.waiting(), changes],
+      [1, [], [1]],
+    );
+  });
+
   it('has no owner when the last lease closes, and the next lease takes the login', () => {
     ownership.leasesChanged([1]);
     ownership.leasesChanged([]);

@@ -67,6 +67,7 @@ export interface AgentEvent {
     | 'untitledDocuments'
     | 'tunnels'
     | 'environment'
+    | 'called'
     | 'editorText';
   time: number;
   id?: string;
@@ -280,6 +281,31 @@ export function editorLogsFolder(): string {
 /** The lines of the log the launch's extensions write, without their time stamps; none before the first is written. */
 export function connectionLog(): string[] {
   return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
+}
+
+/** One push that Remote Explorer's inbox received from Remote - SSH, as the explorer records it. */
+export interface CompanionCall {
+  /** When the explorer received it, in milliseconds since the epoch. */
+  time: number;
+  commandId: string;
+  /** The envelope as the inbox read it. */
+  envelope: Record<string, unknown>;
+}
+
+/**
+ * The pushes the explorer's inbox received in this launch, in order, of the command `commandId` when given; none before
+ * the first. Only the launches with the explorer record them.
+ */
+export function companionCalls(commandId?: string): CompanionCall[] {
+  const file = variable('REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD');
+  if (!existsSync(file)) {
+    return [];
+  }
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => JSON.parse(line) as CompanionCall)
+    .filter(call => commandId === undefined || call.commandId === commandId);
 }
 
 /** The lines of the Dev Containers log, without their time stamps; none before the first is written. */
@@ -1338,6 +1364,28 @@ export async function environmentOf(
   return typeof value === 'string' ? value : null;
 }
 
+/** What a command run by `callCommand` gave: its value, or the message it rejected with. */
+export interface CallResult {
+  value: unknown;
+  rejection: string | undefined;
+}
+
+/** Has window `name` run `commandId` with `parameters` and gives its value, or the message of its rejection. */
+export async function callCommand(
+  name: string,
+  commandId: string,
+  ...parameters: unknown[]
+): Promise<CallResult> {
+  const event = await reported(
+    name,
+    'called',
+    'acceptance.agent.call',
+    commandId,
+    ...parameters,
+  );
+  return {value: event?.value ?? null, rejection: event?.message};
+}
+
 /** Has window `name` report its state once, and gives that report. */
 function reportedState(name: string): Promise<AgentEvent | undefined> {
   return reported(name, 'state', 'acceptance.agent.state');
@@ -1825,16 +1873,55 @@ export async function connected(
 }
 
 /** Waits until window `name`, opened in the home of `user` (harness by default), is connected, for up to `milliseconds`. */
-export function connectedWithin(
+export async function connectedWithin(
   name: string,
   milliseconds: number,
   user = 'harness',
 ): Promise<void> {
-  return waitFor(
-    `${name} to be connected`,
-    () => connected(name, user),
-    milliseconds,
-  );
+  try {
+    await waitFor(
+      `${name} to be connected`,
+      () => connected(name, user),
+      milliseconds,
+    );
+  } catch (caught) {
+    throw new Error(`${String(caught)}\n${await connectState()}`, {
+      cause: caught,
+    });
+  }
+}
+
+/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, and this machine's listeners. */
+async function connectState(): Promise<string> {
+  function read(
+    what: Promise<{stdout: string; stderr: string}>,
+  ): Promise<string> {
+    return what.then(
+      done => `${done.stdout}${done.stderr}`.trim(),
+      (caught: unknown) => `(unreadable: ${String(caught)})`,
+    );
+  }
+  const [listening, sshdLog, here] = await Promise.all([
+    read(
+      execFileAsync('docker', [
+        'exec',
+        variable('HARNESS_CONTAINER'),
+        'sh',
+        '-c',
+        'netstat -ltn 2>&1; ps -o pid,user,args 2>&1 | grep -E "server|sshd" | grep -v grep',
+      ]),
+    ),
+    read(
+      execFileAsync('docker', [
+        'logs',
+        '--tail',
+        '30',
+        variable('HARNESS_CONTAINER'),
+      ]),
+    ),
+    read(execFileAsync('ss', ['-ltnp'])),
+  ]);
+  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}`;
 }
 
 /** Waits until no connection helper of the run runs, for up to `milliseconds`. */

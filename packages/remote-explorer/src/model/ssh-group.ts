@@ -3,8 +3,7 @@
  * per recent folder or workspace. It works on plain values, so the tree and the companion's answers stay outside it.
  */
 
-/** The client's platform as the rows tell it apart: the Windows forms of a path read differently on a Windows client. */
-export type ClientPlatform = 'windows' | 'other';
+import type {ClientPlatform} from 'lib-ssh';
 
 /** What a recent folder's row shows. */
 interface FolderPresentation {
@@ -36,6 +35,11 @@ const WORKSPACE_SUFFIX = '.code-workspace';
 /** The identity of a host row. */
 export function hostRowId(alias: string): string {
   return `ssh-host:${alias}`;
+}
+
+/** The identity the tree gives a host row: its own while it is a leaf, and another once it has folders. */
+export function hostItemId(rowId: string, hasFolders: boolean): string {
+  return hasFolders ? `${rowId}:folders` : rowId;
 }
 
 /** The identity of the folder row at `position` under `alias`. */
@@ -124,7 +128,7 @@ export function buildSshRows(
   aliases: readonly string[],
   history: ReadonlyMap<string, readonly string[]>,
   sortSetting: unknown,
-  platform: ClientPlatform = 'other',
+  platform: ClientPlatform = 'linux',
 ): HostRow[] {
   return aliases.map(alias => ({
     rowId: hostRowId(alias),

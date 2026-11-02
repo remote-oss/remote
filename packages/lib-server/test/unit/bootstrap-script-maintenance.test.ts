@@ -208,12 +208,12 @@ describe('the POSIX bootstrap script', () => {
     });
 
     it('F-2701: the PowerShell script is a failure that says it is not available yet', () => {
-      const text = scriptFor(single('install'), 'powershell', parametersFor());
+      const text = scriptFor(single('kill'), 'powershell', parametersFor());
       deepStrictEqual(text.includes('status=ServerFailedToStart'), true);
     });
 
     it('F-2701: the PowerShell stand-in is far below the command-line limit', () => {
-      const text = scriptFor(single('install'), 'powershell', parametersFor());
+      const text = scriptFor(single('kill'), 'powershell', parametersFor());
       deepStrictEqual(text.length < 8192, true);
     });
 

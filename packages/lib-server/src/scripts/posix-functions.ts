@@ -1,0 +1,461 @@
+/**
+ * @fileoverview The helper functions of the POSIX `sh` bootstrap script, by role, and the server lines it reads. It runs
+ * under dash, ash, BusyBox and bash alike: no bash-only syntax, and every command that could read standard input is
+ * given /dev/null, because the script itself may be arriving on standard input.
+ */
+
+import {PROGRESS_PREFIX} from './progress-line.ts';
+import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
+import type {FunctionRole} from './steps.ts';
+
+/** The server's own line that says it is ready; the port follows it. */
+export const READY_LINE = 'Extension host agent listening on';
+
+/** The start of the server's own line when no port of its `--port` range is free, as a `grep` pattern. */
+export const NO_FREE_PORT_PREFIX =
+  '--port: Could not find free port in range: ';
+
+/** The server's whole line when it ends for CVE-2020-1416, as a `grep` pattern: its leading `*` is escaped. */
+export const CVE_LINE =
+  '\\* !!!! Server terminated due to presence of CVE-2020-1416 !!!!';
+
+/** Quote a value for the shell as one word, whatever it holds. */
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+/** The functions every step uses: the result block, facts, tools and times. */
+const COMMON_FUNCTIONS: readonly string[] = [
+  "RESULT_FACTS=''",
+  'fact() {',
+  "  FACT_VALUE=$(printf '%s' \"$2\" | tr '\\n\\r' '  ')",
+  '  RESULT_FACTS="${RESULT_FACTS}${1}=${FACT_VALUE}',
+  '"',
+  '}',
+  'report() {',
+  `  printf '\\n%s\\n' ${shellQuote(RESULT_BEGIN)}`,
+  '  printf \'status=%s\\n\' "$1"',
+  '  printf \'%s\' "$RESULT_FACTS"',
+  `  printf '%s\\n' ${shellQuote(RESULT_END)}`,
+  '}',
+  'finish() {',
+  '  if [ "$ARCHIVE_REMOVE" = yes ] && [ -n "$ARCHIVE_PATH" ] && [ "$1" != LockBusy ]; then',
+  '    rm -f "$ARCHIVE_PATH"',
+  '  fi',
+  '  report "$1"',
+  '  exit 0',
+  '}',
+  'have() {',
+  '  command -v "$1" >/dev/null 2>&1',
+  '}',
+  'now_seconds() {',
+  '  date +%s',
+  '}',
+  'elapsed_milliseconds() {',
+  '  echo $(( ( $(now_seconds) - $1 ) * 1000 ))',
+  '}',
+  'case $INSTALL_ROOT in',
+  "  '~') INSTALL_ROOT=$HOME ;;",
+  "  '~/'*) INSTALL_ROOT=$HOME/${INSTALL_ROOT#'~/'} ;;",
+  'esac',
+  'DATA_ROOT=${INSTALL_ROOT:-$HOME}',
+  'DATA_DIR=$DATA_ROOT/$DATA_FOLDER',
+  'INSTALL_DIR=$DATA_DIR/bin/$COMMIT',
+  'CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT',
+  'CLI_FILE=$DATA_DIR/$CLI_NAME',
+  'BOOT_PREFIX=$DATA_DIR/.$COMMIT',
+  '[ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes',
+];
+
+/** The port the CLI reports in its log: the first line that is exactly `Listening on 127.0.0.1:<port>`. */
+const CLI_FUNCTIONS: readonly string[] = [
+  'cli_ready_port() {',
+  `  sed -n 's/^Listening on 127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$/\\1/p' "$LOG_FILE" 2>/dev/null | head -n 1`,
+  '}',
+];
+
+/** Source the environment setup once and export the proxy variables the host's own environment does not set. */
+const ENVIRONMENT_FUNCTIONS: readonly string[] = [
+  'prepare_environment() {',
+  '  if [ -n "$ENVIRONMENT_SETUP" ] && [ -f "$ENVIRONMENT_SETUP" ]; then',
+  '    . "$ENVIRONMENT_SETUP" </dev/null',
+  '  fi',
+  '  if [ -n "$PROXY_HTTP" ] && [ -z "${http_proxy:-}" ]; then',
+  '    http_proxy=$PROXY_HTTP',
+  '    export http_proxy',
+  '  fi',
+  '  if [ -n "$PROXY_HTTPS" ] && [ -z "${https_proxy:-}" ]; then',
+  '    https_proxy=$PROXY_HTTPS',
+  '    export https_proxy',
+  '  fi',
+  '}',
+];
+
+/** The host lock: `flock` held on a descriptor, or an atomic hard link; `flock` falls back to the link. */
+const LOCK_FUNCTIONS: readonly string[] = [
+  'lock_method() {',
+  '  if [ "$LOCK_METHOD" = flock ] && have flock; then',
+  '    echo flock',
+  '  else',
+  '    echo link',
+  '  fi',
+  '}',
+  'lock_path() {',
+  '  if [ "$LOCK_IN_TEMPORARY" = yes ]; then',
+  '    echo "/tmp/$LOCK_PREFIX.$1"',
+  '  else',
+  '    echo "$DATA_DIR/bin/$1/$LOCK_PREFIX.$1"',
+  '  fi',
+  '}',
+  'lock_link() {',
+  '  if LOCK_ERROR=$(ln "$LOCK_CANDIDATE" "$LOCK_CANDIDATE.target" 2>&1); then',
+  "    LOCK_ERROR=''",
+  '    return 0',
+  '  fi',
+  '  [ ! -e "$LOCK_CANDIDATE.target" ] || return 1',
+  '  return 2',
+  '}',
+  'lock_take() {',
+  '  LOCK_CANDIDATE=$(lock_path "$1")',
+  "  LOCK_ERROR=''",
+  '  if [ "$LOCK_IN_TEMPORARY" = yes ]; then',
+  '    if [ -L "$LOCK_CANDIDATE" ] || { [ -e "$LOCK_CANDIDATE" ] && [ ! -f "$LOCK_CANDIDATE" ]; }; then',
+  "      LOCK_ERROR='not a regular file'",
+  '      return 2',
+  '    fi',
+  '  fi',
+  '  if [ "$(lock_method)" = flock ]; then',
+  '    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2',
+  '    exec 9>>"$LOCK_CANDIDATE"',
+  '    if LOCK_ERROR=$(flock -n 9 2>&1); then',
+  "      LOCK_ERROR=''",
+  '    else',
+  '      [ -z "$LOCK_ERROR" ] || return 2',
+  '      return 1',
+  '    fi',
+  '  else',
+  '    for LOCK_ATTEMPT in 1 2; do',
+  '      LOCK_ERROR=$( { true >>"$LOCK_CANDIDATE"; } 2>&1 ) || return 2',
+  '      lock_link',
+  '      LOCK_STATUS=$?',
+  '      [ "$LOCK_STATUS" = 2 ] || break',
+  '    done',
+  '    [ "$LOCK_STATUS" = 0 ] || return "$LOCK_STATUS"',
+  '  fi',
+  '  LOCK_HELD=$LOCK_CANDIDATE',
+  "  trap 'exit 1' HUP INT TERM",
+  "  trap 'lock_release' EXIT",
+  '}',
+  'write_failed() {',
+  '  fact server.writeFailedPath "$1"',
+  '  fact server.writeFailedError "$2"',
+  '  finish CreateInstallDirFailed',
+  '}',
+  'write_failed_leave() {',
+  '  lock_release',
+  '  write_failed "$1" "$2"',
+  '}',
+  'take_lock_or_finish() {',
+  '  lock_take "$1"',
+  '  case $? in',
+  '    0) ;;',
+  '    1) fact server.lockPath "$LOCK_CANDIDATE"; finish LockBusy ;;',
+  '    *)',
+  '      fact server.lockPath "$LOCK_CANDIDATE"',
+  '      fact server.lockInTemporary "$LOCK_IN_TEMPORARY"',
+  '      write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR"',
+  '      ;;',
+  '  esac',
+  '}',
+  'lock_release() {',
+  '  [ -n "${LOCK_HELD:-}" ] || return 0',
+  '  if [ "$(lock_method)" = flock ]; then',
+  '    exec 9>&-',
+  '  else',
+  '    rm -f "$LOCK_HELD" "$LOCK_HELD.target"',
+  '  fi',
+  "  LOCK_HELD=''",
+  '}',
+];
+
+/** Whether the host's `wget` is BusyBox's, which takes fewer options than GNU's. */
+const BUSYBOX_FUNCTIONS: readonly string[] = [
+  'wget_is_busybox() {',
+  '  wget --help 2>&1 </dev/null | grep -i busybox >/dev/null 2>&1',
+  '}',
+];
+
+/** The download with the first downloader the host has, `wget` before `curl`, configuration files skipped. */
+const FETCH_FUNCTIONS: readonly string[] = [
+  'fetch_archive() {',
+  "  FETCH_ERROR=''",
+  '  FETCH_STATUS=0',
+  '  if have wget; then',
+  '    if wget_is_busybox; then',
+  '      FETCH_ERROR=$(wget -q -T "$DOWNLOAD_SECONDS" -O "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
+  '    elif [ "$USE_CONFIGURATION_FILES" = yes ]; then',
+  '      FETCH_ERROR=$(wget -q -S -T "$DOWNLOAD_SECONDS" -O "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
+  '    else',
+  '      FETCH_ERROR=$(wget --no-config -q -S -T "$DOWNLOAD_SECONDS" -O "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
+  '    fi',
+  '  elif have curl; then',
+  '    if [ "$USE_CONFIGURATION_FILES" = yes ]; then',
+  '      FETCH_ERROR=$(curl -fsSL --max-time "$DOWNLOAD_SECONDS" -o "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
+  '    else',
+  '      FETCH_ERROR=$(curl -q -fsSL --max-time "$DOWNLOAD_SECONDS" -o "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
+  '    fi',
+  '  else',
+  '    return 127',
+  '  fi',
+  '  [ "$FETCH_STATUS" = 0 ] && return 0',
+  "  LAST_RESPONSE=$(printf '%s\\n' \"$FETCH_ERROR\" | grep -o 'HTTP/1\\.[01] [0-9][0-9][0-9]' | tail -n 1)",
+  '  case $LAST_RESPONSE in',
+  "    'HTTP/1.0 404' | 'HTTP/1.1 404') fact server.downloadStatus 404 ;;",
+  "    '') case $FETCH_ERROR in *'error: 404'*) fact server.downloadStatus 404 ;; esac ;;",
+  '  esac',
+  '  return "$FETCH_STATUS"',
+  '}',
+];
+
+/**
+ * Unpack an archive into a folder, then move the archive's one top folder up into the target. A tar archive is listed
+ * first so that the unpack can report whole percents, at most once per 5 points and once at 100.
+ */
+const UNPACK_FUNCTIONS: readonly string[] = [
+  'progress() {',
+  `  printf '%s %s %s\\n' ${shellQuote(PROGRESS_PREFIX)} "$1" "$2"`,
+  '}',
+  'unpack_progress() {',
+  '  COUNT=0',
+  '  LAST=0',
+  '  while read -r ENTRY_NAME; do',
+  '    COUNT=$((COUNT + 1))',
+  '    PERCENT=$((COUNT * 100 / $1))',
+  '    if [ "$PERCENT" -lt 100 ] && [ $((PERCENT - LAST)) -ge 5 ]; then',
+  '      progress unpack "$PERCENT"',
+  '      LAST=$PERCENT',
+  '    fi',
+  '  done',
+  '}',
+  'extract_tar() {',
+  '  TOTAL=$(tar -tzf "$1" </dev/null 2>/dev/null | wc -l | tr -d " ")',
+  '  [ "${TOTAL:-0}" -gt 0 ] || return 1',
+  '  progress unpack 0',
+  '  { tar -xzvf "$1" -C "$2" </dev/null 2>&1; echo $? >"$2.status"; } | unpack_progress "$TOTAL"',
+  '  EXTRACT_CODE=$(cat "$2.status" 2>/dev/null)',
+  '  rm -f "$2.status"',
+  '  [ "$EXTRACT_CODE" = 0 ] || return 1',
+  '  progress unpack 100',
+  '}',
+  'extract_zip() {',
+  '  progress unpack 0',
+  '  unzip -q "$1" -d "$2" </dev/null || return 1',
+  '  progress unpack 100',
+  '}',
+  'unpack_into() {',
+  '  UNPACK_STAGE=$2.stage.$$',
+  '  rm -rf "$UNPACK_STAGE"',
+  '  mkdir -p "$UNPACK_STAGE" "$2" || return 1',
+  '  case $ARCHIVE_FORMAT in',
+  '    zip) extract_zip "$1" "$UNPACK_STAGE" || return 1 ;;',
+  '    *) extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;',
+  '  esac',
+  '  unpack_move_top "$UNPACK_STAGE" "$2"',
+  '}',
+  'unpack_move_top() {',
+  '  ENTRIES=0',
+  "  WRAPPER=''",
+  '  for ENTRY in "$1"/* "$1"/.[!.]*; do',
+  '    [ -e "$ENTRY" ] || continue',
+  '    ENTRIES=$((ENTRIES + 1))',
+  '    WRAPPER=$ENTRY',
+  '  done',
+  '  SOURCE=$1',
+  '  if [ "$ENTRIES" = 1 ] && [ -d "$WRAPPER" ] && [ ! -L "$WRAPPER" ]; then',
+  '    SOURCE=$WRAPPER',
+  '  fi',
+  '  MOVED=0',
+  '  for ENTRY in "$SOURCE"/* "$SOURCE"/.[!.]*; do',
+  '    [ -e "$ENTRY" ] || continue',
+  '    mv "$ENTRY" "$2"/ || return 1',
+  '    MOVED=1',
+  '  done',
+  '  rm -rf "$1"',
+  '  [ "$MOVED" = 1 ]',
+  '}',
+];
+
+/**
+ * The install into a shared tree: the unpack goes into a sibling of the tree that is renamed once it is whole, and
+ * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable.
+ */
+const TREE_FUNCTIONS: readonly string[] = [
+  'ensure_install_link() {',
+  '  if [ -L "$INSTALL_DIR" ]; then',
+  '    if [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
+  '      fact server.installLink kept',
+  '      return 0',
+  '    fi',
+  '    rm -f "$INSTALL_DIR"',
+  '  elif [ -d "$INSTALL_DIR" ]; then',
+  '    if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '      fact server.installLink realFolder',
+  '      return 0',
+  '    fi',
+  '    rm -rf "$INSTALL_DIR"',
+  '  fi',
+  '  LINK_ERROR=$(mkdir -p "$DATA_DIR/bin" 2>&1) || write_failed_leave "$DATA_DIR/bin" "$LINK_ERROR"',
+  '  LINK_ERROR=$(ln -s "$INSTALL_TREE" "$INSTALL_DIR" 2>&1) || {',
+  '    if [ -L "$INSTALL_DIR" ] && [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
+  '      fact server.installLink kept',
+  '      return 0',
+  '    fi',
+  '    write_failed_leave "$INSTALL_DIR" "$LINK_ERROR"',
+  '  }',
+  '  fact server.installLink made',
+  '}',
+  'install_tree() {',
+  '  TREE_STAGING=${INSTALL_TREE}_$STAGING_SUFFIX',
+  '  unpack_into "$1" "$TREE_STAGING" || return 1',
+  '  [ -x "$TREE_STAGING/$LAUNCHER" ] || return 1',
+  '  if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '    rm -rf "$TREE_STAGING"',
+  '    return 0',
+  '  fi',
+  '  mv "$TREE_STAGING" "$INSTALL_TREE" || return 1',
+  '  rm -rf "${INSTALL_TREE:?}/${TREE_STAGING##*/}"',
+  '  [ -x "$INSTALL_TREE/$LAUNCHER" ]',
+  '}',
+];
+
+/** Whether a process id is a live process whose command line holds a folder, as the server under it does. */
+const PROCESS_FUNCTIONS: readonly string[] = [
+  'is_server_process() {',
+  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
+  '  kill -0 "$1" 2>/dev/null || return 1',
+  '  if [ -r "/proc/$1/cmdline" ]; then',
+  "    PROCESS_LINE=$(tr '\\0' ' ' <\"/proc/$1/cmdline\" 2>/dev/null)",
+  '  else',
+  '    PROCESS_LINE=$(ps -p "$1" -o args= 2>/dev/null)',
+  '    if [ -z "$PROCESS_LINE" ]; then',
+  '      PROCESS_LINE=$(ps -o pid= -o args= 2>/dev/null | sed -n "s/^ *$1 //p")',
+  '    fi',
+  '  fi',
+  '  case $PROCESS_LINE in',
+  '    *"$2"*) return 0 ;;',
+  '  esac',
+  '  return 1',
+  '}',
+];
+
+/**
+ * Whether a process belongs to a server tree under the folder its second argument names: the file it runs is under that
+ * folder, or it is a POSIX shell running a script there, as a server's launcher does. The arguments of the command line
+ * are read as fields, so that a program that only names a path under the folder, such as `tail -f` or an editor, is not
+ * taken for a server.
+ */
+const SERVER_TREE_FUNCTIONS: readonly string[] = [
+  'is_server_tree_process() {',
+  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
+  '  [ -r "/proc/$1/cmdline" ] || return 1',
+  "  TREE_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
+  '  TREE_PROGRAM=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 1p)',
+  '  TREE_FIRST=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 2p)',
+  '  case $TREE_PROGRAM in',
+  '    "$2"*) return 0 ;;',
+  '  esac',
+  '  case ${TREE_PROGRAM##*/} in',
+  '    sh|bash|dash|ash)',
+  '      case $TREE_FIRST in',
+  '        "$2"*) return 0 ;;',
+  '      esac',
+  '      ;;',
+  '  esac',
+  '  return 1',
+  '}',
+];
+
+/**
+ * Stop the servers of the data folder: those of a direct install, whose process ids are recorded in it and whose command
+ * lines hold `bin/`, and every process of a server tree, found by the file it runs being under `bin/` or `cli/servers/`.
+ * The sweep reaches a server's extension host and file watcher, which outlive a main process that ended. A process that
+ * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone.
+ */
+const STOP_FUNCTIONS: readonly string[] = [
+  'stop_servers() {',
+  '  for PID_FILE in "$DATA_DIR"/.*.pid; do',
+  '    [ -f "$PID_FILE" ] || continue',
+  '    SERVER_PID=$(cat "$PID_FILE" 2>/dev/null)',
+  '    is_server_process "$SERVER_PID" "$DATA_DIR/bin/" || continue',
+  '    if have pkill; then',
+  '      pkill -P "$SERVER_PID" 2>/dev/null',
+  '    fi',
+  '    kill "$SERVER_PID" 2>/dev/null',
+  '  done',
+  '  for PROC_DIR in /proc/[0-9]*; do',
+  '    SERVER_PID=${PROC_DIR#/proc/}',
+  '    [ "$SERVER_PID" != "$$" ] || continue',
+  '    is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||',
+  '      is_server_tree_process "$SERVER_PID" "$DATA_DIR/cli/servers/" ||',
+  '      continue',
+  '    if have pkill; then',
+  '      pkill -P "$SERVER_PID" 2>/dev/null',
+  '    fi',
+  '    kill "$SERVER_PID" 2>/dev/null',
+  '  done',
+  '}',
+];
+
+/** The kind of a folder under `bin/`: a 40-character commit, a `<commit>-<suffix>` leftover, or something else. */
+const FOLDER_KIND_FUNCTIONS: readonly string[] = [
+  'folder_kind() {',
+  '  HEAD_PART=$(printf \'%s\' "$1" | cut -c1-40)',
+  '  case $HEAD_PART in',
+  '    *[!0-9a-f]*) echo other; return ;;',
+  '  esac',
+  '  if [ "${#HEAD_PART}" != 40 ]; then',
+  '    echo other',
+  '  elif [ "${#1}" = 40 ]; then',
+  '    echo commit',
+  '  else',
+  '    case $1 in',
+  '      "$HEAD_PART"-*) echo leftover ;;',
+  '      *) echo other ;;',
+  '    esac',
+  '  fi',
+  '}',
+  'remove_install() {',
+  '  if lock_take "$1"; then',
+  '    rm -rf "${DATA_DIR:?}/bin/$1" "$DATA_DIR/.$1.log" "$DATA_DIR/.$1.pid" "$DATA_DIR/.$1.token" "$DATA_DIR/.$1.socket.log" "$DATA_DIR/.$1.socket.pid" "$DATA_DIR/.$1.socket.token"',
+  '    lock_release',
+  '  fi',
+  '}',
+];
+
+/** Ends the script with a status after releasing the lock it holds. */
+const LEAVE_FUNCTIONS: readonly string[] = [
+  'leave() {',
+  '  lock_release',
+  '  finish "$1"',
+  '}',
+];
+
+/** The text of each function role in the POSIX script. */
+export const POSIX_FUNCTIONS: Readonly<
+  Record<FunctionRole, readonly string[]>
+> = {
+  common: COMMON_FUNCTIONS,
+  environment: ENVIRONMENT_FUNCTIONS,
+  lock: LOCK_FUNCTIONS,
+  busybox: BUSYBOX_FUNCTIONS,
+  fetch: FETCH_FUNCTIONS,
+  unpack: UNPACK_FUNCTIONS,
+  leave: LEAVE_FUNCTIONS,
+  process: PROCESS_FUNCTIONS,
+  secretToken: [],
+  serverTree: SERVER_TREE_FUNCTIONS,
+  stop: STOP_FUNCTIONS,
+  cliPort: CLI_FUNCTIONS,
+  folderKind: FOLDER_KIND_FUNCTIONS,
+  tree: TREE_FUNCTIONS,
+};

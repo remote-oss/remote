@@ -34,6 +34,8 @@ export interface ClientEnvironment {
   newNonce: () => string;
   /** The editor's own executable, which runs helper scripts. */
   runtime: string;
+  /** The Node platform the client runs on, which the endpoints' form depends on. */
+  platform: string;
   /** The folder for endpoints (see runtimeFolder). */
   endpointFolder: string;
   processId: number;
@@ -294,6 +296,7 @@ export async function acquire<Refusal = never>(
     namespace: request.namespace,
     recordKey: request.helperKey,
     endpoint: endpointPath(
+      environment.platform,
       environment.endpointFolder,
       request.namespace,
       request.helperKey,

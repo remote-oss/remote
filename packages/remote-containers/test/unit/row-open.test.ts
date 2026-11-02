@@ -111,7 +111,7 @@ describe('the open commands of the Dev Containers rows (card containers-103)', (
       [
         [['inspect', '--type', 'container', 'target']],
         ['docker'],
-        ['firstCheck undefined', 'readConfiguration /w/p', 'currentContext'],
+        ['firstCheck undefined', 'readConfiguration /w/p', 'pinnedEngine'],
         1,
         [{forceNewWindow: false, forceReuseWindow: true}],
         [],

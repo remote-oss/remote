@@ -6,7 +6,6 @@
 
 import {randomBytes, randomInt} from 'node:crypto';
 import {type AddressInfo, createServer} from 'node:net';
-import {homedir, tmpdir} from 'node:os';
 import path from 'node:path';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
 import {nodeClientEnvironment, nodeTimer, runtimeFolder} from 'lib-helper';
@@ -17,7 +16,7 @@ import {
   nodeClientFiles,
   nodeCredentialsPort,
 } from 'lib-server';
-import {type ClientPlatform, nodeLocalFiles, nodeProcessSpawner} from 'lib-ssh';
+import {clientPlatformOf, nodeLocalFiles, nodeProcessSpawner} from 'lib-ssh';
 import {HELPER_CLIENT_WAITS} from './pipeline/bounds.ts';
 import type {ConnectMachine} from './connect-ports.ts';
 import {nodePreconnectFiles} from './preconnect/node-files.ts';
@@ -45,14 +44,6 @@ export interface MachineFacts {
   temporaryFolder: string;
   /** `process.cwd()`. */
   workingDirectory: string;
-}
-
-/** The client platform of a Node platform: Linux for every one that is neither macOS nor Windows. */
-export function clientPlatformOf(platform: string): ClientPlatform {
-  if (platform === 'darwin') {
-    return 'macOS';
-  }
-  return platform === 'win32' ? 'windows' : 'linux';
 }
 
 /** The places the client search reads from the environment. */
@@ -105,7 +96,11 @@ export function nodeMachineOf(
     processEnvironment: facts.environment,
     clientSearch: clientSearchOf(facts.environment),
     spawner: nodeProcessSpawner,
-    helpers: nodeClientEnvironment(places.runtime, HELPER_CLIENT_WAITS),
+    helpers: nodeClientEnvironment(
+      places.runtime,
+      HELPER_CLIENT_WAITS,
+      facts.platform,
+    ),
     freeSocksPort: freeLoopbackPort,
     bundles: {
       helperScript: path.join(bundles, 'connection-helper.js'),
@@ -141,16 +136,5 @@ export function nodeMachineOf(
     prober: nodePortProber(),
     newTemporaryToken,
     drawLinkNumber,
-  };
-}
-
-/** Node's facts for this process. */
-export function nodeFacts(): MachineFacts {
-  return {
-    platform: process.platform,
-    environment: process.env,
-    homeFolder: homedir(),
-    temporaryFolder: tmpdir(),
-    workingDirectory: process.cwd(),
   };
 }

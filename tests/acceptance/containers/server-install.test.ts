@@ -635,7 +635,7 @@ describe('F-0503 server install (card containers-41)', function () {
     }, cutSource);
   });
 
-  it('F-0503 AC-23 (ruling-1591-no-leftovers): closing the window during the install shows no dialog and leaves no {commit}_{epoch-ms} directory on the volume, before or after the container is removed', async () => {
+  it('F-0503 AC-23 (ruling-1591-no-leftovers): closing the window during the install shows no dialog, the container exits with code 0, and the volume has no {commit}_{epoch-ms} directory, before or after the container is removed', async () => {
     const slow = `${variable('HARNESS_DOWNLOADS_LOCAL')}/slow`;
     await removeTree();
     await setUserSetting('remote.serverDownloadBaseUrl', slow);
@@ -650,13 +650,29 @@ describe('F-0503 server install (card containers-41)', function () {
         180_000,
       );
       const dialog = await dialogOf(window);
+      const [containerId = ''] = await devContainersOf(folder);
       await closeWindow(window);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      let stateText = '';
+      await waitFor(
+        'the container to be exited',
+        async () => {
+          stateText = (
+            await execFileAsync('docker', [
+              'inspect',
+              '--format',
+              '{{.State.Status}} {{.State.ExitCode}}',
+              containerId,
+            ])
+          ).stdout.trim();
+          return stateText.startsWith('exited');
+        },
+        90_000,
+      );
       const before = await leftoversOnVolume();
       await removeContainers(folder);
       deepStrictEqual(
-        [dialog, before, await leftoversOnVolume()],
-        [undefined, [], []],
+        [dialog, stateText, before, await leftoversOnVolume()],
+        [undefined, 'exited 0', [], []],
       );
     } finally {
       await setUserSetting('remote.serverDownloadBaseUrl', workingSource);
