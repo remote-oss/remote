@@ -56,7 +56,7 @@ export interface RelayTunnelRequest {
   onWaiting?: () => void;
   /**
    * Asked once, when twenty probes in a row were closed by the relay or found no relay, with the cause: true ends the
-   * wait as a refused forward; false goes on probing until the bound, as for any other failure. No answer means true.
+   * wait as a refused forward; false goes on probing until the bound, as for any other failure. A request with no such function never ends it.
    */
   confirmRefusal?: (
     cause: 'closedBeforeReply' | 'unreachable',
@@ -220,7 +220,7 @@ export async function openRelayTunnel(
               : 'closedBeforeReply';
           if (failures.closedInARow >= REFUSAL_PROBES && !failures.asked) {
             failures.asked = true;
-            if ((await request.confirmRefusal?.(failures.cause)) !== false) {
+            if ((await request.confirmRefusal?.(failures.cause)) === true) {
               failures.confirmed = true;
               refusal.abort();
             }

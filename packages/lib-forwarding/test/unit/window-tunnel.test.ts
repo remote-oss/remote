@@ -27,6 +27,7 @@ function relay(
   listenAnswer: Answer = 'work',
   heldBytesMaximum: number = LIMITS.heldBytesMaximum,
   onWaiting?: () => void,
+  confirmRefusal?: RelayTunnelRequest['confirmRefusal'],
 ): RelayFixture {
   const clock = new FakeClock();
   const dialer = new FakeDialer(dialScript);
@@ -39,6 +40,7 @@ function relay(
     localPort: 50000,
     limits: {...LIMITS, heldBytesMaximum},
     ...(onWaiting === undefined ? {} : {onWaiting}),
+    ...(confirmRefusal === undefined ? {} : {confirmRefusal}),
   };
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
 }
@@ -86,7 +88,13 @@ describe('the window tunnel through the relay', () => {
   });
 
   it('connect-106: twenty probes in a row closed by the relay before its reply are a refused forward, before the bound, and close the port', async () => {
-    const {open, clock, local} = relay(['closedBeforeReply']);
+    const {open, clock, local} = relay(
+      ['closedBeforeReply'],
+      'work',
+      LIMITS.heldBytesMaximum,
+      undefined,
+      () => Promise.resolve(true),
+    );
     const pending = open();
     for (let round = 0; round < 20; round++) {
       await advanced(clock, 500);
@@ -98,7 +106,13 @@ describe('the window tunnel through the relay', () => {
   });
 
   it('connect-106: twenty probes in a row that find nothing at the relay’s port are a refused forward too', async () => {
-    const {open, clock} = relay(['unreachable']);
+    const {open, clock} = relay(
+      ['unreachable'],
+      'work',
+      LIMITS.heldBytesMaximum,
+      undefined,
+      () => Promise.resolve(true),
+    );
     const pending = open();
     for (let round = 0; round < 20; round++) {
       await advanced(clock, 500);
@@ -133,6 +147,13 @@ describe('the window tunnel through the relay', () => {
       await advanced(clock, 500);
     }
     deepStrictEqual([(await pending).kind, asked], ['open', 1]);
+  });
+
+  it('connect-106: with no one to confirm a refusal, closed probes are not ready at the bound, as for a family that never asks', async () => {
+    const {open, clock} = relay(['closedBeforeReply']);
+    const pending = open();
+    await advanced(clock, 10_000);
+    deepStrictEqual((await pending).kind, 'tunnelNotReady');
   });
 
   it('connect-106: one probe that fails otherwise among those closed before the reply keeps the outcome not ready', async () => {
