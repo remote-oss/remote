@@ -17,7 +17,7 @@ import {freshHost} from './maintenance.ts';
 import {PLATFORMS} from './tunnel-support.ts';
 
 /** The argument lists of the `ssh` processes of the run (those that name its ssh_config), as they are now. */
-function runSshArguments(): string[][] {
+export function runSshArguments(): string[][] {
   const config = variable('HARNESS_SSH_CONFIG');
   const lists: string[][] = [];
   for (const entry of readdirSync('/proc')) {
@@ -45,7 +45,7 @@ function runSshArguments(): string[][] {
 }
 
 /** How the sessions of the account `harness` on the host are open now: `notty`, or the terminal they have, such as `pts/0`. */
-async function hostSessions(): Promise<string[]> {
+export async function hostSessions(): Promise<string[]> {
   const output = await onHost(
     'sh',
     '-c',

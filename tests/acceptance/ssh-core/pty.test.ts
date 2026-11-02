@@ -1,7 +1,25 @@
 import {deepStrictEqual} from 'node:assert';
-import {closeAllButLocal} from '../windows/maintenance.ts';
-import {hasNoTty, ptyConnect, type PtyConnect} from '../windows/pty-support.ts';
-import {keepingSettings} from '../windows/tunnel-support.ts';
+import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
+import {
+  hasNoTty,
+  hostSessions,
+  ptyConnect,
+  type PtyConnect,
+  runSshArguments,
+} from '../windows/pty-support.ts';
+import {
+  appendScript,
+  closeWindow,
+  connectedWithin,
+  connectionHelpers,
+  inWindow,
+  openWindow,
+  recordLines,
+  reloadWindow,
+  userSettings,
+  waitFor,
+} from '../windows/harness.ts';
+import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The setting that lets the connection's ssh allocate a pseudo-terminal. */
 const PERMIT = 'remote.SSH.permitPtyAllocation';
@@ -109,6 +127,143 @@ describe('F-2106: pseudo-terminal allocation', function () {
         [
           '[ssh] Pseudo-terminal will not be allocated because stdin is not a terminal.',
         ],
+      );
+    });
+  });
+
+  it('F-2106 AC-6 (c86-kill): a reload with the setting turned on reaches the host with no new session and the connection keeps -T; after Kill Local Connection Server the reconnection has none', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      await freshHost();
+      const name = 'c86-kill';
+      await openWindow('harness', name);
+      await connectedWithin(name, 90_000);
+      const before = await hostSessions();
+      await userSettings({...PLATFORMS, [PERMIT]: true});
+      await reloadWindow(name);
+      await connectedWithin(name, 90_000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const kept = runSshArguments().map(argv => argv.join(' '));
+      const joined = (await hostSessions()).length;
+      appendScript([
+        {
+          surface: 'hostPick',
+          match: '',
+          answer: {label: 'harness'},
+          window: name,
+        },
+      ]);
+      await inWindow(name, 'opensshremotes.cleanLocalServer');
+      const later = new Set<string>();
+      const end = Date.now() + 45_000;
+      while (Date.now() < end) {
+        for (const argv of runSshArguments()) {
+          later.add(argv.join(' '));
+        }
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      deepStrictEqual(
+        [
+          joined === before.length,
+          kept.every(hasNoTty),
+          [...later].some(command => !hasNoTty(command)),
+        ],
+        [true, true, true],
+      );
+      await closeWindow(name).catch(() => undefined);
+    });
+  });
+
+  it('F-2106 AC-16 (c86-changed): a value changed while the local server runs applies to the new connection once that server has ended', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      await freshHost();
+      const name = 'c86-changed';
+      await openWindow('harness', name);
+      await connectedWithin(name, 90_000);
+      const first = runSshArguments().map(argv => hasNoTty(argv.join(' ')));
+      await userSettings({...PLATFORMS, [PERMIT]: true});
+      await closeWindow(name);
+      await waitFor(
+        'the local server to end',
+        async () => (await connectionHelpers()).length === 0,
+        120_000,
+      );
+      const again = await ptyConnect(name, 'harness', {[PERMIT]: true});
+      deepStrictEqual([first, again.commands.map(hasNoTty)], [[true], [false]]);
+    });
+  });
+
+  it('F-2106 AC-17 (c86-same): turning the setting on removes -T from the connection command and changes nothing else in it', async () => {
+    await keepingSettings(async () => {
+      const withoutSetting = await ptyConnect('c86-same', 'harness', {});
+      const withSetting = await ptyConnect('c86-same', 'harness', {
+        [PERMIT]: true,
+      });
+      function plain(command: string): string {
+        return command
+          .replace(/-D 127\.0\.0\.1:\d+/, '-D <port>')
+          .replace(' -T', '');
+      }
+      deepStrictEqual(
+        withSetting.commands.map(plain),
+        withoutSetting.commands.map(plain),
+      );
+    });
+  });
+
+  it('F-2106 AC-14 (ruling-1606-no-tty-warning): with the setting on and no RequestTTY in the shared mode there is no -T, no warning, no terminal, and the window connects', async () => {
+    await keepingSettings(async () => {
+      const found = await ptyConnect('c86-no-warning', 'harness', {
+        [PERMIT]: true,
+      });
+      deepStrictEqual(
+        [
+          found.connected,
+          found.commands.map(hasNoTty),
+          found.sessions,
+          found.logged.filter(line => line.includes('Pseudo-terminal')),
+        ],
+        [true, [false], ['notty'], []],
+      );
+    });
+  });
+
+  it('F-2106 AC-7, AC-9 (c86-force): with the setting on and RequestTTY force a terminal is allocated, with the exec server and without it', async () => {
+    await keepingSettings(async () => {
+      const seen: unknown[] = [];
+      for (const settings of [{}, {}, {'remote.SSH.useExecServer': false}]) {
+        await closeAllButLocal();
+        const found = await ptyConnect('c86-force', 'pty-force', {
+          [PERMIT]: true,
+          ...settings,
+        });
+        seen.push([
+          found.connected,
+          found.sessions.some(each => each.startsWith('pts')),
+        ]);
+      }
+      deepStrictEqual(seen, [
+        [true, true],
+        [true, true],
+        [true, true],
+      ]);
+    });
+  });
+
+  it('F-2106 AC-12 (c86-quiet): the feature shows no notification, progress text or status item of its own, and no failure message names the setting', async () => {
+    await keepingSettings(async () => {
+      for (const settings of [{}, {[PERMIT]: true}]) {
+        await closeAllButLocal();
+        await ptyConnect('c86-quiet', 'harness', settings);
+      }
+      deepStrictEqual(
+        recordLines().filter(line =>
+          /permitPtyAllocation|pseudo|allocat/i.test(
+            `${line.question} ${line.answer}`,
+          ),
+        ),
+        [],
       );
     });
   });

@@ -7,7 +7,6 @@ import {
   fingerprintOf,
   closeWindow,
   reloadWindow,
-  inWindow,
   variable,
   waitFor,
   windowState,
@@ -20,7 +19,6 @@ import {
   inputBoxOf,
   pressEscape,
   notifications,
-  quickPickOf,
   waitForDialog,
 } from '../windows/renderer.ts';
 import {
@@ -39,6 +37,7 @@ import {
 } from '../windows/harness.ts';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
+  killSharedConnection,
   openKeyWindow,
   passphrase,
   untilConnected,
@@ -61,21 +60,6 @@ async function connectedWithPassphrase(
   await answerInputBox(name, passphrase());
   await untilConnected(name, alias);
   return name;
-}
-
-/** Ends the shared connection of `alias` with Kill Local Connection Server For Host..., run in window `name`. */
-async function killSharedConnection(
-  name: string,
-  alias: string,
-): Promise<void> {
-  void inWindow(name, 'opensshremotes.cleanLocalServer');
-  await waitFor(
-    'the host pick',
-    async () => (await quickPickOf(name)) !== undefined,
-    60_000,
-  );
-  // The pick lists more hosts than it draws, so the alias is typed into its filter.
-  await answerInputBox(name, alias);
 }
 
 /** The run's passphrase key file. */

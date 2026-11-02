@@ -5,7 +5,12 @@
 
 import {readFileSync} from 'node:fs';
 import {inWindow, onHostAs, variable, waitFor, windowState} from './harness.ts';
-import {connectSurface, inputBoxOf} from './renderer.ts';
+import {
+  answerInputBox,
+  connectSurface,
+  inputBoxOf,
+  quickPickOf,
+} from './renderer.ts';
 
 /** The run's passphrase. */
 export function passphrase(): string {
@@ -53,4 +58,19 @@ export async function untilConnected(
       (await connectSurface(name)).indicator === `SSH: ${alias}`,
     120_000,
   );
+}
+
+/** Ends the shared connection of `alias` with Kill Local Connection Server For Host..., run in window `name`. */
+export async function killSharedConnection(
+  name: string,
+  alias: string,
+): Promise<void> {
+  void inWindow(name, 'opensshremotes.cleanLocalServer');
+  await waitFor(
+    'the host pick',
+    async () => (await quickPickOf(name)) !== undefined,
+    60_000,
+  );
+  // The pick lists more hosts than it draws, so the alias is typed into its filter.
+  await answerInputBox(name, alias);
 }
