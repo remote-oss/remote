@@ -12,6 +12,7 @@ import {
   connectionLog,
   hostPort,
   inWindow,
+  isOpen,
   nextEmptyWindow,
   onHost,
   openWindow,
@@ -100,7 +101,17 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     await visit(HOST_A, 'c102-a1');
     await titleAction('local', VIEW, 'Refresh');
     await foldersSettled('local', HOST_A, [first, second], scope);
-    deepStrictEqual(await ownPathsOf(HOST_A, scope), [first, second]);
+    // The launch's first row: the history holds these two hosts and nothing else.
+    deepStrictEqual(
+      Object.entries(await historyOf()).map(([host, entries]) => [
+        host,
+        entries.map(entry => entry.path),
+      ]),
+      [
+        [HOST_B, [other]],
+        [HOST_A, [first, second]],
+      ],
+    );
   });
 
   it('F-2503 AC-29 (same-hostname): two aliases with the same HostName list their own entries, and only the alias of the window is marked connected', async () => {
@@ -417,14 +428,14 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
       await appearsAfter('c102-c2', before);
       await connectedTo('c102-c2', HOST_B);
       await firstEntry(second);
-      seen.push(['current', await ownPathsOf(HOST_B, scope)]);
+      seen.push(['current', await ownPathsOf(HOST_B, scope), isOpen(from)]);
       await closeIfOpen('c102-c2');
       from = '';
       deepStrictEqual(seen, [
         ['new', [first, gone, second], []],
         ['deleted', [gone, first, second], [], []],
         ['host', [], [gone, first, second], [gone, first, second]],
-        ['current', [second, gone, first]],
+        ['current', [second, gone, first], false],
       ]);
     } finally {
       await closeIfOpen(from);
@@ -502,17 +513,24 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         return [];
       }
     }
+    const keybindingsFile = path.join(
+      variable('HARNESS_USER_DATA'),
+      'User/keybindings.json',
+    );
     function stateOf(): unknown[] {
       return [
         windowNames().join(','),
         readFileSync(userSettingsFile(), 'utf8'),
+        readFileSync(keybindingsFile, 'utf8'),
         readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8'),
         filesOf().join(','),
         connectionLog().length,
         activations('local'),
       ];
     }
+    const remote = 'c102-k2';
     await visit(HOST_B, 'c102-k1');
+    await openWindow(HOST_B, remote);
     const restore = await bindKeys(
       keys.map(([key, command]) => ({
         key: `ctrl+alt+${key}`,
@@ -520,21 +538,26 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
       })),
     );
     try {
+      await connectedTo(remote, HOST_B);
       const before = stateOf();
-      const historyBefore = await pathsOf(HOST_B);
+      const historyBefore = await historyOf();
       const toasts: unknown[] = [];
-      for (const [key] of keys) {
-        await pressControlAlt('local', key);
-        await new Promise(resolve => setTimeout(resolve, 3_000));
-        toasts.push(await notifications('local'));
+      // A local window and an SSH window.
+      for (const window of ['local', remote]) {
+        for (const [key] of keys) {
+          await pressControlAlt(window, key);
+          await new Promise(resolve => setTimeout(resolve, 3_000));
+          toasts.push(await notifications(window));
+        }
       }
       await inWindow('local', 'workbench.view.remote');
       deepStrictEqual(
-        [stateOf(), await pathsOf(HOST_B), toasts],
-        [before, historyBefore, [[], [], [], []]],
+        [stateOf(), await historyOf(), toasts],
+        [before, historyBefore, Array.from({length: 8}, () => [])],
       );
     } finally {
       restore();
+      await closeIfOpen(remote);
     }
   });
 
@@ -626,7 +649,7 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     try {
       await userSettings({'remote.SSH.configFile': copy});
       await visit(HOST_B, 'c102-ty0');
-      const historyBefore = await pathsOf(HOST_B);
+      const historyBefore = await historyOf();
       await onHost('mkdir', '-p', folder);
       await inWindow(
         'local',
@@ -655,9 +678,17 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
           hosts
             .filter(entry => entry.description === 'connected')
             .map(entry => entry.label),
-          await pathsOf(HOST_B),
+          await historyOf(),
         ],
-        [false, [], historyBefore],
+        [
+          false,
+          [],
+          // The typed target has a history of its own, under the key as typed (F-2503 BR-4); nothing else moves.
+          {
+            ...historyBefore,
+            'harness@127.0.0.9': [{path: folder, kind: 'folder'}],
+          },
+        ],
       );
     } finally {
       await closeIfOpen('c102-typed');
