@@ -6,7 +6,7 @@
 
 import type {Failed, FailurePresenter} from 'lib-authority';
 import type {Logger} from 'lib-log';
-import type {DevContainerFolder} from '../authority/payload.ts';
+import type {DevContainerFolder, SerializedUri} from '../authority/payload.ts';
 import type {FailedContainer} from '../connect/failures.ts';
 import type {Translate} from './engine-dialogs.ts';
 import {failureDialogOf, quickPickOf} from './failure-dialog.ts';
@@ -55,6 +55,8 @@ export interface RecoveryPorts {
     placeholder: string,
     labels: readonly string[],
   ): PromiseLike<string | undefined>;
+  /** Whether the file at `file` exists, asked of the editor's file system for the URI's own scheme. */
+  fileExists(file: SerializedUri): PromiseLike<boolean>;
   /** Writes the failed attempt's log to a file and gives its path; none when it could not be written. */
   writeAttemptLog(): PromiseLike<string | undefined>;
   /** Keeps the configuration file, and the attempt's log file when there is one, for the window that opens `folder` next. */
@@ -126,7 +128,8 @@ export function recoveryPresenterOf(
     const folder = target();
     const pick = quickPickOf(
       folder,
-      failedContainer() !== undefined,
+      failedContainer() !== undefined &&
+        (folder === undefined || (await ports.fileExists(folder.configFile))),
       translate,
     );
     const chosen = await ports.pick(

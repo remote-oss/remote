@@ -35,6 +35,7 @@ export function recoveryPortsOf<Address>(
     RecoveryPorts,
     | 'keepEdit'
     | 'writeAttemptLog'
+    | 'fileExists'
     | 'storePausedRetry'
     | 'rebuildContainer'
     | 'logger'

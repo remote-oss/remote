@@ -390,4 +390,24 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
       await removeContainers(folder);
     }
   });
+
+  it('F-0410 AC-27 (c77-deleted-more): after the configuration is deleted and the window reloads, More Actions... lists no Rebuild Container although the container exists', async () => {
+    const {folder, name} = await deletedConfiguration('c77-deleted-more');
+    try {
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      deepStrictEqual(
+        {
+          rebuildListed: (await quickPickRows(name)).some(
+            entry => entry.label === 'Rebuild Container',
+          ),
+          containers: (await devContainersOf(folder)).length,
+        },
+        {rebuildListed: false, containers: 1},
+      );
+    } finally {
+      await closeWindow(name);
+      await removeContainers(folder);
+    }
+  });
 });
