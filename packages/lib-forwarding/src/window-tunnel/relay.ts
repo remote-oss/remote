@@ -38,7 +38,7 @@ export type WindowTunnelOutcome =
     }
   | {kind: 'tunnelNotReady'}
   /** Twenty probes in a row were closed by the relay with no reply, or found nothing at its port: the forward the relay needs is refused or missing. */
-  | {kind: 'relayRefused'}
+  | {kind: 'relayRefused'; cause: 'closedBeforeReply' | 'unreachable'}
   /** The port accepted a connection and closed it at once: the host refuses the forward the session set up. */
   | {kind: 'forwardRefused'}
   | {kind: 'listenFailed'; detail: string};
@@ -190,7 +190,10 @@ export async function openRelayTunnel(
     closeConnections();
   }
   let waitingTold = false;
-  const failures = {closedInARow: 0};
+  const failures = {
+    closedInARow: 0,
+    cause: 'closedBeforeReply' as 'closedBeforeReply' | 'unreachable',
+  };
   const refusal = new AbortController();
   const ready = await succeedsWithin(
     async () => {
@@ -202,6 +205,10 @@ export async function openRelayTunnel(
           caught instanceof RelayUnreachable
         ) {
           failures.closedInARow += 1;
+          failures.cause =
+            caught instanceof RelayUnreachable
+              ? 'unreachable'
+              : 'closedBeforeReply';
           if (failures.closedInARow >= REFUSAL_PROBES) {
             refusal.abort();
           }
@@ -225,7 +232,7 @@ export async function openRelayTunnel(
   if (!ready) {
     close();
     return failures.closedInARow >= REFUSAL_PROBES
-      ? {kind: 'relayRefused'}
+      ? {kind: 'relayRefused', cause: failures.cause}
       : {kind: 'tunnelNotReady'};
   }
   return {

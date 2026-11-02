@@ -11,6 +11,7 @@ import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {openTunnelStep} from '../../src/pipeline/tunnel-step.ts';
+import type {ConnectionLease} from '../../src/pipeline/steps.ts';
 import {emptyRecording, INPUT, leaseOf, STARTED} from './pipeline.fixture.ts';
 
 const SOCKS_SETTINGS: TunnelSettings = {
@@ -56,6 +57,8 @@ function stepWith(
     onWaiting?: () => void;
     cancellation?: AbortSignal;
     limits?: typeof LIMITS;
+    /** What the host's check says of the server's port: listening, not, or no answer. */
+    listening?: 'yes' | 'no' | 'none';
     onSettingUp?: () => void;
   } = {},
 ): {
@@ -68,6 +71,8 @@ function stepWith(
   /** How often the step told the window that the host refuses the forwarding, and took the bound off. */
   refused: number[];
   disarmed: number[];
+  /** Tells the step that the connection's ssh ended. */
+  loseConnection: () => void;
 } {
   const clock = new FakeClock();
   const local = new FakeLocalPort();
@@ -100,7 +105,25 @@ function stepWith(
     ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
-  const lease = leaseOf(emptyRecording());
+  const recording = emptyRecording();
+  const lease = {
+    ...leaseOf(recording),
+    channel: {
+      runScript: (
+        request: {script: string},
+        onLine: (line: string) => void,
+      ) => {
+        if (options.listening === 'none') {
+          return Promise.resolve({
+            kind: 'failed' as const,
+            failure: {kind: 'spawnFailed' as const, detail: 'no shell'},
+          });
+        }
+        onLine(`remote-oss-listening=${options.listening ?? 'yes'}`);
+        return Promise.resolve({kind: 'exited' as const, status: 0});
+      },
+    } as unknown as ConnectionLease['channel'],
+  };
   return {
     open: () =>
       step.openTunnel(
@@ -121,6 +144,9 @@ function stepWith(
     clock,
     refused,
     disarmed,
+    loseConnection: () => {
+      recording.notice?.({type: 'transportLost'});
+    },
   };
 }
 
@@ -152,6 +178,91 @@ describe('the step that opens the window tunnel', () => {
       [before, result],
       [[1, 1, undefined], {kind: 'failed', failure: {kind: 'cancelled'}}],
     );
+  });
+
+  /** The kind of the step's result, and how often it told the window, for a run that `dialScript` and `listening` steer. */
+  async function refusalRun(
+    options: Parameters<typeof stepWith>[0],
+    beforeBound?: (context: ReturnType<typeof stepWith>) => Promise<void>,
+  ) {
+    const controller = new AbortController();
+    const context = stepWith({
+      cancellation: controller.signal,
+      limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
+      ...options,
+    });
+    let result: Awaited<ReturnType<typeof context.open>> | undefined;
+    const pending = context.open().then(value => {
+      result = value;
+    });
+    await Promise.resolve();
+    await beforeBound?.(context);
+    await pastTheBound(context.clock);
+    const state = {
+      ended: result?.kind,
+      refused: context.refused.length,
+      lines: context.sink.lines.map(line => line.message),
+    };
+    controller.abort();
+    await pending;
+    return state;
+  }
+
+  it('connect-106: closed probes with the server listening on the host are a refused forward, and the log names the fact', async () => {
+    const outcome = await refusalRun({dialScript: ['closedBeforeReply']});
+    deepStrictEqual(
+      [
+        outcome.ended,
+        outcome.refused,
+        outcome.lines.some(line =>
+          line.includes('listens on the host: the forward is refused'),
+        ),
+      ],
+      [undefined, 1, true],
+    );
+  });
+
+  it('connect-106: closed probes with the server gone from the host are today’s outcome: not ready, with no notice', async () => {
+    const outcome = await refusalRun({
+      dialScript: ['closedBeforeReply'],
+      listening: 'no',
+    });
+    deepStrictEqual(
+      [
+        outcome.ended,
+        outcome.refused,
+        outcome.lines.some(line => line.includes('the server is gone')),
+      ],
+      ['failed', 0, true],
+    );
+  });
+
+  it('connect-106: closed probes and a host check that gave no answer are today’s outcome too', async () => {
+    const outcome = await refusalRun({
+      dialScript: ['closedBeforeReply'],
+      listening: 'none',
+    });
+    deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
+  });
+
+  it('connect-106: an unreachable relay with the connection’s ssh alive is a refused forward', async () => {
+    const outcome = await refusalRun({dialScript: ['unreachable']});
+    deepStrictEqual(
+      [
+        outcome.ended,
+        outcome.refused,
+        outcome.lines.some(line => line.includes('ssh is still alive')),
+      ],
+      [undefined, 1, true],
+    );
+  });
+
+  it('connect-106: an unreachable relay after the connection’s ssh ended is not a refused forward', async () => {
+    const outcome = await refusalRun({dialScript: ['unreachable']}, context => {
+      context.loseConnection();
+      return Promise.resolve();
+    });
+    deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
   });
 
   it('connect-106: probes that fail in another way are the failure of an unready tunnel, with no notice and the bound kept', async () => {

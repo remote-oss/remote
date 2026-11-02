@@ -16,6 +16,7 @@ import {
   type TunnelSettings,
   type WaitLimits,
 } from 'lib-forwarding';
+import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
@@ -339,6 +340,65 @@ async function openTerminalTunnel(
   };
 }
 
+/**
+ * The script that tells whether the server's port is in the listening state on the host, from the kernel's own tables:
+ * it prints one line, with a marker that no `ssh` output carries.
+ */
+const LISTEN_SCRIPT = [
+  'hex=$(printf "%04X" "$SERVER_PORT")',
+  'if grep -qiE "^ *[0-9]+: [0-9A-F]+:$hex [0-9A-F]+:[0-9A-F]+ 0A " /proc/net/tcp /proc/net/tcp6 2>/dev/null; then',
+  '  echo remote-oss-listening=yes',
+  'else',
+  '  echo remote-oss-listening=no',
+  'fi',
+  '',
+].join('\n');
+
+/** Whether the host says that `port` listens; undefined when the check could not be run. */
+async function serverListens(
+  channel: HostChannel,
+  port: number,
+  cancellation: AbortSignal,
+): Promise<boolean | undefined> {
+  const lines: string[] = [];
+  const outcome = await channel.runScript(
+    {
+      script: LISTEN_SCRIPT,
+      interpreter: 'posixShell',
+      environment: {SERVER_PORT: String(port)},
+      input: {kind: 'text', text: ''},
+      cancellation,
+    },
+    line => {
+      lines.push(line);
+    },
+  );
+  if (outcome.kind === 'failed' || outcome.status !== 0) {
+    return undefined;
+  }
+  const answer = lines.find(line => line.startsWith('remote-oss-listening='));
+  return answer === undefined ? undefined : answer.endsWith('yes');
+}
+
+/** The log line of the check that ended a refused-looking run, naming the fact that decided it. */
+function refusalLine(
+  cause: 'closedBeforeReply' | 'unreachable',
+  fact: boolean | undefined,
+  port: number,
+): string {
+  if (cause === 'closedBeforeReply') {
+    if (fact === true) {
+      return `the relay closed every connection and the server's port ${String(port)} listens on the host: the forward is refused`;
+    }
+    return fact === false
+      ? `the relay closed every connection and the server's port ${String(port)} does not listen on the host: the server is gone`
+      : `the relay closed every connection and the check of the server's port ${String(port)} gave no answer: the forward is not taken as refused`;
+  }
+  return fact === true
+    ? "the relay cannot be reached and the connection's ssh is still alive: the forward is missing"
+    : "the relay cannot be reached and the connection's ssh has ended: not a refused forward";
+}
+
 /** The failure of a connect that was cancelled while the tunnel was being opened. */
 const CANCELLED: TunnelResult = {kind: 'failed', failure: {kind: 'cancelled'}};
 
@@ -371,6 +431,12 @@ export function openTunnelStep(
     onSettingUp?.();
     const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
+    let connectionLost = false;
+    const stopNotices = lease.onNotice(notice => {
+      if (notice.type === 'transportLost' || notice.type === 'helperGone') {
+        connectionLost = true;
+      }
+    });
     const outcome = await openRelayTunnel({
       dialer,
       local: dependencies.local,
@@ -380,10 +446,20 @@ export function openTunnelStep(
       limits: dependencies.limits,
       onWaiting,
     });
+    stopNotices();
     if (outcome.kind === 'relayRefused') {
-      dependencies.logger.warn(
-        'the host refuses the forwarding of the SOCKS relay: every connection through it was closed with no reply',
+      // A close before the reply is also what a dead server port gives, and an unreachable relay what a dead ssh
+      // gives: one check at the end of the run tells which, and the log names the fact that decided.
+      const fact =
+        outcome.cause === 'closedBeforeReply'
+          ? await serverListens(lease.channel, portOf(server), cancellation)
+          : !connectionLost;
+      dependencies.logger.info(
+        refusalLine(outcome.cause, fact, portOf(server)),
       );
+      if (fact !== true) {
+        return NOT_OPENED;
+      }
       dependencies.forwardRefused();
       // The connect goes on waiting, with its progress, until the window is closed or reloaded: no dialog, no retry.
       disarmBound?.();

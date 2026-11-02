@@ -16,7 +16,11 @@ import {
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
-import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
+import {
+  closeAllButLocal,
+  DATA_FOLDER,
+  freshHost,
+} from '../windows/maintenance.ts';
 import {notifications, portsRows, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
@@ -131,6 +135,15 @@ async function failing(
   signal(`c79-${name}`);
   await closeWindow(name).catch(() => undefined);
   return failed;
+}
+
+/** Waits until window `name` has a failure dialog in its record. */
+function waitForDialogRecord(name: string): Promise<void> {
+  return waitFor(
+    `a failure dialog of window ${name}`,
+    () => recordLines('failureDialog', name).length > 0,
+    120_000,
+  );
 }
 
 describe('the tunnel of a window that its host or its configuration refuses (card coverage-79)', function () {
@@ -265,6 +278,56 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         toast: [expected.toast[0]?.replace('ALIAS', 'fwd-clearall')],
       },
     ]);
+  });
+
+  it('connect-106 (c79-socks-dead-server): F-2104 7.E4, a host that refuses forwarding whose server is gone while the tunnel waits ends with the failure dialog at the bound and shows no notice', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      const name = 'c79-socks-dead';
+      appendScript([
+        {
+          surface: 'notice',
+          match: 'Failed to set up',
+          answer: 'dismiss',
+          window: name,
+        },
+        {
+          surface: 'failureDialog',
+          match: FAILURE,
+          answer: 'dismiss',
+          window: name,
+          after: 'c79-socks-dead-end',
+        },
+      ]);
+      await openWindow('noforward', name);
+      await waitFor(
+        'the tunnel to wait for port forwarding',
+        () =>
+          recordLines('progress', name).some(
+            line => line.question === 'Waiting for port forwarding to be ready',
+          ),
+        120_000,
+      );
+      // The servers of the host end while the relay's probes are still closed, which the host's check then sees.
+      const servers = `${DATA_FOLDER.replace('/.', '/[.]')}/bin/`;
+      await onHost('sh', '-c', `pkill -f '${servers}' || true`);
+      await waitForDialogRecord(name);
+      const lines = recordLines(undefined, name);
+      const result = {
+        dialogs: lines
+          .filter(line => line.surface === 'failureDialog')
+          .map(line => line.question),
+        notices: lines.filter(line => line.surface === 'notice').length,
+        indicator: (await statusItem(name, 'status.host')).text,
+      };
+      signal('c79-socks-dead-end');
+      await closeWindow(name).catch(() => undefined);
+      deepStrictEqual(result, {
+        dialogs: ['Could not establish connection to "noforward".'],
+        notices: 0,
+        indicator: 'Disconnected from SSH: noforward',
+      });
+    });
   });
 
   it('F-2104 AC-24 (c79-max-wait-close): Close Remote on the dialog of the exhausted wait makes the window an empty local window', async () => {

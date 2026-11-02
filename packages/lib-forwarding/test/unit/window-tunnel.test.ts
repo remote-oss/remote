@@ -92,8 +92,8 @@ describe('the window tunnel through the relay', () => {
       await advanced(clock, 500);
     }
     deepStrictEqual(
-      [(await pending).kind, local.closedPorts],
-      ['relayRefused', [50000]],
+      [await pending, local.closedPorts],
+      [{kind: 'relayRefused', cause: 'closedBeforeReply'}, [50000]],
     );
   });
 
@@ -103,7 +103,10 @@ describe('the window tunnel through the relay', () => {
     for (let round = 0; round < 20; round++) {
       await advanced(clock, 500);
     }
-    deepStrictEqual((await pending).kind, 'relayRefused');
+    deepStrictEqual(await pending, {
+      kind: 'relayRefused',
+      cause: 'unreachable',
+    });
   });
 
   it('connect-106: one probe that fails otherwise among those closed before the reply keeps the outcome not ready', async () => {
