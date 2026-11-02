@@ -3,6 +3,7 @@
  * launch configuration, each writing what it saw of the display to a file on the host, which the row then reads.
  */
 
+import {spawn} from 'node:child_process';
 import {
   activeEditorTextOf,
   closeWindow,
@@ -12,6 +13,7 @@ import {
   openWindow,
   runShellTask,
   userSettings,
+  variable,
   waitFor,
 } from './harness.ts';
 import {freshHost} from './maintenance.ts';
@@ -61,15 +63,18 @@ async function writtenAt(file: string): Promise<string> {
   return onHostAs('harness', 'cat', file);
 }
 
-/** Runs `command` in a new terminal of window `name` and gives what it printed. */
+/** Runs `command` in the terminal that is active in window `name`, a new one unless `existing`, and gives what it printed. */
 export async function inTerminal(
   name: string,
   command: string,
+  existing = false,
 ): Promise<string> {
   const file = `${folderOn(name)}/terminal-${String(Date.now())}.txt`;
   await onHostAs('harness', 'mkdir', '-p', folderOn(name));
-  await inWindow(name, 'workbench.action.terminal.new');
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  if (!existing) {
+    await inWindow(name, 'workbench.action.terminal.new');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
   await inWindow(name, 'workbench.action.terminal.sendSequence', {
     text: `{ ${command}; } > ${file} 2>&1; touch ${file}.done\n`,
   });
@@ -161,4 +166,18 @@ export async function contributionsNow(name: string): Promise<string> {
     30_000,
   );
   return text;
+}
+
+/** An `ssh` session of the run into the host that forwards X11 and holds its display until `end` is called. */
+export function heldDisplay(): {end: () => void} {
+  const holder = spawn(
+    'ssh',
+    ['-F', variable('HARNESS_SSH_CONFIG'), 'x11fwd', 'sleep 600'],
+    {stdio: 'ignore'},
+  );
+  return {
+    end: () => {
+      holder.kill();
+    },
+  };
 }

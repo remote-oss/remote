@@ -1,6 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  appendScript,
   connectedWithin,
+  openWindow,
+  onHostAs,
+  readUserSettings,
   inWindow,
   nextEmptyWindow,
   recordLines,
@@ -11,12 +15,13 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {hostSessionIds} from '../windows/pty-support.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
-import {keepingSettings} from '../windows/tunnel-support.ts';
+import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
+import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 import {
   contributionsNow,
   DISPLAY_PROBE,
   environmentContributions,
+  heldDisplay,
   inDebugger,
   inTask,
   inTerminal,
@@ -289,6 +294,136 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
         ['DISPLAY=[]', [], 0, 0],
       );
       await x11Close('c84-forbidden');
+    });
+  });
+
+  it('F-2312 AC-22 (c84-writes): connecting with X11 forwarding writes no setting and leaves no file on the host beyond .Xauthority', async () => {
+    await keepingSettings(async () => {
+      async function filesAfter(alias: string): Promise<string[]> {
+        await x11Window('c84-writes', alias);
+        const listed = await onHostAs(
+          'harness',
+          'sh',
+          '-c',
+          "find /home/harness -type f -not -path '*/.vscodium-server*' -not -path '*/.local/state/*' -not -path '*/c84-writes/*' | sort",
+        );
+        await x11Close('c84-writes');
+        return listed.split('\n').filter(line => line !== '');
+      }
+      const without = await filesAfter('harness');
+      const settingsBefore = readUserSettings();
+      const withX11 = await filesAfter('x11fwd');
+      deepStrictEqual(
+        [
+          withX11.filter(file => !without.includes(file)),
+          readUserSettings() === settingsBefore,
+        ],
+        [['/home/harness/.Xauthority'], true],
+      );
+    });
+  });
+
+  it('F-2312 AC-27 (c84-new-connection): with the setting turned off, a new connection after Kill Local Connection Server contributes no DISPLAY', async () => {
+    await keepingSettings(async () => {
+      await x11Window('c84-new-connection', 'x11fwd');
+      await inTerminal('c84-new-connection', 'true');
+      await userSettings({'remote.SSH.enableX11Forwarding': false});
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      appendScript([
+        {
+          surface: 'hostPick',
+          match: '',
+          answer: {label: 'x11fwd'},
+          window: 'c84-new-connection',
+        },
+      ]);
+      await inWindow('c84-new-connection', 'opensshremotes.cleanLocalServer');
+      await waitFor(
+        'the sessions to end',
+        async () => (await hostSessionIds()).length === 0,
+        60_000,
+      );
+      await waitFor(
+        'the reconnection',
+        async () => (await hostSessionIds()).length > 0,
+        120_000,
+      );
+      await connectedWithin('c84-new-connection', 120_000);
+      await inTerminal('c84-new-connection', 'true');
+      deepStrictEqual(
+        ownContributions(await contributionsNow('c84-new-connection')),
+        [],
+      );
+      await x11Close('c84-new-connection');
+    });
+  });
+
+  it('F-2312 AC-29, AC-30 (c84-new-display): after Kill Local Connection Server the window reconnects with another display; a new terminal and a shell task get it, an old terminal keeps its display until it is relaunched', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      await freshHost();
+      const holder = heldDisplay();
+      try {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        await openWindow('x11fwd', 'c84-new-display');
+        await connectedWithin('c84-new-display', 90_000);
+        const oldTerminal = await inTerminal(
+          'c84-new-display',
+          'echo "$DISPLAY"',
+        );
+        holder.end();
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        appendScript([
+          {
+            surface: 'hostPick',
+            match: '',
+            answer: {label: 'x11fwd'},
+            window: 'c84-new-display',
+          },
+        ]);
+        await inWindow('c84-new-display', 'opensshremotes.cleanLocalServer');
+        await waitFor(
+          'the sessions to end',
+          async () => (await hostSessionIds()).length === 0,
+          60_000,
+        );
+        await waitFor(
+          'the contribution to name another display',
+          async () =>
+            ownContributions(await contributionsNow('c84-new-display')).some(
+              entry => !entry.includes(oldTerminal.trim()),
+            ),
+          120_000,
+        );
+        const stillOld = await inTerminal(
+          'c84-new-display',
+          'echo "$DISPLAY"',
+          true,
+        );
+        await inWindow('c84-new-display', 'workbench.action.terminal.relaunch');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const relaunched = await inTerminal(
+          'c84-new-display',
+          'echo "$DISPLAY"',
+          true,
+        );
+        const fresh = await inTerminal('c84-new-display', DISPLAY_PROBE);
+        const task = await inTask('c84-new-display', DISPLAY_PROBE);
+        deepStrictEqual(
+          [
+            stillOld.trim() === oldTerminal.trim(),
+            relaunched.trim() !== oldTerminal.trim(),
+            fresh.split('\n')[0] === `DISPLAY=${relaunched.trim()}`,
+            CONNECTED.test(fresh),
+            task.split('\n')[0] === `DISPLAY=${relaunched.trim()}`,
+            CONNECTED.test(task),
+          ],
+          [true, true, true, true, true, true],
+        );
+      } finally {
+        holder.end();
+        await x11Close('c84-new-display');
+      }
     });
   });
 });
