@@ -2679,6 +2679,34 @@ describe('acceptance', () => {
       );
     });
 
+    it("coverage-87: a launch's host setup has the run's download port put in", async () => {
+      const seen: string[] = [];
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [
+          {
+            ...PORTS,
+            hostSetup: [{command: 'nc -lk -p ${HARNESS_DOWNLOADS_PORT}'}],
+          },
+        ],
+        (program, programArguments) => {
+          seen.push([program, ...programArguments].join(' '));
+          return {status: 0, stdout: '', stderr: ''};
+        },
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {HARNESS_DOWNLOADS_PORT: '8080'},
+      );
+      deepStrictEqual(
+        seen.filter(call => call.startsWith('docker')),
+        ['docker exec --user root c0ffee sh -c nc -lk -p 8080'],
+      );
+    });
+
     const DEBIAN_PORTS: Launch = {
       ...PORTS,
       label: 'ports-debian',
