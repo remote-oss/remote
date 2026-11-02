@@ -143,6 +143,7 @@ function labelsFromExplorer(): string[] {
     'explorer-trust',
     'explorer-home',
     'explorer-rows',
+    'explorer-folders',
     'explorer-no-proposals',
     'add-host',
     'explorer-standdown',
@@ -260,7 +261,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the eight explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -395,6 +396,7 @@ describe('the launches of the VSCodium run', () => {
         ['explorer-trust', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-home', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-rows', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-folders', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-no-proposals',
           ['remote-oss.remote-explorer'],
@@ -1104,10 +1106,8 @@ describe('the launches of the VSCodium run', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('explorer'))
-        .map(launch => launch.settings),
-      Array.from({length: 7}, () => ({
-        'window.title': '[${rootName}]${remoteName}',
-      })),
+        .map(launch => launch.settings?.['window.title']),
+      Array.from({length: 8}, () => '[${rootName}]${remoteName}'),
     );
   });
 

@@ -581,6 +581,34 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.openUri',
+      async (address: string) => {
+        await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument(vscode.Uri.parse(address)),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.call',
+      async (commandId: string, ...parameters: unknown[]) => {
+        let value: unknown;
+        let message: string | undefined;
+        try {
+          value = await vscode.commands.executeCommand(
+            commandId,
+            ...parameters,
+          );
+        } catch (error) {
+          message = error instanceof Error ? error.message : String(error);
+        }
+        report(agentFolder, name, {
+          event: 'called',
+          value: value ?? null,
+          ...(message !== undefined && {message}),
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.writeActiveEditor',
       async (text: string) => {
         const editor = vscode.window.activeTextEditor;

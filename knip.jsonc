@@ -59,6 +59,7 @@
         "explorer-home/*.test.ts",
         "add-host/*.test.ts",
         "explorer-rows/*.test.ts",
+        "explorer-folders/*.test.ts",
         "explorer-no-proposals/*.test.ts",
         "explorer-standdown/*.test.ts",
         "trust/*.test.ts",

@@ -173,6 +173,9 @@
       "path": "tests/acceptance/explorer-rows"
     },
     {
+      "path": "tests/acceptance/explorer-folders"
+    },
+    {
       "path": "tests/acceptance/explorer-no-proposals"
     },
     {
