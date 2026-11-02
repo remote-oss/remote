@@ -14,6 +14,7 @@ import {
   nodeTimer,
 } from 'lib-helper';
 import {helperLogLineOf} from '../diagnostics/helper-log.ts';
+import {helperLogFileOf} from '../surfaces/scripted-adapters.ts';
 import {
   nodeLauncherFiles,
   nodeProcessSpawner,
@@ -24,7 +25,7 @@ import {
 const HELLO_LIMIT_MILLISECONDS = 2000;
 
 /** Writes a line to the error stream and, in an acceptance run, to the extension's log file. */
-const logLine = helperLogLineOf(process.env, {
+const logLine = helperLogLineOf(helperLogFileOf(process.env), {
   write: text => {
     process.stderr.write(text);
   },

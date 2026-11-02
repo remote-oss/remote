@@ -25,30 +25,15 @@ describe('the log line of the connection helper (card connect-130b)', () => {
     };
   }
 
-  it('writes to the error stream only, when the harness switch or the file is missing', () => {
-    const environments = [
-      {REMOTE_OSS_ACCEPTANCE_LOG: '/run/log.txt'},
-      {REMOTE_OSS_ACCEPTANCE: '1'},
-      {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_LOG: ''},
-    ];
-    const seen = environments.map(environment => {
-      const host = ports();
-      helperLogLineOf(environment, host)('line');
-      return [host.written, host.appended];
-    });
-    deepStrictEqual(seen, [
-      [['line\n'], []],
-      [['line\n'], []],
-      [['line\n'], []],
-    ]);
+  it('writes to the error stream only, when there is no file', () => {
+    const host = ports();
+    helperLogLineOf(undefined, host)('line');
+    deepStrictEqual([host.written, host.appended], [['line\n'], []]);
   });
 
   it('copies each line to the named file with the helper tag in an acceptance run', () => {
     const seen = ports();
-    const logLine = helperLogLineOf(
-      {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_LOG: '/run/log.txt'},
-      seen,
-    );
+    const logLine = helperLogLineOf('/run/log.txt', seen);
     logLine('first');
     logLine('second');
     deepStrictEqual(
@@ -65,10 +50,20 @@ describe('the log line of the connection helper (card connect-130b)', () => {
 
   it('goes on when the file cannot be written', () => {
     const seen = ports(new Error('ENOSPC'));
-    helperLogLineOf(
-      {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_LOG: '/run/log.txt'},
-      seen,
-    )('line');
+    helperLogLineOf('/run/log.txt', seen)('line');
     deepStrictEqual(seen.written, ['line\n']);
+  });
+
+  it('masks a run of 32 characters before the stream and the file get the line', () => {
+    const seen = ports();
+    const token = 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6';
+    helperLogLineOf('/run/log.txt', seen)(`the secret ${token} is here`);
+    deepStrictEqual(
+      [seen.written, seen.appended],
+      [
+        ['the secret [redacted] is here\n'],
+        [['/run/log.txt', '[helper] the secret [redacted] is here\n']],
+      ],
+    );
   });
 });
