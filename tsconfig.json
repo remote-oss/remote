@@ -257,6 +257,9 @@
       "path": "tests/acceptance/passphrase"
     },
     {
+      "path": "tests/acceptance/passphrase-late"
+    },
+    {
       "path": "tests/acceptance/extensionpack-german"
     },
     {

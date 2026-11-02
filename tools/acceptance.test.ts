@@ -425,6 +425,7 @@ const LAUNCH_ORDER = [
   'terminal-login',
   'passphrase-input',
   'terminal-odd',
+  'passphrase-late',
   'login-shells',
   'preconnect',
   'config-files',

@@ -47,6 +47,9 @@ export const PASSKEY_VARIANTS = [
   'several-files',
   'certonly',
   'certonly-nocert',
+  'certpass',
+  'agent-var-set',
+  'agent-var-unset',
 ] as const;
 
 /** The names of the copies of the passphrase key's alias: `passkey-1` to the last. */
@@ -79,6 +82,8 @@ export interface RunKeys {
   certifiedKey: string;
   /** A key without a passphrase that the host accepts with `no-port-forwarding` on its line. */
   noForwardingKey: string;
+  /** A key protected by the run's passphrase, with a certificate for the same principal at `<file>-cert.pub`. */
+  certifiedPassphraseKey: string;
   /** The `docker run` arguments that give the host the further public keys and the authority. */
   hostArguments: string[];
 }
@@ -180,6 +185,23 @@ export function makeRunKeys(
     CERTIFIED_PRINCIPAL,
     `${certifiedKey}.pub`,
   ]);
+  const certifiedPassphraseKey = path.join(runFolder, 'id_certpass');
+  protectedKey(
+    command,
+    passphraseAskpass,
+    certifiedPassphraseKey,
+    'acceptance-certpass',
+  );
+  checked(command, 'ssh-keygen', [
+    '-q',
+    '-s',
+    authority,
+    '-I',
+    'acceptance-passphrase',
+    '-n',
+    CERTIFIED_PRINCIPAL,
+    `${certifiedPassphraseKey}.pub`,
+  ]);
   return {
     passphraseKey,
     passphraseFile,
@@ -190,6 +212,7 @@ export function makeRunKeys(
     looseKey,
     certifiedKey,
     noForwardingKey,
+    certifiedPassphraseKey,
     hostArguments: [
       '--env',
       `AUTHORIZED_KEYS_FURTHER=${[

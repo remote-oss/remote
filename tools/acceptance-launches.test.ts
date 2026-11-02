@@ -260,7 +260,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -283,6 +283,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal-login',
         'passphrase-input',
         'terminal-odd',
+        'passphrase-late',
         'login-shells',
         'preconnect',
         'config-files',
@@ -373,6 +374,7 @@ describe('the launches of the VSCodium run', () => {
         ['terminal-login', undefined, true, undefined],
         ['passphrase-input', undefined, true, undefined],
         ['terminal-odd', undefined, true, undefined],
+        ['passphrase-late', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
@@ -1055,6 +1057,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal-login',
         'passphrase-input',
         'terminal-odd',
+        'passphrase-late',
         'default-ports',
         'ssh-core',
         ...labelsFromExplorer(),

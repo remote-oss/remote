@@ -586,11 +586,11 @@ F-2307.AC-9	acceptance
 F-2307.AC-10	acceptance	
 F-2307.AC-11	acceptance	
 F-2307.AC-12	acceptance	
-F-2307.AC-13	todo	
+F-2307.AC-13	core	core: the "Cannot reconnect" dialog of a rejected resolve on reconnection
 F-2307.AC-14	acceptance	
 F-2307.AC-15	acceptance	
 F-2307.AC-16	acceptance	
-F-2307.AC-17	todo	
+F-2307.AC-17	acceptance	
 F-2307.AC-18	acceptance	
 F-2307.AC-19	acceptance	
 F-2307.AC-20	acceptance	
@@ -599,11 +599,11 @@ F-2307.AC-22	acceptance
 F-2307.AC-23	acceptance	
 F-2307.AC-24	acceptance	
 F-2307.AC-25	acceptance	
-F-2307.AC-26	todo	
+F-2307.AC-26	core	core: the "Cannot reconnect" dialog's Reload Window and Cancel buttons
 F-2307.AC-27	acceptance	
-F-2307.AC-28	todo	
-F-2307.AC-29	todo	
-F-2307.AC-30	todo	
+F-2307.AC-28	acceptance	
+F-2307.AC-29	acceptance	
+F-2307.AC-30	acceptance	
 F-2307.AC-31	acceptance	
 F-2307.AC-32	acceptance	
 F-2307.AC-33	acceptance	
