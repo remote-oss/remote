@@ -1,5 +1,10 @@
 import {deepStrictEqual, throws} from 'node:assert';
-import {execFile, spawn, spawnSync} from 'node:child_process';
+import {
+  type ChildProcess,
+  execFile,
+  spawn,
+  spawnSync,
+} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createServer, type Server} from 'node:http';
 import {
@@ -9,8 +14,11 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  copyFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -407,6 +415,26 @@ function lockFile(host: PowershellHost, parameters: ScriptParameters): string {
   );
 }
 
+/** A pwsh process that holds the lock file with no sharing, as another install would, once it says so. */
+async function holdingLock(lock: string): Promise<ChildProcess> {
+  const holder = spawn(
+    'pwsh',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `$held = [System.IO.File]::Open('${lock}', 'OpenOrCreate', 'ReadWrite', 'None'); 'held'; Start-Sleep 30`,
+    ],
+    {env: {...process.env, POWERSHELL_TELEMETRY_OPTOUT: '1'}},
+  );
+  await new Promise<void>(resolve => {
+    holder.stdout.once('data', () => {
+      resolve();
+    });
+  });
+  return holder;
+}
+
 /** Serves `body` at every address with `status`, and gives the server's address once it listens. */
 function serving(
   status: number,
@@ -516,22 +544,8 @@ describe('the PowerShell install, run under pwsh', function () {
     const parameters = installFrom(serverArchive(host, 'bin/launcher'));
     const lock = lockFile(host, parameters);
     mkdirSync(path.dirname(lock), {recursive: true});
-    const holder = spawn(
-      'pwsh',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `$s = [System.IO.File]::Open('${lock}', 'OpenOrCreate', 'ReadWrite', 'None'); 'held'; Start-Sleep 30`,
-      ],
-      {env: {...process.env, POWERSHELL_TELEMETRY_OPTOUT: '1'}},
-    );
+    const holder = await holdingLock(lock);
     try {
-      await new Promise<void>(resolve => {
-        holder.stdout.once('data', () => {
-          resolve();
-        });
-      });
       deepStrictEqual(
         factsOf(await runOnWhileServing(host, single('install'), parameters), [
           'server.lockPath',
@@ -1105,10 +1119,231 @@ describe('the PowerShell extension install, run under pwsh', function () {
   });
 });
 
+/** Whether a process with the id is still running. */
+function isRunning(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Starts a copy of `sleep` from inside `folder`, so its program lies there, and gives its process id. */
+function sleeperIn(folder: string): number {
+  mkdirSync(folder, {recursive: true});
+  const program = path.join(folder, 'sleep');
+  copyFileSync('/bin/sleep', program);
+  chmodSync(program, 0o755);
+  const child = spawn(program, ['30'], {detached: true, stdio: 'ignore'});
+  child.unref();
+  return child.pid ?? 0;
+}
+
+/** Waits until the process ends, for at most two seconds; gives whether it ended. */
+async function endedSoon(processId: number): Promise<boolean> {
+  for (let tries = 0; tries < 20 && isRunning(processId); tries += 1) {
+    await new Promise(resolve => {
+      setTimeout(resolve, 100);
+    });
+  }
+  return !isRunning(processId);
+}
+
+describe('the PowerShell kill and uninstall, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2411: Kill ends a recorded server, and removes its PID file and the installs', async () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    const started = startOn(host, parameters);
+    const serverId = Number(
+      started === 'none' ? 0 : (started.serverFacts.pid ?? 0),
+    );
+    const dataFolder = path.join(host.home, parameters.dataFolderName);
+    const outcome = factsOf(runOn(host, single('kill'), parameters), []);
+    deepStrictEqual(
+      [
+        outcome,
+        await endedSoon(serverId),
+        existsSync(path.join(dataFolder, 'bin')),
+        readdirSync(dataFolder).filter(name => name.endsWith('.pid')),
+      ],
+      [{status: 'Ok'}, true, false, []],
+    );
+  });
+
+  it('F-2411: Kill ends a process that runs from the installs without a PID file', async () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    const sleeper = sleeperIn(
+      path.join(host.home, parameters.dataFolderName, 'bin', 'old', 'bin'),
+    );
+    runOn(host, single('kill'), parameters);
+    deepStrictEqual(await endedSoon(sleeper), true);
+  });
+
+  it('F-2411: Kill leaves a process that runs from elsewhere', async () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    const sleeper = sleeperIn(path.join(host.root, 'elsewhere'));
+    try {
+      runOn(host, single('kill'), parameters);
+      deepStrictEqual(await endedSoon(sleeper), false);
+    } finally {
+      process.kill(sleeper);
+    }
+  });
+
+  it('F-2412: Uninstall ends the servers and removes the data folder', async () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    const dataFolder = path.join(host.home, parameters.dataFolderName);
+    const sleeper = sleeperIn(path.join(dataFolder, 'bin', 'old'));
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('uninstall'), parameters), []),
+        await endedSoon(sleeper),
+        existsSync(dataFolder),
+      ],
+      [{status: 'Ok'}, true, false],
+    );
+  });
+
+  it("F-2407: with an install root, Uninstall also ends the home folder's servers and removes that data folder", async () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      installRoot: path.join(host.root, 'root'),
+    };
+    const homeData = path.join(host.home, parameters.dataFolderName);
+    const sleeper = sleeperIn(path.join(homeData, 'bin', 'old'));
+    runOn(host, single('uninstall'), parameters);
+    deepStrictEqual(
+      [await endedSoon(sleeper), existsSync(homeData)],
+      [true, false],
+    );
+  });
+
+  it('F-2411: no data folder name touches nothing', () => {
+    const host = powershellHost();
+    const parameters = {...parametersFor(), dataFolderName: ''};
+    writeFileSync(path.join(host.home, 'kept'), 'kept');
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('kill'), parameters), []),
+        existsSync(path.join(host.home, 'kept')),
+      ],
+      [{status: 'Ok'}, true],
+    );
+  });
+});
+
+/** Makes the folders under `bin/`, each with the age in seconds it is given, oldest last. */
+function installsAged(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  ages: Readonly<Record<string, number>>,
+): string {
+  const installs = path.join(host.home, parameters.dataFolderName, 'bin');
+  const now = Date.now() / 1000;
+  for (const [name, seconds] of Object.entries(ages)) {
+    mkdirSync(path.join(installs, name), {recursive: true});
+    utimesSync(path.join(installs, name), now - seconds, now - seconds);
+  }
+  return installs;
+}
+
+const COMMIT_A = 'a'.repeat(40);
+const COMMIT_B = 'b'.repeat(40);
+const COMMIT_C = 'c'.repeat(40);
+
+describe('the PowerShell cleanup, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2413: keepNewest keeps the newest installs and the current one', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'keepNewest' as const, count: 2},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 400,
+      [COMMIT_A]: 10,
+      [COMMIT_B]: 20,
+      [COMMIT_C]: 30,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [COMMIT_A, COMMIT_B, parameters.commit].sort(),
+    );
+  });
+
+  it('F-2413: onlyCurrentRemoveLeftovers removes other commits and leftovers, and keeps the rest', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'onlyCurrentRemoveLeftovers' as const},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [COMMIT_A]: 20,
+      [`${COMMIT_B}-1700000000000`]: 30,
+      notes: 40,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      ['notes', parameters.commit].sort(),
+    );
+  });
+
+  it('F-2413: onlyCurrentKeepLeftovers removes only other commits', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [COMMIT_A]: 20,
+      [`${COMMIT_B}-1700000000000`]: 30,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [`${COMMIT_B}-1700000000000`, parameters.commit].sort(),
+    );
+  });
+
+  it('F-2408: an install whose lock another step holds is left', async () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+    };
+    const installs = installsAged(host, parameters, {[COMMIT_A]: 20});
+    const lock = path.join(
+      installs,
+      COMMIT_A,
+      `${parameters.lock.filePrefix}.${COMMIT_A}`,
+    );
+    const holder = await holdingLock(lock);
+    try {
+      await runOnWhileServing(host, single('cleanup'), parameters);
+      deepStrictEqual(existsSync(path.join(installs, COMMIT_A)), true);
+    } finally {
+      holder.kill();
+    }
+  });
+});
+
 describe('the PowerShell bootstrap script, as text', () => {
   it('F-2701: a step it does not have yet still answers with a failure', () => {
     deepStrictEqual(
-      scriptFor(single('kill'), 'powershell', parametersFor()).includes(
+      scriptFor(single('stopCli'), 'powershell', parametersFor()).includes(
         'status=ServerFailedToStart',
       ),
       true,
@@ -1117,8 +1352,8 @@ describe('the PowerShell bootstrap script, as text', () => {
 
   it('F-2701: rendering a step it does not have is a programming error', () => {
     throws(
-      () => powershellScript(single('kill'), parametersFor()),
-      /no kill step/,
+      () => powershellScript(single('stopCli'), parametersFor()),
+      /no stopCli step/,
     );
   });
 

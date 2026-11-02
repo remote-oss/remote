@@ -322,6 +322,66 @@ const SECRET_TOKEN_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * Ends every server of the data folder: each one a PID file records, and every process whose program lies under the
+ * folder's `bin` or `cli/servers`, with its process tree (`taskkill /T` where Windows has it). Only the user's own
+ * processes show a program path, so no other user's process is touched.
+ */
+const STOP_FUNCTIONS: readonly string[] = [
+  'function Stop-ServerTree([int]$ServerId) {',
+  "  if (Test-Program 'taskkill.exe') {",
+  '    & taskkill.exe /PID $ServerId /T /F *> $null',
+  '  } else {',
+  '    Stop-Process -Id $ServerId -Force -ErrorAction SilentlyContinue',
+  '  }',
+  '}',
+  'function Stop-Servers {',
+  "  foreach ($Recorded in @(Get-ChildItem -LiteralPath $DATA_DIR -Filter '.*.pid' -Force -File -ErrorAction SilentlyContinue)) {",
+  '    $ServerProcess = Get-RecordedServer $Recorded.FullName',
+  '    if ($null -ne $ServerProcess) {',
+  '      Stop-ServerTree $ServerProcess.Id',
+  '    }',
+  '  }',
+  '  $Separator = [System.IO.Path]::DirectorySeparatorChar',
+  "  $Prefixes = @(([System.IO.Path]::Combine($DATA_DIR, 'bin') + $Separator), ([System.IO.Path]::Combine($DATA_DIR, 'cli', 'servers') + $Separator))",
+  '  foreach ($Running in @(Get-Process -ErrorAction SilentlyContinue)) {',
+  '    $Program = [string]$Running.Path',
+  "    if ($Running.Id -eq $PID -or $Program -eq '') {",
+  '      continue',
+  '    }',
+  '    foreach ($Prefix in $Prefixes) {',
+  '      if ($Program.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {',
+  '        Stop-ServerTree $Running.Id',
+  '        break',
+  '      }',
+  '    }',
+  '  }',
+  '}',
+];
+
+/** The kind of a folder under `bin/`: a 40-character commit, a `<commit>-<suffix>` leftover, or something else. */
+const FOLDER_KIND_FUNCTIONS: readonly string[] = [
+  'function Get-FolderKind([string]$Name) {',
+  "  if ($Name -cmatch '^[0-9a-f]{40}$') {",
+  "    return 'commit'",
+  '  }',
+  "  if ($Name -cmatch '^[0-9a-f]{40}-') {",
+  "    return 'leftover'",
+  '  }',
+  "  return 'other'",
+  '}',
+  'function Remove-Install([string]$Name) {',
+  '  if ((Enter-Lock $Name) -ne 0) {',
+  '    return',
+  '  }',
+  "  Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, 'bin', $Name)) -Recurse -Force -ErrorAction SilentlyContinue",
+  "  foreach ($Suffix in @('log', 'pid', 'token', 'err.log', 'socket.log', 'socket.pid', 'socket.token')) {",
+  "    Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, '.' + $Name + '.' + $Suffix)) -Force -ErrorAction SilentlyContinue",
+  '  }',
+  '  Exit-Lock',
+  '}',
+];
+
 /** Ends the script with a status after releasing the lock it holds. */
 const LEAVE_FUNCTIONS: readonly string[] = [
   'function Exit-Step([string]$Status) {',
@@ -331,8 +391,9 @@ const LEAVE_FUNCTIONS: readonly string[] = [
 ];
 
 /**
- * The text of each function role in the PowerShell script. BusyBox doesn't exist on Windows, so its role is empty; the
- * other empty roles are filled as their steps are built.
+ * The text of each function role in the PowerShell script. BusyBox doesn't exist on Windows, and the stop's path scan
+ * covers a server tree's processes, so those roles are empty; the other empty roles are filled as their steps are
+ * built.
  */
 export const POWERSHELL_FUNCTIONS: Readonly<
   Record<FunctionRole, readonly string[]>
@@ -347,8 +408,8 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   process: PROCESS_FUNCTIONS,
   secretToken: SECRET_TOKEN_FUNCTIONS,
   serverTree: [],
-  stop: [],
+  stop: STOP_FUNCTIONS,
   cliPort: [],
-  folderKind: [],
+  folderKind: FOLDER_KIND_FUNCTIONS,
   tree: [],
 };
