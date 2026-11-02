@@ -15,6 +15,7 @@ import {
   panelShown,
   answerInputBox,
   quickPickOf,
+  terminalFocused,
   terminalTabsOf,
 } from '../windows/renderer.ts';
 
@@ -101,10 +102,19 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       120_000,
     );
     await reloadWindow(name);
-    const facts = await untilPrompt(name, "harness-pw@127.0.0.1's password:");
+    await untilPrompt(name, "harness-pw@127.0.0.1's password:");
+    const shown = {
+      panel: await panelShown(name),
+      tabs: (await terminalTabsOf(name)).map(label =>
+        // Core adds the terminal's description to the tab's label.
+        label.startsWith('install') ? 'install' : label,
+      ),
+      focused: await terminalFocused(name),
+    };
+    const facts = await terminalFacts(name);
     deepStrictEqual(
-      {terminals: facts?.terminals, active: facts?.active},
-      {terminals: ['install'], active: 'install'},
+      {...shown, active: facts.active},
+      {panel: true, tabs: ['install'], focused: true, active: 'install'},
     );
     await closeWindow(name);
   });
