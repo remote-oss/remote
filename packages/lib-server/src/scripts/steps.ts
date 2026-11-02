@@ -203,6 +203,8 @@ export const STEP_OUTCOMES: Readonly<
       'server.installDir',
       {key: 'server.treeInstalled', only: POSIX_ONLY},
       {key: 'server.installLink', only: POSIX_ONLY},
+      {key: 'server.identityFrom', only: POSIX_ONLY},
+      {key: 'server.identityTo', only: POSIX_ONLY},
       {key: 'host.note', only: POWERSHELL_ONLY},
     ],
   },
@@ -215,7 +217,13 @@ export const STEP_OUTCOMES: Readonly<
     statuses: ['Ok', 'CreateInstallDirFailed'],
     facts: ['server.stagingDir'],
   },
-  unpack: {statuses: ['Ok', 'UnpackFailed'], facts: []},
+  unpack: {
+    statuses: ['Ok', 'UnpackFailed'],
+    facts: [
+      {key: 'server.identityFrom', only: POSIX_ONLY},
+      {key: 'server.identityTo', only: POSIX_ONLY},
+    ],
+  },
   activate: {statuses: ['Ok', 'UnpackFailed'], facts: ['server.installDir']},
   start: {
     statuses: [
