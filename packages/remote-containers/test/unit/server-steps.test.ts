@@ -485,6 +485,20 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
+  it('F-0419: with a gallery and no volume, an extension the gallery offers nothing of reaches the start as its id', async () => {
+    const channel = channelOf();
+    await runSteps(channel, {
+      defaultExtensions: ['acme.tool'],
+      profile: {...PROFILE, gallery: {serviceUrl: 'https://gallery.invalid'}},
+    });
+    deepStrictEqual(
+      (scriptsOf(channel).find(isStart) ?? '').includes(
+        "'--install-extension' 'acme.tool'",
+      ),
+      true,
+    );
+  });
+
   it('F-0505 BR-11: a request with no extensions starts the server with no install', async () => {
     const channel = channelOf();
     await runSteps(channel);

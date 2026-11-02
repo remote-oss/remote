@@ -68,17 +68,15 @@ function numbersOf(version: string): [number, number, number] | undefined {
 }
 
 function atLeast(
-  version: readonly number[],
-  floor: readonly number[],
+  version: readonly [number, number, number],
+  floor: readonly [number, number, number],
 ): boolean {
-  for (let index = 0; index < 3; index++) {
-    const part = version[index] ?? 0;
-    const bound = floor[index] ?? 0;
-    if (part !== bound) {
-      return part > bound;
-    }
+  if (version[0] !== floor[0]) {
+    return version[0] > floor[0];
   }
-  return true;
+  return version[1] !== floor[1]
+    ? version[1] > floor[1]
+    : version[2] >= floor[2];
 }
 
 /**
@@ -123,13 +121,15 @@ function propertyOf(
 /**
  * The newest version of the gallery's answer for `extensionId` that the container can install: for its target or universal,
  * not a pre-release, with an engine the product's version meets, and with a package to download. A version or target
- * that isn't a plain version or platform name is passed over, so the file name stays inside its folder. None otherwise.
+ * that isn't a plain version or platform name is passed over, so the file name stays inside its folder. A `pinned`
+ * version is the only one taken. None otherwise.
  */
 export function pickOf(
   answer: unknown,
   extensionId: string,
   target: string,
   productVersion: string,
+  pinned?: string,
 ): GalleryPick | undefined {
   const extension = recordOf(
     listOf(recordOf(listOf(recordOf(answer)?.results)[0])?.extensions)[0],
@@ -148,6 +148,7 @@ export function pickOf(
       version === undefined ||
       typeof versionText !== 'string' ||
       !VERSION.test(versionText) ||
+      (pinned !== undefined && versionText !== pinned) ||
       !TARGET.test(versionTarget) ||
       typeof packageAddress !== 'string' ||
       (versionTarget !== target && versionTarget !== UNIVERSAL) ||
@@ -367,7 +368,13 @@ async function cachedPackage(
     }
     return shared === undefined
       ? await keptOnClient(ports, request, partFile, clientFile, ownFile)
-      : await publishedShared(ports, request, pick, partFile, ownFile, token);
+      : await publishedShared(ports, request, {
+          sharedFolder: shared,
+          pick,
+          partFile,
+          ownFile,
+          token,
+        });
   } finally {
     await files.remove(checksumFile);
     await files.remove(partFile);
@@ -411,14 +418,17 @@ async function keptOnClient(
 async function publishedShared(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
-  pick: GalleryPick,
-  partFile: string,
-  ownFile: string,
-  token: string,
+  place: {
+    sharedFolder: string;
+    pick: GalleryPick;
+    partFile: string;
+    ownFile: string;
+    token: string;
+  },
 ): Promise<string | undefined> {
-  const sharedPart = `${request.sharedFolder ?? ''}/.${pick.fileName}.${token}.part`;
+  const sharedPart = `${place.sharedFolder}/.${place.pick.fileName}.${place.token}.part`;
   const copied = await ports.channel.copyToHost({
-    localFile: partFile,
+    localFile: place.partFile,
     remotePath: sharedPart,
     cancellation: request.cancellation,
   });
@@ -427,10 +437,10 @@ async function publishedShared(
   }
   return (await containerSide(ports, request, {
     CACHE_ACTION: 'publish',
-    FILE_NAME: pick.fileName,
+    FILE_NAME: place.pick.fileName,
     PART_FILE: sharedPart,
   }))
-    ? ownFile
+    ? place.ownFile
     : undefined;
 }
 
@@ -443,12 +453,18 @@ export async function cacheExtensions(
   request: ExtensionCacheRequest,
 ): Promise<string[]> {
   const installs: string[] = [];
-  for (const extensionId of request.extensions) {
-    if (!EXTENSION_ID.test(extensionId)) {
+  for (const entry of request.extensions) {
+    const parts = entry.split('@');
+    const [extensionId = '', pinned] = parts;
+    if (
+      parts.length > 2 ||
+      !EXTENSION_ID.test(extensionId) ||
+      (pinned !== undefined && !VERSION.test(pinned))
+    ) {
       ports.logger.info(
-        `${extensionId} isn't a plain gallery id; the server installs it`,
+        `${entry} isn't a plain gallery id or pinned version; the server installs it`,
       );
-      installs.push(extensionId);
+      installs.push(entry);
       continue;
     }
     const answer = await ports.queryGallery(
@@ -464,15 +480,16 @@ export async function cacheExtensions(
       extensionId,
       request.target,
       request.productVersion,
+      pinned,
     );
     if (pick === undefined) {
       ports.logger.info(
-        `the gallery offers no version of ${extensionId} for ${request.target}; the server installs it`,
+        `the gallery offers no version of ${entry} for ${request.target}; the server installs it`,
       );
-      installs.push(extensionId);
+      installs.push(entry);
       continue;
     }
-    installs.push((await cachedPackage(ports, request, pick)) ?? extensionId);
+    installs.push((await cachedPackage(ports, request, pick)) ?? entry);
   }
   return installs;
 }

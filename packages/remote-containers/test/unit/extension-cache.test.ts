@@ -90,11 +90,28 @@ describe('the extensions cache', () => {
           engineAccepts('^1.200.0', '1.140.0'),
           engineAccepts('^2.0.0', '1.140.0'),
           engineAccepts('>=1.140.0', '1.140.06829'),
+          engineAccepts('>=1.140.0', '1.140.0'),
+          engineAccepts('^1.140.5', '1.140.0'),
+          engineAccepts('>=2.0.0', '1.140.0'),
+          engineAccepts('>=0.9.0', '1.140.0'),
           engineAccepts('1.141.0', '1.140.0'),
           engineAccepts('latest', '1.140.0'),
           engineAccepts('^1.95.0', 'insider'),
         ],
-        [true, true, false, false, true, false, false, false],
+        [
+          true,
+          true,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+        ],
       );
     });
 
@@ -144,6 +161,51 @@ describe('the extensions cache', () => {
             versionEntry('1.1.0', '../linux-x64'),
             versionEntry('1.0.0', 'universal'),
           ),
+          'acme.tool',
+          'linux-x64',
+          '1.140.0',
+        )?.fileName,
+        'acme.tool-1.0.0.vsix',
+      );
+    });
+
+    it('F-0505 AC-2: a pinned version is the only one taken', () => {
+      deepStrictEqual(
+        [
+          pickOf(
+            answerOf(
+              versionEntry('1.3.0', 'universal'),
+              versionEntry('1.2.0', 'universal'),
+            ),
+            'acme.tool',
+            'linux-x64',
+            '1.140.0',
+            '1.2.0',
+          )?.fileName,
+          pickOf(
+            answerOf(versionEntry('1.3.0', 'universal')),
+            'acme.tool',
+            'linux-x64',
+            '1.140.0',
+            '1.2.0',
+          ),
+        ],
+        ['acme.tool-1.2.0.vsix', undefined],
+      );
+    });
+
+    it('F-0419: a version that names no target is universal', () => {
+      deepStrictEqual(
+        pickOf(
+          answerOf({
+            version: '1.0.0',
+            files: [
+              {
+                assetType: 'Microsoft.VisualStudio.Services.VSIXPackage',
+                source: PACKAGE,
+              },
+            ],
+          }),
           'acme.tool',
           'linux-x64',
           '1.140.0',
@@ -251,6 +313,10 @@ describe('the extensions cache', () => {
           download: {
             download: (request: DownloadRequest) => {
               downloads.push(request.address);
+              request.onPercent(100);
+              if (request.authorizationFor(request.address) !== undefined) {
+                return Promise.resolve({kind: 'failed', detail: 'authorized'});
+              }
               if (request.address.endsWith('.sha256')) {
                 if (checksum === 404) {
                   return Promise.resolve({
@@ -343,6 +409,18 @@ describe('the extensions cache', () => {
       );
     });
 
+    it('F-0505 AC-2: a pinned version is cached as that version', async () => {
+      const {channel} = containerOf();
+      const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      deepStrictEqual(
+        await cacheExtensions(ports, {
+          ...requestOf(true),
+          extensions: ['acme.tool@1.2.0'],
+        }),
+        [ownFile()],
+      );
+    });
+
     it('F-0419 AC-5: a package the shared cache holds is linked and not downloaded again', async () => {
       const {channel} = containerOf();
       const {ports, downloads, sink} = portsOf(
@@ -404,6 +482,73 @@ describe('the extensions cache', () => {
       deepStrictEqual(await cacheExtensions(ports, requestOf(true)), [
         'acme.tool',
       ]);
+    });
+
+    it("F-0419: a checksum that can't be read counts as none", async () => {
+      const {channel} = containerOf();
+      const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      deepStrictEqual(
+        await cacheExtensions(
+          {...ports, readText: () => Promise.resolve(undefined)},
+          requestOf(true),
+        ),
+        ['acme.tool'],
+      );
+    });
+
+    it('F-0419: a package address with no .vsix ending has no checksum beside it', async () => {
+      const {channel} = containerOf();
+      const {ports, downloads} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      const installs = await cacheExtensions(
+        {
+          ...ports,
+          queryGallery: () =>
+            Promise.resolve(
+              answerOf({
+                version: '1.2.0',
+                targetPlatform: 'universal',
+                files: [
+                  {
+                    assetType: 'Microsoft.VisualStudio.Services.VSIXPackage',
+                    source: 'https://gallery.invalid/assets/acme/tool/package',
+                  },
+                ],
+              }),
+            ),
+        },
+        requestOf(true),
+      );
+      deepStrictEqual([installs, downloads], [['acme.tool'], []]);
+    });
+
+    it('F-0419: with no volume a kept package whose copy into the container fails is left to the server', async () => {
+      const {channel} = containerOf(true);
+      const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      const request = requestOf(false);
+      writeFileSync(
+        path.join(request.clientFolder, 'acme.tool-1.2.0.vsix'),
+        PACKAGE_BYTES,
+      );
+      deepStrictEqual(await cacheExtensions(ports, request), ['acme.tool']);
+    });
+
+    it("F-0419: with no volume a package the client can't keep is left to the server", async () => {
+      const {channel} = containerOf();
+      const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      deepStrictEqual(
+        await cacheExtensions(
+          {
+            ...ports,
+            files: {
+              ...ports.files,
+              rename: () =>
+                Promise.resolve({kind: 'failed', detail: 'no room'}),
+            },
+          },
+          requestOf(false),
+        ),
+        ['acme.tool'],
+      );
     });
 
     it("F-0419: a package that can't be downloaded is left to the server", async () => {
@@ -520,17 +665,24 @@ describe('the extensions cache', () => {
             return Promise.resolve(undefined);
           },
         },
-        {...requestOf(true), extensions: ['acme.tool@1.0.0', '../acme.tool']},
+        {
+          ...requestOf(true),
+          extensions: [
+            'acme.tool@prerelease',
+            '../acme.tool',
+            'acme.tool@1.0.0@x',
+          ],
+        },
       );
       deepStrictEqual(
         [
           installs,
           queries,
           sink.lines.filter(({message}) =>
-            message.includes("isn't a plain gallery id"),
+            message.includes("isn't a plain gallery id or pinned version"),
           ).length,
         ],
-        [['acme.tool@1.0.0', '../acme.tool'], 0, 2],
+        [['acme.tool@prerelease', '../acme.tool', 'acme.tool@1.0.0@x'], 0, 3],
       );
     });
 
