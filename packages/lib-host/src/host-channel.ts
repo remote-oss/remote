@@ -55,7 +55,10 @@ export interface CopyRequest {
   localFile: string;
   remotePath: string;
   cancellation: AbortSignal;
-  /** Told when the copy's login shows an input to the user (true) and when that input closes (false). */
+  /**
+   * Told when the copy's login shows an input to the user (true) and when that input closes (false). A copy that
+   * runs as a process of its own, with no askpass program in its environment, can ask nothing and tells nothing.
+   */
   onInput?: (open: boolean) => void;
 }
 
