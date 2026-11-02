@@ -529,7 +529,11 @@ export function connectAssemblyOf(
       const steps = stepsOf(ports, onPhase);
       return {
         ...steps,
-        openConnection: openingAttached(steps.openConnection, watch),
+        openConnection: openingAttached(
+          (input, terms, cancellation) =>
+            steps.openConnection(input, terms, cancellation),
+          watch,
+        ),
       };
     },
     options: {
