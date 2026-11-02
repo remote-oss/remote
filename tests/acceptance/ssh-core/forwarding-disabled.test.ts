@@ -1,6 +1,4 @@
 import {deepStrictEqual} from 'node:assert';
-import {DatabaseSync} from 'node:sqlite';
-import path from 'node:path';
 import {
   appendScript,
   closeWindow,
@@ -12,10 +10,10 @@ import {
   openWindow,
   readUserSettings,
   recordLines,
+  reloadWindow,
   restoreHostNetwork,
   terminalsOf,
   userSettings,
-  variable,
   waitFor,
   windowEvents,
   windowState,
@@ -26,6 +24,7 @@ import {
   outputPanelFocused,
   statusItem,
 } from '../windows/renderer.ts';
+import {hintRecords, type HintRecords} from '../windows/hint-store.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The notice of a refused SOCKS forward. */
@@ -38,41 +37,8 @@ const SETTING_LINE = 'TCP port forwarding appears to be disabled';
 const SETTING_TEXT =
   'ERROR: TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.';
 
-/** The records of the hint store the extension keeps in its global state; none before it writes one. */
-function hintRecords(): Array<{
-  started: string;
-  hints: Array<{
-    kind?: string;
-    status?: string;
-    message?: string;
-    mitigations?: string[];
-    resources?: string[];
-  }>;
-}> {
-  const database = new DatabaseSync(
-    path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
-    {readOnly: true},
-  );
-  try {
-    const entry = database
-      .prepare('SELECT value FROM ItemTable WHERE key = ?')
-      .get('remote-oss.remote-ssh') as {value: string} | undefined;
-    const store =
-      entry === undefined
-        ? undefined
-        : ((JSON.parse(entry.value) as Record<string, unknown>)[
-            'remote.ssh.hints'
-          ] as {records?: ReturnType<typeof hintRecords>} | undefined);
-    return store?.records ?? [];
-  } finally {
-    database.close();
-  }
-}
-
 /** The forwarding hints of the records that started at or after `since` (an ISO time). */
-function forwardingEntries(
-  since: string,
-): ReturnType<typeof hintRecords>[number]['hints'] {
+function forwardingEntries(since: string): HintRecords[number]['hints'] {
   return hintRecords()
     .filter(record => record.started >= since)
     .flatMap(record => record.hints)
@@ -517,7 +483,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           .filter(record => record.started >= since)
           .flatMap(record => record.hints)
           .filter(hint => hint.kind === 'error')
-          .map(hint => hint.status),
+          .map(hint => [hint.status, hint.details]),
       };
     });
   }
@@ -534,7 +500,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           ['Close Remote', 'Retry', 'More Actions...'],
         ],
         true,
-        ['MitmPortForwardingDisabled'],
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
       ],
     );
   });
@@ -551,8 +517,34 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           'Could not establish connection to "changedkey": Port forwarding is disabled.',
           ['Close Remote', 'Retry', 'More Actions...'],
         ],
-        ['MitmPortForwardingDisabled'],
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
       ],
     );
+  });
+
+  it('F-2604 AC-15 (c85-reload): after a reload with the local server running the window waits again and the log does not repeat the setting line', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      const name = 'c85-reload';
+      await opened('noforward', name);
+      await waitFor(
+        'the notice',
+        () => recordLines('notice', name).length > 0,
+        120_000,
+      );
+      const mark = connectionLog().length;
+      await reloadWindow(name);
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      deepStrictEqual(
+        [
+          connectionLog()
+            .slice(mark)
+            .filter(line => line.includes(SETTING_LINE)).length,
+          (await statusItem(name, 'status.host')).text,
+          (await waitingOf(name))[4],
+        ],
+        [0, 'Opening Remote...', true],
+      );
+    });
   });
 });

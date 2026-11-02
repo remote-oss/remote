@@ -761,6 +761,17 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-84: Host x11-forbidden logs in to harness-nox11 with the run key and asks for X11 forwarding', () => {
+    strictEqual(
+      accountBlock('x11-forbidden'),
+      [
+        ...sharedLines('x11-forbidden', 'harness-nox11'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [
@@ -979,6 +990,51 @@ describe('acceptance', () => {
       [
         ...sharedLines('x11fwd', 'harness'),
         ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+        '  ForwardX11Trusted yes',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-untrusted forwards X11 without the trusted request', () => {
+    strictEqual(
+      accountBlock('x11-untrusted'),
+      [
+        ...sharedLines('x11-untrusted', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-timeout is untrusted with a cookie of one minute, and Host x11-noauth names no xauth', () => {
+    strictEqual(
+      [accountBlock('x11-timeout'), accountBlock('x11-noauth')].join('\n---\n'),
+      [
+        [
+          ...sharedLines('x11-timeout', 'harness'),
+          ...KEY_ALIAS_LINES,
+          '  ForwardX11 yes',
+          '  ForwardX11Trusted no',
+          '  ForwardX11Timeout 60s',
+        ].join('\n'),
+        [
+          ...sharedLines('x11-noauth', 'harness'),
+          ...KEY_ALIAS_LINES,
+          '  ForwardX11 yes',
+          '  XAuthLocation /nonexistent/xauth',
+        ].join('\n'),
+      ].join('\n---\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-match gives ForwardX11 only in a Match block for its name', () => {
+    strictEqual(
+      accountBlock('x11-match'),
+      [
+        ...sharedLines('x11-match', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  Match originalhost x11-match',
         '  ForwardX11 yes',
         '  ForwardX11Trusted yes',
       ].join('\n'),

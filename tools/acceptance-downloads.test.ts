@@ -503,6 +503,35 @@ describe('the download host', function () {
     deepStrictEqual([before, dropped, settled], [false, 204, true]);
   });
 
+  it('coverage-87: stall sends the first megabyte and holds the connection open until the hung connections are dropped', async () => {
+    const outcome = await new Promise<{bytes: number; ended: boolean}>(
+      resolve => {
+        let bytes = 0;
+        let ended = false;
+        const outgoing = httpRequest(
+          {host: '127.0.0.1', port: host.httpPort, path: '/stall/x'},
+          response => {
+            response.on('data', (chunk: Buffer) => {
+              bytes += chunk.length;
+            });
+            response.on('close', () => {
+              ended = true;
+            });
+            response.on('error', () => undefined);
+          },
+        );
+        outgoing.on('error', () => undefined);
+        outgoing.end();
+        setTimeout(() => {
+          const result = {bytes, ended};
+          resolve(result);
+        }, 600);
+      },
+    );
+    await get('http', host.httpPort, DROP_HUNG_PATH);
+    deepStrictEqual(outcome, {bytes: 1024 * 1024, ended: false});
+  });
+
   it('tooling-27: the HTTPS port serves the same behaviours', async () => {
     const received = await get('https', host.httpsPort, '/ok/x');
     strictEqual(received.body.equals(archive), true);

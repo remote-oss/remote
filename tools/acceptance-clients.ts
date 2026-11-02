@@ -26,6 +26,8 @@ export interface FakeClient {
   loggedName?: string;
   /** A check deletes the program, so a call after it finds no program. */
   vanishes?: boolean;
+  /** The commands of an `scp` beside the program, which a copy to the host runs; none writes no `scp`. */
+  copyCommands?: string;
 }
 
 const OPENSSH_BANNER = 'OpenSSH_9.6p1, OpenSSL 3.0.13';
@@ -117,6 +119,14 @@ export const FAKE_CLIENTS: readonly FakeClient[] = [
     mode: 0o755,
     vanishes: true,
   },
+  {
+    folder: 'copy-stalls',
+    banner: OPENSSH_BANNER,
+    stream: 'stderr',
+    status: 0,
+    mode: 0o755,
+    copyCommands: 'exec sleep 600',
+  },
 ];
 
 /** The folder the fakes live in. */
@@ -174,6 +184,11 @@ export function writeClients(runFolder: string): void {
     const file = path.join(folder, 'ssh');
     writeFileSync(file, clientScript(client, callsLog));
     chmodSync(file, client.mode);
+    if (client.copyCommands !== undefined) {
+      const copy = path.join(folder, 'scp');
+      writeFileSync(copy, `#!/bin/sh\n${client.copyCommands}\n`);
+      chmodSync(copy, 0o755);
+    }
   }
   writeFileSync(callsLog, '');
 }

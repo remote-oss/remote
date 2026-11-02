@@ -45,7 +45,7 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
     };
   }
 
-  it('coverage-31: the fakes are the twelve of the table, each a file named ssh in a folder of its name', () => {
+  it('coverage-31: the fakes are the thirteen of the table, each a file named ssh in a folder of its name', () => {
     deepStrictEqual(
       FAKE_CLIENTS.map(client => client.folder),
       [
@@ -61,6 +61,7 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
         'notexec',
         'silent',
         'vanishing',
+        'copy-stalls',
       ],
     );
   });
@@ -153,6 +154,18 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
     deepStrictEqual(
       FAKE_CLIENTS.map(client => statSync(fileOf(client.folder)).mode & 0o777),
       FAKE_CLIENTS.map(client => (client.folder === 'notexec' ? 0o644 : 0o755)),
+    );
+  });
+
+  it('coverage-87: only the fake whose copy stalls has an scp beside its ssh, and that scp sleeps', () => {
+    deepStrictEqual(
+      FAKE_CLIENTS.map(client => [
+        client.folder,
+        existsSync(
+          path.join(clientsFolder(workspace.root), client.folder, 'scp'),
+        ),
+      ]).filter(([, present]) => present),
+      [['copy-stalls', true]],
     );
   });
 

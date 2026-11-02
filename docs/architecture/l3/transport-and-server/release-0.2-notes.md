@@ -19,6 +19,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     resolve's start, everywhere (athena's ruling on #1681; spec question on remote-oss/remote-ssh#40). Rows:
     `ruling-1681-first-label`.
 
+- **Remote - SSH's local server download copies the archive without the reference's `.done` marker files**; the install starts only after the copy has completed in the same session.
+  - F-2405 AC-8, AC-16, BR-9 and BR-10 describe a marker file that the reference's copy leaves beside the archive, which
+    its install watches for because the copy and the install are separate steps. Ours copies over the held connection
+    and starts the install only after the copy has reported success, so it needs no completion signal and an archive
+    that is missing after its copy cannot be installed from. BR-9's client side and POST-2, the `vscode_server_<epoch-ms>`
+    folder of the archive and its marker that the reference never removes, are covered by the same ruling: ours keeps
+    no such folder (athena's ruling on #1607; spec question on
+    remote-oss/remote-ssh#50). Rows: `ruling-1607-no-marker`.
+
 - **A question that Remote - SSH does not recognise, left unanswered in a hidden login terminal, ends in the connection failure dialog after the connect wait**; the reference keeps waiting until it is answered.
   - F-2308 AC-12, 7.E3 and BR-5 have the reference keep waiting, so that the dialog appears only when the user answers
     after the server dropped the login. Ours bounds a question nobody can reach by the connect wait (the connect
@@ -90,6 +99,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-1601-host-key-pick)
+- **A window that joins a running local connection server writes no setting line.**
+  - F-2604 AC-1 and AC-15 put the line "ERROR: TCP port forwarding appears to be disabled…" (STR:S046) in the log of the
+    connect that started the shared `ssh`. A window that joined a login already running, a reload of the window
+    included, logs the refused-channel lines the helper relays but not that line (BR-2, 6.5; `ruling-1773-joiner-lines`,
+    athena on #1773). Each connect still keeps its own hint.
+    Rows: (ruling-1773-joiner-lines)
 
 - **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode.**
   - F-2106 AC-14 expects ssh's "Pseudo-terminal will not be allocated…" warning in the log when the setting is on and the
@@ -97,6 +112,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     `RequestTTY` unset ssh asks for no terminal and writes no warning. `-T` is still present exactly when the setting is
     falsy and no terminal is allocated (athena's ruling on #1606; `ruling-1606-no-tty-warning`).
     Rows: (ruling-1606-no-tty-warning)
+
+- **In terminal mode with pty allocation permitted and `RequestTTY yes`, the session gets a pseudo-terminal and ssh writes no warning.**
+  - F-2106 AC-14 expects ssh's warning in the log in terminal mode too, as the reference gives ssh a non-terminal standard
+    input there. Ours runs ssh in its own login terminal (F-2102), so its standard input is a terminal; with `-T` absent,
+    `RequestTTY yes` requests a pty, the session gets one and ssh has nothing to warn about
+    (`ruling-1779-terminal-pty`, athena on #1779). We do not override the user's `RequestTTY`.
+    Rows: (ruling-1779-terminal-pty)
 
 ## Known issues
 

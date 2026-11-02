@@ -776,9 +776,12 @@ describe('failures of the copy and the install (V4)', () => {
     deepStrictEqual(failureOf(outcome), {kind: 'cancelled'});
   });
 
-  it('V4: a failed copy does not start the install', async () => {
-    const {channel} = await runTransfer(copyFailing(COPY_FAILURE));
-    deepStrictEqual(installsOf(channel), []);
+  it('F-2405 AC-16 (ruling-1607-no-marker): a copy that did not complete starts no install, so an archive that is missing after its copy cannot be installed from', async () => {
+    const {channel, outcome} = await runTransfer(copyFailing(COPY_FAILURE));
+    deepStrictEqual(
+      {failure: failureOf(outcome), installs: installsOf(channel)},
+      {failure: {kind: 'copy', failure: COPY_FAILURE}, installs: []},
+    );
   });
 
   it('V4: a cancelled client download is a cancellation', async () => {

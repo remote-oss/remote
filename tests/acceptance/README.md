@@ -724,7 +724,7 @@ VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has fourteen users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has fifteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -736,10 +736,13 @@ Besides `harness`, the host image has fourteen users, and the run's `ssh_config`
 | `ask-odd` | `harness-odd` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, first `Favourite colour? ` with the answer shown, a question the extension doesn't recognise (any answer goes on), then `Password: `, the run's password; left unanswered, sshd drops the login at its `LoginGraceTime`, 120 s, a global setting |
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
+| `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
 | `noforward-key` | `harness` | a key of its own (`id_noportfwd`), given to the key accounts with `no-port-forwarding` on its `authorized_keys` line: sshd allows forwarding, and the key's sessions get none |
+| `x11-timeout`, `x11-noauth` | `harness` | `ForwardX11 yes` untrusted with `ForwardX11Timeout 60s`, or with an `XAuthLocation` that names no program (F-2312) |
+| `x11-untrusted`, `x11-match` | `harness` | the run's key with `ForwardX11 yes` alone, or `ForwardX11 yes` and `ForwardX11Trusted yes` given only in a `Match originalhost` block (F-2312) |
 | `pty-force`, `pty-yes`, `pty-no` | `harness` | the run's key with `RequestTTY force`, `yes` or `no` in the entry (F-2106) |
 | `changedkey` | `harness` | the run's key against its own `known_hosts_changedkey`, which pins another key under `HostKeyAlias changedkey`, with `StrictHostKeyChecking no`: ssh finds the host key changed, connects, and disables password and keyboard-interactive login and every forward ("Port forwarding is disabled to avoid man-in-the-middle attacks.") |
 | `fwd-busy`, `fwd-busy-exit`, `fwd-static`, `fwd-gateway`, `fwd-remote`, `fwd-dynamic`, `fwd-open`, `fwd-noopen`, `fwd-clearall`, `fwd-exit`, `fwd-dynamic-exit` | `harness` | the run's key; each adds forwards to the client's configuration: `LocalForward 13020 127.0.0.1:8660` (`fwd-busy`, and `fwd-busy-exit` with `ExitOnForwardFailure yes`), `LocalForward 13010 127.0.0.1:8657` (`fwd-static`), `GatewayPorts yes` with `LocalForward 13001 127.0.0.1:8661` (`fwd-gateway`), `RemoteForward 19000 127.0.0.1:19101` (`fwd-remote`), `DynamicForward 11080` (`fwd-dynamic`) and a dynamic `RemoteForward` with `PermitRemoteOpen any` (`fwd-open`, port 19201) or `none` (`fwd-noopen`, port 19200), `ClearAllForwardings yes` (`fwd-clearall`), `ExitOnForwardFailure yes` alone (`fwd-exit`) and `DynamicForward 13030` with `ExitOnForwardFailure yes` (`fwd-dynamic-exit`) |

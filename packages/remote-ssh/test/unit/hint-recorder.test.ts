@@ -1,3 +1,4 @@
+import type {DiagnosticStringId} from 'lib-ssh';
 import {deepStrictEqual} from 'node:assert';
 import type {FailureHint} from 'lib-ssh';
 import {hintRecorderOf} from '../../src/diagnostics/hint-recorder.ts';
@@ -155,6 +156,53 @@ describe('the hint recorder (card connect-119)', () => {
         '194',
         'Restart the SSH server on the remote machine to apply any changes to the configuration',
       ],
+    );
+  });
+
+  /** An id that no table holds, typed as the ids are. */
+  const UNKNOWN = 'S999' as unknown as DiagnosticStringId;
+
+  it('connect-121: a message, a mitigation and details each come from the failure table or ours, and an id in neither table is kept as the id, with no throw', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.record({
+      ...HINT,
+      message: {id: 'S094', values: []},
+      mitigations: [
+        {id: 'S116', values: []},
+        {id: UNKNOWN, values: []},
+      ],
+      details: {id: UNKNOWN},
+    });
+    await settled();
+    const [hint] = stored.value?.records[0]?.hints ?? [];
+    deepStrictEqual(
+      hint?.kind === 'error'
+        ? [hint.message, hint.mitigations, hint.details]
+        : undefined,
+      [
+        'Network is unreachable',
+        [
+          'Restart the SSH server on the remote machine to apply any changes to the configuration',
+          'S999',
+        ],
+        'S999',
+      ],
+    );
+  });
+
+  it('F-2604 AC-14: the details of the man-in-the-middle hint, S107 of the failure table, are kept as its text', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    recorder.record({
+      ...HINT,
+      status: 'MitmPortForwardingDisabled',
+      details: {id: 'S107'},
+    });
+    await settled();
+    deepStrictEqual(
+      stored.value?.records.map(record =>
+        record.hints[0]?.kind === 'error' ? record.hints[0].details : undefined,
+      ),
+      ['Port forwarding is disabled'],
     );
   });
 });

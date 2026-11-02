@@ -71,7 +71,10 @@ import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
-import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
+import {
+  openingAttached,
+  refusalWatchOf,
+} from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
@@ -523,7 +526,15 @@ export function connectAssemblyOf(
   const connector = connectorFrom({
     stepsFor: onPhase => {
       watch.begin();
-      return stepsOf(ports, onPhase);
+      const steps = stepsOf(ports, onPhase);
+      return {
+        ...steps,
+        openConnection: openingAttached(
+          (input, terms, cancellation) =>
+            steps.openConnection(input, terms, cancellation),
+          watch,
+        ),
+      };
     },
     options: {
       // A getter, so each connect reads the setting as it is then.

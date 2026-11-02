@@ -215,6 +215,7 @@ export function leaseOf(recording: Recording): ConnectionLease {
     channel: {} as unknown as HostChannel,
     waits: undefined,
     socksPort: 1080,
+    startedLogin: true,
     storedRecord: undefined,
     storeSharedRecord: record => {
       recording.records.push(record);

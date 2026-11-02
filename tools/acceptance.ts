@@ -502,6 +502,10 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
+    ...accountAlias('x11-forbidden', 'harness-nox11', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+    ]),
     ...accountAlias(
       'nosocket',
       'harness-nosock',
@@ -765,6 +769,31 @@ export function harnessSshConfig(
     ),
     ...accountAlias('x11fwd', 'harness', port, runFolder, [
       ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted yes',
+    ]),
+    // The same without the trusted request, so the server's X11 extensions are the untrusted client's.
+    ...accountAlias('x11-untrusted', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+    ]),
+    // Untrusted forwarding whose cookie expires after a minute.
+    ...accountAlias('x11-timeout', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted no',
+      'ForwardX11Timeout 60s',
+    ]),
+    // A client that cannot find its xauth, so ssh forwards nothing.
+    ...accountAlias('x11-noauth', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'XAuthLocation /nonexistent/xauth',
+    ]),
+    // ForwardX11 given only in a Match block that applies to the alias.
+    ...accountAlias('x11-match', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'Match originalhost x11-match',
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
