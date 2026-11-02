@@ -5,6 +5,8 @@ import {
   closeWindow,
   connectedWithin,
   fingerprintOf,
+  noHelperWithin,
+  reloadWindow,
   onHost,
   openWindow,
   recordLines,
@@ -15,6 +17,7 @@ import {
 } from '../windows/harness.ts';
 import {freshHost, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {statusItemText} from '../windows/renderer.ts';
+import {contributionsNow, ownContributions} from '../windows/x11-support.ts';
 import {printedAfter, windowWithTerminal} from '../windows/terminal-support.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
@@ -39,9 +42,6 @@ const SHOWN_SURFACES = [
   'hostPick',
   'mitigationPick',
 ];
-
-/** The form of the socket sshd gives a session. */
-const SESSION_SOCKET = /^\/tmp\/ssh-[^/]+\/agent\.\d+$/;
 
 /** The key of the run that the agent holds in the rows that list it. */
 function keyFile(): string {
@@ -84,7 +84,7 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
     await freshHost();
   });
 
-  it('F-2311 AC-2 (c99-link): a window on a host entry with ForwardAgent yes has, within 2 s of the indicator reading SSH: agentfwd, a link owned by the remote user that points at the socket sshd gave the session, with no terminal opened', async () => {
+  it('F-2311 AC-2 (c99-link): a window on a host entry with ForwardAgent yes has, within 2 s of the indicator reading SSH: agentfwd, a link owned by the remote user that points at the socket sshd gave the session, whatever its shape, with no terminal opened', async () => {
     await agentAdd(keyFile(), {confirm: false});
     await freshHost();
     await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
@@ -112,13 +112,11 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
         {
           owners: links.map(link => link.split(' ')[0]),
           single: links.length,
-          pointsAtSession: SESSION_SOCKET.test(target),
           sameAsServer: target === (await serverSessionSocket()),
         },
         {
           owners: ['harness'],
           single: 1,
-          pointsAtSession: true,
           sameAsServer: true,
         },
         `${links.join(',')} -> ${target}`,
@@ -181,7 +179,7 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
         deepStrictEqual(
           {
             links: await hostLinks(),
-            sessionSocket: SESSION_SOCKET.test(socket),
+            sessionSocket: socket === (await serverSessionSocket()),
           },
           {links: [], sessionSocket: true},
           socket,
@@ -213,10 +211,105 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
     await noAgent(FORWARD_NO, 'c99-forward-no');
   });
 
+  it('F-2311 AC-6 (c99-contributions): the extension\u2019s own section of the environment contributions lists SSH_AUTH_SOCK with the number of the link', async () => {
+    await connectedOn(FORWARDING, 'c99-contributions');
+    try {
+      const link = (await hostLinks())[0]?.split(' ')[1] ?? '';
+      deepStrictEqual(
+        ownContributions(await contributionsNow('c99-contributions')).filter(
+          entry => entry.startsWith('SSH_AUTH_SOCK'),
+        ),
+        [`SSH_AUTH_SOCK=${link}`],
+      );
+    } finally {
+      await closeWindow('c99-contributions').catch(() => undefined);
+    }
+  });
+
+  /** What a new terminal of a window on the forwarding alias lists first, when the server was started by a session that has ended and the setting is `setting`. */
+  async function listedAfterEndedSession(
+    setting: boolean,
+    label: string,
+  ): Promise<string> {
+    await agentAdd(keyFile(), {confirm: false});
+    await freshHost();
+    await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
+    await windowWithTerminal(`${label}-first`, FORWARDING);
+    await connectedWithin(`${label}-first`, INSTALL_MILLISECONDS);
+    await closeWindow(`${label}-first`);
+    await noHelperWithin(60_000);
+    await userSettings({'remote.SSH.enableAgentForwarding': setting});
+    await windowWithTerminal(label, FORWARDING);
+    try {
+      await connectedWithin(label, INSTALL_MILLISECONDS);
+      return await listedKeys(label);
+    } finally {
+      await closeWindow(label).catch(() => undefined);
+    }
+  }
+
+  it('F-2311 AC-14 (c99-ended-true): on a server started by a session that has ended, with the setting true a new terminal lists the agent’s keys', async () => {
+    await keepingSettings(async () => {
+      deepStrictEqual(
+        (await listedAfterEndedSession(true, 'c99-ended-true')).includes(
+          await fingerprintOf(keyFile()),
+        ),
+        true,
+      );
+    });
+  });
+
+  it('F-2311 AC-14 (c99-ended-false): on a server started by a session that has ended, with the setting false ssh-add -l prints that the agent socket does not exist', async () => {
+    await keepingSettings(async () => {
+      deepStrictEqual(
+        await listedAfterEndedSession(false, 'c99-ended-false'),
+        'Error_connecting_to_agent:_No_such_file_or_directory',
+      );
+    });
+  });
+
+  it('F-2311 AC-17 (c99-reload): with the local server off, a reload makes a new link with a new name and the previous link stays', async () => {
+    await keepingSettings(async () => {
+      await userSettings({
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {[FORWARDING]: 'linux'},
+      });
+      await connectedOn(FORWARDING, 'c99-reload');
+      try {
+        const before = await hostLinks();
+        await reloadWindow('c99-reload');
+        await waitFor(
+          'a second link',
+          async () => (await hostLinks()).length > before.length,
+          INSTALL_MILLISECONDS,
+        ).catch(() => undefined);
+        const after = await hostLinks();
+        const [first = '', second = ''] = await Promise.all(
+          [...before, ...after.filter(link => !before.includes(link))].map(
+            async link =>
+              (await onHost('readlink', link.split(' ')[1] ?? '')).trim(),
+          ),
+        );
+        deepStrictEqual(
+          {
+            count: after.length,
+            keepsFirst: before.every(link => after.includes(link)),
+            newSocket: second !== '' && second !== first,
+          },
+          {count: 2, keepsFirst: true, newSocket: true},
+          `${before.join(',')} -> ${after.join(',')}`,
+        );
+      } finally {
+        await closeWindow('c99-reload').catch(() => undefined);
+      }
+    });
+  });
+
   it('F-2311 AC-21 (c99-links-stay): the link of a window that closed is still in /tmp', async () => {
     await connectedOn(FORWARDING, 'c99-links-stay');
     const before = await hostLinks();
     await closeWindow('c99-links-stay');
+    await noHelperWithin(60_000);
     deepStrictEqual(
       {before: before.length, after: await hostLinks()},
       {before: 1, after: before},

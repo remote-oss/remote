@@ -984,6 +984,17 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-99: Host agentfwd-no logs in to harness with the run key and gives ForwardAgent no', () => {
+    strictEqual(
+      accountBlock('agentfwd-no'),
+      [
+        ...sharedLines('agentfwd-no', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardAgent no',
+      ].join('\n'),
+    );
+  });
+
   it('connect-39: Host x11fwd logs in to harness with the run key and forwards X11 as trusted', () => {
     strictEqual(
       accountBlock('x11fwd'),
