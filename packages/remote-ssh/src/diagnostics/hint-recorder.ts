@@ -80,6 +80,8 @@ export function hintRecorderOf(
           }),
         );
       });
+      // A write the state refuses does not end the writes after it, and is no unhandled rejection.
+      writing = writing.then(undefined, () => undefined);
     },
   };
 }

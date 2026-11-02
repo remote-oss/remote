@@ -108,4 +108,33 @@ describe('the hint recorder (card connect-119)', () => {
       ['Error: Other'],
     );
   });
+
+  it('F-2604 AC-22: a write the state refuses does not stop the hint recorded after it', async () => {
+    const stored: {value?: HintStore} = {};
+    const attempts: string[] = [];
+    let refusals = 1;
+    const recorder = hintRecorderOf(
+      {
+        get: () => stored.value,
+        update: (key, value) => {
+          attempts.push(key);
+          if (refusals > 0) {
+            refusals -= 1;
+            return Promise.reject(new Error('refused'));
+          }
+          stored.value = value;
+          return Promise.resolve();
+        },
+      },
+      {
+        translate: template => template,
+        documentation: () => 'https://docs.example/ssh',
+        now: () => new Date('2026-11-02T00:00:00Z'),
+      },
+    );
+    recorder.record(HINT);
+    recorder.record(HINT);
+    await settled();
+    deepStrictEqual([stored.value?.records.length, attempts.length], [1, 2]);
+  });
 });
