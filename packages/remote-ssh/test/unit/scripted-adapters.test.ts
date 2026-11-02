@@ -23,6 +23,7 @@ import {
   authorityReportingResolverEditorOf,
   claimedWindowName,
   channelPortFor,
+  helperLogFileOf,
   progressFor,
   type RecordLine,
   type ScriptEntry,
@@ -2174,6 +2175,18 @@ describe('the pre-connection dialog of the scripted adapters (card connect-87)',
         missing.adapters.unusedEntries(),
       ],
       [undefined, undefined, 1],
+    );
+  });
+});
+
+describe('helperLogFileOf (card connect-130b)', () => {
+  it('names the log file only in an acceptance run', () => {
+    deepStrictEqual(
+      [
+        {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_LOG: '/run/log.txt'},
+        {REMOTE_OSS_ACCEPTANCE_LOG: '/run/log.txt'},
+      ].map(helperLogFileOf),
+      ['/run/log.txt', undefined],
     );
   });
 });

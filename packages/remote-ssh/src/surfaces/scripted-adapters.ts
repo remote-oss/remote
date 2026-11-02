@@ -10,7 +10,11 @@
 
 import path from 'node:path';
 import type {ProgressPort, ResolverEditor} from 'lib-authority';
-import {acceptanceChannelPortFor, type ChannelPort} from 'lib-log';
+import {
+  acceptanceChannelPortFor,
+  acceptanceLogFileOf,
+  type ChannelPort,
+} from 'lib-log';
 import {
   fileChoiceLabelOf,
   fileChoiceTextOf,
@@ -774,4 +778,11 @@ export function channelPortFor(
       files.append(file, text);
     },
   );
+}
+
+/** The file the connection helper copies its lines to: the one `REMOTE_OSS_ACCEPTANCE_LOG` names when the harness's switch is on. */
+export function helperLogFileOf(
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  return acceptanceLogFileOf(environment, LOG_FILE_VARIABLE);
 }
