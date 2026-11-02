@@ -12,6 +12,7 @@ import {
   openWindow,
   readUserSettings,
   recordLines,
+  reloadWindow,
   restoreHostNetwork,
   terminalsOf,
   userSettings,
@@ -488,6 +489,32 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           stored: 0,
           text: 0,
         },
+      );
+    });
+  });
+
+  it('F-2604 AC-15 (c85-reload): after a reload with the local server running the window waits again and the log does not repeat the setting line', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      const name = 'c85-reload';
+      await opened('noforward', name);
+      await waitFor(
+        'the notice',
+        () => recordLines('notice', name).length > 0,
+        120_000,
+      );
+      const mark = connectionLog().length;
+      await reloadWindow(name);
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      deepStrictEqual(
+        [
+          connectionLog()
+            .slice(mark)
+            .filter(line => line.includes(SETTING_LINE)).length,
+          (await statusItem(name, 'status.host')).text,
+          (await waitingOf(name))[4],
+        ],
+        [0, 'Opening Remote...', true],
       );
     });
   });
