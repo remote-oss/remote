@@ -4,7 +4,8 @@
  * the only file that reads it. The script is read at every question, so a test may append entries at any time and
  * they count from the next question on; a window's cursor is the count of its answered record lines, so a reload
  * continues where the window left off; and an entry that names a signal waits for the run's signal file before it
- * answers, so one window may hold a question while another works.
+ * answers, so one window may hold a question while another works; a held entry with `passCursor` also lets the same
+ * window's next question take the next entry while it waits.
  */
 
 import path from 'node:path';
@@ -49,7 +50,7 @@ const SIGNAL_NAME = /^[A-Za-z0-9-]+$/;
  * One expected question and its answer, in the order the test expects them. An entry with a `window` is answered
  * only by the window of that name; one without is answered once by each window. An entry with an `after` is a held
  * one: it answers only after the run's signal file of that name exists, and a question that ends while it waits is
- * recorded withdrawn.
+ * recorded withdrawn. A held entry with `passCursor` lets the window's next question take the next entry while it waits.
  */
 export type ScriptEntry = (
   | {surface: 'pick'; match: string; answer: 'yes' | 'no' | 'dismiss'}
@@ -83,7 +84,7 @@ export type ScriptEntry = (
       match: string;
       answer: {button: string} | 'dismiss';
     }
-) & {window?: string; after?: string};
+) & {window?: string; after?: string; passCursor?: true};
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
@@ -98,6 +99,8 @@ export interface RecordLine {
   matched: boolean;
   /** The line of a held entry while it waits for its signal: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
+  /** The lines of a held entry that passes the cursor on: its waiting line counts for the cursor, and the answer or withdrawal line that follows it does not. */
+  passCursor?: boolean;
   /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
   details?: boolean;
   /** The name of the window that wrote the line. */
@@ -278,8 +281,8 @@ function entriesOf(
 
 /**
  * A window's cursor: the count of its record lines that are answered entries. A held line does not count — the
- * answer or withdrawal line that follows it does — and a line of a display-only surface or of another window never
- * does. A line that does not parse is skipped, so that an in-flight append of another window cannot move the
+ * answer or withdrawal line that follows it does — unless the entry passes the cursor on, when its held line counts
+ * and the line that follows it does not; a line of a display-only surface or of another window never counts. A line that does not parse is skipped, so that an in-flight append of another window cannot move the
  * cursor.
  */
 function answeredOf(
@@ -307,7 +310,7 @@ function answeredOf(
     if (
       recordLine.window === windowName &&
       recordLine.matched &&
-      recordLine.held !== true &&
+      (recordLine.held === true) === (recordLine.passCursor === true) &&
       countedForCursor(recordLine.surface)
     ) {
       counted += 1;
@@ -394,6 +397,10 @@ export function scriptedAdapters(
       const given = answerOf(entry as Extract<ScriptEntry, {surface: Kind}>);
       if (given !== undefined) {
         const held = entry.after;
+        const passing =
+          held !== undefined && entry.passCursor === true
+            ? ({passCursor: true} as const)
+            : {};
         if (held !== undefined) {
           if (signalsFolder === undefined || !SIGNAL_NAME.test(held)) {
             // A held entry the run cannot signal, or one that names no signal, fails closed: the question is
@@ -414,6 +421,7 @@ export function scriptedAdapters(
             answer: 'held',
             matched: true,
             held: true,
+            ...passing,
           });
           const outcome = await untilSignal(
             path.join(signalsFolder, held),
@@ -426,6 +434,7 @@ export function scriptedAdapters(
               question,
               answer: 'withdrawn',
               matched: true,
+              ...passing,
             });
             return undefined;
           }
@@ -436,6 +445,7 @@ export function scriptedAdapters(
           question,
           answer: given.recorded,
           matched: true,
+          ...passing,
         });
         return given.value;
       }

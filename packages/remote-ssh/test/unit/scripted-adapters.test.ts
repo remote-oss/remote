@@ -1904,6 +1904,80 @@ describe('the script read per question, the cursor from the record and the held 
     );
   });
 
+  /** The held entry of a row, with `passCursor` when `passing` says so. */
+  function passingEntry(passing: boolean): ScriptEntry {
+    return passing ? {...heldEntry(), passCursor: true} : heldEntry();
+  }
+
+  /** A masked input held behind `go`, then a pick asked while it waits: the pick's answer and the way to release the input. */
+  async function pickWhileHeld(passing: boolean) {
+    const entries: ScriptEntry[] = [
+      passingEntry(passing),
+      {surface: 'pick', match: 'authenticity', answer: 'yes'},
+    ];
+    const {adapters, files} = scripted(entries, WINDOW, SIGNALS_FOLDER);
+    const done = adapters.prompts.maskedInput(PASSWORD, NEVER);
+    const during = await adapters.prompts.pick(FINGERPRINT, NEVER);
+    return {
+      adapters,
+      files,
+      during,
+      release: async () => {
+        signal(files, 'go');
+        return done;
+      },
+    };
+  }
+
+  it('tooling-103: a held entry with passCursor lets the next question take the next entry while it waits, and counts once', async () => {
+    const {adapters, during, release} = await pickWhileHeld(true);
+    deepStrictEqual(
+      [during, await release(), adapters.unusedEntries()],
+      ['yes', 'secret', 0],
+    );
+  });
+
+  it('tooling-103: a held entry without passCursor keeps the cursor, so the next question is dismissed', async () => {
+    const {files, release} = await pickWhileHeld(false);
+    await release();
+    deepStrictEqual(
+      files
+        .lines()
+        .filter(line => line.surface === 'pick')
+        .map(line => [line.matched, line.answer]),
+      [[false, 'dismiss']],
+    );
+  });
+
+  it('tooling-103: a held entry with passCursor whose question ends is recorded withdrawn and counts once', async () => {
+    const entries: ScriptEntry[] = [
+      passingEntry(true),
+      {surface: 'pick', match: 'authenticity', answer: 'yes'},
+    ];
+    const {adapters, files} = scripted(entries, WINDOW, SIGNALS_FOLDER);
+    const controller = new AbortController();
+    const done = adapters.prompts.maskedInput(PASSWORD, controller.signal);
+    controller.abort();
+    await done;
+    deepStrictEqual(
+      [files.lines(), adapters.unusedEntries()],
+      [
+        [
+          {...heldLine(PASSWORD.placeholder), passCursor: true},
+          {
+            surface: 'maskedInput',
+            question: PASSWORD.placeholder,
+            answer: 'withdrawn',
+            matched: true,
+            window: WINDOW,
+            passCursor: true,
+          },
+        ],
+        1,
+      ],
+    );
+  });
+
   it('D-85: a held failure dialog waits for its signal', async () => {
     const {adapters, files} = scripted(
       [

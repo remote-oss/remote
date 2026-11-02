@@ -157,6 +157,8 @@ export interface RecordLine {
   matched: boolean;
   /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
+  /** The lines of a held entry that passes the cursor on: the waiting line counts for the cursor, and the answer or withdrawal line that follows it does not. */
+  passCursor?: boolean;
   window: string;
   /** Whether a phase line of a `progress` surface carried the details link. */
   details?: boolean;
