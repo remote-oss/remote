@@ -13,6 +13,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {SECOND_ENGINE_IMAGE} from '../../../tools/acceptance-second-engine.ts';
 import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 import {welcomeText} from '../windows/renderer.ts';
 
@@ -85,7 +86,7 @@ async function secondEngine(withTls: boolean): Promise<SecondEngine> {
     `DOCKER_TLS_CERTDIR=${withTls ? '/certs' : ''}`,
     '-p',
     `127.0.0.1::${port}`,
-    'docker:dind',
+    SECOND_ENGINE_IMAGE,
   ]);
   const hostPort =
     (
@@ -324,9 +325,19 @@ describe('the engine the Dev Containers view uses, from settings and contexts (c
       await settingsAre({});
       await dockerWith({}, 'context', 'use', context);
       seen.push(await lists(plain.marker));
-      await settingsAre({'docker.host': DEAD});
-      seen.push(await showsNoEngine());
-      deepStrictEqual(seen, [true, true, true, true, true, true]);
+      for (const change of [
+        {'containers.environment': {DOCKER_HOST: DEAD}},
+        {'docker.environment': {DOCKER_HOST: DEAD}},
+        {'docker.host': DEAD},
+        {
+          'containers.environment': {DOCKER_HOST: DEAD},
+          'docker.environment': {DOCKER_CONTEXT: context},
+        },
+      ]) {
+        await settingsAre(change);
+        seen.push(await showsNoEngine());
+      }
+      deepStrictEqual(seen, Array<boolean>(9).fill(true));
     } finally {
       await dockerWith({}, 'context', 'use', 'default').catch(() => undefined);
       await dockerWith({}, 'context', 'rm', '--force', context).catch(
