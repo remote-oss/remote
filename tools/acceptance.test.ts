@@ -435,6 +435,7 @@ const LAUNCH_ORDER = [
   'explorer-home',
   'explorer-rows',
   'explorer-no-proposals',
+  'add-host',
   'explorer-standdown',
   'trust',
   'trust-terminal',
@@ -1182,6 +1183,7 @@ describe('acceptance', () => {
             'explorer-home',
             'explorer-rows',
             'explorer-no-proposals',
+            'add-host',
             'explorer-standdown',
           ].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
