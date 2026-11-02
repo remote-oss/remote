@@ -94,6 +94,22 @@ describe('the session start (card ssh-34, #443)', () => {
     );
   });
 
+  it('connect-111: a session that goes on after the bound reports the timeout and leaves out the exit, and its program counts its own longer prelude', () => {
+    const ending = sessionStart(15);
+    const going = sessionStart(15, true);
+    deepStrictEqual(
+      [
+        ending.prelude.includes('\n    exit 124\n'),
+        going.prelude.includes('\n    exit 124\n'),
+        going.prelude.includes('LAYER1-TIMEOUT'),
+        going.remoteProgram.includes(
+          String(Buffer.byteLength(going.prelude, 'utf8')),
+        ),
+      ],
+      [true, false, true, true],
+    );
+  });
+
   it('#443: a bound of 0 is a RangeError', () => {
     throws(() => sessionStart(0), RangeError);
   });

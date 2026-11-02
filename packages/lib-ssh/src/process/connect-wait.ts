@@ -39,6 +39,7 @@ export class ConnectWait {
   private readonly onTimeout: () => void;
   private cancelTimer: (() => void) | undefined;
   private running = false;
+  private lengthFactor = 1;
 
   /** A wait that has not started; `onTimeout` is called once if the time runs out. */
   constructor(
@@ -51,8 +52,9 @@ export class ConnectWait {
     this.onTimeout = onTimeout;
   }
 
-  /** Starts the wait: at the spawn in shared mode, at the platform choice in terminal mode. */
-  start(): void {
+  /** Starts the wait: at the spawn in shared mode, at the platform choice in terminal mode; `lengthFactor` times as long when two stages follow each other. */
+  start(lengthFactor = 1): void {
+    this.lengthFactor = lengthFactor;
     this.running = true;
     this.armTimer();
   }
@@ -78,7 +80,7 @@ export class ConnectWait {
   private armTimer(): void {
     this.cancel();
     this.cancelTimer = this.scheduler.setTimer(
-      this.durationMilliseconds,
+      this.durationMilliseconds * this.lengthFactor,
       () => {
         this.cancelTimer = undefined;
         this.running = false;

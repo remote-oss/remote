@@ -271,6 +271,22 @@ describe("the install connection's request in terminal mode (card connect-17)", 
     );
   });
 
+  it('connect-111: with the platform decided, the session start is the one that goes on after the login shell outlasted its bound', () => {
+    const request = installRequestOf(
+      {...INPUT, target: {kind: 'plain', text: 'alex@dev:2222'}},
+      {...TERMS, platform: 'linux', remoteCommandInEffect: false},
+      STATE,
+      SETTINGS,
+      ENVIRONMENT,
+      undefined,
+      WAIT,
+    );
+    deepStrictEqual(
+      request.remoteProgram,
+      sessionStartFor(WAIT, true).remoteProgram,
+    );
+  });
+
   it('F-2107 BR-1: with a RemoteCommand in effect the request carries no remote program', () => {
     const request = installRequestOf(
       {...INPUT, target: {kind: 'plain', text: 'alex@dev:2222'}},

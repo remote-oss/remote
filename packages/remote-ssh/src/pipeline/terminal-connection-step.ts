@@ -29,6 +29,7 @@ import {
   TerminalSessionRunner,
   type TerminalLogin,
 } from 'lib-ssh';
+import {goesOnAfterLoginTimeout} from './connection-request.ts';
 import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
 import {isForwardingLine, logSshLines} from './ssh-log.ts';
 import type {
@@ -115,6 +116,7 @@ export function openTerminalConnectionStep(
     return new Promise<StepResult<ConnectionLease>>(settle => {
       const lines: string[] = [];
       const waitSettings = dependencies.connectWait();
+      const goesOn = goesOnAfterLoginTimeout(terms);
       let handedOver = false;
       let authenticated = false;
       let finished = false;
@@ -183,13 +185,14 @@ export function openTerminalConnectionStep(
         authenticated = true;
         reader.stop();
         dropQuestions();
-        // The login shell's startup gets a wait of its own, as long as the bootstrap's bound.
-        wait.start();
+        // The login shell's startup gets a wait of its own, as long as the bootstrap's bound; a session that goes on after
+        // the bound waits for the script's start as well.
+        wait.start(goesOn ? 2 : 1);
         const runner: TerminalSessionRunner = new TerminalSessionRunner({
           terminal,
           scheduler: dependencies.scheduler,
           prelude: connectionStart(
-            sessionStartFor(waitSettings),
+            sessionStartFor(waitSettings, goesOn),
             terms.remoteCommandInEffect,
           ).prelude,
           newMarker: () => dependencies.newMarker(),
@@ -211,6 +214,12 @@ export function openTerminalConnectionStep(
           return;
         }
         dependencies.logger.info(bootstrapLogLine(event));
+        if (event.kind === 'timeout' && goesOn) {
+          dependencies.logger.warn(
+            `going on with ssh's environment: ${bootstrapLogLine(event)}`,
+          );
+          return;
+        }
         fail(
           event.kind === 'timeout' ? CONNECT_WAIT_TIMEOUT : {kind: 'unknown'},
         );

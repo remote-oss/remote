@@ -102,6 +102,8 @@ function fixture(
     timeoutSeconds?: number;
     fromHost?: boolean;
     level?: Level;
+    /** The platform of the terms: decided (linux) unless a row needs the probe to find out. */
+    platform?: ConnectionTerms['platform'];
   } = {},
 ): Fixture {
   const {
@@ -110,6 +112,7 @@ function fixture(
     timeoutSeconds = 10,
     fromHost = false,
     level = 'info',
+    platform = 'linux',
   } = options;
   const clock = new FakeClock();
   const terminals = new RecordingTerminals();
@@ -125,7 +128,7 @@ function fixture(
     open: cancellation =>
       openTerminalConnectionStep(made.dependencies)(
         INPUT,
-        TERMS,
+        {...TERMS, platform},
         cancellation ?? new AbortController().signal,
       ),
   };
@@ -614,11 +617,51 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual((await result).kind, 'done');
   });
 
-  it('F-2704 AC-11: a login shell that outlasted its bound fails the connect as a timeout, and is logged', async () => {
-    const made = fixture();
+  it('F-2704 AC-11: a login shell that outlasted its bound fails the connect as a timeout, and is logged, when the probe has the platform to find out', async () => {
+    const made = fixture({platform: 'unknown'});
     const {result, terminal} = await started(made);
     terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
     deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
+  });
+
+  it('connect-111: with the platform decided, a login shell that outlasted its bound is logged as a warning and the connect goes on to the ready line', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 12\n`);
+    await settled();
+    terminal.write('LAYER1-READY\n');
+    deepStrictEqual(
+      [
+        (await result).kind,
+        made
+          .logged()
+          .filter(line => line.startsWith("going on with ssh's environment")),
+      ],
+      [
+        'done',
+        [
+          "going on with ssh's environment: the login shell did not finish its startup within 12 s",
+        ],
+      ],
+    );
+  });
+
+  it('connect-111: with the platform decided, the wait after the login line is twice the connect wait, so the script has room after the bound', async () => {
+    const made = fixture({timeoutSeconds: 10});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    made.clock.advance(23_000);
+    let ended = false;
+    void result.then(() => {
+      ended = true;
+    });
+    await settled();
+    const early = ended;
+    made.clock.advance(2000);
+    deepStrictEqual(
+      [early, await result],
+      [false, {kind: 'failed', failure: TIMED_OUT}],
+    );
   });
 
   it("F-2704 AC-13: a login shell that ended by itself fails the connect with no reason of ssh's", async () => {
@@ -629,7 +672,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
   });
 
   it('F-2704 AC-11: the wait still runs after the login line, so a session that stays silent times out', async () => {
-    const made = fixture({timeoutSeconds: 10});
+    const made = fixture({timeoutSeconds: 10, platform: 'unknown'});
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED_ONLY);
     made.clock.advance(13_000);
@@ -640,7 +683,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const waited = fixture({timeoutSeconds: 10});
     const silent = await started(waited);
     waited.clock.advance(12_000);
-    const booted = fixture();
+    const booted = fixture({platform: 'unknown'});
     const outlasted = await started(booted);
     outlasted.terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
     deepStrictEqual(

@@ -23,6 +23,9 @@ const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
  */
 const WRITE_ENVIRONMENT = 'export -p >"$1.part" && mv "$1.part" "$1"';
 
+/** The line that ends the session after `LAYER1-TIMEOUT`; a session that goes on without the login shell's environment leaves it out. */
+const TIMEOUT_EXIT = '    exit 124';
+
 /**
  * The script of the bootstrap. The user's login shell runs as a login shell on a command that writes the environment it
  * built to a file; a watchdog kills it after `LAYER1_SECONDS`. The session reaches `exec sh` unless the login shell
@@ -59,7 +62,7 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '  elif [ -e "$LAYER1_DIR/timeout" ]; then',
   '    rm -rf "$LAYER1_DIR"',
   '    printf \'LAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
-  '    exit 124',
+  TIMEOUT_EXIT,
   '  else',
   '    rm -rf "$LAYER1_DIR"',
   '    printf \'LAYER1-EXITED %s\\n\' "$LAYER1_STATUS"',
@@ -72,8 +75,18 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   'exec sh',
 ];
 
+/** The lines of the bootstrap: when the login shell outlasts its bound, `exit` the session, or go on to `exec sh` after the report. */
+function bootstrapLines(goesOnAfterTimeout: boolean): readonly string[] {
+  return goesOnAfterTimeout
+    ? SESSION_BOOTSTRAP_LINES.filter(line => line !== TIMEOUT_EXIT)
+    : SESSION_BOOTSTRAP_LINES;
+}
+
 /** The remote command of a session that `ShellRuns` writes to, and the prelude written before any of its commands. */
-export function sessionStart(layerOneSeconds: number): {
+export function sessionStart(
+  layerOneSeconds: number,
+  goesOnAfterTimeout = false,
+): {
   remoteProgram: string;
   prelude: string;
 } {
@@ -86,7 +99,7 @@ export function sessionStart(layerOneSeconds: number): {
       `the login shell's bound is a whole number of seconds from ${String(LAYER_ONE_SECONDS.minimum)} to ${String(LAYER_ONE_SECONDS.maximum)}, not ${String(layerOneSeconds)}`,
     );
   }
-  const prelude = `LAYER1_SECONDS=${String(layerOneSeconds)}\n${SESSION_BOOTSTRAP_LINES.join('\n')}\n`;
+  const prelude = `LAYER1_SECONDS=${String(layerOneSeconds)}\n${bootstrapLines(goesOnAfterTimeout).join('\n')}\n`;
   return {
     remoteProgram: preludeProgram(Buffer.byteLength(prelude, 'utf8')),
     prelude,
@@ -97,7 +110,10 @@ export function sessionStart(layerOneSeconds: number): {
  * The session start for a connect wait: the login shell may take as long as the connect wait itself, in whole seconds,
  * rounded up, at least 1 and at most the ceiling; a host's own 0 takes the ceiling the wait names.
  */
-export function sessionStartFor(settings: ConnectWaitSettings): {
+export function sessionStartFor(
+  settings: ConnectWaitSettings,
+  goesOnAfterTimeout = false,
+): {
   remoteProgram: string;
   prelude: string;
 } {
@@ -107,6 +123,7 @@ export function sessionStartFor(settings: ConnectWaitSettings): {
       LAYER_ONE_SECONDS.maximum,
       Math.max(LAYER_ONE_SECONDS.minimum, Math.ceil(seconds)),
     ),
+    goesOnAfterTimeout,
   );
 }
 
