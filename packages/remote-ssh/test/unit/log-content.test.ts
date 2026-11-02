@@ -74,12 +74,25 @@ describe('the lines of the client search and the probed platform (card connect-2
     );
   });
 
-  it('F-2106 AC-13: the pty line shows the effective value, true only for the boolean true', () => {
+  it('F-2106 BR-7: the pty line shows the setting as written, false when unset, and the JSON of anything else', () => {
     deepStrictEqual(
-      [ptySettingLine(true), ptySettingLine(false)],
       [
+        ptySettingLine(undefined),
+        ptySettingLine(true),
+        ptySettingLine(false),
+        ptySettingLine('yes'),
+        ptySettingLine(0),
+        ptySettingLine(''),
+        ptySettingLine({unexpected: 'text'}),
+      ],
+      [
+        'remote.SSH.permitPtyAllocation = false',
         'remote.SSH.permitPtyAllocation = true',
         'remote.SSH.permitPtyAllocation = false',
+        'remote.SSH.permitPtyAllocation = yes',
+        'remote.SSH.permitPtyAllocation = 0',
+        'remote.SSH.permitPtyAllocation = ',
+        'remote.SSH.permitPtyAllocation = {"unexpected":"text"}',
       ],
     );
   });

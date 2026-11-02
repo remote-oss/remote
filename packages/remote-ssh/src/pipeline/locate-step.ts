@@ -55,8 +55,8 @@ export interface LocateStepDependencies {
   /** The value of `remote.SSH.path`, as the user wrote it; empty when unset. */
   settingValue: () => string;
 
-  /** The effective value of `remote.SSH.permitPtyAllocation`: `true` only when the setting is the boolean `true`. */
-  ptySetting: () => boolean;
+  /** `remote.SSH.permitPtyAllocation`, as written. */
+  ptySetting: () => unknown;
   /** The value of `remote.SSH.configFile`, as the user wrote it; empty when unset. */
   configFile: () => string;
   /** How the connection runs, which the reading of a failed lookup depends on. */

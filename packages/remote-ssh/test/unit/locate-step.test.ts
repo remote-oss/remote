@@ -29,7 +29,7 @@ interface Scenario {
   checks?: Readonly<Record<string, Answer>>;
   lookup?: Answer;
   settingValue?: string;
-  ptySetting?: boolean;
+  ptySetting?: unknown;
   searchPath?: string;
   platform?: 'linux' | 'windows' | 'macOS';
   configFile?: string;
@@ -55,7 +55,7 @@ async function located(scenario: Scenario = {}): Promise<{
   const sink = new MemorySink();
   const step = locateClientStep({
     settingValue: () => scenario.settingValue ?? '',
-    ptySetting: () => scenario.ptySetting ?? false,
+    ptySetting: () => scenario.ptySetting,
     configFile: () => scenario.configFile ?? '',
     mode: () => scenario.mode ?? 'shared',
     connectTimeout: () => scenario.connectTimeout,
@@ -466,7 +466,7 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     ]);
   });
 
-  it('F-2106 AC-13: the effective pty allocation logs right after the path line', async () => {
+  it('F-2106 AC-13: the pty line logs right after the path line', async () => {
     const {searched} = await located({ptySetting: true});
     deepStrictEqual(searched.slice(0, 2), [
       'remote.SSH.path = ""',
@@ -474,7 +474,7 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     ]);
   });
 
-  it('F-2106 AC-13: an unset or non-boolean pty allocation logs false', async () => {
+  it('F-2106 BR-7: an unset pty allocation logs false', async () => {
     const {searched} = await located();
     deepStrictEqual(searched[1], 'remote.SSH.permitPtyAllocation = false');
   });

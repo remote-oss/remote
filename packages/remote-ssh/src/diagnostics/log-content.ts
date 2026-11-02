@@ -49,9 +49,19 @@ export function pathSettingLine(value: string): string {
   return `remote.SSH.path = ${JSON.stringify(value)}`;
 }
 
-/** The effective value of `remote.SSH.permitPtyAllocation` as the log shows it: `true` only for the boolean true. */
-export function ptySettingLine(value: boolean): string {
-  return `remote.SSH.permitPtyAllocation = ${String(value)}`;
+/** The log line of `remote.SSH.permitPtyAllocation` with the value as written: false when absent, the text of a boolean, a number or a string, and the JSON of anything else. */
+export function ptySettingLine(value: unknown): string {
+  if (value === undefined) {
+    return 'remote.SSH.permitPtyAllocation = false';
+  }
+  if (
+    typeof value === 'boolean' ||
+    typeof value === 'number' ||
+    typeof value === 'string'
+  ) {
+    return `remote.SSH.permitPtyAllocation = ${String(value)}`;
+  }
+  return `remote.SSH.permitPtyAllocation = ${JSON.stringify(value)}`;
 }
 
 /** A candidate of the client search is about to be checked. */
