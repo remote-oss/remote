@@ -241,6 +241,7 @@ export const STEP_OUTCOMES: Readonly<
       {key: 'server.installLink', only: POSIX_ONLY},
       {key: 'server.prerequisitesHelper', only: POSIX_ONLY},
       {key: 'server.prerequisites.<line>', only: POSIX_ONLY},
+      {key: 'host.note', only: POWERSHELL_ONLY},
     ],
   },
   installExtensions: {

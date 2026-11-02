@@ -627,10 +627,252 @@ describe('the PowerShell install, run under pwsh', function () {
   });
 });
 
+/** Puts a stand-in launcher with the shell `body` where the parameters' server is installed, and gives its folder. */
+function standInServer(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  body: string,
+): string {
+  const launcher = path.join(
+    installFolder(host, parameters),
+    parameters.launcher,
+  );
+  mkdirSync(path.dirname(launcher), {recursive: true});
+  writeFileSync(launcher, `#!/bin/sh\n${body}\n`);
+  chmodSync(launcher, 0o755);
+  return installFolder(host, parameters);
+}
+
+/** A launcher that names its arguments, says it is ready on port 4242, and stays up a while. */
+const READY_SERVER = [
+  'echo "words: $#"',
+  'echo "Extension host agent listening on 4242"',
+  'sleep 5',
+].join('\n');
+
+/** The parameters of a start that waits at most one second for the ready line. */
+function quickStart(): ScriptParameters {
+  const parameters = parametersFor();
+  return {...parameters, start: {...parameters.start, readySeconds: 1}};
+}
+
+describe('the PowerShell start, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2409: a launched server that says it is ready gives its port, its process and a new token', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    const block = runOn(host, single('start'), parameters);
+    const outcome = factsOf(block, [
+      'server.port',
+      'server.reused',
+      'server.launching',
+    ]);
+    deepStrictEqual(
+      [
+        outcome,
+        /^[A-Za-z0-9]{32}$/.test(
+          block === 'none' ? '' : (block.serverFacts.token ?? ''),
+        ),
+      ],
+      [
+        {
+          status: 'Ok',
+          'server.port': '4242',
+          'server.reused': 'no',
+          'server.launching': 'yes',
+        },
+        true,
+      ],
+    );
+  });
+
+  it('F-2409: the server keeps running after the start, and the next start reuses it', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    runOn(host, single('start'), parameters);
+    deepStrictEqual(
+      factsOf(runOn(host, single('start'), parameters), [
+        'server.reused',
+        'server.launching',
+      ]),
+      {status: 'Ok', 'server.reused': 'yes', 'server.launching': undefined},
+    );
+  });
+
+  it('F-2409: each start word stays one word, a home with a space included', () => {
+    const host = powershellHost();
+    const home = path.join(host.root, 'with space');
+    mkdirSync(home);
+    const spaced = {...host, home};
+    const parameters = quickStart();
+    standInServer(spaced, parameters, READY_SERVER);
+    runOn(spaced, single('start'), parameters);
+    deepStrictEqual(
+      readFileSync(
+        path.join(home, parameters.dataFolderName, `.${parameters.commit}.log`),
+        'utf8',
+      ).split('\n')[0],
+      'words: 10',
+    );
+  });
+
+  it('F-2701 7.E4: socket mode does not apply, and the server listens on a port', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    deepStrictEqual(
+      factsOf(
+        runOn(host, single('start'), {
+          ...parameters,
+          start: {...parameters.start, socketMode: true},
+        }),
+        ['server.port'],
+      ),
+      {status: 'Ok', 'server.port': '4242'},
+    );
+  });
+
+  it('F-2409: a server that ends before it is ready fails to start', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, 'echo starting');
+    deepStrictEqual(factsOf(runOn(host, single('start'), parameters), []), {
+      status: 'ServerFailedToStart',
+    });
+  });
+
+  it('F-2409: a port range with no free port is named', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(
+      host,
+      parameters,
+      'echo "--port: Could not find free port in range: 8000-8001"',
+    );
+    deepStrictEqual(
+      factsOf(runOn(host, single('start'), parameters), ['server.failure']),
+      {status: 'ServerFailedToStart', 'server.failure': 'noFreePort'},
+    );
+  });
+
+  it('F-2409: the CVE stop is named', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(
+      host,
+      parameters,
+      "echo '* !!!! Server terminated due to presence of CVE-2020-1416 !!!!'",
+    );
+    deepStrictEqual(
+      factsOf(runOn(host, single('start'), parameters), ['server.failure']),
+      {status: 'ServerFailedToStart', 'server.failure': 'cveTerminated'},
+    );
+  });
+
+  it('F-2409: a server that never says it is ready fails when the wait ends', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, 'sleep 3');
+    deepStrictEqual(factsOf(runOn(host, single('start'), parameters), []), {
+      status: 'ServerFailedToStart',
+    });
+  });
+
+  it('F-2409: a server that is not installed fails to start', () => {
+    deepStrictEqual(
+      factsOf(runOn(powershellHost(), single('start'), quickStart()), []),
+      {status: 'ServerFailedToStart'},
+    );
+  });
+
+  it('F-2407: a token file that cannot be written is a write failure, named', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    const token = path.join(
+      host.home,
+      parameters.dataFolderName,
+      `.${parameters.commit}.token`,
+    );
+    mkdirSync(path.join(token, 'blocked'), {recursive: true});
+    deepStrictEqual(
+      factsOf(runOn(host, single('start'), parameters), [
+        'server.writeFailedPath',
+      ]),
+      {status: 'CreateInstallDirFailed', 'server.writeFailedPath': token},
+    );
+  });
+});
+
+describe('the PowerShell extension install, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2506: each extension gets its status and the last line it printed, in order', () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    standInServer(
+      host,
+      parameters,
+      [
+        'echo "installing $2"',
+        'if [ "$2" = good.one ]; then echo "Extension good.one installed"; exit 0; fi',
+        'echo "Extension $2 not found"',
+        'exit 1',
+      ].join('\n'),
+    );
+    deepStrictEqual(
+      factsOf(
+        runOn(host, single('installExtensions'), {
+          ...parameters,
+          start: {...parameters.start, extensions: ['good.one', 'bad.one']},
+        }),
+        [
+          'server.extension.0.status',
+          'server.extension.0.message',
+          'server.extension.1.status',
+          'server.extension.1.message',
+        ],
+      ),
+      {
+        status: 'Ok',
+        'server.extension.0.status': 'installed',
+        'server.extension.0.message': 'Extension good.one installed',
+        'server.extension.1.status': 'failed',
+        'server.extension.1.message': 'Extension bad.one not found',
+      },
+    );
+  });
+
+  it('F-2506: no extension to install is done at once', () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    standInServer(host, parameters, 'exit 1');
+    deepStrictEqual(
+      factsOf(runOn(host, single('installExtensions'), parameters), [
+        'server.extension.0.status',
+      ]),
+      {status: 'Ok', 'server.extension.0.status': undefined},
+    );
+  });
+
+  it('F-2506: a server that is not installed installs nothing', () => {
+    deepStrictEqual(
+      factsOf(
+        runOn(powershellHost(), single('installExtensions'), parametersFor()),
+        [],
+      ),
+      {status: 'ServerFailedToStart'},
+    );
+  });
+});
+
 describe('the PowerShell bootstrap script, as text', () => {
   it('F-2701: a step it does not have yet still answers with a failure', () => {
     deepStrictEqual(
-      scriptFor(single('start'), 'powershell', parametersFor()).includes(
+      scriptFor(single('kill'), 'powershell', parametersFor()).includes(
         'status=ServerFailedToStart',
       ),
       true,
@@ -639,8 +881,8 @@ describe('the PowerShell bootstrap script, as text', () => {
 
   it('F-2701: rendering a step it does not have is a programming error', () => {
     throws(
-      () => powershellScript(single('start'), parametersFor()),
-      /no start step/,
+      () => powershellScript(single('kill'), parametersFor()),
+      /no kill step/,
     );
   });
 

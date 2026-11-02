@@ -223,6 +223,29 @@ const UNPACK_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * The server a PID file records, when it still runs: the file holds the process id and its start time in ticks, and a
+ * process whose start lies more than a second away is a recycled id. The second allows for platforms that compute the
+ * start from the boot time. No WMI or CIM query is made, which a standard user may be refused.
+ */
+const PROCESS_FUNCTIONS: readonly string[] = [
+  'function Get-RecordedServer([string]$File) {',
+  '  try {',
+  "    $Fields = @((Get-Content -LiteralPath $File -TotalCount 1 -ErrorAction Stop) -split ' ')",
+  '    if ($Fields.Count -ne 2) {',
+  '      return $null',
+  '    }',
+  '    $Found = Get-Process -Id ([int]$Fields[0]) -ErrorAction Stop',
+  '    if ($Found.HasExited -or [Math]::Abs($Found.StartTime.Ticks - [long]$Fields[1]) -gt 10000000) {',
+  '      return $null',
+  '    }',
+  '    return $Found',
+  '  } catch {',
+  '    return $null',
+  '  }',
+  '}',
+];
+
 /** Ends the script with a status after releasing the lock it holds. */
 const LEAVE_FUNCTIONS: readonly string[] = [
   'function Exit-Step([string]$Status) {',
@@ -245,7 +268,7 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   fetch: FETCH_FUNCTIONS,
   unpack: UNPACK_FUNCTIONS,
   leave: LEAVE_FUNCTIONS,
-  process: [],
+  process: PROCESS_FUNCTIONS,
   serverTree: [],
   stop: [],
   cliPort: [],

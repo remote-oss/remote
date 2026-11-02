@@ -3,12 +3,16 @@
  * helper functions its roles name, and the step's body, which ends in the same result block as the POSIX script.
  */
 
+import {CVE_LINE, NO_FREE_PORT_PREFIX, READY_LINE} from './posix-functions.ts';
 import {POWERSHELL_FUNCTIONS, powershellQuote} from './powershell-functions.ts';
+import {LAUNCHING_LINE} from './result-block.ts';
 import {
   type BootstrapRequest,
   parameterValuesOf,
   rolesOf,
   type ScriptParameters,
+  type StartParameters,
+  startWordsOf,
 } from './steps.ts';
 
 /** Errors are handled by each step, and no progress bar is drawn into the output. */
@@ -132,6 +136,158 @@ const INSTALL_TREE_BODY: readonly string[] = [
   "Complete-Step 'ServerFailedToStart'",
 ];
 
+/**
+ * The server's start words as one Windows command line, each word double-quoted: Start-Process joins its arguments
+ * with spaces and quotes nothing. A Windows host has no socket mode, so the server always listens on a port.
+ */
+function argumentLine(start: StartParameters): string {
+  const words = startWordsOf({...start, socketMode: false}).map(word =>
+    'text' in word
+      ? powershellQuote(`"${word.text.replaceAll('"', '\\"')}"`)
+      : `('"' + $${word.variable} + '"')`,
+  );
+  return `$SERVER_ARGUMENTS = @(${words.join(', ')}) -join ' '`;
+}
+
+/** The server's own lines as patterns: the ready line with its port, a port range with no free port, and the CVE stop. */
+const SERVER_LINE_PATTERNS: readonly string[] = [
+  `$ReadyPattern = '^' + [regex]::Escape(${powershellQuote(READY_LINE)}) + ' ([0-9]+)$'`,
+  `$NoFreePortPattern = '^' + [regex]::Escape(${powershellQuote(NO_FREE_PORT_PREFIX)})`,
+  `$CvePattern = ${powershellQuote(`^${CVE_LINE}$`)}`,
+];
+
+/**
+ * The start: a server the PID file records and that still runs is reused, else the server is launched hidden with
+ * its output in the log files, and its ready line is waited for; a launch that ends early, or a CVE stop, fails.
+ */
+function startBody(start: StartParameters): string[] {
+  return [
+    "$PID_FILE = $BOOT_PREFIX + '.pid'",
+    "$LOG_FILE = $BOOT_PREFIX + '.log'",
+    "$ERROR_LOG_FILE = $BOOT_PREFIX + '.err.log'",
+    "$TOKEN_FILE = $BOOT_PREFIX + '.token'",
+    '$StartedAt = Get-NowSeconds',
+    ...SERVER_LINE_PATTERNS,
+    'function Get-ReadyPort {',
+    '  $Found = Select-String -LiteralPath $LOG_FILE -Pattern $ReadyPattern -ErrorAction SilentlyContinue | Select-Object -Last 1',
+    '  if ($null -eq $Found) {',
+    "    return ''",
+    '  }',
+    '  return $Found.Matches[0].Groups[1].Value',
+    '}',
+    'function Test-ServerLine([string]$Pattern) {',
+    '  return $null -ne (Select-String -LiteralPath $LOG_FILE, $ERROR_LOG_FILE -Pattern $Pattern -ErrorAction SilentlyContinue | Select-Object -First 1)',
+    '}',
+    'function Stop-Starting {',
+    '  if (Test-ServerLine $NoFreePortPattern) {',
+    "    Add-Fact 'server.failure' 'noFreePort'",
+    '  } elseif (Test-ServerLine $CvePattern) {',
+    "    Add-Fact 'server.failure' 'cveTerminated'",
+    '  }',
+    "  Exit-Step 'ServerFailedToStart'",
+    '}',
+    'function Complete-Started([string]$Port, [int]$ServerId) {',
+    '  $Token = Get-Content -LiteralPath $TOKEN_FILE -TotalCount 1 -ErrorAction SilentlyContinue',
+    "  if (-not $Token -or $Port -notmatch '^[1-9][0-9]*$') {",
+    '    Stop-Starting',
+    '  }',
+    "  Add-Fact 'server.port' $Port",
+    "  Add-Fact 'server.pid' ([string]$ServerId)",
+    "  Add-Fact 'server.token' $Token",
+    "  Add-Fact 'server.log' $LOG_FILE",
+    '  if ($Launched) {',
+    "    Add-Fact 'server.reused' 'no'",
+    '  } else {',
+    "    Add-Fact 'server.reused' 'yes'",
+    '  }',
+    "  Add-Fact 'host.kernel' ([System.Environment]::OSVersion.Version.ToString())",
+    "  Add-Fact 'timing.start' ([string](Get-ElapsedMilliseconds $StartedAt))",
+    "  Exit-Step 'Ok'",
+    '}',
+    `if (-not (Test-Path -LiteralPath (${LAUNCHER_PATH}) -PathType Leaf)) {`,
+    "  Complete-Step 'ServerFailedToStart'",
+    '}',
+    'Enter-LockOrComplete $COMMIT',
+    '$ServerProcess = Get-RecordedServer $PID_FILE',
+    '$Launched = $false',
+    'if ($null -eq $ServerProcess) {',
+    '  Initialize-Environment',
+    '  try {',
+    '    if (-not (Test-Path -LiteralPath $TOKEN_FILE -PathType Leaf) -or (Get-Item -LiteralPath $TOKEN_FILE).Length -eq 0) {',
+    "      $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'",
+    '      $Bytes = New-Object byte[] 32',
+    '      $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()',
+    '      $Generator.GetBytes($Bytes)',
+    '      $Generator.Dispose()',
+    '      [System.IO.File]::WriteAllText($TOKEN_FILE, -join ($Bytes | ForEach-Object { $Characters[$_ % 62] }))',
+    '    }',
+    '  } catch {',
+    '    $Message = Get-FailureMessage $_',
+    '    Exit-Lock',
+    '    Write-Failed $TOKEN_FILE $Message',
+    '  }',
+    `  ${argumentLine(start)}`,
+    `  Write-Line ${powershellQuote(LAUNCHING_LINE)}`,
+    "  Add-Fact 'server.launching' 'yes'",
+    `  $Launch = @{FilePath = (${LAUNCHER_PATH}); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}`,
+    "  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {",
+    "    $Launch.WindowStyle = 'Hidden'",
+    '  }',
+    '  try {',
+    '    $ServerProcess = Start-Process @Launch',
+    "    [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)",
+    '  } catch {',
+    '    $Message = Get-FailureMessage $_',
+    '    if ($null -ne $ServerProcess) {',
+    '      Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue',
+    '    }',
+    '    Exit-Lock',
+    '    Write-Failed $PID_FILE $Message',
+    '  }',
+    '  $Launched = $true',
+    '}',
+    '$Ticks = [int]$READY_SECONDS * 5',
+    'for ($Waited = 0; $Waited -lt $Ticks; $Waited++) {',
+    '  $ReadPort = Get-ReadyPort',
+    "  if ($ReadPort -ne '') {",
+    '    Complete-Started $ReadPort $ServerProcess.Id',
+    '  }',
+    '  if ($ServerProcess.HasExited -and (-not $Launched -or (Test-ServerLine $CvePattern))) {',
+    '    Stop-Starting',
+    '  }',
+    '  Start-Sleep -Milliseconds 200',
+    '}',
+    'Stop-Starting',
+  ];
+}
+
+/** Installs each extension with the server's own command line, one fact pair per extension, in order. */
+function installExtensionsBody(start: StartParameters): string[] {
+  const extensions = start.extensions.map(powershellQuote).join(', ');
+  return [
+    `if (-not (Test-Path -LiteralPath (${LAUNCHER_PATH}) -PathType Leaf)) {`,
+    "  Complete-Step 'ServerFailedToStart'",
+    '}',
+    'Initialize-Environment',
+    "$ExtensionLog = $BOOT_PREFIX + '.extension.' + $PID",
+    '$Position = 0',
+    `foreach ($Extension in @(${extensions})) {`,
+    `  & (${LAUNCHER_PATH}) --install-extension $Extension *> $ExtensionLog`,
+    '  if ($LASTEXITCODE -eq 0) {',
+    "    $ExtensionStatus = 'installed'",
+    '  } else {',
+    "    $ExtensionStatus = 'failed'",
+    '  }',
+    "  Add-Fact ('server.extension.' + $Position + '.status') $ExtensionStatus",
+    '  $LastLine = [string](Get-Content -LiteralPath $ExtensionLog -Tail 1 -ErrorAction SilentlyContinue)',
+    "  Add-Fact ('server.extension.' + $Position + '.message') $LastLine.Substring(0, [Math]::Min(300, $LastLine.Length))",
+    '  $Position++',
+    '}',
+    'Remove-Item -LiteralPath $ExtensionLog -Force -ErrorAction SilentlyContinue',
+    "Complete-Step 'Ok'",
+  ];
+}
+
 function bodyOf(
   request: BootstrapRequest,
   parameters: ScriptParameters,
@@ -141,6 +297,12 @@ function bodyOf(
       return probeBody(parameters.installTree);
     case 'install':
       return parameters.installTree === '' ? INSTALL_BODY : INSTALL_TREE_BODY;
+    case 'start':
+      return parameters.installTree === ''
+        ? startBody(parameters.start)
+        : INSTALL_TREE_BODY;
+    case 'installExtensions':
+      return installExtensionsBody(parameters.start);
     default:
       return ["Complete-Step 'Ok'"];
   }
@@ -151,6 +313,8 @@ export const POWERSHELL_STEPS: ReadonlySet<BootstrapRequest['step']> = new Set([
   'probe',
   'install',
   'discard',
+  'start',
+  'installExtensions',
 ]);
 
 /**
