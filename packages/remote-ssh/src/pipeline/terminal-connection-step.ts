@@ -30,7 +30,7 @@ import {
   TerminalSessionRunner,
   type TerminalLogin,
 } from 'lib-ssh';
-import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
+import {CONNECT_WAIT_TIMEOUT, ofClassification} from './failure.ts';
 import {isForwardingLine, logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
@@ -87,15 +87,10 @@ function failureOf(end: TerminalEnd, lines: readonly string[]): StepFailure {
   if (end.code === undefined && !end.hadOutput && end.reason !== 'user') {
     return {kind: 'cancelled', reason: {id: 'trustRefused'}};
   }
-  const classification = classify(lines, end.code, 'connection', 'terminal');
-  return {
-    kind: classification.kind,
-    ...(classification.reason === undefined
-      ? {}
-      : {reason: classification.reason}),
-    hints: classification.hints,
-    ...(end.code === undefined ? {} : {sshExitStatus: end.code}),
-  };
+  return ofClassification(
+    classify(lines, end.code, 'connection', 'terminal'),
+    end.code,
+  );
 }
 
 /** The step that opens the connection of a connect in terminal mode. */

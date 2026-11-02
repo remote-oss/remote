@@ -20,8 +20,11 @@ import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
+  type Classification,
+  classify,
   CONNECTION_CLOSED_TEXT,
   connectWaitMilliseconds,
+  type FailureHint,
   type Forward,
   type Invocation,
   LineSplitter,
@@ -33,6 +36,7 @@ import {
   type TerminalLogin,
 } from 'lib-ssh';
 import {isAborted, portOf} from './connect.ts';
+import {ofClassification} from './failure.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
 import {logSshLines} from './ssh-log.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
@@ -58,6 +62,8 @@ export interface TunnelStepDependencies {
   environment(): WindowEnvironment;
   /** The login terminals of the editor. */
   terminals: LoginTerminals;
+  /** Keeps `hint` for the session, as the hint store does. */
+  recordHint(hint: FailureHint): void;
   /** The tunnel run for one forward: the local port and where it leads on the host. */
   tunnelInvocation(forward: Forward): Invocation;
   /** What the tunnel run is fed on its input at once: its command, when the host's RemoteCommand is in effect. */
@@ -200,6 +206,7 @@ async function openTerminalTunnel(
     dependencies.tunnelInput(),
   );
   let stall: (() => void) | undefined;
+  let refuse: ((classified: Classification) => void) | undefined;
   const unreachable = new Promise<'unreachable'>(resolve => {
     stall = () => {
       resolve('unreachable');
@@ -220,9 +227,20 @@ async function openTerminalTunnel(
   const questions = revealed
     ? undefined
     : dependencies.attachQuestions({terminal: session, reader}, input);
+  const refusedByClient = new Promise<Classification>(resolve => {
+    refuse = resolve;
+  });
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
   const sshOutput = new LineSplitter(line => {
     logSshLines(dependencies.logger, [line], undefined);
+    const classified = classify([line], undefined, 'tunnel', 'terminal');
+    if (
+      classified.hints.some(
+        hint => hint.status === 'MitmPortForwardingDisabled',
+      )
+    ) {
+      refuse?.(classified);
+    }
   });
   session.onOutput(text => {
     reader.push(text);
@@ -241,7 +259,12 @@ async function openTerminalTunnel(
       {once: true},
     );
   });
-  const gate = await Promise.race([session.gate, unreachable, cancelled]);
+  const gate = await Promise.race([
+    session.gate,
+    unreachable,
+    cancelled,
+    refusedByClient,
+  ]);
   takeDown();
   if (gate === 'cancelled') {
     session.stop();
@@ -250,6 +273,13 @@ async function openTerminalTunnel(
   if (gate === 'unreachable') {
     session.stop();
     return {kind: 'failed', failure: {kind: 'timeout'}};
+  }
+  if ('hints' in gate) {
+    session.stop();
+    gate.hints.forEach(hint => {
+      dependencies.recordHint(hint);
+    });
+    return {kind: 'failed', failure: ofClassification(gate)};
   }
   if (gate.kind === 'forwardFailed') {
     dependencies.logger.warn(`the tunnel's forward failed: ${gate.line}`);

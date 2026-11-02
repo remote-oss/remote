@@ -16,7 +16,12 @@ import type {
 } from 'lib-server';
 import type {AcquireFailure} from 'lib-helper';
 import type {TemplateProblem} from 'lib-product';
-import type {ConnectionFailure, FailureHint, FailureKind} from 'lib-ssh';
+import type {
+  Classification,
+  ConnectionFailure,
+  FailureHint,
+  FailureKind,
+} from 'lib-ssh';
 
 /** The kinds of a failed connect: the failures of `ssh` itself and those of the server install and start. */
 export type FailedKind =
@@ -45,6 +50,24 @@ export interface FailureDetail {
   reason?: FailureReason;
   /** What the library said, for the log only; never shown. */
   logDetail?: string;
+}
+
+/** The failure a classified run gives: its kind, its reason and its hints, with `ssh`'s exit status when it has one. */
+export function ofClassification(
+  classification: Classification,
+  sshExitStatus?: number,
+): FailureDetail & {
+  hints: readonly FailureHint[];
+  sshExitStatus?: number;
+} {
+  return {
+    kind: classification.kind,
+    ...(classification.reason === undefined
+      ? {}
+      : {reason: classification.reason}),
+    hints: classification.hints,
+    ...(sshExitStatus === undefined ? {} : {sshExitStatus}),
+  };
 }
 
 /** A failure that shows no library text: the library's words go to the log. */

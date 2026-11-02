@@ -295,6 +295,7 @@ function portsOf(
         : {profile: {...PROFILE, cliDownloadUrlTemplate: changes.cliTemplate}},
     ),
     tunnel: {
+      recordHint: () => undefined,
       terminals: seen.terminals,
       attachQuestions: () => ({
         onQuestion: () => undefined,

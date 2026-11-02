@@ -441,6 +441,9 @@ export function wiringPortsOf(
     },
     tunnel: {
       terminals: surfaces.terminals,
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
       ...loginSurfaces,
       settings: () => tunnelSettingsOf(settings),
       local: machine.local,
