@@ -658,6 +658,23 @@ export async function runProcessTask(
   );
 }
 
+/** The exit code of the shell task running `commandLine` that window `name` ran, or null when the process gave none. */
+export async function runShellTask(
+  name: string,
+  commandLine: string,
+): Promise<number | null> {
+  return (
+    (
+      await reported(
+        name,
+        'taskEnded',
+        'acceptance.agent.runShellTask',
+        commandLine,
+      )
+    )?.exitCode ?? null
+  );
+}
+
 /** The names of window `name`'s terminals, in order, as a `terminalNames` event listed them. */
 export async function terminalNames(name: string): Promise<string[]> {
   return (

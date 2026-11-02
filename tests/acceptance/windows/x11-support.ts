@@ -9,7 +9,7 @@ import {
   inWindow,
   onHostAs,
   openWindow,
-  runProcessTask,
+  runShellTask,
   userSettings,
   waitFor,
 } from './harness.ts';
@@ -74,13 +74,13 @@ export async function inTerminal(
   return writtenAt(file);
 }
 
-/** Runs `command` as a process task of window `name` and gives what it printed. */
+/** Runs `command` as a shell task of window `name` and gives what it printed. */
 export async function inTask(name: string, command: string): Promise<string> {
   const file = `${folderOn(name)}/task-${String(Date.now())}.txt`;
-  await runProcessTask(name, '/bin/sh', [
-    '-c',
+  await runShellTask(
+    name,
     `{ ${command}; } > ${file} 2>&1; touch ${file}.done`,
-  ]);
+  );
   return writtenAt(file);
 }
 

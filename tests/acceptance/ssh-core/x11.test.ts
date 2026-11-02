@@ -21,7 +21,7 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
   this.timeout(900_000);
   beforeEach(closeAllButLocal);
 
-  it('F-2312 AC-3, AC-4 (c84-task-debug): a process task and a node launch configuration see the window’s display and run an X client on it', async () => {
+  it('F-2312 AC-3, AC-4 (c84-task-debug): a shell task and a node launch configuration see the window’s display and run an X client on it', async () => {
     await keepingSettings(async () => {
       await x11Window('c84-task-debug', 'x11fwd');
       const terminal = await inTerminal('c84-task-debug', DISPLAY_PROBE);
@@ -68,10 +68,12 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
         await closeAllButLocal();
         await x11Window('c84-trusted', alias);
         const text = await inTerminal('c84-trusted', DISPLAY_PROBE);
-        seen.push(text.trim().split('\n').at(-1) ?? '');
+        seen.push(
+          `${DISPLAY_LINE.test(text) && CONNECTED.test(text) ? 'works' : 'fails'} ${text.trim().split('\n').at(-1) ?? ''}`,
+        );
         await x11Close('c84-trusted');
       }
-      deepStrictEqual(seen, ['1', '0']);
+      deepStrictEqual(seen, ['works 1', 'works 0']);
     });
   });
 
