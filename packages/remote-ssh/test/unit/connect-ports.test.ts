@@ -1181,7 +1181,7 @@ describe("the assembled ports' platform notice", () => {
 });
 
 describe("the assembled ports' refused forwarding notice (card connect-106)", () => {
-  it('F-2104 7.E4: the first refusal shows the error with a Show log button that reveals the log, and the next ones show nothing', async () => {
+  it('F-2104 7.E4: the first refusal shows the error with a Show log link and no button, and the next ones show nothing', async () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const shown: Array<[string, readonly string[]]> = [];
     const ports = wiringPortsOf(
@@ -1192,7 +1192,7 @@ describe("the assembled ports' refused forwarding notice (card connect-106)", ()
           showWarning: () => Promise.resolve(undefined),
           showError: (message, buttons) => {
             shown.push([message, buttons]);
-            return Promise.resolve(buttons[0]);
+            return Promise.resolve(undefined);
           },
         },
       },
@@ -1202,18 +1202,15 @@ describe("the assembled ports' refused forwarding notice (card connect-106)", ()
     ports.tunnel.forwardRefused();
     ports.tunnel.forwardRefused();
     await new Promise(resolve => setImmediate(resolve));
-    deepStrictEqual(
-      [shown, recorded.revealed],
+    deepStrictEqual(shown, [
       [
-        [
-          [
-            '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server.>',
-            ['<Show log>'],
-          ],
-        ],
-        1,
+        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. {0}>'.replace(
+          '{0}',
+          '[show log](command:opensshremotes.showLog "Show log")',
+        ),
+        [],
       ],
-    );
+    ]);
   });
 });
 

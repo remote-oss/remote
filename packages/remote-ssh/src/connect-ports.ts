@@ -69,6 +69,7 @@ import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
+import {SHOW_LOG_LINK} from './surfaces/progress-titles.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -452,23 +453,14 @@ export function wiringPortsOf(
           return;
         }
         refusedTold = true;
-        const showLog = ownText(
-          {id: 'showLogButton', values: []},
-          surfaces.translate,
+        // A link that runs the Show Log command in a message with no button, which core would not hide.
+        void surfaces.notice.showError(
+          ownText(
+            {id: 'socksForwardingFailedNotice', values: [SHOW_LOG_LINK]},
+            surfaces.translate,
+          ),
+          [],
         );
-        void surfaces.notice
-          .showError(
-            ownText(
-              {id: 'socksForwardingFailedNotice', values: []},
-              surfaces.translate,
-            ),
-            [showLog],
-          )
-          .then(taken => {
-            if (taken === showLog) {
-              surfaces.revealLog();
-            }
-          });
       },
       logger,
     },

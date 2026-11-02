@@ -9,7 +9,7 @@ import type {StringRef} from '../connect/picker-model.ts';
 import type {FailureStringId} from './failure-strings.ts';
 
 /** The link the script's stage carries in place of the details link; neither word of it is translated. */
-const SHOW_LOG_LINK = `[show log](command:${commands.showLog.id} "Show log")`;
+export const SHOW_LOG_LINK = `[show log](command:${commands.showLog.id} "Show log")`;
 
 /** The string id of each stage's message; the share downloaded has none, so it keeps the stage before it. */
 const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {

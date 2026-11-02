@@ -178,7 +178,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     ]);
   });
 
-  it('F-2104 AC-20, AC-21, AC-22, AC-47 (c79-socks-refused): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with Show log that opens the Remote - SSH channel holding the refusal, and its progress waits for port forwarding with no dialog and no success for a minute', async () => {
+  it('F-2104 AC-20, AC-21, AC-22, AC-47 (c79-socks-refused): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and its progress waits for port forwarding with no dialog and no success for a minute', async () => {
     const seen: Array<{
       notices: Array<[string, string[] | undefined]>;
       toast: string[];
@@ -198,7 +198,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
           {
             surface: 'notice',
             match: 'Failed to set up',
-            answer: {button: 'Show log'},
+            answer: 'dismiss',
             window: name,
           },
         ]);
@@ -215,6 +215,8 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         }
         const toast = await toasts();
         const indicator = (await statusItem(name, 'status.host')).text;
+        // The link of the message runs this command, which the row then runs, as the editor does for a click.
+        await inWindow(name, 'opensshremotes.showLog');
         await windowState(name);
         const channel = windowEvents(name)
           .filter(entry => entry.event === 'state')
@@ -242,8 +244,8 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     const expected = {
       notices: [
         [
-          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server.',
-          ['Show log'],
+          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. [show log](command:opensshremotes.showLog "Show log")',
+          [],
         ],
       ],
       toast: [
