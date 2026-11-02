@@ -118,13 +118,39 @@ describe('askpass program', () => {
   it('connect-129, F-2102 AC-40: a permission question nothing listens for prints an empty line and exits 0, so a shared connection that outlives its helper stays in use', async () => {
     deepStrictEqual(
       [
-        await runProgram(['Allow shared connection to host? '], {
+        await runProgram([' Allow shared connection to host? '], {
           ...ENVIRONMENT,
           SSH_ASKPASS_PROMPT: 'confirm',
         }),
         output,
       ],
       [0, ['\n']],
+    );
+  });
+
+  it('connect-129, F-2102 AC-40: the master’s question to open a forward nothing listens for is allowed the same way', async () => {
+    deepStrictEqual(
+      [
+        await runProgram(
+          ['Open dynamic forward 127.0.0.1:34779 -> * on 127.0.0.1?'],
+          {...ENVIRONMENT, SSH_ASKPASS_PROMPT: 'confirm'},
+        ),
+        output,
+      ],
+      [0, ['\n']],
+    );
+  });
+
+  it('connect-115, connect-129: a permission question of another kind nothing listens for still exits 1 and prints nothing', async () => {
+    deepStrictEqual(
+      [
+        await runProgram(['Add key k (c) to agent?'], {
+          ...ENVIRONMENT,
+          SSH_ASKPASS_PROMPT: 'confirm',
+        }),
+        output,
+      ],
+      [1, []],
     );
   });
 
