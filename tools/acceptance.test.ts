@@ -4162,6 +4162,23 @@ describe('acceptance', () => {
       );
     });
 
+    it('#1430: the scheduled split’s parts make every launch of `all` but the genuine group’s, and no launch in two parts', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const {parts} = workflowParts();
+      const made = parts.flatMap(part =>
+        chosenLabels(launches, part.split(',')),
+      );
+      const wanted = chosenLabels(launches, ['all', '!@genuine']);
+      // a group also makes its named-only launches (containers-podman), which `all` leaves out
+      deepStrictEqual(
+        [
+          wanted.filter(label => !made.includes(label)),
+          made.length === new Set(made).size,
+        ],
+        [[], true],
+      );
+    });
+
     it('tooling-74: every selection that names containers-view runs it last, the groups, the dispatch lists and the scheduled split’s parts included, and only one part of the split has it', () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       const {parts} = workflowParts();
