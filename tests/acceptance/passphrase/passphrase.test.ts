@@ -186,6 +186,30 @@ function refused(alias: string) {
   };
 }
 
+/** The lines of every log file of the editor, by file: the lines a row adds are those after the count taken before it. */
+function editorLogLines(): Map<string, string[]> {
+  const lines = new Map<string, string[]>();
+  function walk(folder: string): void {
+    for (const entry of readdirSync(folder, {withFileTypes: true})) {
+      const full = path.join(folder, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith('.log')) {
+        lines.set(full, readFileSync(full, 'utf8').split('\n'));
+      }
+    }
+  }
+  walk(editorLogsFolder());
+  return lines;
+}
+
+/** The lines the editor's logs gained since `before`. */
+function editorLogsSince(before: Map<string, string[]>): string[] {
+  return [...editorLogLines()].flatMap(([file, lines]) =>
+    lines.slice(before.get(file)?.length ?? 0),
+  );
+}
+
 describe('the passphrase input of a key (card coverage-96)', function () {
   this.timeout(300_000);
 
@@ -703,6 +727,56 @@ describe('the passphrase input of a key (card coverage-96)', function () {
       }
     } finally {
       restoreUserSettings(before);
+    }
+  });
+
+  it('F-2307 AC-13, AC-26 (c96-reconnect-escape): Escape at the reconnection input ends in an unhandled NotAvailable that core gives up on, the indicator is disconnected with the host, and no failure dialog of ours is shown', async () => {
+    const name = await connectedWithPassphrase(
+      'passkey-18',
+      'c96-reconnect-escape',
+    );
+    try {
+      const before = editorLogLines();
+      await killSharedConnection(name, 'passkey-18');
+      await untilPassphraseInput(name);
+      await pressEscape(name);
+      await waitFor(
+        'core to give up',
+        () =>
+          editorLogsSince(before).some(line =>
+            line.includes('Will give up now!'),
+          ),
+        60_000,
+      );
+      const added = editorLogsSince(before);
+      deepStrictEqual(
+        {
+          unhandled: added.some(
+            line =>
+              line.includes('resolveAuthority(ssh-remote,2)') &&
+              line.includes('"code":"NotAvailable"') &&
+              line.includes('"detail":false'),
+          ),
+          gaveUp: added.some(line =>
+            line.includes(
+              'A RemoteAuthorityResolverError occurred while trying to reconnect. Will give up now!',
+            ),
+          ),
+          indicator: (await connectSurface(name)).indicator,
+          ownDialog:
+            (await dialogOf(name))?.details.startsWith(
+              'Could not establish connection',
+            ) === true,
+        },
+        {
+          unhandled: true,
+          gaveUp: true,
+          indicator: 'Disconnected from SSH: passkey-18',
+          ownDialog: false,
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
     }
   });
 
