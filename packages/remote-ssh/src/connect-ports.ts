@@ -70,6 +70,7 @@ import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
+import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
 import {
@@ -409,6 +410,9 @@ export function wiringPortsOf(
       download: machine.download,
       credentials: machine.credentials,
       files: machine.clientFiles,
+      onHostDownloadRefused: cause => {
+        surfaces.hints.record(downloadRefusalHint(cause, surfaces.translate));
+      },
       lockLoop: hostLockLoopOf(
         machine.clock,
         HOST_LOCK_ATTEMPTS,

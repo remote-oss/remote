@@ -87,6 +87,8 @@ export interface ServerStepDependencies {
   download: DownloadPort;
   credentials: CredentialsPort;
   files: ClientFilePort;
+  /** Tells that the host could not download the archive while the client may not: `downloadFailed`, or `noDownloader`. */
+  onHostDownloadRefused: (cause: 'downloadFailed' | 'noDownloader') => void;
   /** Whether the program the client's archive is copied to the host with can be started. */
   copyAvailable: () => Promise<boolean>;
   lockLoop: HostLockLoop;
@@ -401,8 +403,15 @@ export function createServerSteps(
         cancellation,
       );
     },
-    transfer: (input, lease, host, downloadPlan, onPhase, cancellation) =>
-      transfer(
+    transfer: async (
+      input,
+      lease,
+      host,
+      downloadPlan,
+      onPhase,
+      cancellation,
+    ) => {
+      const outcome = await transfer(
         {
           plan: downloadPlan,
           parameters: parametersFor({
@@ -428,7 +437,20 @@ export function createServerSteps(
           logger: dependencies.logger,
           onPhase,
         },
-      ),
+      );
+      const placement = dependencies.policy.downloadPlacement;
+      if (
+        outcome.kind === 'failed' &&
+        outcome.failure.kind === 'serverDownload' &&
+        (outcome.failure.cause === 'downloadFailed' ||
+          outcome.failure.cause === 'noDownloader') &&
+        placement.kind === 'hostFirst' &&
+        placement.mode === 'off'
+      ) {
+        dependencies.onHostDownloadRefused(outcome.failure.cause);
+      }
+      return outcome;
+    },
     start: (input, lease, host, licenceAccepted, cancellation) =>
       startOrReuse(
         lease.channel,

@@ -137,4 +137,24 @@ describe('the hint recorder (card connect-119)', () => {
     await settled();
     deepStrictEqual([stored.value?.records.length, attempts.length], [1, 2]);
   });
+
+  it('F-2405 AC-20: the details of a hint, a text or a string of the table, are kept as text', async () => {
+    const {recorder, stored} = recording([
+      '2026-11-02T00:00:00Z',
+      '2026-11-02T00:01:00Z',
+    ]);
+    recorder.record({...HINT, details: {text: '194'}});
+    recorder.begin();
+    recorder.record({...HINT, details: {id: 'S116'}});
+    await settled();
+    deepStrictEqual(
+      stored.value?.records.map(record =>
+        record.hints[0]?.kind === 'error' ? record.hints[0].details : undefined,
+      ),
+      [
+        '194',
+        'Restart the SSH server on the remote machine to apply any changes to the configuration',
+      ],
+    );
+  });
 });
