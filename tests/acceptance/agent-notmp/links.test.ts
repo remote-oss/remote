@@ -19,6 +19,7 @@ import {
 } from '../windows/harness.ts';
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 import {freshHost, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {statusBarItemIds} from '../windows/renderer.ts';
 import {listedKeys, windowWithTerminal} from '../windows/terminal-support.ts';
 
 /** The account that may not create links in /tmp, and the alias that forwards the run's agent to it. */
@@ -40,6 +41,12 @@ const SHOWN_SURFACES = [
 /** The key of the run that the agent holds. */
 function keyFile(): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), 'id_second');
+}
+
+/** The status bar items window `name` shows, once it has had a moment to settle. */
+async function barItems(name: string): Promise<string[]> {
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  return statusBarItemIds(name);
 }
 
 /** The sockets sshd has forwarded for the account, the paths of its agent folder. */
@@ -70,18 +77,24 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
     await freshHost(USER);
   });
 
-  it('F-2311 AC-23 (c99-notmp): with the link refused, the connect completes, nothing is shown, and a new terminal’s ssh-add -l prints that the socket does not exist', async () => {
+  it('F-2311 AC-23 (c99-notmp): with the link refused, the connect completes, nothing is shown (no notification, dialog, input, pick or status item beyond a plain window’s), and a new terminal’s ssh-add -l prints that the socket does not exist', async () => {
     await connectedWindow('c99-notmp');
     try {
+      const items = await barItems('c99-notmp');
+      await windowWithTerminal('c99-notmp-base', 'harness');
+      await connectedWithin('c99-notmp-base', INSTALL_MILLISECONDS);
+      const baseline = await barItems('c99-notmp-base');
+      await closeWindow('c99-notmp-base');
       deepStrictEqual(
         {
+          extraItems: items.filter(item => !baseline.includes(item)),
           links: await hostLinks(),
           shown: recordLines(undefined, 'c99-notmp')
             .map(line => line.surface)
             .filter(surface => SHOWN_SURFACES.includes(surface)),
           listed: await listedKeys('c99-notmp'),
         },
-        {links: [], shown: [], listed: NO_SOCKET},
+        {extraItems: [], links: [], shown: [], listed: NO_SOCKET},
       );
     } finally {
       await closeWindow('c99-notmp').catch(() => undefined);
