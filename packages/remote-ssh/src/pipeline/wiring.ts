@@ -68,6 +68,7 @@ import {
   type ConnectState,
   type LocateStepDependencies,
   locateClientStep,
+  scpStartableOf,
 } from './locate-step.ts';
 import {
   type ForwardingDependencies,
@@ -182,6 +183,7 @@ export interface WiringPorts {
     | 'useExecServer'
     | 'policy'
     | 'socketMode'
+    | 'copyAvailable'
   >;
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
@@ -310,6 +312,7 @@ export function stepsOf(
       ),
       override: ports.settings.override(),
       useExecServer: ports.settings.useExecServer(),
+      copyAvailable: () => scpStartable(),
       policy: sshPolicyFor(ports.settings.localDownloadMode()),
       remoteUser: () => lookedUp(state).user,
       socketMode: () => tunnelStep.tunnelPath() === 'socket',
@@ -345,12 +348,14 @@ export function stepsOf(
     ...ports.terms,
     pickPlatform: prompting(ports.terms.pickPlatform),
   });
-  const locateClient = locateClientStep({
+  const locateDependencies: LocateStepDependencies = {
     ...ports.locate,
     configFile: () => connectionSettings().configFile,
     connectTimeout: () => connectionSettings().connectTimeout,
     state,
-  });
+  };
+  const locateClient = locateClientStep(locateDependencies);
+  const scpStartable = scpStartableOf(locateDependencies);
   const sharedConnection = openConnectionStep({
     acquire: request =>
       ports.acquire(request, () =>

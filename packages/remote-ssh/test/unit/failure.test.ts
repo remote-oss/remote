@@ -217,6 +217,7 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
   ],
   ['install path', ofPlan({kind: 'invalidInstallPath', reason: 'relative'})],
   ['download', ofTransfer({kind: 'serverDownload', cause: 'downloadFailed'})],
+  ['no scp', ofTransfer({kind: 'copyToolMissing'})],
   [
     'local download',
     ofTransfer({

@@ -424,6 +424,17 @@
         "Copying VS Code Server to host with scp"
       ],
       "installedIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "scp-missing",
+      "cite": "F-2405 AC-14 (scp-missing)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.path": "<run>/clients/configured/ssh"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": scp installation not found.",
+      "noStages": ["Copying VS Code Server to host with scp"]
     }
   ]
 }

@@ -95,6 +95,8 @@ export interface TransferDependencies {
   lockLoop: HostLockLoop;
   logger: Logger;
   onPhase: (phase: TransferPhase) => void;
+  /** Whether the program an archive is copied to the host with can be started; none means it always can. */
+  copyAvailable?: () => Promise<boolean>;
 }
 
 /** Why the server is not installed. */
@@ -116,6 +118,7 @@ export type TransferFailure =
   | {kind: 'verification'; mismatch: 'checksum' | 'length'}
   | {kind: 'unpack'}
   | {kind: 'copy'; failure: ChannelFailure}
+  | {kind: 'copyToolMissing'}
   | {kind: 'cancelled'}
   | {kind: 'retriesExhausted'; attempts: number; lockPath?: string}
   | {
@@ -356,6 +359,12 @@ async function deliver(
       archivePath: direct,
       removeArchive: false,
     });
+  }
+  if (
+    dependencies.copyAvailable !== undefined &&
+    !(await dependencies.copyAvailable())
+  ) {
+    return failed({kind: 'copyToolMissing'});
   }
   dependencies.onPhase({kind: 'copying'});
   const remotePath = `${input.hostFolder}/${archiveName(input)}`;
