@@ -2187,7 +2187,11 @@ export async function portProtocolChoices(
         await wait(800);
         choices = [...document.querySelectorAll('.context-view .monaco-menu .action-item')]
           .filter(item => ['HTTP', 'HTTPS'].includes(item.querySelector('.action-label')?.textContent ?? ''))
-          .map(item => [item.querySelector('.action-label')?.textContent ?? '', item.getAttribute('aria-checked') === 'true' || (item.querySelector('.action-label')?.getAttribute('aria-checked') ?? '') === 'true' || item.classList.contains('checked')]);
+          .map(item => {
+            // Core marks a toggled menu item on its link, with aria-checked and the checked class.
+            const link = item.querySelector('.action-menu-item') ?? item;
+            return [item.querySelector('.action-label')?.textContent ?? '', link.getAttribute('aria-checked') === 'true' || link.classList.contains('checked')];
+          });
       }
       for (let press = 0; press < 3; press += 1) {
         for (const type of ['keydown', 'keyup']) {

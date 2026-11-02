@@ -154,8 +154,8 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
     await waitFor(
       'the row',
       async () =>
-        (await portsRows(window).catch(() => [])).some(entry =>
-          entry.port.includes('8681'),
+        (await portsRows(window).catch(() => [])).some(
+          entry => entry.port === '8681',
         ),
       60_000,
     );
@@ -196,11 +196,15 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
   );
 
   /**
-   * The row of a forwarded port whose local end is remapped: the host's port `remote` is forwarded while the client
-   * holds the same local port, so the editor gives it another one; then a process of the host listens on that local
-   * port's number. Gives the ports whose rows the view shows.
+   * A forwarded port whose local end is remapped: the host's port `remote` is forwarded while the client holds the same
+   * local port, so the editor gives it another one; then a process of the host listens on that local port's number.
+   * Waits for the view's row of the remapped number for `seconds` and gives the ports of the rows it shows, with the
+   * remapped number.
    */
-  async function remappedPorts(remote: number): Promise<string[]> {
+  async function remappedRows(
+    remote: number,
+    seconds: number,
+  ): Promise<{remapped: number; ports: string[]}> {
     await userSettings({
       'remote.autoForwardPortsSource': 'process',
       'remote.autoForwardPorts': true,
@@ -210,16 +214,32 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
       holder.once('error', reject);
       holder.listen(remote, '127.0.0.1', resolve);
     });
+    let remapped = 0;
     try {
       await listenOnHost(remote, `ports-${String(remote)}`);
       await forwardByHand(window, remote);
-      const remapped = await localPortOf(window, remote);
+      remapped = await localPortOf(window, remote);
       await listenOnHost(remapped, `ports-${String(remapped)}`);
       await inWindow(window, FOCUS_PORTS);
-      // The editor looks for the host's listening processes every few seconds.
-      await new Promise(resolve => setTimeout(resolve, 30_000));
-      return (await portsRows(window)).map(entry => entry.port);
+      // The editor looks for the host's listening processes every few seconds: the wait is the time it has to forward one.
+      await waitFor(
+        `the row of the remapped port ${String(remapped)}`,
+        async () =>
+          (await portsRows(window).catch(() => [])).some(
+            entry => entry.port === String(remapped),
+          ),
+        seconds * 1000,
+      ).catch(() => undefined);
+      return {
+        remapped,
+        ports: (await portsRows(window)).map(entry => entry.port),
+      };
     } finally {
+      await onHost(
+        'sh',
+        '-c',
+        `pkill -f 'n[c] -lk -p ${String(remapped)}'; true`,
+      );
       await new Promise<void>(resolve => {
         holder.close(() => {
           resolve();
@@ -228,19 +248,29 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
     }
   }
 
+  // [oss] src/vs/workbench/contrib/remote/browser/remoteExplorer.ts at 1.139.1: `isCandidateRemappedTunnelLocalEndpoint`
+  // (a process candidate on a localhost or all-interfaces address whose port is the local port of a forwarded tunnel
+  // with another remote port) and its use in the process-forwarding loop, which skips such a candidate. At 1.125.0 the
+  // function does not exist and the loop forwards the candidate.
   atVersion(FLOOR)(
-    'ADR-0007 floor (ports-remapped, 1.125): core does not filter the process that listens on a remapped tunnel’s local port from automatic forwarding, so it is forwarded too',
+    'ADR-0007 floor (ports-remapped, 1.125): core does not filter the process that listens on a remapped tunnel’s local port from automatic forwarding, so the view gets a row for that number besides the tunnel’s own',
     async () => {
-      const ports = await remappedPorts(8683);
-      deepStrictEqual(ports.length > 1, true);
+      const {remapped, ports} = await remappedRows(8683, 90);
+      deepStrictEqual(
+        [ports.includes('8683'), ports.includes(String(remapped))],
+        [true, true],
+      );
     },
   );
 
   atVersion(RECORDED)(
-    'ADR-0007 floor (ports-remapped, 1.139): core filters the process that listens on a remapped tunnel’s local port from automatic forwarding, so only the tunnel’s own row is shown',
+    'ADR-0007 floor (ports-remapped, 1.139): core filters the process that listens on a remapped tunnel’s local port from automatic forwarding, so the view keeps the tunnel’s own row and gets none for that number after the editor’s scans',
     async () => {
-      const ports = await remappedPorts(8685);
-      deepStrictEqual(ports.length, 1);
+      const {remapped, ports} = await remappedRows(8685, 30);
+      deepStrictEqual(
+        [ports.includes('8685'), ports.includes(String(remapped))],
+        [true, false],
+      );
     },
   );
 
@@ -252,8 +282,8 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
     await waitFor(
       'the row',
       async () =>
-        (await portsRows(window).catch(() => [])).some(entry =>
-          entry.port.includes(String(remote)),
+        (await portsRows(window).catch(() => [])).some(
+          entry => entry.port === String(remote),
         ),
       60_000,
     );
