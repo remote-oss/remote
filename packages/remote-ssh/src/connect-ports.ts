@@ -70,8 +70,9 @@ import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
+import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
-import {commands, settings as settingIds} from './identifiers.generated.ts';
+import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -410,21 +411,7 @@ export function wiringPortsOf(
       credentials: machine.credentials,
       files: machine.clientFiles,
       onHostDownloadRefused: cause => {
-        const status =
-          cause === 'downloadFailed'
-            ? 'ServerDownloadFailed'
-            : 'NoDownloaderOnHost';
-        surfaces.hints.record({
-          status,
-          message: `Error: ${status}`,
-          mitigations: [
-            {
-              id: cause === 'downloadFailed' ? 'S049' : 'S050',
-              values: [settingIds.localServerDownload.id],
-            },
-          ],
-          resources: [],
-        });
+        surfaces.hints.record(downloadRefusalHint(cause, surfaces.translate));
       },
       lockLoop: hostLockLoopOf(
         machine.clock,

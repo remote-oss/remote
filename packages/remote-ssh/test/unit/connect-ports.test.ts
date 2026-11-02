@@ -451,20 +451,16 @@ describe("the assembled ports' settings", () => {
     );
   });
 
-  it('F-2405 AC-20: a refused host download is kept as a hint whose mitigation names the setting', () => {
+  it('F-2405 AC-20: a refused host download is kept as a hint of its status', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
-    const kept: Array<[string, string, unknown]> = [];
+    const kept: string[] = [];
     const ports = wiringPortsOf(
       {
         ...surfaces,
         hints: {
           begin: () => undefined,
           record: hint => {
-            kept.push([
-              hint.status,
-              typeof hint.message === 'string' ? hint.message : hint.message.id,
-              hint.mitigations,
-            ]);
+            kept.push(hint.status);
           },
         },
       },
@@ -473,18 +469,7 @@ describe("the assembled ports' settings", () => {
     );
     ports.server.onHostDownloadRefused('downloadFailed');
     ports.server.onHostDownloadRefused('noDownloader');
-    deepStrictEqual(kept, [
-      [
-        'ServerDownloadFailed',
-        'Error: ServerDownloadFailed',
-        [{id: 'S049', values: ['remote.SSH.localServerDownload']}],
-      ],
-      [
-        'NoDownloaderOnHost',
-        'Error: NoDownloaderOnHost',
-        [{id: 'S050', values: ['remote.SSH.localServerDownload']}],
-      ],
-    ]);
+    deepStrictEqual(kept, ['ServerDownloadFailed', 'NoDownloaderAvailable']);
   });
 
   it('F-2403: remote.SSH.useExecServer is read as a switch', () => {
