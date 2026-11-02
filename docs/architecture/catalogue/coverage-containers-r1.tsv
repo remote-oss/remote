@@ -6,7 +6,7 @@ F-0101.AC-3b	deferred	containers release 1: increment 2 (the reopen notification
 F-0101.AC-4	todo	
 F-0101.AC-5	acceptance	
 F-0101.AC-6	deferred	containers release 1: the full contribution set comes with later increments
-F-0101.AC-7	deferred	containers release 1: increment 2 (shutdown)
+F-0101.AC-7	acceptance	
 F-0101.AC-8	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-9	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-10	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
@@ -234,7 +234,7 @@ F-0301.AC-42	unit
 F-0301.AC-43	unit	
 F-0301.AC-44	acceptance	
 F-0301.AC-47	acceptance	
-F-0301.AC-48	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-48	acceptance	
 F-0301.AC-49	acceptance	
 F-0301.AC-50	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-51	deferred	containers release 1: later (multi-root)
@@ -817,7 +817,7 @@ F-0417.AC-58	acceptance
 F-0417.AC-59	deferred	containers release 1: later (Compose)
 F-0417.AC-60	acceptance	
 F-0417.AC-61	acceptance	
-F-0417.AC-62	deferred	containers release 1: later (Reopen Folder Locally)
+F-0417.AC-62	acceptance	
 F-0417.AC-63	deferred	containers release 1: later (Compose)
 F-0417.AC-64	deferred	containers release 1: later (Compose)
 F-0417.AC-65	acceptance	
