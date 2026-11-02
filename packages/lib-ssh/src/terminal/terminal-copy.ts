@@ -134,7 +134,19 @@ export function terminalCopierOf(options: TerminalCopierOptions): Copier {
           onUnreachable: timedOut,
         },
       );
-      asking.questions = options.attachQuestions({terminal, reader});
+      asking.questions = options.attachQuestions({
+        terminal,
+        reader: {
+          inputOpened: () => {
+            reader.inputOpened();
+            request.onInput?.(true);
+          },
+          inputClosed: () => {
+            reader.inputClosed();
+            request.onInput?.(false);
+          },
+        },
+      });
       const splitter = new LineSplitter(line => {
         if (line.trim() !== '' && !isDebugLine(line)) {
           lines.push(line);

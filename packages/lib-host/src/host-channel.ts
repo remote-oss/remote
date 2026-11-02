@@ -55,6 +55,8 @@ export interface CopyRequest {
   localFile: string;
   remotePath: string;
   cancellation: AbortSignal;
+  /** Told when the copy's login shows an input to the user (true) and when that input closes (false). */
+  onInput?: (open: boolean) => void;
 }
 
 /** A script that ran to its end. Its status is a result for the caller to interpret, never a failure. */

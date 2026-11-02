@@ -457,7 +457,7 @@ async function copyWatched(
   }
   const stopped = new AbortController();
   const ended = new AbortController();
-  const state = {stalled: false};
+  const state = {stalled: false, inputs: 0, grew: Date.now()};
   function isEnded(): boolean {
     return ended.signal.aborted;
   }
@@ -465,11 +465,18 @@ async function copyWatched(
     localFile,
     remotePath,
     cancellation: AbortSignal.any([input.cancellation, stopped.signal]),
+    onInput: open => {
+      if (open) {
+        state.inputs += 1;
+      } else {
+        state.inputs = Math.max(0, state.inputs - 1);
+        state.grew = Date.now();
+      }
+    },
   });
   const watching = (async () => {
     const interval = Math.min(COPY_PROBE_MILLISECONDS, bound / 3);
     let largest = -1;
-    let grew = Date.now();
     while (!isEnded()) {
       await new Promise<void>(resolve => {
         const timer = setTimeout(resolve, interval);
@@ -485,6 +492,10 @@ async function copyWatched(
       if (isEnded()) {
         return;
       }
+      if (state.inputs > 0) {
+        state.grew = Date.now();
+        continue;
+      }
       const size = await sizeOnHost(
         dependencies.channel,
         remotePath,
@@ -492,8 +503,8 @@ async function copyWatched(
       ).catch(() => undefined);
       if (size !== undefined && size > largest) {
         largest = size;
-        grew = Date.now();
-      } else if (Date.now() - grew >= bound) {
+        state.grew = Date.now();
+      } else if (Date.now() - state.grew >= bound) {
         state.stalled = true;
         stopped.abort();
         return;

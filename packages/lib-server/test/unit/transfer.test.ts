@@ -1928,4 +1928,45 @@ describe('the copy to the host that makes no progress (card connect-122)', () =>
       [{kind: 'copyStalled'}, true],
     );
   });
+
+  /** A held copy whose login shows the given inputs. */
+  function heldWithInputs(
+    inputs: ReadonlyArray<{open: boolean; afterMilliseconds: number}>,
+  ): CopyAnswer[] {
+    return [
+      {matches: () => true, ending: {kind: 'holdUntilCancelled'}, inputs},
+    ];
+  }
+
+  it('F-2405 AC-21: an input of the copy login left open past the bound does not end the copy', async () => {
+    const caller = new AbortController();
+    setTimeout(() => {
+      caller.abort();
+    }, 300);
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: heldWithInputs([{open: true, afterMilliseconds: 10}]),
+      copyStall: 90,
+      cancellation: caller.signal,
+      answers: sizeAnswers(new Array<number>(50).fill(0)),
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'cancelled'});
+  });
+
+  it('F-2405 AC-21: the bound starts over when the input closes, and a file that then does not grow ends the copy at it', async () => {
+    const started = Date.now();
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: heldWithInputs([
+        {open: true, afterMilliseconds: 10},
+        {open: false, afterMilliseconds: 250},
+      ]),
+      copyStall: 90,
+      answers: sizeAnswers(new Array<number>(50).fill(0)),
+    });
+    deepStrictEqual(
+      [failureOf(outcome), Date.now() - started >= 250 + 80],
+      [{kind: 'copyStalled'}, true],
+    );
+  });
 });

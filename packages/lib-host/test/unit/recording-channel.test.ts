@@ -339,4 +339,48 @@ describe('recording channel (lib-host fake)', () => {
       });
     });
   });
+
+  it('tells the request of a copy the inputs of its login when the answer says', async () => {
+    const channel = new RecordingChannel({
+      identity: 'host',
+      platformHint: 'linux',
+      copies: [
+        {
+          matches: () => true,
+          ending: {kind: 'copied'},
+          inputs: [
+            {open: true, afterMilliseconds: 0},
+            {open: false, afterMilliseconds: 5},
+          ],
+        },
+      ],
+    });
+    const told: boolean[] = [];
+    await channel.copyToHost({
+      ...copyRequest('/remote/a'),
+      onInput: open => {
+        told.push(open);
+      },
+    });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    deepStrictEqual(told, [true, false]);
+  });
+
+  it('tells nothing of inputs to a request that does not listen', async () => {
+    const channel = new RecordingChannel({
+      identity: 'host',
+      platformHint: 'linux',
+      copies: [
+        {
+          matches: () => true,
+          ending: {kind: 'copied'},
+          inputs: [{open: true, afterMilliseconds: 0}],
+        },
+      ],
+    });
+    deepStrictEqual(await channel.copyToHost(copyRequest('/remote/a')), {
+      kind: 'copied',
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+  });
 });
