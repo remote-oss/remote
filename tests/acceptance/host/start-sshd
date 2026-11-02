@@ -3,7 +3,7 @@
 # may be empty) for the users harness, harness-nofwd, harness-nosock, harness-noall, harness-mute, harness-ro, harness-i686, harness-fish,
 # harness-bash, harness-zsh, harness-dash, harness-ksh, harness-csh and harness-tcsh, writes CA_PUBLIC_KEY (may be empty)
 # to /etc/ssh/ca.pub for the certificate-only user harness-cert, sets
-# the password HOST_PASSWORD (from the run's env file) for harness-pw and forgets it, leaves the host with the download tool
+# the password HOST_PASSWORD (from the run's env file) for harness-pw and harness-pwonly and forgets it, leaves the host with the download tool
 # HOST_FETCH names (busybox-wget, the default; gnu-wget; curl; none), then runs sshd in the foreground.
 # The tools are removed with rm: apk del would put BusyBox's wget link back.
 set -eu
@@ -16,6 +16,7 @@ done
 printf '%s\n' "${CA_PUBLIC_KEY:-}" > /etc/ssh/ca.pub
 chpasswd <<EOF
 harness-pw:$HOST_PASSWORD
+harness-pwonly:$HOST_PASSWORD
 EOF
 unset HOST_PASSWORD
 case "${HOST_FETCH:-busybox-wget}" in

@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {mock} from 'node:test';
 import type {ConnectPhase, Connected, Failed} from 'lib-authority';
+import type {ServerResult} from '../../src/connect/server-steps.ts';
 import {
   devContainerPayloadOf,
   type DevContainerFolder,
@@ -64,6 +65,33 @@ function withMerged(extensions: string[]): Scene['configuration'] {
     workspaceFolder: '/workspaces/proj',
     workspaceMount: undefined,
     mergedConfiguration: {customizations: {vscode: [{extensions}]}},
+  };
+}
+
+/** The read's answer: a named configuration with no image and no merged part. */
+function namedConfiguration(): Scene['configuration'] {
+  return {
+    kind: 'configuration',
+    configuration: {name: 'Proj'},
+    workspaceFolder: '/workspaces/proj',
+    workspaceMount: undefined,
+    mergedConfiguration: undefined,
+  };
+}
+
+/** The requirements check's failure: S034, not retryable, silent, with no hints and no diagnostics. */
+function failedServer(): ServerResult {
+  return {
+    kind: 'failed',
+    failure: {
+      kind: 'serverFailed',
+      reason: {id: 'S034'},
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    },
   };
 }
 
@@ -620,6 +648,31 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(scene.connector.failedContainer(), undefined);
   });
 
+  it('F-0503 AC-15: a failure before the container is ready leaves no identity, though the read gave a name', async () => {
+    const scene = sceneOf();
+    scene.configuration = namedConfiguration();
+    scene.outcome = {
+      kind: 'lifecycleFailed',
+      hook: 'build',
+      part: undefined,
+      message: 'the build failed',
+      containerId: undefined,
+    };
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(scene.connector.attemptIdentity(), undefined);
+  });
+
+  it('F-0503 AC-15: a failure after the container is ready keeps the name the read gave', async () => {
+    const scene = sceneOf();
+    scene.configuration = namedConfiguration();
+    scene.server = failedServer();
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(scene.connector.attemptIdentity(), {
+      name: 'Proj',
+      context: undefined,
+    });
+  });
+
   it('F-0409: an ordinary open hands C7 no rebuild', async () => {
     const scene = sceneOf();
     await connected(scene);
@@ -813,16 +866,7 @@ describe('the container connector: the connect (card containers-08)', () => {
 
   it('F-0417 AC-60, BR-8, BR-5: a connect that fails after its container is ready has told the helper which container the window holds, and then that the connection ends, since a failed window holds nothing', async () => {
     const scene = sceneOf();
-    const failure: Failed = {
-      kind: 'serverFailed',
-      reason: {id: 'S034'},
-      retryable: false,
-      silent: false,
-      userAlreadyNotified: false,
-      hints: [],
-      diagnostics: [],
-    };
-    scene.server = {kind: 'failed', failure};
+    scene.server = failedServer();
     await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
       scene.shutdownSent.map(request => request.type),

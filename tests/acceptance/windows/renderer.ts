@@ -952,6 +952,14 @@ export async function terminalTabsOf(name: string): Promise<string[]> {
   );
 }
 
+/** Whether the keyboard focus of window `name` is inside a terminal, as the page's active element tells it. */
+export async function terminalFocused(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `document.activeElement?.closest('.xterm') != null`,
+  );
+}
+
 /** What an Extensions view row shows. */
 export interface ExtensionRow {
   name: string;
@@ -1870,6 +1878,36 @@ export async function toastDetails(name: string): Promise<ToastDetails[]> {
   progress: ${TOAST_PROGRESS},
 }))`,
   );
+}
+
+/** Clicks the link `linkText` in the message of the toast of window `name` that starts with `messageStart`; fails naming the toasts it found. */
+export async function clickToastLink(
+  name: string,
+  messageStart: string,
+  linkText: string,
+): Promise<void> {
+  const found = await evaluate<string>(
+    name,
+    `(() => {
+  const items = [...document.querySelectorAll('.notifications-toasts .notification-list-item')];
+  const item = items.find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  if (item === undefined) {
+    return 'toasts: ' + JSON.stringify(items.map(each => each.querySelector('.notification-list-item-message')?.textContent));
+  }
+  const links = [...item.querySelectorAll('.notification-list-item-message a')];
+  const link = links.find(each => each.textContent === ${JSON.stringify(linkText)});
+  if (link === undefined) {
+    return 'links: ' + JSON.stringify(links.map(each => each.textContent));
+  }
+  link.click();
+  return 'clicked';
+})()`,
+  );
+  if (found !== 'clicked') {
+    throw new Error(
+      `the link "${linkText}" of the toast "${messageStart}" in window ${name} was not clicked (${found})`,
+    );
+  }
 }
 
 /** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */

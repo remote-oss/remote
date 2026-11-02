@@ -840,7 +840,12 @@ export function launchesOf(root: string): Launch[] {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
         'remote.SSH.showLoginTerminal': true,
-        'remote.SSH.remotePlatform': {password: 'linux'},
+        'remote.SSH.remotePlatform': {
+          password: 'linux',
+          'password-retry': 'linux',
+          'proxy-ask': 'linux',
+          'proxy-ask-terminal': 'linux',
+        },
         'window.dialogStyle': 'custom',
         // Core hides the tab list of a single terminal; the rows read what the panel lists.
         'terminal.integrated.tabs.hideCondition': 'never',
@@ -927,6 +932,13 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
+    },
+    {
+      // The Add New SSH Host flow writes the user's file, so the editor has a home of the run's own.
+      ...EXPLORER_LAUNCH,
+      label: 'add-host',
+      suite: 'add-host',
+      environment: {HOME: '<run>/add-host-home'},
     },
     {
       ...EXPLORER_LAUNCH,
