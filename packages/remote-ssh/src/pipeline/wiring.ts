@@ -9,7 +9,10 @@ import {
   applyDefaults as applyDefaultForwards,
   type TunnelOpener,
 } from '../forwarding/default-forwards.ts';
-import type {ReadSignal} from '../forwarding/default-forwards-timing.ts';
+import type {
+  DefaultReadEvents,
+  ReadSignal,
+} from '../forwarding/default-forwards-timing.ts';
 import type {FailurePresenter} from 'lib-authority';
 import {environmentTunnels, type LocalPort} from 'lib-forwarding';
 import type {Scheduler} from 'lib-helper';
@@ -19,6 +22,7 @@ import type {OverrideValue} from 'lib-product';
 import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
 import {
   buildInvocation,
+  ConnectWait,
   tunnelStart,
   connectWaitMilliseconds,
   type HostListResult,
@@ -46,6 +50,7 @@ import {
   HOST_ZERO_TIMEOUT_SECONDS,
 } from './bounds.ts';
 import type {PhaseEvent} from './connect.ts';
+import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
@@ -146,6 +151,8 @@ export interface WiringPorts {
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
   defaultRead(): Promise<ReadSignal>;
   terms: TermsStepDependencies;
+  /** Whether the workspace is trusted, and when it becomes so: a failed lookup of the terminal mode waits for it. */
+  trust: Pick<DefaultReadEvents, 'isTrusted' | 'onTrustGranted'>;
   /** The client step's dependencies, apart from this connect's state and what the settings give. */
   locate: Omit<
     LocateStepDependencies,
@@ -179,7 +186,11 @@ export interface WiringPorts {
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
     TunnelStepDependencies,
-    'environment' | 'connectWait' | 'tunnelInvocation' | 'tunnelInput'
+    | 'environment'
+    | 'connectWait'
+    | 'tunnelInvocation'
+    | 'tunnelInput'
+    | 'useExecServer'
   >;
   cliPath: CliWiring;
   /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */
@@ -402,6 +413,7 @@ export function stepsOf(
   });
   const tunnelStep = openTunnelStep({
     ...ports.tunnel,
+    useExecServer: ports.settings.useExecServer,
     connectWait: () =>
       terminalWaitOf(
         lookedUp(state).connectTimeout,
@@ -463,6 +475,46 @@ export function stepsOf(
     decideTerms: terms.decideTerms,
     lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
     locateClient,
+    holdLookupFailure: (failed, cancellation) => {
+      if (ports.trust.isTrusted() || cancellation.aborted) {
+        return Promise.resolve(failed);
+      }
+      // Core holds the creation of a terminal process in an untrusted workspace for the trust question, so the held
+      // failure opens the login terminal, with a program that does nothing, as the question's cause.
+      const terminal = ports.terminal.terminals.open(
+        {
+          program: ports.requestEnvironment.runtime,
+          arguments: ['-e', ''],
+          environment: {ELECTRON_RUN_AS_NODE: '1'},
+        },
+        ports.terminal.terminalName(),
+        ports.terminal.revealLoginTerminals(),
+      );
+      return new Promise<StepFailure>(settle => {
+        const wait = new ConnectWait(
+          terminalWaitOf(undefined, connectionSettings().connectTimeout),
+          ports.terminal.scheduler,
+          () => {
+            end(CONNECT_WAIT_TIMEOUT);
+          },
+        );
+        const grant = ports.trust.onTrustGranted(() => {
+          end(failed);
+        });
+        function end(failure: StepFailure): void {
+          wait.stop();
+          grant.dispose();
+          terminal.dispose();
+          cancellation.removeEventListener('abort', onAbort);
+          settle(failure);
+        }
+        function onAbort(): void {
+          end({kind: 'cancelled'});
+        }
+        cancellation.addEventListener('abort', onAbort);
+        wait.start();
+      });
+    },
     openConnection: (input, connectTerms, cancellation) => {
       held.opening = {input, terms: connectTerms};
       if (ports.locate.mode() === 'shared') {

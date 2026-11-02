@@ -137,7 +137,7 @@ F-2005	15	remote-ssh	feature	spec:draft	E20	Report Issue...	B	ssh.report-issue	l
 F-2006	16	remote-ssh	feature	spec:draft	E20	Command catalogue: palette visibility and out-of-context invocation	B	ssh.command-catalogue	lib-standdown	26	5	True	17	3	0	5	ssh-remote				21
 F-2007	17	remote-ssh	feature	spec:draft	E20	Companions installed with the extension (extension pack)	B	ssh.extension-pack-manifest	lib-companion	15	3	True	1	1	1	0					13
 F-2008	18	remote-ssh	feature	spec:draft	E20	Boundary with VS Code core's own SSH features	A	ssh.core-boundary	lib-authority	16	7	True	6	9	0	0	ssh-remote+<alias>;ssh-remote+<host name>;ssh-remote+<hex JSON>	resolvers	VS Code CLI / server install script;agent-host supervisor	editor-cli;openssh	14
-F-2101	19	remote-ssh	feature	spec:draft	E21	Finding and running the local ssh client	A	ssh.client-locator	lib-ssh	30	5	False	0	2	0	0	ssh-remote	resolvers	ssh;ssh -V;Git for Windows ssh.exe	openssh	14
+F-2101	19	remote-ssh	feature	spec:reviewed	E21	Finding and running the local ssh client	A	ssh.client-locator	lib-ssh	30	5	False	0	2	0	0	ssh-remote	resolvers	ssh;ssh -V;Git for Windows ssh.exe	openssh	14
 F-2102	20	remote-ssh	feature	spec:draft	E21	Connection sharing: local connection server and Kill Local Connection Server	A	ssh.local-connection-server	lib-ssh	40	10	False	1	1	0	1	ssh-remote	resolvers	ssh;detached local helper process;SSH_ASKPASS helper	openssh	20
 F-2103	21	remote-ssh	feature	spec:draft	E21	Exec server bootstrap mode	A	ssh.exec-bootstrap	lib-server	34	6	False	0	1	0	0	ssh-remote	resolvers (resolveExecServer, workspace.getRemoteExecServer)	VS Code CLI on host;bash;curl;wget;scp;ssh	editor-cli;openssh	19
 F-2104	22	remote-ssh	feature	spec:draft	E21	SSH tunnel to the server, dynamic forwarding and local port range	A	ssh.tunnel-manager	lib-forwarding	48	13	False	0	2	0	0	ssh-remote	resolvers (ResolvedAuthority, tunnel factory)	ssh (SOCKS dynamic forward);second ssh with local forward	openssh	21
@@ -146,7 +146,7 @@ F-2106	24	remote-ssh	feature	spec:draft	E21	PTY allocation	A	ssh.pty-flag	lib-ss
 F-2107	25	remote-ssh	feature	spec:draft	E21	RemoteCommand support	A	ssh.remote-command-gate	lib-ssh	27	11	False	0	1	0	0	ssh-remote	resolvers	ssh;ssh -G	openssh	14
 F-2108	26	remote-ssh	feature	spec:reviewed	E21	Pre-connection script	A	ssh.preconnect-runner	lib-ssh	42	9	False	0	1	0	0	ssh-remote	resolvers	user-configured script (.sh/executable; .ps1 on Windows)	openssh	13
 F-2109	27	remote-ssh	feature	spec:draft	E21	ssh_config keywords passed through to ssh	A	ssh.config-passthrough	lib-ssh	19	6	False	0	0	0	0	ssh-remote	resolvers	ssh	openssh	24
-F-2201	28	remote-ssh	feature	spec:draft	E22	Which SSH configuration files are read; remote.SSH.configFile; parse errors	A	ssh.config-source	lib-ssh	44	10	True	1	1	0	0		resolvers	ssh (-F option)	openssh	18
+F-2201	28	remote-ssh	feature	spec:reviewed	E22	Which SSH configuration files are read; remote.SSH.configFile; parse errors	A	ssh.config-source	lib-ssh	46	10	True	1	1	0	0		resolvers	ssh (-F option)	openssh	18
 F-2202	29	remote-ssh	feature	spec:draft	E22	Host list from the configuration: Host patterns, Include and Match	B	ssh.host-list	lib-ssh	34	6	False	1	1	0	0				openssh	11
 F-2203	30	remote-ssh	feature	spec:draft	E22	Open SSH Configuration File...	B	ssh.config-opener	lib-ssh	31	6	True	2	1	0	0					9
 F-2204	31	remote-ssh	feature	spec:reviewed	E22	Add New SSH Host...	B	ssh.add-host-wizard	lib-ssh	41	9	True	2	1	0	0	ssh-remote			openssh	9
@@ -154,7 +154,7 @@ F-2205	32	remote-ssh	feature	spec:draft	E22	Host and user name validation	A	ssh.
 F-2206	33	remote-ssh	feature	spec:reviewed	E22	Remote platform per host: detection, the platform picker and remotePlatform	D	ssh.platform-resolver	lib-ssh	38	10	True	3	4	0	0	ssh-remote	resolvers	ssh;hidden terminal in non-local mode	openssh	21
 F-2301	34	remote-ssh	feature	spec:draft	E23	Connect to Host... (new window): the host picker and user@host input	B	ssh.host-picker	lib-authority	34	11	True	1	0	0	0	ssh-remote	resolvers			15
 F-2302	35	remote-ssh	feature	spec:draft	E23	Connect Current Window to Host...	B	ssh.host-picker (reuse-window variant)	lib-authority	34	5	True	1	2	0	0	ssh-remote	resolvers			11
-F-2303	36	remote-ssh	feature	spec:draft	E23	New Window on Active Host	A	ssh.new-window-on-host	lib-authority	26	3	True	1	4	0	2	ssh-remote	resolvers			15
+F-2303	36	remote-ssh	feature	spec:reviewed	E23	New Window on Active Host	A	ssh.new-window-on-host	lib-authority	27	3	True	1	4	0	2	ssh-remote	resolvers			15
 F-2304	37	remote-ssh	feature	spec:draft	E23	Connection progress, phases and cancel	A	ssh.connect-progress	lib-log	34	11	True	1	8	0	0	ssh-remote	resolvers;terminalDataWriteEvent	ssh	openssh	20
 F-2305	38	remote-ssh	feature	spec:draft	E23	Host-key verification	A	ssh.prompt-relay (host-key classifier)	lib-ssh	45	9	True	0	5	0	0	ssh-remote	resolvers	ssh;SSH_ASKPASS relay	openssh	24
 F-2306	39	remote-ssh	feature	spec:draft	E23	Password and keyboard-interactive (two-factor) prompts	A	ssh.prompt-relay (secret input)	lib-ssh	36	7	True	0	7	0	0	ssh-remote	resolvers;terminalDataWriteEvent	ssh;SSH_ASKPASS relay	openssh	18

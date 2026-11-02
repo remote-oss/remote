@@ -11,6 +11,7 @@ import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {openTunnelStep} from '../../src/pipeline/tunnel-step.ts';
+import type {ConnectionLease} from '../../src/pipeline/steps.ts';
 import {emptyRecording, INPUT, leaseOf, STARTED} from './pipeline.fixture.ts';
 
 const SOCKS_SETTINGS: TunnelSettings = {
@@ -41,6 +42,7 @@ const TERMINAL_NOT_USED = {
   },
   tunnelInput: (): undefined => undefined,
   revealLoginTerminals: (): boolean => false,
+  useExecServer: (): boolean => true,
   connectWait: (): never => {
     throw new Error('the SOCKS path has no connect wait');
   },
@@ -54,6 +56,10 @@ function stepWith(
     port?: number | undefined;
     busyRange?: {first: number; last: number};
     onWaiting?: () => void;
+    cancellation?: AbortSignal;
+    limits?: typeof LIMITS;
+    /** What the host's check says of the server's port: listening, not, or no answer. */
+    listening?: 'yes' | 'no' | 'none' | 'status' | 'silent';
     onSettingUp?: () => void;
   } = {},
 ): {
@@ -63,11 +69,18 @@ function stepWith(
   socksPorts: number[];
   sink: MemorySink;
   clock: FakeClock;
+  /** How often the step told the window that the host refuses the forwarding, and took the bound off. */
+  refused: number[];
+  disarmed: number[];
+  /** Tells the step that the connection's ssh ended. */
+  loseConnection: () => void;
 } {
   const clock = new FakeClock();
   const local = new FakeLocalPort();
   const dialer = new FakeDialer(options.dialScript ?? ['work']);
   const socksPorts: number[] = [];
+  const refused: number[] = [];
+  const disarmed: number[] = [];
   const sink = new MemorySink();
   const port = 'port' in options ? options.port : 50000;
   const choice: PortChoice =
@@ -80,17 +93,43 @@ function stepWith(
     settings: () => options.settings ?? SOCKS_SETTINGS,
     local,
     scheduler: clock.scheduler(),
-    limits: LIMITS,
+    limits: options.limits ?? LIMITS,
     dialerFor: socksPort => {
       socksPorts.push(socksPort);
       return dialer;
     },
     chooseLocalPort: () => Promise.resolve(choice),
     environment: () => ENVIRONMENT,
+    forwardRefused: () => {
+      refused.push(1);
+    },
     ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
-  const lease = leaseOf(emptyRecording());
+  const recording = emptyRecording();
+  const lease = {
+    ...leaseOf(recording),
+    channel: {
+      runScript: (
+        request: {script: string},
+        onLine: (line: string) => void,
+      ) => {
+        if (options.listening === 'none') {
+          return Promise.resolve({
+            kind: 'failed' as const,
+            failure: {kind: 'spawnFailed' as const, detail: 'no shell'},
+          });
+        }
+        if (options.listening !== 'silent') {
+          onLine(`remote-oss-listening=${options.listening ?? 'yes'}`);
+        }
+        return Promise.resolve({
+          kind: 'exited' as const,
+          status: options.listening === 'status' ? 3 : 0,
+        });
+      },
+    } as unknown as ConnectionLease['channel'],
+  };
   return {
     open: () =>
       step.openTunnel(
@@ -98,18 +137,171 @@ function stepWith(
         lease,
         STARTED.server,
         options.onWaiting ?? (() => undefined),
-        new AbortController().signal,
+        options.cancellation ?? new AbortController().signal,
         options.onSettingUp,
+        () => {
+          disarmed.push(1);
+        },
       ),
     local,
     dialer,
     socksPorts,
     sink,
     clock,
+    refused,
+    disarmed,
+    loseConnection: () => {
+      recording.notice?.({type: 'transportLost'});
+    },
   };
 }
 
+/** Lets the clock run past the wait of the relay, a turn of the event loop at a time. */
+async function pastTheBound(clock: FakeClock): Promise<void> {
+  for (let round = 0; round < 400; round++) {
+    await Promise.resolve();
+    clock.advance(50);
+  }
+}
+
 describe('the step that opens the window tunnel', () => {
+  it('connect-106: a relay that closes every probe before its reply tells the window once, takes the bound off and waits until the connect is cancelled', async () => {
+    const controller = new AbortController();
+    const {open, clock, refused, disarmed} = stepWith({
+      dialScript: ['closedBeforeReply'],
+      cancellation: controller.signal,
+      limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
+    });
+    let result: Awaited<ReturnType<typeof open>> | undefined;
+    const pending = open().then(value => {
+      result = value;
+    });
+    await pastTheBound(clock);
+    const before = [refused.length, disarmed.length, result];
+    controller.abort();
+    await pending;
+    deepStrictEqual(
+      [before, result],
+      [[1, 1, undefined], {kind: 'failed', failure: {kind: 'cancelled'}}],
+    );
+  });
+
+  /** The kind of the step's result, and how often it told the window, for a run that `dialScript` and `listening` steer. */
+  async function refusalRun(
+    options: Parameters<typeof stepWith>[0],
+    beforeBound?: (context: ReturnType<typeof stepWith>) => Promise<void>,
+  ) {
+    const controller = new AbortController();
+    const context = stepWith({
+      cancellation: controller.signal,
+      limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
+      ...options,
+    });
+    let result: Awaited<ReturnType<typeof context.open>> | undefined;
+    const pending = context.open().then(value => {
+      result = value;
+    });
+    await Promise.resolve();
+    await beforeBound?.(context);
+    await pastTheBound(context.clock);
+    const state = {
+      ended: result?.kind,
+      refused: context.refused.length,
+      lines: context.sink.lines.map(line => line.message),
+    };
+    controller.abort();
+    await pending;
+    return state;
+  }
+
+  it('connect-106: closed probes with the server listening on the host are a refused forward, and the log names the fact', async () => {
+    const outcome = await refusalRun({dialScript: ['closedBeforeReply']});
+    deepStrictEqual(
+      [
+        outcome.ended,
+        outcome.refused,
+        outcome.lines.some(line =>
+          line.includes('listens on the host: the forward is refused'),
+        ),
+      ],
+      [undefined, 1, true],
+    );
+  });
+
+  it('connect-106: closed probes with the server gone from the host are today’s outcome: not ready, with no notice', async () => {
+    const outcome = await refusalRun({
+      dialScript: ['closedBeforeReply'],
+      listening: 'no',
+    });
+    deepStrictEqual(
+      [
+        outcome.ended,
+        outcome.refused,
+        outcome.lines.some(line => line.includes('the server is gone')),
+      ],
+      ['failed', 0, true],
+    );
+  });
+
+  it('connect-106: closed probes whose check says the server does not listen go on probing, and a server that starts later opens', async () => {
+    const script: DialAnswer[] = [
+      ...Array.from({length: 25}, (): DialAnswer => 'closedBeforeReply'),
+      'work',
+    ];
+    const outcome = await refusalRun({dialScript: script, listening: 'no'});
+    deepStrictEqual([outcome.ended, outcome.refused], ['done', 0]);
+  });
+
+  it('connect-106: closed probes and a host check that gave no answer are today’s outcome too', async () => {
+    const outcome = await refusalRun({
+      dialScript: ['closedBeforeReply'],
+      listening: 'none',
+    });
+    deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
+  });
+
+  it('connect-106: a host check that exits with a failing status or prints no answer is no answer, and the probing goes on to the bound', async () => {
+    const seen: string[] = [];
+    for (const listening of ['status', 'silent'] as const) {
+      const outcome = await refusalRun({
+        dialScript: ['closedBeforeReply'],
+        listening,
+      });
+      seen.push(`${String(outcome.ended)} ${String(outcome.refused)}`);
+    }
+    deepStrictEqual(seen, ['failed 0', 'failed 0']);
+  });
+
+  it('connect-106: an unreachable relay with the connection’s ssh alive is a refused forward', async () => {
+    const outcome = await refusalRun({dialScript: ['unreachable']});
+    deepStrictEqual(
+      [
+        outcome.ended,
+        outcome.refused,
+        outcome.lines.some(line => line.includes('ssh is still alive')),
+      ],
+      [undefined, 1, true],
+    );
+  });
+
+  it('connect-106: an unreachable relay after the connection’s ssh ended is not a refused forward', async () => {
+    const outcome = await refusalRun({dialScript: ['unreachable']}, context => {
+      context.loseConnection();
+      return Promise.resolve();
+    });
+    deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
+  });
+
+  it('connect-106: probes that fail in another way are the failure of an unready tunnel, with no notice and the bound kept', async () => {
+    const {open, clock, refused, disarmed} = stepWith({dialScript: ['fail']});
+    const pending = open();
+    await pastTheBound(clock);
+    deepStrictEqual(
+      [(await pending).kind, refused.length, disarmed.length],
+      ['failed', 0, 0],
+    );
+  });
+
   it('connect-107: the step tells its caller that the tunnel stage began once the window’s port is chosen, and not when no port is free', async () => {
     let began = 0;
     function onSettingUp(): void {

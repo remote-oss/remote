@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import type * as vscode from 'vscode';
 import {
   type EditorResolver,
+  type PhaseName,
   type ResolvedConnection,
   resolverEditorOf,
   type ProgressUpdate,
@@ -214,7 +215,7 @@ describe('the editor behind the resolver host', () => {
   /** The progress messages for the stages `run` reports, in order. */
   async function messagesFor(
     report: (update: ProgressUpdate) => void,
-    detailsTitle?: (stage: string) => string | undefined,
+    detailsTitle?: (stage: PhaseName) => string | undefined,
   ): Promise<string[]> {
     const seen: Seen = {events: []};
     await resolverEditorOf(fakeEditor(seen), {

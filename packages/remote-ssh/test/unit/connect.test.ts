@@ -393,6 +393,26 @@ describe('the connect pipeline, what the log says of a resolve (card connect-65)
     ]);
   });
 
+  it('F-2201 AC-27: the failure of the lookup in terminal mode is the one the step holds it to, and no connection is opened', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        locateClient: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'unknown'}}),
+        holdLookupFailure: () => Promise.resolve({kind: 'cancelled'}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('openConnection'),
+      ],
+      ['cancelled', false],
+    );
+  });
+
   it('F-2003 BR-6 item 9: a server on a socket has no listening line', async () => {
     const {recording, options, logSink} = setup();
     await connect(
@@ -941,6 +961,39 @@ describe('the connect pipeline, when a step fails', () => {
       {...options, cancellation: controller.signal},
     );
     await new Promise(resolve => setTimeout(resolve, 10));
+    controller.abort();
+    const result = await pending;
+    deepStrictEqual('kind' in result ? result.kind : result, 'cancelled');
+  });
+
+  it('connect-106: a SOCKS tunnel step that takes the bound off goes on waiting past it, and a cancel ends it', async () => {
+    const {recording, options} = setup();
+    const controller = new AbortController();
+    const pending = connect(
+      INPUT,
+      steps(recording, {
+        locateClient: waitsOf({...WAITS, tunnelMilliseconds: 20}),
+        tunnelPath: () => 'socks',
+        openTunnel: (
+          input,
+          lease,
+          server,
+          onWaiting,
+          signal,
+          onSettingUp,
+          disarm,
+        ) => {
+          disarm?.();
+          return new Promise(resolve => {
+            signal.addEventListener('abort', () => {
+              resolve({kind: 'failed', failure: {kind: 'cancelled'}});
+            });
+          });
+        },
+      }),
+      {...options, cancellation: controller.signal},
+    );
+    await new Promise(resolve => setTimeout(resolve, 80));
     controller.abort();
     const result = await pending;
     deepStrictEqual('kind' in result ? result.kind : result, 'cancelled');

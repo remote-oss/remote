@@ -3,19 +3,22 @@ import {
   acceptedKeyLogins,
   appendScript,
   closeWindow,
+  connectionLog,
   emptyWindows,
   inWindow,
   onHost,
+  onHostAs,
   openWindow,
   recordLines,
   signal,
   userSettings,
   variable,
   waitFor,
+  windowEvents,
   windowState,
 } from '../windows/harness.ts';
 import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
-import {portsRows, statusItem} from '../windows/renderer.ts';
+import {notifications, portsRows, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
   connectedWith,
@@ -131,12 +134,21 @@ async function failing(
   return failed;
 }
 
+/** Waits until window `name` has a failure dialog in its record. */
+function waitForDialogRecord(name: string): Promise<void> {
+  return waitFor(
+    `a failure dialog of window ${name}`,
+    () => recordLines('failureDialog', name).length > 0,
+    120_000,
+  );
+}
+
 describe('the tunnel of a window that its host or its configuration refuses (card coverage-79)', function () {
   this.timeout(900_000);
 
   beforeEach(closeAllButLocal);
 
-  it('F-2104 AC-23 (c79-max-wait): with the second ssh and every forward cleared, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
+  it('F-2104 AC-23, AC-36 (c79-max-wait): with the second ssh and every forward cleared, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
     const seen: Array<
       [boolean, number, string | undefined, string[] | undefined, string]
     > = [];
@@ -174,6 +186,203 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
       [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
     ]);
+  });
+
+  it('F-2104 AC-35, AC-36 (c79-max-wait-bind): with the second ssh and a range whose only port nobody listens on but the user cannot bind, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
+    const seen: Array<
+      [boolean, number, string | undefined, string[] | undefined, string]
+    > = [];
+    for (const settings of [
+      {...SECOND_SSH, 'remote.SSH.preferredLocalPortRange': '80-80'},
+      {
+        ...SECOND_SSH,
+        'remote.SSH.preferredLocalPortRange': '80-80',
+        'remote.SSH.connectTimeout': 30,
+      },
+    ]) {
+      await closeAllButLocal();
+      await keepingSettings(async () => {
+        const failed = await failing(
+          'c79-bind-wait',
+          'harness',
+          settings,
+          25_000,
+        );
+        const waiting = phaseOf(
+          failed,
+          'Waiting for port forwarding to be ready',
+        );
+        const dialog = dialogsOf(failed)[0];
+        seen.push([
+          waiting !== undefined,
+          Math.round(
+            ((dialog?.elapsed ?? 0) - (waiting?.elapsed ?? Number.NaN)) / 1000,
+          ),
+          dialog?.question,
+          dialog?.buttons,
+          failed.indicator,
+        ]);
+      });
+    }
+    const exhausted =
+      'Could not establish connection to "harness": Error establishing tunnel (Max wait time exhausted).';
+    deepStrictEqual(seen, [
+      [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: harness'],
+      [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: harness'],
+    ]);
+  });
+
+  it('F-2104 AC-20, AC-21, AC-22, AC-47 (c79-socks-refused): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and its progress waits for port forwarding with no dialog and no success for a minute', async () => {
+    const seen: Array<{
+      notices: Array<[string, string[] | undefined]>;
+      toast: string[];
+      indicator: string;
+      dialogs: number;
+      channel: string | null | undefined;
+      refusal: boolean;
+      later: number;
+      stillWaiting: boolean;
+    }> = [];
+    for (const alias of ['noforward', 'fwd-clearall']) {
+      await closeAllButLocal();
+      await keepingSettings(async () => {
+        await userSettings({...PLATFORMS});
+        const name = `c79-socks-${alias}`;
+        appendScript([
+          {
+            surface: 'notice',
+            match: 'Failed to set up',
+            answer: 'dismiss',
+            window: name,
+          },
+        ]);
+        await openWindow(alias, name);
+        await waitFor(
+          'the notification',
+          () => recordLines('notice', name).length > 0,
+          120_000,
+        );
+        async function toasts(): Promise<string[]> {
+          return (await notifications(name)).filter(text =>
+            text.includes('Waiting'),
+          );
+        }
+        const toast = await toasts();
+        const indicator = (await statusItem(name, 'status.host')).text;
+        // The link of the message runs this command, which the row then runs, as the editor does for a click.
+        await inWindow(name, 'opensshremotes.showLog');
+        await windowState(name);
+        const channel = windowEvents(name)
+          .filter(entry => entry.event === 'state')
+          .at(-1)?.visibleOutputChannel;
+        const first = recordLines('notice', name).length;
+        await new Promise(resolve => setTimeout(resolve, 60_000));
+        seen.push({
+          notices: recordLines('notice', name).map(line => [
+            line.question,
+            line.buttons,
+          ]),
+          toast,
+          indicator,
+          dialogs: recordLines('failureDialog', name).length,
+          channel,
+          refusal: connectionLog().some(line =>
+            line.includes('administratively prohibited'),
+          ),
+          later: recordLines('notice', name).length - first,
+          stillWaiting: (await toasts()).length > 0,
+        });
+        await closeWindow(name);
+      });
+    }
+    const expected = {
+      notices: [
+        [
+          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ([Show log](command:opensshremotes.showLog))',
+          [],
+        ],
+      ],
+      toast: [
+        'Setting up SSH Host ALIAS: Waiting for port forwarding to be ready',
+      ],
+      indicator: 'Opening Remote...',
+      dialogs: 0,
+      channel: 'Remote - SSH',
+      refusal: true,
+      later: 0,
+      stillWaiting: true,
+    };
+    deepStrictEqual(seen, [
+      {...expected, toast: [expected.toast[0]?.replace('ALIAS', 'noforward')]},
+      {
+        ...expected,
+        toast: [expected.toast[0]?.replace('ALIAS', 'fwd-clearall')],
+      },
+    ]);
+  });
+
+  it('connect-106 (c79-socks-dead-server): F-2104 7.E4, a host that refuses forwarding whose server is gone while the tunnel waits ends with the failure dialog at the bound and shows no notice', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      const name = 'c79-socks-dead';
+      appendScript([
+        {
+          surface: 'notice',
+          match: 'Failed to set up',
+          answer: 'dismiss',
+          window: name,
+        },
+        {
+          surface: 'failureDialog',
+          match: FAILURE,
+          answer: 'dismiss',
+          window: name,
+          after: 'c79-socks-dead-end',
+        },
+      ]);
+      await openWindow('noforward', name);
+      await waitFor(
+        'the tunnel to wait for port forwarding',
+        () =>
+          recordLines('progress', name).some(
+            line => line.question === 'Waiting for port forwarding to be ready',
+          ),
+        120_000,
+      );
+      // The server of the account ends while the relay's probes are still closed, which the host's check then sees.
+      await onHostAs(
+        'harness-nofwd',
+        'sh',
+        '-c',
+        "pkill -f '[.]vscodium-server-insiders/bin/' || true",
+      );
+      await waitForDialogRecord(name);
+      const lines = recordLines(undefined, name);
+      const result = {
+        dialogs: lines
+          .filter(line => line.surface === 'failureDialog')
+          .map(line => line.question),
+        notices: lines.filter(line => line.surface === 'notice').length,
+        indicator: (await statusItem(name, 'status.host')).text,
+        // The probing went on to the bound of ten seconds after the wait began, not to the end of the run of closed ones.
+        atTheBound: Math.round(
+          ((lines.find(line => line.surface === 'failureDialog')?.time ?? 0) -
+            (lines.find(
+              line =>
+                line.question === 'Waiting for port forwarding to be ready',
+            )?.time ?? 0)) /
+            1000,
+        ),
+      };
+      signal('c79-socks-dead-end');
+      await closeWindow(name).catch(() => undefined);
+      deepStrictEqual(result, {
+        dialogs: ['Could not establish connection to "noforward".'],
+        notices: 0,
+        indicator: 'Disconnected from SSH: noforward',
+        atTheBound: 10,
+      });
+    });
   });
 
   it('F-2104 AC-24 (c79-max-wait-close): Close Remote on the dialog of the exhausted wait makes the window an empty local window', async () => {
@@ -409,14 +618,11 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       });
     }
     deepStrictEqual(seen, [
+      // On the SOCKS path the refused forward keeps the progress and shows the notification, with no dialog.
+      ['Opening Remote...', undefined, true],
       [
         'Disconnected from SSH: harness',
-        'Could not establish connection to "harness".',
-        true,
-      ],
-      [
-        'Disconnected from SSH: harness',
-        'Could not establish connection to "harness".',
+        'Could not establish connection to "harness": Connection closed.',
         true,
       ],
     ]);

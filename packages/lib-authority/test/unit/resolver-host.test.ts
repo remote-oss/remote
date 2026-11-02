@@ -864,13 +864,44 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     );
   });
 
-  it('containers-55: a report with no stage text carries no increment', async () => {
+  it('containers-55: a stage with no text adds no report, and the one with text carries its increment', async () => {
     deepStrictEqual(
       await incrementsFor(
         [{name: 'initializing'}, {name: 'startingServer'}],
         true,
       ),
-      [undefined, 0],
+      [0],
+    );
+  });
+
+  it('connect-108: a stage with no message between two titled ones adds no step, so that the text is not blanked', async () => {
+    const context = await setup({
+      titleOf: phase => (phase.name === 'opened' ? '' : phase.name),
+    });
+    context.connector.phases = [
+      {name: 'initializing'},
+      {name: 'opened'},
+      {name: 'installing'},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      'initializing',
+      'installing',
+    ]);
+  });
+
+  it('connect-108: a progress opened by a stage with no message reports nothing until a stage speaks', async () => {
+    const context = await setup({
+      titleOf: phase => (phase.name === 'opened' ? '' : phase.name),
+    });
+    context.connector.phases = [{name: 'opened'}, {name: 'installing'}];
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.length,
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [1, ['installing']],
     );
   });
 

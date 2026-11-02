@@ -68,6 +68,10 @@ import {announcePlatform} from './connect/platform-notice.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
+import {ownText} from './surfaces/own-strings.ts';
+import type {HintRecorder} from './diagnostics/hint-recorder.ts';
+import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
+import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -137,6 +141,8 @@ export interface ConnectSurfaces {
   /** The non-modal notices, and the profile's record of the answers to them. */
   notice: NoticePort;
   noticeState: AcceptanceState;
+  /** The recorder of the hints a connect leaves for the session. */
+  hints: HintRecorder;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   /** The question before a pre-connection script runs, and the record of the scripts the user trusts. */
@@ -259,6 +265,7 @@ export function wiringPortsOf(
   logger: Logger,
 ): WiringPorts {
   const {settings} = surfaces;
+  let refusedTold = false;
   /** What every login terminal shares: its questions, and whether it is shown. */
   const loginSurfaces = {
     attachQuestions: (login: TerminalLogin, input: ConnectInput) =>
@@ -381,6 +388,7 @@ export function wiringPortsOf(
       ),
     attachLogin: (login, alias) =>
       attachPromptSurface(login, surfaces.prompts, {displayHost: alias}),
+    trust: surfaces.defaultReadEvents,
     terminal: {
       terminals: surfaces.terminals,
       dynamicForwarding: () =>
@@ -446,6 +454,26 @@ export function wiringPortsOf(
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
       chooseLocalPort: chooseWindowPort,
+      forwardRefused: () => {
+        // The extension host is the window's, so a flag of this assembly is a flag of the window.
+        if (refusedTold) {
+          return;
+        }
+        refusedTold = true;
+        // A link that runs the Show Log command in a message with no button, which core would not hide.
+        void surfaces.notice.showError(
+          ownText(
+            {
+              id: 'socksForwardingFailedNotice',
+              values: [
+                `[${ownText({id: 'showLogLinkText', values: []}, surfaces.translate)}](command:${commands.showLog.id})`,
+              ],
+            },
+            surfaces.translate,
+          ),
+          [],
+        );
+      },
       logger,
     },
     logger,
@@ -476,20 +504,24 @@ export function connectAssemblyOf(
   connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
   const tracker = new LoginTerminalTracker(surfaces.terminals);
+  const watch = refusalWatchOf(logger, surfaces.hints, surfaces.translate);
   const ports = wiringPortsOf(
     {...surfaces, terminals: tracker},
     machine,
-    logger,
+    watch.logger,
   );
   const connector = connectorFrom({
-    stepsFor: onPhase => stepsOf(ports, onPhase),
+    stepsFor: onPhase => {
+      watch.begin();
+      return stepsOf(ports, onPhase);
+    },
     options: {
       // A getter, so each connect reads the setting as it is then.
       get maximumReconnectionAttempts() {
         return valueOf(surfaces.settings, 'maxReconnectionAttempts');
       },
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
-      logger,
+      logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
         return switchOf(surfaces.settings, 'useExecServer');

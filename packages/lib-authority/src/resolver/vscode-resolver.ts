@@ -7,6 +7,7 @@
 import type * as vscode from 'vscode';
 import type {
   EditorResolver,
+  PhaseName,
   ProgressPort,
   ResolvedConnection,
   ResolverEditor,
@@ -18,7 +19,7 @@ export interface ResolverEditorOptions {
   /** The command the progress's "(details)" link runs; registered by the extension, never contributed. */
   detailsCommand: string;
   /** The tooltip of the "(details)" link of the stage named `stage` as it is now, read at each report; none keeps the editor's own. */
-  detailsTitle?: (stage: string) => string | undefined;
+  detailsTitle?: (stage: PhaseName) => string | undefined;
   /** The source of the window's candidate ports that the resolver declares to the editor; none keeps the editor's default. */
   candidatePortSource?: 'output';
 }

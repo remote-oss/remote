@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  appendScript,
   connectedWithin,
   connectionLog,
   variable,
@@ -208,6 +209,15 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
       await setting('remote.SSH.enableRemoteCommand', true);
       await setting('remote.SSH.remoteServerListenOnSocket', true);
       await writeHomeFile('harness-bash', '.zshenv', 'export F2107_SOCKET=1\n');
+      // Socket mode asks for the platform (F-2410 AC-5).
+      appendScript([
+        {
+          surface: 'platformPick',
+          match: 'platform',
+          answer: 'linux',
+          window: 'wm-br1-socket',
+        },
+      ]);
       try {
         const environment = await withWindow('rc-zsh', 'wm-br1-socket', () =>
           taskEnvironment('wm-br1-socket', 'harness-bash', 'wm-br1-socket'),
@@ -215,6 +225,8 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
         deepStrictEqual(environment.F2107_SOCKET, '1');
       } finally {
         await setting('remote.SSH.remoteServerListenOnSocket', undefined);
+        // The connect stored an entry for the alias, which would switch the RemoteCommand off for a later connect (F-2107 BR-1).
+        await setting('remote.SSH.remotePlatform', undefined);
         await removeHomeFiles('harness-bash', '.zshenv');
       }
     });

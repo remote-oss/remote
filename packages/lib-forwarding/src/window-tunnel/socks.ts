@@ -7,6 +7,28 @@
 import type {Scheduler} from 'lib-helper';
 import type {Dialer, Duplex, LocalPort, TunnelTarget} from './ports.ts';
 
+/**
+ * The relay closed the connection after the greeting without a byte of its reply: what OpenSSH does when the host
+ * refuses the channel the connection asked for, with no reply code.
+ */
+export class RelayClosedBeforeReply extends Error {
+  /** The error of a relay that closed before replying. */
+  constructor() {
+    super('the relay closed the connection before its reply');
+  }
+}
+
+/**
+ * Nothing listens on the relay's port: the connection's ssh has no SOCKS forward, as when the host entry clears every
+ * forward.
+ */
+export class RelayUnreachable extends Error {
+  /** The error of a relay port that could not be connected to, with the reason the machine gave. */
+  constructor(reason: string) {
+    super(`the relay cannot be reached: ${reason}`);
+  }
+}
+
 /** What the dialer is made from. */
 export interface SocksDialerInit {
   local: LocalPort;
@@ -90,11 +112,11 @@ function openThroughRelay(
         fail('the relay did not answer in time');
       },
     );
-    function fail(reason: string): void {
+    function fail(reason: string | Error): void {
       stage = 'open';
       cancelTimer();
       relay.close();
-      reject(new Error(reason));
+      reject(typeof reason === 'string' ? new Error(reason) : reason);
     }
     function deliver(chunk: Uint8Array): void {
       if (dataListeners.length === 0) {
@@ -169,6 +191,8 @@ function openThroughRelay(
         for (const listener of closeListeners) {
           listener();
         }
+      } else if (stage === 'reply' && received.length === 0) {
+        fail(new RelayClosedBeforeReply());
       } else {
         fail('the relay closed the connection');
       }
@@ -199,11 +223,15 @@ export function socksDialer(init: SocksDialerInit): Dialer {
       ) {
         throw new Error(`the port ${String(target.port)} is not 1 to 65535`);
       }
-      return openThroughRelay(
-        await init.local.connect(init.socksPort),
-        target.port,
-        init,
-      );
+      let relay: Duplex;
+      try {
+        relay = await init.local.connect(init.socksPort);
+      } catch (caught) {
+        throw new RelayUnreachable(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      }
+      return openThroughRelay(relay, target.port, init);
     },
   };
 }

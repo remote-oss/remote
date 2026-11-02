@@ -117,7 +117,7 @@ export type ProgressUpdate = (
   title: string,
   details: boolean,
   increment?: number,
-  stage?: string,
+  stage?: PhaseName,
 ) => void;
 
 /** Progress the user sees while a connect runs. */
@@ -371,7 +371,7 @@ export async function registerResolver(
     input: ConnectInput,
   ): Promise<Connected | Failed> {
     let shown:
-      | {title: string; details: boolean; staged: boolean; stage: string}
+      | {title: string; details: boolean; staged: boolean; stage: PhaseName}
       | undefined;
     let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
@@ -414,7 +414,8 @@ export async function registerResolver(
           },
           async update => {
             report = update;
-            if (shown !== undefined) {
+            // A stage with no message adds no step: an empty message would blank the text the progress shows.
+            if (shown !== undefined && shown.title !== '') {
               reported = {title: shown.title, details: shown.details};
               update(shown.title, shown.details, incrementOf(), shown.stage);
             }
@@ -446,9 +447,10 @@ export async function registerResolver(
       if (report !== undefined) {
         const increment = incrementOf();
         if (
-          reported?.title !== shown.title ||
-          reported.details !== shown.details ||
-          increment !== undefined
+          shown.title !== '' &&
+          (reported?.title !== shown.title ||
+            reported.details !== shown.details ||
+            increment !== undefined)
         ) {
           reported = {title: shown.title, details: shown.details};
           report(shown.title, shown.details, increment, shown.stage);

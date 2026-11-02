@@ -1,7 +1,8 @@
 /**
  * @fileoverview ssh's own error-stream lines in the extension's log: each is marked `[ssh]`, the connection token is
  * masked, and the `debug1` lines of the client's `-v` are kept for the trace level alone, except the server host key's.
- * The lines are logged and never read.
+ * The lines are logged; a logger that implements `sshLines` is handed each bare line after it is logged, and nothing else
+ * reads them.
  */
 
 import type {Logger} from 'lib-log';
@@ -39,17 +40,25 @@ export function isForwardingLine(line: string): boolean {
   return FORWARDING_LINE.test(line.endsWith('\r') ? line.slice(0, -1) : line);
 }
 
-/** Writes `lines` to `logger` as `sshLogEntries` gives them. */
+/** A logger that may also want ssh's bare lines, once each is logged. */
+export type SshLogger = Pick<Logger, 'info' | 'trace'> & {
+  sshLines?(lines: readonly string[]): void;
+};
+
+/** Writes `lines` to `logger` as `sshLogEntries` gives them, each followed by the bare line for its `sshLines`. */
 export function logSshLines(
-  logger: Pick<Logger, 'info' | 'trace'>,
+  logger: SshLogger,
   lines: readonly string[],
   token: string | undefined,
 ): void {
-  for (const entry of sshLogEntries(lines, token)) {
-    if (entry.level === 'info') {
-      logger.info(entry.text);
-    } else {
-      logger.trace(entry.text);
+  for (const line of lines) {
+    for (const entry of sshLogEntries([line], token)) {
+      if (entry.level === 'info') {
+        logger.info(entry.text);
+      } else {
+        logger.trace(entry.text);
+      }
     }
+    logger.sshLines?.([line.endsWith('\r') ? line.slice(0, -1) : line]);
   }
 }

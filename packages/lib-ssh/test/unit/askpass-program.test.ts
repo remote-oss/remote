@@ -73,6 +73,61 @@ describe('askpass program', () => {
     deepStrictEqual([await runProgram(), output], [1, []]);
   });
 
+  it('connect-115, F-2307 AC-16: a refused permission question prints an empty line and exits 0, which ssh takes as allowed', async () => {
+    await listenAnswering(undefined);
+    deepStrictEqual(
+      [
+        await runProgram(['Add key k (c) to agent?'], {
+          ...ENVIRONMENT,
+          SSH_ASKPASS_PROMPT: 'confirm',
+        }),
+        output,
+      ],
+      [0, ['\n']],
+    );
+  });
+
+  it('connect-115: a refused question of another kind still exits 1', async () => {
+    await listenAnswering(undefined);
+    deepStrictEqual(
+      [
+        await runProgram(['Enter passphrase: '], {
+          ...ENVIRONMENT,
+          SSH_ASKPASS_PROMPT: 'none',
+        }),
+        output,
+      ],
+      [1, []],
+    );
+  });
+
+  it('connect-115: an answered permission question prints the answer as typed', async () => {
+    await listenAnswering({type: 'answer', text: 'no'});
+    deepStrictEqual(
+      [
+        await runProgram(['Add key k (c) to agent?'], {
+          ...ENVIRONMENT,
+          SSH_ASKPASS_PROMPT: 'confirm',
+        }),
+        output,
+      ],
+      [0, ['no\n']],
+    );
+  });
+
+  it('connect-115: a permission question nothing listens for still exits 1', async () => {
+    deepStrictEqual(
+      [
+        await runProgram(['Add key k (c) to agent?'], {
+          ...ENVIRONMENT,
+          SSH_ASKPASS_PROMPT: 'confirm',
+        }),
+        output,
+      ],
+      [1, []],
+    );
+  });
+
   it('exits 1 for a reply that is no answer', async () => {
     await listenAnswering({type: 'dance'});
     deepStrictEqual([await runProgram(), output], [1, []]);

@@ -30,7 +30,10 @@ import {
   termsSettingsOf,
   textOf as settingTextOf,
 } from '../../src/pipeline/connect-settings.ts';
-import {decidePlatform} from '../../src/pipeline/platform.ts';
+import {
+  decidePlatform,
+  remoteCommandInEffect,
+} from '../../src/pipeline/platform.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import {textOf} from '../../src/surfaces/prompt-strings.ts';
 import {
@@ -1108,6 +1111,19 @@ describe('the terms in socket mode (card connect-96)', () => {
     deepStrictEqual(termsSettingsOf(SOCKET_AND_LOCAL).useLocalServer, false);
   });
 
+  it('F-2107 BR-1: socket mode with useLocalServer true leaves the host’s remote command in effect, and with it false does not', () => {
+    const socketAndOff = userHost({
+      'remote.SSH.remoteServerListenOnSocket': true,
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [SOCKET_AND_LOCAL, socketAndOff].map(host =>
+        remoteCommandInEffect(true, termsSettingsOf(host), 'devbox'),
+      ),
+      [true, false],
+    );
+  });
+
   it('F-2410: without socket mode, useLocalServer true still probes', () => {
     deepStrictEqual(
       decidePlatform(
@@ -1203,6 +1219,40 @@ describe("the assembled ports' platform notice", () => {
       shown.map(message => message.includes('"linux"')),
       [true],
     );
+  });
+});
+
+describe("the assembled ports' refused forwarding notice (card connect-106)", () => {
+  it('F-2104 7.E4: the first refusal shows the error with a Show log link and no button, and the next ones show nothing', async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const shown: Array<[string, readonly string[]]> = [];
+    const ports = wiringPortsOf(
+      {
+        ...surfaces,
+        notice: {
+          showInformation: () => Promise.resolve(undefined),
+          showWarning: () => Promise.resolve(undefined),
+          showError: (message, buttons) => {
+            shown.push([message, buttons]);
+            return Promise.resolve(undefined);
+          },
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    );
+    ports.tunnel.forwardRefused();
+    ports.tunnel.forwardRefused();
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(shown, [
+      [
+        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})>'.replace(
+          '{0}',
+          '[<Show log>](command:opensshremotes.showLog)',
+        ),
+        [],
+      ],
+    ]);
   });
 });
 
