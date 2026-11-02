@@ -226,10 +226,12 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
     });
   });
 
-  it('F-2312 AC-26 (c84-reload): after Reload Window with the local server running the contribution and new terminals still have the display', async () => {
+  it('F-2312 AC-26 (c84-reload): with the setting turned off in the window, after Reload Window with the local server running the contribution and new terminals still have the display', async () => {
     await keepingSettings(async () => {
       await x11Window('c84-reload', 'x11fwd');
       const before = await inTerminal('c84-reload', DISPLAY_PROBE);
+      await userSettings({'remote.SSH.enableX11Forwarding': false});
+      await new Promise(resolve => setTimeout(resolve, 3000));
       await reloadWindow('c84-reload');
       await connectedWithin('c84-reload', 90_000);
       const after = await inTerminal('c84-reload', DISPLAY_PROBE);
