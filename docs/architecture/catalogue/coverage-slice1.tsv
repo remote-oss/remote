@@ -1005,11 +1005,11 @@ F-2508.AC-9	acceptance
 F-2508.AC-10	acceptance	
 F-2508.AC-11	acceptance	
 F-2508.AC-12	acceptance	
-F-2508.AC-13	todo	
-F-2508.AC-14	todo	
+F-2508.AC-13	core	core: the debugger's modal; on this server build js-debug falls back to the server's node
+F-2508.AC-14	acceptance	
 F-2508.AC-15	acceptance	
 F-2508.AC-16	acceptance	
-F-2508.AC-17	todo	
+F-2508.AC-17	acceptance	
 F-2508.AC-18	todo	
 F-2508.AC-19	acceptance	
 F-2508.AC-20	acceptance	
@@ -1020,15 +1020,15 @@ F-2508.AC-24	acceptance
 F-2508.AC-25	acceptance	
 F-2508.AC-26	acceptance	
 F-2508.AC-27	acceptance	
-F-2508.AC-28	todo	
-F-2508.AC-29	todo	
+F-2508.AC-28	acceptance	
+F-2508.AC-29	acceptance	
 F-2508.AC-30	acceptance	
 F-2508.AC-31	acceptance	
 F-2508.AC-32	acceptance	
 F-2508.AC-33	todo	
-F-2508.AC-34	todo	
+F-2508.AC-34	core	core: the debugger's modal; on this server build js-debug falls back to the server's node
 F-2508.AC-35	core	core: the trust prompt's Manage action and the Workspace Trust editor are core's; the pinned editor's startup prompt has no Manage button
-F-2508.AC-36	todo	
+F-2508.AC-36	acceptance	
 F-2508.AC-37	todo	
 F-2509.AC-1	unit	
 F-2509.AC-2	acceptance	
