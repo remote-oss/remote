@@ -980,6 +980,26 @@ describe('acceptance', () => {
     );
   });
 
+  it("F-2311: Hosts agentfwd-tmpdir and agentfwd-notmp log in to harness-tmpdir and harness-notmp with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd-tmpdir', 'agentfwd-notmp'].map(alias => accountBlock(alias)),
+      [
+        ['agentfwd-tmpdir', 'harness-tmpdir'],
+        ['agentfwd-notmp', 'harness-notmp'],
+      ].map(([alias, user]) =>
+        [
+          ...sharedLines(alias ?? '', user ?? '').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
+    );
+  });
+
   it('connect-39: Host x11fwd logs in to harness with the run key and forwards X11 as trusted', () => {
     strictEqual(
       accountBlock('x11fwd'),

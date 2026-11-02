@@ -737,6 +737,8 @@ Besides `harness`, the host image has fifteen users, and the run's `ssh_config` 
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
+| `agentfwd-tmpdir` | `harness-tmpdir` | the run's key, forwarding the run's agent as `agentfwd` does; the login shell (`tmpdir-shell`) sets `TMPDIR` to `~/tmp`, a folder of the account's own, then is `sh`, for a command, a script on standard input and a login terminal alike |
+| `agentfwd-notmp` | `harness-notmp` | the Ubuntu 26.04 host only: the run's key, forwarding the run's agent; an ACL entry on `/tmp` (`u:harness-notmp:r-x`) lets the account create nothing there, while OpenSSH 10.2 keeps the forwarded socket under `~/.ssh/agent`, so the agent still works; a row lifts it as root with `setfacl -x u:harness-notmp /tmp` and puts it back with `setfacl -m u:harness-notmp:r-x /tmp` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |

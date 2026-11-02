@@ -376,7 +376,9 @@ export function sshConfigOf(
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
- * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11, and
+ * `agentfwd-tmpdir` and `agentfwd-notmp`, forwarding it for an account whose login shell sets TMPDIR (the Alpine host's)
+ * and for one that may not create links in /tmp (the Ubuntu 26.04 host's); three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
  * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
  * sockets of the ControlMaster aliases are in `controlFolder`.
@@ -761,6 +763,21 @@ export function harnessSshConfig(
       accountAlias(
         alias,
         'harness',
+        port,
+        runFolder,
+        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
+        agentSocket,
+      ),
+    ),
+    // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
+    // for one that may not create links in /tmp (the Ubuntu 26.04 host's).
+    ...[
+      ['agentfwd-tmpdir', 'harness-tmpdir'],
+      ['agentfwd-notmp', 'harness-notmp'],
+    ].flatMap(([alias, user]) =>
+      accountAlias(
+        alias ?? '',
+        user ?? '',
         port,
         runFolder,
         [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
