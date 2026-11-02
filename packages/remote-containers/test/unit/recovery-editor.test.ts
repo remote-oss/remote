@@ -42,6 +42,7 @@ function editor(answer?: string) {
   const ports = recoveryPortsOf(fake, {
     writeAttemptLog: () => Promise.resolve(undefined),
     keepEdit: () => Promise.resolve(),
+    fileExists: () => Promise.resolve(true),
     storePausedRetry: () => Promise.resolve(),
     rebuildContainer: () => Promise.resolve(),
     logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
