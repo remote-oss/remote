@@ -796,6 +796,50 @@ export async function clickRowLabel(
 }
 
 /**
+ * The tooltip the editor draws for the inline action `actionTitle` of the one row labelled `rowLabel` in view
+ * `viewName` of window `name`, read after the mouse rests on the action; the mouse is moved away again.
+ */
+export async function actionTooltip(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+  actionTitle: string,
+): Promise<string> {
+  await hoverRow(name, viewName, rowLabel);
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      const action = rows.length === 1 ? [...rows[0].querySelectorAll('.actions .action-label')].find(label => (label.getAttribute('aria-label') ?? '').startsWith(${JSON.stringify(actionTitle)})) : undefined;
+      if (action === undefined) {
+        return null;
+      }
+      const box = action.getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: no action ${JSON.stringify(actionTitle)} on the row ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  await dispatchInput(await pageOf(name), name, [
+    {
+      method: 'Input.dispatchMouseEvent',
+      params: {type: 'mouseMoved', ...point},
+    },
+  ]);
+  await new Promise(resolve => setTimeout(resolve, 2_000));
+  const text = await evaluate<string>(
+    name,
+    "document.querySelector('.monaco-hover .monaco-hover-content')?.textContent ?? ''",
+  );
+  await hoverRow(name, viewName, undefined);
+  return text;
+}
+
+/**
  * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name` that are
  * drawn now, in the order shown: the row's actions stay out of sight until it is hovered, focused or selected.
  */

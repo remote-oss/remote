@@ -5,7 +5,13 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
   closePick,
@@ -280,5 +286,27 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
       [seen, existsSync(missing), readFileSync(existing, 'utf8')],
       [[offered(existing), offered(missing)], false, 'Host custom-one\n'],
     );
+  });
+
+  it('F-5102 AC-25 (unreadable-home-file): with the home file unreadable and the system file defining hosts, only the system hosts are listed with no notification, and the gear still hands over to the companion picker', async () => {
+    const file = sshFile('config', ['Host hidden-one']);
+    chmodSync(file, 0o000);
+    const window = await viewWindow('group-unreadable');
+    try {
+      await listing(window, systemHosts());
+      await rowAction(window, VIEW, GROUP, GEAR);
+      const shown = await pickShown(window);
+      await closePick(window);
+      deepStrictEqual(
+        [
+          await hostLabels(window),
+          await notifications(window),
+          shown.placeholder,
+        ],
+        [systemHosts(), [], 'Select SSH configuration file to update'],
+      );
+    } finally {
+      await closeWindow(window);
+    }
   });
 });

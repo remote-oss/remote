@@ -22,11 +22,13 @@ import {
   restoreUserSettings,
   userSettings,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {
   answerDialog,
   answerInputBox,
   chooseQuickPickRow,
+  paletteRows,
   rowAction,
   viewRows,
   waitForDialog,
@@ -219,6 +221,30 @@ describe('"New Remote" completed through the companion (card coverage-102, part 
           before.includes('inc-listed'),
         ],
         [true, true, true],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5102 AC-36 (unparsable-file): New Remote into a file that does not parse leaves the file as it was, adds no row, opens and closes no window and keeps the window usable', async () => {
+    const file = sshFile('config', ['Host "never closed']);
+    const before = readFileSync(file, 'utf8');
+    const window = await viewWindow('add-unparsable');
+    try {
+      await groupShown(window);
+      const rows = await hostLabels(window);
+      const windows = windowNames();
+      await newRemote(window, 'ssh valid-one', file);
+      await new Promise(resolve => setTimeout(resolve, 4_000));
+      deepStrictEqual(
+        [
+          readFileSync(file, 'utf8'),
+          await hostLabels(window),
+          windowNames(),
+          (await paletteRows(window, 'Focus on Remotes')).length > 0,
+        ],
+        [before, rows, windows, true],
       );
     } finally {
       await closeWindow(window);
