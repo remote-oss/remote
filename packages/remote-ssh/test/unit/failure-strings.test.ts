@@ -34,6 +34,13 @@ describe('the texts of the failure dialog and the progress', () => {
     );
   });
 
+  it('F-2405 AC-14: the missing scp has its text, which the dialog ends with a period', () => {
+    deepStrictEqual(
+      reasonText({id: 'scpNotFound'}, text => text),
+      'scp installation not found',
+    );
+  });
+
   it('F-2104 7.E1: the busy preferred range has the tunnel text with the search and the range, two spaces kept', () => {
     deepStrictEqual(
       reasonText(busyRangeReason({first: 41060, last: 41061}), text => text),

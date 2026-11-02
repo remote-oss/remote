@@ -5,6 +5,7 @@ import type {ConnectionMode} from 'lib-ssh';
 import {
   type ConnectState,
   locateClientStep,
+  scpStartableOf,
 } from '../../src/pipeline/locate-step.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
@@ -612,6 +613,57 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     deepStrictEqual(
       searched.filter(line => line.startsWith('Using ssh client')),
       [],
+    );
+  });
+});
+
+describe('the scp the connect copies with (card connect-120)', () => {
+  /** Whether the check finds `scp` startable, with the programs `checks` answers and the sibling of a configured ssh kept. */
+  async function startable(
+    checks: Readonly<Record<string, Answer>>,
+    kept: string | undefined,
+  ): Promise<[boolean, string[]]> {
+    const seen: Seen = {started: [], killed: [], environments: []};
+    const state: ConnectState = {};
+    if (kept !== undefined) {
+      state.programs = {sshProgram: '/c/ssh', scpProgram: kept};
+    }
+    const check = scpStartableOf({
+      settingValue: () => '',
+      configFile: () => '',
+      mode: () => 'shared',
+      connectTimeout: () => undefined,
+      environment: {searchPath: '/usr/bin', programFilesFolder: ''},
+      platform: 'linux',
+      homeFolder: '/home/a',
+      spawner: spawnerOf(checks, LOOKUP, seen),
+      processEnvironment: {},
+      checkMilliseconds: 20,
+      state,
+      logger: createLogger(new MemorySink(), {
+        minimumLevel: (): Level => 'info',
+      }),
+    });
+    return [await check(), seen.started];
+  }
+
+  it('F-2405 AC-14: the sibling of a configured ssh that starts is found, and one that cannot start is not', async () => {
+    deepStrictEqual(
+      [
+        await startable({'/c/scp': {kind: 'exit', status: 1}}, '/c/scp'),
+        await startable({}, '/c/scp'),
+      ],
+      [
+        [true, ['/c/scp ']],
+        [false, []],
+      ],
+    );
+  });
+
+  it('F-2405 AC-14: with no ssh kept the scp on the PATH is the one asked for', async () => {
+    deepStrictEqual(
+      await startable({scp: {kind: 'exit', status: 1}}, undefined),
+      [true, ['scp ']],
     );
   });
 });

@@ -37,6 +37,7 @@ import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts'
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import {CONNECT_WAIT_TIMEOUT} from '../../src/pipeline/failure.ts';
+import type {ServerStepDependencies} from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput, StepFailure} from '../../src/pipeline/steps.ts';
 import type {PhaseEvent} from '../../src/pipeline/connect.ts';
 import {
@@ -143,6 +144,10 @@ function portsOf(
     defaultRead?: () => Promise<ReadSignal>;
     /** Whether the workspace is trusted; it is, unless the row says otherwise. */
     trusted?: boolean;
+    /** How the `scp` on the PATH answers; it cannot be started when absent. */
+    scp?: Answer;
+    /** What replaces the server steps' ports. */
+    serverPorts?: Partial<ServerStepDependencies>;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -239,7 +244,10 @@ function portsOf(
       platform: 'linux',
       homeFolder: '/home/a',
       spawner: spawnerOf(
-        {[SSH_PROGRAM]: OPENSSH},
+        {
+          [SSH_PROGRAM]: OPENSSH,
+          ...(changes.scp === undefined ? {} : {scp: changes.scp}),
+        },
         changes.lookup ?? {kind: 'exit', output: OPTIONS_TEXT, status: 0},
         seen.spawned,
       ),
@@ -291,8 +299,11 @@ function portsOf(
     },
     server: dependencies(
       changes.cliTemplate === undefined
-        ? {}
-        : {profile: {...PROFILE, cliDownloadUrlTemplate: changes.cliTemplate}},
+        ? (changes.serverPorts ?? {})
+        : {
+            ...changes.serverPorts,
+            profile: {...PROFILE, cliDownloadUrlTemplate: changes.cliTemplate},
+          },
     ),
     tunnel: {
       terminals: seen.terminals,
@@ -671,6 +682,48 @@ describe("the composition's forwarding of the later server steps", () => {
       new AbortController().signal,
     );
     deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('F-2405 AC-14: a client download with no scp to start ends at the copy tool, before the copying stage', async () => {
+    const {ports} = portsOf({
+      localDownloadMode: 'always',
+      serverPorts: {
+        download: {
+          download: () =>
+            Promise.resolve({
+              kind: 'downloaded',
+              facts: {},
+              finalAddress: 'https://example.invalid/a',
+            }),
+        } as unknown as ServerStepDependencies['download'],
+        files: {
+          remove: () => Promise.resolve(),
+          size: () => Promise.resolve(0),
+          sha256: () => Promise.resolve(''),
+          exists: () => Promise.resolve(false),
+          rename: () => Promise.resolve({kind: 'renamed'}),
+        } as unknown as ServerStepDependencies['files'],
+      },
+    });
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const planned = steps.plan(inputFor('dev'), fresh);
+    if (!('plan' in planned) || planned.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    const phases: string[] = [];
+    const outcome = await steps.transfer(
+      inputFor('dev'),
+      leaseOn(channelAnswering(lines('Ok', 'server.installDir=/x'))),
+      fresh,
+      planned.plan,
+      phase => phases.push(phase.kind),
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind, phases],
+      ['copyToolMissing', ['downloadingLocally']],
+    );
   });
 
   it("connect-14: the start runs after the client step, with this connect's looked-up user", async () => {

@@ -309,3 +309,17 @@ export function locateClientStep(
     };
   };
 }
+
+/** Whether the `scp` the connect would copy with can be started: the sibling of a configured `ssh`, else the one on the PATH. */
+export function scpStartableOf(
+  dependencies: LocateStepDependencies,
+): () => Promise<boolean> {
+  return async () =>
+    (
+      await runBounded(
+        dependencies.state.programs?.scpProgram ?? 'scp',
+        [],
+        dependencies,
+      )
+    ).ending !== 'unstarted';
+}
