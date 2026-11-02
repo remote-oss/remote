@@ -45,6 +45,7 @@ function hintRecords(): Array<{
     kind?: string;
     status?: string;
     message?: string;
+    details?: string;
     mitigations?: string[];
     resources?: string[];
   }>;
@@ -517,7 +518,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           .filter(record => record.started >= since)
           .flatMap(record => record.hints)
           .filter(hint => hint.kind === 'error')
-          .map(hint => hint.status),
+          .map(hint => [hint.status, hint.details]),
       };
     });
   }
@@ -534,7 +535,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           ['Close Remote', 'Retry', 'More Actions...'],
         ],
         true,
-        ['MitmPortForwardingDisabled'],
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
       ],
     );
   });
@@ -551,7 +552,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           'Could not establish connection to "changedkey": Port forwarding is disabled.',
           ['Close Remote', 'Retry', 'More Actions...'],
         ],
-        ['MitmPortForwardingDisabled'],
+        [['MitmPortForwardingDisabled', 'Port forwarding is disabled']],
       ],
     );
   });

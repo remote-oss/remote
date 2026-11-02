@@ -182,7 +182,9 @@ export function textOfTemplate(
 }
 
 /** Whether the id has a template here. */
-function isKnownId(stringId: string): stringId is FailureStringId {
+export function isFailureStringId(
+  stringId: string,
+): stringId is FailureStringId {
   return Object.hasOwn(FAILURE_TEMPLATES, stringId);
 }
 
@@ -199,7 +201,7 @@ export function reasonText(
     return reason.text === '' ? undefined : reason.text;
   }
   if ('values' in reason) {
-    if (!isKnownId(reason.id)) {
+    if (!isFailureStringId(reason.id)) {
       return undefined;
     }
     const values: string[] = [];
@@ -213,5 +215,7 @@ export function reasonText(
     }
     return textOfId(reason.id, translate, values);
   }
-  return isKnownId(reason.id) ? textOfId(reason.id, translate) : undefined;
+  return isFailureStringId(reason.id)
+    ? textOfId(reason.id, translate)
+    : undefined;
 }
