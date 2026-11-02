@@ -5,7 +5,7 @@
 
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {passkeyCopies} from './acceptance-keys.ts';
+import {PASSKEY_VARIANTS, passkeyCopies} from './acceptance-keys.ts';
 import type {HostBase} from './host-variants.ts';
 
 /** The window the remote launches open: the harness host's home folder over `ssh-remote`. */
@@ -868,6 +868,7 @@ export function launchesOf(root: string): Launch[] {
             ...passkeyCopies(),
             'passkey-then-second',
             'loosekey',
+            ...PASSKEY_VARIANTS,
           ].map(alias => [alias, 'linux']),
         ),
       },

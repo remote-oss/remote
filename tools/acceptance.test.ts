@@ -5,7 +5,7 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
-import {passkeyCopies} from './acceptance-keys.ts';
+import {PASSKEY_VARIANTS, passkeyCopies} from './acceptance-keys.ts';
 import type {PortHolder} from './acceptance-occupy.ts';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -795,6 +795,23 @@ describe('acceptance', () => {
         '  IdentityFile /run/id_passphrase',
         '  IdentitiesOnly yes',
       ]),
+    );
+  });
+
+  it('coverage-96: each variant of the passphrase key has a block, and AddKeysToAgent names its value', () => {
+    const values = {
+      'passkey-add-yes': 'yes',
+      'passkey-ask-yes': 'ask',
+      'passkey-add-confirm': 'confirm',
+    };
+    deepStrictEqual(
+      {
+        missing: PASSKEY_VARIANTS.filter(alias => accountBlock(alias) === ''),
+        added: Object.entries(values).map(([alias, value]) =>
+          accountBlock(alias).includes(`AddKeysToAgent ${value}`),
+        ),
+      },
+      {missing: [], added: [true, true, true]},
     );
   });
 

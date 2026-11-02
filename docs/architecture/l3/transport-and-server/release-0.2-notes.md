@@ -12,6 +12,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
     remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
 
+- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>")**; the
+  reference shows "Disconnected from SSH" until a connect has succeeded.
+  - F-2307 AC-7 and F-2206 7.E1 describe the indicator without the host for an authority that never connected, while
+    F-2410 AC-12 and AC-31 describe it with the host for the same state. Ours registers the host label at the first
+    resolve's start, everywhere (athena's ruling on #1681; spec question on remote-oss/remote-ssh#40). Rows:
+    `ruling-1681-first-label`.
+
 - **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
   - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
     family's floor (ADR-0007 as amended, the user's decision D-102 on #1368). The proposed APIs it uses read the same
