@@ -165,6 +165,11 @@
           "light": "resources/light/refresh.svg",
           "dark": "resources/dark/refresh.svg"
         }
+      },
+      {
+        "command": "remote-containers.settings",
+        "title": "%commands.Settings.title%",
+        "category": "Dev Containers"
       }
     ],
     "menus": {
@@ -236,6 +241,10 @@
         {
           "command": "remote-containers.showContainerLog",
           "when": "false"
+        },
+        {
+          "command": "remote-containers.settings",
+          "when": "!remote-containers:standingDown"
         }
       ],
       "view/title": [
