@@ -43,6 +43,12 @@ describe('more of the server on a socket (card coverage-81)', function () {
     saved = readUserSettings();
     sshConfig = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
     await freshHost();
+    // Another account's server, left by an earlier row, keeps its socket in /tmp; only this account's are this row's.
+    await onHost(
+      'sh',
+      '-c',
+      "find /tmp -maxdepth 1 -user harness -name 'code-*' -delete",
+    );
     await userSettings({
       'remote.SSH.remoteServerListenOnSocket': true,
       'remote.SSH.remotePlatform': {
@@ -74,7 +80,7 @@ describe('more of the server on a socket (card coverage-81)', function () {
         await onHost(
           'sh',
           '-c',
-          'for f in /tmp/code-*; do [ -S "$f" ] && stat -c %A "$f"; done',
+          'for f in /tmp/code-*; do [ -S "$f" ] && [ "$(stat -c %U "$f")" = harness ] && stat -c %A "$f"; done; true',
         )
       )
         .split('\n')

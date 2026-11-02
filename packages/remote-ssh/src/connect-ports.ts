@@ -117,6 +117,7 @@ import {
   type PromptEditor,
 } from './surfaces/prompt-surface.ts';
 import type {Translate} from './surfaces/strings.ts';
+import {LoginTerminalTracker} from './surfaces/login-terminal-tracker.ts';
 import {attachTerminalQuestions} from './surfaces/terminal-questions.ts';
 
 /** The editor's surfaces a connect shows, each over the editor. */
@@ -485,7 +486,12 @@ export function connectAssemblyOf(
   logger: Logger,
   connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
-  const ports = wiringPortsOf(surfaces, machine, logger);
+  const tracker = new LoginTerminalTracker(surfaces.terminals);
+  const ports = wiringPortsOf(
+    {...surfaces, terminals: tracker},
+    machine,
+    logger,
+  );
   const connector = connectorFrom({
     stepsFor: onPhase => stepsOf(ports, onPhase),
     options: {
@@ -500,7 +506,12 @@ export function connectAssemblyOf(
         return switchOf(surfaces.settings, 'useExecServer');
       },
     },
-    revealLog: surfaces.revealLog,
+    revealLog: () => {
+      tracker.revealDetails(
+        terminalModeOf(surfaces.settings),
+        surfaces.revealLog,
+      );
+    },
     terminalMode: () => terminalModeOf(surfaces.settings),
     applyTerminalEnvironment: surfaces.applyTerminalEnvironment,
   });
@@ -537,7 +548,6 @@ export function connectAssemblyOf(
       presenter: surfaces.presenter,
       cancellable: false,
       allowsTrust: false,
-      progressAtStart: true,
       startTitle: target => {
         // A new connect starts here: a stage without a message of its own has nothing before it to keep.
         shownTitle = '';
@@ -545,6 +555,11 @@ export function connectAssemblyOf(
         return textOfId(title.id as FailureStringId, translate, title.values);
       },
       titleOf: phase => {
+        if (phase.name === 'opened') {
+          // The stage with no text: the progress shows the host alone, whatever stage came before it.
+          shownTitle = '';
+          return shownTitle;
+        }
         const title = phaseTitleOf(phase);
         // A stage without a message of its own keeps the one shown before it.
         if (title !== undefined) {

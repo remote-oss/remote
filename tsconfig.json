@@ -167,6 +167,9 @@
       "path": "tests/acceptance/explorer-home"
     },
     {
+      "path": "tests/acceptance/add-host"
+    },
+    {
       "path": "tests/acceptance/explorer-rows"
     },
     {
@@ -243,6 +246,9 @@
     },
     {
       "path": "tests/acceptance/extensionpack"
+    },
+    {
+      "path": "tests/acceptance/terminal-login"
     },
     {
       "path": "tests/acceptance/extensionpack-german"

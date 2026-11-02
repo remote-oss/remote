@@ -106,10 +106,11 @@ export function openTerminalConnectionStep(
     if (cancellation.aborted) {
       return {kind: 'failed', failure: {kind: 'cancelled'}};
     }
+    const revealed = dependencies.revealLoginTerminals();
     const terminal = dependencies.terminals.open(
       buildInvocation(dependencies.installRequest(input, terms, socksPort)),
       'install',
-      dependencies.revealLoginTerminals(),
+      revealed,
     );
     return new Promise<StepResult<ConnectionLease>>(settle => {
       const lines: string[] = [];
@@ -171,10 +172,12 @@ export function openTerminalConnectionStep(
           },
         },
       );
-      asking.questions = dependencies.attachQuestions(
-        {terminal, reader},
-        input,
-      );
+      if (!revealed) {
+        asking.questions = dependencies.attachQuestions(
+          {terminal, reader},
+          input,
+        );
+      }
 
       function startSession(): void {
         authenticated = true;

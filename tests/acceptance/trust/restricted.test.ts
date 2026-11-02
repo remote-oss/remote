@@ -18,7 +18,8 @@ import {
 describe('the answers to core’s trust question in an SSH window (card coverage-80)', function () {
   this.timeout(300_000);
 
-  it('F-2508 AC-16 (c80-refuse): refusing trust leaves the window connected, in Restricted Mode, with no dialog left', async () => {
+  // F-2308 AC-26's "Cancel" is this refusing answer: core's trust dialog has no cancel (proteus's ruling on #1602).
+  it('F-2508 AC-16, F-2308 AC-26 (c80-refuse): refusing trust leaves the window connected, in Restricted Mode, with no dialog left', async () => {
     await openWindow('harness', 'c80-refuse');
     try {
       await waitForDialog('c80-refuse');

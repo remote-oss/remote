@@ -327,6 +327,23 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual((await result).kind, 'done');
   });
 
+  it('connect-108, F-2308 AC-2: with the login terminal shown no questions are attached, so a password question opens no input', async () => {
+    const made = fixture({reveal: true});
+    const {result, terminal} = await started(made);
+    terminal.write("alex@dev's password: ");
+    made.clock.advance(100);
+    terminal.write(`\n${AUTHENTICATED}`);
+    await result;
+    deepStrictEqual([made.questions, made.questionsDisposed], [[], 0]);
+  });
+
+  it('connect-108: with the login terminal shown a question nobody can reach after the handshake still times out', async () => {
+    deepStrictEqual((await unreachable(true)).outcome, {
+      kind: 'failed',
+      failure: TIMED_OUT,
+    });
+  });
+
   it('athena on #352: a question the reader reports reaches the questions', async () => {
     const made = fixture();
     const {terminal} = await started(made);
@@ -399,8 +416,8 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
   });
 
   /** A login that reached the handshake and then asked a question nobody recognises, until its bound has passed. */
-  async function unreachable() {
-    const made = fixture({timeoutSeconds: 10});
+  async function unreachable(reveal = false) {
+    const made = fixture({timeoutSeconds: 10, reveal});
     const {result, terminal} = await started(made);
     terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
     terminal.write('Some unknown question? ');

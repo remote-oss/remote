@@ -144,6 +144,7 @@ function labelsFromExplorer(): string[] {
     'explorer-home',
     'explorer-rows',
     'explorer-no-proposals',
+    'add-host',
     'explorer-standdown',
     'trust',
     'trust-terminal',
@@ -259,7 +260,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, login-shells, preconnect, default-ports, no-proposals, the seven explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -279,6 +280,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
+        'terminal-login',
         'login-shells',
         'preconnect',
         'config-files',
@@ -288,6 +290,15 @@ describe('the launches of the VSCodium run', () => {
         'no-proposals',
         ...labelsFromExplorer(),
       ],
+    );
+  });
+
+  it('coverage-38: the add-host launch runs with a HOME of its own in the run, which no other launch shares', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.environment?.HOME === '<run>/add-host-home')
+        .map(launch => [launch.label, launch.suite]),
+      [['add-host', 'add-host']],
     );
   });
 
@@ -339,7 +350,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches, terminal-login and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -357,6 +368,7 @@ describe('the launches of the VSCodium run', () => {
           : [],
       ),
       [
+        ['terminal-login', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
@@ -375,6 +387,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['add-host', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
@@ -1035,6 +1048,7 @@ describe('the launches of the VSCodium run', () => {
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
+        'terminal-login',
         'default-ports',
         'ssh-core',
         ...labelsFromExplorer(),

@@ -43,6 +43,8 @@ import type {
 export type PhaseEvent =
   | {kind: 'initializing'; quiet?: true}
   | {kind: 'promptShown'}
+  /** The stage that has no text: it opens the progress with the host's title alone. */
+  | {kind: 'opened'}
   | {kind: 'runningPreconnectScript'}
   | {kind: 'waitingForOtherWindow'}
   | {kind: 'downloading'}
@@ -339,6 +341,11 @@ async function runSteps(
   }
   const lease = connection.value;
   held.lease = lease;
+  if (lease.storedRecord === undefined) {
+    // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
+    // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
+    options.onPhase({kind: 'opened'});
+  }
   waits ??= lease.waits;
   if (waits === undefined) {
     throw new Error('the connection was opened with no waits and no lookup');
@@ -489,7 +496,6 @@ async function runSteps(
       steps.installExtensions(input, lease, cancellation),
     );
   }
-  options.onPhase({kind: 'settingUpTunnel'});
   const tunnel = await runBounded(
     (signal, disarm) =>
       steps.openTunnel(
@@ -500,6 +506,9 @@ async function runSteps(
           options.onPhase({kind: 'waitingForForwarding'});
         },
         signal,
+        () => {
+          options.onPhase({kind: 'settingUpTunnel'});
+        },
         disarm,
       ),
     // A second `ssh` has bounds of its own and a login to wait for, which a limit sized for the relay would cut off.

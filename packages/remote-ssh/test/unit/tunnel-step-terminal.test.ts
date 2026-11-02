@@ -311,6 +311,15 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     deepStrictEqual(questions, ["alex@dev's password: "]);
   });
 
+  it('connect-108, F-2308 AC-8: with the login terminal shown the tunnel attaches no questions', async () => {
+    const {open, opened, logins, questions, clock} = stepWith({reveal: true});
+    void open();
+    await settled();
+    opened().write("alex@dev's password: ");
+    await advance(clock, 120);
+    deepStrictEqual([logins.length, questions], [0, []]);
+  });
+
   it('F-2003 BR-8: every line of the SSH Tunnel terminal is logged as ssh’s, including a refused channel', async () => {
     const {open, opened, sink} = stepWith();
     void open();
@@ -341,20 +350,71 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     });
   });
 
-  it('#299: a forward-failure line then the success line fails, stops the session and logs the line', async () => {
-    const {open, opened, sink} = stepWith();
-    const pending = open();
+  /** A second-ssh step whose tunnel ssh printed the forward-failure line and then the success line. */
+  async function forwardFailed(options: Parameters<typeof stepWith>[0] = {}) {
+    const context = stepWith(options);
+    const pending = context.open();
     await settled();
-    opened().write(`${FORWARD_FAILURE}\n${TUNNEL_SUCCESS_LINE}\n`);
-    const result = await pending;
+    context.opened().write(`${FORWARD_FAILURE}\n${TUNNEL_SUCCESS_LINE}\n`);
+    await settled();
+    return {...context, pending};
+  }
+
+  it('F-2104 AC-35: a forward-failure line then the success line stops the session, logs the line and tells the caller the forward is awaited, and the step holds', async () => {
+    const context = await forwardFailed();
+    let result: unknown = 'pending';
+    void context.pending.then(value => {
+      result = value;
+    });
+    await advance(context.clock, 9_900, 100);
     deepStrictEqual(
       [
         result,
-        opened().disposed,
-        sink.lines.some(line => line.message.includes(FORWARD_FAILURE)),
+        context.opened().disposed,
+        context.waits(),
+        context.sink.lines.some(line => line.message.includes(FORWARD_FAILURE)),
       ],
-      [{kind: 'failed', failure: {kind: 'unknown'}}, true, true],
+      ['pending', true, 1, true],
     );
+  });
+
+  it('F-2104 AC-35, BR-10: at the 10 s bound the held step fails with the max-wait reason, and the port is never connected', async () => {
+    const context = await forwardFailed();
+    await advance(context.clock, 10_100, 100);
+    deepStrictEqual(
+      [await context.pending, context.local.connected.length],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'unknown',
+            reason: {id: 'S067', values: [{id: 'S089', values: []}]},
+          },
+        },
+        0,
+      ],
+    );
+  });
+
+  it('F-2104 AC-36, BR-10: a connect timeout of 30 s does not move the bound', async () => {
+    const context = await forwardFailed({
+      connectWait: {
+        connectTimeoutSeconds: 30,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      },
+    });
+    await advance(context.clock, 10_100, 100);
+    deepStrictEqual((await context.pending).kind, 'failed');
+  });
+
+  it('F-2104 AC-35: a cancel while the step holds ends it at once', async () => {
+    const context = await forwardFailed();
+    context.cancellation.abort();
+    deepStrictEqual(await context.pending, {
+      kind: 'failed',
+      failure: {kind: 'cancelled'},
+    });
   });
 
   it('F-2104 6.2 step 5: the success line tells the caller the forward is awaited, once', async () => {
@@ -509,8 +569,11 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
   });
 
   /** A tunnel login that printed the handshake and then a question no one recognises, with the step still pending. */
-  async function silentQuestion(connectWait: ConnectWaitSettings) {
-    const context = stepWith({connectWait});
+  async function silentQuestion(
+    connectWait: ConnectWaitSettings,
+    reveal = false,
+  ) {
+    const context = stepWith({connectWait, reveal});
     const pending = context.open();
     let outcome: Awaited<typeof pending> | undefined;
     void pending.then(result => {
@@ -530,6 +593,12 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
 
   it('#299 ruling 1b: a question nobody can see fails the step as a timeout once the connect wait has passed', async () => {
     const {clock, outcome} = await silentQuestion(TEN_SECONDS);
+    await advance(clock, 12_100, 100);
+    deepStrictEqual(outcome(), {kind: 'failed', failure: {kind: 'timeout'}});
+  });
+
+  it('connect-108: with the login terminal shown a question nobody can see still fails the step as a timeout', async () => {
+    const {clock, outcome} = await silentQuestion(TEN_SECONDS, true);
     await advance(clock, 12_100, 100);
     deepStrictEqual(outcome(), {kind: 'failed', failure: {kind: 'timeout'}});
   });

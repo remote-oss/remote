@@ -44,6 +44,7 @@ export interface AppendedEntry {
     | {typed: string};
   window?: string;
   after?: string;
+  passCursor?: true;
 }
 
 /**

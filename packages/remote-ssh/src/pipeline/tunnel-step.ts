@@ -174,7 +174,7 @@ async function openTerminalTunnel(
   path: 'secondSsh' | 'socket',
   given: Parameters<ConnectSteps['openTunnel']>,
 ): Promise<TunnelResult> {
-  const [input, , server, onWaiting, cancellation] = given;
+  const [input, , server, onWaiting, cancellation, onSettingUp] = given;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
@@ -182,16 +182,18 @@ async function openTerminalTunnel(
   if (!('port' in chosen)) {
     return notOpenedFor(chosen);
   }
+  onSettingUp?.();
   const localPort = chosen.port;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
   const forward = forwardFor(path, localPort, server);
+  const revealed = dependencies.revealLoginTerminals();
   const session = openTunnelSession(
     dependencies.terminals,
     dependencies.tunnelInvocation(forward),
     localPort,
-    dependencies.revealLoginTerminals(),
+    revealed,
     dependencies.tunnelInput(),
   );
   let stall: (() => void) | undefined;
@@ -205,17 +207,16 @@ async function openTerminalTunnel(
     connectWaitMilliseconds(dependencies.connectWait()),
     {
       onQuestion: text => {
-        questions.onQuestion(text);
+        questions?.onQuestion(text);
       },
       onUnreachable: () => {
         stall?.();
       },
     },
   );
-  const questions = dependencies.attachQuestions(
-    {terminal: session, reader},
-    input,
-  );
+  const questions = revealed
+    ? undefined
+    : dependencies.attachQuestions({terminal: session, reader}, input);
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
   const sshOutput = new LineSplitter(line => {
     logSshLines(dependencies.logger, [line], undefined);
@@ -226,7 +227,7 @@ async function openTerminalTunnel(
   });
   function takeDown(): void {
     reader.stop();
-    questions.dispose();
+    questions?.dispose();
   }
   const cancelled = new Promise<'cancelled'>(resolve => {
     cancellation.addEventListener(
@@ -249,8 +250,27 @@ async function openTerminalTunnel(
   }
   if (gate.kind === 'forwardFailed') {
     dependencies.logger.warn(`the tunnel's forward failed: ${gate.line}`);
+    // The port is never probed or connected, since nothing here listens on it. The window waits as for a port that never
+    // accepts, for the same fixed bound whatever the connect timeout is, and fails with the same reason.
     session.stop();
-    return NOT_OPENED;
+    onWaiting();
+    const hold: {cancel?: () => void} = {};
+    const elapsed = new Promise<'elapsed'>(resolve => {
+      hold.cancel = dependencies.scheduler.setTimer(
+        FORWARD_READY_MILLISECONDS,
+        () => {
+          resolve('elapsed');
+        },
+      );
+    });
+    const held = await Promise.race([elapsed, cancelled]);
+    hold.cancel?.();
+    return held === 'cancelled'
+      ? CANCELLED
+      : {
+          kind: 'failed',
+          failure: {kind: 'unknown', reason: MAX_WAIT_EXHAUSTED},
+        };
   }
   if (gate.kind === 'ended') {
     return NOT_OPENED;
@@ -338,7 +358,8 @@ export function openTunnelStep(
   async function openTunnel(
     ...given: Parameters<ConnectSteps['openTunnel']>
   ): Promise<TunnelResult> {
-    const [, lease, server, onWaiting, cancellation, disarmBound] = given;
+    const [, lease, server, onWaiting, cancellation, onSettingUp, disarmBound] =
+      given;
     const path = tunnelPath();
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
@@ -347,6 +368,7 @@ export function openTunnelStep(
     if (!('port' in chosen)) {
       return notOpenedFor(chosen);
     }
+    onSettingUp?.();
     const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
     const outcome = await openRelayTunnel({

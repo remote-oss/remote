@@ -633,7 +633,10 @@ describe('Kill VS Code Server (card coverage-39)', function () {
 
   it('F-2411 AC-32 (c43-socket-host): with the server listening on a socket, Kill on Host kills it and says so', async () => {
     await closeAllButLocal();
-    await userSettings({'remote.SSH.remoteServerListenOnSocket': true});
+    await userSettings({
+      'remote.SSH.remoteServerListenOnSocket': true,
+      'remote.SSH.remotePlatform': {harness: 'linux'},
+    });
     try {
       await openConnected('x1');
       const servers = await serverProcesses();
@@ -643,14 +646,20 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         [killed('harness'), ['Open Logs']],
       ]);
     } finally {
-      await userSettings({'remote.SSH.remoteServerListenOnSocket': undefined});
+      await userSettings({
+        'remote.SSH.remoteServerListenOnSocket': undefined,
+        'remote.SSH.remotePlatform': undefined,
+      });
       await closeAllButLocal();
     }
   });
 
   it('F-2411 AC-32 (c43-socket-current): with the server listening on a socket, Kill Current says so and the window stays remote', async () => {
     await closeAllButLocal();
-    await userSettings({'remote.SSH.remoteServerListenOnSocket': true});
+    await userSettings({
+      'remote.SSH.remoteServerListenOnSocket': true,
+      'remote.SSH.remotePlatform': {harness: 'linux'},
+    });
     try {
       await openConnected('x1');
       const mark = recordLines().length;
@@ -660,7 +669,10 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         [[[killed('harness'), ['Open Logs']]], 'ssh-remote'],
       );
     } finally {
-      await userSettings({'remote.SSH.remoteServerListenOnSocket': undefined});
+      await userSettings({
+        'remote.SSH.remoteServerListenOnSocket': undefined,
+        'remote.SSH.remotePlatform': undefined,
+      });
       await closeAllButLocal();
     }
   });

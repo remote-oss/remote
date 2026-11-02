@@ -126,6 +126,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
 
+- `add-host`: an explorer launch (Remote Explorer installed, a debugging port) whose editor has `HOME=<run>/add-host-home`, so the user file that "Remote-SSH: Add New SSH Host..." writes is the run's own; `add-host/add-host.test.ts` answers the input, the file pick and the notice from the script, sets `remote.SSH.configFile` to `''`, and reads the written file, the window's tabs and the explorer's hosts view (F-2204's rows).
+
 - `explorer`, `explorer-alone`, `explorer-trust`, `explorer-home`, `explorer-rows`, `explorer-no-proposals` and `explorer-standdown`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, `explorer-trust` with workspace trust on, so a new folder window is in Restricted Mode, `explorer-home` with the run's own HOME (`<run>/home`), where its rows write the user's SSH configuration, `explorer-rows` with the view's own rows (activation, the hosts of a file, Refresh and SSH windows) apart from `explorer`'s gate rows, whose Connect in Current Window reloads the launch's window, `explorer-no-proposals` without the proposed API, and `explorer-standdown` with a stand-in carrying the reference Remote Explorer's id, so the explorer meets it at its first activation.
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
@@ -722,7 +724,7 @@ VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has thirteen users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has fourteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -731,6 +733,7 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
 | `twofactor` | `harness-2fa` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password and then a one-time code of the run's secret (`HARNESS_TOTP_FILE`; RFC 6238, six digits, a window of three steps) |
 | `expired` | `harness-expired` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password, marked expired, so the login asks for the current password and a new one twice |
+| `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |

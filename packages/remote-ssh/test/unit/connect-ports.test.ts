@@ -334,6 +334,13 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it('connect-107: the stage with no text resets the message, so that the progress opened by it shows the host alone', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    options.titleOf({name: 'initializing'}, decoded('dev'));
+    deepStrictEqual(options.titleOf({name: 'opened'}, decoded('dev')), '');
+  });
+
   it("F-2304: a new connect's share downloaded does not keep the last connect's message", () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
@@ -355,12 +362,6 @@ describe('the connect assembled from the editor and the machine', () => {
       [options.family, options.cancellable, options.allowsTrust],
       ['ssh-remote', false, false],
     );
-  });
-
-  it('connect-104, F-2104 AC-42: ssh-remote opens its progress at the resolve’s start', () => {
-    const {surfaces, machine, recorded} = assemblyInputs();
-    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
-    deepStrictEqual(options.progressAtStart, true);
   });
 
   /** The connector's and the client check's answers on the mode, for the user's `written` settings. */
@@ -390,6 +391,18 @@ describe('the connect assembled from the editor and the machine', () => {
 
   it('F-2304: the details link reveals the log', () => {
     const {surfaces, machine, recorded} = assemblyInputs();
+    connectAssemblyOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).connector.revealDetails();
+    deepStrictEqual(recorded.revealed, 1);
+  });
+
+  it('connect-108, F-2308 AC-6: in the terminal mode with no login terminal running the details link reveals the log', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({
+      'remote.SSH.useLocalServer': false,
+    });
     connectAssemblyOf(
       surfaces,
       machine,

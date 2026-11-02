@@ -22,6 +22,7 @@ const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
   settingUpTunnel: 'S130',
   waitingForForwarding: 'S158',
   startingServer: undefined,
+  opened: undefined,
   runningPreconnectScript: 'S118',
   serverDownloadPercent: undefined,
 };

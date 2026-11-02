@@ -9,9 +9,11 @@ import type {
 import {
   connect,
   portOf,
+  type PhaseEvent,
   type TransportEvent,
 } from '../../src/pipeline/connect.ts';
 import type {
+  ConnectionLease,
   ConnectSteps,
   StepFailure,
   StepResult,
@@ -237,6 +239,7 @@ describe('the connect pipeline, when it works', () => {
     );
     deepStrictEqual(recording.phases, [
       {kind: 'initializing', quiet: true},
+      {kind: 'opened'},
       {kind: 'downloading'},
       {kind: 'serverDownloadPercent', percent: 40},
       {kind: 'downloadingLocally'},
@@ -246,12 +249,67 @@ describe('the connect pipeline, when it works', () => {
     ]);
   });
 
+  /** The record a stored, live connection leaves for the next window. */
+  const STORED_RECORD = {
+    remotePort: 4321,
+    operatingSystem: 'linux',
+    architecture: 'x64',
+    temporaryFolder: '/tmp',
+    connectionToken: 'token',
+  };
+
+  /** The phases a connect reports when the connection's lease holds `storedRecord`, on the attempt `attempt`. */
+  async function phasesWithRecord(
+    storedRecord: ConnectionLease['storedRecord'],
+    attempt: number,
+  ): Promise<PhaseEvent[]> {
+    const {recording, options} = setup();
+    await connect(
+      {...INPUT, attempt},
+      steps(recording, {
+        openConnection: () =>
+          Promise.resolve({
+            kind: 'done',
+            value: {...leaseOf(recording), storedRecord},
+          }),
+      }),
+      options,
+    );
+    return recording.phases;
+  }
+
+  it('connect-107: a connect that reuses a stored, live connection stays quiet: no stage that opens the progress before its work', async () => {
+    deepStrictEqual(
+      (await phasesWithRecord(STORED_RECORD, 1)).some(
+        phase => phase.kind === 'opened',
+      ),
+      false,
+    );
+  });
+
+  it('connect-107: a connect with no stored connection reports the stage with no text, which opens the progress with the title alone', async () => {
+    deepStrictEqual((await phasesWithRecord(undefined, 1)).slice(0, 2), [
+      {kind: 'initializing', quiet: true},
+      {kind: 'opened'},
+    ]);
+  });
+
+  it('connect-107: a retry after a failure, which has no stored connection either, reports it too', async () => {
+    deepStrictEqual(
+      (await phasesWithRecord(undefined, 2)).some(
+        phase => phase.kind === 'opened',
+      ),
+      true,
+    );
+  });
+
   it('tells the window when the port is slow to answer', async () => {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {
-        openTunnel: (input, lease, server, onWaiting) => {
+        openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+          onSettingUp?.();
           onWaiting();
           return Promise.resolve({
             kind: 'done',

@@ -328,10 +328,12 @@ export function steps(
       return Promise.resolve();
     },
     tunnelPath: () => 'socks',
-    openTunnel: () =>
-      Promise.resolve(
+    openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+      onSettingUp?.();
+      return Promise.resolve(
         note('openTunnel', {kind: 'done', value: tunnelOf(recording)}),
-      ),
+      );
+    },
     rememberPlatform: () => {
       note('rememberPlatform', undefined);
       return Promise.resolve();

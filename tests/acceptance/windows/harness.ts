@@ -157,6 +157,8 @@ export interface RecordLine {
   matched: boolean;
   /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
+  /** The lines of a held entry that passes the cursor on: the waiting line counts for the cursor, and the answer or withdrawal line that follows it does not. */
+  passCursor?: boolean;
   window: string;
   /** Whether a phase line of a `progress` surface carried the details link. */
   details?: boolean;
@@ -169,6 +171,13 @@ export interface RecordLine {
   /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
   active?: string | undefined;
   time: number;
+}
+
+/** Whether a record line is a question of the window, not a display-only line of its progress. */
+export function isQuestion(line: RecordLine): boolean {
+  return !['progress', 'downloadProgress', 'progressEnd'].includes(
+    line.surface,
+  );
 }
 
 /** A question the scripted adapters of the launch's windows answer from the script, in the order the windows ask them. */

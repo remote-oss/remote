@@ -46,6 +46,8 @@ async function registered(
     /** What the user does with a failure dialog: a button, Escape, or leaves it open until `closeDialog`. */
     dialog?: {button: string} | 'escape' | 'open';
     identity?: {name: string | undefined; context: string | undefined};
+    /** What the connector says its latest attempt read from the configuration. */
+    attemptIdentity?: {name: string | undefined; context: string | undefined};
     /** The container the connector says its last connect found. */
     failedContainer?: FailedContainer;
     canonical?: (
@@ -102,6 +104,7 @@ async function registered(
     leaveShutdown: () => Promise.resolve(),
     failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,
+    attemptIdentity: () => options.attemptIdentity,
     heldPorts: () => options.ports,
     canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
@@ -530,6 +533,37 @@ describe('the registration of the container connector (card containers-08)', () 
     deepStrictEqual(
       [suffixesOf(knownFolder), suffixesOf(otherFolder)],
       [['Dev Container: Proj'], ['Dev Container']],
+    );
+  });
+
+  it('F-0503 AC-15: the name the failed attempt read names the disconnected label, and a read that gives none falls back to the known name', async () => {
+    const known = {
+      'remote-oss.remote-containers.connectedNames': {
+        '/w#/w/.devcontainer/devcontainer.json': {
+          name: 'Proj',
+          context: undefined,
+        },
+      },
+    };
+    async function settled(options?: Parameters<typeof registered>[0]) {
+      const seen = await registered({
+        failure: containerSetupFailed(),
+        dialog: 'escape',
+        ...options,
+      });
+      await settledResolve(seen, 1, FOLDER_AUTHORITY);
+      return seen;
+    }
+    deepStrictEqual(
+      [
+        suffixesOf(
+          await settled({
+            attemptIdentity: {name: 'Old Glibc', context: undefined},
+          }),
+        ),
+        suffixesOf(await settled({known})),
+      ],
+      [['Dev Container: Old Glibc'], ['Dev Container: Proj']],
     );
   });
 

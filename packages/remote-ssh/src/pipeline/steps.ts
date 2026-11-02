@@ -279,6 +279,8 @@ export interface ConnectSteps {
     server: StartedServer,
     onWaiting: () => void,
     cancellation: AbortSignal,
+    /** Told once the window's port is chosen, when the tunnel's own work begins: the stage "Setting up SSH tunnel". */
+    onSettingUp?: () => void,
     /** Takes the pipeline's bound off the step, for a step that waits on purpose until the connect is cancelled. */
     disarmBound?: () => void,
   ): Promise<StepResult<TunnelOpening>>;

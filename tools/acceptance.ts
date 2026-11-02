@@ -367,7 +367,7 @@ export function sshConfigOf(
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
- * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
+ * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
@@ -441,6 +441,28 @@ export function harnessSshConfig(
     // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, and a forced change.
     ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
     ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
+    // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
+    ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
+      'PubkeyAuthentication no',
+      'PreferredAuthentications password',
+      'NumberOfPasswordPrompts 3',
+    ]),
+    // The same ProxyCommand for a login terminal, which a user answers there; it asks before the handshake, and the host sets no ConnectTimeout, so the setting's is the wait.
+    'Host proxy-ask-terminal',
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness-pw',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_proxy-ask-terminal')}`,
+    ...PASSWORD_LINES.map(line => `  ${line}`),
+    `  ProxyCommand bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
+    '',
+    // The password account behind a ProxyCommand that asks on the terminal, which a window without one cannot answer.
+    ...accountAlias('proxy-ask', 'harness-pw', port, runFolder, [
+      ...PASSWORD_LINES,
+      `ProxyCommand setsid bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
+    ]),
     'Host password-ask',
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,

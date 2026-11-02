@@ -56,6 +56,7 @@ function stepWith(
     onWaiting?: () => void;
     cancellation?: AbortSignal;
     limits?: typeof LIMITS;
+    onSettingUp?: () => void;
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
@@ -108,6 +109,7 @@ function stepWith(
         STARTED.server,
         options.onWaiting ?? (() => undefined),
         options.cancellation ?? new AbortController().signal,
+        options.onSettingUp,
         () => {
           disarmed.push(1);
         },
@@ -160,6 +162,20 @@ describe('the step that opens the window tunnel', () => {
       [(await pending).kind, refused.length, disarmed.length],
       ['failed', 0, 0],
     );
+  });
+
+  it('connect-107: the step tells its caller that the tunnel stage began once the window’s port is chosen, and not when no port is free', async () => {
+    let began = 0;
+    function onSettingUp(): void {
+      began += 1;
+    }
+    await stepWith({onSettingUp}).open();
+    const afterPort = began;
+    await stepWith({
+      busyRange: {first: 41060, last: 41061},
+      onSettingUp,
+    }).open();
+    deepStrictEqual([afterPort, began], [1, 1]);
   });
 
   it('F-2104 BR-1: the socks path gives the window the local address', async () => {
