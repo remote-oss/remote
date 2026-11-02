@@ -136,7 +136,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
 
   beforeEach(closeAllButLocal);
 
-  it('F-2104 AC-23 (c79-max-wait): with the second ssh and every forward cleared, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
+  it('F-2104 AC-23, AC-36 (c79-max-wait): with the second ssh and every forward cleared, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
     const seen: Array<
       [boolean, number, string | undefined, string[] | undefined, string]
     > = [];
@@ -173,6 +173,50 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     deepStrictEqual(seen, [
       [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
       [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: fwd-clearall'],
+    ]);
+  });
+
+  it('F-2104 AC-35, AC-36 (c79-max-wait-bind): with the second ssh and a range whose only port nobody listens on but the user cannot bind, the progress waits for port forwarding and 10 s later the dialog says the wait is exhausted, also with a connect timeout of 30 s', async () => {
+    const seen: Array<
+      [boolean, number, string | undefined, string[] | undefined, string]
+    > = [];
+    for (const settings of [
+      {...SECOND_SSH, 'remote.SSH.preferredLocalPortRange': '80-80'},
+      {
+        ...SECOND_SSH,
+        'remote.SSH.preferredLocalPortRange': '80-80',
+        'remote.SSH.connectTimeout': 30,
+      },
+    ]) {
+      await closeAllButLocal();
+      await keepingSettings(async () => {
+        const failed = await failing(
+          'c79-bind-wait',
+          'harness',
+          settings,
+          25_000,
+        );
+        const waiting = phaseOf(
+          failed,
+          'Waiting for port forwarding to be ready',
+        );
+        const dialog = dialogsOf(failed)[0];
+        seen.push([
+          waiting !== undefined,
+          Math.round(
+            ((dialog?.elapsed ?? 0) - (waiting?.elapsed ?? Number.NaN)) / 1000,
+          ),
+          dialog?.question,
+          dialog?.buttons,
+          failed.indicator,
+        ]);
+      });
+    }
+    const exhausted =
+      'Could not establish connection to "harness": Error establishing tunnel (Max wait time exhausted).';
+    deepStrictEqual(seen, [
+      [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: harness'],
+      [true, 10, exhausted, BUTTONS, 'Disconnected from SSH: harness'],
     ]);
   });
 
