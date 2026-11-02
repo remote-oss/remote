@@ -387,6 +387,7 @@ export function plainTestsOf(
         '--spec',
         path.join(root, 'tests', 'acceptance', launch.suite, file),
       ]),
+      ...(process.env.HARNESS_GREP ? ['--grep', process.env.HARNESS_GREP] : []),
     ],
     environment: {...environment},
   };
