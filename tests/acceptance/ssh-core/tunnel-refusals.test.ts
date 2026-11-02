@@ -400,8 +400,9 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       ]);
       await openWindow('fwd-clearall', name);
       // The new empty window may take a name an earlier one gave back: look for an open one that was not.
-      const arrived = (): string | undefined =>
-        openEmptyWindows().find(each => !before.includes(each));
+      function arrived(): string | undefined {
+        return openEmptyWindows().find(each => !before.includes(each));
+      }
       await waitFor(
         'the window to become an empty window',
         () => arrived() !== undefined,
