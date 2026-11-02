@@ -5,6 +5,7 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
+import {PASSKEY_VARIANTS, passkeyCopies} from './acceptance-keys.ts';
 import type {PortHolder} from './acceptance-occupy.ts';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -422,6 +423,7 @@ const LAUNCH_ORDER = [
   'terminal-pick',
   'windows',
   'terminal-login',
+  'passphrase-input',
   'login-shells',
   'preconnect',
   'config-files',
@@ -698,6 +700,43 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-85: Host changedkey is the harness host whose own known-hosts file pins another key, with the check off', () => {
+    strictEqual(
+      accountBlock('changedkey'),
+      [
+        'Host changedkey',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  HostKeyAlias changedkey',
+        '  StrictHostKeyChecking no',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_changedkey',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-85: Host noforward-key is the harness account with the key whose line on the host refuses port forwarding', () => {
+    strictEqual(
+      accountBlock('noforward-key'),
+      [
+        'Host noforward-key',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_noportfwd',
+        '  IdentitiesOnly yes',
+        '  StrictHostKeyChecking accept-new',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [
@@ -733,12 +772,17 @@ describe('acceptance', () => {
     );
   });
 
-  it('tooling-34: Host twofactor and Host expired log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
+  it('tooling-34, coverage-82: Host twofactor, Host expired and Host ask-odd log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
     deepStrictEqual(
-      [accountBlock('twofactor'), accountBlock('expired')],
+      [
+        accountBlock('twofactor'),
+        accountBlock('expired'),
+        accountBlock('ask-odd'),
+      ],
       [
         ['twofactor', 'harness-2fa'],
         ['expired', 'harness-expired'],
+        ['ask-odd', 'harness-odd'],
       ].map(([name = '', user = '']) =>
         [
           ...sharedLines(name, user),
@@ -775,6 +819,41 @@ describe('acceptance', () => {
         ...PASSWORD_ALIAS_LINES,
         `  ProxyCommand bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/49153 && { cat <&3 & exec cat >&3; }'`,
       ].join('\n'),
+    );
+  });
+
+  it('coverage-96: the passkey aliases offer the passphrase key alone, under the names passkey-1 to the last copy', () => {
+    const aliases = ['passkey', ...passkeyCopies()];
+    deepStrictEqual(
+      aliases.map(alias =>
+        accountBlock(alias)
+          .split('\n')
+          .filter(
+            line =>
+              line.includes('IdentityFile') || line.includes('IdentitiesOnly'),
+          ),
+      ),
+      aliases.map(() => [
+        '  IdentityFile /run/id_passphrase',
+        '  IdentitiesOnly yes',
+      ]),
+    );
+  });
+
+  it('coverage-96: each variant of the passphrase key has a block, and AddKeysToAgent names its value', () => {
+    const values = {
+      'passkey-add-yes': 'yes',
+      'passkey-ask-yes': 'ask',
+      'passkey-add-confirm': 'confirm',
+    };
+    deepStrictEqual(
+      {
+        missing: PASSKEY_VARIANTS.filter(alias => accountBlock(alias) === ''),
+        added: Object.entries(values).map(([alias, value]) =>
+          accountBlock(alias).includes(`AddKeysToAgent ${value}`),
+        ),
+      },
+      {missing: [], added: [true, true, true]},
     );
   });
 

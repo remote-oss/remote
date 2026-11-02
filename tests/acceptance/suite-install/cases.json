@@ -388,6 +388,42 @@
       "outcome": "dialog",
       "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server.",
       "noArchiveLeft": true
+    },
+    {
+      "label": "nofetch-local",
+      "cite": "F-2405 AC-23 (nofetch-local)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}"
+      },
+      "setup": [
+        "for t in curl wget; do p=$(command -v $t); [ -n \"$p\" ] && mv $p $p.off; done; true"
+      ],
+      "outcome": "connected",
+      "stages": [
+        "Downloading VS Code Server locally",
+        "Copying VS Code Server to host with scp"
+      ],
+      "requests": {
+        "clientOnly": true
+      },
+      "hostLacks": ["/usr/bin/curl", "/usr/bin/wget"],
+      "installedIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "nofetch-restore",
+      "cite": "F-2405 AC-2 (nofetch-restore)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "setup": [
+        "for t in curl wget; do for p in /usr/bin/$t /bin/$t; do [ -e $p.off ] && mv $p.off $p; done; done; true"
+      ],
+      "outcome": "connected",
+      "noStages": [
+        "Downloading VS Code Server locally",
+        "Copying VS Code Server to host with scp"
+      ],
+      "installedIn": "/home/harness/.vscodium-server-insiders"
     }
   ]
 }

@@ -129,6 +129,7 @@ interface Fixture {
   connecting: (
     cancellation?: AbortSignal,
     input?: ConnectInput,
+    terms?: ConnectionTerms,
   ) => ReturnType<ReturnType<typeof openConnectionStep>>;
 }
 
@@ -239,18 +240,23 @@ function fixture(
     },
     channelsFor,
     termsAsked,
-    connecting: (cancellation, input) =>
-      step(input ?? INPUT, TERMS, cancellation ?? new AbortController().signal),
+    connecting: (cancellation, input, terms) =>
+      step(
+        input ?? INPUT,
+        terms ?? TERMS,
+        cancellation ?? new AbortController().signal,
+      ),
   };
 }
 
 /** A fixture whose connect has gone through the login, with what the connect gave. */
 async function loggedIn(
   storedRecord?: PlainData,
+  terms?: ConnectionTerms,
 ): Promise<Fixture & {outcome: Awaited<ReturnType<Fixture['connecting']>>}> {
   const ready = fixture();
   ready.lease.storedRecord = storedRecord;
-  const pending = ready.connecting();
+  const pending = ready.connecting(undefined, undefined, terms);
   await settled();
   ready.lease.emit({type: 'connected', socksPort: 41000});
   return {...ready, outcome: await pending};
@@ -486,6 +492,45 @@ describe('the connection step', () => {
       outcome.kind === 'done' ? outcome.value.storedRecord : outcome,
       record,
     );
+  });
+
+  describe('F-2206 AC-29: a connection another window set up is reused before the platform of the settings counts', () => {
+    const WINDOWS_TERMS: ConnectionTerms = {...TERMS, platform: 'windows'};
+
+    /** A record an earlier window left for a host whose operating system is `operatingSystem`. */
+    function recordOf(operatingSystem: string): PlainData {
+      return {
+        remotePort: 4321,
+        operatingSystem,
+        architecture: 'x64',
+        temporaryFolder: '/tmp',
+        connectionToken: 'token',
+      };
+    }
+
+    it('gives the channel the platform the record names, not the windows entry', async () => {
+      const {channelsFor} = await loggedIn(recordOf('linux'), WINDOWS_TERMS);
+      deepStrictEqual(channelsFor, [
+        [true, {...WINDOWS_TERMS, platform: 'linux'}, 'harness'],
+      ]);
+    });
+
+    it('names macOS for a darwin record, and unknown for an operating system with no name', async () => {
+      const darwin = await loggedIn(recordOf('darwin'), WINDOWS_TERMS);
+      const other = await loggedIn(recordOf('freebsd'), WINDOWS_TERMS);
+      deepStrictEqual(
+        [darwin.channelsFor, other.channelsFor],
+        [
+          [[true, {...WINDOWS_TERMS, platform: 'macOS'}, 'harness']],
+          [[true, {...WINDOWS_TERMS, platform: 'unknown'}, 'harness']],
+        ],
+      );
+    });
+
+    it('keeps the terms of the settings when the helper holds no record, so the entry decides after the server is gone', async () => {
+      const {channelsFor} = await loggedIn(undefined, WINDOWS_TERMS);
+      deepStrictEqual(channelsFor, [[true, WINDOWS_TERMS, 'harness']]);
+    });
   });
 
   it('leaves the shared record with the helper when the pipeline asks', async () => {

@@ -14,6 +14,7 @@ import type {RunBase, SharedConnection} from 'lib-ssh';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   connectAssemblyOf,
+  maintenancePortsOf,
   type ConnectMachine,
   type ConnectSurfaces,
   sshOverridePolicy,
@@ -29,7 +30,10 @@ import {
   termsSettingsOf,
   textOf as settingTextOf,
 } from '../../src/pipeline/connect-settings.ts';
-import {decidePlatform} from '../../src/pipeline/platform.ts';
+import {
+  decidePlatform,
+  remoteCommandInEffect,
+} from '../../src/pipeline/platform.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import {textOf} from '../../src/surfaces/prompt-strings.ts';
 import {
@@ -334,6 +338,13 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it('connect-107: the stage with no text resets the message, so that the progress opened by it shows the host alone', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    options.titleOf({name: 'initializing'}, decoded('dev'));
+    deepStrictEqual(options.titleOf({name: 'opened'}, decoded('dev')), '');
+  });
+
   it("F-2304: a new connect's share downloaded does not keep the last connect's message", () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
@@ -355,12 +366,6 @@ describe('the connect assembled from the editor and the machine', () => {
       [options.family, options.cancellable, options.allowsTrust],
       ['ssh-remote', false, false],
     );
-  });
-
-  it('connect-104, F-2104 AC-42: ssh-remote opens its progress at the resolve’s start', () => {
-    const {surfaces, machine, recorded} = assemblyInputs();
-    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
-    deepStrictEqual(options.progressAtStart, true);
   });
 
   /** The connector's and the client check's answers on the mode, for the user's `written` settings. */
@@ -1106,6 +1111,19 @@ describe('the terms in socket mode (card connect-96)', () => {
     deepStrictEqual(termsSettingsOf(SOCKET_AND_LOCAL).useLocalServer, false);
   });
 
+  it('F-2107 BR-1: socket mode with useLocalServer true leaves the host’s remote command in effect, and with it false does not', () => {
+    const socketAndOff = userHost({
+      'remote.SSH.remoteServerListenOnSocket': true,
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [SOCKET_AND_LOCAL, socketAndOff].map(host =>
+        remoteCommandInEffect(true, termsSettingsOf(host), 'devbox'),
+      ),
+      [true, false],
+    );
+  });
+
   it('F-2410: without socket mode, useLocalServer true still probes', () => {
     deepStrictEqual(
       decidePlatform(
@@ -1131,6 +1149,18 @@ describe("the assembly's maintenance run (card connect-23)", () => {
       loggerOf(recorded),
     ).maintain('kill', {host: 'dev'});
     deepStrictEqual(outcome.result, 'connectionFailed');
+  });
+
+  it('connect-113, F-2308 AC-19, AC-28: a connect logs in in a terminal named install, a kill or an uninstall in one named Uninstall VS Code Server', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const ports = wiringPortsOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(
+      [
+        ports.terminal.terminalName(),
+        maintenancePortsOf(ports).terminal.terminalName(),
+      ],
+      ['install', 'Uninstall VS Code Server'],
+    );
   });
 
   /** The record files a helper client on a fresh file port reads during `action`, each once. */
@@ -1189,6 +1219,40 @@ describe("the assembled ports' platform notice", () => {
       shown.map(message => message.includes('"linux"')),
       [true],
     );
+  });
+});
+
+describe("the assembled ports' refused forwarding notice (card connect-106)", () => {
+  it('F-2104 7.E4: the first refusal shows the error with a Show log link and no button, and the next ones show nothing', async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const shown: Array<[string, readonly string[]]> = [];
+    const ports = wiringPortsOf(
+      {
+        ...surfaces,
+        notice: {
+          showInformation: () => Promise.resolve(undefined),
+          showWarning: () => Promise.resolve(undefined),
+          showError: (message, buttons) => {
+            shown.push([message, buttons]);
+            return Promise.resolve(undefined);
+          },
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    );
+    ports.tunnel.forwardRefused();
+    ports.tunnel.forwardRefused();
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(shown, [
+      [
+        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})>'.replace(
+          '{0}',
+          '[<Show log>](command:opensshremotes.showLog)',
+        ),
+        [],
+      ],
+    ]);
   });
 });
 

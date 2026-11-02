@@ -22,10 +22,12 @@ import {
 } from './harness.ts';
 import {
   acceptQuickPick,
+  allQuickPickRows,
   chooseQuickPickRow,
   type DetailedQuickPickRow,
   detailedQuickPickRows,
   moveQuickPickFocus,
+  notificationCentre,
   pressEscape,
   quickPickFacts,
   quickPickOf,
@@ -188,6 +190,29 @@ export async function configurationOf(
 /** Waits until `file` exists. */
 export function written(file: string): Promise<void> {
   return waitFor(`${file} to be written`, () => existsSync(file), 60_000);
+}
+
+/** The start of the reopen notice of a configuration in the store of user data. */
+const STORED_NOTICE_START = 'There is a Dev Container configuration';
+
+/**
+ * Waits until the run of the command in `window` that wrote the stored `file` has ended. The file is written before the
+ * run opens its preview and offers to reopen, and a command started meanwhile is refused as already running; the
+ * reopen notice is the run's last step, so it is shown once the command can run again.
+ */
+export async function writtenToStore(
+  window: string,
+  file: string,
+): Promise<void> {
+  await written(file);
+  await waitFor(
+    'the run that wrote the file to end with its reopen notice',
+    async () =>
+      (await notificationCentre(window)).some(text =>
+        text.startsWith(STORED_NOTICE_START),
+      ),
+    60_000,
+  );
 }
 
 /** The files named `relatives` under `folder`, those that exist. */
@@ -373,13 +398,16 @@ export async function startFromPalette(window: string): Promise<void> {
   );
 }
 
-/** Opens the screen in `window` and gives its rows, leaving it open. */
+/**
+ * Opens the screen in `window` and gives its whole rows, leaving it open with its focus as it opened: the screen's
+ * list is virtualized, so the rows are read back from the list walked by the pick's focus.
+ */
 export async function screenOf(
   window: string,
 ): Promise<DetailedQuickPickRow[]> {
   await startCommand(window);
   await chooseWorkspace(window);
-  return detailedQuickPickRows(window);
+  return allQuickPickRows(window);
 }
 
 /** Types `text` into the screen of `window` and gives the rows once the list has followed. */

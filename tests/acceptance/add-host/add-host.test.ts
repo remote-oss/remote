@@ -24,6 +24,7 @@ import {
   closeWindow,
   dirtyDocumentsOf,
   activeEditorTextOf,
+  heldLines,
   inWindow,
   nextEmptyName,
   nextEmptyWindow,
@@ -32,6 +33,8 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  signal,
+  startInWindow,
   userSettings,
   variable,
   waitFor,
@@ -451,6 +454,55 @@ describe('Add New SSH Host... in a window of the editor with its own home (card 
     deepStrictEqual(
       [afterCancel, afterSuccess, readUserSettings()],
       [settings, settings, settings],
+    );
+  });
+
+  it('F-2204 AC-40: a second run started while the first waits at the file pick adds only its own host, and the first shows nothing', async () => {
+    const mark = recordLines(undefined, 'local').length;
+    appendScript([
+      {
+        surface: 'textInput',
+        match: INPUT_QUESTION,
+        answer: {text: 'kappa'},
+        window: 'local',
+      },
+      {
+        surface: 'filePick',
+        match: 'SSH configuration file',
+        answer: 'dismiss',
+        window: 'local',
+        after: 'second',
+        passCursor: true,
+      },
+    ]);
+    await startInWindow('local', ADD_COMMAND);
+    await waitFor(
+      'the first run to wait at the file pick',
+      () => heldLines('local').length > 0,
+      30_000,
+    );
+    appendScript(
+      entriesOf(
+        {command: 'lambda', file: USER_FILE, notice: 'dismiss'},
+        'local',
+      ),
+    );
+    await inWindow('local', ADD_COMMAND);
+    signal('second');
+    await waitFor(
+      'the first run to end',
+      () =>
+        recordLines('filePick', 'local').some(
+          line => line.passCursor === true && !line.held,
+        ),
+      30_000,
+    );
+    deepStrictEqual(
+      [
+        userText(),
+        ofSurface(recordLines(undefined, 'local').slice(mark), 'notice').length,
+      ],
+      ['Host lambda\n  HostName lambda\n', 1],
     );
   });
 

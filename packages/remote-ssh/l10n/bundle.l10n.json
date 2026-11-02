@@ -74,6 +74,8 @@
   "Waiting for other windows to connect": "Waiting for other windows to connect",
   "remote.SSH.configFile must be an absolute path or start with ~/: \"{0}\"": "remote.SSH.configFile must be an absolute path or start with ~/: \"{0}\"",
   "Killed VS Code Server on {0}.": "Killed VS Code Server on {0}.",
+  "Show log": "Show log",
+  "Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})": "Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})",
   "Failed to kill VS Code Server on {0}.": "Failed to kill VS Code Server on {0}.",
   "Open Logs": "Open Logs",
   "You selected \"{0}\" as the remote platform - this will be stored in the setting \"remote.SSH.remotePlatform\" and can be changed there if needed.": "You selected \"{0}\" as the remote platform - this will be stored in the setting \"remote.SSH.remotePlatform\" and can be changed there if needed.",
@@ -108,5 +110,10 @@
   "'{0}' will be executed on your local machine.": "'{0}' will be executed on your local machine.",
   "Allow": "Allow",
   "Allow and Don't Ask Again": "Allow and Don't Ask Again",
-  "Skip": "Skip"
+  "Skip": "Skip",
+  "Show details in terminal": "Show details in terminal",
+  "ERROR: TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.": "ERROR: TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.",
+  "The remote server's SSH configuration may have TCP forwarding disabled": "The remote server's SSH configuration may have TCP forwarding disabled",
+  "Add the setting '{0}' to the server's '{1}' (or similar) configuration file": "Add the setting '{0}' to the server's '{1}' (or similar) configuration file",
+  "Restart the SSH server on the remote machine to apply any changes to the configuration": "Restart the SSH server on the remote machine to apply any changes to the configuration"
 }

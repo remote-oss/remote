@@ -23,4 +23,30 @@ describe('the message of a connect stage', () => {
       'Initializing VS Code Server',
     );
   });
+
+  it('connect-113, F-2308 AC-7: a link title is written after the command', () => {
+    deepStrictEqual(
+      phaseMessage(
+        'Setting up SSH tunnel',
+        true,
+        'opensshremotes.showDetails',
+        'Show details in terminal',
+      ),
+      '([details](command:opensshremotes.showDetails "Show details in terminal")) Setting up SSH tunnel',
+    );
+  });
+
+  it('connect-113: a quote in the title is escaped', () => {
+    deepStrictEqual(
+      phaseMessage('Stage', true, 'command.id', 'say "hi"'),
+      '([details](command:command.id "say \\"hi\\"")) Stage',
+    );
+  });
+
+  it('connect-113: a title without the link is not written', () => {
+    deepStrictEqual(
+      phaseMessage('Stage', false, 'command.id', 'Title'),
+      'Stage',
+    );
+  });
 });

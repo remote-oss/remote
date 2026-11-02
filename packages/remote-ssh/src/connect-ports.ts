@@ -68,6 +68,10 @@ import {announcePlatform} from './connect/platform-notice.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
+import {ownText} from './surfaces/own-strings.ts';
+import type {HintRecorder} from './diagnostics/hint-recorder.ts';
+import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
+import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -137,6 +141,8 @@ export interface ConnectSurfaces {
   /** The non-modal notices, and the profile's record of the answers to them. */
   notice: NoticePort;
   noticeState: AcceptanceState;
+  /** The recorder of the hints a connect leaves for the session. */
+  hints: HintRecorder;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   /** The question before a pre-connection script runs, and the record of the scripts the user trusts. */
@@ -259,6 +265,7 @@ export function wiringPortsOf(
   logger: Logger,
 ): WiringPorts {
   const {settings} = surfaces;
+  let refusedTold = false;
   /** What every login terminal shares: its questions, and whether it is shown. */
   const loginSurfaces = {
     attachQuestions: (login: TerminalLogin, input: ConnectInput) =>
@@ -381,6 +388,7 @@ export function wiringPortsOf(
       ),
     attachLogin: (login, alias) =>
       attachPromptSurface(login, surfaces.prompts, {displayHost: alias}),
+    trust: surfaces.defaultReadEvents,
     terminal: {
       terminals: surfaces.terminals,
       dynamicForwarding: () =>
@@ -388,6 +396,7 @@ export function wiringPortsOf(
       freePort: machine.freeSocksPort,
       scheduler: machine.scheduler,
       newMarker: machine.helpers.newNonce,
+      terminalName: () => 'install',
       ...loginSurfaces,
     },
     server: {
@@ -445,9 +454,40 @@ export function wiringPortsOf(
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
       chooseLocalPort: chooseWindowPort,
+      forwardRefused: () => {
+        // The extension host is the window's, so a flag of this assembly is a flag of the window.
+        if (refusedTold) {
+          return;
+        }
+        refusedTold = true;
+        // A link that runs the Show Log command in a message with no button, which core would not hide.
+        void surfaces.notice.showError(
+          ownText(
+            {
+              id: 'socksForwardingFailedNotice',
+              values: [
+                `[${ownText({id: 'showLogLinkText', values: []}, surfaces.translate)}](command:${commands.showLog.id})`,
+              ],
+            },
+            surfaces.translate,
+          ),
+          [],
+        );
+      },
       logger,
     },
     logger,
+  };
+}
+
+/** The name of the terminal a Kill or an Uninstall logs in with. */
+const MAINTENANCE_TERMINAL = 'Uninstall VS Code Server';
+
+/** The ports of a Kill or an Uninstall: those of a connect, with the login in a terminal of its own name. */
+export function maintenancePortsOf(ports: WiringPorts): WiringPorts {
+  return {
+    ...ports,
+    terminal: {...ports.terminal, terminalName: () => MAINTENANCE_TERMINAL},
   };
 }
 
@@ -464,20 +504,24 @@ export function connectAssemblyOf(
   connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
   const tracker = new LoginTerminalTracker(surfaces.terminals);
+  const watch = refusalWatchOf(logger, surfaces.hints, surfaces.translate);
   const ports = wiringPortsOf(
     {...surfaces, terminals: tracker},
     machine,
-    logger,
+    watch.logger,
   );
   const connector = connectorFrom({
-    stepsFor: onPhase => stepsOf(ports, onPhase),
+    stepsFor: onPhase => {
+      watch.begin();
+      return stepsOf(ports, onPhase);
+    },
     options: {
       // A getter, so each connect reads the setting as it is then.
       get maximumReconnectionAttempts() {
         return valueOf(surfaces.settings, 'maxReconnectionAttempts');
       },
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
-      logger,
+      logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
         return switchOf(surfaces.settings, 'useExecServer');
@@ -500,7 +544,7 @@ export function connectAssemblyOf(
       const runKey = machine.helpers.newNonce();
       try {
         return await runMaintenance(
-          stepsOf(ports, () => undefined),
+          stepsOf(maintenancePortsOf(ports), () => undefined),
           maintenanceInputOf(target, runKey),
           action,
           new AbortController().signal,
@@ -525,7 +569,6 @@ export function connectAssemblyOf(
       presenter: surfaces.presenter,
       cancellable: false,
       allowsTrust: false,
-      progressAtStart: true,
       startTitle: target => {
         // A new connect starts here: a stage without a message of its own has nothing before it to keep.
         shownTitle = '';
@@ -533,6 +576,11 @@ export function connectAssemblyOf(
         return textOfId(title.id as FailureStringId, translate, title.values);
       },
       titleOf: phase => {
+        if (phase.name === 'opened') {
+          // The stage with no text: the progress shows the host alone, whatever stage came before it.
+          shownTitle = '';
+          return shownTitle;
+        }
         const title = phaseTitleOf(phase);
         // A stage without a message of its own keeps the one shown before it.
         if (title !== undefined) {

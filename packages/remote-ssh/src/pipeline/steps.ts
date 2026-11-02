@@ -141,6 +141,15 @@ export interface ConnectSteps {
   /** Finds the `ssh` client and reads the host's configuration, which decides how long the later waits may take. */
   locateClient(input: ConnectInput): Promise<StepResult<ConnectWaits>>;
   /**
+   * What a failed client lookup of the terminal mode ends in: the failure itself at once when the workspace is trusted;
+   * otherwise it is held, as the login terminal is, until trust is granted (the failure), the connect wait ends (the
+   * wait's failure) or the connect is cancelled.
+   */
+  holdLookupFailure(
+    failure: StepFailure,
+    cancellation: AbortSignal,
+  ): Promise<StepFailure>;
+  /**
    * Decides the platform and the remote command from the settings and the host string alone, and asks the user for
    * the platform when the settings do not say. It runs before any `ssh` does, so a question comes first; the wait
    * for the user's answer has no limit of its own.
@@ -279,6 +288,10 @@ export interface ConnectSteps {
     server: StartedServer,
     onWaiting: () => void,
     cancellation: AbortSignal,
+    /** Told once the window's port is chosen, when the tunnel's own work begins: the stage "Setting up SSH tunnel". */
+    onSettingUp?: () => void,
+    /** Takes the pipeline's bound off the step, for a step that waits on purpose until the connect is cancelled. */
+    disarmBound?: () => void,
   ): Promise<StepResult<TunnelOpening>>;
   /** Writes the platform the host reported to the settings after a connect has worked, where the settings ask for it. */
   rememberPlatform(

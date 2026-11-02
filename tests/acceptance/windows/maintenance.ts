@@ -25,6 +25,7 @@ import {
   onHost,
   onHostAs,
   openWindow,
+  readUserSettings,
   recordLines,
   type RecordLine,
   variable,
@@ -55,6 +56,23 @@ export function pickHost(label: string): AppendedEntry {
     match: 'Select configured SSH host',
     answer: {label},
   };
+}
+
+/** The answer that takes platform `answer` in the platform pick. */
+export function platformAnswer(
+  answer: 'linux' | 'windows' | 'macOS' | 'dismiss',
+): AppendedEntry {
+  return {surface: 'platformPick', match: 'platform', answer};
+}
+
+/** What `remote.SSH.remotePlatform` holds in the user settings file, or nothing. */
+export function storedPlatform(): unknown {
+  const text = readUserSettings();
+  return text === undefined
+    ? undefined
+    : (JSON.parse(text) as Record<string, unknown>)[
+        'remote.SSH.remotePlatform'
+      ];
 }
 
 /** The answer that types `text` into the host pick. */
@@ -265,6 +283,24 @@ export async function perWindowMode(enabled: boolean): Promise<void> {
     enabled ? {harness: 'linux'} : undefined,
   );
   await setting('remote.SSH.useLocalServer', enabled ? false : undefined);
+}
+
+/** Adds a copy of the `harness` block named `alias` to the run's ssh_config, and gives the original text back. */
+export function addHarnessCopy(alias: string): string {
+  const file = variable('HARNESS_SSH_CONFIG');
+  const original = readFileSync(file, 'utf8');
+  const start = original.indexOf('Host harness\n');
+  const block = original.slice(start, original.indexOf('\n\n', start));
+  writeFileSync(
+    file,
+    `${original}\n${block.replace('Host harness', `Host ${alias}`)}\n`,
+  );
+  return original;
+}
+
+/** Puts the run's ssh_config back to `original`. */
+export function restoreConfig(original: string): void {
+  writeFileSync(variable('HARNESS_SSH_CONFIG'), original);
 }
 
 /** Whether `file` exists on the host. */

@@ -246,6 +246,21 @@ describe(`the platform case "${label}" of the VSCodium run`, () => {
     });
   }
 
+  if (label === 'platform-broken-settings') {
+    it('F-2206 AC-36 (platform-broken-settings): no error notification appears', () => {
+      deepStrictEqual(
+        record
+          .filter(
+            line =>
+              line.surface === 'notice' &&
+              !line.question.startsWith('You selected'),
+          )
+          .map(line => line.question),
+        [],
+      );
+    });
+  }
+
   if (label === 'platform-mute-default') {
     it('F-2206 AC-28 (platform-mute-default): no pick, and the dialog came after the host connect timeout', () => {
       const dialog = lines.find(line => line.surface === 'failureDialog');

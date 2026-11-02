@@ -71,6 +71,7 @@ import {
   writeToStore,
   chooseUserData,
   written,
+  writtenToStore,
 } from '../windows/authoring-support.ts';
 
 const execFileAsync = promisify(execFile);
@@ -449,7 +450,7 @@ describe('the location pick and the store of user data (card containers-91)', fu
     await withWindow('u5', {}, async window => {
       await writeToStore(window);
       const stored = path.join(storeRoot(), 'u5', CONFIGURATION);
-      await written(stored);
+      await writtenToStore(window, stored);
       const outcomes: unknown[] = [];
       for (const answer of ['Skip', 'Cancel', 'Overwrite'] as const) {
         writeFileSync(stored, 'mine');
@@ -616,7 +617,7 @@ async function withStored(
   await withWindow(name, contents, async (window, folder) => {
     await writeToStore(window);
     const stored = path.join(storeRoot(), name, CONFIGURATION);
-    await written(stored);
+    await writtenToStore(window, stored);
     await inWindow(window, 'workbench.action.closeAllEditors');
     await inWindow(window, 'notifications.clearAll');
     await body(window, folder, stored);

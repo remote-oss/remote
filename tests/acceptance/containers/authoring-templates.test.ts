@@ -7,6 +7,7 @@ import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
 import {installBrowser, openedUrls} from '../windows/web-ui-support.ts';
 import {
   acceptQuickPick,
+  allQuickPickRows,
   answerDialog,
   answerFolderDialog,
   chooseQuickPickRow,
@@ -169,7 +170,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
     );
   });
 
-  it.skip('F-0802 AC-26 (c72-curated-package-go): package.json beside go.mod gives the core set and the Node.js templates, Node.js & TypeScript included (skipped: the list lacks Node.js & TypeScript, see #1537)', async () => {
+  it('F-0802 AC-26 (c72-curated-package-go): package.json beside go.mod gives the core set and the Node.js templates, Node.js & TypeScript included', async () => {
     await withWindow(
       'c72-package-go',
       {'package.json': '{}', 'go.mod': ''},
@@ -186,7 +187,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
     );
   });
 
-  it.skip('F-0802 AC-35 (c72-curated-python): a lone app.py gives the core set and the seven Python and Anaconda templates, Python 3 & PostgreSQL included (skipped: the list lacks Python 3 & PostgreSQL, see #1537)', async () => {
+  it('F-0802 AC-35 (c72-curated-python): a lone app.py gives the core set and the seven Python and Anaconda templates, Python 3 & PostgreSQL included', async () => {
     await withWindow('c72-app-py', {'app.py': ''}, async window => {
       const labels = (await screenOf(window)).map(each => each.label);
       await closeScreen(window);
@@ -229,7 +230,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
           ),
         15_000,
       );
-      const all = await detailedQuickPickRows(window);
+      const all = await allQuickPickRows(window);
       const allLabels = all.map(each => each.label);
       const focus = focusedLabel(all);
       await closeScreen(window);
@@ -560,9 +561,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
         60_000,
       );
       const facts = await quickPickFacts(window);
-      const labels = (await detailedQuickPickRows(window)).map(
-        each => each.label,
-      );
+      const labels = (await allQuickPickRows(window)).map(each => each.label);
       const custom = (await typed(window, 'a/b/c')).map(each => each.label);
       await closeScreen(window);
       deepStrictEqual(
@@ -583,7 +582,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
     });
   });
 
-  it.skip('F-0802 AC-29 (c72-chooser-flat): the chooser’s template row opens the flat list when the folder holds a Dockerfile and no curating marker (skipped: it opens the curated list, see #1537)', async () => {
+  it('F-0802 AC-29 (c72-chooser-flat): the chooser’s template row opens the flat list when the folder holds a Dockerfile and no curating marker', async () => {
     let flat: string[] = [];
     await withWindow('c72-chooser-flat-base', {}, async window => {
       flat = (await screenOf(window)).map(each => each.label);
@@ -606,9 +605,7 @@ describe('the template screen of the wizard (card coverage-72)', function () {
             'Select a container configuration template or enter a custom template id',
           30_000,
         );
-        const labels = (await detailedQuickPickRows(window)).map(
-          each => each.label,
-        );
+        const labels = (await allQuickPickRows(window)).map(each => each.label);
         await closeScreen(window);
         deepStrictEqual(labels.join('|'), flat.join('|'));
       },

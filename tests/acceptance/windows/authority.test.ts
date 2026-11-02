@@ -207,7 +207,10 @@ describe('the ssh-remote authorities of F-2501 (card coverage-19)', function () 
       await connectedWithin('a1', 90_000);
       const first = (await windowState('a1')).remoteName;
       restoreUserSettings(saved);
-      await userSettings({'remote.SSH.remoteServerListenOnSocket': true});
+      await userSettings({
+        'remote.SSH.remoteServerListenOnSocket': true,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      });
       await openWindow('harness', 'a2');
       await connectedWithin('a2', 90_000);
       deepStrictEqual(

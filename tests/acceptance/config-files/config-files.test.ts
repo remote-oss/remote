@@ -20,6 +20,7 @@ import {
 } from 'node:fs';
 import {userInfo} from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {redact} from 'lib-log';
 import {invocationNotesOf} from '../../../tools/acceptance-clients.ts';
 import {
@@ -39,6 +40,8 @@ import {
   type RecordLine,
   userSettings,
   variable,
+  waitFor,
+  windowState,
 } from '../windows/harness.ts';
 
 /** The question of the host pick. */
@@ -466,6 +469,12 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
       'c17',
       'c18',
       'c19',
+      'c20',
+      'c21',
+      'c22',
+      'c23',
+      'c24',
+      'c25',
     ]) {
       if (isOpen(window)) {
         await closeWindow(window);
@@ -481,6 +490,17 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     deepStrictEqual(
       [result.items, result.messages],
       [[...systemHosts(), ...FIXED_ROWS], []],
+    );
+  });
+
+  it("F-2201 AC-1: the pick lists the user file's hosts in file order, then the system file's, then the two fixed rows", async () => {
+    writeFileSync(USER_FILE, `${hostBlock('zulu')}${hostBlock('alpha')}`);
+    await configFileSetting('');
+    const result = await hostPickResult();
+    writeFileSync(USER_FILE, hostBlock('onlydefault'));
+    deepStrictEqual(
+      [result.items, result.messages],
+      [['zulu', 'alpha', ...systemHosts(), ...FIXED_ROWS], []],
     );
   });
 
@@ -551,7 +571,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     );
   });
 
-  it('F-2201 AC-13: a setting that is not an absolute file lists no hosts, in each bad form, and no message appears', async () => {
+  it('F-2201 AC-13, AC-45: a setting that is not an absolute file lists no hosts, in each bad form, and no message appears', async () => {
     writeFileSync(CFG_000, hostBlock('cfghost'));
     chmodSync(CFG_000, 0);
     const results = [
@@ -605,7 +625,84 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     );
   });
 
-  it('F-2201 AC-35: a relative setting fails the connect before ssh is started, and the log names the setting', async () => {
+  it('F-2201 AC-46: a setting of white space only, or one that starts with a space, lists no host and fails the connect before ssh is started, with the value as written in the log', async () => {
+    const spaced = path.join(RUN_FOLDER, 'cfg-space');
+    writeFileSync(spaced, hostBlock('cfghost'));
+    const seen: unknown[] = [];
+    for (const [index, value] of ['   ', ` ${spaced}`].entries()) {
+      await configFileSetting(value);
+      const picked = await hostPickResult();
+      const mark = connectionLog().length;
+      const window = `c2${String(index + 1)}`;
+      const {dialog, argvs} = await failingWindow('cfghost', window);
+      await endWindow(window);
+      seen.push([
+        picked.items,
+        picked.messages,
+        dialog.question,
+        argvs.length,
+        connectionLog()
+          .slice(mark)
+          .includes(
+            `remote.SSH.configFile is not an absolute path: "${value}"`,
+          ),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [FIXED_ROWS, [], 'Could not establish connection to "cfghost".', 0, true],
+      [FIXED_ROWS, [], 'Could not establish connection to "cfghost".', 0, true],
+    ]);
+  });
+
+  it('F-2201 AC-46: an absolute path ending in a space or a newline is read as written: its host is listed, a window connects with ssh handed that exact file, and the file pick offers and opens it as written', async () => {
+    const seen: unknown[] = [];
+    for (const [index, name] of [
+      path.join(RUN_FOLDER, 'cfg-trail '),
+      path.join(RUN_FOLDER, 'cfg-newline\n'),
+    ].entries()) {
+      writeFileSync(name, hostBlock('cfghost'));
+      await configFileSetting(name);
+      const picked = await hostPickResult();
+      const mark = recordedInvocations().length;
+      const window = `c2${String(index + 3)}`;
+      await openWindow('cfghost', window);
+      await connectedWithin(window, 60_000);
+      // The recorder notes one argument to a line, so a name ending in a newline is noted without it; the window
+      // connecting is what shows ssh read that exact file, since the host is defined nowhere else.
+      const noted = recordedInvocations().slice(mark);
+      const handed = handsFile(noted, name.replace(/\n$/, ''));
+      await endWindow(window);
+      const line = await filePick({label: name});
+      const href = pathToFileURL(name).href;
+      await waitFor(
+        'the file as the active tab',
+        async () => (await windowState('local')).activeTab?.uri === href,
+        15_000,
+      );
+      seen.push([picked.items, handed, line.items?.[0]]);
+    }
+    deepStrictEqual(seen, [
+      [['cfghost', ...FIXED_ROWS], true, path.join(RUN_FOLDER, 'cfg-trail ')],
+      [
+        ['cfghost', ...FIXED_ROWS],
+        true,
+        path.join(RUN_FOLDER, 'cfg-newline\n'),
+      ],
+    ]);
+  });
+
+  it('F-2201 AC-46: when no file of that name exists the connect fails as for a missing file, with ssh handed the exact name', async () => {
+    const gone = path.join(RUN_FOLDER, 'cfg-gone ');
+    await configFileSetting(gone);
+    const {dialog, argvs} = await failingWindow('cfghost', 'c25');
+    await endWindow('c25');
+    deepStrictEqual(
+      [dialog.question, handsFile(argvs, gone)],
+      ['Could not establish connection to "cfghost".', true],
+    );
+  });
+
+  it('F-2201 AC-35, AC-45: a relative setting fails the connect before ssh is started, and the log names the setting', async () => {
     await configFileSetting('cfg-b');
     const mark = connectionLog().length;
     const {dialog, argvs} = await failingWindow('cfghost', 'c13');
@@ -624,7 +721,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     );
   });
 
-  it('F-2201 AC-35: a $HOME/ setting fails the connect before ssh is started, and the log names the setting', async () => {
+  it('F-2201 AC-35, AC-45: a $HOME/ setting fails the connect before ssh is started, and the log names the setting', async () => {
     await configFileSetting('$HOME/cfg-b');
     const mark = connectionLog().length;
     const {dialog, argvs} = await failingWindow('cfghost', 'c14');
@@ -643,7 +740,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     );
   });
 
-  it('F-2201 AC-35: a ${env:HOME}/ setting fails the connect before ssh is started, and the log names the setting', async () => {
+  it('F-2201 AC-35, AC-45: a ${env:HOME}/ setting fails the connect before ssh is started, and the log names the setting', async () => {
     await configFileSetting('${env:HOME}/cfg-b');
     const mark = connectionLog().length;
     const {dialog, argvs} = await failingWindow('cfghost', 'c15');

@@ -48,6 +48,10 @@ import type {PromptEditor} from './surfaces/prompt-surface.ts';
 import type {TextInputPort} from './surfaces/text-input.ts';
 import type {Translate} from './surfaces/strings.ts';
 import type {SettingHost} from 'lib-identifiers';
+import {
+  hintRecorderOf,
+  type HintRecorderState,
+} from './diagnostics/hint-recorder.ts';
 
 /** The editor's adapters of the connect's surfaces. */
 export interface EditorAdapters {
@@ -100,6 +104,10 @@ export interface SurfaceContext {
   acceptanceState: AcceptanceState;
   /** The profile's record of the notices the user asked not to see again. */
   noticeState: AcceptanceState;
+  /** The extension's global state, where the hints of a connect are kept. */
+  hintState: HintRecorderState;
+  /** The address of the documentation a hint points to. */
+  documentation: () => string;
   /** The window's log, where a notice that could not be shown is noted. */
   logger: Logger;
   /** Makes these the only variables the window's terminals get from the extension. */
@@ -172,6 +180,11 @@ export function editorSurfacesOf(
     },
     notice: adapters.notice,
     noticeState: context.noticeState,
+    hints: hintRecorderOf(context.hintState, {
+      translate,
+      documentation: context.documentation,
+      now: () => new Date(),
+    }),
     licenceModal: licenceModalOf(
       adapters.licenceDialog,
       translate,

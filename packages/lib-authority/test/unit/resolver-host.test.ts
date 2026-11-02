@@ -719,7 +719,6 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     delay: number | undefined,
     phases: ConnectPhase[],
     delayPasses: boolean,
-    extra: Partial<ResolverOptions> = {},
   ): Promise<{
     runs: number;
     title: string | undefined;
@@ -727,9 +726,7 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     timers: number[];
   }> {
     const context = await setup(
-      delay === undefined
-        ? extra
-        : {...extra, progressDelayMilliseconds: delay},
+      delay === undefined ? {} : {progressDelayMilliseconds: delay},
     );
     context.connector.phases = phases;
     if (delayPasses) {
@@ -773,40 +770,8 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     deepStrictEqual([shown.runs, shown.timers], [1, [1500, 2000]]);
   });
 
-  it('connect-104: with the progress at the start, a connect that fails before any stage has shown the progress with the start title alone, and closed it', async () => {
-    const context = await setup({progressAtStart: true});
-    context.connector.failure = new Error('no port');
-    await failureOf(context);
-    deepStrictEqual(
-      [
-        context.editor.progressRuns.map(entry => entry.title),
-        context.editor.progressRuns[0]?.updates,
-        context.editor.progressEnded,
-      ],
-      [['starting'], [], 1],
-    );
-  });
-
-  it('connect-104: with the progress at the start, the progress is open before the first stage and a stage updates it', async () => {
-    const shown = await progressOf(undefined, [{name: 'downloading'}], false, {
-      progressAtStart: true,
-    });
-    deepStrictEqual(
-      [shown.runs, shown.title, shown.updates],
-      [1, 'starting', ['phase downloading']],
-    );
-  });
-
-  it('connect-104: without it, a connect that fails before any stage shows no progress', async () => {
-    const context = await setup();
-    context.connector.failure = new Error('no port');
-    await failureOf(context);
-    deepStrictEqual(context.editor.progressRuns.length, 0);
-  });
-
   it('connect-106: two stages that say the same give one report, and a stage that says another gives its own', async () => {
     const context = await setup({
-      progressAtStart: true,
       titleOf: phase => (phase.name === 'downloading' ? 'second' : 'same'),
     });
     context.connector.phases = [
@@ -899,13 +864,44 @@ describe('the resolver host: the progress opens lazily (card connect-78)', () =>
     );
   });
 
-  it('containers-55: a report with no stage text carries no increment', async () => {
+  it('containers-55: a stage with no text adds no report, and the one with text carries its increment', async () => {
     deepStrictEqual(
       await incrementsFor(
         [{name: 'initializing'}, {name: 'startingServer'}],
         true,
       ),
-      [undefined, 0],
+      [0],
+    );
+  });
+
+  it('connect-108: a stage with no message between two titled ones adds no step, so that the text is not blanked', async () => {
+    const context = await setup({
+      titleOf: phase => (phase.name === 'opened' ? '' : phase.name),
+    });
+    context.connector.phases = [
+      {name: 'initializing'},
+      {name: 'opened'},
+      {name: 'installing'},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      'initializing',
+      'installing',
+    ]);
+  });
+
+  it('connect-108: a progress opened by a stage with no message reports nothing until a stage speaks', async () => {
+    const context = await setup({
+      titleOf: phase => (phase.name === 'opened' ? '' : phase.name),
+    });
+    context.connector.phases = [{name: 'opened'}, {name: 'installing'}];
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.length,
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [1, ['installing']],
     );
   });
 

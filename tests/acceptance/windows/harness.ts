@@ -157,6 +157,8 @@ export interface RecordLine {
   matched: boolean;
   /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
+  /** The lines of a held entry that passes the cursor on: the waiting line counts for the cursor, and the answer or withdrawal line that follows it does not. */
+  passCursor?: boolean;
   window: string;
   /** Whether a phase line of a `progress` surface carried the details link. */
   details?: boolean;
@@ -169,6 +171,13 @@ export interface RecordLine {
   /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
   active?: string | undefined;
   time: number;
+}
+
+/** Whether a record line is a question of the window, not a display-only line of its progress. */
+export function isQuestion(line: RecordLine): boolean {
+  return !['progress', 'downloadProgress', 'progressEnd'].includes(
+    line.surface,
+  );
 }
 
 /** A question the scripted adapters of the launch's windows answer from the script, in the order the windows ask them. */
@@ -476,16 +485,23 @@ export async function acceptedKeyLogins(since: string): Promise<number> {
 
 /**
  * The established TCP connections of this machine whose peer is the host container's published address, each with
- * the name of the program that holds it, from `ss -tnpH state established`.
+ * the name and the process id of the program that holds it, from `ss -tnpH state established`.
  */
-export async function hostConnections(): Promise<Array<{program: string}>> {
+export async function hostConnections(): Promise<
+  Array<{program: string; processId: number}>
+> {
   const {stdout} = await execFileAsync('ss', ['-tnpH', 'state', 'established']);
   const peer = `127.0.0.1:${String(hostPort())}`;
   return stdout
     .split('\n')
-    .map(line => /^\s*\d+\s+\d+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)"/.exec(line))
+    .map(line =>
+      /^\s*\d+\s+\d+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)",pid=(\d+)/.exec(line),
+    )
     .filter(match => match?.[1] === peer)
-    .map(match => ({program: match?.[2] ?? ''}));
+    .map(match => ({
+      program: match?.[2] ?? '',
+      processId: Number(match?.[3]),
+    }));
 }
 
 /** Cuts the host container's network, as a lost network is cut; a row that cuts restores it in a `finally`. */

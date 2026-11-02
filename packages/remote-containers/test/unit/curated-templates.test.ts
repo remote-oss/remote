@@ -70,7 +70,7 @@ describe('the rule of the curated list (card containers-79)', () => {
       [
         isCurated(factsOf(['main.go'])),
         isCurated(factsOf(['a/b/c/d/e/f/g/tool.py'])),
-        isCurated(factsOf(['notes.TXT', 'Dockerfile'])),
+        isCurated(factsOf(['notes.TXT', 'go.mod'])),
       ],
       [true, true, true],
     );
@@ -88,6 +88,19 @@ describe('the rule of the curated list (card containers-79)', () => {
 
   it('F-0802 AC-26: a walk that had no end makes the folder curated', () => {
     deepStrictEqual(isCurated(factsOf([], true)), true);
+  });
+
+  it('F-0802 AC-29: a Dockerfile or a Compose file alone leaves the folder flat', () => {
+    deepStrictEqual(
+      [
+        isCurated(factsOf(['Dockerfile'])),
+        isCurated(factsOf(['docker-compose.yml'])),
+        isCurated(factsOf(['docker-compose.yaml'])),
+        isCurated(factsOf(['Dockerfile', 'docker-compose.yml', 'README.md'])),
+        isCurated(factsOf(['Dockerfile', 'go.mod'])),
+      ],
+      [false, false, false, false, true],
+    );
   });
 });
 
@@ -195,6 +208,58 @@ describe('our curated table (card containers-79)', () => {
         ),
       ),
       ['debian'],
+    );
+  });
+
+  it('F-0802 AC-26: package.json adds the four Node.js templates, Node.js & TypeScript included', () => {
+    const catalogue = [
+      ...CORE.map(part => templateOf(part)),
+      templateOf('javascript-node'),
+      templateOf('javascript-node-mongo'),
+      templateOf('javascript-node-postgres'),
+      templateOf('typescript-node'),
+    ];
+    deepStrictEqual(
+      partsOf(
+        curatedTemplates(
+          catalogue,
+          factsOf(['package.json', 'go.mod']),
+          PREFIX,
+        ),
+      ),
+      [
+        ...CORE,
+        'javascript-node',
+        'javascript-node-mongo',
+        'javascript-node-postgres',
+        'typescript-node',
+      ],
+    );
+  });
+
+  it('F-0802 AC-35: a .py file adds the seven Python templates, Python 3 & PostgreSQL included', () => {
+    const catalogue = [
+      ...CORE.map(part => templateOf(part)),
+      templateOf('anaconda'),
+      templateOf('anaconda-postgres'),
+      templateOf('miniconda'),
+      templateOf('miniconda-postgres'),
+      templateOf('postgres'),
+      templateOf('python'),
+      templateOf('universal'),
+    ];
+    deepStrictEqual(
+      partsOf(curatedTemplates(catalogue, factsOf(['app.py']), PREFIX)),
+      [
+        ...CORE,
+        'anaconda',
+        'anaconda-postgres',
+        'miniconda',
+        'miniconda-postgres',
+        'postgres',
+        'python',
+        'universal',
+      ],
     );
   });
 });

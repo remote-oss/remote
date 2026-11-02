@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {PhaseName} from 'lib-authority';
 import {
+  detailsTitleOf,
   phaseTitleOf,
   startTitleOf,
 } from '../../src/surfaces/progress-titles.ts';
@@ -38,10 +39,29 @@ describe('the titles of the connection progress', () => {
     deepStrictEqual(phaseTitleOf({name: 'startingServer'}), undefined);
   });
 
+  it('connect-107: the opening stage has no message, which opens the progress with the title alone', () => {
+    deepStrictEqual(phaseTitleOf({name: 'opened'}), undefined);
+  });
+
   it('F-2304: the share downloaded has no message, so the last one stays', () => {
     deepStrictEqual(
       phaseTitleOf({name: 'serverDownloadPercent', percent: 40}),
       undefined,
     );
+  });
+
+  it('connect-113, F-2308 AC-7: the tunnel stage in the terminal mode has the title S132', () => {
+    deepStrictEqual(detailsTitleOf('settingUpTunnel', true), {
+      id: 'S132',
+      values: [],
+    });
+  });
+
+  it('connect-113: the tunnel stage has no title outside the terminal mode', () => {
+    deepStrictEqual(detailsTitleOf('settingUpTunnel', false), undefined);
+  });
+
+  it('connect-113: another stage has no title in the terminal mode either', () => {
+    deepStrictEqual(detailsTitleOf('initializing', true), undefined);
   });
 });

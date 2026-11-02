@@ -13,7 +13,11 @@ import {
   waitFor,
   type RecordLine,
 } from './harness.ts';
-import {freshHost, INSTALL_MILLISECONDS} from './maintenance.ts';
+import {
+  freshHost,
+  INSTALL_MILLISECONDS,
+  storedPlatform,
+} from './maintenance.ts';
 
 /** The question of the platform pick of the host `harness`. */
 const PLATFORM_QUESTION = 'Select the platform of the remote host "harness"';
@@ -33,16 +37,6 @@ function linesOf(name: string, surface: string): RecordLine[] {
 /** The progress titles window `name` showed, in order, without the phases' repeats. */
 function progressTitles(name: string): string[] {
   return linesOf(name, 'progress').map(line => line.question);
-}
-
-/** What `remote.SSH.remotePlatform` holds in the user settings file, or nothing. */
-function storedPlatform(): unknown {
-  const text = readUserSettings();
-  return text === undefined
-    ? undefined
-    : (JSON.parse(text) as Record<string, unknown>)[
-        'remote.SSH.remotePlatform'
-      ];
 }
 
 /** The entries that dismiss the failure dialog and the pick of actions of window `name`. */

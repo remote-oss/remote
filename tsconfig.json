@@ -251,6 +251,9 @@
       "path": "tests/acceptance/terminal-login"
     },
     {
+      "path": "tests/acceptance/passphrase"
+    },
+    {
       "path": "tests/acceptance/extensionpack-german"
     },
     {

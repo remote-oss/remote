@@ -68,9 +68,12 @@ import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
+  changedKeyHostsFile,
+  CHANGED_KEY_ALIAS,
   controlFolderOf,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
+  passkeyCopies,
   startRunAgent,
 } from './acceptance-keys.ts';
 import {
@@ -366,7 +369,9 @@ export function sshConfigOf(
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
- * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
+ * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
+ * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
+ * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
@@ -437,10 +442,27 @@ export function harnessSshConfig(
     '  BatchMode yes',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
     '',
+    // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
+    // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
+    `Host ${CHANGED_KEY_ALIAS}`,
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    `  HostKeyAlias ${CHANGED_KEY_ALIAS}`,
+    '  StrictHostKeyChecking no',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${changedKeyHostsFile(runFolder)}`,
+    '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
-    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, and a forced change.
+    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, a forced change, and a
+    // question the extension doesn't recognise before the password.
     ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
     ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
+    ...accountAlias('ask-odd', 'harness-odd', port, runFolder, KBD_LINES),
     // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
     ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
       'PubkeyAuthentication no',
@@ -596,6 +618,96 @@ export function harnessSshConfig(
       controlFolder,
     ),
     ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
+    // The same alias again under other names, so that a row finds no shared connection a row before it left.
+    ...passkeyCopies().flatMap(alias =>
+      keyAlias(alias, 'harness', port, runFolder, ['id_passphrase']),
+    ),
+    // The passphrase key with each AddKeysToAgent value.
+    ...keyAlias(
+      'passkey-add-yes',
+      'harness',
+      port,
+      runFolder,
+      ['id_passphrase'],
+      ['AddKeysToAgent yes'],
+    ),
+    ...keyAlias(
+      'passkey-ask-yes',
+      'harness',
+      port,
+      runFolder,
+      ['id_passphrase'],
+      ['AddKeysToAgent ask'],
+    ),
+    ...keyAlias(
+      'passkey-ask-no',
+      'harness',
+      port,
+      runFolder,
+      ['id_passphrase'],
+      ['AddKeysToAgent ask'],
+    ),
+    ...keyAlias(
+      'passkey-ask-escape',
+      'harness',
+      port,
+      runFolder,
+      ['id_passphrase'],
+      ['AddKeysToAgent ask'],
+    ),
+    ...keyAlias(
+      'passkey-add-confirm',
+      'harness',
+      port,
+      runFolder,
+      ['id_passphrase'],
+      ['AddKeysToAgent confirm'],
+    ),
+    // No usable key, each in its own way.
+    ...keyAlias('nokey-missing', 'harness', port, runFolder, ['id_missing']),
+    ...keyAlias(
+      'nokey-none',
+      'harness',
+      port,
+      runFolder,
+      [],
+      ['IdentityFile none'],
+    ),
+    ...keyAlias(
+      'nokey-nopubkey',
+      'harness',
+      port,
+      runFolder,
+      ['id_second'],
+      ['PubkeyAuthentication no'],
+    ),
+    ...keyAlias('nokey-agent-only', 'harness', port, runFolder, [], []),
+    ...keyAlias(
+      'nokey-agent-none',
+      'harness',
+      port,
+      runFolder,
+      [],
+      ['IdentityAgent none'],
+      false,
+    ),
+    // Several identity files and the agent.
+    ...keyAlias(
+      'agent-other-file',
+      'harness',
+      port,
+      runFolder,
+      ['id_unauthorised'],
+      [],
+      false,
+    ),
+    // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
+    ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
+    ...keyAlias('several-files', 'harness', port, runFolder, [
+      'id_missing',
+      'id_passphrase_stranger',
+      'id_second',
+    ]),
     ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
       'id_passphrase',
       'id_second',
@@ -659,14 +771,20 @@ function keyAlias(
   port: number,
   runFolder: string,
   keyFiles: readonly string[],
+  further: readonly string[] = [],
+  identitiesOnly = true,
 ): string[] {
   return [
     `Host ${alias}`,
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     `  User ${user}`,
-    ...keyFiles.map(file => `  IdentityFile ${path.join(runFolder, file)}`),
-    '  IdentitiesOnly yes',
+    ...keyFiles.map(
+      file =>
+        `  IdentityFile ${file.startsWith('/') ? file : path.join(runFolder, file)}`,
+    ),
+    `  IdentitiesOnly ${identitiesOnly ? 'yes' : 'no'}`,
+    ...further.map(line => `  ${line}`),
     '  StrictHostKeyChecking accept-new',
     '  ConnectTimeout 10',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,

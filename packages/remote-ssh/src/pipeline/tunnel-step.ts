@@ -16,6 +16,7 @@ import {
   type TunnelSettings,
   type WaitLimits,
 } from 'lib-forwarding';
+import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
@@ -66,6 +67,10 @@ export interface TunnelStepDependencies {
     login: TerminalLogin,
     input: ConnectInput,
   ): {onQuestion(text: string): void; dispose(): void};
+  /** Tells the user, once for the window, that the host refuses the forwarding the SOCKS relay needs. */
+  forwardRefused(): void;
+  /** `remote.SSH.useExecServer`: with it the second ssh's refused first forward is a failure. */
+  useExecServer(): boolean;
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
   /** What decides the length of the connect wait, which also bounds a question of the tunnel login that nobody can see. */
@@ -172,7 +177,7 @@ async function openTerminalTunnel(
   path: 'secondSsh' | 'socket',
   given: Parameters<ConnectSteps['openTunnel']>,
 ): Promise<TunnelResult> {
-  const [input, , server, onWaiting, cancellation] = given;
+  const [input, , server, onWaiting, cancellation, onSettingUp] = given;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
@@ -180,6 +185,7 @@ async function openTerminalTunnel(
   if (!('port' in chosen)) {
     return notOpenedFor(chosen);
   }
+  onSettingUp?.();
   const localPort = chosen.port;
   if (isAborted(cancellation)) {
     return CANCELLED;
@@ -247,8 +253,27 @@ async function openTerminalTunnel(
   }
   if (gate.kind === 'forwardFailed') {
     dependencies.logger.warn(`the tunnel's forward failed: ${gate.line}`);
+    // The port is never probed or connected, since nothing here listens on it. The window waits as for a port that never
+    // accepts, for the same fixed bound whatever the connect timeout is, and fails with the same reason.
     session.stop();
-    return NOT_OPENED;
+    onWaiting();
+    const hold: {cancel?: () => void} = {};
+    const elapsed = new Promise<'elapsed'>(resolve => {
+      hold.cancel = dependencies.scheduler.setTimer(
+        FORWARD_READY_MILLISECONDS,
+        () => {
+          resolve('elapsed');
+        },
+      );
+    });
+    const held = await Promise.race([elapsed, cancelled]);
+    hold.cancel?.();
+    return held === 'cancelled'
+      ? CANCELLED
+      : {
+          kind: 'failed',
+          failure: {kind: 'unknown', reason: MAX_WAIT_EXHAUSTED},
+        };
   }
   if (gate.kind === 'ended') {
     return NOT_OPENED;
@@ -262,10 +287,11 @@ async function openTerminalTunnel(
       ...dependencies.limits,
       readyMilliseconds: FORWARD_READY_MILLISECONDS,
     },
-    // After a connect has worked the refusal stays a reconnection, which is how the window recovers a lost one. Only
-    // the socket path fails on a refused forward; the second ssh's refused port forward reconnects, with the platform
-    // pick of each attempt.
-    ...(input.isReconnection || path !== 'socket'
+    // After a connect has worked the refusal stays a reconnection. On a first resolve, the socket path and the second
+    // ssh with the exec server fail on a refused forward; the second ssh without it reconnects, with the platform pick
+    // of each attempt.
+    ...(input.isReconnection ||
+    (path === 'secondSsh' && !dependencies.useExecServer())
       ? {}
       : {refusalMilliseconds: FORWARD_REFUSAL_MILLISECONDS}),
     stopSession: () => {
@@ -317,6 +343,65 @@ async function openTerminalTunnel(
   };
 }
 
+/**
+ * The script that tells whether the server's port is in the listening state on the host, from the kernel's own tables:
+ * it prints one line, with a marker that no `ssh` output carries.
+ */
+const LISTEN_SCRIPT = [
+  'hex=$(printf "%04X" "$SERVER_PORT")',
+  'if grep -qiE "^ *[0-9]+: [0-9A-F]+:$hex [0-9A-F]+:[0-9A-F]+ 0A " /proc/net/tcp /proc/net/tcp6 2>/dev/null; then',
+  '  echo remote-oss-listening=yes',
+  'else',
+  '  echo remote-oss-listening=no',
+  'fi',
+  '',
+].join('\n');
+
+/** Whether the host says that `port` listens; undefined when the check could not be run. */
+async function serverListens(
+  channel: HostChannel,
+  port: number,
+  cancellation: AbortSignal,
+): Promise<boolean | undefined> {
+  const lines: string[] = [];
+  const outcome = await channel.runScript(
+    {
+      script: LISTEN_SCRIPT,
+      interpreter: 'posixShell',
+      environment: {SERVER_PORT: String(port)},
+      input: {kind: 'text', text: ''},
+      cancellation,
+    },
+    line => {
+      lines.push(line);
+    },
+  );
+  if (outcome.kind === 'failed' || outcome.status !== 0) {
+    return undefined;
+  }
+  const answer = lines.find(line => line.startsWith('remote-oss-listening='));
+  return answer === undefined ? undefined : answer.endsWith('yes');
+}
+
+/** The log line of the check that ended a refused-looking run, naming the fact that decided it. */
+function refusalLine(
+  cause: 'closedBeforeReply' | 'unreachable',
+  fact: boolean | undefined,
+  port: number,
+): string {
+  if (cause === 'closedBeforeReply') {
+    if (fact === true) {
+      return `the relay closed every connection and the server's port ${String(port)} listens on the host: the forward is refused`;
+    }
+    return fact === false
+      ? `the relay closed every connection and the server's port ${String(port)} does not listen on the host: the server is gone`
+      : `the relay closed every connection and the check of the server's port ${String(port)} gave no answer: the forward is not taken as refused`;
+  }
+  return fact === true
+    ? "the relay cannot be reached and the connection's ssh is still alive: the forward is missing"
+    : "the relay cannot be reached and the connection's ssh has ended: not a refused forward";
+}
+
 /** The failure of a connect that was cancelled while the tunnel was being opened. */
 const CANCELLED: TunnelResult = {kind: 'failed', failure: {kind: 'cancelled'}};
 
@@ -336,7 +421,8 @@ export function openTunnelStep(
   async function openTunnel(
     ...given: Parameters<ConnectSteps['openTunnel']>
   ): Promise<TunnelResult> {
-    const [, lease, server, onWaiting] = given;
+    const [, lease, server, onWaiting, cancellation, onSettingUp, disarmBound] =
+      given;
     const path = tunnelPath();
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
@@ -345,8 +431,15 @@ export function openTunnelStep(
     if (!('port' in chosen)) {
       return notOpenedFor(chosen);
     }
+    onSettingUp?.();
     const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
+    let connectionLost = false;
+    const stopNotices = lease.onNotice(notice => {
+      if (notice.type === 'transportLost' || notice.type === 'helperGone') {
+        connectionLost = true;
+      }
+    });
     const outcome = await openRelayTunnel({
       dialer,
       local: dependencies.local,
@@ -355,7 +448,32 @@ export function openTunnelStep(
       localPort,
       limits: dependencies.limits,
       onWaiting,
+      // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
+      confirmRefusal: async cause => {
+        const fact =
+          cause === 'closedBeforeReply'
+            ? await serverListens(lease.channel, portOf(server), cancellation)
+            : !connectionLost;
+        dependencies.logger.info(refusalLine(cause, fact, portOf(server)));
+        return fact === true;
+      },
     });
+    stopNotices();
+    if (outcome.kind === 'relayRefused') {
+      dependencies.forwardRefused();
+      // The connect goes on waiting, with its progress, until the window is closed or reloaded: no dialog, no retry.
+      disarmBound?.();
+      await new Promise<void>(resolve => {
+        if (isAborted(cancellation)) {
+          resolve();
+        } else {
+          cancellation.addEventListener('abort', () => {
+            resolve();
+          });
+        }
+      });
+      return CANCELLED;
+    }
     if (outcome.kind !== 'open') {
       return NOT_OPENED;
     }

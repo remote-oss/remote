@@ -3,11 +3,12 @@
  * curated list shows when any significant file exists below the folder: a file that is not neutral, `.git` excluded
  * and folders never counting. The neutral files are `*.txt`, `*.md`, `*.json`, `Makefile` and `Gemfile`, the names
  * and patterns observed to leave the full list on (`readme.txt`, `foo.txt`, `requirements.txt`, `README.md`,
- * `data.json`, `package.json`, `Makefile`, `Gemfile`), generalised. Once the curated list shows, every file present
- * adds its language matches, neutral ones included, once: the eight core templates are always in it. A match whose
- * id is not in the catalogue is left out. The specification's own collection is the one whose repository is
- * `SPECIFICATION_TEMPLATES_REPOSITORY`, as the index publishes it: its templates carry the verified mark, and the
- * folder their ids share is the prefix the curated table matches under.
+ * `data.json`, `package.json`, `Makefile`, `Gemfile`), generalised, plus `Dockerfile`, `docker-compose.yml` and
+ * `docker-compose.yaml`, which the chooser offers to reuse, so they never decide the list. Once the curated list
+ * shows, every file present adds its language matches, neutral ones included, once: the eight core templates are
+ * always in it. A match whose id is not in the catalogue is left out. The specification's own collection is the one
+ * whose repository is `SPECIFICATION_TEMPLATES_REPOSITORY`, as the index publishes it: its templates carry the
+ * verified mark, and the folder their ids share is the prefix the curated table matches under.
  */
 
 import type {CatalogueTemplate} from './catalogue.ts';
@@ -47,7 +48,13 @@ const CORE_TEMPLATES: readonly string[] = [
 const NEUTRAL_EXTENSIONS: readonly string[] = ['.txt', '.md', '.json'];
 
 /** The names of the neutral files without an extension. */
-const NEUTRAL_NAMES: readonly string[] = ['Makefile', 'Gemfile'];
+const NEUTRAL_NAMES: readonly string[] = [
+  'Makefile',
+  'Gemfile',
+  'Dockerfile',
+  'docker-compose.yml',
+  'docker-compose.yaml',
+];
 
 /** A file name or pattern, and the templates it matches. */
 interface LanguageMatch {
@@ -72,6 +79,7 @@ const LANGUAGE_MATCHES: readonly LanguageMatch[] = [
       'anaconda-postgres',
       'miniconda',
       'miniconda-postgres',
+      'postgres',
       'universal',
     ],
   },
@@ -90,6 +98,7 @@ const LANGUAGE_MATCHES: readonly LanguageMatch[] = [
       'javascript-node',
       'javascript-node-mongo',
       'javascript-node-postgres',
+      'typescript-node',
     ],
   },
   {

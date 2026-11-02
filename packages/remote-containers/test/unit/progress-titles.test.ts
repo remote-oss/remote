@@ -33,6 +33,13 @@ describe('the titles of the connect progress (card containers-08)', () => {
     );
   });
 
+  it('connect-107: the opening stage of the ssh family, which this family never reports, has an empty message', () => {
+    deepStrictEqual(
+      phaseTitleOf({name: 'opened'}, template => template),
+      '',
+    );
+  });
+
   it('containers-55: the download of the server keeps the installing text, so the suffix stays until the next stage replaces it', () => {
     deepStrictEqual(
       phaseTitleOf({name: 'serverDownloadPercent'}, template => template),
