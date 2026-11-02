@@ -36,6 +36,7 @@ import {
 import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts';
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
+import {CONNECT_WAIT_TIMEOUT} from '../../src/pipeline/failure.ts';
 import type {ConnectInput, StepFailure} from '../../src/pipeline/steps.ts';
 import type {PhaseEvent} from '../../src/pipeline/connect.ts';
 import {
@@ -114,6 +115,8 @@ interface WiringSeen {
   linkTerminals: Array<{name: string; command: string[]}>;
   /** The tunnels the editor was asked for. */
   tunnels: TunnelOptions[];
+  /** The listeners of the grant of trust that are still registered. */
+  trustListeners: Array<() => void>;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -138,6 +141,8 @@ function portsOf(
     defaultForwards?: unknown;
     /** What the read of the default forwards waits for; the configuration's change at once when absent. */
     defaultRead?: () => Promise<ReadSignal>;
+    /** Whether the workspace is trusted; it is, unless the row says otherwise. */
+    trusted?: boolean;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -153,6 +158,7 @@ function portsOf(
     progress: [],
     tunnels: [],
     linkTerminals: [],
+    trustListeners: [],
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
@@ -166,6 +172,20 @@ function portsOf(
     },
     defaultRead:
       changes.defaultRead ?? (() => Promise.resolve('configuration')),
+    trust: {
+      isTrusted: () => changes.trusted ?? true,
+      onTrustGranted: listener => {
+        seen.trustListeners.push(listener);
+        return {
+          dispose: () => {
+            seen.trustListeners.splice(
+              seen.trustListeners.indexOf(listener),
+              1,
+            );
+          },
+        };
+      },
+    },
     configuredHosts: changes.configuredHosts ?? (() => ({hosts: []})),
     preconnect: {
       readFile: () => Promise.resolve(new Uint8Array()),
@@ -1946,5 +1966,102 @@ describe("the lookup inside the shared connection's acquire (card connect-57)", 
   it('F-2102 BR-9: in shared mode it does not', () => {
     const {ports} = portsOf({mode: 'shared'});
     deepStrictEqual(stepsOf(ports).lookupBeforeConnection(), false);
+  });
+
+  /** The failure a lookup gave, as the hold row passes it. */
+  const LOOKUP_FAILURE: StepFailure = {
+    kind: 'configFileUnparsable',
+    reason: {text: 'bad file'},
+    logDetail: 'bad file',
+  };
+
+  it("F-2201 AC-27: a failed lookup in an untrusted workspace is held, and the grant of trust gives the lookup's failure", async () => {
+    const {ports, seen} = portsOf({mode: 'terminal', trusted: false});
+    const held = stepsOf(ports).holdLookupFailure(
+      LOOKUP_FAILURE,
+      new AbortController().signal,
+    );
+    seen.clock.advance(5_000);
+    const early = [
+      seen.trustListeners.length,
+      seen.terminals.opened.map(terminal => [terminal.name, terminal.disposed]),
+    ];
+    seen.trustListeners[0]?.();
+    deepStrictEqual(
+      [await held, early, seen.terminals.opened[0]?.disposed],
+      [LOOKUP_FAILURE, [1, [['install', false]]], true],
+    );
+  });
+
+  it("F-2201 AC-27: with no grant before the connect wait ends the held failure is the wait's, and the listener is gone", async () => {
+    const {ports, seen} = portsOf({
+      mode: 'terminal',
+      trusted: false,
+      connectTimeout: 10,
+    });
+    const held = stepsOf(ports).holdLookupFailure(
+      LOOKUP_FAILURE,
+      new AbortController().signal,
+    );
+    seen.clock.advance(11_999);
+    seen.clock.advance(1);
+    deepStrictEqual(
+      [
+        await held,
+        seen.trustListeners.length,
+        seen.terminals.opened.map(terminal => terminal.disposed),
+      ],
+      [CONNECT_WAIT_TIMEOUT, 0, [true]],
+    );
+  });
+
+  it("F-2201 AC-27: in a trusted workspace the lookup's failure comes at once", async () => {
+    const {ports, seen} = portsOf({mode: 'terminal', trusted: true});
+    deepStrictEqual(
+      [
+        await stepsOf(ports).holdLookupFailure(
+          LOOKUP_FAILURE,
+          new AbortController().signal,
+        ),
+        seen.trustListeners.length,
+        seen.terminals.opened.length,
+      ],
+      [LOOKUP_FAILURE, 0, 0],
+    );
+  });
+
+  it("F-2201 AC-27: a connect already cancelled gets the lookup's failure at once, with no listener", async () => {
+    const {ports, seen} = portsOf({mode: 'terminal', trusted: false});
+    const cancellation = new AbortController();
+    cancellation.abort();
+    deepStrictEqual(
+      [
+        await stepsOf(ports).holdLookupFailure(
+          LOOKUP_FAILURE,
+          cancellation.signal,
+        ),
+        seen.trustListeners.length,
+        seen.terminals.opened.length,
+      ],
+      [LOOKUP_FAILURE, 0, 0],
+    );
+  });
+
+  it('F-2201 AC-27: a cancel ends the hold with the cancelled failure', async () => {
+    const {ports, seen} = portsOf({mode: 'terminal', trusted: false});
+    const cancellation = new AbortController();
+    const held = stepsOf(ports).holdLookupFailure(
+      LOOKUP_FAILURE,
+      cancellation.signal,
+    );
+    cancellation.abort();
+    deepStrictEqual(
+      [
+        await held,
+        seen.trustListeners.length,
+        seen.terminals.opened.map(terminal => terminal.disposed),
+      ],
+      [{kind: 'cancelled'}, 0, [true]],
+    );
   });
 });

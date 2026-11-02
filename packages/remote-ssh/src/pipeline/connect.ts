@@ -323,7 +323,9 @@ async function runSteps(
   if (steps.lookupBeforeConnection()) {
     const located = await steps.locateClient(input);
     if (located.kind === 'failed') {
-      return failure(located.failure);
+      return failure(
+        await steps.holdLookupFailure(located.failure, cancellation),
+      );
     }
     const unlocated = cancelled();
     if (unlocated !== undefined) {

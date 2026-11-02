@@ -384,6 +384,7 @@ export function wiringPortsOf(
       ),
     attachLogin: (login, alias) =>
       attachPromptSurface(login, surfaces.prompts, {displayHost: alias}),
+    trust: surfaces.defaultReadEvents,
     terminal: {
       terminals: surfaces.terminals,
       dynamicForwarding: () =>
