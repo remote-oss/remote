@@ -74,16 +74,23 @@ The Explorer has a second `ClientPlatform` of its own (`'windows' | 'other'`).
      requests, not off schedules).
    - **Measured on GitHub's hosted runners** (proteus's probe, run 41467076289, 2026-11-02; the user allowed GitHub's
      runners on 2026-10-20, #1106):
-     - `windows-2025`: virtualization is on, `wsl --install Ubuntu-24.04` installs a WSL2 distro that runs, OpenSSH
-       for Windows' server answers on localhost, and VSCodium starts with its debugging port;
-     - `windows-2022`: no virtualization (`vmFirmware=False`), so no WSL2;
-     - `macos-14` and `macos-15`: VSCodium starts with its debugging port.
-   - So these rows run on hosted runners in a scheduled job, outside pull requests, as D-93 does for the Macs:
-     - Windows clients, Windows SSH hosts (localhost) and WSL2, on `windows-2025`;
-     - macOS clients, on `macos-14` or `macos-15`.
+     - **`windows-2025`:** virtualization is on. `wsl --install Ubuntu-24.04` installs a WSL2 distro that runs, OpenSSH
+       for Windows' server answers on localhost, and VSCodium starts with its debugging port. Docker there runs
+       Windows containers only.
+     - **`windows-2022`:** no virtualization (`vmFirmware=False`), so no WSL2.
+     - **`macos-14` and `macos-15` (arm64):** VSCodium starts with its debugging port. There's no hypervisor
+       (`kern.hv_support` absent), so no Docker.
+     - **`macos-15-intel`:** has a hypervisor, and colima gives Docker for `linux/x86_64` in about 10 minutes.
+     - **On all three Macs:** a localhost `sshd` answers but refused the key, so key login isn't settled yet.
+   - **So these rows run on hosted runners in a scheduled job,** outside pull requests, as D-93 does for the Macs:
+     - **Windows clients, Windows SSH hosts (localhost) and WSL2:** on `windows-2025`. A Windows client row that needs
+       a Linux SSH host gets it from the WSL2 distro on the same runner.
+     - **macOS clients:** on `macos-14` or `macos-15`. A macOS client row that needs a Linux SSH host (Docker) runs on
+       `macos-15-intel`, with colima.
 
      A `host:` reason stays on such a line only until its job exists.
-   - **macOS SSH hosts** weren't probed (Remote Login on a hosted Mac). Until they are, their rows wait for a host.
+   - **macOS SSH hosts:** the hosted Macs' `sshd` answers, but its key login isn't settled yet. Until it is, those rows
+     wait for a host.
 7. **macOS hosts use the POSIX script, with BSD userland as data.** Where `stat`, `ps`, `sed -i`, `mktemp` or `getconf`
    differ, the script's functions detect the behaviour (a probe of the flag or form), not the name from `uname`. The
    detection is covered by a "BSD userland" fixture: stub commands with the documented BSD forms, first on the PATH in
@@ -95,7 +102,7 @@ The Explorer has a second `ClientPlatform` of its own (`'windows' | 'other'`).
 |---|---|---|
 | Platform as data, pure functions, Linux-tested; real-host rows written and waiting (chosen) | Builds everything now; every branch has a row today; a host later runs prepared rows; matches the existing seams | A stub can be wrong about Windows; the first real run may still find gaps |
 | Wait for hosts before building (the deferral D-105 removes) | Nothing built on assumptions | Contradicts D-105; Windows work piles up behind hardware |
-| GitHub-hosted runners for the platform rows (taken, scheduled outside pull requests) | Allowed by the user on 2026-10-20 (#1106); measured: `windows-2025` runs WSL2, a localhost OpenSSH server and VSCodium; macOS runners run VSCodium | GitHub's machines, outside the lab; `windows-2022` has no virtualization; macOS SSH hosts not yet probed |
+| GitHub-hosted runners for the platform rows (taken, scheduled outside pull requests) | Allowed by the user on 2026-10-20 (#1106). Measured: `windows-2025` runs WSL2, a localhost OpenSSH server and VSCodium; the macOS runners run VSCodium; `macos-15-intel` runs Docker through colima | GitHub's machines, outside the lab; `windows-2022` has no virtualization; the arm64 Macs have no Docker; macOS SSH hosts' key login isn't settled |
 | One script language (PowerShell on every host via `pwsh`) | One renderer | Hosts don't have `pwsh`; a POSIX host needs `sh` only (F-2402) |
 
 ## Consequences
