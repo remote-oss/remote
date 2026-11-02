@@ -29,7 +29,9 @@ import {
   answerInputBox,
   chooseQuickPickRow,
   paletteRows,
+  editorTabs,
   rowAction,
+  rowMenuAction,
   viewRows,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -247,6 +249,45 @@ describe('"New Remote" completed through the companion (card coverage-102, part 
         [before, rows, windows, true],
       );
     } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5102 AC-15 (menu-outcomes): through the context-menu entries the file pick opens the chosen file as a tab, and a completed New Remote writes the file and shows its row first, as through the buttons', async () => {
+    const file = sshFile('config', ['Host alpha']);
+    const window = await viewWindow('add-menu');
+    try {
+      await listing(window, ['alpha', ...systemHosts()]);
+      await rowMenuAction(window, VIEW, GROUP, GEAR);
+      await pickShown(window);
+      await chooseQuickPickRow(window, file);
+      await waitFor(
+        `window ${window} to open the file`,
+        async () =>
+          (await editorTabs(window)).some(entry => entry.label === 'config'),
+        30_000,
+      );
+      await rowMenuAction(window, VIEW, GROUP, PLUS);
+      await pickShown(window);
+      await answerInputBox(window, 'ssh menuone');
+      await pickShown(window);
+      await chooseQuickPickRow(window, file);
+      await listedWithin(
+        window,
+        ['menuone', 'alpha', ...systemHosts()],
+        Date.now(),
+        10_000,
+      );
+      deepStrictEqual(
+        [
+          (await editorTabs(window)).filter(entry => entry.label === 'config')
+            .length,
+          readFileSync(file, 'utf8').includes('Host menuone'),
+        ],
+        [1, true],
+      );
+    } finally {
+      await startInWindow(window, 'workbench.action.closeAllEditors');
       await closeWindow(window);
     }
   });
