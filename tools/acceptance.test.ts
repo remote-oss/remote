@@ -78,6 +78,7 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
+import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
@@ -478,12 +479,7 @@ function workflowParts(): {workflow: string; parts: string[]} {
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {
-    workflow,
-    parts: JSON.parse(
-      /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
-    ) as string[],
-  };
+  return {workflow, parts: partsOfWorkflow(workflow)};
 }
 
 function chosenLabels(
