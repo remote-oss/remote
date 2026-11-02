@@ -366,7 +366,7 @@ export function sshConfigOf(
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `jumped` (the harness account through the harness host as a `ProxyJump`), `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
@@ -437,6 +437,20 @@ export function harnessSshConfig(
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    '',
+    // The harness account reached through the harness host as a jump host: the target is the host's own sshd, at the port it listens on inside.
+    'Host jumped',
+    '  HostName 127.0.0.1',
+    '  Port 22',
+    '  User harness',
+    '  ProxyJump harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
     // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, and a forced change.
