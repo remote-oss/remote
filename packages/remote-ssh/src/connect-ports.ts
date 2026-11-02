@@ -69,7 +69,7 @@ import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
-import {SHOW_LOG_LINK} from './surfaces/progress-titles.ts';
+import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -456,7 +456,12 @@ export function wiringPortsOf(
         // A link that runs the Show Log command in a message with no button, which core would not hide.
         void surfaces.notice.showError(
           ownText(
-            {id: 'socksForwardingFailedNotice', values: [SHOW_LOG_LINK]},
+            {
+              id: 'socksForwardingFailedNotice',
+              values: [
+                `[${ownText({id: 'showLogLinkText', values: []}, surfaces.translate)}](command:${commands.showLog.id})`,
+              ],
+            },
             surfaces.translate,
           ),
           [],

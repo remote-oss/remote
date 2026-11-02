@@ -23,8 +23,9 @@ export const OWN_TEMPLATES = {
   S078: 'Host added!',
   S099: 'Open Config',
   S168: '{1} is not a valid host to bind',
+  showLogLinkText: 'Show log',
   socksForwardingFailedNotice:
-    'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. {0}',
+    'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})',
   configFileNotAbsolute:
     'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;

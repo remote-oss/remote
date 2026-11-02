@@ -1204,9 +1204,9 @@ describe("the assembled ports' refused forwarding notice (card connect-106)", ()
     await new Promise(resolve => setImmediate(resolve));
     deepStrictEqual(shown, [
       [
-        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. {0}>'.replace(
+        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})>'.replace(
           '{0}',
-          '[show log](command:opensshremotes.showLog "Show log")',
+          '[<Show log>](command:opensshremotes.showLog)',
         ),
         [],
       ],

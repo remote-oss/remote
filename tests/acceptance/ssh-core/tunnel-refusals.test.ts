@@ -244,7 +244,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     const expected = {
       notices: [
         [
-          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. [show log](command:opensshremotes.showLog "Show log")',
+          'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ([Show log](command:opensshremotes.showLog))',
           [],
         ],
       ],
