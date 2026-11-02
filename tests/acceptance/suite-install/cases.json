@@ -252,7 +252,7 @@
     },
     {
       "label": "local-no-marker",
-      "cite": "F-2405 AC-8, BR-9, POST-2 (ruling-1607-no-marker)",
+      "cite": "F-2405 AC-8 (ruling-1607-no-marker)",
       "settings": {
         "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
         "remote.SSH.localServerDownload": "always"
