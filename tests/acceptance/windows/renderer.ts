@@ -188,6 +188,24 @@ export function pagesOfRemoteness(
 }
 
 /**
+ * The pages whose titles fit a window's state. A window with no folder that is resolving a remote has the remote's name
+ * but not yet its title, which core completes once the connection is made, so when no title fits and the window has no
+ * folder and no workspace, the pages titled `[]` are the candidates.
+ */
+export function pagesForState(
+  found: readonly DebugTarget[],
+  state: PageState,
+): DebugTarget[] {
+  const matches = titleMatcher(state);
+  const fitting = found.filter(page => matches(page.title));
+  const folderless =
+    state.folders.length === 0 && (state.workspaceFile ?? null) === null;
+  return fitting.length === 0 && folderless && state.remoteName !== null
+    ? found.filter(page => page.title === '[]')
+    : fitting;
+}
+
+/**
  * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
  * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
  * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
@@ -308,12 +326,11 @@ export async function pageOf(
       if (state === undefined) {
         return undefined;
       }
-      const matches = titleMatcher({
+      const candidates = pagesForState(found, {
         folders: state.folders,
         remoteName: state.remoteName,
         workspaceFile: state.workspaceFile,
       });
-      const candidates = found.filter(page => matches(page.title));
       const chosen =
         pageAmong(candidates, name, REMEMBERED_PAGES, isOpen) ??
         pageAmong(
