@@ -762,6 +762,39 @@ export async function hoverRow(
   await new Promise(resolve => setTimeout(resolve, 300));
 }
 
+/** Clicks the label of the one row labelled `rowLabel` in view `viewName` of window `name` with the mouse, which selects and focuses it. */
+export async function clickRowLabel(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<void> {
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].querySelector('.label-name').getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  await dispatchInput(
+    await pageOf(name),
+    name,
+    ['mousePressed', 'mouseReleased'].map(type => ({
+      method: 'Input.dispatchMouseEvent',
+      params: {type, ...point, button: 'left', clickCount: 1},
+    })),
+  );
+}
+
 /**
  * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name` that are
  * drawn now, in the order shown: the row's actions stay out of sight until it is hovered, focused or selected.

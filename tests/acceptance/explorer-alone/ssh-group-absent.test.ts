@@ -40,7 +40,8 @@ describe('the SSH group commands with Remote - SSH absent (card coverage-102, pa
     ]);
     try {
       await inWindow(LOCAL, 'workbench.view.remote');
-      const rows = (await viewRows(LOCAL, VIEW)) ?? [];
+      const drawn = await viewRows(LOCAL, VIEW);
+      const rows = drawn ?? [];
       const windows = windowNames();
       const file = userFileText();
       const tabs = await editorTabs(LOCAL);

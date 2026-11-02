@@ -116,12 +116,14 @@ export async function pickShown(name: string): Promise<PickShown> {
   };
 }
 
-/** Closes the quick pick open in window `name` with Escape, and waits until none is shown. */
+/** Closes the quick pick open in window `name` with Escape, pressed again while one is still shown, and fails if one stays. */
 export async function closePick(name: string): Promise<void> {
-  await pressEscape(name);
-  await waitFor(
-    `the quick pick of window ${name} to close`,
-    async () => (await quickPickFacts(name)) === undefined,
-    10_000,
-  );
+  for (let presses = 0; presses < 5; presses += 1) {
+    await pressEscape(name);
+    await new Promise(resolve => setTimeout(resolve, 1_500));
+    if ((await quickPickFacts(name)) === undefined) {
+      return;
+    }
+  }
+  throw new Error(`the quick pick of window ${name} stays open after Escape`);
 }

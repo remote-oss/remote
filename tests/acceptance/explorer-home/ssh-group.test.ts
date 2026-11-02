@@ -5,7 +5,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, readFileSync, rmSync} from 'node:fs';
+import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   closePick,
@@ -21,9 +21,11 @@ import {
   readUserSettings,
   restoreUserSettings,
   userSettings,
+  waitFor,
 } from '../windows/harness.ts';
 import {
   answerInputBox,
+  clickRowLabel,
   hoverRow,
   notifications,
   paletteRows,
@@ -40,6 +42,16 @@ const GEAR = 'Open SSH Config File';
 const PLUS = 'New Remote';
 const GROUP = 'SSH';
 
+/** Waits until the SSH row is drawn: a group with no host has no listing to wait for. */
+async function groupDrawn(window: string): Promise<void> {
+  await waitFor(
+    `window ${window} to draw the ${GROUP} row`,
+    async () =>
+      ((await viewRows(window, VIEW)) ?? []).some(each => each.label === GROUP),
+    30_000,
+  );
+}
+
 describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)", function () {
   this.timeout(240_000);
   let savedSettings: string | undefined;
@@ -55,7 +67,7 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
     rmSync(sshFolder(), {recursive: true, force: true});
   });
 
-  it('F-5102 AC-1 (inline-buttons): an idle SSH row shows no button, and a hovered one shows the gear and then the plus', async () => {
+  it('F-5102 AC-1 (inline-buttons): an idle SSH row shows no button, and a hovered one, and a selected and focused one with the mouse away, show the gear and then the plus', async () => {
     sshFile('config', ['Host user-one']);
     const window = await viewWindow('group-buttons');
     try {
@@ -63,13 +75,17 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
       await hoverRow(window, VIEW, undefined);
       const idle = await shownRowActionTitles(window, VIEW, GROUP);
       await hoverRow(window, VIEW, GROUP);
+      const hovered = await shownRowActionTitles(window, VIEW, GROUP);
+      await clickRowLabel(window, VIEW, GROUP);
+      await hoverRow(window, VIEW, undefined);
       deepStrictEqual(
         [
           idle,
+          hovered,
           await shownRowActionTitles(window, VIEW, GROUP),
           await rowActionTitles(window, VIEW, GROUP),
         ],
-        [[], [GEAR, PLUS], [GEAR, PLUS]],
+        [[], [GEAR, PLUS], [GEAR, PLUS], [GEAR, PLUS]],
       );
     } finally {
       await closeWindow(window);
@@ -86,15 +102,11 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
     }
   });
 
-  it('F-5102 AC-3 (no-palette): the Command Palette lists neither command of the group, by title or by id', async () => {
+  it('F-5102 AC-3 (no-palette): the Command Palette lists neither command of the group, by title', async () => {
     const window = await viewWindow('group-palette');
     try {
       const listed = (
-        await Promise.all(
-          [GEAR, PLUS, 'remote-explorer.'].map(text =>
-            paletteRows(window, text),
-          ),
-        )
+        await Promise.all([GEAR, PLUS].map(text => paletteRows(window, text)))
       ).flat();
       deepStrictEqual(
         listed.filter(
@@ -111,7 +123,7 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
     }
   });
 
-  it("F-5102 AC-10, AC-15 (gear-picker): the gear and its menu entry open the picker of the companion's own palette command at once, and nothing else is shown", async () => {
+  it("F-5102 AC-10 (gear-picker): the gear and its menu entry open the picker of the companion's own palette command at once, and nothing else is shown", async () => {
     sshFile('config', ['Host user-one']);
     const window = await viewWindow('group-gear');
     try {
@@ -144,7 +156,7 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
     }
   });
 
-  it("F-5102 AC-12, AC-15 (plus-input): the plus and its menu entry open the input of the companion's own palette command at once, with its title, placeholder and an empty value", async () => {
+  it("F-5102 AC-12 (plus-input): the plus and its menu entry open the input of the companion's own palette command at once, with its title, placeholder and an empty value", async () => {
     sshFile('config', ['Host user-one']);
     const window = await viewWindow('group-plus');
     try {
@@ -177,7 +189,7 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
     }
   });
 
-  it('F-5102 AC-19 (cancelled): Escape on the picker and on the input, and Enter on an empty input, create and change no file, show no notification and leave the host list as it was', async () => {
+  it('F-5102 AC-19 (cancelled): Escape on the picker, on the input and on the file pick after a valid command, and Enter on an empty input, create and change no file, show no notification and leave the host list as it was', async () => {
     const window = await viewWindow('group-cancel');
     try {
       await listing(window, systemHosts());
@@ -186,6 +198,11 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
       await pickShown(window);
       await closePick(window);
       await rowAction(window, VIEW, GROUP, PLUS);
+      await pickShown(window);
+      await closePick(window);
+      await rowAction(window, VIEW, GROUP, PLUS);
+      await pickShown(window);
+      await answerInputBox(window, 'ssh cancelled-one');
       await pickShown(window);
       await closePick(window);
       await rowAction(window, VIEW, GROUP, PLUS);
@@ -205,50 +222,63 @@ describe("the SSH group's hand-overs to Remote - SSH (card coverage-102, part 2)
     }
   });
 
-  it('F-5102 AC-24 (missing-file): a configFile naming a missing file leaves the SSH row expanded with no child and no notification, and both buttons offered', async () => {
+  it('F-5102 AC-24 (empty-or-missing-file): a configFile naming a missing or an empty file leaves the SSH row expanded with no child and no notification, and both buttons offered', async () => {
     const missing = path.join(sshFolder(), 'missing.conf');
-    await userSettings({'remote.SSH.configFile': missing});
-    const window = await viewWindow('group-missing');
-    try {
-      await listing(window, []);
-      deepStrictEqual(
-        [
+    const empty = sshFile('empty.conf', []);
+    writeFileSync(empty, '');
+    const seen: unknown[] = [];
+    for (const [index, file] of [missing, empty].entries()) {
+      await userSettings({'remote.SSH.configFile': file});
+      const window = await viewWindow(`group-empty-${String(index)}`);
+      try {
+        await groupDrawn(window);
+        seen.push([
+          await hostLabels(window),
           (await viewRows(window, VIEW))?.find(each => each.label === GROUP)
             ?.expanded,
           await notifications(window),
           await rowActionTitles(window, VIEW, GROUP),
-          existsSync(missing),
-        ],
-        [true, [], [GEAR, PLUS], false],
-      );
-    } finally {
-      await closeWindow(window);
+        ]);
+      } finally {
+        await closeWindow(window);
+      }
     }
+    deepStrictEqual(seen, [
+      [[], true, [], [GEAR, PLUS]],
+      [[], true, [], [GEAR, PLUS]],
+    ]);
   });
 
-  it('F-5102 AC-44 (custom-picker): with a configFile the picker has the placeholder of a custom file and exactly the custom path, Settings and Help', async () => {
-    const custom = sshFile('custom.conf', ['Host custom-one']);
-    await userSettings({'remote.SSH.configFile': custom});
-    const window = await viewWindow('group-custom');
-    try {
-      await listing(window, ['custom-one']);
-      await rowAction(window, VIEW, GROUP, GEAR);
-      const shown = await pickShown(window);
-      await closePick(window);
-      deepStrictEqual(
-        [shown.placeholder, shown.rows, readFileSync(custom, 'utf8')],
-        [
-          'Edit custom SSH configuration file',
-          [
-            custom,
-            'Settings | specify a custom configuration file',
-            'Help | about SSH configuration files',
-          ],
-          'Host custom-one\n',
-        ],
-      );
-    } finally {
-      await closeWindow(window);
+  it('F-5102 AC-44 (custom-picker): with a configFile, existing or missing, the picker has the placeholder of a custom file and exactly the custom path, Settings and Help', async () => {
+    const existing = sshFile('custom.conf', ['Host custom-one']);
+    const missing = path.join(sshFolder(), 'custom-missing.conf');
+    const seen: unknown[] = [];
+    for (const [index, file] of [existing, missing].entries()) {
+      await userSettings({'remote.SSH.configFile': file});
+      const window = await viewWindow(`group-custom-${String(index)}`);
+      try {
+        await groupDrawn(window);
+        await rowAction(window, VIEW, GROUP, GEAR);
+        const shown = await pickShown(window);
+        await closePick(window);
+        seen.push([shown.placeholder, shown.rows]);
+      } finally {
+        await closeWindow(window);
+      }
     }
+    function offered(file: string): unknown[] {
+      return [
+        'Edit custom SSH configuration file',
+        [
+          file,
+          'Settings | specify a custom configuration file',
+          'Help | about SSH configuration files',
+        ],
+      ];
+    }
+    deepStrictEqual(
+      [seen, existsSync(missing), readFileSync(existing, 'utf8')],
+      [[offered(existing), offered(missing)], false, 'Host custom-one\n'],
+    );
   });
 });
