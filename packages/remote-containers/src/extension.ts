@@ -1290,6 +1290,30 @@ export async function activate(
             clock,
             newTemporaryToken: () =>
               `${String(process.pid)}-${String(clock.now())}`,
+            // The editor's fetch, so that its proxy settings apply as for the server's download.
+            queryGallery: async (address, query, cancellation) => {
+              try {
+                const response = await fetch(address, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json;api-version=3.0-preview.1',
+                  },
+                  body: JSON.stringify(query),
+                  signal: cancellation,
+                });
+                return response.ok ? await response.json() : undefined;
+              } catch {
+                return undefined;
+              }
+            },
+            readText: async file => {
+              try {
+                return await readFile(file, 'utf8');
+              } catch {
+                return undefined;
+              }
+            },
             logger,
             translate,
           },

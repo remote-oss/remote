@@ -54,12 +54,13 @@ function modeOf(folder: string): string {
   return (statSync(folder).mode & 0o777).toString(8);
 }
 
-/** The script's three folders under `root`. */
+/** The script's four folders under `root`: the server folder, its bin, its platform folder and the extensions cache. */
 function foldersUnder(root: string): string[] {
   return [
     path.join(root, 's'),
     path.join(root, 's', 'bin'),
     path.join(root, 's', 'bin', 'p'),
+    path.join(root, 'extensionsCache-codium'),
   ];
 }
 
@@ -76,6 +77,7 @@ async function runScriptOn(
         SHARED_FOLDER_1: folders[0] ?? '',
         SHARED_FOLDER_2: folders[1] ?? '',
         SHARED_FOLDER_3: folders[2] ?? '',
+        SHARED_FOLDER_4: folders[3] ?? '',
       },
     },
   );
@@ -125,14 +127,14 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
     rmSync(root, {recursive: true, force: true});
   });
 
-  it('F-0419 5.0 step 6: a fresh volume gets the three folders, each 0777', async () => {
+  it('F-0419 5.0 step 6: a fresh volume gets the four folders, each 0777', async () => {
     const folders = foldersUnder(root);
     const result = await runScriptOn(folders);
     deepStrictEqual(
       [result, folders.map(modeOf)],
       [
         {status: 'Ok', facts: {created: folders.join(' ')}},
-        ['777', '777', '777'],
+        ['777', '777', '777', '777'],
       ],
     );
   });
@@ -145,7 +147,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
       [result, folders.map(modeOf)],
       [
         {status: 'Ok', facts: {created: folders.slice(1).join(' ')}},
-        ['700', '777', '777'],
+        ['700', '777', '777', '777'],
       ],
     );
   });
@@ -153,6 +155,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
   it('F-0419 7.E5: an existing tree is left as found', async () => {
     const folders = foldersUnder(root);
     mkdirSync(folders[2] ?? '', {recursive: true, mode: 0o755});
+    mkdirSync(folders[3] ?? '', {mode: 0o755});
     const stray = path.join(folders[2] ?? '', 'stray');
     writeFileSync(stray, 'x');
     const before = folders.map(modeOf);
@@ -166,6 +169,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
   it("contracts §5.2: an existing file in a folder's place is left alone", async () => {
     const folders = foldersUnder(root);
     mkdirSync(folders[1] ?? '', {recursive: true});
+    mkdirSync(folders[3] ?? '');
     writeFileSync(folders[2] ?? '', 'kept');
     const result = await runScriptOn(folders);
     deepStrictEqual(
@@ -174,7 +178,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
     );
   });
 
-  it('contracts §5.2: a folder that cannot be made is reported, and the first failure is the one kept', async () => {
+  it('contracts §5.2: a folder that cannot be made is reported, the first failure is the one kept, and the others are still made', async () => {
     const folders = foldersUnder(root);
     writeFileSync(folders[0] ?? '', 'not a folder');
     const result = await runScriptOn(folders);
@@ -186,7 +190,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
         result.facts.writeFailedError?.startsWith('mkdir: '),
         result.facts.writeFailedError?.includes('\n'),
       ],
-      ['CreateInstallDirFailed', '', folders[1], true, false],
+      ['CreateInstallDirFailed', folders[3], folders[1], true, false],
     );
   });
 
@@ -210,6 +214,7 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
           SHARED_FOLDER_1: '/vscode/codium-server',
           SHARED_FOLDER_2: '/vscode/codium-server/bin',
           SHARED_FOLDER_3: '/vscode/codium-server/bin/linux-x64',
+          SHARED_FOLDER_4: '/vscode/extensionsCache-codium',
         },
         {kind: 'text', text: ''},
       ],
@@ -312,11 +317,12 @@ describe("C10's root step for the vscode volume (card containers-25)", () => {
     );
   });
 
-  it('contracts §5.2: the folders are the product’s server folder, its bin and its platform folder', () => {
+  it('contracts §5.2: the folders are the product’s server folder, its bin, its platform folder and the extensions cache', () => {
     deepStrictEqual(sharedFoldersOf(PROFILE, 'alpine-arm64'), [
       '/vscode/codium-server',
       '/vscode/codium-server/bin',
       '/vscode/codium-server/bin/alpine-arm64',
+      '/vscode/extensionsCache-codium',
     ]);
   });
 

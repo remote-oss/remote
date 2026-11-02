@@ -59,6 +59,7 @@ import {
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {PREVIEW_TEMPLATES, previewNoteOf} from './preview-note.ts';
+import {cacheExtensions, type ExtensionCachePorts} from './extension-cache.ts';
 import {prepareVolumeFolders} from './volume-folders.ts';
 
 /** How long the server may take to report its port, in seconds. */
@@ -90,6 +91,10 @@ export interface ServerStepDependencies {
   files: ClientFilePort;
   clock: Clock;
   newTemporaryToken: () => string;
+  /** Posts a query to the product's extension gallery and gives the answer's JSON, or undefined when it gave none. */
+  queryGallery: ExtensionCachePorts['queryGallery'];
+  /** The text of a client file, or undefined when it can't be read. */
+  readText: ExtensionCachePorts['readText'];
   logger: Logger;
   translate: Translate;
 }
@@ -615,6 +620,34 @@ export async function runServerSteps(
     }
     freshlyDownloaded = transferred.fromCache !== true;
   }
+  const serviceUrl = profile.gallery?.serviceUrl;
+  const defaultExtensions =
+    request.defaultExtensions.length === 0 || typeof serviceUrl !== 'string'
+      ? request.defaultExtensions
+      : await cacheExtensions(
+          {
+            queryGallery: dependencies.queryGallery,
+            download: dependencies.download,
+            files: dependencies.files,
+            readText: dependencies.readText,
+            channel,
+            newTemporaryToken: dependencies.newTemporaryToken,
+            logger,
+          },
+          {
+            extensions: request.defaultExtensions,
+            serviceUrl,
+            target: platformName,
+            productVersion: profile.version,
+            sharedFolder: request.volumeMounted
+              ? cacheFolders(profile, profile.commit, platformName, true)
+                  .extensionsCache
+              : undefined,
+            clientFolder: `${cacheRootOf(dependencies)}/extensionsCache`,
+            ownFolder: `${dataFolder}/extensionsCache`,
+            cancellation,
+          },
+        );
   const started = await startOrReuse(
     channel,
     parametersOf(dependencies, request, installTree, ''),
@@ -623,7 +656,7 @@ export async function runServerSteps(
       portRange: request.devPort,
       licenceAccepted: licence.acceptanceFlag,
       graceSeconds: 0,
-      defaultExtensions: request.defaultExtensions,
+      defaultExtensions,
       fileWatcherPollingMilliseconds: 0,
       readySeconds: READY_SECONDS,
       socketMode: false,
