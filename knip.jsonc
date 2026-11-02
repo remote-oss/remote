@@ -84,6 +84,7 @@
         "containers-view/*.test.ts",
         "containers-podman/*.test.ts",
         "extensionpack/*.test.ts",
+        "terminal-login/*.test.ts",
         "extensionpack-german/*.test.ts",
         "extensionpack-partial/*.test.ts",
         "extensionpack-language/*.test.ts",

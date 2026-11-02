@@ -398,6 +398,18 @@ describe('the connect assembled from the editor and the machine', () => {
     deepStrictEqual(recorded.revealed, 1);
   });
 
+  it('connect-108, F-2308 AC-6: in the terminal mode with no login terminal running the details link reveals the log', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({
+      'remote.SSH.useLocalServer': false,
+    });
+    connectAssemblyOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).connector.revealDetails();
+    deepStrictEqual(recorded.revealed, 1);
+  });
+
   it('contracts §3.2: a target that is not an ssh one has no alias in the title', () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
