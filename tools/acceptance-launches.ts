@@ -907,7 +907,8 @@ export function launchesOf(root: string): Launch[] {
         SSH_AUTH_SOCK: '<run>/late-agent.sock',
       },
     },
-    {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
+    // Its rows read the window's title and remote indicator, as the renderer helpers do.
+    {...RENDERER_LAUNCH, label: 'login-shells', suite: 'login-shells'},
     {
       label: 'preconnect',
       kind: 'plain',

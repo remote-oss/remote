@@ -19,6 +19,7 @@ import {
   serversGoneWithin,
   setting,
 } from '../windows/maintenance.ts';
+import {connectSurface, terminalTabsOf} from '../windows/renderer.ts';
 import {
   failedOn,
   surfaceLines,
@@ -112,14 +113,27 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
     });
   });
 
-  it('F-2704 AC-19 (login-terminal-name): in the terminal mode with remote.SSH.showLoginTerminal the window holds a terminal named install', async () => {
+  it('F-2704 AC-19 (reading-1608-title): in the terminal mode with remote.SSH.showLoginTerminal the window holds a terminal named install, shown as a tab of the local terminals after the local folder', async () => {
     await inTerminalMode(async () => {
       await setting('remote.SSH.showLoginTerminal', true);
-      await freshServer('harness-bash');
-      const names = await withWindow('harness-bash', 'wm-ac19', () =>
-        terminalNames('wm-ac19'),
-      );
-      deepStrictEqual(names, ['install']);
+      // A single terminal's tab list is hidden unless the setting says it always shows.
+      await setting('terminal.integrated.tabs.hideCondition', 'never');
+      try {
+        await freshServer('harness-bash');
+        const seen = await withWindow('harness-bash', 'wm-ac19', async () => ({
+          names: await terminalNames('wm-ac19'),
+          tabs: await terminalTabsOf('wm-ac19'),
+        }));
+        deepStrictEqual(
+          [
+            seen.names,
+            seen.tabs.map(label => /^installLocal - .+$/.test(label)),
+          ],
+          [['install'], [true]],
+        );
+      } finally {
+        await setting('terminal.integrated.tabs.hideCondition', undefined);
+      }
     });
   });
 
@@ -243,12 +257,16 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
           buttons: failed.dialog.buttons,
           quick: failed.dialog.sinceConnectStarted < 2000,
           notices: surfaceLines('wm-ac31', 'notice'),
+          toasts: (await connectSurface('wm-ac31')).toasts.filter(
+            toast => !toast.startsWith('Setting up SSH Host'),
+          ),
         },
         {
           question: 'Could not establish connection to "rc-end".',
           buttons: ['Close Remote', 'Retry', 'More Actions...'],
           quick: true,
           notices: [],
+          toasts: [],
         },
       );
     });

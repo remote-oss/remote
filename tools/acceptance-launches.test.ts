@@ -353,7 +353,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches, terminal-login and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -375,6 +375,7 @@ describe('the launches of the VSCodium run', () => {
         ['passphrase-input', undefined, true, undefined],
         ['terminal-odd', undefined, true, undefined],
         ['passphrase-late', undefined, true, undefined],
+        ['login-shells', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
@@ -1039,7 +1040,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, default-ports, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1058,6 +1059,7 @@ describe('the launches of the VSCodium run', () => {
         'passphrase-input',
         'terminal-odd',
         'passphrase-late',
+        'login-shells',
         'default-ports',
         'ssh-core',
         ...labelsFromExplorer(),
@@ -1575,6 +1577,8 @@ describe('the launch with no runner', () => {
           label: 'login-shells',
           kind: 'plain',
           suite: 'login-shells',
+          debuggingPort: true,
+          settings: {'window.title': '[${rootName}]'},
         },
       ],
     );

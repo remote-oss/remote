@@ -12,11 +12,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
     remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
 
-- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>")**; the
-  reference shows "Disconnected from SSH" until a connect has succeeded.
+- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>") and in the window title ("<folder> [SSH: <host>]")**; the
+  reference shows "Disconnected from SSH" and "<folder> [SSH]" until a connect has succeeded.
   - F-2307 AC-7 and F-2206 7.E1 describe the indicator without the host for an authority that never connected, while
-    F-2410 AC-12 and AC-31 describe it with the host for the same state. Ours registers the host label at the first
-    resolve's start, everywhere (athena's ruling on #1681; spec question on remote-oss/remote-ssh#40). Rows:
+    F-2410 AC-12 and AC-31 describe it with the host for the same state; F-2704 AC-25 gives the title without the host,
+    and AC-23 the reloading window's title as the folder alone. Ours registers the host label at the first resolve's
+    start, everywhere (athena's ruling on #1681 and #1608; spec question on remote-oss/remote-ssh#40). Rows:
     `ruling-1681-first-label`.
 
 - **Remote - SSH's local server download copies the archive without the reference's `.done` marker files**; the install starts only after the copy has completed in the same session.
