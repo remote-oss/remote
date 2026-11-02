@@ -7,6 +7,7 @@ import {
   emptyWindows,
   inWindow,
   onHost,
+  onHostAs,
   openWindow,
   recordLines,
   signal,
@@ -16,11 +17,7 @@ import {
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
-import {
-  closeAllButLocal,
-  DATA_FOLDER,
-  freshHost,
-} from '../windows/maintenance.ts';
+import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
 import {notifications, portsRows, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
@@ -308,9 +305,13 @@ describe('the tunnel of a window that its host or its configuration refuses (car
           ),
         120_000,
       );
-      // The servers of the host end while the relay's probes are still closed, which the host's check then sees.
-      const servers = `${DATA_FOLDER.replace('/.', '/[.]')}/bin/`;
-      await onHost('sh', '-c', `pkill -f '${servers}' || true`);
+      // The server of the account ends while the relay's probes are still closed, which the host's check then sees.
+      await onHostAs(
+        'harness-nofwd',
+        'sh',
+        '-c',
+        "pkill -f '[.]vscodium-server-insiders/bin/' || true",
+      );
       await waitForDialogRecord(name);
       const lines = recordLines(undefined, name);
       const result = {
