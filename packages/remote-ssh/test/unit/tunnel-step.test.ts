@@ -42,6 +42,7 @@ const TERMINAL_NOT_USED = {
   },
   tunnelInput: (): undefined => undefined,
   revealLoginTerminals: (): boolean => false,
+  useExecServer: (): boolean => true,
   connectWait: (): never => {
     throw new Error('the SOCKS path has no connect wait');
   },
