@@ -635,12 +635,14 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
         (await result).kind,
         made
           .logged()
-          .filter(line => line.startsWith("going on with ssh's environment")),
+          .filter(line =>
+            line.startsWith('the login shell gave no environment'),
+          ),
       ],
       [
         'done',
         [
-          "going on with ssh's environment: the login shell did not finish its startup within 12 s",
+          "the login shell gave no environment within 12 s; the server starts with ssh's environment",
         ],
       ],
     );

@@ -216,7 +216,7 @@ export function openTerminalConnectionStep(
         dependencies.logger.info(bootstrapLogLine(event));
         if (event.kind === 'timeout' && goesOn) {
           dependencies.logger.warn(
-            `going on with ssh's environment: ${bootstrapLogLine(event)}`,
+            `the login shell gave no environment within ${String(event.seconds)} s; the server starts with ssh's environment`,
           );
           return;
         }
