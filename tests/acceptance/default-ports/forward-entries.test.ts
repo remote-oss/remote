@@ -417,7 +417,7 @@ describe('the default forwarded ports of an SSH window (card coverage-83)', func
     }
   });
 
-  it('F-2507 AC-17 (c83-no-new-ssh): using a forwarded port starts no further ssh process and asks for no login, and on the host the connection to the application port comes from a node process', async () => {
+  it('F-2507 AC-17, F-2501 AC-24 (c83-no-new-ssh): using a forwarded port starts no further ssh process and asks for no login, and on the host the connection to the application port comes from a node process', async () => {
     await listenHoldingOnHost(8655, 'c83-8655');
     await userSettings({
       [ENTRIES]: [{name: 'use', remotePort: 8655, localPort: 18655}],

@@ -900,7 +900,7 @@ F-2501.AC-20	acceptance
 F-2501.AC-21	unit	
 F-2501.AC-22	acceptance	
 F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
-F-2501.AC-24	todo	
+F-2501.AC-24	acceptance	
 F-2501.AC-25	acceptance	
 F-2501.AC-26	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2501.AC-27	acceptance	
@@ -912,6 +912,7 @@ F-2501.AC-32	acceptance
 F-2501.AC-33	acceptance	
 F-2501.AC-34	deferred	chained ssh-remote authorities (F-2501 6.8) are not built in 0.2
 F-2501.AC-35	todo	
+F-2501.AC-36	todo	
 F-2502.AC-1	unit	
 F-2502.AC-2	core	core: the window title and the Explorer header
 F-2502.AC-3	core	core: the remote indicator's text and icon
@@ -1174,7 +1175,7 @@ F-3902.AC-5	acceptance
 F-3902.AC-6	acceptance	
 F-3902.AC-7	acceptance	
 F-3902.AC-8	acceptance	
-F-3902.AC-9	todo	
+F-3902.AC-9	acceptance	
 F-3902.AC-10	unit	
 F-3902.AC-11	unit	
 F-3902.AC-12	acceptance	
@@ -1191,3 +1192,4 @@ F-3902.AC-22	deferred	CLI path dormant in 0.2: no shipped product names a CLI so
 F-3902.AC-23	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-24	acceptance	
 F-3902.AC-25	acceptance	
+F-3902.AC-26	todo	
