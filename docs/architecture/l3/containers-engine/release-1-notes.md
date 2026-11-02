@@ -17,6 +17,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     `--additional-features` every default whose id equals a key of `features` ignoring case (athena on #1204;
     remote-oss/remote-containers#59, card containers-93).
 
+- **The notification that offers to reopen a folder in a container appears at once and does not wait for Docker.**
+  - F-0101 AC-20 has the offer wait for the Docker CLI's answer (observed after 12.3 to 12.6 s with a CLI that waits
+    12 s), while commands from the palette work meanwhile. Ours decides from the folder's files alone, so the offer shows
+    within a second whatever `dev.containers.dockerPath` names, a slow CLI, a missing path or a daemon that is not
+    there, and shows no Docker error at startup (athena on #1808). Rows: `ruling-1808-no-docker-wait`.
+
 - **Reopen in Container checks Docker and reads the configuration before the window reloads.** When that takes longer
   than half a second, a "Reading Dev Container Configuration" notification shows meanwhile, with Cancel.
   - F-0401 5.0 step 2 has the reload "within about 1 s"; the dev container CLI's read of the configuration can't

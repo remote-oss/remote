@@ -77,7 +77,7 @@ function slowDocker(seconds: number): string {
 describe('the reopen notification (card containers-23, F-0402)', function () {
   this.timeout(600_000);
 
-  it('F-0402 AC-1, AC-2, F-0101 AC-3, F-0301 AC-18 (n1-n2): a folder with a configuration shows the notification with its link and buttons, and Reopen in Container reconnects the window to its container', async () => {
+  it('F-0402 AC-1, AC-2, F-0101 AC-3, F-0301 AC-18 (reading-1808-own-link): a folder with a configuration shows the notification with its link and buttons, and Reopen in Container reconnects the window to its container', async () => {
     const folder = devContainerFolder('notice-shown', {name: 'Notice'});
     const name = await openFolderWindow(folder);
     await showsNotice(name);
@@ -189,7 +189,7 @@ describe('the reopen notification (card containers-23, F-0402)', function () {
     }
   });
 
-  it('F-0101 AC-19 (n7-subfolder): a configuration one subfolder deep shows the notification, one two levels deep shows none', async () => {
+  it('F-0101 AC-19 (reading-1808-own-link): a configuration one subfolder deep shows the notification, one two levels deep shows none', async () => {
     const shallow = await openFolderWindow(
       folderWith('notice-sub', {
         '.devcontainer/a/devcontainer.json': CONFIGURATION,
@@ -238,7 +238,7 @@ describe('the reopen notification (card containers-23, F-0402)', function () {
     }
   });
 
-  it('F-0101 AC-20 (n10-slow-docker): a Docker CLI that answers after 12 s, a missing CLI and a daemon that is not there each leave the notification to appear within 5 s of the window, with no Docker error', async () => {
+  it('F-0101 AC-20 (ruling-1808-no-docker-wait): a Docker CLI that answers after 12 s, a missing CLI and a daemon that is not there each leave the notification to appear within 5 s of the window, with no Docker error', async () => {
     const times: number[] = [];
     const errors: unknown[] = [];
     try {
