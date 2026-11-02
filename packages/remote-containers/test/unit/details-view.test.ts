@@ -101,6 +101,8 @@ function connectionOf(scene: Scene): HeldConnection {
     hostPath: '/tmp/c33w',
     remoteWorkspaceFolder: '/workspaces/c33w',
     engine: engineOf(scene),
+    configFile: '/tmp/c33w/.devcontainer/devcontainer.json',
+    created: false,
   };
 }
 

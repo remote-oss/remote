@@ -289,6 +289,8 @@ function connectionOf(scene: Scene, containerId: string): HeldConnection {
     hostPath: FOLDER,
     remoteWorkspaceFolder: '/workspaces/proj',
     engine: engineOf(scene, 'held'),
+    configFile: `${FOLDER}/.devcontainer/devcontainer.json`,
+    created: false,
   };
 }
 

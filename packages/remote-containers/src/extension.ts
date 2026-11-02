@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {appendFileSync, readFileSync} from 'node:fs';
+import {appendFileSync, readFileSync, watch} from 'node:fs';
 import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -77,6 +77,7 @@ import {
   withAmbientContext,
   withEnvironment,
 } from './engine/effective-engine.ts';
+import {configWatchOf} from './config-watch/config-watch.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
@@ -1417,6 +1418,69 @@ export async function activate(
         logger,
       },
     );
+    const configWatch =
+      registered.registration === 'registered'
+        ? configWatchOf({
+            readFile: file =>
+              readFile(file).then(
+                bytes => new Uint8Array(bytes),
+                () => undefined,
+              ),
+            watchFolder: (folder, listener, failed) => {
+              try {
+                const watcher = watch(folder, (kind, name) => {
+                  listener(name ?? undefined);
+                });
+                watcher.on('error', () => {
+                  watcher.close();
+                  failed();
+                });
+                return {
+                  dispose: () => {
+                    watcher.close();
+                  },
+                };
+              } catch {
+                return undefined;
+              }
+            },
+            setTimer: (callback, milliseconds) => {
+              const timer = setTimeout(callback, milliseconds);
+              return () => {
+                clearTimeout(timer);
+              };
+            },
+            state: context.workspaceState,
+            show: (message, buttons) =>
+              vscode.window.showInformationMessage(message, ...buttons),
+            rebuild: () =>
+              vscode.commands.executeCommand(commands.rebuildContainer.id),
+            translate,
+            logger,
+          })
+        : undefined;
+    if (configWatch !== undefined) {
+      const stopListening = connector.onHeldChanged(() => {
+        const held = connector.heldConnection();
+        if (held === undefined) {
+          configWatch.pause();
+          return;
+        }
+        configWatch.activate(held).catch((caught: unknown) => {
+          logger.warn(
+            `the configuration watch failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+          );
+        });
+      });
+      context.subscriptions.push(
+        {dispose: stopListening},
+        {
+          dispose: () => {
+            configWatch.dispose();
+          },
+        },
+      );
+    }
     const explorerEditor = {
       commandIds: () => vscode.commands.getCommands(true),
       setContext: (key: string, value: boolean) =>
