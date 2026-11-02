@@ -20,12 +20,16 @@ import {
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
+  answerDialog,
   answerNotification,
   notificationButtons,
   notificationCentre,
+  paletteRows,
+  waitForDialog,
 } from '../windows/renderer.ts';
 import {inWindow} from '../windows/harness.ts';
 import {docker} from './resolve-support.ts';
+import {storeRoot} from '../windows/authoring-support.ts';
 
 /** The words of the notification for the files `names`. */
 function changed(names: string): string {
@@ -487,6 +491,152 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
           [changed('.devcontainer.json')],
           [changed('.devcontainer.json, Dockerfile')],
         ],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-12 (c106-first): the first Reopen in Container of a folder that was never connected shows nothing', async () => {
+    const folder = devContainerFolder('c106-first', {name: 'C106 First'});
+    const name = await connectedWindow(folder);
+    try {
+      deepStrictEqual(await noticesAfter(name, 10), []);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-16, AC-17 (c106-target): naming another Dockerfile tells the old target, the new one and the configuration; once acted on the old target is unwatched; a target outside the folder is told by its written path', async () => {
+    const folder = dockerfileFolder('c106-target');
+    const second = path.join(folder, '.devcontainer', 'Dockerfile2');
+    const outside = path.join(folder, 'OutsideDockerfile');
+    writeFileSync(second, dockerfileText());
+    writeFileSync(outside, dockerfileText());
+    const name = await connectedWindow(folder);
+    try {
+      rewriteConfiguration(folder, {build: {dockerfile: 'Dockerfile2'}});
+      const first = await noticesWhen(name, 1);
+      await answerNotification(name, CHANGED_START, 'Ignore');
+      appendFileSync(
+        path.join(folder, '.devcontainer', 'Dockerfile'),
+        'LABEL c106=old\n',
+      );
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const unwatched = await noticesAfter(name, 8);
+      rewriteConfiguration(folder, {
+        build: {dockerfile: '../OutsideDockerfile'},
+      });
+      const third = await noticesWhen(name, 1);
+      await answerNotification(name, CHANGED_START, 'Ignore');
+      appendFileSync(outside, 'LABEL c106=outside\n');
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const fourth = await noticesWhen(name, 1);
+      deepStrictEqual(
+        {first, unwatched, third, fourth},
+        {
+          first: [changed('Dockerfile, Dockerfile2, devcontainer.json')],
+          unwatched: [],
+          third: [
+            changed('../OutsideDockerfile, Dockerfile2, devcontainer.json'),
+          ],
+          fourth: [changed('../OutsideDockerfile')],
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-10 (c106-palette): Rebuild Container is in the Command Palette only while connected, and the notification’s button reads Rebuild', async () => {
+    const local = await openFolderWindow(
+      devContainerFolder('c106-palette-local', {name: 'C106 Palette Local'}),
+    );
+    let before: string[];
+    try {
+      before = await paletteRows(local, 'Dev Containers: Rebuild Container');
+    } finally {
+      await closeWindow(local).catch(() => undefined);
+    }
+    const folder = devContainerFolder('c106-palette', {name: 'C106 Palette'});
+    const name = await connectedWindow(folder);
+    try {
+      const connected = await paletteRows(
+        name,
+        'Dev Containers: Rebuild Container',
+      );
+      rewriteConfiguration(folder, {containerEnv: {C106: 'palette'}});
+      await noticesWhen(name, 1);
+      deepStrictEqual(
+        {
+          before: before.includes('Dev Containers: Rebuild Container'),
+          connected: connected.includes('Dev Containers: Rebuild Container'),
+          buttons: await notificationButtons(name, CHANGED_START),
+        },
+        {before: false, connected: true, buttons: ['Rebuild', 'Ignore']},
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-15 (c106-stored): a configuration kept in the user data folder is watched like a folder’s own, with the same notification and buttons', async () => {
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'c106-stored');
+    rmSync(folder, {recursive: true, force: true});
+    mkdirSync(folder, {recursive: true});
+    const slot = path.join(storeRoot(), 'c106-stored', '.devcontainer');
+    mkdirSync(slot, {recursive: true});
+    const stored = path.join(slot, 'devcontainer.json');
+    const config = {
+      name: 'C106 Stored',
+      image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+      runArgs: runLabelArguments(),
+    };
+    writeFileSync(stored, JSON.stringify(config));
+    writeFileSync(
+      path.join(slot, '.devcontainer-internal.json'),
+      `// Maintained by the Dev Container extension\n${JSON.stringify({rootFolder: folder})}\n`,
+    );
+    const name = await connectedWindow(folder);
+    try {
+      writeFileSync(
+        stored,
+        JSON.stringify({...config, containerEnv: {C106: 'stored'}}),
+      );
+      const shown = await noticesWhen(name, 1);
+      deepStrictEqual(
+        [shown, await notificationButtons(name, CHANGED_START)],
+        [[changed('devcontainer.json')], ['Rebuild', 'Ignore']],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+      rmSync(path.dirname(slot), {recursive: true, force: true});
+    }
+  });
+
+  it('F-0303 AC-13 (c106-failed-rebuild): a rebuild that fails shows the setup error and advances nothing; after the fix and Retry the connected window shows no notification', async () => {
+    const folder = dockerfileFolder('c106-failed-rebuild');
+    const dockerfile = path.join(folder, '.devcontainer', 'Dockerfile');
+    const name = await connectedWindow(folder);
+    try {
+      rewriteConfiguration(folder, {containerEnv: {C106: 'broken'}});
+      await noticesWhen(name, 1);
+      appendFileSync(dockerfile, 'RUN false\n');
+      await answerNotification(name, CHANGED_START, 'Rebuild');
+      const dialog = await waitForDialog(name, 300_000);
+      writeFileSync(dockerfile, dockerfileText());
+      await answerDialog(name, 'Retry');
+      await connectedToContainer(name, 300_000);
+      deepStrictEqual(
+        [dialog.buttons.includes('Retry'), await noticesAfter(name, 10)],
+        [true, []],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
