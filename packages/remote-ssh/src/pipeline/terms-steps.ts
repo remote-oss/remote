@@ -7,6 +7,7 @@
 import {hostAlias} from './host-settings.ts';
 import {
   decidePlatform,
+  PLATFORM_OF_PROBE,
   type PlatformSettings,
   platformWrite,
   type RemotePlatform,
@@ -35,9 +36,6 @@ export interface TermsStepDependencies {
 }
 
 type TermsStepNames = 'decideTerms' | 'rememberPlatform';
-
-/** The platform the editor names for an operating system the probe reports. */
-const PLATFORM_OF_PROBE = {linux: 'linux', darwin: 'macOS'} as const;
 
 /** The steps that decide the terms and remember the platform. */
 export function createTermsSteps(
