@@ -946,6 +946,39 @@ describe('the connect pipeline, when a step fails', () => {
     deepStrictEqual('kind' in result ? result.kind : result, 'cancelled');
   });
 
+  it('connect-106: a SOCKS tunnel step that takes the bound off goes on waiting past it, and a cancel ends it', async () => {
+    const {recording, options} = setup();
+    const controller = new AbortController();
+    const pending = connect(
+      INPUT,
+      steps(recording, {
+        locateClient: waitsOf({...WAITS, tunnelMilliseconds: 20}),
+        tunnelPath: () => 'socks',
+        openTunnel: (
+          input,
+          lease,
+          server,
+          onWaiting,
+          signal,
+          onSettingUp,
+          disarm,
+        ) => {
+          disarm?.();
+          return new Promise(resolve => {
+            signal.addEventListener('abort', () => {
+              resolve({kind: 'failed', failure: {kind: 'cancelled'}});
+            });
+          });
+        },
+      }),
+      {...options, cancellation: controller.signal},
+    );
+    await new Promise(resolve => setTimeout(resolve, 80));
+    controller.abort();
+    const result = await pending;
+    deepStrictEqual('kind' in result ? result.kind : result, 'cancelled');
+  });
+
   it('a tunnel that never answers fails at its limit as a timeout', async () => {
     const {recording, options} = setup();
     const result = await connect(
