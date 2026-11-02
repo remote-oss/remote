@@ -1,5 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
@@ -8,6 +14,8 @@ import {
   devContainersOf,
   reloadWindow,
   reopenInContainer,
+  runLabelArguments,
+  variable,
   waitFor,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
@@ -85,6 +93,29 @@ async function connectedWindow(folder: string): Promise<string> {
   await reopenInContainer(name);
   await new Promise(resolve => setTimeout(resolve, 3000));
   return name;
+}
+
+/** The Dockerfile of the rows: the run's dev container image, nothing more. */
+function dockerfileText(): string {
+  return `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\n`;
+}
+
+/** A folder named `label` whose configuration builds from `.devcontainer/Dockerfile`, with `extra` over the configuration. */
+function dockerfileFolder(
+  label: string,
+  extra: Readonly<Record<string, unknown>> = {},
+): string {
+  const folder = devContainerFolder(label, {
+    name: label,
+    image: undefined,
+    build: {dockerfile: 'Dockerfile'},
+    ...extra,
+  });
+  writeFileSync(
+    path.join(folder, '.devcontainer', 'Dockerfile'),
+    dockerfileText(),
+  );
+  return folder;
 }
 
 describe('the rebuild prompt when the configuration changes (card coverage-106)', function () {
@@ -233,6 +264,230 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
       rewriteConfiguration(folder, {containerEnv: {C106: 'three'}});
       const third = await noticesAfter(name, 6);
       deepStrictEqual([second.length, cleared, third], [1, [], []]);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-4, AC-5, AC-24 (c106-dockerfile): a Dockerfile written on the host shows nothing for 40 s; after a reload it is named alone, and a configuration edit then shows both, beside the first', async () => {
+    const folder = dockerfileFolder('c106-dockerfile');
+    const name = await connectedWindow(folder);
+    try {
+      appendFileSync(
+        path.join(folder, '.devcontainer', 'Dockerfile'),
+        '# a comment line\n\n',
+      );
+      const live = await noticesAfter(name, 40);
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const afterReload = await noticesWhen(name, 1);
+      rewriteConfiguration(folder, {containerEnv: {C106: 'two'}});
+      const both = await noticesWhen(name, 2);
+      deepStrictEqual(
+        {live, afterReload, both},
+        {
+          live: [],
+          afterReload: [changed('Dockerfile')],
+          both: [
+            changed('Dockerfile, devcontainer.json'),
+            changed('Dockerfile'),
+          ],
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-11 (c106-scope): a file written after the notification and not named in it stays unacknowledged by Ignore and is acknowledged by Rebuild', async () => {
+    const outcomes: string[][] = [];
+    for (const button of ['Ignore', 'Rebuild']) {
+      const folder = dockerfileFolder(`c106-scope-${button.toLowerCase()}`);
+      const name = await connectedWindow(folder);
+      try {
+        rewriteConfiguration(folder, {containerEnv: {C106: 'one'}});
+        await noticesWhen(name, 1);
+        appendFileSync(
+          path.join(folder, '.devcontainer', 'Dockerfile'),
+          'LABEL c106=changed\n',
+        );
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await answerNotification(name, CHANGED_START, button);
+        if (button === 'Rebuild') {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+        await connectedToContainer(name, 300_000);
+        await reloadWindow(name);
+        await connectedToContainer(name, 300_000);
+        outcomes.push(
+          button === 'Ignore'
+            ? await noticesWhen(name, 1)
+            : await noticesAfter(name, 10),
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+        await removeContainers(folder).catch(() => undefined);
+      }
+    }
+    deepStrictEqual(outcomes, [[changed('Dockerfile')], []]);
+  });
+
+  it('F-0303 AC-19, AC-20 (c106-delete): a deleted configuration shows nothing at 0, 10 and 25 s or after a reload, an identical recreation shows nothing, and a different edit shows within 3 s', async () => {
+    const folder = devContainerFolder('c106-delete', {name: 'C106 Delete'});
+    const name = await connectedWindow(folder);
+    const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+    const text = readFileSync(file, 'utf8');
+    try {
+      rmSync(file);
+      const deleted = [
+        await noticesAfter(name, 1),
+        await noticesAfter(name, 9),
+        await noticesAfter(name, 15),
+      ];
+      writeFileSync(file, text);
+      const identical = await noticesAfter(name, 6);
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const afterReload = await noticesAfter(name, 8);
+      rewriteConfiguration(folder, {containerEnv: {C106: 'different'}});
+      const different = await noticesWhen(name, 1);
+      deepStrictEqual(
+        {deleted, identical, afterReload, different},
+        {
+          deleted: [[], [], []],
+          identical: [],
+          afterReload: [],
+          different: [changed('devcontainer.json')],
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-14, AC-23 (c106-format): comments, spacing and a missing final brace change nothing; a reordered key, a changed value (also without the brace) and text that is not JSON are told', async () => {
+    const base = {
+      name: 'C106 Format',
+      image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+      runArgs: runLabelArguments(),
+      containerEnv: {FIRST: '1', SECOND: '2'},
+    };
+    const folder = devContainerFolder('c106-format', base);
+    const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+    const plain = JSON.stringify(base, null, 2);
+    writeFileSync(file, plain);
+    const name = await connectedWindow(folder);
+    try {
+      const quiet: string[][] = [];
+      for (const text of [
+        `// a comment\n${plain.replace(/\n/g, '\n\n  ')}\n`,
+        plain.slice(0, plain.lastIndexOf('}')),
+        plain,
+      ]) {
+        writeFileSync(file, text);
+        quiet.push(await noticesAfter(name, 6));
+      }
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      quiet.push(await noticesAfter(name, 8));
+      const reordered = JSON.stringify(
+        {...base, containerEnv: {SECOND: '2', FIRST: '1'}},
+        null,
+        2,
+      );
+      writeFileSync(file, reordered);
+      const order = await noticesWhen(name, 1);
+      await answerNotification(name, CHANGED_START, 'Ignore');
+      writeFileSync(
+        file,
+        JSON.stringify({
+          ...base,
+          containerEnv: {SECOND: '2', FIRST: '9'},
+        }).slice(0, -1),
+      );
+      const value = await noticesWhen(name, 1);
+      await answerNotification(name, CHANGED_START, 'Ignore');
+      writeFileSync(file, 'this is not JSON at all');
+      const invalid = await noticesWhen(name, 1);
+      deepStrictEqual(
+        {quiet, order, value, invalid},
+        {
+          quiet: [[], [], [], []],
+          order: [changed('devcontainer.json')],
+          value: [changed('devcontainer.json')],
+          invalid: [changed('devcontainer.json')],
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-25 (c106-legacy): the legacy dockerFile property is watched at an activation only, and the notification offers Rebuild and Ignore', async () => {
+    const folder = devContainerFolder('c106-legacy', {
+      name: 'C106 Legacy',
+      image: undefined,
+      dockerFile: 'Dockerfile',
+    });
+    writeFileSync(
+      path.join(folder, '.devcontainer', 'Dockerfile'),
+      dockerfileText(),
+    );
+    const name = await connectedWindow(folder);
+    try {
+      appendFileSync(
+        path.join(folder, '.devcontainer', 'Dockerfile'),
+        'LABEL c106=legacy\n',
+      );
+      const live = await noticesAfter(name, 10);
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const shown = await noticesWhen(name, 1);
+      deepStrictEqual(
+        [live, shown, await notificationButtons(name, CHANGED_START)],
+        [[], [changed('Dockerfile')], ['Rebuild', 'Ignore']],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
+
+  it('F-0303 AC-28 (c106-dotfile): a root .devcontainer.json is told with its dot within 3 s, and with its Dockerfile after a reload', async () => {
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'c106-dotfile');
+    rmSync(folder, {recursive: true, force: true});
+    mkdirSync(folder, {recursive: true});
+    const file = path.join(folder, '.devcontainer.json');
+    const config = {
+      name: 'C106 Dotfile',
+      build: {dockerfile: 'Dockerfile'},
+      runArgs: runLabelArguments(),
+    };
+    writeFileSync(file, JSON.stringify(config));
+    writeFileSync(path.join(folder, 'Dockerfile'), dockerfileText());
+    const name = await connectedWindow(folder);
+    try {
+      writeFileSync(
+        file,
+        JSON.stringify({...config, containerEnv: {C106: 'x'}}),
+      );
+      const first = await noticesWhen(name, 1);
+      appendFileSync(path.join(folder, 'Dockerfile'), 'LABEL c106=dot\n');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      await reloadWindow(name);
+      await connectedToContainer(name, 300_000);
+      const second = await noticesWhen(name, 1);
+      deepStrictEqual(
+        [first, second],
+        [
+          [changed('.devcontainer.json')],
+          [changed('.devcontainer.json, Dockerfile')],
+        ],
+      );
     } finally {
       await closeWindow(name).catch(() => undefined);
       await removeContainers(folder).catch(() => undefined);
