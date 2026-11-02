@@ -3,7 +3,7 @@ import {
   combineQuickPickReads,
   type QuickPickRead,
   type QuickPickReadRow,
-} from '../tests/acceptance/windows/renderer.ts';
+} from '../tests/acceptance/windows/quick-pick-reads.ts';
 
 function readRow(position: number, setSize: number): QuickPickReadRow {
   return {
