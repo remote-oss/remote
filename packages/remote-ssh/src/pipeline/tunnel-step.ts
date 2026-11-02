@@ -185,11 +185,12 @@ async function openTerminalTunnel(
     return CANCELLED;
   }
   const forward = forwardFor(path, localPort, server);
+  const revealed = dependencies.revealLoginTerminals();
   const session = openTunnelSession(
     dependencies.terminals,
     dependencies.tunnelInvocation(forward),
     localPort,
-    dependencies.revealLoginTerminals(),
+    revealed,
     dependencies.tunnelInput(),
   );
   let stall: (() => void) | undefined;
@@ -203,17 +204,16 @@ async function openTerminalTunnel(
     connectWaitMilliseconds(dependencies.connectWait()),
     {
       onQuestion: text => {
-        questions.onQuestion(text);
+        questions?.onQuestion(text);
       },
       onUnreachable: () => {
         stall?.();
       },
     },
   );
-  const questions = dependencies.attachQuestions(
-    {terminal: session, reader},
-    input,
-  );
+  const questions = revealed
+    ? undefined
+    : dependencies.attachQuestions({terminal: session, reader}, input);
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
   const sshOutput = new LineSplitter(line => {
     logSshLines(dependencies.logger, [line], undefined);
@@ -224,7 +224,7 @@ async function openTerminalTunnel(
   });
   function takeDown(): void {
     reader.stop();
-    questions.dispose();
+    questions?.dispose();
   }
   const cancelled = new Promise<'cancelled'>(resolve => {
     cancellation.addEventListener(
