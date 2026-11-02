@@ -1733,8 +1733,8 @@ export const GENUINE_JOB = 'acceptance-genuine';
 
 /**
  * Why the run refuses its launches, when one of them takes its server from the editor's publisher or accepts its
- * licence outside the genuine job: the run takes such a launch only under Actions, in that job, with the version named.
- * Anyone can set the three variables, so this guards against an accident, not against intent.
+ * licence without naming the genuine version it runs: such a launch runs wherever the version is named, on any machine
+ * or job. Anyone can set the variable, so this guards against an accident, not against intent.
  */
 export function publisherDownloadsRefusal(
   launches: readonly Launch[],
@@ -1744,14 +1744,9 @@ export function publisherDownloadsRefusal(
   const labels = launches
     .filter(launch => launch.publisherDownloads === true)
     .map(launch => launch.label);
-  const genuineJob =
-    environment.GITHUB_ACTIONS === 'true' &&
-    environment.GITHUB_JOB === GENUINE_JOB &&
-    named !== undefined &&
-    named !== '';
-  return labels.length === 0 || genuineJob
+  return labels.length === 0 || (named !== undefined && named !== '')
     ? undefined
-    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB ${GENUINE_JOB} and HARNESS_GENUINE_VERSION set`;
+    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence names the genuine version it runs (D-106): set HARNESS_GENUINE_VERSION`;
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
