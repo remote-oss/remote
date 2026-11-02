@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   closeWindow,
+  connectedWithin,
   editorProduct,
   inWindow,
   onHost,
@@ -42,6 +43,19 @@ async function windowWithTerminal(folder: string): Promise<void> {
     30_000,
   );
   await new Promise(resolve => setTimeout(resolve, 4000));
+}
+
+/** The process ids of the server's pid files on the host, sorted: the same ones before and after mean the same server. */
+async function serverProcessIds(): Promise<string[]> {
+  const ids = await onHost(
+    'sh',
+    '-c',
+    `cat /home/harness/${editorProduct().serverDataFolderName}/.*.pid`,
+  );
+  return ids
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .sort();
 }
 
 /** Waits until the quick pick of window `folder` has rows, and gives the label of each with the heading of the group it starts. */
@@ -211,13 +225,18 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
       );
       await new Promise(resolve => setTimeout(resolve, 5000));
       const before = await terminalNames('c125-reload');
+      const serverBefore = await serverProcessIds();
       await reloadWindow('c125-reload');
+      await connectedWithin('c125-reload', 60_000);
       await waitFor(
         'the terminals to be revived',
         async () => (await terminalNames('c125-reload')).length === 2,
         60_000,
       );
-      deepStrictEqual(await terminalNames('c125-reload'), before);
+      deepStrictEqual(
+        [await terminalNames('c125-reload'), await serverProcessIds()],
+        [before, serverBefore],
+      );
     } finally {
       await closeWindow('c125-reload').catch(() => undefined);
     }
