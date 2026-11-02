@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
-import {dialogOf} from '../windows/renderer.ts';
+import {dialogOf, statusItem} from '../windows/renderer.ts';
 import {
   hasNoTty,
   hostSessions,
@@ -337,6 +337,14 @@ describe('F-2106: pseudo-terminal allocation', function () {
         'the window’s own reconnection to open a session on a terminal',
         async () =>
           (await hostSessions()).some(session => session.startsWith('pts')),
+        120_000,
+      );
+      await connectedWithin(name, 120_000);
+      await waitFor(
+        'the indicator to read the host again',
+        async () =>
+          (await statusItem(name, 'status.host').catch(() => undefined))
+            ?.text === 'SSH: pty-force',
         120_000,
       );
       deepStrictEqual(
