@@ -13,28 +13,25 @@ export type ParsedRange = {range: PortRange} | {none: true; reason: string};
 
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
-const DIGITS = /^\d+$/;
+const RANGE = /^(\d+)-(\d+)$/;
 
 /**
- * Reads a `remote.SSH.preferredLocalPortRange` value. Accepts a string "A-B" (digits, one hyphen, optional
- * spaces around) with 1 <= A <= B <= 65535; anything else is ignored with a reason.
+ * Reads a `remote.SSH.preferredLocalPortRange` value. Accepts a string "A-B" (digits, one hyphen, nothing else)
+ * with 1 <= A <= B <= 65535, as the setting's pattern does; anything else is ignored with a reason.
  */
 export function parseRange(settingValue: unknown): ParsedRange {
   if (typeof settingValue !== 'string') {
     return {none: true, reason: 'notAString'};
   }
-  const trimmed = settingValue.trim();
-  if (trimmed === '') {
+  if (settingValue === '') {
     return {none: true, reason: 'empty'};
   }
-  const hyphen = trimmed.indexOf('-');
-  const firstText = hyphen === -1 ? '' : trimmed.slice(0, hyphen).trim();
-  const lastText = hyphen === -1 ? '' : trimmed.slice(hyphen + 1).trim();
-  if (hyphen === -1 || !DIGITS.test(firstText) || !DIGITS.test(lastText)) {
+  const match = RANGE.exec(settingValue);
+  if (match === null) {
     return {none: true, reason: 'badFormat'};
   }
-  const first = Number(firstText);
-  const last = Number(lastText);
+  const first = Number(match[1]);
+  const last = Number(match[2]);
   if (first < MIN_PORT || last > MAX_PORT) {
     return {none: true, reason: 'outOfBounds'};
   }

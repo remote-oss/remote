@@ -13,8 +13,8 @@ Create `packages/lib-forwarding` in the shape of `packages/lib-host` (allowed im
 ```ts
 export type PortRange = { first: number; last: number };   // inclusive, 1 ≤ first ≤ last ≤ 65535
 export function parseRange(settingValue: unknown): { range: PortRange } | { none: true; reason: string };
-// accepted forms: a string "A-B" (digits, one hyphen, optional spaces around) with 1 ≤ A ≤ B ≤ 65535; anything else → none with reason 'notAString' | 'badFormat' | 'outOfBounds' | 'reversed'; an empty or whitespace string → none, reason 'empty'
-export interface PortProber { probe(port: number): Promise<'refused' | 'open' | 'error'> }   // 'refused' = nobody listens (the port is free)
+// accepted forms: a string "A-B" (digits, one hyphen, nothing else, as the setting's pattern) with 1 ≤ A ≤ B ≤ 65535; anything else → none with reason 'notAString' | 'badFormat' | 'outOfBounds' | 'reversed'; the empty string → none, reason 'empty'; a whitespace string → 'badFormat'
+export interface PortProber { probe(port: number): Promise<'refused' | 'open' | 'error' | 'timedOut'> }   // 'refused' = nobody listens (the port is free); 'timedOut' = no answer in time
 export interface FindOptions { timeBudgetMilliseconds: number; now: () => number; randomPort: () => number }  // defaults 3000, Date.now, a function returning a random port in 49152–65535
 export function findFreePort(prober: PortProber, range: PortRange | undefined, options?: FindOptions): Promise<{ port: number } | { failure: 'noFreePort' }>;
 // with a range: probe first..last in order; the first 'refused' wins; 'open' and 'error' continue; stop with noFreePort after the whole range or when the time budget is exhausted (checked before each probe)

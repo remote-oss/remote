@@ -43,6 +43,15 @@ describe('findFreePort (card forwarding-01 table)', () => {
     deepStrictEqual([outcome, prober.probed], [{port: 40001}, [40000, 40001]]);
   });
 
+  it('F-2104 AC-34: a first port that times out ends the search, and the free second port isn’t tried', async () => {
+    const prober = new FakeProber({40000: 'timedOut', 40001: 'refused'});
+    const outcome = await findFreePort(prober, RANGE);
+    deepStrictEqual(
+      [outcome, prober.probed],
+      [{failure: 'noFreePort'}, [40000]],
+    );
+  });
+
   it('range 40000-40100, each probe advances the clock 500 ms, budget 3000 -> stops after six probes', async () => {
     const prober = new FakeProber({});
     const options: FindOptions = {
@@ -72,6 +81,18 @@ describe('findFreePort (card forwarding-01 table)', () => {
     };
     const outcome = await findFreePort(prober, undefined, options);
     deepStrictEqual([outcome, prober.probed], [{port: 50001}, [50000, 50001]]);
+  });
+
+  it('no range, random sequence [52000 timedOut, 52001 refused] -> port 52001: a stalling candidate is one more port that is not free', async () => {
+    const prober = new FakeProber({52000: 'timedOut', 52001: 'refused'});
+    const candidates = [52000, 52001];
+    const options: FindOptions = {
+      timeBudgetMilliseconds: 3000,
+      now: () => 0,
+      randomPort: () => candidates.shift() ?? 59999,
+    };
+    const outcome = await findFreePort(prober, undefined, options);
+    deepStrictEqual([outcome, prober.probed], [{port: 52001}, [52000, 52001]]);
   });
 
   it('no range, ten opens -> noFreePort; exactly ten probes', async () => {

@@ -1,13 +1,13 @@
 /**
  * @fileoverview The real port prober: one TCP connect to the loopback port answers whether the port is free — a
- * refusal means free, a connection means taken, and any other error or no answer in time is an error. The socket
+ * refusal means free, a connection means taken, any other error is an error and no answer in time a timeout. The
  * keeps its error listener for its whole life, so no error of the probe is unheard. It never binds a port (§W1).
  */
 
 import {createConnection, type Socket} from 'node:net';
 import type {PortProber, ProbeAnswer} from './find.ts';
 
-/** How long one probe waits for an answer before it counts as an error. */
+/** How long one probe waits for an answer before it counts as a timeout. */
 export const PROBE_TIMEOUT_MILLISECONDS = 500;
 
 /** A prober over `connect`, which starts a connection to a loopback port; it never binds a port (§W1). */
@@ -31,7 +31,7 @@ export function proberOver(
           resolve(result);
         }
         timer = setTimeout(() => {
-          finish('error');
+          finish('timedOut');
         }, timeoutMilliseconds);
         socket.once('connect', () => {
           finish('open');

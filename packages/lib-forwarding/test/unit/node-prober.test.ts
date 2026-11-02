@@ -97,9 +97,9 @@ describe('the port prober over node:net', () => {
     deepStrictEqual(seen, ['connect', 'close']);
   });
 
-  it('§W1: a probe that never answers errors after the timer', async () => {
+  it('§W1: a probe that never answers times out after the timer', async () => {
     const answer = await proberOver(() => new Socket(), 20).probe(1025);
-    deepStrictEqual(answer, 'error');
+    deepStrictEqual(answer, 'timedOut');
   });
 
   it('§W1: an error that arrives after the timeout changes nothing', async () => {
@@ -110,7 +110,7 @@ describe('the port prober over node:net', () => {
       }, 40);
       return socket;
     }, 20).probe(1025);
-    deepStrictEqual(answer, 'error');
+    deepStrictEqual(answer, 'timedOut');
   });
 
   it('§W1: a socket error other than a refusal answers error', async () => {
