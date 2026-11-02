@@ -81,6 +81,28 @@ async function newWindowFrom(name: string): Promise<string> {
   }
 }
 
+/** The number of processes of the host’s connection servers, the ones started with `--start-server`. */
+async function serverCount(): Promise<number> {
+  const listed = await onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    "pgrep -u harness -f '[-][-]start-server' | wc -l",
+  );
+  return Number(listed.trim());
+}
+
+/** The `DISPLAY=` lines of the environments of the host's connection servers, each once. */
+async function serverDisplays(): Promise<string[]> {
+  const listed = await onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    "for pid in $(pgrep -u harness -f '[-][-]start-server'); do tr '\\0' '\\n' < /proc/$pid/environ | grep '^DISPLAY='; done | sort -u",
+  );
+  return listed.split('\n').filter(line => line !== '');
+}
+
 /** The first line of an X client probe's output, the `DISPLAY=` line. */
 function display(text: string): string {
   return text.split('\n')[0] ?? '';
@@ -287,10 +309,34 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
     });
   });
 
+  it('F-2312 AC-18 (c84-bad-display): with a local DISPLAY that ssh cannot set up untrusted forwarding for the connection succeeds with ssh’s warning, no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
+    await keepingSettings(async () => {
+      const mark = connectionLog().length;
+      deepStrictEqual(
+        [
+          await noDisplayAt('c84-bad-display', 'x11-untrusted', {
+            'remote.SSH.path': path.join(
+              variable('HARNESS_RUN_FOLDER'),
+              'clients/bad-display/ssh',
+            ),
+          }),
+          connectionLog()
+            .slice(mark)
+            .some(line =>
+              line.includes('untrusted X11 forwarding setup failed'),
+            ),
+        ],
+        [['DISPLAY=[]', [], 0, 0], true],
+      );
+    });
+  });
+
   it('F-2312 AC-10 (c84-held): a window that connects to a server started in a session that still holds display 10 gets its own display in the terminal, the task and the debugger', async () => {
     await keepingSettings(async () => {
       await x11Window('c84-held-a', 'x11fwd');
       const held = await inTerminal('c84-held-a', 'echo "DISPLAY=$DISPLAY"');
+      const servers = await serverCount();
+      const environment = await serverDisplays();
       await openWindow('x11-match', 'c84-held-b');
       await connectedWithin('c84-held-b', 90_000);
       const terminal = await inTerminal('c84-held-b', DISPLAY_PROBE);
@@ -298,12 +344,14 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
       const debugged = await inDebugger('c84-held-b', DISPLAY_PROBE);
       deepStrictEqual(
         [
+          [servers > 0, servers, await serverCount(), environment],
           [terminal, task, debugged].map(display),
           display(terminal) === held.trim(),
           [terminal, task, debugged].map(text => CONNECTED.test(text)),
           ownContributions(await contributionsNow('c84-held-b')),
         ],
         [
+          [true, servers, servers, [held.trim()]],
           [display(terminal), display(terminal), display(terminal)],
           false,
           [true, true, true],

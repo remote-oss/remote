@@ -45,7 +45,7 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
     };
   }
 
-  it('coverage-31: the fakes are the thirteen of the table, each a file named ssh in a folder of its name', () => {
+  it('coverage-31: the fakes are the fourteen of the table, each a file named ssh in a folder of its name', () => {
     deepStrictEqual(
       FAKE_CLIENTS.map(client => client.folder),
       [
@@ -62,6 +62,7 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
         'silent',
         'vanishing',
         'copy-stalls',
+        'bad-display',
       ],
     );
   });
@@ -166,6 +167,26 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
         ),
       ]).filter(([, present]) => present),
       [['copy-stalls', true]],
+    );
+  });
+
+  it('coverage-84: the fake that runs ssh with an invalid display exports it just before the real client, and the others export nothing', () => {
+    deepStrictEqual(
+      FAKE_CLIENTS.map(client => [
+        client.folder,
+        clientScript(client, '/log').includes('export '),
+      ]).filter(([, exports]) => exports),
+      [['bad-display', true]],
+    );
+  });
+
+  it('coverage-84: the bad-display fake sets DISPLAY to 1 on the line before it runs the real client', () => {
+    const client = FAKE_CLIENTS.find(each => each.folder === 'bad-display');
+    deepStrictEqual(
+      (client === undefined ? '' : clientScript(client, '/log'))
+        .split('\n')
+        .slice(-3),
+      ["export DISPLAY='1'", 'exec /usr/bin/ssh "$@"', ''],
     );
   });
 
