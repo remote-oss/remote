@@ -244,10 +244,19 @@ class FakeHarness implements HarnessDependencies {
   /** Whether each start of the download host was asked for the earlier release's archives. */
   readonly earlierAsked: boolean[] = [];
 
+  /** Whether each start of the download host was asked for the CLI archives. */
+  readonly cliAsked: boolean[] = [];
+
   readonly startDownloads = (
-    ...asked: [root?: string, runFolder?: string, earlier?: boolean]
+    ...asked: [
+      root?: string,
+      runFolder?: string,
+      earlier?: boolean,
+      cli?: boolean,
+    ]
   ): Promise<RunDownloads> => {
     this.earlierAsked.push(asked[2] ?? false);
+    this.cliAsked.push(asked[3] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -313,6 +322,15 @@ class FakeHarness implements HarnessDependencies {
   readonly vscodiumExecutable = (): Promise<string> => {
     this.calls.push('vscodium executable');
     return Promise.resolve('codium-insiders');
+  };
+
+  readonly cliEditor = (
+    executable: string,
+    runFolder: string,
+    template: string,
+  ): string => {
+    this.calls.push(`cli editor of ${executable}: ${template}`);
+    return path.join(runFolder, 'cli-editor', executable);
   };
 
   readonly vscodeExecutable = (version: string): Promise<string> => {
@@ -3198,6 +3216,29 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-111: only a run that chooses cli-path asks for the CLI archives and makes the CLI-source editor, whose template is on the download host', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      const plainRun = harness.calls.filter(call =>
+        call.startsWith('cli editor'),
+      );
+      harness.calls.length = 0;
+      await runAcceptance(workspace.root, harness, 'vscodium', ['cli-path']);
+      deepStrictEqual(
+        [
+          harness.cliAsked,
+          plainRun,
+          harness.calls.filter(call => call.startsWith('cli editor')),
+        ],
+        [
+          [false, true],
+          [],
+          [
+            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+          ],
+        ],
+      );
+    });
+
     it("containers-09, tooling-76: the VSCodium run sweeps other runs' stale containers, then builds the run's dev container image, and passes its tag", async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       const sweep = harness.calls.indexOf(
@@ -4306,20 +4347,40 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51: the executable of a launch is VS Code’s for a launch of that client and VSCodium’s for any other', () => {
+    it('tooling-51, tooling-111: the executable of a launch is VS Code’s for a launch of that client, the CLI-source copy’s for cli-path and VSCodium’s for any other', () => {
       const variables: Partial<HarnessVariables> = {
         HARNESS_VSCODE_EXECUTABLE: '/vscode/code',
         HARNESS_VSCODIUM_EXECUTABLE: '/vscodium/codium',
+        HARNESS_CLI_EDITOR_EXECUTABLE: '/run/cli-editor/codium',
       };
       const launches = launchesOf(REPOSITORY_ROOT);
       deepStrictEqual(
-        ['genuine', 'windows', 'local'].map(label =>
+        ['genuine', 'cli-path', 'windows', 'local'].map(label =>
           editorExecutableOf(
             variables as HarnessVariables,
             launchLabelled(launches, label),
           ),
         ),
-        ['/vscode/code', '/vscodium/codium', '/vscodium/codium'],
+        [
+          '/vscode/code',
+          '/run/cli-editor/codium',
+          '/vscodium/codium',
+          '/vscodium/codium',
+        ],
+      );
+    });
+
+    it('tooling-51, tooling-111: a launch whose editor the run did not make gets no executable', () => {
+      const none: Partial<HarnessVariables> = {};
+      const launches = launchesOf(REPOSITORY_ROOT);
+      deepStrictEqual(
+        ['genuine', 'cli-path', 'local'].map(label =>
+          editorExecutableOf(
+            none as HarnessVariables,
+            launchLabelled(launches, label),
+          ),
+        ),
+        ['', '', ''],
       );
     });
 

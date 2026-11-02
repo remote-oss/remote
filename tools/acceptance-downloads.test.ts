@@ -24,6 +24,9 @@ import path from 'node:path';
 import {
   bridgeGateway,
   BROKEN_INDEX_TEXT,
+  CLI_ARCHIVES,
+  cliArchiveName,
+  cliArchiveOf,
   DOWNLOAD_HOST_NAMES,
   type DownloadHost,
   downloadHostArguments,
@@ -31,6 +34,7 @@ import {
   EARLIER_SERVER_ARCHIVE,
   DROP_HUNG_PATH,
   makeCertificate,
+  type PinnedCliArchive,
   removeStaleClientArchives,
   requestedPlatform,
   SERVER_ARCHIVE,
@@ -144,6 +148,7 @@ describe('the download host', function () {
     writeFileSync(path.join(folder, 'archive.tar.gz'), archive);
     writeFileSync(path.join(folder, 'glibc.tar.gz'), glibcArchive);
     writeFileSync(path.join(folder, 'earlier-glibc.tar.gz'), 'earlier glibc');
+    writeFileSync(path.join(folder, 'cli-glibc.tar.gz'), 'cli glibc');
     logFile = path.join(folder, 'requests.log');
     tlsLogFile = path.join(folder, 'tls.log');
     writeFileSync(logFile, '');
@@ -157,6 +162,9 @@ describe('the download host', function () {
       },
       earlierArchiveFiles: {
         'linux-x64': path.join(folder, 'earlier-glibc.tar.gz'),
+      },
+      cliArchiveFiles: {
+        'linux-x64': path.join(folder, 'cli-glibc.tar.gz'),
       },
       defaultPlatform: 'alpine-x64',
       ...certificate,
@@ -265,6 +273,24 @@ describe('the download host', function () {
     deepStrictEqual(answers, [
       [200, 'earlier glibc'],
       [404, ''],
+      [404, ''],
+      [404, ''],
+    ]);
+  });
+
+  it('tooling-111: under /cli/, the CLI archive of the platform the path names is served whole, and a platform with none pinned, or none named, gives 404', async () => {
+    const answers = await Promise.all(
+      [
+        '/cli/linux-x64/cli-linux-x64.tar.gz',
+        '/cli/alpine-x64/cli-alpine-x64.tar.gz',
+        '/cli/cli.tar.gz',
+      ].map(async pathName => {
+        const received = await get('http', host.httpPort, pathName);
+        return [received.status, received.body.toString()];
+      }),
+    );
+    deepStrictEqual(answers, [
+      [200, 'cli glibc'],
       [404, ''],
       [404, ''],
     ]);
@@ -984,6 +1010,88 @@ function gateway(): CommandResult {
   return {status: 0, stdout: '127.0.0.2\n', stderr: ''};
 }
 
+describe('cliArchiveOf', () => {
+  let folder = '';
+
+  beforeEach(() => {
+    folder = mkdtempSync(path.join(tmpdir(), 'cli-cache-'));
+  });
+
+  afterEach(() => {
+    rmSync(folder, {recursive: true, force: true});
+  });
+
+  /** The pins of one linux-x64 archive at `address` whose bytes are `body`. */
+  function pinsOf(body: string): Record<string, PinnedCliArchive> {
+    return {
+      'linux-x64': {
+        address: 'https://example.test/cli-linux-x64.tar.gz',
+        sha256: createHash('sha256').update(body).digest('hex'),
+      },
+    };
+  }
+
+  it('tooling-111: nothing is pinned yet, so a run serves no CLI archive', () => {
+    deepStrictEqual(CLI_ARCHIVES, {});
+  });
+
+  it('tooling-111: a platform with no pin gives none, and nothing is downloaded', async () => {
+    const result = await cliArchiveOf(
+      folder,
+      'alpine-x64',
+      () => Promise.reject(new Error('no download expected')),
+      writeFileSync,
+      pinsOf('cli'),
+    );
+    strictEqual(result, undefined);
+  });
+
+  it('tooling-111: a pinned archive is downloaded from its address once, then taken from the cache', async () => {
+    const asked: string[] = [];
+    function fetchOnce(): Promise<string | undefined> {
+      return cliArchiveOf(
+        folder,
+        'linux-x64',
+        address => {
+          asked.push(address);
+          return Promise.resolve(Buffer.from('cli'));
+        },
+        writeFileSync,
+        pinsOf('cli'),
+      );
+    }
+    const first = await fetchOnce();
+    const second = await fetchOnce();
+    deepStrictEqual(
+      [first, second, asked, readFileSync(first ?? '', 'utf8')],
+      [
+        path.join(folder, cliArchiveName('linux-x64')),
+        path.join(folder, cliArchiveName('linux-x64')),
+        ['https://example.test/cli-linux-x64.tar.gz'],
+        'cli',
+      ],
+    );
+  });
+
+  it('tooling-111: a download that does not match its pin fails, and writes nothing', async () => {
+    const failure = await cliArchiveOf(
+      folder,
+      'linux-x64',
+      () => Promise.resolve(Buffer.from('other')),
+      writeFileSync,
+      pinsOf('cli'),
+    ).then(
+      () => 'resolved',
+      (caught: unknown) =>
+        caught instanceof Error ? caught.message : String(caught),
+    );
+    deepStrictEqual(
+      [failure, existsSync(path.join(folder, cliArchiveName('linux-x64')))],
+      ['the CLI archive download does not match its checksum', false],
+    );
+  });
+});
+
 /** A root with the cache folder of the archives, and a run folder, both new. */
 function temporaryRun(): {root: string; runFolder: string; cache: string} {
   const base = mkdtempSync(path.join(tmpdir(), 'downloads-run-'));
@@ -993,6 +1101,76 @@ function temporaryRun(): {root: string; runFolder: string; cache: string} {
 }
 
 describe('the download host in the run', () => {
+  it('tooling-111: a run given CLI pins serves the pinned platform under /cli/, and one given none downloads no CLI', async () => {
+    const {root, runFolder} = temporaryRun();
+    try {
+      const pinned = {
+        'alpine-arm64': createHash('sha256').update('alpine').digest('hex'),
+        'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
+      };
+      const answers: Record<string, string> = {
+        [serverArchiveName('alpine-arm64')]: 'alpine',
+        [serverArchiveName('linux-arm64')]: 'glibc',
+        'cli-linux-arm64.tar.gz': 'cli',
+      };
+      const asked: string[] = [];
+      function download(address: string): Promise<Uint8Array> {
+        asked.push(path.basename(address));
+        return Promise.resolve(
+          Buffer.from(answers[path.basename(address)] ?? ''),
+        );
+      }
+      const downloads = await startRunDownloads(
+        gateway,
+        download,
+        root,
+        runFolder,
+        'arm64',
+        pinned,
+        undefined,
+        {
+          'linux-arm64': {
+            address: 'https://example.test/cli-linux-arm64.tar.gz',
+            sha256: createHash('sha256').update('cli').digest('hex'),
+          },
+        },
+      );
+      const port = Number(
+        /:(\d+)$/.exec(downloads.variables.HARNESS_DOWNLOADS_LOCAL ?? '')?.[1],
+      );
+      const served = await Promise.all(
+        ['linux-arm64', 'alpine-arm64'].map(async platform =>
+          (
+            await getFrom(
+              '127.0.0.1',
+              port,
+              `/cli/${platform}/${cliArchiveName(platform)}`,
+            )
+          ).toString(),
+        ),
+      );
+      await downloads.stop();
+      const cliAsked = asked.filter(name => name.startsWith('cli-'));
+      asked.length = 0;
+      const plain = await startRunDownloads(
+        gateway,
+        download,
+        root,
+        runFolder,
+        'arm64',
+        pinned,
+      );
+      await plain.stop();
+      deepStrictEqual(
+        [served, cliAsked, asked.filter(name => name.startsWith('cli-'))],
+        [['cli', ''], ['cli-linux-arm64.tar.gz'], []],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
   it("tooling-27, tooling-68: a run's download host serves the cached archives on the loopback and the gateway only, and stops", async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'downloads-root-'));
     const runFolder = mkdtempSync(path.join(tmpdir(), 'downloads-run-'));

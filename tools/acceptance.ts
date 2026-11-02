@@ -47,12 +47,14 @@ import {
 import {build} from 'esbuild';
 import {
   downloadHostArguments,
+  CLI_ARCHIVES,
   EARLIER_SERVER_ARCHIVE,
   type RunDownloads,
   startRunDownloads,
   UPDATE_SERVICE_NAME,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
+import {CLI_TEMPLATE_PATH, cliSourceEditorOf} from './acceptance-cli-editor.ts';
 import {
   acceptanceRunId,
   buildDevContainerImage,
@@ -229,6 +231,8 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_LOG: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
+  /** The CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`), only when a chosen launch starts it. */
+  HARNESS_CLI_EDITOR_EXECUTABLE?: string;
   /** The version of the editor the tests run on: the recorded version, or the job's for a genuine launch. */
   HARNESS_EDITOR_VERSION: string;
   /** The VS Code executable of the genuine version, only when a chosen launch starts it. */
@@ -263,6 +267,15 @@ export interface HarnessDependencies {
   editorCli: () => Promise<string>;
   /** The VSCodium executable at the pinned release, downloading and unpacking it when it is missing. */
   vscodiumExecutable: () => Promise<string>;
+  /**
+   * Makes the run's CLI-source copy of the VSCodium at `executable` in `runFolder`, its `product.json` naming
+   * `template`, and gives the copy's executable.
+   */
+  cliEditor: (
+    executable: string,
+    runFolder: string,
+    template: string,
+  ) => string;
   /** The VS Code executable of `version`, downloading the editor when it is missing. */
   vscodeExecutable: (version: string) => Promise<string>;
   /**
@@ -289,11 +302,15 @@ export interface HarnessDependencies {
     launch: Launch,
   ) => Promise<AttemptResult>;
   /** Starts the run's download host in the run's folder; the VSCodium run only. */
-  /** Starts the download host; `earlier` says whether a launch of the run asks for the earlier release's archives. */
+  /**
+   * Starts the download host; `earlier` says whether a launch of the run asks for the earlier release's archives, and
+   * `cliArchives` whether one starts the CLI-source editor, which needs the pinned CLI archives.
+   */
   startDownloads: (
     root: string,
     runFolder: string,
     earlier: boolean,
+    cliArchives: boolean,
   ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
@@ -1132,6 +1149,7 @@ async function prepare(
           root,
           runFolder,
           chosen.some(launch => launch.earlierServerArchive === true),
+          chosen.some(startsCliEditor),
         )
       : undefined;
   if (downloads !== undefined) {
@@ -1199,6 +1217,16 @@ async function prepare(
   await dependencies.bundleSuite(root);
   const vscodium =
     editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
+  const cliEditor =
+    vscodium === undefined ||
+    downloads === undefined ||
+    !chosen.some(startsCliEditor)
+      ? undefined
+      : dependencies.cliEditor(
+          vscodium,
+          runFolder,
+          `${downloads.variables.HARNESS_DOWNLOADS_HTTP ?? ''}${CLI_TEMPLATE_PATH}`,
+        );
   const vsixFiles = packagedExtensions(root);
   if (
     editor === 'vscodium' &&
@@ -1327,6 +1355,9 @@ async function prepare(
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
+    ...(cliEditor === undefined
+      ? {}
+      : {HARNESS_CLI_EDITOR_EXECUTABLE: cliEditor}),
     HARNESS_EDITOR_VERSION: EDITOR_VERSION,
     ...(vscode === undefined
       ? {}
@@ -2315,14 +2346,25 @@ export function runTestCli(
   );
 }
 
-/** The executable a plain launch starts: VS Code for a launch that names it as its client, the run's VSCodium otherwise. */
+/** Whether a launch starts the run's CLI-source copy of VSCodium. */
+function startsCliEditor(launch: Launch): boolean {
+  return launch.kind === 'plain' && launch.cliSource === true;
+}
+
+/**
+ * The executable a plain launch starts: VS Code for a launch that names it as its client, the CLI-source copy for a
+ * launch that asks for it, the run's VSCodium otherwise.
+ */
 export function editorExecutableOf(
   variables: HarnessVariables,
   launch: Launch,
 ): string {
+  if (launch.kind === 'plain' && launch.client === 'vscode') {
+    return variables.HARNESS_VSCODE_EXECUTABLE ?? '';
+  }
   return (
-    (launch.kind === 'plain' && launch.client === 'vscode'
-      ? variables.HARNESS_VSCODE_EXECUTABLE
+    (startsCliEditor(launch)
+      ? variables.HARNESS_CLI_EDITOR_EXECUTABLE
       : variables.HARNESS_VSCODIUM_EXECUTABLE) ?? ''
   );
 }
@@ -2525,6 +2567,7 @@ if (isMainModule(import.meta.url)) {
           process.arch,
           {download: downloadWithRetry, unpack: unpackArchive},
         ),
+        cliEditor: cliSourceEditorOf.bind(undefined, runCommand),
         runTests: runTestCli,
         windowAgentVsix: packageWindowAgent,
         languagePackVsix: packageLanguagePack,
@@ -2541,7 +2584,7 @@ if (isMainModule(import.meta.url)) {
             undefined,
             devContainerImage,
           ),
-        startDownloads: (root, runFolder, earlier) =>
+        startDownloads: (root, runFolder, earlier, cliArchives) =>
           startRunDownloads(
             runCommand,
             downloadWithRetry,
@@ -2550,6 +2593,7 @@ if (isMainModule(import.meta.url)) {
             undefined,
             undefined,
             earlier ? EARLIER_SERVER_ARCHIVE : undefined,
+            cliArchives ? CLI_ARCHIVES : undefined,
           ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
