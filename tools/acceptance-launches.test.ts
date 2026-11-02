@@ -88,6 +88,39 @@ function publisherBreaches(
   });
 }
 
+/**
+ * What is wrong with the parts of the launches run in parts in `table`, one line per file: a test file of the suite
+ * folder under `root` that no part lists or that two parts list, and a listed file that the folder doesn't have.
+ */
+function partBreaches(table: readonly Launch[], root: string): string[] {
+  const wholes = new Map<string, Launch[]>();
+  for (const launch of table) {
+    if (launch.kind === 'plain' && launch.partOf !== undefined) {
+      wholes.set(launch.partOf, [...(wholes.get(launch.partOf) ?? []), launch]);
+    }
+  }
+  return [...wholes].flatMap(([whole, parts]) => {
+    const suite = parts[0]?.suite ?? '';
+    const present = readdirSync(path.join(root, 'tests', 'acceptance', suite))
+      .filter(file => file.endsWith('.test.ts'))
+      .sort();
+    const listed = parts.flatMap(part =>
+      part.kind === 'plain' ? (part.files ?? []) : [],
+    );
+    return [
+      ...present.flatMap(file => {
+        const count = listed.filter(each => each === file).length;
+        return count === 1
+          ? []
+          : [`${whole}: ${file} is in ${String(count)} parts`];
+      }),
+      ...listed
+        .filter(file => !present.includes(file))
+        .map(file => `${whole}: ${file} is no test file of ${suite}`),
+    ];
+  });
+}
+
 const [PORTS_SUITE, INSTALL_SUITE] = HOST_CASE_SUITES as [
   (typeof HOST_CASE_SUITES)[number],
   (typeof HOST_CASE_SUITES)[number],
@@ -116,7 +149,8 @@ function labelsFromExplorer(): string[] {
     'trust-terminal',
     'web-ui',
     'web-ui-trust',
-    'containers',
+    'containers-a',
+    'containers-b',
     'containers-standdown',
     'containers-no-proposals',
     'containers-trust',
@@ -165,7 +199,7 @@ describe('the launches of the VSCodium run', () => {
           'ports-range',
           'explorer',
           'containers-explorer',
-          'containers',
+          'containers-a',
           'genuine',
           'ssh-no-proposals',
         ].map(groupOf),
@@ -346,12 +380,12 @@ describe('the launches of the VSCodium run', () => {
         ['trust-terminal', undefined, true, undefined],
         ['web-ui', undefined, true, undefined],
         ['web-ui-trust', undefined, true, undefined],
-        [
-          'containers',
+        ...['containers-a', 'containers-b'].map(label => [
+          label,
           ['remote-oss.remote-containers'],
           true,
           ['ms-vscode-remote.remote-containers'],
-        ],
+        ]),
         [
           'containers-standdown',
           ['remote-oss.remote-containers'],
@@ -492,13 +526,13 @@ describe('the launches of the VSCodium run', () => {
           launch.proposedApi,
         ]),
       [
-        [
-          'containers',
+        ...['containers-a', 'containers-b'].map(label => [
+          label,
           'containers',
           shared,
           ['ms-vscode-remote.remote-containers'],
           undefined,
-        ],
+        ]),
         [
           'containers-standdown',
           'containers-standdown',
@@ -624,7 +658,8 @@ describe('the launches of the VSCodium run', () => {
     deepStrictEqual(
       launches.filter(needsDevContainerImage).map(launch => launch.label),
       [
-        'containers',
+        'containers-a',
+        'containers-b',
         'containers-standdown',
         'containers-no-proposals',
         'containers-trust',
@@ -780,7 +815,7 @@ describe('the launches of the VSCodium run', () => {
         podman === undefined
           ? undefined
           : settingsOfLaunch(podman)?.['dev.containers.dockerPath'],
-        launches.find(launch => launch.label === 'containers')?.settings?.[
+        launches.find(launch => launch.label === 'containers-a')?.settings?.[
           'dev.containers.dockerPath'
         ],
       ],
@@ -914,6 +949,58 @@ describe('the launches of the VSCodium run', () => {
           workspace.root,
         ),
         ['accepts accepts the licence', 'accepts-by-name accepts the licence'],
+      );
+    } finally {
+      workspace.remove();
+    }
+  });
+
+  it('tooling-96: the two parts of the containers launch list disjoint files that together are exactly the containers suite’s test files, each part’s alphabetical', () => {
+    const parts = launches.filter(
+      launch => launch.kind === 'plain' && launch.partOf === 'containers',
+    );
+    deepStrictEqual(
+      [
+        parts.map(launch => launch.label),
+        partBreaches(launches, REPOSITORY_ROOT),
+        parts.every(
+          launch =>
+            launch.kind === 'plain' &&
+            JSON.stringify(launch.files) ===
+              JSON.stringify([...(launch.files ?? [])].sort()),
+        ),
+      ],
+      [['containers-a', 'containers-b'], [], true],
+    );
+  });
+
+  it('tooling-96: the parts check names a test file in no part, one in two parts and a listed file the suite folder lacks', () => {
+    const workspace = new TemporaryWorkspace('launches');
+    try {
+      for (const file of [
+        'a.test.ts',
+        'b.test.ts',
+        'c.test.ts',
+        'helpers.ts',
+      ]) {
+        workspace.write(`tests/acceptance/split/${file}`, '');
+      }
+      function part(label: string, files: string[]): Launch {
+        return {label, kind: 'plain', suite: 'split', files, partOf: 'split'};
+      }
+      deepStrictEqual(
+        partBreaches(
+          [
+            part('split-a', ['a.test.ts', 'b.test.ts']),
+            part('split-b', ['b.test.ts', 'gone.test.ts']),
+          ],
+          workspace.root,
+        ),
+        [
+          'split: b.test.ts is in 2 parts',
+          'split: c.test.ts is in 0 parts',
+          'split: gone.test.ts is no test file of split',
+        ],
       );
     } finally {
       workspace.remove();
@@ -1630,7 +1717,8 @@ describe('the platform cases (card coverage-12)', () => {
         ])
         .filter(([, environment]) => environment !== undefined),
       [
-        ['containers', {PATH: '<run>/browser-bin:<path>'}],
+        ['containers-a', {PATH: '<run>/browser-bin:<path>'}],
+        ['containers-b', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
         [
           'containers-features',
@@ -1698,7 +1786,8 @@ describe('the platform cases (card coverage-12)', () => {
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
       [
-        'containers',
+        'containers-a',
+        'containers-b',
         'containers-trust',
         'containers-ports',
         'containers-features',
@@ -1713,7 +1802,8 @@ describe('the platform cases (card coverage-12)', () => {
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
       [
-        'containers',
+        'containers-a',
+        'containers-b',
         'containers-trust',
         'containers-features',
         'containers-index-broken',

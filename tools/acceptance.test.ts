@@ -439,7 +439,8 @@ const LAUNCH_ORDER = [
   'trust-terminal',
   'web-ui',
   'web-ui-trust',
-  ...['containers', 'containers-standdown', 'containers-no-proposals'],
+  ...['containers-a', 'containers-b', 'containers-standdown'],
+  'containers-no-proposals',
   ...['containers-trust', 'containers-volume', 'containers-explorer'],
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
@@ -1151,7 +1152,8 @@ describe('acceptance', () => {
             client: 'vscodium',
           })),
           ...[
-            'containers',
+            'containers-a',
+            'containers-b',
             'containers-standdown',
             'containers-no-proposals',
             'containers-trust',
@@ -4054,7 +4056,41 @@ describe('acceptance', () => {
             'genuine-accept-a',
             'genuine-accept-b',
           ],
-          ['containers'],
+          ['containers-a', 'containers-b'],
+        ],
+      );
+    });
+
+    it('tooling-96: containers names both parts of the containers launch, alone or among others, and !containers takes both out', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      /** The labels a selection makes from the repository's table. */
+      function labels(selected: string[]): string[] {
+        return chosenLabels(launches, selected);
+      }
+      deepStrictEqual(
+        [
+          labels(['containers']),
+          labels(['containers-view', 'containers']).slice(0, 2),
+          labels(['@containers', '!containers']).filter(label =>
+            label.startsWith('containers-'),
+          ).length,
+          labels(['@containers', '!containers']).some(label =>
+            ['containers-a', 'containers-b'].includes(label),
+          ),
+          labels(['containers-b']),
+        ],
+        [
+          ['containers-a', 'containers-b'],
+          ['containers-a', 'containers-b'],
+          launches.filter(
+            launch =>
+              launchGroupOf(launch) === 'containers' &&
+              launch.label.startsWith('containers-') &&
+              launch.kind === 'plain' &&
+              launch.partOf === undefined,
+          ).length,
+          false,
+          ['containers-b'],
         ],
       );
     });

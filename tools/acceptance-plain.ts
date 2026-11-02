@@ -367,7 +367,7 @@ export function plainEditorOf(
   };
 }
 
-/** The Node mocha run of a launch with no runner: the test files of its suite folder, without the repository's config. */
+/** The Node mocha run of a launch with no runner: the test files of its suite folder it lists, else every one, without the repository's config. */
 export function plainTestsOf(
   root: string,
   launch: Launch,
@@ -380,8 +380,13 @@ export function plainTestsOf(
       '--no-config',
       '--extension',
       'ts',
-      '--spec',
-      path.join(root, 'tests', 'acceptance', launch.suite, '*.test.ts'),
+      ...(launch.kind === 'plain' && launch.files !== undefined
+        ? launch.files
+        : ['*.test.ts']
+      ).flatMap(file => [
+        '--spec',
+        path.join(root, 'tests', 'acceptance', launch.suite, file),
+      ]),
     ],
     environment: {...environment},
   };
@@ -681,6 +686,8 @@ export async function runPlainLaunch(
       ? {HARNESS_EDITOR_VERSION: session.environment.HARNESS_GENUINE_VERSION}
       : {}),
     HARNESS_USER_DATA: userDataFolderOf(session.runFolder, launch),
+    // The extensions folder the editor runs with, which a row reads by this name rather than by the launch's label.
+    HARNESS_EXTENSIONS_FOLDER: extensionsFolderOf(session.runFolder, launch),
     REMOTE_OSS_ACCEPTANCE_RELAUNCH: relaunchFolderOf(
       session.runFolder,
       launch.label,

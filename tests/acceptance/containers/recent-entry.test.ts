@@ -174,9 +174,16 @@ describe('The Open Recent entry and the label of a connected window (cards conta
         `vscode-remote://dev-container%2B${authority}/workspaces/c74-legacy`,
       );
       await connectedToContainer('c74-legacy');
+      // The indicator can still read "Opening Remote..." a moment after the window connects, as on a cold volume.
+      const indicator = await statusItemText(
+        'c74-legacy',
+        'status.host',
+        'Dev Container: Legacy Payload',
+        60_000,
+      );
       const state = {
         title: await windowTitle('c74-legacy'),
-        indicator: (await statusItem('c74-legacy', 'status.host')).text,
+        indicator,
         containers: (await devContainersOf(folder)).length,
       };
       await closeWindow('c74-legacy');
