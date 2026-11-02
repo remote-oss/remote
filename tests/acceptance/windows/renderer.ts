@@ -2119,6 +2119,95 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** Clicks the status bar item `itemId` of window `name`, as a user's click on its label does. */
+export async function clickStatusItem(
+  name: string,
+  itemId: string,
+): Promise<void> {
+  const missing = await evaluate<boolean>(
+    name,
+    `(() => {
+      const item = document.getElementById(${JSON.stringify(itemId)});
+      if (item === null) {
+        return true;
+      }
+      (item.querySelector('a') ?? item).click();
+      return false;
+    })()`,
+  );
+  if (missing) {
+    throw new Error(`window ${name}: no status bar item ${itemId}`);
+  }
+}
+
+/** Whether core's Ports view is on screen in window `name`: its pane exists and has a size. */
+export async function portsViewShown(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(() => {
+      const pane = ${paneExpression('Ports')};
+      return pane !== undefined && pane.getBoundingClientRect().height > 0 && pane.offsetParent !== null;
+    })()`,
+  );
+}
+
+/**
+ * The protocol choices of the row `port` of core's Ports view, as its context menu shows them: the menu's labels, and
+ * the items of the Change Port Protocol submenu with whether each is checked (none when the menu has no such submenu).
+ * The menus are closed again.
+ */
+export async function portProtocolChoices(
+  name: string,
+  port: string,
+): Promise<{menu: string[]; choices: Array<[string, boolean]>}> {
+  const found = await evaluate<{
+    menu: string[];
+    choices: Array<[string, boolean]>;
+  } | null>(
+    name,
+    `(async () => {
+      const entry = ${PORTS_ROWS_EXPRESSION}.find(each => each.cells[1] === ${JSON.stringify(port)});
+      if (entry === undefined) {
+        return null;
+      }
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const box = entry.row.getBoundingClientRect();
+      entry.row.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      for (let tries = 0; tries < 30 && document.querySelector('.context-view .monaco-menu .action-label') === null; tries += 1) {
+        await wait(100);
+      }
+      await wait(300);
+      const menu = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+      const submenu = [...document.querySelectorAll('.context-view .monaco-menu .action-item')].find(item => (item.querySelector('.action-label')?.textContent ?? '') === 'Change Port Protocol');
+      let choices = [];
+      if (submenu !== undefined) {
+        for (const type of ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click']) {
+          submenu.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
+        }
+        await wait(800);
+        choices = [...document.querySelectorAll('.context-view .monaco-menu .action-item')]
+          .filter(item => ['HTTP', 'HTTPS'].includes(item.querySelector('.action-label')?.textContent ?? ''))
+          .map(item => {
+            // Core marks a toggled menu item on its link, with aria-checked and the checked class.
+            const link = item.querySelector('.action-menu-item') ?? item;
+            return [item.querySelector('.action-label')?.textContent ?? '', link.getAttribute('aria-checked') === 'true' || link.classList.contains('checked')];
+          });
+      }
+      for (let press = 0; press < 3; press += 1) {
+        for (const type of ['keydown', 'keyup']) {
+          (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+        }
+        await wait(200);
+      }
+      return {menu, choices};
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name}: no Ports row for ${JSON.stringify(port)}`);
+  }
+  return found;
+}
+
 /** The codicons of the status bar item `itemId` of window `name`, such as `alert` for a disconnected remote indicator. */
 export async function statusItemIcons(
   name: string,
