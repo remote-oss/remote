@@ -20,7 +20,7 @@ import {
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
+import {closeAllButLocal, dismissals} from '../windows/maintenance.ts';
 import {
   notifications,
   outputPanelFocused,
@@ -490,5 +490,69 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         },
       );
     });
+  });
+
+  /** Opens window `name` on `changedkey` and gives its failure dialog line, the hint of kind error the connect stored and the time it took. */
+  async function changedKeyFailure(
+    name: string,
+    settings: Record<string, unknown>,
+  ) {
+    return keepingSettings(async () => {
+      await userSettings({...PLATFORMS, ...settings});
+      const since = new Date().toISOString();
+      appendScript([...dismissals(name)]);
+      const started = Date.now();
+      await openWindow('changedkey', name);
+      await waitFor(
+        'the failure dialog',
+        () => recordLines('failureDialog', name).length > 0,
+        120_000,
+      );
+      const [dialog] = recordLines('failureDialog', name);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return {
+        dialog: [dialog?.question, dialog?.buttons],
+        waited: Date.now() - started,
+        hints: hintRecords()
+          .filter(record => record.started >= since)
+          .flatMap(record => record.hints)
+          .filter(hint => hint.kind === 'error')
+          .map(hint => hint.status),
+      };
+    });
+  }
+
+  it('F-2604 AC-13, AC-14 (c123-mitm): with the local server off and the dynamic forward at its default, a host whose key changed fails at once with Port forwarding is disabled and F-2601’s buttons, and the hint store holds the error', async () => {
+    const found = await changedKeyFailure('c123-mitm', {
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.waited < 60_000, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        true,
+        ['MitmPortForwardingDisabled'],
+      ],
+    );
+  });
+
+  it('F-2604 AC-13 (c123-mitm-second): the same with the dynamic forward off, on the second ssh', async () => {
+    const found = await changedKeyFailure('c123-mitm-second', {
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.enableDynamicForwarding': false,
+    });
+    deepStrictEqual(
+      [found.dialog, found.hints],
+      [
+        [
+          'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          ['Close Remote', 'Retry', 'More Actions...'],
+        ],
+        ['MitmPortForwardingDisabled'],
+      ],
+    );
   });
 });
