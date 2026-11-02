@@ -16,9 +16,6 @@ import type {Translate} from '../surfaces/strings.ts';
 /** Why the host could not download. */
 export type DownloadRefusal = 'downloadFailed' | 'noDownloader';
 
-/** The status the host's downloader step ended on when it found neither `curl` nor `wget`. */
-const NO_DOWNLOADER_EXIT_STATUS = '194';
-
 /** A string of the table, with its values. */
 function mitigation(
   stringId: DiagnosticStringId,
@@ -53,7 +50,6 @@ export function downloadRefusalHint(
   return {
     status: 'NoDownloaderAvailable',
     message: `${text('S159')} (${text('S042')})`,
-    details: {text: NO_DOWNLOADER_EXIT_STATUS},
     mitigations: [
       mitigation('S083', 'wget'),
       mitigation('S083', 'curl'),

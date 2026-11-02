@@ -35,14 +35,14 @@ describe('the hints of a refused host download (card connect-121)', () => {
     ]);
   });
 
-  it('F-2405 AC-20, 7.E2: a host with neither tool has its status, its message, the exit status as details and no resource', () => {
+  it('F-2405 AC-20, 7.E2: a host with neither tool has its status, its message, no details and no resource', () => {
     const hint = downloadRefusalHint('noDownloader', template => template);
     deepStrictEqual(
       [hint.status, hint.message, hint.details, hint.resources],
       [
         'NoDownloaderAvailable',
         'When first establishing a connection to the remote server, various resources must be installed from the internet. A program (either "wget" or "curl") is used to download these resources, but they are not installed on the remote server.  When this step fails, the extension attempts to use the local machine to download the resources and then upload them to the remote server. (Downloading VS Code Server failed - please install either curl or wget on the remote.)',
-        {text: '194'},
+        undefined,
         [],
       ],
     );
