@@ -117,7 +117,7 @@ export type ProgressUpdate = (
   title: string,
   details: boolean,
   increment?: number,
-  stage?: string,
+  stage?: PhaseName,
 ) => void;
 
 /** Progress the user sees while a connect runs. */
@@ -371,7 +371,7 @@ export async function registerResolver(
     input: ConnectInput,
   ): Promise<Connected | Failed> {
     let shown:
-      | {title: string; details: boolean; staged: boolean; stage: string}
+      | {title: string; details: boolean; staged: boolean; stage: PhaseName}
       | undefined;
     let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
