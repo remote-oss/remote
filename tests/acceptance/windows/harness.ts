@@ -158,6 +158,8 @@ export interface RecordLine {
   /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
   held?: boolean;
   window: string;
+  /** Whether a phase line of a `progress` surface carried the details link. */
+  details?: boolean;
   /** The labels a failure dialog, a notice or the pre-connection dialog was shown with, in order. */
   buttons?: string[];
   /** The detail text a modal was shown with; only the lines of a `licenceModal` or a `preconnectDialog` surface have it. */
