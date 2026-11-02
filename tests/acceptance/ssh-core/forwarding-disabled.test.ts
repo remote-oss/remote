@@ -21,7 +21,11 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
-import {notifications, statusItem} from '../windows/renderer.ts';
+import {
+  notifications,
+  outputPanelFocused,
+  statusItem,
+} from '../windows/renderer.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The notice of a refused SOCKS forward. */
@@ -30,10 +34,15 @@ const REFUSED = 'Failed to set up';
 /** The text of the log line that names the forwarding setting. */
 const SETTING_LINE = 'TCP port forwarding appears to be disabled';
 
+/** The whole line, as the criterion words it. */
+const SETTING_TEXT =
+  'ERROR: TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.';
+
 /** The records of the hint store the extension keeps in its global state; none before it writes one. */
 function hintRecords(): Array<{
   started: string;
   hints: Array<{
+    kind?: string;
     status?: string;
     message?: string;
     mitigations?: string[];
@@ -68,6 +77,14 @@ function forwardingEntries(
     .filter(record => record.started >= since)
     .flatMap(record => record.hints)
     .filter(hint => hint.status === 'AllowTcpForwardingDisabled');
+}
+
+/** How many hints of kind `error` the records that started at or after `since` hold, whatever their status. */
+function errorHints(since: string): number {
+  return hintRecords()
+    .filter(record => record.started >= since)
+    .flatMap(record => record.hints)
+    .filter(hint => hint.kind === 'error').length;
 }
 
 /** How many forwarding hints the records that started at or after `since` hold. */
@@ -319,18 +336,20 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         .at(-1)?.visibleOutputChannel;
       deepStrictEqual(
         {
-          after: logged[first + 1]?.startsWith(`ERROR: ${SETTING_LINE}`),
+          after: logged[first + 1] === SETTING_TEXT,
           lines: logged.filter(line => line.includes(SETTING_LINE)).length,
           refusals:
             logged.filter(line => line.includes('administratively prohibited'))
               .length > 1,
           stored: stored.map(hint => [
+            hint.kind,
             hint.status,
             hint.message,
             hint.mitigations,
           ]),
           documents: stored.map(hint => hint.resources?.length),
           channel,
+          focused: await outputPanelFocused(name),
           waiting: (await waitingOf(name))[4],
         },
         {
@@ -339,6 +358,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           refusals: true,
           stored: [
             [
+              FORWARDING_ENTRY.kind,
               FORWARDING_ENTRY.status,
               FORWARDING_ENTRY.message,
               FORWARDING_ENTRY.mitigations,
@@ -346,6 +366,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           ],
           documents: [1],
           channel: 'Remote - SSH',
+          focused: true,
           waiting: true,
         },
       );
@@ -456,7 +477,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
           waiting: await waitingOf(name),
-          stored: forwardingHints(since),
+          stored: errorHints(since),
           text: recordLines(undefined, name).filter(line =>
             line.question.includes('Port forwarding is disabled'),
           ).length,
