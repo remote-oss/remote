@@ -92,6 +92,64 @@ export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-1406',
 ];
 
+/** The features of Remote - Containers release 2, the 54 reviewed families no release had taken yet. */
+export const CONTAINERS_RELEASE_TWO_FEATURES: readonly string[] = [
+  'F-0102',
+  'F-0103',
+  'F-0107',
+  'F-0108',
+  'F-0109',
+  'F-0202',
+  'F-0203',
+  'F-0204',
+  'F-0206',
+  'F-0207',
+  'F-0303',
+  'F-0304',
+  'F-0305',
+  'F-0306',
+  'F-0404',
+  'F-0406',
+  'F-0407',
+  'F-0413',
+  'F-0418',
+  'F-0506',
+  'F-0507',
+  'F-0603',
+  'F-0604',
+  'F-0605',
+  'F-0701',
+  'F-0702',
+  'F-0703',
+  'F-0704',
+  'F-0705',
+  'F-0706',
+  'F-0707',
+  'F-0708',
+  'F-0806',
+  'F-0807',
+  'F-0808',
+  'F-0809',
+  'F-0810',
+  'F-0811',
+  'F-0812',
+  'F-0904',
+  'F-0905',
+  'F-1001',
+  'F-1002',
+  'F-1003',
+  'F-1004',
+  'F-1005',
+  'F-1006',
+  'F-1007',
+  'F-1103',
+  'F-1201',
+  'F-1301',
+  'F-1302',
+  'F-1404',
+  'F-1405',
+];
+
 /** A coverage file: its name, where it lies under the repository root, the features it holds, and the repository of their issues. */
 export interface CoverageScope {
   /** The file's set name, the argument of `seed-coverage`'s command line. */
@@ -119,6 +177,14 @@ export const CONTAINERS_RELEASE_ONE_SCOPE: CoverageScope = {
   name: 'containers-r1',
   file: path.join(CATALOGUE_FOLDER, 'coverage-containers-r1.tsv'),
   features: CONTAINERS_RELEASE_ONE_FEATURES,
+  repository: 'remote-containers',
+};
+
+/** The coverage file of Remote - Containers release 2. */
+export const CONTAINERS_RELEASE_TWO_SCOPE: CoverageScope = {
+  name: 'containers-r2',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-containers-r2.tsv'),
+  features: CONTAINERS_RELEASE_TWO_FEATURES,
   repository: 'remote-containers',
 };
 
@@ -150,6 +216,14 @@ export const EXPLORER_SLICE_ONE_SCOPE: CoverageScope = {
   ],
 };
 
+/** The coverage file of Remote Explorer's release 2. */
+export const EXPLORER_RELEASE_TWO_SCOPE: CoverageScope = {
+  name: 'explorer-r2',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-explorer-r2.tsv'),
+  features: ['F-5201', 'F-5202', 'F-5301'],
+  repository: 'remote-explorer',
+};
+
 /** The features of the Extension Pack's first release: its package data, listing, members and identity. */
 export const EXTENSIONPACK_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-9001',
@@ -166,12 +240,23 @@ export const EXTENSIONPACK_RELEASE_ONE_SCOPE: CoverageScope = {
   repository: 'remote-extensionpack',
 };
 
+/** The coverage file of the Extension Pack's second release. */
+export const EXTENSIONPACK_RELEASE_TWO_SCOPE: CoverageScope = {
+  name: 'extensionpack-r2',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-extensionpack-r2.tsv'),
+  features: ['F-9102', 'F-9103'],
+  repository: 'remote-extensionpack',
+};
+
 /** Every coverage file the check reads. */
 export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
   CONTAINERS_RELEASE_ONE_SCOPE,
   EXPLORER_SLICE_ONE_SCOPE,
   EXTENSIONPACK_RELEASE_ONE_SCOPE,
+  CONTAINERS_RELEASE_TWO_SCOPE,
+  EXPLORER_RELEASE_TWO_SCOPE,
+  EXTENSIONPACK_RELEASE_TWO_SCOPE,
 ];
 
 /**

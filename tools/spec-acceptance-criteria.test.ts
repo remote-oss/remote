@@ -3,11 +3,15 @@ import {
   acceptanceCriteriaOf,
   CONTAINERS_RELEASE_ONE_FEATURES,
   CONTAINERS_RELEASE_ONE_SCOPE,
+  CONTAINERS_RELEASE_TWO_FEATURES,
+  CONTAINERS_RELEASE_TWO_SCOPE,
   COVERAGE_SCOPES,
+  EXPLORER_RELEASE_TWO_SCOPE,
   EXPLORER_SLICE_ONE_FEATURES,
   EXPLORER_SLICE_ONE_SCOPE,
   EXTENSIONPACK_RELEASE_ONE_FEATURES,
   EXTENSIONPACK_RELEASE_ONE_SCOPE,
+  EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SLICE_ONE_FEATURES,
   SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
@@ -139,7 +143,7 @@ describe('acceptanceCriteriaOf, the forms of Remote - Containers', () => {
 });
 
 describe('the coverage files', () => {
-  it('coverage-25a: the first slice, containers release 1, the explorer slice and the pack, each with its features and repository', () => {
+  it('coverage-25a, seed-01: the four release 1 files and the three release 2 files, each with its features and repository', () => {
     deepStrictEqual(
       COVERAGE_SCOPES.map(scope => [
         scope.file,
@@ -163,6 +167,13 @@ describe('the coverage files', () => {
           EXTENSIONPACK_RELEASE_ONE_FEATURES.length,
           'remote-extensionpack',
         ],
+        [
+          CONTAINERS_RELEASE_TWO_SCOPE.file,
+          CONTAINERS_RELEASE_TWO_FEATURES.length,
+          'remote-containers',
+        ],
+        [EXPLORER_RELEASE_TWO_SCOPE.file, 3, 'remote-explorer'],
+        [EXTENSIONPACK_RELEASE_TWO_SCOPE.file, 2, 'remote-extensionpack'],
       ],
     );
   });
