@@ -90,3 +90,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-1601-host-key-pick)
+
+## Known issues
+
+- **When a reconnection fails, for example after a cancelled passphrase, VS Code may show no "Cannot reconnect" dialog.**
+  The indicator reads "Disconnected from SSH: <host>". Reload the window to connect again.
+  - F-2307 AC-13 and AC-26 describe core's "Cannot reconnect. Please reload the window." dialog after a cancelled
+    passphrase input on a reconnection. Ours hands core an unhandled "not available" error, which core's loop gives up
+    on without showing the dialog (measured in the editor's own log, also for an ordinary authentication failure on a
+    reconnection); the dialog is core's rendering (athena's ruling on #1725).

@@ -167,6 +167,29 @@ describe('makeRunKeys', function () {
     );
   });
 
+  it('coverage-96: the certified passphrase key needs the passphrase, and its certificate is for harness-cert', () => {
+    deepStrictEqual(
+      {
+        opensWithout:
+          runProgram('ssh-keygen', [
+            '-y',
+            '-P',
+            '',
+            '-f',
+            keys.certifiedPassphraseKey,
+          ]).status === 0,
+        principal: /Principals:\s+harness-cert/.test(
+          runProgram('ssh-keygen', [
+            '-L',
+            '-f',
+            `${keys.certifiedPassphraseKey}-cert.pub`,
+          ]).output,
+        ),
+      },
+      {opensWithout: false, principal: true},
+    );
+  });
+
   it("coverage-19: the unauthorised key has no passphrase and isn't given to the host", () => {
     deepStrictEqual(
       [

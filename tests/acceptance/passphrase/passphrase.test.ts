@@ -8,7 +8,6 @@ import {
   closeWindow,
   reloadWindow,
   inWindow,
-  onHostAs,
   variable,
   waitFor,
   windowState,
@@ -39,51 +38,18 @@ import {
   secretHits,
 } from '../windows/harness.ts';
 import {setUserSetting} from '../windows/folder-windows.ts';
+import {
+  openKeyWindow,
+  passphrase,
+  untilConnected,
+  untilPassphraseInput,
+} from '../windows/key-windows.ts';
 
 /** The placeholder of the passphrase input, with nothing after it (STR:S064). */
 const PLACEHOLDER = 'Enter passphrase for ssh key ';
 
 /** The message line core puts under every input box. */
 const MESSAGE = "Press 'Enter' to confirm your input or 'Escape' to cancel";
-
-/** The run's passphrase. */
-function passphrase(): string {
-  return readFileSync(variable('HARNESS_PASSPHRASE_FILE'), 'utf8').trim();
-}
-
-/** Opens a window on folder `label` of the user `harness` through the alias `alias`; the window is named `label`. */
-async function openKeyWindow(alias: string, label: string): Promise<string> {
-  await onHostAs('harness', 'mkdir', '-p', `/home/harness/${label}`);
-  void inWindow(
-    'local',
-    'acceptance.agent.openWindow',
-    `vscode-remote://ssh-remote+${alias}/home/harness/${label}`,
-  );
-  return label;
-}
-
-/** Waits until the passphrase input of window `name` is open; gives what it shows. */
-async function untilPassphraseInput(name: string, milliseconds = 90_000) {
-  await waitFor(
-    `the passphrase input of ${name}`,
-    async () =>
-      (await inputBoxOf(name))?.placeholder.startsWith('Enter passphrase') ===
-      true,
-    milliseconds,
-  );
-  return inputBoxOf(name);
-}
-
-/** Waits until window `name` is connected through `alias`: its remote name and its indicator say so. */
-async function untilConnected(name: string, alias: string): Promise<void> {
-  await waitFor(
-    'the window to connect',
-    async () =>
-      (await windowState(name)).remoteName === 'ssh-remote' &&
-      (await connectSurface(name)).indicator === `SSH: ${alias}`,
-    120_000,
-  );
-}
 
 /** Opens a window through `alias`, answers its passphrase input with the right passphrase, and waits until it is connected. */
 async function connectedWithPassphrase(
@@ -184,6 +150,30 @@ function refused(alias: string) {
     details: `Could not establish connection to "${alias}": Permission denied (publickey).`,
     buttons: ['Close Remote', 'More Actions...', 'Retry'],
   };
+}
+
+/** The lines of every log file of the editor, by file: the lines a row adds are those after the count taken before it. */
+function editorLogLines(): Map<string, string[]> {
+  const lines = new Map<string, string[]>();
+  function walk(folder: string): void {
+    for (const entry of readdirSync(folder, {withFileTypes: true})) {
+      const full = path.join(folder, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith('.log')) {
+        lines.set(full, readFileSync(full, 'utf8').split('\n'));
+      }
+    }
+  }
+  walk(editorLogsFolder());
+  return lines;
+}
+
+/** The lines the editor's logs gained since `before`. */
+function editorLogsSince(before: Map<string, string[]>): string[] {
+  return [...editorLogLines()].flatMap(([file, lines]) =>
+    lines.slice(before.get(file)?.length ?? 0),
+  );
 }
 
 describe('the passphrase input of a key (card coverage-96)', function () {
@@ -703,6 +693,132 @@ describe('the passphrase input of a key (card coverage-96)', function () {
       }
     } finally {
       restoreUserSettings(before);
+    }
+  });
+
+  it('F-2307 AC-13, AC-26 (c96-reconnect-escape): Escape at the reconnection input ends in an unhandled NotAvailable that core gives up on, the indicator is disconnected with the host, and no failure dialog of ours is shown', async () => {
+    const name = await connectedWithPassphrase(
+      'passkey-18',
+      'c96-reconnect-escape',
+    );
+    try {
+      const before = editorLogLines();
+      await killSharedConnection(name, 'passkey-18');
+      await untilPassphraseInput(name);
+      await pressEscape(name);
+      await waitFor(
+        'core to give up',
+        () =>
+          editorLogsSince(before).some(line =>
+            line.includes('Will give up now!'),
+          ),
+        60_000,
+      );
+      const added = editorLogsSince(before);
+      deepStrictEqual(
+        {
+          unhandled: added.some(
+            line =>
+              line.includes('resolveAuthority(ssh-remote,2)') &&
+              line.includes('"code":"NotAvailable"') &&
+              line.includes('"detail":false'),
+          ),
+          gaveUp: added.some(line =>
+            line.includes(
+              'A RemoteAuthorityResolverError occurred while trying to reconnect. Will give up now!',
+            ),
+          ),
+          indicator: (await connectSurface(name)).indicator,
+          ownDialog:
+            (await dialogOf(name))?.details.startsWith(
+              'Could not establish connection',
+            ) === true,
+        },
+        {
+          unhandled: true,
+          gaveUp: true,
+          indicator: 'Disconnected from SSH: passkey-18',
+          ownDialog: false,
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  it('F-2307 AC-17 (c96-confirm-added): with AddKeysToAgent confirm the first connection adds the key, and a later connection offering it fails with no input, Permission denied in the log and the dialog of a first connection', async () => {
+    await agentClear();
+    const first = await connectedWithPassphrase(
+      'passkey-add-confirm',
+      'c96-confirm-added',
+    );
+    try {
+      const held = (await agentKeys()).includes(
+        await fingerprintOf(passphraseKeyFile()),
+      );
+      const mark = connectionLog().length;
+      const later = await refusedWithoutInput(
+        'passkey-19',
+        'c96-confirm-later',
+      );
+      deepStrictEqual(
+        {
+          held,
+          later,
+          logged: connectionLog()
+            .slice(mark)
+            .some(line => line.includes('Permission denied (publickey).')),
+        },
+        {
+          held: true,
+          later: {dialog: refused('passkey-19'), input: undefined},
+          logged: true,
+        },
+      );
+    } finally {
+      await closeWindow(first).catch(() => undefined);
+      await agentClear();
+    }
+  });
+
+  it('F-2307 AC-28 (c96-cert-passphrase): a passphrase key with a certificate, for a host that accepts only the certificate, asks for the passphrase and connects with it', async () => {
+    const name = await openKeyWindow('certpass', 'c96-cert-passphrase');
+    try {
+      const input = await untilPassphraseInput(name);
+      await answerInputBox(name, passphrase());
+      await untilConnected(name, 'certpass');
+      deepStrictEqual(input?.placeholder, PLACEHOLDER);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  it('F-2307 AC-30 (c96-agent-var-set): IdentityAgent naming a variable of the editor’s environment reaches the agent holding the key: no input, it connects', async () => {
+    await agentAdd(passphraseKeyFile(), {confirm: false});
+    try {
+      const {name, sawInput} = await connectedWithoutInput(
+        'agent-var-set',
+        'c96-agent-var-set',
+      );
+      await closeWindow(name).catch(() => undefined);
+      deepStrictEqual(sawInput, false);
+    } finally {
+      await agentClear();
+    }
+  });
+
+  it('F-2307 AC-30 (c96-agent-var-unset): IdentityAgent naming a variable the editor was not started with finds no agent: no input and the dialog of a first connection', async () => {
+    await agentAdd(passphraseKeyFile(), {confirm: false});
+    try {
+      deepStrictEqual(
+        await refusedWithoutInput('agent-var-unset', 'c96-agent-var-unset'),
+        {
+          dialog: refused('agent-var-unset'),
+          input: undefined,
+        },
+      );
+    } finally {
+      await agentClear();
     }
   });
 

@@ -155,6 +155,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/terminal-login/tsconfig.json',
   './tests/acceptance/terminal-odd/tsconfig.json',
   './tests/acceptance/passphrase/tsconfig.json',
+  './tests/acceptance/passphrase-late/tsconfig.json',
   './tests/acceptance/extensionpack-german/tsconfig.json',
   './tests/acceptance/extensionpack-partial/tsconfig.json',
   './tests/acceptance/extensionpack-language/tsconfig.json',

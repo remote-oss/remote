@@ -716,6 +716,28 @@ export function harnessSshConfig(
     ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_certified',
     ]),
+    ...keyAlias('certpass', CERTIFIED_PRINCIPAL, port, runFolder, [
+      'id_certpass',
+    ]),
+    // The agent named by a variable of the editor's environment, set or not (no key file of its own).
+    ...keyAlias(
+      'agent-var-set',
+      'harness',
+      port,
+      runFolder,
+      [],
+      ['IdentityAgent $HARNESS_AGENT_SOCKET'],
+      false,
+    ),
+    ...keyAlias(
+      'agent-var-unset',
+      'harness',
+      port,
+      runFolder,
+      [],
+      ['IdentityAgent $HARNESS_NO_SUCH_VARIABLE'],
+      false,
+    ),
     ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_second',
     ]),
