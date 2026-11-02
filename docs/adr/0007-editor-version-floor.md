@@ -2,7 +2,8 @@
 
 - Status: accepted (the lead, 2026-10-06); amended 2026-10-20 by the user's instruction (D-102): the floor moves from
   1.139 to 1.125. Raised or lowered only by an amendment like this one. Decision 4's floor list gained the container
-  open on 2026-11-01 (#1570, #1575), and the connect past the licence by the user's D-104 the same day.
+  open on 2026-11-01 (#1570, #1575), and the connect past the licence by the user's D-104 the same day. The third core
+  difference's reach was measured on 2026-11-02 (#1634): no row of the Ports view shows it.
 - Date: 2026-10-06; amended 2026-10-20
 - Deciders: `remote-architect`; the floor of 2026-10-20 is the user's
 - Scope: all packages
@@ -35,7 +36,11 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
   - the Forwarded Ports status item focuses the Ports view on 1.125 and toggles it on 1.139 (`remoteExplorer.ts`);
   - automatic forwarding lacks the filter for a remapped tunnel's local end (`isCandidateRemappedTunnelLocalEndpoint`,
     `remoteExplorer.ts`);
-  - the Ports view's protocol context is always `https` on 1.125 (`tunnelView.ts`, a core bug fixed later).
+  - the Ports view's protocol context is always `https` on 1.125 (`tunnelView.ts`, a core bug fixed later). Measured
+    (2026-11-02, genuine job, run 41365739306; #1634): that context is the view-level key `onFocusChanged` sets, which
+    no menu of a row reads. A row's own context carries its tunnel's protocol, so the Change Port Protocol menu of an
+    http listener has HTTP checked at both versions. The difference exists in the source, and nothing the extensions
+    or a user reach through a row shows it.
 
   `tunnelModel.ts`, `remoteExplorerService.ts`, `nativeExtensionService.ts`, `extHostExtensionService.ts` and
   `remoteAuthorityResolver.ts` are unchanged.
