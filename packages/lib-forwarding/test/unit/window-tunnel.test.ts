@@ -28,6 +28,7 @@ function relay(
   heldBytesMaximum: number = LIMITS.heldBytesMaximum,
   onWaiting?: () => void,
   confirmRefusal?: RelayTunnelRequest['confirmRefusal'],
+  onLine?: (line: string) => void,
 ): RelayFixture {
   const clock = new FakeClock();
   const dialer = new FakeDialer(dialScript);
@@ -41,6 +42,7 @@ function relay(
     limits: {...LIMITS, heldBytesMaximum},
     ...(onWaiting === undefined ? {} : {onWaiting}),
     ...(confirmRefusal === undefined ? {} : {confirmRefusal}),
+    ...(onLine === undefined ? {} : {onLine}),
   };
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
 }
@@ -290,6 +292,108 @@ describe('the window tunnel through the relay', () => {
       outcome.close();
     }
     deepStrictEqual(local.closedPorts, [50000]);
+  });
+});
+
+describe('what the window tunnel through the relay logs (card connect-131)', () => {
+  function logged(
+    dialScript: readonly DialAnswer[],
+    lines: string[],
+  ): RelayFixture {
+    return relay(
+      dialScript,
+      'work',
+      LIMITS.heldBytesMaximum,
+      undefined,
+      undefined,
+      line => {
+        lines.push(line);
+      },
+    );
+  }
+
+  it('says a failing probe once for a run of the same failure, with the port it asked for and the reason', async () => {
+    const lines: string[] = [];
+    const {open, clock} = logged(
+      ['closedBeforeReply', 'closedBeforeReply', 'work'],
+      lines,
+    );
+    const pending = open();
+    await advanced(clock, 500);
+    await advanced(clock, 500);
+    await pending;
+    deepStrictEqual(lines, [
+      "a probe to the host's port 4321 failed: the relay closed the connection before its reply",
+    ]);
+  });
+
+  it('says again when the failure changes', async () => {
+    const lines: string[] = [];
+    const {open, clock} = logged(
+      ['closedBeforeReply', 'unreachable', 'work'],
+      lines,
+    );
+    const pending = open();
+    await advanced(clock, 500);
+    await advanced(clock, 500);
+    await pending;
+    deepStrictEqual(lines, [
+      "a probe to the host's port 4321 failed: the relay closed the connection before its reply",
+      "a probe to the host's port 4321 failed: the relay cannot be reached: connection refused",
+    ]);
+  });
+
+  it('says a connection of the window that could not be opened to the host', async () => {
+    const lines: string[] = [];
+    const {open, local} = logged(['work', 'fail'], lines);
+    await open();
+    local.accept(50000);
+    await settled();
+    deepStrictEqual(lines, [
+      "a connection to the window port could not be opened to the host's port 4321: the dialer cannot reach the host",
+    ]);
+  });
+
+  it('says that the window port stopped listening by itself, with the reason', async () => {
+    const lines: string[] = [];
+    const {open, local} = logged(['work'], lines);
+    await open();
+    local.fail(50000, 'the socket was reset');
+    deepStrictEqual(lines, [
+      'the window port 50000 stopped listening by itself: the socket was reset',
+    ]);
+  });
+
+  it('says that the owner closed the window port, once', async () => {
+    const lines: string[] = [];
+    const {open} = logged(['work'], lines);
+    const outcome = await open();
+    if (outcome.kind === 'open') {
+      outcome.close();
+      outcome.close();
+    }
+    deepStrictEqual(lines, ['the window port 50000 was closed by its owner']);
+  });
+
+  it('says its socket target without a path', async () => {
+    const lines: string[] = [];
+    const clock = new FakeClock();
+    const outcome = openRelayTunnel({
+      dialer: new FakeDialer(['fail']),
+      local: new FakeLocalPort(),
+      scheduler: clock.scheduler(),
+      target: {kind: 'socket', path: '/run/user/1000/server.sock'},
+      localPort: 50000,
+      limits: LIMITS,
+      onLine: line => {
+        lines.push(line);
+      },
+    });
+    await advanced(clock, LIMITS.readyMilliseconds + 1000);
+    await outcome;
+    deepStrictEqual(lines.slice(0, 1), [
+      "a probe to the host's socket failed: the dialer cannot reach the host",
+    ]);
   });
 });
 
