@@ -209,17 +209,16 @@ function startBody(start: StartParameters): string[] {
     '}',
     'Enter-LockOrComplete $COMMIT',
     '$ServerProcess = Get-RecordedServer $PID_FILE',
+    // A running server whose token another principal may read is not reused: a new one starts with a new token.
+    'if ($null -ne $ServerProcess -and -not (Test-ConnectionToken $TOKEN_FILE)) {',
+    '  $ServerProcess = $null',
+    '}',
     '$Launched = $false',
     'if ($null -eq $ServerProcess) {',
     '  Initialize-Environment',
     '  try {',
-    '    if (-not (Test-Path -LiteralPath $TOKEN_FILE -PathType Leaf) -or (Get-Item -LiteralPath $TOKEN_FILE).Length -eq 0) {',
-    "      $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'",
-    '      $Bytes = New-Object byte[] 32',
-    '      $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()',
-    '      $Generator.GetBytes($Bytes)',
-    '      $Generator.Dispose()',
-    '      [System.IO.File]::WriteAllText($TOKEN_FILE, -join ($Bytes | ForEach-Object { $Characters[$_ % 62] }))',
+    '    if (-not (Test-ConnectionToken $TOKEN_FILE)) {',
+    '      Write-ConnectionToken $TOKEN_FILE',
     '    }',
     '  } catch {',
     '    $Message = Get-FailureMessage $_',
@@ -230,11 +229,8 @@ function startBody(start: StartParameters): string[] {
     `  Write-Line ${powershellQuote(LAUNCHING_LINE)}`,
     "  Add-Fact 'server.launching' 'yes'",
     `  $Launch = @{FilePath = (${LAUNCHER_PATH}); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}`,
-    "  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {",
-    "    $Launch.WindowStyle = 'Hidden'",
-    '  }',
     '  try {',
-    '    $ServerProcess = Start-Process @Launch',
+    '    $ServerProcess = Start-Program $Launch',
     "    [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)",
     '  } catch {',
     '    $Message = Get-FailureMessage $_',
@@ -318,23 +314,38 @@ export const POWERSHELL_STEPS: ReadonlySet<BootstrapRequest['step']> = new Set([
 ]);
 
 /**
- * The PowerShell script of one request: the preamble, the parameters, the role functions and the step's body. Throws
- * for a step the script doesn't have yet, which only a caller that skips `POWERSHELL_STEPS` can reach.
+ * The PowerShell script of one request in two parts: the head (the preamble, the parameters and the role functions)
+ * and the step's body. A test can define stand-ins for the Windows-only functions between the two.
+ */
+export function powershellParts(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): {head: string; body: string} {
+  if (!POWERSHELL_STEPS.has(request.step)) {
+    throw new Error(`the PowerShell script has no ${request.step} step`);
+  }
+  return {
+    head: [
+      ...PREAMBLE,
+      ...parameterValuesOf(parameters).map(
+        ([name, value]) => `$${name} = ${powershellQuote(value)}`,
+      ),
+      ...rolesOf(request, parameters).flatMap(
+        role => POWERSHELL_FUNCTIONS[role],
+      ),
+    ].join('\n'),
+    body: [...bodyOf(request, parameters), ''].join('\n'),
+  };
+}
+
+/**
+ * The PowerShell script of one request: its head and its body. Throws for a step the script doesn't have yet, which
+ * only a caller that skips `POWERSHELL_STEPS` can reach.
  */
 export function powershellScript(
   request: BootstrapRequest,
   parameters: ScriptParameters,
 ): string {
-  if (!POWERSHELL_STEPS.has(request.step)) {
-    throw new Error(`the PowerShell script has no ${request.step} step`);
-  }
-  return [
-    ...PREAMBLE,
-    ...parameterValuesOf(parameters).map(
-      ([name, value]) => `$${name} = ${powershellQuote(value)}`,
-    ),
-    ...rolesOf(request, parameters).flatMap(role => POWERSHELL_FUNCTIONS[role]),
-    ...bodyOf(request, parameters),
-    '',
-  ].join('\n');
+  const {head, body} = powershellParts(request, parameters);
+  return `${head}\n${body}`;
 }

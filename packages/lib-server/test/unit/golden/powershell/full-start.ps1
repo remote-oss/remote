@@ -65,6 +65,20 @@ function Get-FailureMessage($Failure) {
   }
   return $Exception.Message
 }
+function New-Secret {
+  $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  $Bytes = New-Object byte[] 32
+  $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $Generator.GetBytes($Bytes)
+  $Generator.Dispose()
+  return -join ($Bytes | ForEach-Object { $Characters[$_ % 62] })
+}
+function Start-Program([hashtable]$Launch) {
+  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
+    $Launch.WindowStyle = 'Hidden'
+  }
+  return Start-Process @Launch
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }
@@ -164,6 +178,56 @@ function Get-RecordedServer([string]$File) {
   } catch {
     return $null
   }
+}
+function Get-CurrentUserSid {
+  return [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+}
+function Get-TokenPrincipals {
+  return @((Get-CurrentUserSid), 'S-1-5-18', 'S-1-5-32-544')
+}
+function Test-TokenAccess([string]$File) {
+  $Allowed = Get-TokenPrincipals
+  foreach ($Entry in @((Get-Acl -LiteralPath $File).Access)) {
+    if ([string]$Entry.AccessControlType -ne 'Allow' -or ([long]$Entry.FileSystemRights -band 0xD00C0007) -eq 0) {
+      continue
+    }
+    if ($Allowed -notcontains $Entry.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) {
+      return $false
+    }
+  }
+  return $true
+}
+function Set-TokenAcl([string]$File) {
+  $Security = New-Object System.Security.AccessControl.FileSecurity
+  $Security.SetAccessRuleProtection($true, $false)
+  foreach ($Principal in Get-TokenPrincipals) {
+    $Security.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule((New-Object System.Security.Principal.SecurityIdentifier $Principal), 'FullControl', 'Allow')))
+  }
+  Set-Acl -LiteralPath $File -AclObject $Security
+}
+function Test-ConnectionToken([string]$File) {
+  $Item = Get-Item -LiteralPath $File -Force -ErrorAction SilentlyContinue
+  if ($null -eq $Item -or $Item.PSIsContainer -or ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+    return $false
+  }
+  if ([System.IO.File]::ReadAllText($File) -cnotmatch '^[0-9A-Za-z_-]{1,128}$') {
+    return $false
+  }
+  try {
+    return (Test-TokenAccess $File)
+  } catch {
+    return $false
+  }
+}
+function Write-ConnectionToken([string]$File) {
+  $Part = $File + '.' + $PID
+  [System.IO.File]::WriteAllText($Part, '')
+  Set-TokenAcl $Part
+  [System.IO.File]::WriteAllText($Part, (New-Secret))
+  if (Test-Path -LiteralPath $File) {
+    Remove-Item -LiteralPath $File -Force -ErrorAction Stop
+  }
+  Move-Item -LiteralPath $Part -Destination $File -ErrorAction Stop
 }
 function Exit-Step([string]$Status) {
   Exit-Lock

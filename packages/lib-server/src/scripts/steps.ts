@@ -292,6 +292,7 @@ export type FunctionRole =
   | 'unpack'
   | 'leave'
   | 'process'
+  | 'secretToken'
   | 'serverTree'
   | 'stop'
   | 'cliPort'
@@ -316,7 +317,7 @@ const STEP_ROLES: Readonly<
   prepare: ['common'],
   unpack: ['common', 'unpack'],
   activate: ['common'],
-  start: ['common', 'environment', 'lock', 'process', 'leave'],
+  start: ['common', 'environment', 'lock', 'process', 'secretToken', 'leave'],
   installExtensions: ['common', 'environment'],
   installCli: [
     'common',

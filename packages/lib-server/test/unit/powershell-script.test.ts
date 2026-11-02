@@ -5,10 +5,12 @@ import {createServer, type Server} from 'node:http';
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -21,7 +23,10 @@ import {
   type ScriptParameters,
   type ScriptStep,
 } from '../../src/index.ts';
-import {powershellScript} from '../../src/scripts/powershell-script.ts';
+import {
+  powershellParts,
+  powershellScript,
+} from '../../src/scripts/powershell-script.ts';
 import {parametersFor} from './fake-host.ts';
 
 /** A Windows host as pwsh on Linux plays it: a home, a folder of stand-in programs, and the Windows variables. */
@@ -62,15 +67,23 @@ const WINDOWS_VARIABLES = {
   PROCESSOR_ARCHITECTURE: 'AMD64',
 };
 
-/** The script file and the environment of one run of the request's PowerShell script on the host. */
+/**
+ * The script file and the environment of one run of the request's PowerShell script on the host; a `stub` stands in
+ * for Windows-only functions, defined between the script's head and its body.
+ */
 function scriptRun(
   host: PowershellHost,
   request: BootstrapRequest,
   parameters: ScriptParameters,
   variables: Readonly<Record<string, string | undefined>>,
+  stub = '',
 ): {file: string; environment: Record<string, string | undefined>} {
   const file = path.join(host.root, 'step.ps1');
-  writeFileSync(file, scriptFor(request, 'powershell', parameters));
+  const {head, body} = powershellParts(request, parameters);
+  writeFileSync(
+    file,
+    stub === '' ? `${head}\n${body}` : `${head}\n${stub}\n${body}`,
+  );
   return {
     file,
     environment: {
@@ -95,8 +108,15 @@ function runOn(
   request: BootstrapRequest,
   parameters: ScriptParameters,
   variables: Readonly<Record<string, string | undefined>> = WINDOWS_VARIABLES,
+  stub = '',
 ): ResultBlock | 'none' {
-  const {file, environment} = scriptRun(host, request, parameters, variables);
+  const {file, environment} = scriptRun(
+    host,
+    request,
+    parameters,
+    variables,
+    stub,
+  );
   const pwshRun = spawnSync('pwsh', [...PWSH_ARGUMENTS, file], {
     encoding: 'utf8',
     env: environment,
@@ -627,6 +647,102 @@ describe('the PowerShell install, run under pwsh', function () {
   });
 });
 
+/** The current user's SID the stand-ins report. */
+const USER_SID = 'S-1-5-21-100-200-300-1001';
+
+/** A token ACL entry the stand-in `Get-Acl` reports: its principal's SID, its rights, its type and its account name. */
+interface StandInEntry {
+  principal: string;
+  rights: number;
+  type: 'Allow' | 'Deny';
+  name?: string;
+}
+
+/** The three principals a token may have, with full control. */
+const THREE_PRINCIPALS: readonly StandInEntry[] = [
+  {principal: USER_SID, rights: 2032127, type: 'Allow'},
+  {principal: 'S-1-5-18', rights: 2032127, type: 'Allow'},
+  {principal: 'S-1-5-32-544', rights: 2032127, type: 'Allow'},
+];
+
+/** The record the stand-in `Set-Acl` writes on the host: whether inheritance is off, the file's length, and the rules. */
+function aclRecordOf(host: PowershellHost): string {
+  return path.join(host.root, 'acl-record');
+}
+
+/**
+ * Stand-ins for the token's Windows-only calls, so that the script's own checks and writes run: the user's SID, a
+ * `Get-Acl` that reports `entries` until `Set-Acl` recorded an ACL (then that one), the three security types of
+ * `New-Object` (every other type passes through), and a `Set-Acl` that records what it is given.
+ */
+function tokenStub(
+  host: PowershellHost,
+  entries: readonly StandInEntry[] = THREE_PRINCIPALS,
+): string {
+  const record = aclRecordOf(host);
+  const entryLines = entries.map(
+    entry =>
+      `(New-StandInEntry '${entry.principal}' ${String(entry.rights)} '${entry.type}' '${entry.name ?? ''}')`,
+  );
+  return [
+    `function Get-CurrentUserSid { return '${USER_SID}' }`,
+    'function New-StandInEntry([string]$Principal, [long]$Rights, [string]$Type, [string]$Name) {',
+    '  $Identity = [pscustomobject]@{Value = $Name; Principal = $Principal}',
+    '  $Identity | Add-Member -MemberType ScriptMethod -Name Translate -Value { param($Target) return [pscustomobject]@{Value = $this.Principal} }',
+    '  return [pscustomobject]@{AccessControlType = $Type; FileSystemRights = $Rights; IdentityReference = $Identity}',
+    '}',
+    'function Get-Acl([string]$LiteralPath) {',
+    `  if (Test-Path -LiteralPath '${record}') {`,
+    `    return [pscustomobject]@{Access = @(Get-Content -LiteralPath '${record}' | Where-Object { $_ -like 'rule *' } | ForEach-Object { $Fields = $_ -split ' '; New-StandInEntry $Fields[1] 2032127 $Fields[3] '' })}`,
+    '  }',
+    `  return [pscustomobject]@{Access = @(${entryLines.join(', ')})}`,
+    '}',
+    'function New-Object {',
+    '  param([string]$TypeName, [object[]]$ArgumentList)',
+    '  switch ($TypeName) {',
+    "    'System.Security.AccessControl.FileSecurity' {",
+    '      $Security = [pscustomobject]@{Protected = $false; Rules = @()}',
+    '      $Security | Add-Member -MemberType ScriptMethod -Name SetAccessRuleProtection -Value { param($On, $Keep) $this.Protected = $On }',
+    '      $Security | Add-Member -MemberType ScriptMethod -Name AddAccessRule -Value { param($Rule) $this.Rules += $Rule }',
+    '      return $Security',
+    '    }',
+    "    'System.Security.AccessControl.FileSystemAccessRule' {",
+    '      return [pscustomobject]@{Principal = $ArgumentList[0].Value; Rights = $ArgumentList[1]; Type = $ArgumentList[2]}',
+    '    }',
+    "    'System.Security.Principal.SecurityIdentifier' {",
+    '      return [pscustomobject]@{Value = [string]$ArgumentList[0]}',
+    '    }',
+    '    default {',
+    '      if ($null -eq $ArgumentList) {',
+    '        return Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName',
+    '      }',
+    '      return Microsoft.PowerShell.Utility\\New-Object -TypeName $TypeName -ArgumentList $ArgumentList',
+    '    }',
+    '  }',
+    '}',
+    'function Set-Acl([string]$LiteralPath, $AclObject) {',
+    "  $Lines = @(('protected ' + $AclObject.Protected), ('length ' + (Get-Item -LiteralPath $LiteralPath).Length))",
+    "  $Lines += @($AclObject.Rules | ForEach-Object { 'rule ' + $_.Principal + ' ' + $_.Rights + ' ' + $_.Type })",
+    `  Set-Content -LiteralPath '${record}' -Value $Lines`,
+    '}',
+  ].join('\n');
+}
+
+/** Runs the start on the host with the token's stand-ins for `entries`. */
+function startOn(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  entries: readonly StandInEntry[] = THREE_PRINCIPALS,
+): ResultBlock | 'none' {
+  return runOn(
+    host,
+    single('start'),
+    parameters,
+    WINDOWS_VARIABLES,
+    tokenStub(host, entries),
+  );
+}
+
 /** Puts a stand-in launcher with the shell `body` where the parameters' server is installed, and gives its folder. */
 function standInServer(
   host: PowershellHost,
@@ -663,7 +779,7 @@ describe('the PowerShell start, run under pwsh', function () {
     const host = powershellHost();
     const parameters = quickStart();
     standInServer(host, parameters, READY_SERVER);
-    const block = runOn(host, single('start'), parameters);
+    const block = startOn(host, parameters);
     const outcome = factsOf(block, [
       'server.port',
       'server.reused',
@@ -692,12 +808,9 @@ describe('the PowerShell start, run under pwsh', function () {
     const host = powershellHost();
     const parameters = quickStart();
     standInServer(host, parameters, READY_SERVER);
-    runOn(host, single('start'), parameters);
+    startOn(host, parameters);
     deepStrictEqual(
-      factsOf(runOn(host, single('start'), parameters), [
-        'server.reused',
-        'server.launching',
-      ]),
+      factsOf(startOn(host, parameters), ['server.reused', 'server.launching']),
       {status: 'Ok', 'server.reused': 'yes', 'server.launching': undefined},
     );
   });
@@ -709,7 +822,7 @@ describe('the PowerShell start, run under pwsh', function () {
     const spaced = {...host, home};
     const parameters = quickStart();
     standInServer(spaced, parameters, READY_SERVER);
-    runOn(spaced, single('start'), parameters);
+    startOn(spaced, parameters);
     deepStrictEqual(
       readFileSync(
         path.join(home, parameters.dataFolderName, `.${parameters.commit}.log`),
@@ -725,7 +838,7 @@ describe('the PowerShell start, run under pwsh', function () {
     standInServer(host, parameters, READY_SERVER);
     deepStrictEqual(
       factsOf(
-        runOn(host, single('start'), {
+        startOn(host, {
           ...parameters,
           start: {...parameters.start, socketMode: true},
         }),
@@ -739,7 +852,7 @@ describe('the PowerShell start, run under pwsh', function () {
     const host = powershellHost();
     const parameters = quickStart();
     standInServer(host, parameters, 'echo starting');
-    deepStrictEqual(factsOf(runOn(host, single('start'), parameters), []), {
+    deepStrictEqual(factsOf(startOn(host, parameters), []), {
       status: 'ServerFailedToStart',
     });
   });
@@ -752,10 +865,10 @@ describe('the PowerShell start, run under pwsh', function () {
       parameters,
       'echo "--port: Could not find free port in range: 8000-8001"',
     );
-    deepStrictEqual(
-      factsOf(runOn(host, single('start'), parameters), ['server.failure']),
-      {status: 'ServerFailedToStart', 'server.failure': 'noFreePort'},
-    );
+    deepStrictEqual(factsOf(startOn(host, parameters), ['server.failure']), {
+      status: 'ServerFailedToStart',
+      'server.failure': 'noFreePort',
+    });
   });
 
   it('F-2409: the CVE stop is named', () => {
@@ -766,26 +879,25 @@ describe('the PowerShell start, run under pwsh', function () {
       parameters,
       "echo '* !!!! Server terminated due to presence of CVE-2020-1416 !!!!'",
     );
-    deepStrictEqual(
-      factsOf(runOn(host, single('start'), parameters), ['server.failure']),
-      {status: 'ServerFailedToStart', 'server.failure': 'cveTerminated'},
-    );
+    deepStrictEqual(factsOf(startOn(host, parameters), ['server.failure']), {
+      status: 'ServerFailedToStart',
+      'server.failure': 'cveTerminated',
+    });
   });
 
   it('F-2409: a server that never says it is ready fails when the wait ends', () => {
     const host = powershellHost();
     const parameters = quickStart();
     standInServer(host, parameters, 'sleep 3');
-    deepStrictEqual(factsOf(runOn(host, single('start'), parameters), []), {
+    deepStrictEqual(factsOf(startOn(host, parameters), []), {
       status: 'ServerFailedToStart',
     });
   });
 
   it('F-2409: a server that is not installed fails to start', () => {
-    deepStrictEqual(
-      factsOf(runOn(powershellHost(), single('start'), quickStart()), []),
-      {status: 'ServerFailedToStart'},
-    );
+    deepStrictEqual(factsOf(startOn(powershellHost(), quickStart()), []), {
+      status: 'ServerFailedToStart',
+    });
   });
 
   it('F-2407: a token file that cannot be written is a write failure, named', () => {
@@ -799,10 +911,134 @@ describe('the PowerShell start, run under pwsh', function () {
     );
     mkdirSync(path.join(token, 'blocked'), {recursive: true});
     deepStrictEqual(
-      factsOf(runOn(host, single('start'), parameters), [
-        'server.writeFailedPath',
-      ]),
+      factsOf(startOn(host, parameters), ['server.writeFailedPath']),
       {status: 'CreateInstallDirFailed', 'server.writeFailedPath': token},
+    );
+  });
+});
+
+/** The server's token file for the parameters on the host. */
+function serverTokenOf(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+): string {
+  return path.join(
+    host.home,
+    parameters.dataFolderName,
+    `.${parameters.commit}.token`,
+  );
+}
+
+/** A start on a new host whose token file holds `token` beforehand, with the ACL `entries`; gives the token after it. */
+function tokenAfterStart(
+  token: string,
+  entries: readonly StandInEntry[],
+): {host: PowershellHost; token: string} {
+  const host = powershellHost();
+  const parameters = quickStart();
+  standInServer(host, parameters, READY_SERVER);
+  mkdirSync(path.dirname(serverTokenOf(host, parameters)), {recursive: true});
+  writeFileSync(serverTokenOf(host, parameters), token);
+  startOn(host, parameters, entries);
+  return {host, token: readFileSync(serverTokenOf(host, parameters), 'utf8')};
+}
+
+describe("the PowerShell start's connection token, run under pwsh", function () {
+  this.timeout(60000);
+
+  it('F-2409: a token only the user, SYSTEM and Administrators may read is reused, a deny and a non-reading entry ignored', () => {
+    deepStrictEqual(
+      tokenAfterStart('kept-token', [
+        ...THREE_PRINCIPALS,
+        {principal: 'S-1-5-32-545', rights: 2032127, type: 'Deny'},
+        {principal: 'S-1-5-32-545', rights: 0x100000, type: 'Allow'},
+      ]).token,
+      'kept-token',
+    );
+  });
+
+  it('F-2409: Administrators named in another language are still recognized by their SID', () => {
+    deepStrictEqual(
+      tokenAfterStart('kept-token', [
+        {principal: USER_SID, rights: 2032127, type: 'Allow'},
+        {
+          principal: 'S-1-5-18',
+          rights: 2032127,
+          type: 'Allow',
+          name: 'NT-AUTORITÄT\\SYSTEM',
+        },
+        {
+          principal: 'S-1-5-32-544',
+          rights: 2032127,
+          type: 'Allow',
+          name: 'VORDEFINIERT\\Administratoren',
+        },
+      ]).token,
+      'kept-token',
+    );
+  });
+
+  it('F-2409: a token Users may read is rewritten', () => {
+    deepStrictEqual(
+      /^[A-Za-z0-9]{32}$/.test(
+        tokenAfterStart('loose-token', [
+          ...THREE_PRINCIPALS,
+          {principal: 'S-1-5-32-545', rights: 0x1, type: 'Allow'},
+        ]).token,
+      ),
+      true,
+    );
+  });
+
+  it('F-2409: a token that is a link is rewritten, and its target left', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    const token = serverTokenOf(host, parameters);
+    mkdirSync(path.dirname(token), {recursive: true});
+    writeFileSync(path.join(host.root, 'elsewhere'), 'linked-token');
+    symlinkSync(path.join(host.root, 'elsewhere'), token);
+    startOn(host, parameters);
+    deepStrictEqual(
+      [
+        lstatSync(token).isSymbolicLink(),
+        readFileSync(path.join(host.root, 'elsewhere'), 'utf8'),
+      ],
+      [false, 'linked-token'],
+    );
+  });
+
+  it('F-2409: after a write, the token has only the three principals, inheritance off, set while the file was empty', () => {
+    const {host} = tokenAfterStart('loose-token', [
+      {principal: 'S-1-5-32-545', rights: 0x1, type: 'Allow'},
+    ]);
+    deepStrictEqual(
+      readFileSync(aclRecordOf(host), 'utf8').trim().split('\n'),
+      [
+        'protected True',
+        'length 0',
+        `rule ${USER_SID} FullControl Allow`,
+        'rule S-1-5-18 FullControl Allow',
+        'rule S-1-5-32-544 FullControl Allow',
+      ],
+    );
+  });
+
+  it('F-2409: a running server whose token Users may read is not reused, and a new one starts', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    startOn(host, parameters);
+    rmSync(aclRecordOf(host), {force: true});
+    deepStrictEqual(
+      factsOf(
+        startOn(host, parameters, [
+          ...THREE_PRINCIPALS,
+          {principal: 'S-1-5-32-545', rights: 0x1, type: 'Allow'},
+        ]),
+        ['server.reused'],
+      ),
+      {status: 'Ok', 'server.reused': 'no'},
     );
   });
 });
