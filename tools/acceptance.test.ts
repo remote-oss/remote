@@ -739,6 +739,28 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-86: Host pty-force, pty-yes and pty-no are the harness account with the run key and the RequestTTY of their name', () => {
+    deepStrictEqual(
+      ['force', 'yes', 'no'].map(request => accountBlock(`pty-${request}`)),
+      ['force', 'yes', 'no'].map(request =>
+        [
+          `Host pty-${request}`,
+          '  HostName 127.0.0.1',
+          '  Port 49153',
+          '  User harness',
+          '  IdentityFile /run/id_ed25519',
+          '  IdentitiesOnly yes',
+          '  BatchMode yes',
+          '  IdentityAgent none',
+          `  RequestTTY ${request}`,
+          '  StrictHostKeyChecking accept-new',
+          '  ConnectTimeout 10',
+          '  UserKnownHostsFile /run/known_hosts',
+        ].join('\n'),
+      ),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [

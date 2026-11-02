@@ -91,6 +91,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-1601-host-key-pick)
 
+- **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode.**
+  - F-2106 AC-14 expects ssh's "Pseudo-terminal will not be allocated…" warning in the log when the setting is on and the
+    host entry has no `RequestTTY`. Our connection command always carries a remote command (the prelude), so with
+    `RequestTTY` unset ssh asks for no terminal and writes no warning. `-T` is still present exactly when the setting is
+    falsy and no terminal is allocated (athena's ruling on #1606; `ruling-1606-no-tty-warning`).
+    Rows: (ruling-1606-no-tty-warning)
+
 ## Known issues
 
 - **When a reconnection fails, for example after a cancelled passphrase, VS Code may show no "Cannot reconnect" dialog.**
