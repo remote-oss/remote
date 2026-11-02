@@ -1,18 +1,30 @@
 import {deepStrictEqual} from 'node:assert';
-import {readdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
+  connectedToContainer,
   devContainerFolder,
   devContainersOf,
+  isOpen,
   reopenInContainer,
   startInWindow,
+  variable,
   waitFor,
+  windowNames,
   windowState,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   answerDialog,
+  answerFolderDialog,
+  chooseQuickPickRow,
   detailedQuickPickRows,
   dialogKindOf,
   dialogOf,
@@ -21,12 +33,17 @@ import {
   quickPickFacts,
   waitForDialog,
   waitForQuickPick,
+  windowTitle,
 } from '../windows/renderer.ts';
 import {
+  ALPINE_OPTION,
   chooseWorkspace,
   closeScreen,
   rowsOf,
+  takeFeatureScreen,
+  takeOptionScreen,
   withWindow,
+  written,
 } from '../windows/authoring-support.ts';
 import {docker} from './resolve-support.ts';
 
@@ -275,5 +292,79 @@ describe('the commands that make a container from a folder with no configuration
       true,
       'nocache-with',
     );
+  });
+
+  it('F-0301 AC-66 (c101-open-folder): Open Folder in Container on an empty target asks where while the window still shows the start folder, and after the workspace choice and Alpine the same window reloads onto the target, which holds the configuration while the start folder holds nothing, and connects as the target with the template name', async () => {
+    const target = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'authoring',
+      'c101-target',
+    );
+    rmSync(target, {recursive: true, force: true});
+    mkdirSync(target, {recursive: true});
+    await withWindow('c101-start', {}, async (window, folder) => {
+      const openBefore = windowNames().filter(isOpen).length;
+      await startInWindow(window, 'remote-containers.openFolder');
+      await answerFolderDialog(window, target);
+      await waitForQuickPick(window, 180_000);
+      const asked = [
+        await quickPickFacts(window),
+        await rowsOf(window),
+        await windowTitle(window),
+      ];
+      await chooseWorkspace(window);
+      await chooseQuickPickRow(window, 'Alpine');
+      await takeOptionScreen(window, ALPINE_OPTION);
+      await takeFeatureScreen(window);
+      await written(path.join(target, '.devcontainer/devcontainer.json'));
+      await waitFor(
+        'the window to be on the target',
+        () => Promise.resolve(isOpen('c101-target')),
+        180_000,
+      );
+      try {
+        const trusting = waitForDialog('c101-target', 20_000).then(
+          () => answerDialog('c101-target', 'Trust Folder & Continue'),
+          () => undefined,
+        );
+        await connectedToContainer('c101-target', 300_000);
+        await trusting;
+        deepStrictEqual(
+          [
+            asked,
+            readdirSync(folder),
+            isOpen('c101-start'),
+            windowNames().filter(isOpen).length === openBefore,
+            await windowTitle('c101-target'),
+          ],
+          [
+            [
+              WHERE.facts,
+              [
+                [
+                  'Add configuration to workspace',
+                  '',
+                  'This allows you to share the configuration with others via source control',
+                  true,
+                ],
+                [
+                  'Add configuration to user data folder',
+                  '',
+                  'This avoids having outgoing changes in your workspace folder',
+                  false,
+                ],
+              ],
+              `[${path.basename(folder)}]`,
+            ],
+            [],
+            false,
+            true,
+            '[c101-target [Dev Container: Alpine]]',
+          ],
+        );
+      } finally {
+        await closeWindow('c101-target').catch(() => undefined);
+      }
+    });
   });
 });
