@@ -13,11 +13,15 @@ export interface WaitLimits {
   heldBytesMaximum: number;
 }
 
-/** Whether `attempt` worked before the bound ran out. An attempt that throws counts as one that failed. */
+/**
+ * Whether `attempt` worked before the bound ran out, or before `stop` was signalled, which ends the wait as a failure.
+ * An attempt that throws counts as one that failed.
+ */
 export function succeedsWithin(
   attempt: () => Promise<void>,
   limits: WaitLimits,
   scheduler: Scheduler,
+  stop?: AbortSignal,
 ): Promise<boolean> {
   return new Promise<boolean>(resolve => {
     let finished = false;
@@ -46,6 +50,9 @@ export function succeedsWithin(
         },
       );
     }
+    stop?.addEventListener('abort', () => {
+      finish(false);
+    });
     tryOnce();
   });
 }

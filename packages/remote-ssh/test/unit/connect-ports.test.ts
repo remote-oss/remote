@@ -1206,6 +1206,40 @@ describe("the assembled ports' platform notice", () => {
   });
 });
 
+describe("the assembled ports' refused forwarding notice (card connect-106)", () => {
+  it('F-2104 7.E4: the first refusal shows the error with a Show log link and no button, and the next ones show nothing', async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const shown: Array<[string, readonly string[]]> = [];
+    const ports = wiringPortsOf(
+      {
+        ...surfaces,
+        notice: {
+          showInformation: () => Promise.resolve(undefined),
+          showWarning: () => Promise.resolve(undefined),
+          showError: (message, buttons) => {
+            shown.push([message, buttons]);
+            return Promise.resolve(undefined);
+          },
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    );
+    ports.tunnel.forwardRefused();
+    ports.tunnel.forwardRefused();
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(shown, [
+      [
+        '<Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})>'.replace(
+          '{0}',
+          '[<Show log>](command:opensshremotes.showLog)',
+        ),
+        [],
+      ],
+    ]);
+  });
+});
+
 describe("the assembled ports' CLI path", () => {
   it('F-2103 5.0 step 6: the S045 notification has its own text, translated', () => {
     const {surfaces, machine, recorded} = assemblyInputs();

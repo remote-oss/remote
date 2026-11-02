@@ -20,7 +20,23 @@ import {type Started, startDetached} from './acceptance-plain.ts';
 export const CERTIFIED_PRINCIPAL = 'harness-cert';
 
 /** How many aliases of the passphrase key a run has besides `passkey`, named `passkey-1` and on: one for each row that needs a connection of its own. */
-const PASSKEY_COPIES = 12;
+const PASSKEY_COPIES = 24;
+
+/** The aliases that vary the passphrase key's configuration: the values of AddKeysToAgent, and the ways of having no usable key. */
+export const PASSKEY_VARIANTS = [
+  'passkey-add-yes',
+  'passkey-ask-yes',
+  'passkey-ask-no',
+  'passkey-ask-escape',
+  'passkey-add-confirm',
+  'nokey-missing',
+  'nokey-none',
+  'nokey-nopubkey',
+  'nokey-agent-only',
+  'nokey-agent-none',
+  'agent-other-file',
+  'several-files',
+] as const;
 
 /** The names of the copies of the passphrase key's alias: `passkey-1` to the last. */
 export function passkeyCopies(): string[] {

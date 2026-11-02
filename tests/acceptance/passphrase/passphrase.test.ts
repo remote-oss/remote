@@ -1,7 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  agentAdd,
   agentClear,
   agentKeys,
+  connectionLog,
+  fingerprintOf,
   closeWindow,
   reloadWindow,
   inWindow,
@@ -17,6 +20,7 @@ import {
   dialogOf,
   inputBoxOf,
   pressEscape,
+  notifications,
   quickPickOf,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -94,6 +98,80 @@ async function killSharedConnection(
   await answerInputBox(name, alias);
 }
 
+/** The run's passphrase key file. */
+function passphraseKeyFile(): string {
+  return `${variable('HARNESS_RUN_FOLDER')}/id_passphrase`;
+}
+
+/** Opens a window through `alias` and waits until it is connected, noting whether a passphrase input showed on the way. */
+async function connectedWithoutInput(
+  alias: string,
+  label: string,
+): Promise<{name: string; sawInput: boolean}> {
+  const name = await openKeyWindow(alias, label);
+  let sawInput = false;
+  await waitFor(
+    'the window to connect',
+    async () => {
+      sawInput ||= (await inputBoxOf(name)) !== undefined;
+      return (
+        (await windowState(name)).remoteName === 'ssh-remote' &&
+        (await connectSurface(name)).indicator === `SSH: ${alias}`
+      );
+    },
+    120_000,
+  );
+  return {name, sawInput};
+}
+
+/** What a first connection through `alias` shows when the host refuses every key: the dialog, and no input after it. */
+async function refusedWithoutInput(alias: string, label: string) {
+  const name = await openKeyWindow(alias, label);
+  try {
+    const dialog = await refusedDialog(name);
+    return {dialog, input: await inputBoxOf(name)};
+  } finally {
+    await closeWindow(name).catch(() => undefined);
+  }
+}
+
+/** The shape of the question to add a key to the agent, as the placeholder of a masked input. */
+function questionShown(shown: {
+  placeholder: string;
+  masked: boolean | undefined;
+  message: string | undefined;
+}) {
+  return {
+    beginsWithAdd: shown.placeholder.startsWith(' Add key '),
+    endsWithQuestion: shown.placeholder.endsWith(
+      ' (acceptance-passphrase) to agent?',
+    ),
+    masked: shown.masked,
+    message: shown.message,
+  };
+}
+
+/** The question to add the key, as it is to read. */
+const QUESTION = {
+  beginsWithAdd: true,
+  endsWithQuestion: true,
+  masked: true,
+  message: MESSAGE,
+};
+/** The dialog of the refused key: its details and buttons, once it shows. */
+async function refusedDialog(name: string) {
+  const dialog = await waitForDialog(name, 120_000);
+  return {details: dialog.details, buttons: [...dialog.buttons].sort()};
+}
+
+/** What the AC-7 dialog holds for the alias `alias`. */
+function refused(alias: string) {
+  return {
+    details: `Could not establish connection to "${alias}": Permission denied (publickey).`,
+    buttons: ['Close Remote', 'More Actions...', 'Retry'],
+  };
+}
+
 describe('the passphrase input of a key (card coverage-96)', function () {
   this.timeout(300_000);
 
@@ -152,20 +230,6 @@ describe('the passphrase input of a key (card coverage-96)', function () {
       await closeWindow(name).catch(() => undefined);
     }
   });
-
-  /** The dialog of the refused key: its details and buttons, once it shows. */
-  async function refusedDialog(name: string) {
-    const dialog = await waitForDialog(name, 120_000);
-    return {details: dialog.details, buttons: [...dialog.buttons].sort()};
-  }
-
-  /** What the AC-7 dialog holds for the alias `alias`. */
-  function refused(alias: string) {
-    return {
-      details: `Could not establish connection to "${alias}": Permission denied (publickey).`,
-      buttons: ['Close Remote', 'More Actions...', 'Retry'],
-    };
-  }
 
   it('F-2307 AC-8 (c96-three-wrong): three wrong passphrases end in the Permission denied dialog, and Retry opens the input again, where the right passphrase connects', async () => {
     const name = await openKeyWindow('passkey-3', 'c96-three-wrong');
@@ -278,6 +342,241 @@ describe('the passphrase input of a key (card coverage-96)', function () {
       await answerInputBox(name, passphrase());
       await untilConnected(name, 'passkey-9');
       deepStrictEqual(input?.placeholder, PLACEHOLDER);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  it('F-2307 AC-7 (ruling-1681-first-label): three wrong passphrases end in the Permission denied dialog, and the indicator of the authority that never connected names the host', async () => {
+    const name = await openKeyWindow('passkey-12', 'c96-first-label');
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await untilPassphraseInput(name);
+        await answerInputBox(name, `wrong-${String(attempt)}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      deepStrictEqual(
+        {
+          dialog: await refusedDialog(name),
+          indicator: (await connectSurface(name)).indicator,
+        },
+        {
+          dialog: refused('passkey-12'),
+          indicator: 'Disconnected from SSH: passkey-12',
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
+  });
+
+  /** The dialog of a refusal for lack of a usable key, with the agent holding the passphrase key when `agentHolds`. */
+  async function noUsableKey(
+    alias: string,
+    label: string,
+    agentHolds: boolean,
+  ) {
+    if (agentHolds) {
+      await agentAdd(passphraseKeyFile(), {confirm: false});
+    }
+    try {
+      return await refusedWithoutInput(alias, label);
+    } finally {
+      await agentClear();
+    }
+  }
+
+  it('F-2307 AC-14 (c96-agent-has-key): with the accepted key in the agent no input appears and the window connects', async () => {
+    await agentAdd(passphraseKeyFile(), {confirm: false});
+    try {
+      const {name, sawInput} = await connectedWithoutInput(
+        'passkey-13',
+        'c96-agent-has-key',
+      );
+      await closeWindow(name).catch(() => undefined);
+      deepStrictEqual(sawInput, false);
+    } finally {
+      await agentClear();
+    }
+  });
+
+  it('F-2307 AC-15 (c96-add-yes): with AddKeysToAgent yes the agent holds the key afterwards, and a later connection offering it shows no input', async () => {
+    await agentClear();
+    const name = await connectedWithPassphrase(
+      'passkey-add-yes',
+      'c96-add-yes',
+    );
+    try {
+      const held = await agentKeys();
+      const later = await connectedWithoutInput(
+        'passkey-14',
+        'c96-add-yes-later',
+      );
+      await closeWindow(later.name).catch(() => undefined);
+      deepStrictEqual(
+        {
+          held: held.includes(await fingerprintOf(passphraseKeyFile())),
+          sawInput: later.sawInput,
+        },
+        {held: true, sawInput: false},
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await agentClear();
+    }
+  });
+
+  /** AddKeysToAgent ask: the question the second input shows, and whether the agent holds the key after `answer`; Escape when none. */
+  async function askedToAdd(alias: string, label: string, answer?: string) {
+    await agentClear();
+    const name = await openKeyWindow(alias, label);
+    try {
+      await untilPassphraseInput(name);
+      await answerInputBox(name, passphrase());
+      await waitFor(
+        'the question to add the key',
+        async () =>
+          (await inputBoxOf(name))?.placeholder.includes('to agent?') === true,
+        90_000,
+      );
+      const asked = await inputBoxOf(name);
+      if (answer === undefined) {
+        await pressEscape(name);
+      } else {
+        await answerInputBox(name, answer);
+      }
+      await untilConnected(name, alias);
+      return {
+        shown: questionShown({
+          placeholder: asked?.placeholder ?? '',
+          masked: asked?.masked,
+          message: asked?.message,
+        }),
+        held: (await agentKeys()).includes(
+          await fingerprintOf(passphraseKeyFile()),
+        ),
+      };
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await agentClear();
+    }
+  }
+
+  it('F-2307 AC-16 (c96-ask-yes): with AddKeysToAgent ask the question to add the key is a second masked input, and yes adds the key', async () => {
+    deepStrictEqual(await askedToAdd('passkey-ask-yes', 'c96-ask-yes', 'yes'), {
+      shown: QUESTION,
+      held: true,
+    });
+  });
+
+  it('F-2307 AC-16 (c96-ask-no): no to the question leaves the key out of the agent, and the window connects', async () => {
+    deepStrictEqual(await askedToAdd('passkey-ask-no', 'c96-ask-no', 'no'), {
+      shown: QUESTION,
+      held: false,
+    });
+  });
+
+  it('F-2307 AC-31 (c96-confirm-key): a key in the agent with the confirm constraint, which the agent cannot ask about, gives no input and the Permission denied dialog on a first connection', async () => {
+    await agentAdd(passphraseKeyFile(), {confirm: true});
+    try {
+      deepStrictEqual(
+        await refusedWithoutInput('passkey-15', 'c96-confirm-key'),
+        {
+          dialog: refused('passkey-15'),
+          input: undefined,
+        },
+      );
+    } finally {
+      await agentClear();
+    }
+  });
+
+  it('F-2307 AC-19 (c96-key-missing): an IdentityFile that is missing gives no input and the Permission denied dialog', async () => {
+    deepStrictEqual(
+      await noUsableKey('nokey-missing', 'c96-key-missing', false),
+      {
+        dialog: refused('nokey-missing'),
+        input: undefined,
+      },
+    );
+  });
+
+  it('F-2307 AC-19 (c96-key-none): IdentityFile none gives no input and the Permission denied dialog', async () => {
+    deepStrictEqual(await noUsableKey('nokey-none', 'c96-key-none', false), {
+      dialog: refused('nokey-none'),
+      input: undefined,
+    });
+  });
+
+  it('F-2307 AC-19 (c96-no-pubkey): PubkeyAuthentication no gives no input and the Permission denied dialog', async () => {
+    deepStrictEqual(
+      await noUsableKey('nokey-nopubkey', 'c96-no-pubkey', false),
+      {
+        dialog: refused('nokey-nopubkey'),
+        input: undefined,
+      },
+    );
+  });
+
+  it('F-2307 AC-19 (c96-ids-only): IdentitiesOnly yes with only the agent holding the key gives no input and the Permission denied dialog', async () => {
+    deepStrictEqual(
+      await noUsableKey('nokey-agent-only', 'c96-ids-only', true),
+      {
+        dialog: refused('nokey-agent-only'),
+        input: undefined,
+      },
+    );
+  });
+
+  it('F-2307 AC-19 (c96-agent-none): IdentityAgent none with only the agent holding the key gives no input and the Permission denied dialog', async () => {
+    deepStrictEqual(
+      await noUsableKey('nokey-agent-none', 'c96-agent-none', true),
+      {
+        dialog: refused('nokey-agent-none'),
+        input: undefined,
+      },
+    );
+  });
+
+  it('F-2307 AC-20 (c96-other-file): IdentitiesOnly no, the accepted key in the agent and another IdentityFile: it connects with the agent key and no input', async () => {
+    await agentAdd(passphraseKeyFile(), {confirm: false});
+    try {
+      const {name, sawInput} = await connectedWithoutInput(
+        'agent-other-file',
+        'c96-other-file',
+      );
+      await closeWindow(name).catch(() => undefined);
+      deepStrictEqual(sawInput, false);
+    } finally {
+      await agentClear();
+    }
+  });
+
+  it('F-2307 AC-21 (c96-several-files): a missing file, a passphrase key the host refuses and an accepted key: no passphrase input, and the window connects', async () => {
+    const {name, sawInput} = await connectedWithoutInput(
+      'several-files',
+      'c96-several-files',
+    );
+    await closeWindow(name).catch(() => undefined);
+    deepStrictEqual(sawInput, false);
+  });
+
+  it('F-2307 AC-22 (c96-loose-key): a key file with mode 0644 gives the dialog with only Permission denied, and the warning is in the log, not in the dialog, a notification or a terminal', async () => {
+    const name = await openKeyWindow('loosekey', 'c96-loose-key');
+    try {
+      const dialog = await refusedDialog(name);
+      deepStrictEqual(
+        {
+          dialog,
+          warned: connectionLog().some(line =>
+            line.includes('UNPROTECTED PRIVATE KEY FILE'),
+          ),
+          toasts: (await notifications(name)).filter(
+            text => !text.startsWith('Setting up SSH Host'),
+          ),
+        },
+        {dialog: refused('loosekey'), warned: true, toasts: []},
+      );
     } finally {
       await closeWindow(name).catch(() => undefined);
     }

@@ -300,6 +300,7 @@ function portsOf(
         dispose: () => undefined,
       }),
       revealLoginTerminals: () => false,
+      forwardRefused: () => undefined,
       settings: () => ({
         listenOnSocket: false,
         useLocalServer: true,
