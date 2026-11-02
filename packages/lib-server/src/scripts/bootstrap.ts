@@ -1,10 +1,11 @@
 /**
- * @fileoverview The bootstrap script of each step, for the interpreter the host has. Only the POSIX `sh` script exists;
- * the PowerShell script answers with a clear failure until it has been captured on a Windows host.
+ * @fileoverview The bootstrap script of each step, for the interpreter the host has: the POSIX `sh` script for every
+ * step, and the PowerShell script for the steps it has; any other step answers a PowerShell host with a clear failure.
  */
 
 import type {Interpreter} from 'lib-host';
 import {posixScript} from './posix-script.ts';
+import {POWERSHELL_STEPS, powershellScript} from './powershell-script.ts';
 import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 import type {BootstrapRequest, ScriptParameters} from './steps.ts';
 
@@ -17,7 +18,7 @@ export type {
   StepwiseAction,
 } from './steps.ts';
 
-/** What the PowerShell twin prints until it exists: a result block that names the missing piece. */
+/** What a PowerShell host gets for a step the PowerShell script doesn't have yet: a block that names the gap. */
 const POWERSHELL_UNAVAILABLE: string = [
   `Write-Output ''`,
   `Write-Output '${RESULT_BEGIN}'`,
@@ -28,16 +29,18 @@ const POWERSHELL_UNAVAILABLE: string = [
 ].join('\n');
 
 /**
- * The text of the script for one step, for the interpreter the host has. The POSIX script runs under any `sh` and
- * prints a result block that `parseResult` reads. The PowerShell script is provisional until it has been captured on
- * a Windows host, so it answers with a failure that says so.
+ * The text of the script for one step, for the interpreter the host has. Both scripts print a result block that
+ * `parseResult` reads; a step the PowerShell script doesn't have yet answers with a failure that says so.
  */
 export function scriptFor(
   request: BootstrapRequest,
   interpreter: Interpreter,
   parameters: ScriptParameters,
 ): string {
-  return interpreter === 'powershell'
-    ? POWERSHELL_UNAVAILABLE
-    : posixScript(request, parameters);
+  if (interpreter === 'posixShell') {
+    return posixScript(request, parameters);
+  }
+  return POWERSHELL_STEPS.has(request.step)
+    ? powershellScript(request, parameters)
+    : POWERSHELL_UNAVAILABLE;
 }

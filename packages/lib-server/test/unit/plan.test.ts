@@ -114,7 +114,7 @@ describe('install planner (card server-04 table)', () => {
       input({
         facts: {
           ...facts,
-          operatingSystem: 'windows',
+          operatingSystem: 'win32',
           homeFolder: 'C:/Users/u',
         },
         installPathSetting: 'C:\\srv',

@@ -104,14 +104,18 @@ export function remoteCommandInEffect(
 }
 
 /** The platform the editor names for an operating system the probe reports. */
-export const PLATFORM_OF_PROBE = {linux: 'linux', darwin: 'macOS'} as const;
+export const PLATFORM_OF_PROBE = {
+  linux: 'linux',
+  darwin: 'macOS',
+  win32: 'windows',
+} as const;
 
 /** The platform a stored record's operating system names, or `unknown` for one the editor has no name for. */
 export function platformOfRecord(
   operatingSystem: string,
 ): RemotePlatform | 'unknown' {
-  return operatingSystem === 'linux' || operatingSystem === 'darwin'
-    ? PLATFORM_OF_PROBE[operatingSystem]
+  return Object.hasOwn(PLATFORM_OF_PROBE, operatingSystem)
+    ? PLATFORM_OF_PROBE[operatingSystem as keyof typeof PLATFORM_OF_PROBE]
     : 'unknown';
 }
 

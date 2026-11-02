@@ -550,6 +550,22 @@ describe('probe (V2)', () => {
     );
   });
 
+  it('F-2701: a Windows host is probed as win32 and needs no tar', async () => {
+    const outcome = await probe(
+      recording(
+        block('Ok', 'host.os=win32', 'host.arch=x64', 'host.tool.tar=no'),
+      ),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'probed'
+        ? [outcome.host.operatingSystem, outcome.host.tools]
+        : outcome.kind,
+      ['win32', []],
+    );
+  });
+
   it('V2: another status is probeFailed, with the status', async () => {
     const outcome = await probe(
       recording(block('ServerFailedToStart')),

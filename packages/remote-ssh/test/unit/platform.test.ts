@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   decidePlatform,
   platformEntry,
+  platformOfRecord,
   type PlatformSettings,
   platformWrite,
   remoteCommandInEffect,
@@ -325,5 +326,23 @@ describe('the platform rows of F-2206', () => {
       decidePlatform(settings({windowsRemotes: ['lab-*']}), 'lab-one'),
       {kind: 'probe'},
     );
+  });
+});
+
+describe('the platform a stored record names', () => {
+  it('names each operating system the probe reports', () => {
+    deepStrictEqual(['linux', 'darwin', 'win32'].map(platformOfRecord), [
+      'linux',
+      'macOS',
+      'windows',
+    ]);
+  });
+
+  it('gives unknown for any other name, an inherited property included', () => {
+    deepStrictEqual(['freebsd', 'toString', ''].map(platformOfRecord), [
+      'unknown',
+      'unknown',
+      'unknown',
+    ]);
   });
 });
