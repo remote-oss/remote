@@ -124,7 +124,7 @@ F-5102.AC-7	acceptance
 F-5102.AC-8	acceptance	
 F-5102.AC-9	acceptance	
 F-5102.AC-10	acceptance	
-F-5102.AC-11	deferred	explorer slice 1: increment 2
+F-5102.AC-11	acceptance	
 F-5102.AC-12	acceptance	
 F-5102.AC-13	acceptance	
 F-5102.AC-15	deferred	explorer slice 1: increment 2
@@ -134,8 +134,8 @@ F-5102.AC-18	acceptance
 F-5102.AC-19	acceptance	
 F-5102.AC-20	deferred	explorer slice 1: increment 2
 F-5102.AC-21	deferred	explorer slice 1: increment 2
-F-5102.AC-22	deferred	explorer slice 1: increment 2
-F-5102.AC-23	deferred	explorer slice 1: increment 2
+F-5102.AC-22	acceptance	
+F-5102.AC-23	acceptance	
 F-5102.AC-24	acceptance	
 F-5102.AC-25	deferred	explorer slice 1: increment 2
 F-5102.AC-26	acceptance	
@@ -162,7 +162,7 @@ F-5102.AC-46	acceptance
 F-5102.AC-47	acceptance	
 F-5102.AC-48	core	core: the display language comes from an installed language pack
 F-5102.AC-49	acceptance	
-F-5102.AC-50	deferred	explorer slice 1: increment 2
+F-5102.AC-50	acceptance	
 F-5102.AC-51	deferred	explorer slice 1: increment 2
 F-5102.AC-52	deferred	explorer slice 1: increment 2
 F-5102.AC-53	deferred	explorer slice 1: increment 2
