@@ -115,7 +115,11 @@ export function openConnectionStep(
       connection.release();
     }
     const login = dependencies.attachLogin(connection, input);
+    let startedLogin = false;
     const stopStages = connection.onNotice(notice => {
+      if (notice.type === 'loginOwned' || notice.type === 'loginStarted') {
+        startedLogin = true;
+      }
       if (notice.type === 'waitingForOtherWindow') {
         dependencies.onPhase({kind: 'waitingForOtherWindow'});
       } else if (
@@ -161,6 +165,7 @@ export function openConnectionStep(
         channel,
         waits: dependencies.waits(),
         socksPort: outcome.socksPort,
+        startedLogin,
         storedRecord: outcome.sharedRecord ?? undefined,
         storeSharedRecord: record => {
           token = record.connectionToken;
