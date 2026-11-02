@@ -30,7 +30,10 @@ import {
   termsSettingsOf,
   textOf as settingTextOf,
 } from '../../src/pipeline/connect-settings.ts';
-import {decidePlatform} from '../../src/pipeline/platform.ts';
+import {
+  decidePlatform,
+  remoteCommandInEffect,
+} from '../../src/pipeline/platform.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import {textOf} from '../../src/surfaces/prompt-strings.ts';
 import {
@@ -1106,6 +1109,19 @@ describe('the terms in socket mode (card connect-96)', () => {
 
   it('F-2410 AC-5: socket mode gives the terms the shared connection off', () => {
     deepStrictEqual(termsSettingsOf(SOCKET_AND_LOCAL).useLocalServer, false);
+  });
+
+  it('F-2107 BR-1: socket mode with useLocalServer true leaves the host’s remote command in effect, and with it false does not', () => {
+    const socketAndOff = userHost({
+      'remote.SSH.remoteServerListenOnSocket': true,
+      'remote.SSH.useLocalServer': false,
+    });
+    deepStrictEqual(
+      [SOCKET_AND_LOCAL, socketAndOff].map(host =>
+        remoteCommandInEffect(true, termsSettingsOf(host), 'devbox'),
+      ),
+      [true, false],
+    );
   });
 
   it('F-2410: without socket mode, useLocalServer true still probes', () => {

@@ -10,6 +10,7 @@ import {
 function settings(changes: Partial<PlatformSettings> = {}): PlatformSettings {
   return {
     useLocalServer: true,
+    useLocalServerSetting: true,
     remotePlatform: {},
     windowsRemotes: [],
     ...changes,
@@ -162,10 +163,25 @@ describe('the remote command', () => {
     deepStrictEqual(remoteCommandInEffect(false, settings(), 'devbox'), false);
   });
 
-  it('is not in effect without the shared connection', () => {
+  it('is not in effect when remote.SSH.useLocalServer is off', () => {
     deepStrictEqual(
-      remoteCommandInEffect(true, settings({useLocalServer: false}), 'devbox'),
+      remoteCommandInEffect(
+        true,
+        settings({useLocalServer: false, useLocalServerSetting: false}),
+        'devbox',
+      ),
       false,
+    );
+  });
+
+  it('F-2107 BR-1: is in effect when the connect does not use the shared connection but the setting is on, as in socket mode', () => {
+    deepStrictEqual(
+      remoteCommandInEffect(
+        true,
+        settings({useLocalServer: false, useLocalServerSetting: true}),
+        'devbox',
+      ),
+      true,
     );
   });
 
