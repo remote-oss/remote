@@ -144,6 +144,7 @@ function labelsFromExplorer(): string[] {
     'explorer-home',
     'explorer-rows',
     'explorer-no-proposals',
+    'add-host',
     'explorer-standdown',
     'trust',
     'trust-terminal',
@@ -291,6 +292,15 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('coverage-38: the add-host launch runs with a HOME of its own in the run, which no other launch shares', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.environment?.HOME === '<run>/add-host-home')
+        .map(launch => [launch.label, launch.suite]),
+      [['add-host', 'add-host']],
+    );
+  });
+
   it('coverage-20: the config-files launch runs with its own HOME, the recorder first on the PATH and no agent socket', () => {
     deepStrictEqual(
       launches.find(launch => launch.label === 'config-files')?.environment,
@@ -375,6 +385,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['add-host', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
