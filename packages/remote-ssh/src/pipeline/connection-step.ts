@@ -86,11 +86,9 @@ export function openConnectionStep(
   dependencies: ConnectionStepDependencies,
 ): ConnectSteps['openConnection'] {
   return async (input, terms, cancellation) => {
-    const sharedHost =
-      input.connectionKey ?? payloadOf(sshTargetOf(input.target));
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
-      hostString: sharedHost,
+      hostString: input.connectionKey ?? payloadOf(sshTargetOf(input.target)),
       cancellation,
     });
     if (acquired.kind === 'refused') {
@@ -117,7 +115,11 @@ export function openConnectionStep(
       connection.release();
     }
     const login = dependencies.attachLogin(connection, input);
+    let startedLogin = false;
     const stopStages = connection.onNotice(notice => {
+      if (notice.type === 'loginOwned' || notice.type === 'loginStarted') {
+        startedLogin = true;
+      }
       if (notice.type === 'waitingForOtherWindow') {
         dependencies.onPhase({kind: 'waitingForOtherWindow'});
       } else if (
@@ -163,7 +165,7 @@ export function openConnectionStep(
         channel,
         waits: dependencies.waits(),
         socksPort: outcome.socksPort,
-        shared: `${sharedHost}:${String(outcome.socksPort)}`,
+        startedLogin,
         storedRecord: outcome.sharedRecord ?? undefined,
         storeSharedRecord: record => {
           token = record.connectionToken;

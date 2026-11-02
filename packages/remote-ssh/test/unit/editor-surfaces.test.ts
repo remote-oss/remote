@@ -96,7 +96,6 @@ function surfacesWith(
     }),
     translate: template => template,
     hintState: {get: () => undefined, update: () => Promise.resolve()},
-    refusalState: {get: () => undefined, update: () => Promise.resolve()},
     documentation: () => 'https://docs.example/ssh',
     help: {
       getHelp: {

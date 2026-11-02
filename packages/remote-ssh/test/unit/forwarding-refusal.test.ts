@@ -2,7 +2,12 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {FailureHint} from 'lib-ssh';
-import {refusalWatchOf} from '../../src/diagnostics/forwarding-refusal.ts';
+import {
+  openingAttached,
+  refusalWatchOf,
+} from '../../src/diagnostics/forwarding-refusal.ts';
+import type {ConnectInput, ConnectionTerms} from '../../src/pipeline/steps.ts';
+import {channelAnswering, leaseOn} from './server-steps.fixture.ts';
 import {logSshLines} from '../../src/pipeline/ssh-log.ts';
 
 const REFUSED =
@@ -17,17 +22,14 @@ function watching(): {
   sink: MemorySink;
   calls: string[];
   hints: FailureHint[];
-  remembered: string[];
 } {
   const sink = new MemorySink();
   const calls: string[] = [];
   const hints: FailureHint[] = [];
-  const remembered: string[] = [];
   return {
     sink,
     calls,
     hints,
-    remembered,
     watch: refusalWatchOf(
       createLogger(sink, {minimumLevel: (): Level => 'trace'}),
       {
@@ -36,12 +38,6 @@ function watching(): {
         },
         record: hint => {
           hints.push(hint);
-        },
-      },
-      {
-        contains: connection => remembered.includes(connection),
-        remember: connection => {
-          remembered.push(connection);
         },
       },
       template => template,
@@ -136,30 +132,42 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-15: two connects on one shared connection log the setting text once, and record the hint twice', () => {
+  it('F-2604 AC-15: a connect that started the login logs the setting text, and one that joined it does not, though both record the hint', () => {
     const {watch, sink, hints} = watching();
     watch.begin();
-    watch.attach('devbox:1080');
+    watch.attach(true);
     logSshLines(watch.logger, [REFUSED], undefined);
     watch.begin();
-    watch.attach('devbox:1080');
+    watch.attach(false);
     logSshLines(watch.logger, [REFUSED], undefined);
     deepStrictEqual(
       [
         sink.lines.filter(line => line.message === SETTING_TEXT).length,
+        sink.lines.filter(line => line.message === `[ssh] ${REFUSED}`).length,
         hints.length,
       ],
-      [1, 2],
+      [1, 2, 2],
     );
   });
 
-  it('F-2604 AC-15: a new shared connection logs the setting text again', () => {
+  it('F-2604 AC-15: a joiner that logs the refused-channel lines still gets them in its log', () => {
     const {watch, sink} = watching();
     watch.begin();
-    watch.attach('devbox:1080');
+    watch.attach(false);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      sink.lines.map(line => line.message),
+      [`[ssh] ${REFUSED}`],
+    );
+  });
+
+  it('F-2604 AC-15: a new helper after the old one was killed is started by the connect again, and logs the setting text again', () => {
+    const {watch, sink} = watching();
+    watch.begin();
+    watch.attach(true);
     logSshLines(watch.logger, [REFUSED], undefined);
     watch.begin();
-    watch.attach('devbox:1081');
+    watch.attach(true);
     logSshLines(watch.logger, [REFUSED], undefined);
     deepStrictEqual(
       sink.lines.filter(line => line.message === SETTING_TEXT).length,
@@ -167,20 +175,45 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-15: a session of one window logs the setting text at every connect', () => {
-    const {watch, sink, remembered} = watching();
+  it('F-2604 AC-15: a connect on which nothing was attached logs the setting text, as a session of one window does', () => {
+    const {watch, sink} = watching();
     watch.begin();
-    watch.attach(undefined);
-    logSshLines(watch.logger, [REFUSED], undefined);
-    watch.begin();
-    watch.attach(undefined);
     logSshLines(watch.logger, [REFUSED], undefined);
     deepStrictEqual(
-      [
-        sink.lines.filter(line => line.message === SETTING_TEXT).length,
-        remembered,
-      ],
-      [2, []],
+      sink.lines.filter(line => line.message === SETTING_TEXT).length,
+      1,
     );
+  });
+
+  it('F-2604 AC-15: the step that opens the connection tells the watch whether the connect started the login, and a failed one tells nothing', async () => {
+    const told: boolean[] = [];
+    const watch = {
+      attach: (startedLogin: boolean) => {
+        told.push(startedLogin);
+      },
+    };
+    const lease = leaseOn(channelAnswering([]));
+    const input: ConnectInput = {
+      target: {kind: 'plain', text: 'devbox'},
+      rawHostString: 'devbox',
+      attempt: 1,
+      isReconnection: false,
+      windowId: 'window-1',
+      windowWorkspace: undefined,
+    };
+    const terms: ConnectionTerms = {
+      platform: 'linux',
+      remoteCommandInEffect: false,
+    };
+    const signal = new AbortController().signal;
+    await openingAttached(
+      () => Promise.resolve({kind: 'done', value: lease}),
+      watch,
+    )(input, terms, signal);
+    await openingAttached(
+      () => Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      watch,
+    )(input, terms, signal);
+    deepStrictEqual(told, [true]);
   });
 });

@@ -26,7 +26,6 @@ function connectorOptions(
     maximumReconnectionAttempts: options.maximumReconnectionAttempts,
     preconnectMilliseconds: options.preconnectMilliseconds,
     logger: options.logger,
-    onConnection: options.onConnection,
     serve: options.serve,
     useExecServer: options.useExecServer,
   };

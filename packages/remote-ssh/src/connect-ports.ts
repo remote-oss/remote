@@ -70,9 +70,11 @@ import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
-import type {RefusalMemory} from './diagnostics/refusal-memory.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
-import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
+import {
+  openingAttached,
+  refusalWatchOf,
+} from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
@@ -145,8 +147,6 @@ export interface ConnectSurfaces {
   noticeState: AcceptanceState;
   /** The recorder of the hints a connect leaves for the session. */
   hints: HintRecorder;
-  /** The shared connections whose refusal of a forward was logged. */
-  refusals: RefusalMemory;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   /** The question before a pre-connection script runs, and the record of the scripts the user trusts. */
@@ -511,12 +511,7 @@ export function connectAssemblyOf(
   connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
   const tracker = new LoginTerminalTracker(surfaces.terminals);
-  const watch = refusalWatchOf(
-    logger,
-    surfaces.hints,
-    surfaces.refusals,
-    surfaces.translate,
-  );
+  const watch = refusalWatchOf(logger, surfaces.hints, surfaces.translate);
   const ports = wiringPortsOf(
     {...surfaces, terminals: tracker},
     machine,
@@ -525,7 +520,11 @@ export function connectAssemblyOf(
   const connector = connectorFrom({
     stepsFor: onPhase => {
       watch.begin();
-      return stepsOf(ports, onPhase);
+      const steps = stepsOf(ports, onPhase);
+      return {
+        ...steps,
+        openConnection: openingAttached(steps.openConnection, watch),
+      };
     },
     options: {
       // A getter, so each connect reads the setting as it is then.
@@ -534,9 +533,6 @@ export function connectAssemblyOf(
       },
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
       logger: watch.logger,
-      onConnection: shared => {
-        watch.attach(shared);
-      },
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
         return switchOf(surfaces.settings, 'useExecServer');

@@ -90,6 +90,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-1601-host-key-pick)
+- **A window that joins a running local connection server writes no setting line.**
+  - F-2604 AC-1 and AC-15 put the line "ERROR: TCP port forwarding appears to be disabled…" (STR:S046) in the log of the
+    connect that started the shared `ssh`. A window that joined a login already running, a reload of the window
+    included, logs the refused-channel lines the helper relays but not that line (BR-2, 6.5; `ruling-1773-joiner-lines`,
+    athena on #1773). Each connect still keeps its own hint.
+    Rows: (ruling-1773-joiner-lines)
 
 ## Known issues
 

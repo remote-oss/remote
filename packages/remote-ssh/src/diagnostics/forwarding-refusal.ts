@@ -1,14 +1,13 @@
 /**
  * @fileoverview What a refused forward leaves behind besides the notice: the line that names the server's setting, in
- * the log once per shared connection (once per connect for a session of one window), and the hint kept for each
- * connect. Both come from ssh's bare lines, which the logger is handed once each is logged.
+ * the log once, by the connect that started the connection's login, and the hint kept for each connect. Both come from ssh's bare lines, which the logger is handed once each is logged.
  */
 
 import type {Logger} from 'lib-log';
 import {classify, type FailureHint} from 'lib-ssh';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {SshLogger} from '../pipeline/ssh-log.ts';
-import type {RefusalMemory} from './refusal-memory.ts';
+import type {ConnectSteps} from '../pipeline/steps.ts';
 import type {Translate} from '../surfaces/strings.ts';
 
 /** What the connect hands over when it recognises the refusal. */
@@ -24,8 +23,8 @@ export interface RefusalWatch {
   logger: Logger & Required<SshLogger>;
   /** Starts a connect: the next refusal is recorded again, and logged again unless its connection logged it. */
   begin(): void;
-  /** The connect rides the shared connection `shared`, or a session of its own when none. */
-  attach(shared: string | undefined): void;
+  /** The connect's connection is open: whether this connect started its login. A connect that joined one logs no setting line. */
+  attach(startedLogin: boolean): void;
 }
 
 /**
@@ -35,14 +34,9 @@ export interface RefusalWatch {
 export function refusalWatchOf(
   logger: Logger,
   port: RefusalPort,
-  memory: RefusalMemory,
   translate: Translate,
 ): RefusalWatch {
-  const state: {
-    recorded: boolean;
-    logged: boolean;
-    shared: string | undefined;
-  } = {recorded: false, logged: false, shared: undefined};
+  const state = {recorded: false, logged: false};
   function noticed(line: string): void {
     if (state.recorded && state.logged) {
       return;
@@ -55,9 +49,6 @@ export function refusalWatchOf(
       state.logged = true;
       for (const logLine of found.logLines) {
         logger.error(ownText({id: logLine, values: []}, translate));
-      }
-      if (state.shared !== undefined) {
-        memory.remember(state.shared);
       }
     }
     if (!state.recorded) {
@@ -94,12 +85,24 @@ export function refusalWatchOf(
     begin: () => {
       state.recorded = false;
       state.logged = false;
-      state.shared = undefined;
       port.begin();
     },
-    attach: shared => {
-      state.shared = shared;
-      state.logged = shared !== undefined && memory.contains(shared);
+    attach: startedLogin => {
+      state.logged = !startedLogin;
     },
+  };
+}
+
+/** The step that opens the connection, which tells `watch` once the connection is open whether this connect started its login. */
+export function openingAttached(
+  open: ConnectSteps['openConnection'],
+  watch: Pick<RefusalWatch, 'attach'>,
+): ConnectSteps['openConnection'] {
+  return async (input, terms, cancellation) => {
+    const opened = await open(input, terms, cancellation);
+    if (opened.kind === 'done') {
+      watch.attach(opened.value.startedLogin);
+    }
+    return opened;
   };
 }

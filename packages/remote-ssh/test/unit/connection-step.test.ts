@@ -632,6 +632,44 @@ describe('the connection step', () => {
     deepStrictEqual(ready.phases, []);
   });
 
+  /** Whether the lease a connect gave says its window started the login, after the helper's `notices` and its refusals of the first request. */
+  async function startedAfter(
+    replies: PlainData[],
+    notices: PlainData[],
+  ): Promise<boolean | undefined> {
+    const ready = fixture();
+    ready.lease.connectReplies = replies;
+    const pending = ready.connecting();
+    await settled();
+    for (const notice of notices) {
+      ready.lease.emit(notice);
+    }
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    const outcome = await pending;
+    return outcome.kind === 'done' ? outcome.value.startedLogin : undefined;
+  }
+
+  it('F-2604 AC-15: a connect whose request started the login says it started it', async () => {
+    deepStrictEqual(await startedAfter([], []), true);
+  });
+
+  it('F-2604 AC-15: a connect to which the login fell says it started it', async () => {
+    deepStrictEqual(
+      await startedAfter(
+        [{type: 'refused', reason: 'alreadyConnecting'}],
+        [{type: 'waitingForOtherWindow'}, {type: 'ownerChanged', owner: 1}],
+      ),
+      true,
+    );
+  });
+
+  it('F-2604 AC-15: a connect that joined a login already done says it did not start it', async () => {
+    deepStrictEqual(
+      await startedAfter([{type: 'refused', reason: 'alreadyConnected'}], []),
+      false,
+    );
+  });
+
   it('F-2304 BR-11: a login this window starts is the initializing stage', async () => {
     const {phases} = await loggedIn();
     deepStrictEqual(phases, [{kind: 'initializing'}]);

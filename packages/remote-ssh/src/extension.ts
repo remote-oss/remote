@@ -453,7 +453,6 @@ async function registerConnectOf(
       acceptanceState: context.globalState,
       noticeState: context.globalState,
       hintState: context.globalState,
-      refusalState: context.globalState,
       documentation: () => helpLinksOf(manifest).documentation,
       logger: served.logger,
       applyTerminalEnvironment: terminalEnvironmentOf(
