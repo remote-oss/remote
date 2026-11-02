@@ -11,13 +11,14 @@ and does not re-decide it.
 | [0003](0003-coding-standards.md) | Google TypeScript style, enforced by lint and coverage gates | accepted |
 | [0004](0004-ssh-transport-native-openssh.md) | The SSH transport is the native OpenSSH client | accepted (D-51) |
 | [0005](0005-reuse-of-open-source-components.md) | Reuse existing open-source components (dev container CLI, the editor CLI) | accepted (R-76) |
-| [0006](0006-product-driven-artefact-resolution.md) | The running editor's product.json drives server and CLI resolution | accepted |
-| [0007](0007-editor-version-floor.md) | The editor version floor is 1.125, the recorded version stays 1.139.1, and proposed API is pinned to the floor | accepted (amended 2026-10-20, D-102) |
+| [0006](0006-product-driven-artefact-resolution.md) | The running editor's product.json drives server and CLI resolution | accepted (decisions 3 and 8 revised 2026-11-02, D-105) |
+| [0007](0007-editor-version-floor.md) | The editor version floor is 1.125, the recorded version stays 1.139.1, and proposed API is pinned to the floor | accepted (amended 2026-10-20, D-102; 2026-11-02, D-106) |
 | [0008](0008-public-surface-and-voice.md) | The public surface speaks as a product and carries nothing of the process | accepted (D-59, R-85) |
 | [0009](0009-dev-container-cli-bridge.md) | Drive the dev container CLI as a pinned, spawned program, and bend it without forking | accepted |
 | [0010](0010-output-read-only-through-markers.md) | What we read from a shell or a program is read only through our markers or its documented form | accepted |
 | [0011](0011-lifecycle-runs-in-a-terminal.md) | Lifecycle commands run in a real terminal, through the editor's own node-pty | accepted (the user, 2026-10-16) |
 | [0012](0012-lifecycle-pty-on-macos.md) | Lifecycle commands run in a real terminal on macOS too | accepted (the user, 2026-10-16) |
+| [0013](0013-platform-split.md) | Platform differences are data behind the existing seams, built and unit-tested on Linux before a host exists | accepted (D-105) |
 
 Planned, in this order (titles may change):
 
