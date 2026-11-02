@@ -5,8 +5,10 @@ import {
   closeWindow,
   connectedWithin,
   connectionHelpers,
+  hostAnswer,
   hostPassword,
   isOpen,
+  kill,
   masterCheck,
   masterExit,
   noHelperWithin,
@@ -113,6 +115,31 @@ describe('the local connection server beside an OpenSSH ControlMaster (card cove
     deepStrictEqual(
       [questions('m1') - asked, await masterCheck('master')],
       [1, true],
+    );
+  });
+
+  it('F-2102 AC-40 (c129-master-autoask): with ControlMaster autoask, Kill Local Connection Server and a reload connect again with no password and no confirmation, through the same master', async () => {
+    restoreUserSettings(savedSettings);
+    await clean();
+    appendScript([
+      password('m1'),
+      {
+        surface: 'maskedInput',
+        match: 'Allow shared connection',
+        answer: {text: 'yes'},
+        window: 'm1',
+      },
+    ]);
+    await openWindow('master-autoask', 'm1');
+    await connectedWithin('m1', 60_000);
+    const asked = questions('m1');
+    appendScript([hostAnswer('m1', {label: 'master-autoask'})]);
+    await kill('m1');
+    await reloadWindow('m1');
+    await connectedWithin('m1', 60_000);
+    deepStrictEqual(
+      [questions('m1') - asked, await masterCheck('master-autoask')],
+      [0, true],
     );
   });
 });

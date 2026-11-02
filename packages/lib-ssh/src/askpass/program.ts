@@ -2,7 +2,7 @@
  * @fileoverview The askpass program `ssh` runs: it hands the question to the helper's askpass endpoint and prints
  * the answer on standard output. It exits 1 when the question is refused, which `ssh` takes as a cancelled prompt; a
  * refused permission question (`ssh` sets `SSH_ASKPASS_PROMPT` to `confirm`) is answered with an empty line, which
- * `ssh` takes as allowed.
+ * `ssh` takes as allowed, and so is one asked when the endpoint cannot be reached.
  */
 
 import type {EndpointPort} from 'lib-helper';
@@ -33,6 +33,15 @@ const EXIT_ANSWERED = 0;
 const EXIT_REFUSED = 1;
 const EXIT_MISUSED = 2;
 
+/** The status for a question nobody answered: a permission question is allowed with an empty line, any other is refused. */
+function refused(askpass: AskpassProgramEnvironment): number {
+  if (askpass.environment[PROMPT_VARIABLE] === PERMISSION_PROMPT) {
+    askpass.output('\n');
+    return EXIT_ANSWERED;
+  }
+  return EXIT_REFUSED;
+}
+
 /** Asks the question and prints the answer; resolves to the exit status. Nothing it handles is logged. */
 export async function runAskpassProgram(
   askpass: AskpassProgramEnvironment,
@@ -56,16 +65,13 @@ export async function runAskpassProgram(
     connection.send({type: 'ask', nonce, text: question});
     const text = await answer;
     if (text === undefined) {
-      if (askpass.environment[PROMPT_VARIABLE] === PERMISSION_PROMPT) {
-        askpass.output('\n');
-        return EXIT_ANSWERED;
-      }
-      return EXIT_REFUSED;
+      return refused(askpass);
     }
     askpass.output(`${text}\n`);
     return EXIT_ANSWERED;
   } catch {
-    // An endpoint that cannot be reached refuses the question like one that closes.
-    return EXIT_REFUSED;
+    // An endpoint that cannot be reached refuses the question like one that closes: a shared connection that outlives
+    // its helper asks its permission questions here, and the answer that allows it keeps the connection in use.
+    return refused(askpass);
   }
 }

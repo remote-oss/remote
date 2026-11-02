@@ -115,12 +115,25 @@ describe('askpass program', () => {
     );
   });
 
-  it('connect-115: a permission question nothing listens for still exits 1', async () => {
+  it('connect-129, F-2102 AC-40: a permission question nothing listens for prints an empty line and exits 0, so a shared connection that outlives its helper stays in use', async () => {
     deepStrictEqual(
       [
-        await runProgram(['Add key k (c) to agent?'], {
+        await runProgram(['Allow shared connection to host? '], {
           ...ENVIRONMENT,
           SSH_ASKPASS_PROMPT: 'confirm',
+        }),
+        output,
+      ],
+      [0, ['\n']],
+    );
+  });
+
+  it('connect-129: a password question nothing listens for still exits 1 and prints nothing', async () => {
+    deepStrictEqual(
+      [
+        await runProgram(['password: '], {
+          ...ENVIRONMENT,
+          SSH_ASKPASS_PROMPT: 'none',
         }),
         output,
       ],
