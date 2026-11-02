@@ -42,15 +42,17 @@ function pushesSince(count: number): ReturnType<typeof companionCalls> {
 async function historyOf(host: string): Promise<string[]> {
   await inWindow('local', SHOW_REMOTE_EXPLORER);
   let rows = (await viewRows('local', VIEW)) ?? [];
-  const row = rows.find(each => each.level === 2 && each.label === host);
-  if (row?.expanded === false) {
+  const hostRow = rows.find(each => each.level === 2 && each.label === host);
+  if (hostRow?.expanded === false) {
     await toggleRow('local', VIEW, host);
     rows = (await viewRows('local', VIEW)) ?? [];
   }
-  const at = rows.findIndex(each => each.level === 2 && each.label === host);
+  const hostAt = rows.findIndex(
+    each => each.level === 2 && each.label === host,
+  );
   const folders: string[] = [];
-  for (const each of rows.slice(at + 1)) {
-    if (at === -1 || each.level <= 2) {
+  for (const each of rows.slice(hostAt + 1)) {
+    if (hostAt === -1 || each.level <= 2) {
       break;
     }
     folders.push(each.description);
