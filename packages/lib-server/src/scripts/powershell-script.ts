@@ -81,9 +81,75 @@ function probeBody(installTree: string): readonly string[] {
   ];
 }
 
+const LAUNCHER_PATH = '[System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)';
+
+/**
+ * The install into the data folder: the folder and the lock, a server already there kept, the archive given or
+ * downloaded, unpacked, and the launcher checked; the times of the download and the install are facts.
+ */
+const INSTALL_BODY: readonly string[] = [
+  '$StartedAt = Get-NowSeconds',
+  "if ($DATA_ROOT -eq '') {",
+  "  Complete-Step 'CreateInstallDirFailed'",
+  '}',
+  'try {',
+  '  New-Folder $INSTALL_DIR',
+  '} catch {',
+  '  Write-Failed $INSTALL_DIR (Get-FailureMessage $_)',
+  '}',
+  'Enter-LockOrComplete $COMMIT',
+  `if (Test-Path -LiteralPath (${LAUNCHER_PATH}) -PathType Leaf) {`,
+  "  Add-Fact 'server.installDir' $INSTALL_DIR",
+  "  Exit-Step 'Ok'",
+  '}',
+  'Initialize-Environment',
+  "if ($ARCHIVE_PATH -ne '') {",
+  '  $Archive = $ARCHIVE_PATH',
+  '} else {',
+  "  $Archive = [System.IO.Path]::Combine($INSTALL_DIR, '.archive.' + $PID)",
+  '  if ((Save-Archive $ARCHIVE_URL $Archive) -ne 0) {',
+  '    Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue',
+  "    Exit-Step 'ServerDownloadFailed'",
+  '  }',
+  '}',
+  '$DownloadedAt = Get-NowSeconds',
+  '$Unpacked = Expand-ServerArchive $Archive $INSTALL_DIR',
+  "if ($ARCHIVE_PATH -eq '') {",
+  '  Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue',
+  '}',
+  `if (-not $Unpacked -or -not (Test-Path -LiteralPath (${LAUNCHER_PATH}) -PathType Leaf)) {`,
+  "  Exit-Step 'UnpackFailed'",
+  '}',
+  "Add-Fact 'server.installDir' $INSTALL_DIR",
+  "Add-Fact 'timing.download' ([string](($DownloadedAt - $StartedAt) * 1000))",
+  "Add-Fact 'timing.install' ([string](Get-ElapsedMilliseconds $DownloadedAt))",
+  "Exit-Step 'Ok'",
+];
+
+/** What an install into a server tree answers until the PowerShell script has the tree's functions. */
+const INSTALL_TREE_BODY: readonly string[] = [
+  "Add-Fact 'host.note' 'the Windows bootstrap script has no server tree install yet'",
+  "Complete-Step 'ServerFailedToStart'",
+];
+
+function bodyOf(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): readonly string[] {
+  switch (request.step) {
+    case 'probe':
+      return probeBody(parameters.installTree);
+    case 'install':
+      return parameters.installTree === '' ? INSTALL_BODY : INSTALL_TREE_BODY;
+    default:
+      return ["Complete-Step 'Ok'"];
+  }
+}
+
 /** The steps the PowerShell script has; every other step still answers with a failure. */
 export const POWERSHELL_STEPS: ReadonlySet<BootstrapRequest['step']> = new Set([
   'probe',
+  'install',
   'discard',
 ]);
 
@@ -104,9 +170,7 @@ export function powershellScript(
       ([name, value]) => `$${name} = ${powershellQuote(value)}`,
     ),
     ...rolesOf(request, parameters).flatMap(role => POWERSHELL_FUNCTIONS[role]),
-    ...(request.step === 'probe'
-      ? probeBody(parameters.installTree)
-      : ["Complete-Step 'Ok'"]),
+    ...bodyOf(request, parameters),
     '',
   ].join('\n');
 }
