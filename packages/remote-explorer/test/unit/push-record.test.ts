@@ -50,4 +50,33 @@ describe('the record of the pushes the inbox receives (card tooling-107)', () =>
       ],
     ]);
   });
+
+  it('drops a line it cannot write, whatever the reason, and records the next', () => {
+    const seen = ports();
+    let failures = 1;
+    const record = recorderOf(
+      {[COMPANION_RECORD_VARIABLE]: '/run/companion.jsonl'},
+      {
+        ...seen,
+        append: (file, line) => {
+          if (failures > 0) {
+            failures -= 1;
+            throw new Error('ENOSPC');
+          }
+          seen.append(file, line);
+        },
+      },
+    );
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    deepStrictEqual(
+      [
+        record?.('remote-internal.setActiveFolders', {}),
+        record?.('remote-internal.setActiveFolders', circular),
+        record?.('remote-internal.sshHostsChanged', {}),
+        seen.lines.length,
+      ],
+      [undefined, undefined, undefined, 1],
+    );
+  });
 });

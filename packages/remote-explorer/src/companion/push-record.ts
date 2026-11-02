@@ -1,7 +1,7 @@
 /**
  * @fileoverview The record of the pushes the inbox receives, for the acceptance runs: when the environment names a
  * file in `REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD`, each push the inbox reads is appended to it as one JSON line before
- * its handler runs. Without the variable nothing is recorded.
+ * its handler runs. Without the variable nothing is recorded, and a record that cannot be written is dropped.
  */
 
 /** The variable that names the file the record is appended to. */
@@ -27,9 +27,13 @@ export function recorderOf(
     return undefined;
   }
   return (commandId, envelope) => {
-    ports.append(
-      file,
-      `${JSON.stringify({time: ports.now(), commandId, envelope})}\n`,
-    );
+    try {
+      ports.append(
+        file,
+        `${JSON.stringify({time: ports.now(), commandId, envelope})}\n`,
+      );
+    } catch {
+      // The record is for the acceptance runs: a file that cannot be written must never stop the push it records.
+    }
   };
 }
