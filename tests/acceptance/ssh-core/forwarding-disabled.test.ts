@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   appendScript,
   closeWindow,
+  connectionHelpers,
   connectionLog,
   cutHostNetwork,
   hostConnections,
@@ -81,7 +82,15 @@ async function waitingOf(
 
 describe('F-2604: TCP forwarding disabled on the server', function () {
   this.timeout(900_000);
-  beforeEach(closeAllButLocal);
+  beforeEach(async () => {
+    await closeAllButLocal();
+    // A window opened within the grace of the last local connection server would join it instead of starting its own.
+    await waitFor(
+      'the local connection server of the earlier row to end',
+      async () => (await connectionHelpers()).length === 0,
+      60_000,
+    );
+  });
 
   it('F-2604 AC-4, AC-6 (c85-wait): the refusal shows the notice with the waiting progress, no dialog and no terminal, and three minutes later the window still waits', async () => {
     await keepingSettings(async () => {
