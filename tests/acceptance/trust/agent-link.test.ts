@@ -64,7 +64,7 @@ async function linksWithin(milliseconds: number): Promise<string[]> {
 describe('the agent link of a window on an untrusted folder (card coverage-99)', function () {
   this.timeout(300_000);
 
-  it('F-2311 AC-8 (c99-trust-wait): while the trust question is open for 60 s no link exists, and within 2 s of the answer that trusts the folder it does', async () => {
+  it('F-2311 AC-8 (c99-trust-wait): while the trust question is open for 60 s no link exists, and within 2 s of the answer that trusts the folder it does (core’s startup question has Yes, I trust the authors for Trust Folder & Continue, as ruled on #1602)', async () => {
     await untrustedWindow('c99-trust-wait');
     try {
       await new Promise(resolve => setTimeout(resolve, OPEN_MILLISECONDS));
@@ -85,7 +85,7 @@ describe('the agent link of a window on an untrusted folder (card coverage-99)',
     }
   });
 
-  it('F-2311 AC-9 (c99-trust-refused): refusing the question makes the link and leaves the window in Restricted Mode', async () => {
+  it('F-2311 AC-9 (c99-trust-refused): refusing the question makes the link and leaves the window in Restricted Mode (core’s startup question has No, I don’t trust the authors for Cancel, as ruled on #1602)', async () => {
     await untrustedWindow('c99-trust-refused');
     try {
       await answerDialog('c99-trust-refused', REFUSE);
