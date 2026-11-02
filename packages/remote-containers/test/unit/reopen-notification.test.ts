@@ -12,6 +12,10 @@ import {
 
 const S426 =
   'Folder contains a Dev Container configuration file. Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
+const S427 =
+  'Workspace contains a Dev Container configuration file. Reopen workspace to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
+const FOLLOW_UP_WORKSPACE =
+  "Don't show again for the current workspace or for any workspace?";
 const REOPEN = 'Reopen in Container';
 const SUPPRESS = "Don't Show Again...";
 const FOLLOW_UP = "Don't show again for the current folder or for any folder?";
@@ -44,6 +48,8 @@ interface Scene {
   workspace: RecordingMemento;
   window: ReopenNotificationPorts['window'];
   configuration: 'none' | 'folder' | 'stored';
+  /** The kind of a root that differs from `configuration`, by path. */
+  rootKinds: Record<string, 'none' | 'folder' | 'stored'>;
   /** What each `show` answers, in order. */
   answers: Array<string | undefined>;
   shown: Array<[string, readonly string[]]>;
@@ -58,10 +64,11 @@ function sceneOf(): Scene {
     workspace: mementoOf(),
     window: {
       remote: false,
-      workspaceFile: false,
+      workspace: 'none',
       folders: [{scheme: 'file', fsPath: '/w/p'}],
     },
     configuration: 'folder',
+    rootKinds: {},
     answers: [],
     shown: [],
     reopened: 0,
@@ -82,7 +89,7 @@ async function offered(
       workspace: scene.workspace,
       configurationKind: folder => {
         scene.asked.push(folder);
-        return Promise.resolve(scene.configuration);
+        return Promise.resolve(scene.rootKinds[folder] ?? scene.configuration);
       },
       show: (message, buttons) => {
         scene.shown.push([message, buttons]);
@@ -106,6 +113,9 @@ function lines(scene: Scene): string[] {
 
 const S368 =
   'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
+
+const S427_S368 =
+  'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen workspace to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
 
 describe('the reopen notification (card containers-23, F-0402)', () => {
   it('F-0402 AC-1: a local folder with a configuration shows S426 with S186 and the two buttons', async () => {
@@ -262,33 +272,41 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     const scene = sceneOf();
     scene.window = {
       remote: true,
-      workspaceFile: false,
+      workspace: 'none',
       folders: [{scheme: 'vscode-remote', fsPath: '/workspaces/p'}],
     };
     await offered(scene, 1000, 'folder');
     deepStrictEqual([scene.shown, scene.asked], [[], []]);
   });
 
-  it('brief: a .code-workspace, two folders, no folder and a folder that is not a file one show nothing', async () => {
+  it('brief: two folders in a window with no workspace file, no folder, a folder that is not a file one, a root of another scheme and an untitled workspace of one folder show nothing', async () => {
     const windows: Array<ReopenNotificationPorts['window']> = [
       {
         remote: false,
-        workspaceFile: true,
-        folders: [{scheme: 'file', fsPath: '/w/p'}],
-      },
-      {
-        remote: false,
-        workspaceFile: false,
+        workspace: 'none',
         folders: [
           {scheme: 'file', fsPath: '/w/p'},
           {scheme: 'file', fsPath: '/w/q'},
         ],
       },
-      {remote: false, workspaceFile: false, folders: []},
+      {remote: false, workspace: 'none', folders: []},
       {
         remote: false,
-        workspaceFile: false,
+        workspace: 'none',
         folders: [{scheme: 'memfs', fsPath: '/m'}],
+      },
+      {
+        remote: false,
+        workspace: 'saved',
+        folders: [
+          {scheme: 'file', fsPath: '/w/p'},
+          {scheme: 'memfs', fsPath: '/m'},
+        ],
+      },
+      {
+        remote: false,
+        workspace: 'untitled',
+        folders: [{scheme: 'file', fsPath: '/w/p'}],
       },
     ];
     const seen = [];
@@ -303,7 +321,161 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
       [0, 0],
       [0, 0],
       [0, 0],
+      [0, 0],
     ]);
+  });
+
+  /** A scene of a window with a workspace of the given kind and roots `/w/p`, `/w/q`, as many as `count`. */
+  function workspaceScene(
+    workspace: 'saved' | 'untitled',
+    count: number,
+  ): Scene {
+    const scene = sceneOf();
+    scene.window = {
+      remote: false,
+      workspace,
+      folders: ['/w/p', '/w/q']
+        .slice(0, count)
+        .map(fsPath => ({scheme: 'file', fsPath})),
+    };
+    return scene;
+  }
+
+  it('F-0402 6.2, BR-1: a saved workspace, of one root or of two, with a root that has a configuration shows S427 with S405 and the two buttons', async () => {
+    const seen = [];
+    for (const count of [1, 2]) {
+      const scene = workspaceScene('saved', count);
+      scene.configuration = 'none';
+      scene.rootKinds = {'/w/p': 'folder'};
+      await offered(scene);
+      seen.push([scene.shown, scene.asked]);
+    }
+    const expected = [[[S427, [REOPEN, SUPPRESS]]]];
+    deepStrictEqual(seen, [
+      [expected[0], ['/w/p']],
+      [expected[0], ['/w/p', '/w/q']],
+    ]);
+  });
+
+  it('F-0402 BR-1: a saved workspace whose only configuration is a stored one shows S427 with S368', async () => {
+    const scene = workspaceScene('saved', 2);
+    scene.configuration = 'none';
+    scene.rootKinds = {'/w/q': 'stored'};
+    await offered(scene);
+    deepStrictEqual(scene.shown, [[S427_S368, [REOPEN, SUPPRESS]]]);
+  });
+
+  it('F-0301 6.5 step 4: a saved workspace with no root that has a configuration shows nothing, whatever sits beside its file', async () => {
+    const scene = workspaceScene('saved', 2);
+    scene.configuration = 'none';
+    await offered(scene);
+    deepStrictEqual([scene.shown, lines(scene)], [[], []]);
+  });
+
+  it('F-0402 6.2: in a saved workspace Don’t Show Again... asks S152, Any Workspace writes the global slot and Current Workspace the workspace state', async () => {
+    const global = workspaceScene('saved', 2);
+    global.answers = [SUPPRESS, 'Any Workspace'];
+    const current = workspaceScene('saved', 2);
+    current.answers = [SUPPRESS, 'Current Workspace'];
+    for (const scene of [global, current]) {
+      await offered(scene);
+    }
+    deepStrictEqual(
+      [global, current].map(scene => [
+        scene.shown.map(([message, buttons]) => [message, buttons]).at(-1),
+        scene.global.writes,
+        scene.workspace.writes,
+        lines(scene),
+      ]),
+      [
+        [
+          [FOLLOW_UP_WORKSPACE, ['Any Workspace', 'Current Workspace']],
+          [[REOPEN_NOTIFICATION_KEY, {suppressedAt: 1000}]],
+          [],
+          ['info: the reopen notification: suppressed for any workspace'],
+        ],
+        [
+          [FOLLOW_UP_WORKSPACE, ['Any Workspace', 'Current Workspace']],
+          [],
+          [[REOPEN_NOTIFICATION_KEY, {suppressedAt: 1000}]],
+          ['info: the reopen notification: suppressed for this workspace'],
+        ],
+      ],
+    );
+  });
+
+  it('F-0402 6.5 steps 2 and 3: an untitled workspace with one root of two that has a configuration shows S426 with S368, never S186 or the workspace wording', async () => {
+    const scene = workspaceScene('untitled', 2);
+    scene.configuration = 'none';
+    scene.rootKinds = {'/w/q': 'folder'};
+    await offered(scene);
+    deepStrictEqual(
+      [scene.shown, scene.asked],
+      [[[S368, [REOPEN, SUPPRESS]]], ['/w/p', '/w/q']],
+    );
+  });
+
+  it('F-0402 6.5 step 8: an untitled workspace with no root that has a configuration shows nothing', async () => {
+    const scene = workspaceScene('untitled', 2);
+    scene.configuration = 'none';
+    await offered(scene);
+    deepStrictEqual(scene.shown, []);
+  });
+
+  it('F-0402 6.5 steps 5 and 6: in an untitled workspace Don’t Show Again... asks S151, Any Folder writes the global slot and Current Folder the workspace state', async () => {
+    const global = workspaceScene('untitled', 2);
+    global.answers = [SUPPRESS, 'Any Folder'];
+    const current = workspaceScene('untitled', 2);
+    current.answers = [SUPPRESS, 'Current Folder'];
+    for (const scene of [global, current]) {
+      await offered(scene);
+    }
+    deepStrictEqual(
+      [global, current].map(scene => [
+        scene.shown.at(-1),
+        scene.global.writes,
+        scene.workspace.writes,
+      ]),
+      [
+        [
+          [FOLLOW_UP, ['Any Folder', 'Current Folder']],
+          [[REOPEN_NOTIFICATION_KEY, {suppressedAt: 1000}]],
+          [],
+        ],
+        [
+          [FOLLOW_UP, ['Any Folder', 'Current Folder']],
+          [],
+          [[REOPEN_NOTIFICATION_KEY, {suppressedAt: 1000}]],
+        ],
+      ],
+    );
+  });
+
+  it('F-0402 BR-15: a saved or untitled workspace is suppressed by its own state or by the global slot, and by nothing else', async () => {
+    const seen = [];
+    for (const workspace of ['saved', 'untitled'] as const) {
+      const byWorkspace = workspaceScene(workspace, 2);
+      byWorkspace.workspace = mementoOf({suppressedAt: 10});
+      const byGlobal = workspaceScene(workspace, 2);
+      byGlobal.global = mementoOf({suppressedAt: 10});
+      const neither = workspaceScene(workspace, 2);
+      for (const scene of [byWorkspace, byGlobal, neither]) {
+        await offered(scene);
+      }
+      seen.push(
+        [byWorkspace, byGlobal, neither].map(scene => scene.shown.length),
+      );
+    }
+    deepStrictEqual(seen, [
+      [0, 0, 1],
+      [0, 0, 1],
+    ]);
+  });
+
+  it('F-0302 AC-5: the user data variant is for a window with one folder: a workspace window gets nothing from it', async () => {
+    const scene = workspaceScene('saved', 1);
+    await offered(scene, 1000, 'userData');
+    deepStrictEqual([scene.shown, scene.asked], [[], []]);
   });
 
   it('F-0402 AC-11: trust is not read: the module has no trust port, and a window shows the notification', async () => {

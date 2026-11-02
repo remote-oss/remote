@@ -174,5 +174,10 @@
   "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)": "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)",
   "'Reopen in SSH' not possible in current context.": "'Reopen in SSH' not possible in current context.",
   "'Reopen in Tunnel' not possible in current context.": "'Reopen in Tunnel' not possible in current context.",
-  "'Reopen in WSL' not possible in current context.": "'Reopen in WSL' not possible in current context."
+  "'Reopen in WSL' not possible in current context.": "'Reopen in WSL' not possible in current context.",
+  "{0} Reopen workspace to develop in a container ([learn more]({2})).{1}": "{0} Reopen workspace to develop in a container ([learn more]({2})).{1}",
+  "Workspace contains a Dev Container configuration file.": "Workspace contains a Dev Container configuration file.",
+  "Don't show again for the current workspace or for any workspace?": "Don't show again for the current workspace or for any workspace?",
+  "Any Workspace": "Any Workspace",
+  "Current Workspace": "Current Workspace"
 }

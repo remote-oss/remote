@@ -569,7 +569,12 @@ export async function activate(
       {
         window: {
           remote: vscode.env.remoteName !== undefined,
-          workspaceFile: vscode.workspace.workspaceFile !== undefined,
+          workspace:
+            vscode.workspace.workspaceFile === undefined
+              ? 'none'
+              : vscode.workspace.workspaceFile.scheme === 'file'
+                ? 'saved'
+                : 'untitled',
           folders: windowFolders(),
         },
         global: context.globalState,
