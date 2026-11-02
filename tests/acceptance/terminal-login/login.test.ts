@@ -2,18 +2,26 @@ import {deepStrictEqual} from 'node:assert';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  hostPassword,
   inWindow,
   onHostAs,
+  reloadWindow,
+  terminalFacts,
   terminalNames,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
 import {
+  answerDialog,
+  clickToastLink,
+  connectSurface,
   dialogOf,
   notifications,
   panelShown,
   quickPickOf,
+  terminalFocused,
   terminalTabsOf,
+  typeInTerminal,
   waitForDialog,
 } from '../windows/renderer.ts';
 
@@ -48,6 +56,39 @@ function openPasswordWindow(label: string): Promise<string> {
   return openAccountWindow('password', label);
 }
 
+/** The password prompt of the install terminal of the password account. */
+const PASSWORD_PROMPT = "harness-pw@127.0.0.1's password:";
+
+/** A tab label as the panel lists it: core adds the terminal's description after the name. */
+function tabName(label: string): string {
+  return label.startsWith('install') ? 'install' : label;
+}
+
+/** Waits until window `name`'s Terminal panel lists the install tab, then 2 s more, reading no terminal facts, which would focus it. */
+async function untilInstallTab(name: string): Promise<void> {
+  await waitFor(
+    'the install tab',
+    async () =>
+      (await terminalTabsOf(name)).some(label => label.startsWith('install')),
+    90_000,
+  );
+  await new Promise(resolve => setTimeout(resolve, 2000));
+}
+
+/** Waits until the login terminal of window `name` shows `prompt`; gives the terminal's facts. */
+async function untilPrompt(name: string, prompt: string) {
+  let facts = await terminalFacts(name).catch(() => undefined);
+  await waitFor(
+    `the login terminal of ${name} to show ${prompt}`,
+    async () => {
+      facts = await terminalFacts(name).catch(() => undefined);
+      return facts?.text?.includes(prompt) === true;
+    },
+    90_000,
+  );
+  return facts;
+}
+
 describe('the login terminal of the terminal mode (card coverage-82)', function () {
   this.timeout(300_000);
 
@@ -55,6 +96,185 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     await setUserSetting(SHOW_TERMINAL, true);
     await setUserSetting(LOCAL_SERVER, false);
     await setUserSetting(CONNECT_TIMEOUT, undefined);
+  });
+
+  it('F-2308 AC-2 (c82-reveal): with the setting on the install terminal is revealed and focused with ssh’s password prompt, and no quick input appears', async () => {
+    await setUserSetting(SHOW_TERMINAL, true);
+    const name = await openPasswordWindow('c82-reveal');
+    await untilInstallTab(name);
+    const shown = {
+      panel: await panelShown(name),
+      focused: await terminalFocused(name),
+      quick: await quickPickOf(name),
+    };
+    const facts = await untilPrompt(name, PASSWORD_PROMPT);
+    deepStrictEqual(
+      {...shown, terminals: facts?.terminals, active: facts?.active},
+      {
+        panel: true,
+        focused: true,
+        quick: undefined,
+        terminals: ['install'],
+        active: 'install',
+      },
+    );
+    await closeWindow(name);
+  });
+
+  it('F-2308 AC-3 (c82-password): the correct password typed in the terminal connects the window, and the terminal stays open and focused', async () => {
+    await setUserSetting(SHOW_TERMINAL, true);
+    const name = await openPasswordWindow('c82-password');
+    await untilPrompt(name, PASSWORD_PROMPT);
+    await typeInTerminal(name, `${hostPassword()}\n`);
+    await waitFor(
+      'the window to connect',
+      async () => (await windowState(name)).remoteName === 'ssh-remote',
+      120_000,
+    );
+    const facts = await terminalFacts(name);
+    deepStrictEqual(
+      {
+        terminals: facts.terminals,
+        active: facts.active,
+        quick: await quickPickOf(name),
+      },
+      {terminals: ['install'], active: 'install', quick: undefined},
+    );
+    await closeWindow(name);
+  });
+
+  it('F-2308 AC-6, AC-27 (c82-details): details in the progress notification reveals and focuses the install terminal, which is then listed, while the quick input stays open', async () => {
+    await setUserSetting(SHOW_TERMINAL, false);
+    const name = await openPasswordWindow('c82-details');
+    await waitFor(
+      'the password quick input',
+      async () => (await quickPickOf(name)) !== undefined,
+      90_000,
+    );
+    const before = {
+      panel: await panelShown(name),
+      tabs: await terminalTabsOf(name),
+    };
+    await clickToastLink(name, 'Setting up SSH Host', 'details');
+    await waitFor('the panel', () => panelShown(name), 30_000);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    deepStrictEqual(
+      {
+        before,
+        panel: await panelShown(name),
+        tabs: (await terminalTabsOf(name)).map(tabName),
+        focused: await terminalFocused(name),
+        quick: (await quickPickOf(name))?.placeholder,
+      },
+      {
+        before: {panel: false, tabs: []},
+        panel: true,
+        tabs: ['install'],
+        focused: true,
+        quick: 'Enter password for harness-pw@127.0.0.1',
+      },
+    );
+    await closeWindow(name);
+  });
+
+  it('F-2308 AC-16 (c82-wrong): a wrong password typed in the terminal brings ssh’s Permission denied line and the prompt again, and no editor UI', async () => {
+    await setUserSetting(SHOW_TERMINAL, true);
+    const name = await openAccountWindow('password-retry', 'c82-wrong');
+    await untilPrompt(name, PASSWORD_PROMPT);
+    await typeInTerminal(name, 'not-the-password\n');
+    const facts = await untilPrompt(
+      name,
+      'Permission denied, please try again.',
+    );
+    deepStrictEqual(
+      {
+        prompts: (
+          facts?.text?.match(/harness-pw@127\.0\.0\.1's password:/g) ?? []
+        ).length,
+        quick: await quickPickOf(name),
+        dialog: await dialogOf(name),
+        toasts: (await notifications(name)).filter(
+          text => !text.startsWith('Setting up SSH Host'),
+        ),
+      },
+      {prompts: 2, quick: undefined, dialog: undefined, toasts: []},
+    );
+    await closeWindow(name);
+  });
+
+  it('F-2308 AC-25 (c82-denied): wrong passwords as often as ssh allows end in the Permission denied dialog, the indicator is disconnected, the install terminal is gone, and Retry makes a new revealed one with the prompt', async () => {
+    await setUserSetting(SHOW_TERMINAL, true);
+    const name = await openAccountWindow('password-retry', 'c82-denied');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await untilPrompt(
+        name,
+        attempt === 0
+          ? PASSWORD_PROMPT
+          : 'Permission denied, please try again.',
+      );
+      await typeInTerminal(name, `wrong-${String(attempt)}\n`);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    const dialog = await waitForDialog(name, 120_000);
+    const failed = {
+      dialog: [dialog.details, [...dialog.buttons].sort()],
+      indicator: (await connectSurface(name)).indicator.startsWith(
+        'Disconnected from SSH',
+      ),
+      terminals: await terminalNames(name),
+      tabs: await terminalTabsOf(name),
+    };
+    await answerDialog(name, 'Retry');
+    await untilInstallTab(name);
+    const again = {
+      panel: await panelShown(name),
+      focused: await terminalFocused(name),
+      tabs: (await terminalTabsOf(name)).map(tabName),
+    };
+    const facts = await untilPrompt(name, PASSWORD_PROMPT);
+    deepStrictEqual(
+      {failed, again, retried: facts?.terminals},
+      {
+        failed: {
+          dialog: [
+            // The list in the parentheses is the host's own: its password account also offers keyboard-interactive.
+            'Could not establish connection to "password-retry": Permission denied (password,keyboard-interactive).',
+            ['Close Remote', 'More Actions...', 'Retry'],
+          ],
+          indicator: true,
+          terminals: [],
+          tabs: [],
+        },
+        again: {panel: true, focused: true, tabs: ['install']},
+        retried: ['install'],
+      },
+    );
+    await closeWindow(name);
+  });
+
+  it('F-2308 AC-20 (c82-reload): reloading a connected window with the setting on reveals exactly one new install terminal, focused', async () => {
+    await setUserSetting(SHOW_TERMINAL, true);
+    const name = await openPasswordWindow('c82-reload');
+    await untilPrompt(name, PASSWORD_PROMPT);
+    await typeInTerminal(name, `${hostPassword()}\n`);
+    await waitFor(
+      'the window to connect',
+      async () => (await windowState(name)).remoteName === 'ssh-remote',
+      120_000,
+    );
+    await reloadWindow(name);
+    await untilInstallTab(name);
+    const shown = {
+      panel: await panelShown(name),
+      tabs: (await terminalTabsOf(name)).map(tabName),
+      focused: await terminalFocused(name),
+    };
+    await untilPrompt(name, PASSWORD_PROMPT);
+    deepStrictEqual(
+      {...shown, active: (await terminalFacts(name)).active},
+      {panel: true, tabs: ['install'], focused: true, active: 'install'},
+    );
+    await closeWindow(name);
   });
 
   it('F-2308 AC-5 (c82-hidden): with the setting off the panel stays hidden, the install terminal has no tab in it, and the password comes as the quick input', async () => {

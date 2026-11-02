@@ -754,7 +754,7 @@ describe('acceptance', () => {
       [
         ...sharedLines('password-retry', 'harness-pw'),
         '  PubkeyAuthentication no',
-        '  PreferredAuthentications password,keyboard-interactive',
+        '  PreferredAuthentications password',
         '  NumberOfPasswordPrompts 3',
       ].join('\n'),
     );
