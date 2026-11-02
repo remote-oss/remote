@@ -55,6 +55,16 @@ function Complete-Step([string]$Status) {
 function Test-Program([string]$Name) {
   return $null -ne (Get-Command -Name $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
+function New-Folder([string]$Path) {
+  [void][System.IO.Directory]::CreateDirectory($Path)
+}
+function Get-FailureMessage($Failure) {
+  $Exception = $Failure.Exception
+  if ($null -ne $Exception.InnerException) {
+    $Exception = $Exception.InnerException
+  }
+  return $Exception.Message
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }
