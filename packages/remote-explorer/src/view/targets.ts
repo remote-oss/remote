@@ -19,6 +19,7 @@ import {
   buildSshRows,
   type FolderRow,
   type HostRow,
+  hostItemId,
 } from '../model/ssh-group.ts';
 import type {CompanionCalls} from './companion-calls.ts';
 
@@ -300,7 +301,9 @@ export function createTargets(options: TargetsOptions): Targets {
         };
       }
       return {
-        id: node.hostRow.rowId,
+        // Core keeps a row's expansion by its id, so a host that gains its first folder, or loses its last, is a new row:
+        // it starts as its state says, and not as the leaf it was.
+        id: hostItemId(node.hostRow.rowId, node.folders.length > 0),
         label: node.hostRow.alias,
         tooltip: node.hostRow.alias,
         ...(node.connected ? {description: options.connectedText} : {}),

@@ -37,6 +37,11 @@ export function hostRowId(alias: string): string {
   return `ssh-host:${alias}`;
 }
 
+/** The identity the tree gives a host row: its own while it is a leaf, and another once it has folders. */
+export function hostItemId(rowId: string, hasFolders: boolean): string {
+  return hasFolders ? `${rowId}:folders` : rowId;
+}
+
 /** The identity of the folder row at `position` under `alias`. */
 export function folderRowId(alias: string, position: number): string {
   return `ssh-folder:${String(position)}:${alias}`;
