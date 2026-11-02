@@ -3,7 +3,7 @@
 - Status: accepted (the user's constraint, 2026-10-05: "VSCodium won't be our only editor, so we have to expect
   that the editor configures the URL patterns for the REH and CLI binaries"; the resolution orders below are the
   lead's design under R-47 and the user may change them)
-- Date: 2026-10-05 (decision 7 added 2026-10-16)
+- Date: 2026-10-05 (decision 7 added 2026-10-16; decisions 3 and 8 revised 2026-11-02, D-105)
 - Deciders: the user; design by `remote-architect`
 - Scope: every package that downloads, installs or starts a server (REH) or the editor CLI on a remote side:
   Remote-SSH, WSL, Dev Containers, Remote - Tunnels, and the shared server-lifecycle library
@@ -60,6 +60,13 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    the editor ships in its own bin folder, named by `tunnelApplicationName` (F-8902 rule 4, constraint 44); the host
    side of a tunnel is the editor's own. So there is no `cliDownloadUrlTemplate`, no CLI table and no CLI dialog.
    The profile still carries `tunnelApplicationName` for Tunnels to locate the shipped executable.
+   **Revised 2026-11-02 (D-105; `brief-cli-path.md` section 3).** The field returns now. It doesn't wait for a
+   shipped product to name it:
+   - lib-product reads `cliDownloadUrlTemplate` when the running editor's product.json has it, and the CLI path of
+     `brief-cli-path.md` applies exactly when it does;
+   - an editor that names none (today's VSCodium and genuine VS Code, whose CLI is a `vsda` build) stays on the direct
+     path, logged as row 2 of the brief's table;
+   - nothing in the family defaults a CLI source or hard-codes one (decision 1).
 4. **Caches are keyed by product as well as commit** (added 2026-10-06 from the WSL dossier): VS Code and VSCodium
    share commit ids, so a client-side archive cache keyed by commit alone would hand one product's server to the
    other; the key is `applicationName` plus commit for every product except genuine VS Code, which keeps the
@@ -89,6 +96,13 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
 8. **Conformance**: the suite's profiles include at least two real products (genuine VS Code with the explicit
    server URL; VSCodium) and one synthetic `product.json` with made-up names and both templates, so a build that
    hard-codes any product fails a case.
+   **Extended 2026-11-02 (D-105).** The synthetic profile is also how the CLI path's rows run before a shipped
+   product names a CLI source:
+   - its `cliDownloadUrlTemplate` points at the run's download host;
+   - that host serves a CLI built from the editor's MIT `cli/` crate with D-76's patch (the facts below; [cli],
+     ADR-0005), or VSCodium's own published CLI archive once there is one;
+   - the rows prove the product's behaviour for product data a real editor will carry. No real user's editor is
+     changed by them.
 
 ## Facts from the VSCodium CLI patch (D-76, 2026-10-08, for the later revision)
 
