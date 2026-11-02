@@ -121,6 +121,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     (`ruling-1779-terminal-pty`, athena on #1779). We do not override the user's `RequestTTY`.
     Rows: (ruling-1779-terminal-pty)
 
+- **The Remote - SSH log replaces any run of 32 or more letters, digits, underscores or hyphens with `[redacted]`, except commit and digest ids and key fingerprints, to keep tokens out of the log.**
+  - Hyphens inside a run count towards the 32; hyphens at its ends stay as written. A value the log shows "as written"
+    (for example a configFile path, F-2201 AC-46) shows such a segment redacted. The guard is not loosened for one
+    criterion, and it applies to every value any criterion quotes into the log (R-26; `ruling-1794-log-redaction`,
+    athena on #1794).
+    Rows: (ruling-1794-log-redaction)
+
 ## Known issues
 
 - **In a new Remote - SSH window, Terminal: Select Default Profile, Debug: Select and Start Debugging and Tasks: Run Task show empty lists, or nothing, until a terminal has been opened in the window.**
