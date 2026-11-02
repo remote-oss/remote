@@ -45,6 +45,13 @@ function relay(
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
 }
 
+/** A relay whose caller confirms a refusal, with every probe answered as `answer`. */
+function confirmedRelay(answer: DialAnswer): RelayFixture {
+  return relay([answer], 'work', LIMITS.heldBytesMaximum, undefined, () =>
+    Promise.resolve(true),
+  );
+}
+
 describe('the window tunnel through the relay', () => {
   it('opens at once when a probe through the dialer works, and gives the window its address', async () => {
     const {open} = relay();
@@ -88,13 +95,7 @@ describe('the window tunnel through the relay', () => {
   });
 
   it('connect-106: twenty probes in a row closed by the relay before its reply are a refused forward, before the bound, and close the port', async () => {
-    const {open, clock, local} = relay(
-      ['closedBeforeReply'],
-      'work',
-      LIMITS.heldBytesMaximum,
-      undefined,
-      () => Promise.resolve(true),
-    );
+    const {open, clock, local} = confirmedRelay('closedBeforeReply');
     const pending = open();
     for (let round = 0; round < 20; round++) {
       await advanced(clock, 500);
@@ -106,13 +107,7 @@ describe('the window tunnel through the relay', () => {
   });
 
   it('connect-106: twenty probes in a row that find nothing at the relay’s port are a refused forward too', async () => {
-    const {open, clock} = relay(
-      ['unreachable'],
-      'work',
-      LIMITS.heldBytesMaximum,
-      undefined,
-      () => Promise.resolve(true),
-    );
+    const {open, clock} = confirmedRelay('unreachable');
     const pending = open();
     for (let round = 0; round < 20; round++) {
       await advanced(clock, 500);
