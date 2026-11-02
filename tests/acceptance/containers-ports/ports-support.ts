@@ -22,7 +22,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {answerInputBox, portsRows, type PortsRow} from '../windows/renderer.ts';
+import {portsRows, type PortsRow} from '../windows/renderer.ts';
 
 /** The command that focuses core's Ports view. */
 const FOCUS_PORTS = '~remote.forwardedPorts.focus';
@@ -144,16 +144,6 @@ export function recordBrowserOpens(): string {
   chmodSync(path.join(binFolder, 'xdg-open'), 0o755);
   rmSync(logFile, {force: true});
   return logFile;
-}
-
-/** Forwards `port` of the window by hand, as a user does with Forward a Port. */
-export async function forwardByHand(
-  window: string,
-  port: number,
-): Promise<void> {
-  const forwarding = inWindow(window, 'remote.tunnel.forwardCommandPalette');
-  await answerInputBox(window, String(port));
-  await forwarding;
 }
 
 /** Holds `port` on the host's loopback until the returned function is called. */
