@@ -185,19 +185,22 @@ export async function secondEngine(
 }
 
 /** Asks the view of the local window to refresh. */
-export async function refresh(): Promise<void> {
-  await inWindow('local', 'workbench.view.remote');
-  await inWindow('local', 'remote-containers.explorerTargetsRefresh').catch(
+export async function refresh(window = 'local'): Promise<void> {
+  await inWindow(window, 'workbench.view.remote');
+  await inWindow(window, 'remote-containers.explorerTargetsRefresh').catch(
     () => undefined,
   );
 }
 
-/** Whether the view of the local window, refreshed, lists a container whose row is labelled with `marker`. */
-export async function lists(marker: string): Promise<boolean> {
+/** Whether the view of window `window`, refreshed, lists a container whose row is labelled with `marker`. */
+export async function lists(
+  marker: string,
+  window = 'local',
+): Promise<boolean> {
   try {
-    await refresh();
+    await refresh(window);
     await rowsWhen(
-      'local',
+      window,
       rows => rows.some(each => each.label.startsWith(marker)),
       20_000,
     );
@@ -207,14 +210,14 @@ export async function lists(marker: string): Promise<boolean> {
   }
 }
 
-/** Whether the view of the local window, refreshed, shows the welcome content of an unreachable engine. */
-export async function showsNoEngine(): Promise<boolean> {
+/** Whether the view of window `window`, refreshed, shows the welcome content of an unreachable engine. */
+export async function showsNoEngine(window = 'local'): Promise<boolean> {
   try {
     await waitFor(
       'the welcome content of an unreachable engine',
       async () => {
-        await refresh();
-        return ((await welcomeText('local', VIEW)) ?? '').includes(
+        await refresh(window);
+        return ((await welcomeText(window, VIEW)) ?? '').includes(
           NO_ENGINE_WORDS,
         );
       },
