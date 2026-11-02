@@ -31,6 +31,30 @@
       "card": "#884",
       "slice": "containers release 1",
       "decision": "F-0405 3.2 (2026-09-27): defined, never set"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "canReopenInSSH",
+      "card": "#1830",
+      "slice": "containers release 1",
+      "decision": "F-0406 (2026-11-02): defined, never set yet (its family sets it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "canReopenInTunnel",
+      "card": "#1830",
+      "slice": "containers release 1",
+      "decision": "F-0406 (2026-11-02): defined, never set yet (its family sets it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "canReopenInWSL",
+      "card": "#1830",
+      "slice": "containers release 1",
+      "decision": "F-0406 (2026-11-02): defined, never set yet (its family sets it)"
     }
   ]
 }
