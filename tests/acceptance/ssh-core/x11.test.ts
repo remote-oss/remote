@@ -81,6 +81,51 @@ async function newWindowFrom(name: string): Promise<string> {
   }
 }
 
+/** The number of processes of the host’s connection servers, the ones started with `--start-server`. */
+async function serverCount(): Promise<number> {
+  const listed = await onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    "pgrep -u harness -f '[-][-]start-server' | wc -l",
+  );
+  return Number(listed.trim());
+}
+
+/** The `DISPLAY=` lines of the environments of the host's connection servers, each once. */
+async function serverDisplays(): Promise<string[]> {
+  const listed = await onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    "for pid in $(pgrep -u harness -f '[-][-]start-server'); do tr '\\0' '\\n' < /proc/$pid/environ | grep '^DISPLAY='; done | sort -u",
+  );
+  return listed.split('\n').filter(line => line !== '');
+}
+
+/** The first line of an X client probe's output, the `DISPLAY=` line. */
+function display(text: string): string {
+  return text.split('\n')[0] ?? '';
+}
+
+/** Opens window `name` on `alias` with `settings` and gives what the feature leaves of a connection that gets no display: the new terminal's `DISPLAY`, the contributed entries and the notices and dialogs. */
+async function noDisplayAt(
+  name: string,
+  alias: string,
+  settings: Readonly<Record<string, unknown>> = {},
+): Promise<[string, string[], number, number]> {
+  await x11Window(name, alias, settings);
+  const text = await inTerminal(name, 'echo "DISPLAY=[$DISPLAY]"');
+  const seen: [string, string[], number, number] = [
+    text.trim(),
+    ownContributions(await contributionsNow(name)),
+    recordLines('notice', name).length,
+    recordLines('failureDialog', name).length,
+  ];
+  await x11Close(name);
+  return seen;
+}
+
 describe('F-2312: X11 forwarding into the remote environment', function () {
   this.timeout(900_000);
   beforeEach(closeAllButLocal);
@@ -91,9 +136,6 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
       const terminal = await inTerminal('c84-task-debug', DISPLAY_PROBE);
       const task = await inTask('c84-task-debug', DISPLAY_PROBE);
       const debugged = await inDebugger('c84-task-debug', DISPLAY_PROBE);
-      function display(text: string): string {
-        return text.split('\n')[0] ?? '';
-      }
       deepStrictEqual(
         [
           display(task),
@@ -258,18 +300,132 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
 
   it('F-2312 AC-18 (c84-noauth): with an xauth the client cannot find the connection succeeds with no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
     await keepingSettings(async () => {
-      await x11Window('c84-noauth', 'x11-noauth');
-      const text = await inTerminal('c84-noauth', 'echo "DISPLAY=[$DISPLAY]"');
+      deepStrictEqual(await noDisplayAt('c84-noauth', 'x11-noauth'), [
+        'DISPLAY=[]',
+        [],
+        0,
+        0,
+      ]);
+    });
+  });
+
+  it('F-2312 AC-18 (c84-bad-display): with a local DISPLAY that ssh cannot set up untrusted forwarding for the connection succeeds with ssh’s warning, no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
+    await keepingSettings(async () => {
+      const mark = connectionLog().length;
       deepStrictEqual(
         [
-          text.trim(),
-          ownContributions(await contributionsNow('c84-noauth')),
-          recordLines('notice', 'c84-noauth').length,
-          recordLines('failureDialog', 'c84-noauth').length,
+          await noDisplayAt('c84-bad-display', 'x11-untrusted', {
+            'remote.SSH.path': path.join(
+              variable('HARNESS_RUN_FOLDER'),
+              'clients/bad-display/ssh',
+            ),
+          }),
+          connectionLog()
+            .slice(mark)
+            .some(line =>
+              line.includes('untrusted X11 forwarding setup failed'),
+            ),
         ],
-        ['DISPLAY=[]', [], 0, 0],
+        [['DISPLAY=[]', [], 0, 0], true],
       );
-      await x11Close('c84-noauth');
+    });
+  });
+
+  it('F-2312 AC-10 (c84-held): a window that connects to a server started in a session that still holds display 10 gets its own display in the terminal, the task and the debugger', async () => {
+    await keepingSettings(async () => {
+      await x11Window('c84-held-a', 'x11fwd');
+      const held = await inTerminal('c84-held-a', 'echo "DISPLAY=$DISPLAY"');
+      const servers = await serverCount();
+      const environment = await serverDisplays();
+      await openWindow('x11-match', 'c84-held-b');
+      await connectedWithin('c84-held-b', 90_000);
+      const terminal = await inTerminal('c84-held-b', DISPLAY_PROBE);
+      const task = await inTask('c84-held-b', DISPLAY_PROBE);
+      const debugged = await inDebugger('c84-held-b', DISPLAY_PROBE);
+      deepStrictEqual(
+        [
+          [servers > 0, servers, await serverCount(), environment],
+          [terminal, task, debugged].map(display),
+          display(terminal) === held.trim(),
+          [terminal, task, debugged].map(text => CONNECTED.test(text)),
+          ownContributions(await contributionsNow('c84-held-b')),
+        ],
+        [
+          [true, servers, servers, [held.trim()]],
+          [display(terminal), display(terminal), display(terminal)],
+          false,
+          [true, true, true],
+          [display(terminal)],
+        ],
+      );
+      await x11Close('c84-held-b');
+      await x11Close('c84-held-a');
+    });
+  });
+
+  it('F-2312 AC-23 (c84-ended): a window that connects to a server started in an X11 session that has ended gets no DISPLAY contributed, a terminal with the ended session’s display, and clients fail on it', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      await freshHost();
+      await openWindow('x11fwd', 'c84-ended-a');
+      await connectedWithin('c84-ended-a', 90_000);
+      const ended = await inTerminal('c84-ended-a', 'echo "DISPLAY=$DISPLAY"');
+      await x11Close('c84-ended-a');
+      appendScript([
+        {
+          surface: 'hostPick',
+          match: '',
+          answer: {label: 'x11fwd'},
+          window: 'local',
+        },
+      ]);
+      await inWindow('local', 'opensshremotes.cleanLocalServer');
+      await waitFor(
+        'the sessions to end',
+        async () => (await hostSessionIds()).length === 0,
+        60_000,
+      );
+      await openWindow('harness', 'c84-ended-b');
+      await connectedWithin('c84-ended-b', 90_000);
+      const terminal = await inTerminal('c84-ended-b', DISPLAY_PROBE);
+      deepStrictEqual(
+        [
+          display(terminal),
+          CONNECTED.test(terminal),
+          ownContributions(await contributionsNow('c84-ended-b')),
+          ['notice', 'failureDialog', 'maskedInput', 'textInput'].flatMap(
+            surface => recordLines(surface, 'c84-ended-b'),
+          ),
+        ],
+        [ended.trim(), false, [], []],
+      );
+      await x11Close('c84-ended-b');
+    });
+  });
+
+  it('F-2312 AC-12 (c84-export): with the setting off and a server started without X11, the display sshd opened for the window works when it is exported by hand', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      await freshHost();
+      await openWindow('harness', 'c84-export-a');
+      await connectedWithin('c84-export-a', 90_000);
+      await x11Close('c84-export-a');
+      await userSettings({
+        ...PLATFORMS,
+        'remote.SSH.enableX11Forwarding': false,
+      });
+      await openWindow('x11fwd', 'c84-export');
+      await connectedWithin('c84-export', 90_000);
+      const empty = await inTerminal('c84-export', 'echo "DISPLAY=[$DISPLAY]"');
+      const exported = await inTerminal(
+        'c84-export',
+        'number=$(netstat -ltn | grep -o "127.0.0.1:60[0-9][0-9]" | head -1 | cut -d: -f2); DISPLAY=localhost:$((number - 6000)).0 xdpyinfo | sed -n 1p',
+      );
+      deepStrictEqual(
+        [empty.trim(), CONNECTED.test(`\n${exported}`)],
+        ['DISPLAY=[]', true],
+      );
+      await x11Close('c84-export');
     });
   });
 
@@ -321,21 +477,12 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
 
   it('F-2312 AC-19 (c84-forbidden): on a host that forbids X11 forwarding the connection succeeds with no UI, no DISPLAY is contributed and a new terminal on a freshly started server has an empty DISPLAY', async () => {
     await keepingSettings(async () => {
-      await x11Window('c84-forbidden', 'x11-forbidden');
-      const text = await inTerminal(
-        'c84-forbidden',
-        'echo "DISPLAY=[$DISPLAY]"',
-      );
-      deepStrictEqual(
-        [
-          text.trim(),
-          ownContributions(await contributionsNow('c84-forbidden')),
-          recordLines('notice', 'c84-forbidden').length,
-          recordLines('failureDialog', 'c84-forbidden').length,
-        ],
-        ['DISPLAY=[]', [], 0, 0],
-      );
-      await x11Close('c84-forbidden');
+      deepStrictEqual(await noDisplayAt('c84-forbidden', 'x11-forbidden'), [
+        'DISPLAY=[]',
+        [],
+        0,
+        0,
+      ]);
     });
   });
 
