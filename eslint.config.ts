@@ -151,6 +151,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/containers-killed/tsconfig.json',
   './tests/acceptance/containers-view/tsconfig.json',
   './tests/acceptance/extensionpack/tsconfig.json',
+  './tests/acceptance/terminal-login/tsconfig.json',
   './tests/acceptance/extensionpack-german/tsconfig.json',
   './tests/acceptance/extensionpack-partial/tsconfig.json',
   './tests/acceptance/extensionpack-language/tsconfig.json',
