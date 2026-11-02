@@ -1898,6 +1898,33 @@ export async function toastDetails(name: string): Promise<ToastDetails[]> {
   );
 }
 
+/** One notification toast with what its chrome says besides its words: its source, its severity and which button is primary. */
+export interface ToastFacts {
+  message: string;
+  /** The extension or area that raised it, as the toast prints it. */
+  source: string;
+  /** `info`, `warning` or `error`, from the toast's icon. */
+  severity: string;
+  /** The links of the message: their words and addresses. */
+  links: NotificationLink[];
+  /** The buttons in order, each with whether it is drawn as the primary one. */
+  buttons: Array<{label: string; primary: boolean}>;
+}
+
+/** The notifications on screen of window `name` (its toasts, or the centre once that is open) in the order shown, each with its source, severity, links and buttons. */
+export async function toastFacts(name: string): Promise<ToastFacts[]> {
+  return evaluate<ToastFacts[]>(
+    name,
+    `[...document.querySelectorAll('.notifications-toasts .notification-list-item, .notifications-center.visible .notification-list-item')].map(item => ({
+  message: item.querySelector('.notification-list-item-message')?.textContent ?? '',
+  source: (item.querySelector('.notification-list-item-details-row .monaco-button-dropdown, .notification-list-item-source')?.textContent ?? '').trim(),
+  severity: ['info', 'warning', 'error'].find(each => item.querySelector('.notification-list-item-icon.codicon-' + each) !== null) ?? '',
+  links: [...item.querySelectorAll('.notification-list-item-message a')].map(each => ({text: each.textContent ?? '', href: each.getAttribute('href') ?? each.getAttribute('data-href') ?? ''})),
+  buttons: [...item.querySelectorAll('.notification-list-item-buttons-container .monaco-button')].map(each => ({label: each.textContent ?? '', primary: !each.classList.contains('secondary')})),
+}))`,
+  );
+}
+
 /** Clicks the link `linkText` in the message of the toast of window `name` that starts with `messageStart`; fails naming the toasts it found. */
 export async function clickToastLink(
   name: string,
