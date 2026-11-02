@@ -11,6 +11,7 @@ import {
   systemTimers,
 } from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
+import type {ClientPlatform} from 'lib-ssh';
 import {standDownHost} from 'lib-standdown';
 import type * as vscode from 'vscode';
 import {activateExplorer, silentHandlers} from './activation.ts';
@@ -20,7 +21,6 @@ import {commands, standDown, views} from './identifiers.generated.ts';
 import {companionCallsOf} from './view/companion-calls.ts';
 import {connectHandlers} from './view/connect.ts';
 import {handOverHandlers} from './view/hand-overs.ts';
-import type {ClientPlatform} from './model/ssh-group.ts';
 import {createTargets, type ViewSession} from './view/targets.ts';
 import {
   configFileChangesOf,

@@ -329,6 +329,9 @@ importers:
       lib-product:
         specifier: workspace:*
         version: link:../lib-product
+      lib-ssh:
+        specifier: workspace:*
+        version: link:../lib-ssh
       lib-standdown:
         specifier: workspace:*
         version: link:../lib-standdown

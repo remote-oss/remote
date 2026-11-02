@@ -39,7 +39,7 @@ process.on('exit', code => {
 
 runConnectionHelper({
   parameters: helperParameters(process.env),
-  port: nodeEndpointPort(),
+  port: nodeEndpointPort(process.platform),
   clock: Date.now,
   scheduler: {setTimer: nodeTimer},
   files: nodeFilePort,

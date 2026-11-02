@@ -1850,16 +1850,55 @@ export async function connected(
 }
 
 /** Waits until window `name`, opened in the home of `user` (harness by default), is connected, for up to `milliseconds`. */
-export function connectedWithin(
+export async function connectedWithin(
   name: string,
   milliseconds: number,
   user = 'harness',
 ): Promise<void> {
-  return waitFor(
-    `${name} to be connected`,
-    () => connected(name, user),
-    milliseconds,
-  );
+  try {
+    await waitFor(
+      `${name} to be connected`,
+      () => connected(name, user),
+      milliseconds,
+    );
+  } catch (caught) {
+    throw new Error(`${String(caught)}\n${await connectState()}`, {
+      cause: caught,
+    });
+  }
+}
+
+/** What the host and this machine hold when a window did not connect: the host's listeners and server processes, the last lines of its sshd's log, and this machine's listeners. */
+async function connectState(): Promise<string> {
+  function read(
+    what: Promise<{stdout: string; stderr: string}>,
+  ): Promise<string> {
+    return what.then(
+      done => `${done.stdout}${done.stderr}`.trim(),
+      (caught: unknown) => `(unreadable: ${String(caught)})`,
+    );
+  }
+  const [listening, sshdLog, here] = await Promise.all([
+    read(
+      execFileAsync('docker', [
+        'exec',
+        variable('HARNESS_CONTAINER'),
+        'sh',
+        '-c',
+        'netstat -ltn 2>&1; ps -o pid,user,args 2>&1 | grep -E "server|sshd" | grep -v grep',
+      ]),
+    ),
+    read(
+      execFileAsync('docker', [
+        'logs',
+        '--tail',
+        '30',
+        variable('HARNESS_CONTAINER'),
+      ]),
+    ),
+    read(execFileAsync('ss', ['-ltnp'])),
+  ]);
+  return `the host's listeners and processes:\n${listening}\nthe last lines of the host's sshd log:\n${sshdLog}\nthis machine's listeners:\n${here}`;
 }
 
 /** Waits until no connection helper of the run runs, for up to `milliseconds`. */

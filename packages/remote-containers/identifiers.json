@@ -26,6 +26,22 @@
       "setter": "extension"
     },
     {
+      "id": "canReopenLocally",
+      "setter": "extension"
+    },
+    {
+      "id": "canReopenInWSL",
+      "setter": "extension"
+    },
+    {
+      "id": "canReopenInSSH",
+      "setter": "extension"
+    },
+    {
+      "id": "canReopenInTunnel",
+      "setter": "extension"
+    },
+    {
       "id": "remote-containers:needsDockerStartOrInstall",
       "setter": "extension"
     },

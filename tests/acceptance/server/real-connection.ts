@@ -95,7 +95,11 @@ export class WindowSide {
     this.environment = {
       freePort,
       helper: {
-        ...nodeClientEnvironment(process.execPath, HELPER_WAITS),
+        ...nodeClientEnvironment(
+          process.execPath,
+          HELPER_WAITS,
+          process.platform,
+        ),
         endpointFolder: this.folder,
       },
     };

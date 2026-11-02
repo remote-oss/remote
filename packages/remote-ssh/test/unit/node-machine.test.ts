@@ -1,13 +1,11 @@
 import {deepStrictEqual, match} from 'node:assert';
 import {createServer} from 'node:net';
 import {
-  clientPlatformOf,
   clientSearchOf,
   drawLinkNumber,
   freeLoopbackPort,
   type MachinePlaces,
   newTemporaryToken,
-  nodeFacts,
   nodeMachineOf,
 } from '../../src/node-machine.ts';
 import {PROFILE} from './server-steps.fixture.ts';
@@ -44,21 +42,6 @@ function bindable(port: number): Promise<boolean> {
 }
 
 describe('the machine a connect runs on', () => {
-  it('F-2101: macOS is the client platform of darwin', () => {
-    deepStrictEqual(clientPlatformOf('darwin'), 'macOS');
-  });
-
-  it('F-2101: Windows is the client platform of win32', () => {
-    deepStrictEqual(clientPlatformOf('win32'), 'windows');
-  });
-
-  it('F-2101: any other platform is Linux', () => {
-    deepStrictEqual(
-      ['linux', 'freebsd'].map(platform => clientPlatformOf(platform)),
-      ['linux', 'linux'],
-    );
-  });
-
   it('F-2101: the client search reads PATH and ProgramFiles', () => {
     deepStrictEqual(
       clientSearchOf({PATH: '/usr/bin', ProgramFiles: 'C:\\Program Files'}),
@@ -159,13 +142,5 @@ describe('the machine a connect runs on', () => {
     });
     await machine.clock.wait(1);
     deepStrictEqual([fired, machine.clock.now() > 0], [true, true]);
-  });
-
-  it("connect-14: the facts are this process's", () => {
-    const facts = nodeFacts();
-    deepStrictEqual(
-      [facts.platform, facts.environment === process.env],
-      [process.platform, true],
-    );
   });
 });

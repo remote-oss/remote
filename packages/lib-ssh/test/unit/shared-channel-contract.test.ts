@@ -168,6 +168,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
         clock: Date.now,
         newNonce,
         runtime: '/editor',
+        platform: 'linux',
         endpointFolder: '/run',
         processId: 1,
         parentEnvironment: {},

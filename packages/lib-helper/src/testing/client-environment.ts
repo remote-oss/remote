@@ -20,6 +20,7 @@ export function clientEnvironment(
       return `nonce-${String(nonces)}`;
     },
     runtime: '/editor/code',
+    platform: 'linux',
     endpointFolder: '/run',
     processId: 777,
     parentEnvironment: {HOME: '/home/user', UNSET: undefined},

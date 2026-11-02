@@ -23,7 +23,7 @@ import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {containersChannelPortFor} from './acceptance-log.ts';
 import {activateContainers} from './activation.ts';
-import {serializedUriOf} from './authority/payload.ts';
+import {serializedUriOf, windowOriginOf} from './authority/payload.ts';
 import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
 import {
@@ -69,6 +69,7 @@ import {
 } from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
 import {folderDialogOptions} from './open/folder-dialog.ts';
+import {reopenOriginHandlersOf} from './open/reopen-origin.ts';
 import {
   type EngineSources,
   engineEnvironment,
@@ -81,6 +82,7 @@ import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
 import {
   commands,
+  contextKeys,
   enabledApiProposals,
   settings,
   standDown,
@@ -630,6 +632,8 @@ export async function activate(
         viewIds: [views.targetsContainers],
         templates: SETUP_TEXT_TEMPLATES,
         translate,
+        homeFolder: os.homedir(),
+        platform: process.platform,
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
@@ -1010,8 +1014,24 @@ export async function activate(
             : {scheme: picked.scheme, fsPath: picked.fsPath};
         },
       });
+      const reopenOrigin = reopenOriginHandlersOf({
+        origin: () =>
+          served.missing.includes('resolvers')
+            ? undefined
+            : windowOriginOf(vscode.env.remoteAuthority),
+        folderOpen: () => (vscode.workspace.workspaceFolders ?? []).length > 0,
+        opener: reopenPorts.opener,
+        inform: text => {
+          void vscode.window.showInformationMessage(text);
+        },
+        translate,
+      });
       return {
         reopenInContainer: {execute: reopenHandler()},
+        reopenLocally: {execute: reopenOrigin.reopenLocally},
+        reopenInSSH: {execute: reopenOrigin.reopenInSSH},
+        reopenInWSL: {execute: reopenOrigin.reopenInWSL},
+        reopenInTunnel: {execute: reopenOrigin.reopenInTunnel},
         openFolder: {execute: openFolder},
         createDevContainerFile: {
           execute: createDevContainerFile({
@@ -1143,6 +1163,7 @@ export async function activate(
     const shutdownHelper = nodeClientEnvironment(
       process.execPath,
       SHUTDOWN_CLIENT_WAITS,
+      process.platform,
     );
     const connector = containerConnectorOf({
       shutdown: createWindowLease({
@@ -1292,10 +1313,18 @@ export async function activate(
     });
     windowShutdown.leave = () => connector.leaveShutdown();
     // `env.remoteAuthority` belongs to the resolvers proposal: reading it without the grant throws.
+    const windowOrigin = served.missing.includes('resolvers')
+      ? undefined
+      : windowOriginOf(vscode.env.remoteAuthority);
     connector.announceShutdown(
       served.missing.includes('resolvers')
         ? undefined
         : vscode.env.remoteAuthority,
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      contextKeys.canReopenLocally.id,
+      windowOrigin?.kind === 'local',
     );
     if (served.missing.length === 0) {
       offerReopenFor(logger).catch((caught: unknown) => {
