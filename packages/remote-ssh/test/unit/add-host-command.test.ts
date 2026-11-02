@@ -390,7 +390,7 @@ describe('the command that adds a host (card connect-22)', () => {
     deepStrictEqual(world.steps, ['input', 'pick', 'read', 'write']);
   });
 
-  it('F-2204 §16: a run that wrote the block sends one signal, right after the write and before the notice', async () => {
+  it('F-2204 AC-41: a run that wrote the block sends one signal, right after the write and before the notice', async () => {
     const world = worldWith();
     await execute(world);
     deepStrictEqual(world.signals, [
@@ -407,7 +407,7 @@ describe('the command that adds a host (card connect-22)', () => {
     ]);
   });
 
-  it('F-2204 §16: a cancelled run, a parse problem and a failed write send no signal', async () => {
+  it('F-2204 AC-41: a cancelled run, a parse problem and a failed write send no signal', async () => {
     const signals: number[] = [];
     for (const world of [
       worldWith({typed: undefined}),

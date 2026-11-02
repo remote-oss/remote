@@ -152,4 +152,21 @@ describe('the hosts-changed signal (card ssh-provider-03)', () => {
     await Promise.resolve();
     deepStrictEqual(executed.length, 1);
   });
+
+  it('F-2204 AC-41: a signal the editor refuses raises no unhandled rejection, and the next signal still goes out', async () => {
+    const {protocol, executed} = protocolOver(new Error('command not found'));
+    const unhandled: unknown[] = [];
+    function remember(reason: unknown): void {
+      unhandled.push(reason);
+    }
+    process.on('unhandledRejection', remember);
+    try {
+      signalHostsChanged(protocol);
+      signalHostsChanged(protocol);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    } finally {
+      process.off('unhandledRejection', remember);
+    }
+    deepStrictEqual([unhandled, executed.length], [[], 2]);
+  });
 });

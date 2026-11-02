@@ -578,6 +578,17 @@ export function activate(context: vscode.ExtensionContext): void {
         await document.save();
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.typeInto',
+      async (file: string, text: string) => {
+        const editor = await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument(vscode.Uri.file(file)),
+        );
+        await editor.edit(edit => {
+          edit.insert(editor.document.positionAt(0), text);
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.activeEditorText', () => {
       report(agentFolder, name, {
         event: 'editorText',
