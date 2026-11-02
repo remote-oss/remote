@@ -106,13 +106,14 @@ describe('Connect Current Window to Host', function () {
   it('F-2302 AC-5, AC-6 (switch): a host picked in a local window reloads it onto that host with no folder, and opens no new window', async () => {
     await userSettings({...PLATFORMS});
     const first = await openFolderWindow(folderOf('c41-switch'));
+    const leftover = emptyWindows();
     const next = await switched(first, {label: 'harness'});
     deepStrictEqual(
       [
         (await windowState(next)).remoteAuthority,
         (await windowState(next)).folders,
         windowEvents(first).at(-1)?.event,
-        emptyWindows(),
+        emptyWindows().filter(name => !leftover.includes(name)),
       ],
       ['ssh-remote+harness', [], 'deactivated', [next]],
     );
