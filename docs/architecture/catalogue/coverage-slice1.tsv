@@ -57,7 +57,7 @@ F-2101.AC-25	acceptance
 F-2101.AC-26	acceptance	
 F-2101.AC-27	unit	
 F-2101.AC-28	acceptance	
-F-2101.AC-29	todo	
+F-2101.AC-29	acceptance	
 F-2101.AC-30	unit	
 F-2102.AC-1	unit	
 F-2102.AC-2	unit	
@@ -206,7 +206,7 @@ F-2108.AC-39	acceptance
 F-2108.AC-40	acceptance	
 F-2108.AC-41	unit	
 F-2108.AC-42	acceptance	
-F-2201.AC-1	todo	
+F-2201.AC-1	acceptance	
 F-2201.AC-2	unit	
 F-2201.AC-3	acceptance	
 F-2201.AC-4	unit	
@@ -227,7 +227,7 @@ F-2201.AC-18	acceptance
 F-2201.AC-19	acceptance	
 F-2201.AC-20	unit	
 F-2201.AC-21	acceptance	
-F-2201.AC-22	todo	
+F-2201.AC-22	acceptance	
 F-2201.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2201.AC-24	unit	
 F-2201.AC-25	unit	
@@ -250,6 +250,8 @@ F-2201.AC-41	acceptance
 F-2201.AC-42	acceptance	
 F-2201.AC-43	acceptance	
 F-2201.AC-44	acceptance	
+F-2201.AC-45	acceptance	
+F-2201.AC-46	acceptance	
 F-2202.AC-1	unit	
 F-2202.AC-2	unit	
 F-2202.AC-3	unit	
@@ -457,6 +459,7 @@ F-2303.AC-23	acceptance
 F-2303.AC-24	todo	
 F-2303.AC-25	todo	
 F-2303.AC-26	acceptance	
+F-2303.AC-27	todo	
 F-2304.AC-1	acceptance	
 F-2304.AC-2	unit	
 F-2304.AC-3	todo	
