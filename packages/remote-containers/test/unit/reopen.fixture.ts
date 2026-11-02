@@ -228,9 +228,11 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         await state.waitOnCheck;
         return cancellation?.aborted === true ? 'stopped' : state.check;
       },
-      currentContext: () => {
-        state.calls.push('currentContext');
-        return Promise.resolve(state.context);
+      pinnedEngine: () => {
+        state.calls.push('pinnedEngine');
+        return Promise.resolve(
+          state.context === undefined ? {} : {context: state.context},
+        );
       },
     },
     dialogs: {
