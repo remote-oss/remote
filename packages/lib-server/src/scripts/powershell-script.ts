@@ -284,6 +284,76 @@ function installExtensionsBody(start: StartParameters): string[] {
   ];
 }
 
+/** A data folder that isn't named ends the step at once, as there is nothing of ours to touch. */
+const DATA_FOLDER_GUARD: readonly string[] = [
+  "if ($DATA_ROOT -eq '' -or $DATA_FOLDER -eq '') {",
+  "  Complete-Step 'Ok'",
+  '}',
+];
+
+/** Kill: every server of the data folder ended, its PID files and its `bin` removed. */
+const KILL_BODY: readonly string[] = [
+  ...DATA_FOLDER_GUARD,
+  'Stop-Servers',
+  "Remove-Item -Path ([System.IO.Path]::Combine($DATA_DIR, '.*.pid')) -Force -ErrorAction SilentlyContinue",
+  "Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, 'bin')) -Recurse -Force -ErrorAction SilentlyContinue",
+  "Complete-Step 'Ok'",
+];
+
+/** Uninstall: the servers ended, in the install root's data folder and the home's, and the data folder removed. */
+const UNINSTALL_BODY: readonly string[] = [
+  ...DATA_FOLDER_GUARD,
+  'Stop-Servers',
+  'if ($DATA_ROOT -ne $HOME) {',
+  "  if ($HOME -eq '') {",
+  "    Complete-Step 'Ok'",
+  '  }',
+  '  $DATA_DIR = [System.IO.Path]::Combine($HOME, $DATA_FOLDER)',
+  '  Stop-Servers',
+  '}',
+  'Remove-Item -LiteralPath $DATA_DIR -Recurse -Force -ErrorAction SilentlyContinue',
+  "Complete-Step 'Ok'",
+];
+
+/**
+ * Cleanup: the installs under `bin/`, newest first, removed by the policy's kind; the current commit is always kept,
+ * and an install whose lock another step holds is left.
+ */
+const CLEANUP_BODY: readonly string[] = [
+  ...DATA_FOLDER_GUARD,
+  "$BinFolder = [System.IO.Path]::Combine($DATA_DIR, 'bin')",
+  'if (-not (Test-Path -LiteralPath $BinFolder -PathType Container)) {',
+  "  Complete-Step 'Ok'",
+  '}',
+  '$Index = 0',
+  'foreach ($Folder in @(Get-ChildItem -LiteralPath $BinFolder -Force | Sort-Object -Property LastWriteTime -Descending)) {',
+  '  $Index++',
+  '  $Name = $Folder.Name',
+  '  if ($Name -eq $COMMIT) {',
+  '    continue',
+  '  }',
+  '  $Kind = Get-FolderKind $Name',
+  '  switch ($CLEANUP_KIND) {',
+  "    'keepNewest' {",
+  '      if ($Index -gt [int]$KEEP_COUNT) {',
+  '        Remove-Install $Name',
+  '      }',
+  '    }',
+  "    'onlyCurrentRemoveLeftovers' {",
+  "      if ($Kind -ne 'other') {",
+  '        Remove-Install $Name',
+  '      }',
+  '    }',
+  '    default {',
+  "      if ($Kind -eq 'commit') {",
+  '        Remove-Install $Name',
+  '      }',
+  '    }',
+  '  }',
+  '}',
+  "Complete-Step 'Ok'",
+];
+
 function bodyOf(
   request: BootstrapRequest,
   parameters: ScriptParameters,
@@ -299,6 +369,12 @@ function bodyOf(
         : INSTALL_TREE_BODY;
     case 'installExtensions':
       return installExtensionsBody(parameters.start);
+    case 'kill':
+      return KILL_BODY;
+    case 'uninstall':
+      return UNINSTALL_BODY;
+    case 'cleanup':
+      return CLEANUP_BODY;
     default:
       return ["Complete-Step 'Ok'"];
   }
@@ -311,6 +387,9 @@ export const POWERSHELL_STEPS: ReadonlySet<BootstrapRequest['step']> = new Set([
   'discard',
   'start',
   'installExtensions',
+  'kill',
+  'uninstall',
+  'cleanup',
 ]);
 
 /**
