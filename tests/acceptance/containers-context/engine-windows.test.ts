@@ -34,7 +34,7 @@ import {
   secondEngine,
   type SocketProxy,
   socketProxy,
-} from './engine-fixture.ts';
+} from '../windows/engine-fixture.ts';
 
 /** The containers on the engine at `address` that were made for `folder`. */
 async function containersOn(
@@ -163,7 +163,7 @@ describe('the windows of a dev container opened through the engine settings (car
         runArgs: runLabelArguments(),
       }),
     );
-    const second = await secondEngine(false, shared);
+    const second = await secondEngine({shared});
     const marker = runScopedName('c133aonly');
     const proxy = await socketProxy();
     try {

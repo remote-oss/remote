@@ -12,7 +12,7 @@ import {
   type SecondEngine,
   secondEngine,
   showsNoEngine,
-} from './engine-fixture.ts';
+} from '../windows/engine-fixture.ts';
 
 describe('the engine the Dev Containers view uses, from settings and contexts (card containers-133)', function () {
   this.timeout(900_000);
@@ -30,8 +30,8 @@ describe('the engine the Dev Containers view uses, from settings and contexts (c
 
   before(async () => {
     saved = readUserSettings();
-    plain = await secondEngine(false);
-    secured = await secondEngine(true);
+    plain = await secondEngine();
+    secured = await secondEngine({secured: true});
   });
 
   after(async () => {

@@ -21,7 +21,7 @@ import {
   type SecondEngine,
   secondEngine,
   showsNoEngine,
-} from './engine-fixture.ts';
+} from '../windows/engine-fixture.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -77,7 +77,7 @@ describe('the checks of the Dev Containers view against the engine it uses (card
 
   before(async () => {
     saved = readUserSettings();
-    plain = await secondEngine(false);
+    plain = await secondEngine();
   });
 
   after(async () => {

@@ -462,6 +462,8 @@ const LAUNCH_ORDER = [
   ...['containers-index-broken', 'containers-index-down'],
   ...['containers-killed-23', 'containers-killed-35', 'containers-killed-43'],
   'containers-context',
+  'containers-env-host',
+  'containers-env-ctx',
   'extensionpack',
   'extensionpack-german',
   'extensionpack-partial',
@@ -1514,15 +1516,19 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
-          {
-            folder: path.join('/run', 'extensions-containers-context'),
+          ...[
+            'containers-context',
+            'containers-env-host',
+            'containers-env-ctx',
+          ].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
             files: [
               '/dist/remote-ssh.vsix',
               '/run/window-agent.vsix',
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
             ],
             client: 'vscodium',
-          },
+          })),
           ...['extensionpack', 'extensionpack-german'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [

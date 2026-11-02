@@ -9,7 +9,7 @@ import {mkdirSync, rmSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {SECOND_ENGINE_IMAGE} from '../../../tools/acceptance-second-engine.ts';
-import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
+import {rowsWhen, VIEW} from './dev-containers-view.ts';
 import {
   inWindow,
   restoreUserSettings,
@@ -18,8 +18,8 @@ import {
   userSettings,
   variable,
   waitFor,
-} from '../windows/harness.ts';
-import {welcomeText} from '../windows/renderer.ts';
+} from './harness.ts';
+import {rowDetails, welcomeText} from './renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,15 +34,37 @@ function dockerConfig(): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), 'docker-config');
 }
 
+/** The variables with which the editor of a launch may start and which pick an engine. */
+const ENGINE_VARIABLE_NAMES = [
+  'DOCKER_HOST',
+  'DOCKER_CONTEXT',
+  'DOCKER_CERT_PATH',
+  'DOCKER_TLS_VERIFY',
+];
+
+/** This process's environment without the variables that pick an engine, which a launch may have set for its editor. */
+function cleanEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !ENGINE_VARIABLE_NAMES.includes(name),
+    ),
+  );
+}
+
 /** The output of `docker` run with `parameters`, in the launch's own Docker configuration and the extra variables. */
 export async function dockerWith(
   environment: Readonly<Record<string, string>>,
   ...parameters: string[]
 ): Promise<string> {
   const {stdout} = await execFileAsync('docker', parameters, {
-    env: {...process.env, DOCKER_CONFIG: dockerConfig(), ...environment},
+    env: {...cleanEnvironment(), DOCKER_CONFIG: dockerConfig(), ...environment},
   });
   return stdout.trim();
+}
+
+/** The output of `docker` run with `parameters` on this machine's own daemon, whatever context the launch has made current. */
+function localDocker(...parameters: string[]): Promise<string> {
+  return dockerWith({}, '--context', 'default', ...parameters);
 }
 
 /** A second Docker daemon of the run, in a container of its own, and the one container only it holds. */
@@ -71,20 +93,26 @@ function clientOf(engine: {
   };
 }
 
+/** How many daemons this process has started, so that each one's names are its own. */
+let started = 0;
+
 /**
  * Starts a Docker daemon in a container of the run (the daemon of the `docker:dind` image, TLS or not), waits for it to
  * answer, and creates the container that only it holds from a copy of the run's dev container image under a repository
- * of its own. A `shared` folder is mounted into the daemon's container at the same path, so that a dev container the daemon
+ * of its own. A `hostPort` fixes the port the daemon is published on. A `shared` folder is mounted into the daemon's container at the same path, so that a dev container the daemon
  * makes can bind a folder opened from there (the daemon's own /tmp is hidden by the image).
  */
 export async function secondEngine(
-  withTls: boolean,
-  shared?: string,
+  options: {secured?: boolean; shared?: string; hostPort?: number} = {},
 ): Promise<SecondEngine> {
-  const name = runScopedName(withTls ? 'c133-tls' : 'c133-plain');
-  const marker = runScopedName(withTls ? 'c133tlsonly' : 'c133plainonly');
+  const withTls = options.secured === true;
+  const {shared} = options;
+  started += 1;
+  const kind = `${withTls ? 'tls' : 'plain'}${String(started)}`;
+  const name = runScopedName(`c133-${kind}`);
+  const marker = runScopedName(`c133${kind}only`);
   const port = withTls ? '2376' : '2375';
-  await execFileAsync('docker', [
+  await localDocker(
     'run',
     '-d',
     '--rm',
@@ -96,15 +124,11 @@ export async function secondEngine(
     `DOCKER_TLS_CERTDIR=${withTls ? '/certs' : ''}`,
     ...(shared === undefined ? [] : ['-v', `${shared}:${shared}`]),
     '-p',
-    `127.0.0.1::${port}`,
+    `127.0.0.1:${options.hostPort === undefined ? '' : String(options.hostPort)}:${port}`,
     SECOND_ENGINE_IMAGE,
-  ]);
+  );
   const hostPort =
-    (
-      (await execFileAsync('docker', ['port', name, `${port}/tcp`])).stdout
-        .trim()
-        .split('\n')[0] ?? ''
-    )
+    ((await localDocker('port', name, `${port}/tcp`)).split('\n')[0] ?? '')
       .split(':')
       .pop() ?? '';
   const certificates = withTls
@@ -112,7 +136,7 @@ export async function secondEngine(
     : undefined;
   const engine = {address: `tcp://127.0.0.1:${hostPort}`, certificates};
   async function stop(): Promise<void> {
-    await execFileAsync('docker', ['rm', '-f', name]).catch(() => undefined);
+    await localDocker('rm', '-f', name).catch(() => undefined);
     if (certificates !== undefined) {
       rmSync(certificates, {recursive: true, force: true});
     }
@@ -124,11 +148,7 @@ export async function secondEngine(
         try {
           if (certificates !== undefined) {
             mkdirSync(certificates, {recursive: true});
-            await execFileAsync('docker', [
-              'cp',
-              `${name}:/certs/client/.`,
-              certificates,
-            ]);
+            await localDocker('cp', `${name}:/certs/client/.`, certificates);
           }
           await dockerWith(clientOf(engine), 'info');
           return true;
@@ -144,7 +164,7 @@ export async function secondEngine(
       .join(' ');
     await execFileAsync('sh', [
       '-c',
-      `docker save '${image}' | env ${target} docker load >/dev/null`,
+      `env -u DOCKER_HOST -u DOCKER_CONTEXT docker save '${image}' | env ${target} docker load >/dev/null`,
     ]);
     await dockerWith(clientOf(engine), 'tag', image, `${marker}:only`);
     await dockerWith(
@@ -266,4 +286,31 @@ export async function socketProxy(): Promise<SocketProxy> {
         });
       }),
   };
+}
+
+/**
+ * The labels of the rows the view of the local window shows after a refresh, or none when it shows the welcome content
+ * of an unreachable engine. A row listing waits a moment, so that the rows of one engine are all there.
+ */
+export async function viewLabels(): Promise<string[] | undefined> {
+  await refresh();
+  let labels: string[] | undefined;
+  await waitFor(
+    'the rows or the welcome content of the view',
+    async () => {
+      const rows = (await rowDetails('local', VIEW).catch(() => [])) ?? [];
+      if (rows.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        labels = ((await rowDetails('local', VIEW)) ?? []).map(
+          each => each.label,
+        );
+        return true;
+      }
+      return ((await welcomeText('local', VIEW)) ?? '').includes(
+        NO_ENGINE_WORDS,
+      );
+    },
+    30_000,
+  );
+  return labels;
 }
