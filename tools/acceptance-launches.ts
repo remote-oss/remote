@@ -913,6 +913,13 @@ export function launchesOf(root: string): Launch[] {
       proposedApi: false,
     },
     {
+      // The Add New SSH Host flow writes the user's file, so the editor has a home of the run's own.
+      ...EXPLORER_LAUNCH,
+      label: 'add-host',
+      suite: 'add-host',
+      environment: {HOME: '<run>/add-host-home'},
+    },
+    {
       ...EXPLORER_LAUNCH,
       label: 'explorer-standdown',
       suite: 'explorer-standdown',

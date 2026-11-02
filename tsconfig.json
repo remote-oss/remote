@@ -167,6 +167,9 @@
       "path": "tests/acceptance/explorer-home"
     },
     {
+      "path": "tests/acceptance/add-host"
+    },
+    {
       "path": "tests/acceptance/explorer-rows"
     },
     {
