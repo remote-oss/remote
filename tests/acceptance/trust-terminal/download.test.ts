@@ -45,7 +45,7 @@ describe('the local download in an untrusted folder in terminal mode (card cover
   beforeEach(async () => {
     saved = readUserSettings();
     // A host with no server of ours needs the download, and the one the host cannot make is the client's.
-    await freshHost();
+    await freshHost(ALIAS);
     await userSettings({
       'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_LOCAL')}/ok/\${os}-\${arch}/\${commit}`,
       'remote.SSH.connectTimeout': 10,
