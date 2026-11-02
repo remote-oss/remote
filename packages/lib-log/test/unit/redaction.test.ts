@@ -15,6 +15,16 @@ describe('redaction (card log-03 table)', () => {
     );
   });
 
+  it('F-2201 AC-46 (ruling-1794-log-redaction): a configFile-like path with a 32-character segment is logged with that segment redacted and its other segments as written', () => {
+    strictEqual(
+      redact(
+        `remote.SSH.configFile is not an absolute path: " /tmp/${'a'.repeat(32)}/cfg-space"`,
+        [],
+      ),
+      'remote.SSH.configFile is not an absolute path: " /tmp/[redacted]/cfg-space"',
+    );
+  });
+
   it('redact of a 40-hex commit id -> unchanged', () => {
     strictEqual(
       redact(`commit ${COMMIT_ID} installed`, []),
