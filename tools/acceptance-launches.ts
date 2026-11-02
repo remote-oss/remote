@@ -335,6 +335,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'authoring.test.ts',
   'cache-volume.test.ts',
   'compose-names.test.ts',
+  'config-watch.test.ts',
   'configuration-errors.test.ts',
   'configuration-open.test.ts',
   'configuration-picker.test.ts',
