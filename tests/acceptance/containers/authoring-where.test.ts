@@ -79,6 +79,130 @@ const WHERE = {
   ],
 } as const;
 
+/** Runs `command` in a folder with a configuration and no container, as window `label`, and checks that it makes the container directly and connects. */
+async function directRebuild(command: string, label: string): Promise<void> {
+  const folder = devContainerFolder(`c101-direct-${label}`, {
+    name: 'Direct',
+    postCreateCommand: 'echo x >> marker-post-create',
+  });
+  const window = await openFolderWindow(folder);
+  try {
+    const began = Math.floor(Date.now() / 1000);
+    await reopenInContainer(window, 300_000, command);
+    const containers = await devContainersOf(folder);
+    const events = (
+      await docker(
+        'events',
+        '--since',
+        String(began),
+        '--until',
+        String(Math.ceil(Date.now() / 1000) + 1),
+        '--filter',
+        `container=${containers[0] ?? ''}`,
+        '--format',
+        '{{.Action}}',
+      )
+    )
+      .split('\n')
+      .filter(action => ['die', 'kill', 'stop', 'destroy'].includes(action));
+    deepStrictEqual(
+      [
+        (await windowState(window)).remoteName,
+        containers.length,
+        events,
+        readFileSync(path.join(folder, 'marker-post-create'), 'utf8')
+          .split('\n')
+          .filter(line => line !== '').length,
+      ],
+      ['dev-container', 1, [], 1],
+    );
+  } finally {
+    await closeWindow(window).catch(() => undefined);
+  }
+}
+
+/** Runs `command` on a configuration with no container source, with or without a stopped container of the folder, as row `label`. */
+async function noSourceRebuild(
+  command: string,
+  existing: boolean,
+  label: string,
+): Promise<void> {
+  const folder = devContainerFolder(`c101-no-source-${label}`, {
+    name: 'No Source',
+  });
+  const file = path.join(folder, '.devcontainer/devcontainer.json');
+  let containerId = '';
+  if (existing) {
+    const first = await openFolderWindow(folder);
+    await reopenInContainer(first);
+    containerId = (await devContainersOf(folder))[0] ?? '';
+    await closeWindow(first);
+    await waitFor(
+      'the container to be stopped',
+      async () => (await containerStateOf(containerId)).endsWith(' exited'),
+      90_000,
+    );
+  }
+  writeFileSync(file, '{"name":"No Source"}');
+  const before = containerId === '' ? '' : await containerStateOf(containerId);
+  const window = await openFolderWindow(folder);
+  try {
+    const seen: unknown[] = [];
+    for (const answer of ['Cancel', 'Use Template'] as const) {
+      await startInWindow(window, command);
+      const dialog = await waitForDialog(window, 180_000);
+      seen.push([
+        await dialogText(window),
+        await dialogKindOf(window),
+        dialog.buttons,
+        await primaryButtonOf(window),
+      ]);
+      await answerDialog(window, answer);
+      if (answer === 'Use Template') {
+        await waitForQuickPick(window, 180_000);
+        await chooseWorkspace(window);
+        seen.push(
+          (await quickPickFacts(window))?.placeholder ===
+            'Select a container configuration template or enter a custom template id',
+        );
+        await closeScreen(window);
+      }
+    }
+    deepStrictEqual(
+      [
+        seen,
+        (await windowState(window)).remoteName,
+        readFileSync(file, 'utf8'),
+        containerId === '' ? '' : await containerStateOf(containerId),
+        (await devContainersOf(folder)).length,
+      ],
+      [
+        [
+          [
+            `CancelUse Template${MISSING_IMAGE}`,
+            'warning',
+            ['Cancel', 'Use Template'],
+            'Use Template',
+          ],
+          [
+            `CancelUse Template${MISSING_IMAGE}`,
+            'warning',
+            ['Cancel', 'Use Template'],
+            'Use Template',
+          ],
+          true,
+        ],
+        null,
+        '{"name":"No Source"}',
+        before,
+        existing ? 1 : 0,
+      ],
+    );
+  } finally {
+    await closeWindow(window).catch(() => undefined);
+  }
+}
+
 describe('the commands that make a container from a folder with no configuration (card coverage-101)', function () {
   this.timeout(900_000);
 
@@ -107,133 +231,49 @@ describe('the commands that make a container from a folder with no configuration
     });
   });
 
-  for (const command of COMMANDS.slice(1)) {
-    const label = command.includes('NoCache') ? 'nocache' : 'rebuild';
-    it(`F-0405 AC-13 (c101-direct-${label}): in a folder with a configuration and no container, ${command} makes the container directly, with no stop or removal, runs postCreateCommand once and connects the window`, async () => {
-      const folder = devContainerFolder(`c101-direct-${label}`, {
-        name: 'Direct',
-        postCreateCommand: 'echo x >> marker-post-create',
-      });
-      const window = await openFolderWindow(folder);
-      try {
-        const began = Math.floor(Date.now() / 1000);
-        await reopenInContainer(window, 300_000, command);
-        const containers = await devContainersOf(folder);
-        const events = (
-          await docker(
-            'events',
-            '--since',
-            String(began),
-            '--until',
-            String(Math.ceil(Date.now() / 1000) + 1),
-            '--filter',
-            `container=${containers[0] ?? ''}`,
-            '--format',
-            '{{.Action}}',
-          )
-        )
-          .split('\n')
-          .filter(action =>
-            ['die', 'kill', 'stop', 'destroy'].includes(action),
-          );
-        deepStrictEqual(
-          [
-            (await windowState(window)).remoteName,
-            containers.length,
-            events,
-            readFileSync(path.join(folder, 'marker-post-create'), 'utf8')
-              .split('\n')
-              .filter(line => line !== '').length,
-          ],
-          ['dev-container', 1, [], 1],
-        );
-      } finally {
-        await closeWindow(window).catch(() => undefined);
-      }
-    });
-  }
+  it('F-0405 AC-13 (c101-direct-rebuild): in a folder with a configuration and no container, remote-containers.rebuildAndReopenInContainer makes the container directly, with no stop or removal, runs postCreateCommand once and connects the window', async () => {
+    await directRebuild(
+      'remote-containers.rebuildAndReopenInContainer',
+      'rebuild',
+    );
+  });
 
-  for (const command of COMMANDS.slice(1)) {
-    for (const existing of [false, true]) {
-      const label = `${command.includes('NoCache') ? 'nocache' : 'rebuild'}-${existing ? 'with' : 'without'}`;
-      it(`F-0405 AC-32 (c101-no-source-${label}): ${command} on a configuration with no container source ${existing ? 'and a stopped container' : 'and no container'} shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state`, async () => {
-        const folder = devContainerFolder(`c101-no-source-${label}`, {
-          name: 'No Source',
-        });
-        const file = path.join(folder, '.devcontainer/devcontainer.json');
-        let containerId = '';
-        if (existing) {
-          const first = await openFolderWindow(folder);
-          await reopenInContainer(first);
-          containerId = (await devContainersOf(folder))[0] ?? '';
-          await closeWindow(first);
-          await waitFor(
-            'the container to be stopped',
-            async () =>
-              (await containerStateOf(containerId)).endsWith(' exited'),
-            90_000,
-          );
-        }
-        writeFileSync(file, '{"name":"No Source"}');
-        const before =
-          containerId === '' ? '' : await containerStateOf(containerId);
-        const window = await openFolderWindow(folder);
-        try {
-          const seen: unknown[] = [];
-          for (const answer of ['Cancel', 'Use Template'] as const) {
-            await startInWindow(window, command);
-            const dialog = await waitForDialog(window, 180_000);
-            seen.push([
-              await dialogText(window),
-              await dialogKindOf(window),
-              dialog.buttons,
-              await primaryButtonOf(window),
-            ]);
-            await answerDialog(window, answer);
-            if (answer === 'Use Template') {
-              await waitForQuickPick(window, 180_000);
-              await chooseWorkspace(window);
-              seen.push(
-                (await quickPickFacts(window))?.placeholder ===
-                  'Select a container configuration template or enter a custom template id',
-              );
-              await closeScreen(window);
-            }
-          }
-          deepStrictEqual(
-            [
-              seen,
-              (await windowState(window)).remoteName,
-              readFileSync(file, 'utf8'),
-              containerId === '' ? '' : await containerStateOf(containerId),
-              (await devContainersOf(folder)).length,
-            ],
-            [
-              [
-                [
-                  `CancelUse Template${MISSING_IMAGE}`,
-                  'warning',
-                  ['Cancel', 'Use Template'],
-                  'Use Template',
-                ],
-                [
-                  `CancelUse Template${MISSING_IMAGE}`,
-                  'warning',
-                  ['Cancel', 'Use Template'],
-                  'Use Template',
-                ],
-                true,
-              ],
-              null,
-              '{"name":"No Source"}',
-              before,
-              existing ? 1 : 0,
-            ],
-          );
-        } finally {
-          await closeWindow(window).catch(() => undefined);
-        }
-      });
-    }
-  }
+  it('F-0405 AC-13 (c101-direct-nocache): in a folder with a configuration and no container, remote-containers.rebuildNoCacheAndReopenInContainer makes the container directly, with no stop or removal, runs postCreateCommand once and connects the window', async () => {
+    await directRebuild(
+      'remote-containers.rebuildNoCacheAndReopenInContainer',
+      'nocache',
+    );
+  });
+
+  it('F-0405 AC-32 (c101-no-source-rebuild-without): remote-containers.rebuildAndReopenInContainer on a configuration with no container source and no container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state', async () => {
+    await noSourceRebuild(
+      'remote-containers.rebuildAndReopenInContainer',
+      false,
+      'rebuild-without',
+    );
+  });
+
+  it('F-0405 AC-32 (c101-no-source-rebuild-with): remote-containers.rebuildAndReopenInContainer on a configuration with no container source and a stopped container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state', async () => {
+    await noSourceRebuild(
+      'remote-containers.rebuildAndReopenInContainer',
+      true,
+      'rebuild-with',
+    );
+  });
+
+  it('F-0405 AC-32 (c101-no-source-nocache-without): remote-containers.rebuildNoCacheAndReopenInContainer on a configuration with no container source and no container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state', async () => {
+    await noSourceRebuild(
+      'remote-containers.rebuildNoCacheAndReopenInContainer',
+      false,
+      'nocache-without',
+    );
+  });
+
+  it('F-0405 AC-32 (c101-no-source-nocache-with): remote-containers.rebuildNoCacheAndReopenInContainer on a configuration with no container source and a stopped container shows the modal warning, Cancel changes nothing and Use Template opens the template screen, and the container keeps its id and state', async () => {
+    await noSourceRebuild(
+      'remote-containers.rebuildNoCacheAndReopenInContainer',
+      true,
+      'nocache-with',
+    );
+  });
 });
