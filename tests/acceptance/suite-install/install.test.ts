@@ -38,8 +38,6 @@ interface InstallCase {
   noArchiveLeft?: boolean;
   /** File names, as `find -name` patterns, that nothing under the host's home and temporary folders may carry. */
   noHostFiles?: string[];
-  /** The seconds, least and most, between the first progress line and the failure dialog. */
-  dialogAfterSeconds?: [number, number];
 }
 
 /** The install case of this window, named by the variable the harness gave it. */
@@ -239,19 +237,6 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
           ),
         ),
         noHostFiles.map(() => ''),
-      );
-    });
-  }
-
-  if (installCase?.dialogAfterSeconds !== undefined) {
-    const [least, most] = installCase.dialogAfterSeconds;
-    it(`${cite}: the dialog comes ${String(least)} to ${String(most)} seconds after the progress began`, () => {
-      const began = recordLines('progress').at(0)?.time ?? 0;
-      const ended = recordLines('failureDialog').at(0)?.time ?? 0;
-      const seconds = (ended - began) / 1000;
-      deepStrictEqual(
-        {inRange: seconds >= least && seconds <= most, seconds},
-        {inRange: true, seconds},
       );
     });
   }

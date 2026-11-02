@@ -23,7 +23,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-2405 AC-8, AC-16, BR-9 and BR-10 describe a marker file that the reference's copy leaves beside the archive, which
     its install watches for because the copy and the install are separate steps. Ours copies over the held connection
     and starts the install only after the copy has reported success, so it needs no completion signal and an archive
-    that is missing after its copy cannot be installed from (athena's ruling on #1607; spec question on
+    that is missing after its copy cannot be installed from. BR-9's client side and POST-2, the `vscode_server_<epoch-ms>`
+    folder of the archive and its marker that the reference never removes, are covered by the same ruling: ours keeps
+    no such folder (athena's ruling on #1607; spec question on
     remote-oss/remote-ssh#50). Rows: `ruling-1607-no-marker`.
 
 - **A question that Remote - SSH does not recognise, left unanswered in a hidden login terminal, ends in the connection failure dialog after the connect wait**; the reference keeps waiting until it is answered.

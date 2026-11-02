@@ -23,11 +23,11 @@ const LOCALLY =
 const VIA_LOCAL_MACHINE =
   'Enable remote.SSH.localServerDownload to allow VS Code to download the required resources via your local machine and then upload them to the remote server';
 
-/** The mitigations of every hint the extension has stored. */
-function storedMitigations(): string[] {
-  return hintRecords().flatMap(record =>
-    record.hints.flatMap(hint => hint.mitigations ?? []),
-  );
+/** The mitigations of the hints of the records that started at or after `since` (an ISO time). */
+function storedMitigations(since: string): string[] {
+  return hintRecords()
+    .filter(record => record.started >= since)
+    .flatMap(record => record.hints.flatMap(hint => hint.mitigations ?? []));
 }
 
 /** Opens window `name` on the host under `template` with the local download off, and waits until its failure is in the hint store. */
@@ -43,6 +43,7 @@ async function failedWith(
     'remote.SSH.localServerDownload': 'off',
   });
   appendScript(dismissals(name));
+  const since = new Date().toISOString();
   await openWindow('harness', name);
   try {
     await waitFor(
@@ -52,10 +53,10 @@ async function failedWith(
     );
     await waitFor(
       'the stored hint',
-      () => storedMitigations().includes(wanted),
+      () => storedMitigations(since).includes(wanted),
       60_000,
     ).catch(() => undefined);
-    return storedMitigations();
+    return storedMitigations(since);
   } finally {
     await closeWindow(name).catch(() => undefined);
   }
@@ -85,12 +86,16 @@ describe('the hints of a host download that fails with the local download off (c
 
   it('F-2405 AC-20 (c87-hint-nofetch): a host with neither curl nor wget and local download off stores a hint whose mitigations include S050', async () => {
     await keepingSettings(async () => {
-      await onHostAs(
-        'root',
-        'sh',
-        '-c',
-        'for t in curl wget; do p=$(command -v $t); [ -n "$p" ] && mv $p $p.off; done; true',
-      );
+      const moved = (
+        await onHostAs(
+          'root',
+          'sh',
+          '-c',
+          'for t in curl wget; do p=$(command -v $t); [ -n "$p" ] && mv $p $p.off && echo $p; done; true',
+        )
+      )
+        .split('\n')
+        .filter(each => each !== '');
       try {
         const mitigations = await failedWith(
           'c87-hint-nofetch',
@@ -103,12 +108,9 @@ describe('the hints of a host download that fails with the local download off (c
           JSON.stringify(mitigations),
         );
       } finally {
-        await onHostAs(
-          'root',
-          'sh',
-          '-c',
-          'for t in curl wget; do for p in /usr/bin/$t /bin/$t; do [ -e $p.off ] && mv $p.off $p; done; done; true',
-        );
+        for (const each of moved) {
+          await onHostAs('root', 'mv', `${each}.off`, each);
+        }
       }
     });
   });
