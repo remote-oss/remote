@@ -294,7 +294,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     ],
   };
 
-  it('F-2604 AC-1, AC-2, AC-3, AC-5, AC-22 (c85-line): the logged holds the setting line once, directly after the first refused-channel line; the hint is stored while the window still waits; Show logged puts the Remote - SSH channel in front', async () => {
+  it('F-2604 AC-1, AC-2, AC-3, AC-5, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored while the window still waits; Show log puts the Remote - SSH channel in front', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-line';
@@ -403,6 +403,70 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
             .filter(line => line.includes(SETTING_LINE)).length,
         ],
         [0, 'Opening Remote...', 1],
+      );
+    });
+  });
+
+  it('F-2604 AC-20 (c85-key): a key whose authorized_keys line forbids port forwarding gives the setting line, the wait of AC-4 and the stored hint', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      const name = 'c85-key';
+      const mark = connectionLog().length;
+      const since = new Date().toISOString();
+      await opened('noforward-key', name);
+      await waitFor(
+        'the notice',
+        () => recordLines('notice', name).length > 0,
+        120_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 10_000));
+      deepStrictEqual(
+        {
+          lines: connectionLog()
+            .slice(mark)
+            .filter(line => line.includes(SETTING_LINE)).length,
+          waiting: await waitingOf(name),
+          stored: forwardingHints(since),
+        },
+        {
+          lines: 1,
+          waiting: [1, 0, [], 'Opening Remote...', true],
+          stored: 1,
+        },
+      );
+    });
+  });
+
+  it('F-2604 AC-19 (c85-changed): a host whose key changed, with every setting at its default, gives the wait of AC-4: no dialog, no port forwarding text, no setting line and no forwarding hint', async () => {
+    await keepingSettings(async () => {
+      await userSettings({...PLATFORMS});
+      const name = 'c85-changed';
+      const mark = connectionLog().length;
+      const since = new Date().toISOString();
+      await opened('changedkey', name);
+      await waitFor(
+        'the notice',
+        () => recordLines('notice', name).length > 0,
+        120_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 10_000));
+      deepStrictEqual(
+        {
+          lines: connectionLog()
+            .slice(mark)
+            .filter(line => line.includes(SETTING_LINE)).length,
+          waiting: await waitingOf(name),
+          stored: forwardingHints(since),
+          text: recordLines(undefined, name).filter(line =>
+            line.question.includes('Port forwarding is disabled'),
+          ).length,
+        },
+        {
+          lines: 0,
+          waiting: [1, 0, [], 'Opening Remote...', true],
+          stored: 0,
+          text: 0,
+        },
       );
     });
   });
