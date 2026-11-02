@@ -140,6 +140,9 @@
       "path": "tests/acceptance/secrets"
     },
     {
+      "path": "tests/acceptance/agent-notmp"
+    },
+    {
       "path": "tests/acceptance/no-proposals"
     },
     {

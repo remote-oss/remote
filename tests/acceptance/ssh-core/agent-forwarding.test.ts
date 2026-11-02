@@ -8,6 +8,7 @@ import {
   noHelperWithin,
   reloadWindow,
   onHost,
+  onHostAs,
   openWindow,
   recordLines,
   runShellTask,
@@ -18,15 +19,27 @@ import {
 import {freshHost, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {statusItemText} from '../windows/renderer.ts';
 import {contributionsNow, ownContributions} from '../windows/x11-support.ts';
-import {printedAfter, windowWithTerminal} from '../windows/terminal-support.ts';
+import {
+  listedKeys,
+  printedAfter,
+  windowWithTerminal,
+} from '../windows/terminal-support.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
-import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
+import {
+  hostLinks,
+  LINK_PATTERN,
+  serverSessionSocket,
+} from '../windows/agent-links.ts';
 
 /** The alias that forwards the run's agent. */
 const FORWARDING = 'agentfwd';
 
 /** The alias with no ForwardAgent. */
 const PLAIN = 'harness';
+
+/** The account whose login shell sets TMPDIR, and the alias that forwards the agent to it. */
+const TMPDIR_USER = 'harness-tmpdir';
+const TMPDIR_ALIAS = 'agentfwd-tmpdir';
 
 /** The alias with ForwardAgent no. */
 const FORWARD_NO = 'agentfwd-no';
@@ -51,29 +64,9 @@ function keyFile(): string {
 /** Opens window `name` on `alias` on a host with no server, with a terminal, and waits for the connect. */
 async function connectedOn(alias: string, name: string): Promise<void> {
   await freshHost();
-  await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
+  await onHostAs('root', 'sh', '-c', `rm -f ${LINK_PATTERN}`);
   await windowWithTerminal(name, alias);
   await connectedWithin(name, INSTALL_MILLISECONDS);
-}
-
-/** The SSH_AUTH_SOCK the host's server was started with, the socket sshd gave the session that started it. */
-async function serverSessionSocket(): Promise<string> {
-  return (
-    await onHost(
-      'sh',
-      '-c',
-      `for pid in $(pgrep -f '[.]vscodium-server-insiders/bin/'); do tr '\\0' '\\n' < /proc/$pid/environ 2>/dev/null | sed -n 's/^SSH_AUTH_SOCK=//p'; done | head -1`,
-    )
-  ).trim();
-}
-
-/** What a new terminal of window `name` lists with `ssh-add -l`, once it has printed. */
-async function listedKeys(name: string): Promise<string> {
-  return printedAfter(
-    name,
-    'KEYS',
-    '$(ssh-add -l 2>&1 | head -1 | tr " " "_")',
-  );
 }
 
 describe('F-2311, SSH agent forwarding into the remote environment (card coverage-99)', function () {
@@ -306,6 +299,36 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
         await closeWindow('c99-reload').catch(() => undefined);
       }
     });
+  });
+
+  it('F-2311 AC-20 (c99-tmpdir): for an account whose login shell sets TMPDIR to a folder of its own, the link is still created in /tmp', async () => {
+    await freshHost(TMPDIR_USER);
+    await onHostAs('root', 'sh', '-c', `rm -f ${LINK_PATTERN}`);
+    await windowWithTerminal('c99-tmpdir', TMPDIR_ALIAS, TMPDIR_USER);
+    try {
+      await connectedWithin('c99-tmpdir', INSTALL_MILLISECONDS, TMPDIR_USER);
+      await waitFor(
+        'the agent link',
+        async () => (await hostLinks()).length > 0,
+        10_000,
+      ).catch(() => undefined);
+      deepStrictEqual(
+        {
+          owners: (await hostLinks()).map(link => link.split(' ')[0]),
+          inHomeTmp: (
+            await onHostAs(
+              TMPDIR_USER,
+              'sh',
+              '-c',
+              `ls /home/${TMPDIR_USER}/tmp 2>/dev/null | grep vscode-ssh-auth-sock || true`,
+            )
+          ).trim(),
+        },
+        {owners: [TMPDIR_USER], inHomeTmp: ''},
+      );
+    } finally {
+      await closeWindow('c99-tmpdir').catch(() => undefined);
+    }
   });
 
   it('F-2311 AC-21 (c99-links-stay): the link of a window that closed is still in /tmp', async () => {
