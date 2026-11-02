@@ -14,7 +14,6 @@ import {
   chooseQuickPickRow,
   pageText,
   pressEscape,
-  quickPickFacts,
   quickPickGroups,
   quickPickRows,
   terminalText,
@@ -128,7 +127,8 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
         () => undefined,
       );
       const groups = await groupsOf('c125-select');
-      const placeholder = (await quickPickFacts('c125-select'))?.placeholder;
+      const placeholder = (await waitForQuickPick('c125-select', 30_000))
+        .placeholder;
       await pressEscape('c125-select');
       deepStrictEqual(
         [placeholder, groups],
