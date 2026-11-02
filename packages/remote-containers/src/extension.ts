@@ -4,7 +4,7 @@
  */
 
 import {appendFileSync, readFileSync} from 'node:fs';
-import {mkdir, mkdtemp, readdir, readFile, stat} from 'node:fs/promises';
+import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -1283,7 +1283,11 @@ export async function activate(
           writeAttemptLog: async () =>
             writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
           fileExists: file =>
-            stat(file).then(
+            Promise.resolve(
+              vscode.workspace.fs.stat(
+                vscode.Uri.from({scheme: file.scheme, path: file.path}),
+              ),
+            ).then(
               () => true,
               () => false,
             ),

@@ -2,7 +2,10 @@ import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import type {DevContainerFolder} from '../../src/authority/payload.ts';
+import type {
+  DevContainerFolder,
+  SerializedUri,
+} from '../../src/authority/payload.ts';
 import {
   containerSetupFailed,
   containerUnusable,
@@ -45,7 +48,7 @@ interface Script {
   /** A rejection of the paused retry's store, an Error or a text. */
   storeRefusal?: Error | string;
   /** What fileExists answers with; by default the file is there. */
-  fileExists?: (file: string) => PromiseLike<boolean>;
+  fileExists?: (file: SerializedUri) => PromiseLike<boolean>;
   /** The file the attempt's log is written to; none when the write gives none. */
   logFile?: string;
   /** Whether the write of the attempt's log fails. */
@@ -264,6 +267,27 @@ describe('the failure presenter C8 (card containers-11)', () => {
     deepStrictEqual(seen.calls.slice(2), [
       `pick Pick an action to help resolve the problem.|Reload Window,${EDIT},Open Recent...,Open Documentation`,
     ]);
+  });
+
+  it('F-0410 AC-27: the check for the configuration file is given its own URI, scheme included', async () => {
+    const asked: SerializedUri[] = [];
+    const configFile: SerializedUri = {
+      $mid: 1,
+      path: '/w/.devcontainer.json',
+      scheme: 'vscode-fileHost',
+    };
+    const seen = await present(containerSetupFailed(), {
+      errors: ['More Actions...'],
+      picks: [undefined],
+      failed: {containerId: 'd'.repeat(64), paused: false},
+      target: {...TARGET, configFile},
+      fileExists: file => {
+        asked.push(file);
+        return Promise.resolve(true);
+      },
+    });
+    await seen.flush();
+    deepStrictEqual(asked, [configFile]);
   });
 
   it('F-0410 AC-4: Edit Locally opens the folder locally and resolves handled', async () => {
