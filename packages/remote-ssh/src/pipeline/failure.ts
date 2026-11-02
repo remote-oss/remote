@@ -311,7 +311,9 @@ export function ofTransfer(
     case 'copy':
       return ofChannel(failure.failure);
     case 'copyToolMissing':
-      return logged('unknown', 'scp could not be started', {id: 'scpNotFound'});
+      return logged('unknown', 'scp could not be started', {
+        id: 'scpInstallationNotFound',
+      });
     case 'cancelled':
       return {kind: 'cancelled'};
     case 'retriesExhausted':

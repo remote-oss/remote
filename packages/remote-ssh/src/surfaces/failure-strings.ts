@@ -76,7 +76,7 @@ export type FailureStringId =
   | 'preconnectValueList'
   | 'preconnectValueNumber'
   | 'preconnectValueObject'
-  | 'scpNotFound'
+  | 'scpInstallationNotFound'
   | 'trustRefused';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
@@ -151,7 +151,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
   trustRefused: 'Got bad result from install script',
-  scpNotFound: 'scp installation not found',
+  scpInstallationNotFound: 'scp installation not found',
 };
 
 /** The two dialogs of a missing or unusable server download location, which have no string id yet. */

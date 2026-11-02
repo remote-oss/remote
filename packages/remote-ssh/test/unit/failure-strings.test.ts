@@ -36,7 +36,7 @@ describe('the texts of the failure dialog and the progress', () => {
 
   it('F-2405 AC-14: the missing scp has its text, which the dialog ends with a period', () => {
     deepStrictEqual(
-      reasonText({id: 'scpNotFound'}, text => text),
+      reasonText({id: 'scpInstallationNotFound'}, text => text),
       'scp installation not found',
     );
   });
