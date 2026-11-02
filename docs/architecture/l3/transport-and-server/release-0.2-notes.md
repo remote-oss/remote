@@ -98,6 +98,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     falsy and no terminal is allocated (athena's ruling on #1606; `ruling-1606-no-tty-warning`).
     Rows: (ruling-1606-no-tty-warning)
 
+- **In terminal mode with pty allocation permitted and `RequestTTY yes`, the session gets a pseudo-terminal and ssh writes no warning.**
+  - F-2106 AC-14 expects ssh's warning in the log in terminal mode too, as the reference gives ssh a non-terminal standard
+    input there. Ours runs ssh in its own login terminal (F-2102), so its standard input is a terminal; with `-T` absent,
+    `RequestTTY yes` requests a pty, the session gets one and ssh has nothing to warn about
+    (`ruling-1779-terminal-pty`, athena on #1779). We do not override the user's `RequestTTY`.
+    Rows: (ruling-1779-terminal-pty)
+
 ## Known issues
 
 - **When a reconnection fails, for example after a cancelled passphrase, VS Code may show no "Cannot reconnect" dialog.**
