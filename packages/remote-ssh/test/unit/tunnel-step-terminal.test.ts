@@ -350,20 +350,71 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     });
   });
 
-  it('#299: a forward-failure line then the success line fails, stops the session and logs the line', async () => {
-    const {open, opened, sink} = stepWith();
-    const pending = open();
+  /** A second-ssh step whose tunnel ssh printed the forward-failure line and then the success line. */
+  async function forwardFailed(options: Parameters<typeof stepWith>[0] = {}) {
+    const context = stepWith(options);
+    const pending = context.open();
     await settled();
-    opened().write(`${FORWARD_FAILURE}\n${TUNNEL_SUCCESS_LINE}\n`);
-    const result = await pending;
+    context.opened().write(`${FORWARD_FAILURE}\n${TUNNEL_SUCCESS_LINE}\n`);
+    await settled();
+    return {...context, pending};
+  }
+
+  it('F-2104 AC-35: a forward-failure line then the success line stops the session, logs the line and tells the caller the forward is awaited, and the step holds', async () => {
+    const context = await forwardFailed();
+    let result: unknown = 'pending';
+    void context.pending.then(value => {
+      result = value;
+    });
+    await advance(context.clock, 9_900, 100);
     deepStrictEqual(
       [
         result,
-        opened().disposed,
-        sink.lines.some(line => line.message.includes(FORWARD_FAILURE)),
+        context.opened().disposed,
+        context.waits(),
+        context.sink.lines.some(line => line.message.includes(FORWARD_FAILURE)),
       ],
-      [{kind: 'failed', failure: {kind: 'unknown'}}, true, true],
+      ['pending', true, 1, true],
     );
+  });
+
+  it('F-2104 AC-35, BR-10: at the 10 s bound the held step fails with the max-wait reason, and the port is never connected', async () => {
+    const context = await forwardFailed();
+    await advance(context.clock, 10_100, 100);
+    deepStrictEqual(
+      [await context.pending, context.local.connected.length],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'unknown',
+            reason: {id: 'S067', values: [{id: 'S089', values: []}]},
+          },
+        },
+        0,
+      ],
+    );
+  });
+
+  it('F-2104 AC-36, BR-10: a connect timeout of 30 s does not move the bound', async () => {
+    const context = await forwardFailed({
+      connectWait: {
+        connectTimeoutSeconds: 30,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      },
+    });
+    await advance(context.clock, 10_100, 100);
+    deepStrictEqual((await context.pending).kind, 'failed');
+  });
+
+  it('F-2104 AC-35: a cancel while the step holds ends it at once', async () => {
+    const context = await forwardFailed();
+    context.cancellation.abort();
+    deepStrictEqual(await context.pending, {
+      kind: 'failed',
+      failure: {kind: 'cancelled'},
+    });
   });
 
   it('F-2104 6.2 step 5: the success line tells the caller the forward is awaited, once', async () => {
