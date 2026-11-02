@@ -316,6 +316,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-sweep.test.ts',
   'authoring-templates.test.ts',
   'authoring-user-data.test.ts',
+  'authoring-where.test.ts',
   'authoring.test.ts',
   'cache-volume.test.ts',
   'configuration-errors.test.ts',

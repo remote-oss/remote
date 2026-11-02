@@ -118,7 +118,7 @@ describe('the authoring wizard from the commands that need a configuration (card
     );
   });
 
-  it('F-0301 AC-10, AC-54, F-0802 AC-1 (f10): a configuration with no container source shows the warning with Cancel and Use Template and no editor behind it; Cancel and Escape open the file as a preview with the window local; Use Template opens the template screen in the same window and leaves the file as it was', async () => {
+  it('F-0301 AC-10, AC-54, AC-70, F-0802 AC-1 (f10): a configuration with no container source shows the warning with Cancel and Use Template and no editor behind it; Cancel and Escape open the file as a preview with the window local; Use Template opens the template screen in the same window and leaves the file as it was', async () => {
     const original = '{"name":"x"}';
     await withWindow(
       'f10',
