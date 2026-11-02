@@ -570,6 +570,28 @@ describe("the assembled ports' settings", () => {
     );
   });
 
+  it('F-2106 BR-7, connect-126: the pty value reads the setting as written, and is undefined when unset', () => {
+    const written = assemblyInputs({
+      'remote.SSH.permitPtyAllocation': 'yes',
+    });
+    const unset = assemblyInputs();
+    deepStrictEqual(
+      [
+        wiringPortsOf(
+          written.surfaces,
+          written.machine,
+          loggerOf(written.recorded),
+        ).locate.ptySetting(),
+        wiringPortsOf(
+          unset.surfaces,
+          unset.machine,
+          loggerOf(unset.recorded),
+        ).locate.ptySetting(),
+      ],
+      ['yes', undefined],
+    );
+  });
+
   it("connect-14: the processes get the editor's environment without its unset entries", () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     deepStrictEqual(

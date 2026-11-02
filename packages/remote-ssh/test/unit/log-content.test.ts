@@ -11,6 +11,7 @@ import {
   maskOf,
   notValidLine,
   pathSettingLine,
+  ptySettingLine,
   rejectedLine,
   resolvedLine,
   resolverLine,
@@ -70,6 +71,29 @@ describe('the lines of the client search and the probed platform (card connect-2
     deepStrictEqual(
       [pathSettingLine(''), pathSettingLine('/opt/a "b"/ssh')],
       ['remote.SSH.path = ""', 'remote.SSH.path = "/opt/a \\"b\\"/ssh"'],
+    );
+  });
+
+  it('F-2106 BR-7: the pty line shows the setting as written, false when unset, and the JSON of anything else', () => {
+    deepStrictEqual(
+      [
+        ptySettingLine(undefined),
+        ptySettingLine(true),
+        ptySettingLine(false),
+        ptySettingLine('yes'),
+        ptySettingLine(0),
+        ptySettingLine(''),
+        ptySettingLine({unexpected: 'text'}),
+      ],
+      [
+        'remote.SSH.permitPtyAllocation = false',
+        'remote.SSH.permitPtyAllocation = true',
+        'remote.SSH.permitPtyAllocation = false',
+        'remote.SSH.permitPtyAllocation = yes',
+        'remote.SSH.permitPtyAllocation = 0',
+        'remote.SSH.permitPtyAllocation = ',
+        'remote.SSH.permitPtyAllocation = {"unexpected":"text"}',
+      ],
     );
   });
 
