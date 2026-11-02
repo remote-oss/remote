@@ -451,6 +451,27 @@ describe("the assembled ports' settings", () => {
     );
   });
 
+  it('F-2405 AC-20: a refused host download is kept as a hint of its status', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({});
+    const kept: string[] = [];
+    const ports = wiringPortsOf(
+      {
+        ...surfaces,
+        hints: {
+          begin: () => undefined,
+          record: hint => {
+            kept.push(hint.status);
+          },
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    );
+    ports.server.onHostDownloadRefused('downloadFailed');
+    ports.server.onHostDownloadRefused('noDownloader');
+    deepStrictEqual(kept, ['ServerDownloadFailed', 'NoDownloaderAvailable']);
+  });
+
   it('F-2403: remote.SSH.useExecServer is read as a switch', () => {
     const {surfaces, machine, recorded} = assemblyInputs({
       'remote.SSH.useExecServer': true,

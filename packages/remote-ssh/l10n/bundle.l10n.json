@@ -116,5 +116,17 @@
   "The remote server's SSH configuration may have TCP forwarding disabled": "The remote server's SSH configuration may have TCP forwarding disabled",
   "Add the setting '{0}' to the server's '{1}' (or similar) configuration file": "Add the setting '{0}' to the server's '{1}' (or similar) configuration file",
   "Restart the SSH server on the remote machine to apply any changes to the configuration": "Restart the SSH server on the remote machine to apply any changes to the configuration",
-  "scp installation not found": "scp installation not found"
+  "Enable {0} to allow VS Code to download the required resources locally": "Enable {0} to allow VS Code to download the required resources locally",
+  "Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server": "Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server",
+  "scp installation not found": "scp installation not found",
+  "A VS Code Server matching your local installation could not be downloaded from the internet.": "A VS Code Server matching your local installation could not be downloaded from the internet.",
+  "Downloading VS Code Server failed - please install either curl or wget on the remote.": "Downloading VS Code Server failed - please install either curl or wget on the remote.",
+  "Ensure curl/wget are on the remote system's '{0}'": "Ensure curl/wget are on the remote system's '{0}'",
+  "Ensure that the remote server has internet access and has access to the VS Code CDN": "Ensure that the remote server has internet access and has access to the VS Code CDN",
+  "Ensure that the remote server has internet access and that the network is not blocking the download": "Ensure that the remote server has internet access and that the network is not blocking the download",
+  "If your remote server is behind a firewall, ask your IT department to allow access to the VS Code CDN": "If your remote server is behind a firewall, ask your IT department to allow access to the VS Code CDN",
+  "If your remote server is behind a proxy, provide the proxy URL with setting '{0}' or '{1}'": "If your remote server is behind a proxy, provide the proxy URL with setting '{0}' or '{1}'",
+  "Install '{0}' on the remote server. Installation steps will vary per distribution.": "Install '{0}' on the remote server. Installation steps will vary per distribution.",
+  "Update VS Code and try again later": "Update VS Code and try again later",
+  "When first establishing a connection to the remote server, various resources must be installed from the internet. A program (either \"wget\" or \"curl\") is used to download these resources, but they are not installed on the remote server.  When this step fails, the extension attempts to use the local machine to download the resources and then upload them to the remote server.": "When first establishing a connection to the remote server, various resources must be installed from the internet. A program (either \"wget\" or \"curl\") is used to download these resources, but they are not installed on the remote server.  When this step fails, the extension attempts to use the local machine to download the resources and then upload them to the remote server."
 }

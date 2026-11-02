@@ -3,7 +3,7 @@
  * in the hint store of the extension's global state.
  */
 
-import type {FailureHint, FilledString} from 'lib-ssh';
+import type {FailureHint, FailureReason, FilledString} from 'lib-ssh';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
 import {
@@ -42,6 +42,13 @@ function textOf(part: string | FilledString, translate: Translate): string {
   return typeof part === 'string' ? part : ownText(part, translate);
 }
 
+/** The text of a hint's details. */
+function reasonText(reason: FailureReason, translate: Translate): string {
+  return 'text' in reason
+    ? reason.text
+    : ownText({id: reason.id, values: []}, translate);
+}
+
 /** The recorder over `state`. */
 export function hintRecorderOf(
   state: HintRecorderState,
@@ -62,6 +69,9 @@ export function hintRecorderOf(
             kind: 'error',
             status: hint.status,
             message: textOf(hint.message, environment.translate),
+            ...(hint.details === undefined
+              ? {}
+              : {details: reasonText(hint.details, environment.translate)}),
             mitigations: hint.mitigations.map(each =>
               textOf(each, environment.translate),
             ),

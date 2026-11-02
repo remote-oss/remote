@@ -1126,6 +1126,77 @@ describe('the server steps: the default extensions', () => {
   });
 });
 
+describe('the host download that is refused with local download off (card connect-121)', () => {
+  /** What `onHostDownloadRefused` heard when the host answered `status` under `policy`; the client's download fails. */
+  async function heard(
+    status: string,
+    policy: ServerPolicyRecord,
+  ): Promise<string[]> {
+    const causes: string[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        policy,
+        download: {
+          download: () =>
+            Promise.resolve({kind: 'failed' as const, detail: 'offline'}),
+        },
+        onHostDownloadRefused: cause => {
+          causes.push(cause);
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    await steps.transfer(
+      INPUT,
+      leaseOn(channelAnswering(lines(status))),
+      HOST,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+    return causes;
+  }
+
+  it('F-2405 AC-20: a failed download on the host with the mode off is told as downloadFailed', async () => {
+    deepStrictEqual(await heard('ServerDownloadFailed', sshPolicyFor('off')), [
+      'downloadFailed',
+    ]);
+  });
+
+  it('F-2405 AC-20: a host with no download tool and the mode off is told as noDownloader', async () => {
+    deepStrictEqual(await heard('NoDownloaderAvailable', sshPolicyFor('off')), [
+      'noDownloader',
+    ]);
+  });
+
+  it('F-2405 AC-20: with the mode auto neither failure is told', async () => {
+    deepStrictEqual(
+      [
+        await heard('ServerDownloadFailed', sshPolicyFor('auto')),
+        await heard('NoDownloaderAvailable', sshPolicyFor('auto')),
+      ],
+      [[], []],
+    );
+  });
+
+  it('F-2405 AC-20: with the client downloading alone the host is never blamed', async () => {
+    deepStrictEqual(
+      await heard('ServerDownloadFailed', {
+        ...sshPolicyFor('off'),
+        downloadPlacement: {kind: 'clientOnly'},
+      }),
+      [],
+    );
+  });
+
+  it('F-2405 AC-20: another failure of the host with the mode off is not told', async () => {
+    deepStrictEqual(await heard('UnpackFailed', sshPolicyFor('off')), []);
+  });
+});
+
 describe('the stall bounds of the transfer (card connect-122)', () => {
   /** The stall bound the client download is asked with under `policy`. */
   async function downloadStallUnder(
