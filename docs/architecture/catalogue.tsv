@@ -158,7 +158,7 @@ F-2303	36	remote-ssh	feature	spec:draft	E23	New Window on Active Host	A	ssh.new-
 F-2304	37	remote-ssh	feature	spec:draft	E23	Connection progress, phases and cancel	A	ssh.connect-progress	lib-log	34	11	True	1	8	0	0	ssh-remote	resolvers;terminalDataWriteEvent	ssh	openssh	20
 F-2305	38	remote-ssh	feature	spec:draft	E23	Host-key verification	A	ssh.prompt-relay (host-key classifier)	lib-ssh	45	9	True	0	5	0	0	ssh-remote	resolvers	ssh;SSH_ASKPASS relay	openssh	24
 F-2306	39	remote-ssh	feature	spec:draft	E23	Password and keyboard-interactive (two-factor) prompts	A	ssh.prompt-relay (secret input)	lib-ssh	36	7	True	0	7	0	0	ssh-remote	resolvers;terminalDataWriteEvent	ssh;SSH_ASKPASS relay	openssh	18
-F-2307	40	remote-ssh	feature	spec:draft	E23	Keys, passphrases, certificates and the local SSH agent	A	ssh.prompt-relay (passphrase)	lib-ssh	32	8	True	0	10	0	0	ssh-remote	resolvers;terminalDataWriteEvent	ssh;ssh-agent (via SSH_AUTH_SOCK);SSH_ASKPASS relay	openssh	28
+F-2307	40	remote-ssh	feature	spec:reviewed	E23	Keys, passphrases, certificates and the local SSH agent	A	ssh.prompt-relay (passphrase)	lib-ssh	33	8	True	0	10	0	0	ssh-remote	resolvers;terminalDataWriteEvent	ssh;ssh-agent (via SSH_AUTH_SOCK);SSH_ASKPASS relay	openssh	28
 F-2308	41	remote-ssh	feature	spec:draft	E23	The login terminal and unrecognized prompts	A	ssh.login-terminal	lib-ssh	28	8	True	0	6	0	0	ssh-remote	terminalDataWriteEvent;resolvers	ssh	openssh	18
 F-2309	42	remote-ssh	feature	spec:draft	E23	External SSH_ASKPASS	A	ssh.askpass-policy	lib-ssh	28	8	True	0	1	0	0	ssh-remote	resolvers	ssh;user askpass program	openssh	17
 F-2310	43	remote-ssh	feature	spec:draft	E23	Jump hosts and proxy commands	A	ssh.hop-prompt-relay	lib-ssh	36	9	True	0	0	0	0	ssh-remote	resolvers	ssh;scp;nc;ssh -W	openssh	25

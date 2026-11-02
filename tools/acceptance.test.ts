@@ -5,6 +5,7 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
+import {passkeyCopies} from './acceptance-keys.ts';
 import type {PortHolder} from './acceptance-occupy.ts';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -422,6 +423,7 @@ const LAUNCH_ORDER = [
   'terminal-pick',
   'windows',
   'terminal-login',
+  'passphrase-input',
   'login-shells',
   'preconnect',
   'config-files',
@@ -775,6 +777,24 @@ describe('acceptance', () => {
         ...PASSWORD_ALIAS_LINES,
         `  ProxyCommand bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/49153 && { cat <&3 & exec cat >&3; }'`,
       ].join('\n'),
+    );
+  });
+
+  it('coverage-96: the passkey aliases offer the passphrase key alone, under the names passkey-1 to the last copy', () => {
+    const aliases = ['passkey', ...passkeyCopies()];
+    deepStrictEqual(
+      aliases.map(alias =>
+        accountBlock(alias)
+          .split('\n')
+          .filter(
+            line =>
+              line.includes('IdentityFile') || line.includes('IdentitiesOnly'),
+          ),
+      ),
+      aliases.map(() => [
+        '  IdentityFile /run/id_passphrase',
+        '  IdentitiesOnly yes',
+      ]),
     );
   });
 
