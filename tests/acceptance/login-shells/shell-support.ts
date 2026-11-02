@@ -93,6 +93,14 @@ export async function taskEnvironment(
 ): Promise<Record<string, string>> {
   const file = `/tmp/${label}-env`;
   await runProcessTask(window, '/bin/sh', ['-c', `env > ${file}`]);
+  return takeEnvironment(user, file);
+}
+
+/** The `NAME=value` lines of `file`, written on the host as `user`, as a map; the file is removed. */
+export async function takeEnvironment(
+  user: string,
+  file: string,
+): Promise<Record<string, string>> {
   const text = await onHostAs(user, 'cat', file);
   await onHostAs(user, 'rm', '-f', file);
   return Object.fromEntries(
