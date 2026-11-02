@@ -724,7 +724,7 @@ VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has fourteen users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has fifteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -736,6 +736,7 @@ Besides `harness`, the host image has fourteen users, and the run's `ssh_config`
 | `ask-odd` | `harness-odd` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, first `Favourite colour? ` with the answer shown, a question the extension doesn't recognise (any answer goes on), then `Password: `, the run's password; left unanswered, sshd drops the login at its `LoginGraceTime`, 120 s, a global setting |
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
+| `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |

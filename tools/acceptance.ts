@@ -502,6 +502,10 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
+    ...accountAlias('x11-forbidden', 'harness-nox11', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+    ]),
     ...accountAlias(
       'nosocket',
       'harness-nosock',

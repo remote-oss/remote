@@ -34,6 +34,8 @@ RUN apk add --no-cache openssh-server openssh-client xauth xdpyinfo iptables lib
   && sed -i 's/^harness-nosock:!/harness-nosock:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-noall \
   && sed -i 's/^harness-noall:!/harness-noall:*/' /etc/shadow \
+  && adduser -D -s /bin/sh harness-nox11 \
+  && sed -i 's/^harness-nox11:!/harness-nox11:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-i686 \
   && sed -i 's/^harness-i686:!/harness-i686:*/' /etc/shadow \
   && adduser -D -s /usr/bin/fish harness-fish \
@@ -91,6 +93,8 @@ RUN echo /usr/local/bin/mute-shell >> /etc/shells \
     '  AllowStreamLocalForwarding no' \
     'Match User harness-noall' \
     '  DisableForwarding yes' \
+    'Match User harness-nox11' \
+    '  X11Forwarding no' \
     'Match User harness-cert' \
     '  AuthorizedKeysFile none' \
     '  TrustedUserCAKeys /etc/ssh/ca.pub' \
