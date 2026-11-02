@@ -26,6 +26,7 @@ RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ cu
   && adduser -D -s /bin/sh harness \
   && sed -i 's/^harness:!/harness:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-pw \
+  && adduser -D -s /bin/sh harness-pwonly \
   && adduser -D -s /bin/sh harness-nofwd \
   && sed -i 's/^harness-nofwd:!/harness-nofwd:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-nosock \
@@ -78,6 +79,10 @@ RUN echo /usr/local/bin/mute-shell >> /etc/shells \
     'Match User harness-pw' \
     '  PasswordAuthentication yes' \
     '  KbdInteractiveAuthentication yes' \
+    '  PubkeyAuthentication no' \
+    'Match User harness-pwonly' \
+    '  PasswordAuthentication yes' \
+    '  KbdInteractiveAuthentication no' \
     '  PubkeyAuthentication no' \
     'Match User harness-nofwd' \
     '  AllowTcpForwarding no' \
