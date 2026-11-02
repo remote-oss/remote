@@ -954,7 +954,15 @@ describe('the connect pipeline, when a step fails', () => {
       steps(recording, {
         locateClient: waitsOf({...WAITS, tunnelMilliseconds: 20}),
         tunnelPath: () => 'socks',
-        openTunnel: (input, lease, server, onWaiting, signal, disarm) => {
+        openTunnel: (
+          input,
+          lease,
+          server,
+          onWaiting,
+          signal,
+          onSettingUp,
+          disarm,
+        ) => {
           disarm?.();
           return new Promise(resolve => {
             signal.addEventListener('abort', () => {
