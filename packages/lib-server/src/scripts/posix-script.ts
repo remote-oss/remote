@@ -1,432 +1,606 @@
 /**
- * @fileoverview The text of the POSIX `sh` bootstrap script, in the pieces the steps are built from. The script runs
- * under dash, ash, BusyBox and bash alike: no bash-only syntax, and every command that could read standard input is
- * given /dev/null, because the script itself may be arriving on standard input.
+ * @fileoverview The POSIX `sh` script of each bootstrap step: the guard, the parameter block, the helper functions its
+ * roles name, and the step's body, which ends in the result block.
  */
 
-import {PROGRESS_PREFIX} from './progress-line.ts';
-import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
+import {
+  CVE_LINE,
+  NO_FREE_PORT_PREFIX,
+  POSIX_FUNCTIONS,
+  READY_LINE,
+  shellQuote,
+} from './posix-functions.ts';
+import {LAUNCHING_LINE} from './result-block.ts';
+import {
+  type BootstrapRequest,
+  parameterValuesOf,
+  rolesOf,
+  type ScriptParameters,
+  type StartParameters,
+  startWordsOf,
+  type StepwiseAction,
+} from './steps.ts';
 
-/** The server's own line that says it is ready; the port follows it. */
-export const READY_LINE = 'Extension host agent listening on';
-
-/** The start of the server's own line when no port of its `--port` range is free, as a `grep` pattern. */
-export const NO_FREE_PORT_PREFIX =
-  '--port: Could not find free port in range: ';
-
-/** The server's whole line when it ends for CVE-2020-1416, as a `grep` pattern: its leading `*` is escaped. */
-export const CVE_LINE =
-  '\\* !!!! Server terminated due to presence of CVE-2020-1416 !!!!';
-
-/** Quote a value for the shell as one word, whatever it holds. */
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
+/**
+ * The `set --` line that holds the server's start options: each option and value as one single-quoted word, and the
+ * two file variables as words the script expands.
+ */
+function startOptions(start: StartParameters): string {
+  const words = startWordsOf(start).map(word =>
+    'text' in word ? shellQuote(word.text) : `"$${word.variable}"`,
+  );
+  return `set -- ${words.join(' ')}`;
 }
 
-/** The functions every step uses: the result block, facts, tools and times. */
-export const COMMON_FUNCTIONS: readonly string[] = [
-  "RESULT_FACTS=''",
-  'fact() {',
-  "  FACT_VALUE=$(printf '%s' \"$2\" | tr '\\n\\r' '  ')",
-  '  RESULT_FACTS="${RESULT_FACTS}${1}=${FACT_VALUE}',
-  '"',
-  '}',
-  'report() {',
-  `  printf '\\n%s\\n' ${shellQuote(RESULT_BEGIN)}`,
-  '  printf \'status=%s\\n\' "$1"',
-  '  printf \'%s\' "$RESULT_FACTS"',
-  `  printf '%s\\n' ${shellQuote(RESULT_END)}`,
-  '}',
-  'finish() {',
-  '  if [ "$ARCHIVE_REMOVE" = yes ] && [ -n "$ARCHIVE_PATH" ] && [ "$1" != LockBusy ]; then',
-  '    rm -f "$ARCHIVE_PATH"',
-  '  fi',
-  '  report "$1"',
-  '  exit 0',
-  '}',
-  'have() {',
-  '  command -v "$1" >/dev/null 2>&1',
-  '}',
-  'now_seconds() {',
-  '  date +%s',
-  '}',
-  'elapsed_milliseconds() {',
-  '  echo $(( ( $(now_seconds) - $1 ) * 1000 ))',
-  '}',
-  'case $INSTALL_ROOT in',
-  "  '~') INSTALL_ROOT=$HOME ;;",
-  "  '~/'*) INSTALL_ROOT=$HOME/${INSTALL_ROOT#'~/'} ;;",
+const GUARD: readonly string[] = [
+  'if [ -n "${ZSH_VERSION:-}" ]; then',
+  '  emulate sh',
+  'fi',
+];
+
+const PROBE_BODY: readonly string[] = [
+  'fact host.tmp "${TMPDIR:-/tmp}"',
+  'fact host.home "${HOME:-}"',
+  'OS_NAME=$(uname -s 2>/dev/null)',
+  'case $OS_NAME in',
+  '  Linux) HOST_OS=linux ;;',
+  '  Darwin) HOST_OS=darwin ;;',
+  '  *)',
+  '    fact host.os "$OS_NAME"',
+  '    finish UnsupportedPlatform',
+  '    ;;',
   'esac',
-  'DATA_ROOT=${INSTALL_ROOT:-$HOME}',
-  'DATA_DIR=$DATA_ROOT/$DATA_FOLDER',
-  'INSTALL_DIR=$DATA_DIR/bin/$COMMIT',
-  'CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT',
-  'CLI_FILE=$DATA_DIR/$CLI_NAME',
-  'BOOT_PREFIX=$DATA_DIR/.$COMMIT',
-  '[ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes',
-];
-
-/** The port the CLI reports in its log: the first line that is exactly `Listening on 127.0.0.1:<port>`. */
-export const CLI_FUNCTIONS: readonly string[] = [
-  'cli_ready_port() {',
-  `  sed -n 's/^Listening on 127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$/\\1/p' "$LOG_FILE" 2>/dev/null | head -n 1`,
-  '}',
-];
-
-/** Source the environment setup once and export the proxy variables the host's own environment does not set. */
-export const ENVIRONMENT_FUNCTIONS: readonly string[] = [
-  'prepare_environment() {',
-  '  if [ -n "$ENVIRONMENT_SETUP" ] && [ -f "$ENVIRONMENT_SETUP" ]; then',
-  '    . "$ENVIRONMENT_SETUP" </dev/null',
+  'fact host.os "$HOST_OS"',
+  'MACHINE=$(uname -m 2>/dev/null)',
+  'case $MACHINE in',
+  '  x86_64) HOST_ARCH=x64 ;;',
+  '  aarch64 | arm64) HOST_ARCH=arm64 ;;',
+  '  armv7l | armv8l) HOST_ARCH=armhf ;;',
+  '  ppc64le) HOST_ARCH=ppc64le ;;',
+  '  riscv64) HOST_ARCH=riscv64 ;;',
+  '  loongarch64) HOST_ARCH=loong64 ;;',
+  '  s390x) HOST_ARCH=s390x ;;',
+  '  *)',
+  '    fact host.arch "$MACHINE"',
+  '    finish UnsupportedArch',
+  '    ;;',
+  'esac',
+  'fact host.arch "$HOST_ARCH"',
+  'HOST_LIBC=unknown',
+  'if [ "$HOST_OS" = linux ]; then',
+  '  for LOADER in /lib/ld-musl-* /usr/lib/ld-musl-*; do',
+  '    [ ! -e "$LOADER" ] || HOST_LIBC=musl',
+  '  done',
+  '  if [ "$HOST_LIBC" = unknown ] && have getconf && getconf GNU_LIBC_VERSION >/dev/null 2>&1; then',
+  '    HOST_LIBC=glibc',
   '  fi',
-  '  if [ -n "$PROXY_HTTP" ] && [ -z "${http_proxy:-}" ]; then',
-  '    http_proxy=$PROXY_HTTP',
-  '    export http_proxy',
-  '  fi',
-  '  if [ -n "$PROXY_HTTPS" ] && [ -z "${https_proxy:-}" ]; then',
-  '    https_proxy=$PROXY_HTTPS',
-  '    export https_proxy',
-  '  fi',
-  '}',
-];
-
-/** The host lock: `flock` held on a descriptor, or an atomic hard link; `flock` falls back to the link. */
-export const LOCK_FUNCTIONS: readonly string[] = [
-  'lock_method() {',
-  '  if [ "$LOCK_METHOD" = flock ] && have flock; then',
-  '    echo flock',
+  'fi',
+  'fact host.libc "$HOST_LIBC"',
+  'fact host.kernel "$(uname -r 2>/dev/null)"',
+  'RELEASE_ID=$(. /etc/os-release >/dev/null 2>&1 </dev/null; echo "${ID:-}")',
+  'fact host.release "${RELEASE_ID:-$OS_NAME}"',
+  'for TOOL in wget curl tar unzip flock gzip; do',
+  '  if have "$TOOL"; then',
+  '    fact "host.tool.$TOOL" yes',
   '  else',
-  '    echo link',
+  '    fact "host.tool.$TOOL" no',
   '  fi',
-  '}',
-  'lock_path() {',
-  '  if [ "$LOCK_IN_TEMPORARY" = yes ]; then',
-  '    echo "/tmp/$LOCK_PREFIX.$1"',
+  'done',
+  'if have wget && wget_is_busybox; then',
+  '  fact host.wgetBusybox yes',
+  'else',
+  '  fact host.wgetBusybox no',
+  'fi',
+  'fact host.shell "${SHELL:-}"',
+  'fact host.sshAuthSock "${SSH_AUTH_SOCK:-}"',
+  'fact host.display "${DISPLAY:-}"',
+  'fact server.installDir "$INSTALL_DIR"',
+  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '  fact server.installed yes',
+  'else',
+  '  fact server.installed no',
+  'fi',
+];
+
+/** What the probe adds when the server installs into a tree: whether the tree is complete. */
+const PROBE_TREE_BODY: readonly string[] = [
+  'if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '  fact server.treeComplete yes',
+  'else',
+  '  fact server.treeComplete no',
+  'fi',
+];
+
+function probeBody(installTree: string): readonly string[] {
+  return [
+    ...PROBE_BODY,
+    ...(installTree === '' ? [] : PROBE_TREE_BODY),
+    'finish Ok',
+  ];
+}
+
+const INSTALL_BODY: readonly string[] = [
+  'STARTED_AT=$(now_seconds)',
+  '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
+  'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
+  'take_lock_or_finish "$COMMIT"',
+  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '  fact server.installDir "$INSTALL_DIR"',
+  '  leave Ok',
+  'fi',
+  'prepare_environment',
+  'if [ -n "$ARCHIVE_PATH" ]; then',
+  '  ARCHIVE=$ARCHIVE_PATH',
+  'else',
+  '  have wget || have curl || leave NoDownloaderAvailable',
+  '  ARCHIVE=$INSTALL_DIR/.archive.$$',
+  '  fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || leave ServerDownloadFailed',
+  'fi',
+  'DOWNLOADED_AT=$(now_seconds)',
+  'unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes',
+  '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
+  '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
+  'fact server.installDir "$INSTALL_DIR"',
+  'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
+  'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'leave Ok',
+];
+
+/**
+ * The install into a tree: the lock is the container's own, in the temporary folder; a complete tree is not
+ * touched, and the link `bin/<commit>` is made whether the tree was installed now or by another container.
+ */
+const INSTALL_TREE_BODY: readonly string[] = [
+  'STARTED_AT=$(now_seconds)',
+  '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
+  'MKDIR_ERROR=$(mkdir -p "$DATA_DIR/bin" "${INSTALL_TREE%/*}" 2>&1) || write_failed "$DATA_DIR/bin" "$MKDIR_ERROR"',
+  'take_lock_or_finish "$COMMIT"',
+  'if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '  fact server.treeInstalled no',
+  'else',
+  '  prepare_environment',
+  '  if [ -n "$ARCHIVE_PATH" ]; then',
+  '    ARCHIVE=$ARCHIVE_PATH',
   '  else',
-  '    echo "$DATA_DIR/bin/$1/$LOCK_PREFIX.$1"',
+  '    have wget || have curl || leave NoDownloaderAvailable',
+  '    ARCHIVE=${INSTALL_TREE}_$STAGING_SUFFIX.archive.$$',
+  '    fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || leave ServerDownloadFailed',
   '  fi',
+  '  DOWNLOADED_AT=$(now_seconds)',
+  '  install_tree "$ARCHIVE" || UNPACK_FAILED=yes',
+  '  [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
+  '  [ -z "${UNPACK_FAILED:-}" ] || leave UnpackFailed',
+  '  fact server.treeInstalled yes',
+  '  fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
+  '  fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'fi',
+  'ensure_install_link',
+  '[ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
+  'fact server.installDir "$INSTALL_DIR"',
+  'leave Ok',
+];
+
+const INSTALL_CLI_BODY: readonly string[] = [
+  'clear_staging() {',
+  '  rm -rf "$CLI_STAGING" "$CLI_STAGING".stage.*',
+  '  rmdir "$DATA_DIR/cli-bin" 2>/dev/null',
   '}',
-  'lock_link() {',
-  '  if LOCK_ERROR=$(ln "$LOCK_CANDIDATE" "$LOCK_CANDIDATE.target" 2>&1); then',
-  "    LOCK_ERROR=''",
-  '    return 0',
+  'STARTED_AT=$(now_seconds)',
+  '[ -n "$DATA_ROOT" ] && [ -n "$CLI_NAME" ] || finish CreateInstallDirFailed',
+  'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
+  'take_lock_or_finish "$COMMIT"',
+  'if [ -x "$CLI_FILE" ]; then',
+  '  fact cli.path "$CLI_FILE"',
+  '  leave Ok',
+  'fi',
+  'MKDIR_ERROR=$(mkdir -p "$CLI_STAGING" 2>&1) || write_failed_leave "$CLI_STAGING" "$MKDIR_ERROR"',
+  'prepare_environment',
+  'if [ -n "$ARCHIVE_PATH" ]; then',
+  '  ARCHIVE=$ARCHIVE_PATH',
+  'else',
+  '  have wget || have curl || leave NoDownloaderAvailable',
+  '  ARCHIVE=$CLI_STAGING.archive.$$',
+  '  fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || { rm -f "$ARCHIVE"; clear_staging; leave ServerDownloadFailed; }',
+  'fi',
+  'DOWNLOADED_AT=$(now_seconds)',
+  'unpack_into "$ARCHIVE" "$CLI_STAGING" || UNPACK_FAILED=yes',
+  '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
+  'if [ -n "${UNPACK_FAILED:-}" ] || [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then',
+  '  clear_staging',
+  '  leave UnpackFailed',
+  'fi',
+  'chmod +x "$CLI_STAGING/$LAUNCHER" && mv "$CLI_STAGING/$LAUNCHER" "$CLI_FILE" || { clear_staging; leave UnpackFailed; }',
+  'clear_staging',
+  'fact cli.path "$CLI_FILE"',
+  'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
+  'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'leave Ok',
+];
+
+/**
+ * The check of the host's connection token file: a regular file, not a link, that only its owner can read or write,
+ * holding 1 to 128 characters of the server's token form.
+ */
+const CONNECTION_TOKEN_CHECK: readonly string[] = [
+  'connection_token_usable() {',
+  '  [ -f "$1" ] && [ ! -L "$1" ] || return 1',
+  '  case $(ls -ln "$1" 2>/dev/null) in -rw-------*|-r--------*) ;; *) return 1 ;; esac',
+  '  TOKEN_TEXT=$(cat "$1" 2>/dev/null) || return 1',
+  "  case $TOKEN_TEXT in ''|*[!0-9A-Za-z_-]*) return 1 ;; esac",
+  '  [ "${#TOKEN_TEXT}" -le 128 ]',
+  '}',
+];
+
+const START_CLI_BODY: readonly string[] = [
+  ...CONNECTION_TOKEN_CHECK,
+  '[ -x "$CLI_FILE" ] || finish ServerFailedToStart',
+  '[ -n "${VSCODE_CLI_REQUIRE_TOKEN:-}" ] || { fact cli.tokenMissing yes; finish ServerFailedToStart; }',
+  'TOKEN_FILE=$CLI_DATA/connection-token',
+  '(umask 077; mkdir -p "$CLI_DATA") || finish ServerFailedToStart',
+  'if [ ! -e "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ]; then',
+  '  TOKEN_TEMPORARY=$TOKEN_FILE.$$',
+  '  (umask 077; tr -dc \'A-Za-z0-9\' </dev/urandom | head -c 32 >"$TOKEN_TEMPORARY")',
+  '  TOKEN_LENGTH=$(wc -c <"$TOKEN_TEMPORARY" 2>/dev/null)',
+  '  [ "$((TOKEN_LENGTH + 0))" -eq 32 ] && ln "$TOKEN_TEMPORARY" "$TOKEN_FILE" 2>/dev/null',
+  '  rm -f "$TOKEN_TEMPORARY"',
+  'fi',
+  '[ -e "$TOKEN_FILE" ] || [ -L "$TOKEN_FILE" ] || finish ServerFailedToStart',
+  'connection_token_usable "$TOKEN_FILE" || { fact cli.tokenInvalid yes; finish ServerFailedToStart; }',
+  'fact cli.connectionToken "$(cat "$TOKEN_FILE")"',
+  'LOG_FILE=$DATA_DIR/.cli.$COMMIT.log',
+  '(umask 077; printf \'\' >"$LOG_FILE") || finish ServerFailedToStart',
+  'nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+  'CLI_PID=$!',
+  'if sleep 0.2 2>/dev/null; then TICK=0.2; TICKS=$((READY_SECONDS * 5)); else TICK=1; TICKS=$READY_SECONDS; fi',
+  'WAITED=0',
+  'while [ "$WAITED" -lt "$TICKS" ]; do',
+  '  CLI_PORT=$(cli_ready_port)',
+  '  if [ -n "$CLI_PORT" ]; then',
+  '    fact cli.port "$CLI_PORT"',
+  '    fact cli.pid "$CLI_PID"',
+  '    fact cli.log "$LOG_FILE"',
+  '    finish Ok',
   '  fi',
-  '  [ ! -e "$LOCK_CANDIDATE.target" ] || return 1',
-  '  return 2',
-  '}',
-  'lock_take() {',
-  '  LOCK_CANDIDATE=$(lock_path "$1")',
-  "  LOCK_ERROR=''",
-  '  if [ "$LOCK_IN_TEMPORARY" = yes ]; then',
-  '    if [ -L "$LOCK_CANDIDATE" ] || { [ -e "$LOCK_CANDIDATE" ] && [ ! -f "$LOCK_CANDIDATE" ]; }; then',
-  "      LOCK_ERROR='not a regular file'",
-  '      return 2',
+  '  kill -0 "$CLI_PID" 2>/dev/null || finish ServerFailedToStart',
+  '  sleep "$TICK"',
+  '  WAITED=$((WAITED + 1))',
+  'done',
+  'kill "$CLI_PID" 2>/dev/null',
+  'finish ServerFailedToStart',
+];
+
+const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
+  prepare: [
+    '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
+    'STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX',
+    'MKDIR_ERROR=$(mkdir -p "$STAGING" 2>&1) || write_failed "$STAGING" "$MKDIR_ERROR"',
+    'fact server.stagingDir "$STAGING"',
+    'finish Ok',
+  ],
+  unpack: [
+    'STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX',
+    'cat >"$STAGING.archive" || finish UnpackFailed',
+    'unpack_into "$STAGING.archive" "$STAGING" || UNPACK_FAILED=yes',
+    'rm -f "$STAGING.archive"',
+    '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
+    'finish Ok',
+  ],
+  activate: [
+    'STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX',
+    'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+    '  rm -rf "$STAGING"',
+    '  fact server.installDir "$INSTALL_DIR"',
+    '  finish Ok',
+    'fi',
+    '[ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
+    'ASIDE=$INSTALL_DIR.old.$$',
+    'if [ -d "$INSTALL_DIR" ]; then',
+    '  mv "$INSTALL_DIR" "$ASIDE" || finish UnpackFailed',
+    'fi',
+    'if ! mv "$STAGING" "$INSTALL_DIR"; then',
+    '  [ ! -d "$ASIDE" ] || mv "$ASIDE" "$INSTALL_DIR"',
+    '  finish UnpackFailed',
+    'fi',
+    'rm -rf "${ASIDE:?}"',
+    'fact server.installDir "$INSTALL_DIR"',
+    'finish Ok',
+  ],
+};
+
+/**
+ * What a launch does first under the `bundledHelper` policy: it runs the server's own requirements helper through `sh`.
+ * Exit 99 is `LinuxPrereqs`, with the helper's output as facts inside the result block (ADR-0010 rule 1): up to 20 lines
+ * of 500 characters, read from a here-document so that the loop runs in the script's own shell. Any other exit
+ * launches the server. A server with no helper is not checked, and the fact says so. The lines of the here-document
+ * start in the first column, because its end marker must.
+ */
+const REQUIREMENTS_HELPER_LINES: readonly string[] = [
+  'if [ "$REQUIREMENTS_HELPER" = yes ]; then',
+  '  REQUIREMENTS_SCRIPT=$INSTALL_DIR/bin/helpers/check-requirements.sh',
+  '  if [ -f "$REQUIREMENTS_SCRIPT" ]; then',
+  '    REQUIREMENTS_STATUS=0',
+  '    REQUIREMENTS_OUTPUT=$(sh "$REQUIREMENTS_SCRIPT" 2>&1) || REQUIREMENTS_STATUS=$?',
+  '    if [ "$REQUIREMENTS_STATUS" = 99 ]; then',
+  '      REQUIREMENTS_LINE=0',
+  '      if [ -n "$REQUIREMENTS_OUTPUT" ]; then',
+  '        while IFS= read -r REQUIREMENTS_TEXT; do',
+  '          [ "$REQUIREMENTS_LINE" -lt 20 ] || break',
+  '          REQUIREMENTS_LINE=$((REQUIREMENTS_LINE + 1))',
+  "          REQUIREMENTS_TEXT=$(printf '%s' \"$REQUIREMENTS_TEXT\" | tr -d '\\r' | cut -c1-500)",
+  '          fact "server.prerequisites.$REQUIREMENTS_LINE" "$REQUIREMENTS_TEXT"',
+  '        done <<REQUIREMENTS_END',
+  '$REQUIREMENTS_OUTPUT',
+  'REQUIREMENTS_END',
+  '      fi',
+  '      leave LinuxPrereqs',
   '    fi',
-  '  fi',
-  '  if [ "$(lock_method)" = flock ]; then',
-  '    LOCK_ERROR=$( ( exec 9>>"$LOCK_CANDIDATE" ) 2>&1 ) || return 2',
-  '    exec 9>>"$LOCK_CANDIDATE"',
-  '    if LOCK_ERROR=$(flock -n 9 2>&1); then',
-  "      LOCK_ERROR=''",
-  '    else',
-  '      [ -z "$LOCK_ERROR" ] || return 2',
-  '      return 1',
-  '    fi',
   '  else',
-  '    for LOCK_ATTEMPT in 1 2; do',
-  '      LOCK_ERROR=$( { true >>"$LOCK_CANDIDATE"; } 2>&1 ) || return 2',
-  '      lock_link',
-  '      LOCK_STATUS=$?',
-  '      [ "$LOCK_STATUS" = 2 ] || break',
-  '    done',
-  '    [ "$LOCK_STATUS" = 0 ] || return "$LOCK_STATUS"',
+  '    fact server.prerequisitesHelper missing',
   '  fi',
-  '  LOCK_HELD=$LOCK_CANDIDATE',
-  "  trap 'exit 1' HUP INT TERM",
-  "  trap 'lock_release' EXIT",
-  '}',
-  'write_failed() {',
-  '  fact server.writeFailedPath "$1"',
-  '  fact server.writeFailedError "$2"',
-  '  finish CreateInstallDirFailed',
-  '}',
-  'write_failed_leave() {',
-  '  lock_release',
-  '  write_failed "$1" "$2"',
-  '}',
-  'take_lock_or_finish() {',
-  '  lock_take "$1"',
-  '  case $? in',
-  '    0) ;;',
-  '    1) fact server.lockPath "$LOCK_CANDIDATE"; finish LockBusy ;;',
+  'fi',
+];
+
+function startBody(start: StartParameters, installTree: string): string[] {
+  return [
+    'if [ "$SOCKET_MODE" = yes ]; then KIND_PREFIX=$BOOT_PREFIX.socket; else KIND_PREFIX=$BOOT_PREFIX; fi',
+    'PID_FILE=$KIND_PREFIX.pid',
+    'LOG_FILE=$KIND_PREFIX.log',
+    'TOKEN_FILE=$KIND_PREFIX.token',
+    'STARTED_AT=$(now_seconds)',
+    'ready_port() {',
+    '  if [ "$SOCKET_MODE" = yes ]; then',
+    `    sed -n 's/^${READY_LINE} \\(\\/[^ ]*\\)$/\\1/p' "$LOG_FILE" 2>/dev/null | tail -n 1`,
+    '  else',
+    `    sed -n 's/^${READY_LINE} \\([0-9][0-9]*\\)$/\\1/p' "$LOG_FILE" 2>/dev/null | tail -n 1`,
+    '  fi',
+    '}',
+    'cve_terminated() {',
+    `  grep -q '^${CVE_LINE}$' "$LOG_FILE" 2>/dev/null`,
+    '}',
+    'start_failed() {',
+    `  if grep -q '^${NO_FREE_PORT_PREFIX}' "$LOG_FILE" 2>/dev/null; then`,
+    '    fact server.failure noFreePort',
+    '  elif cve_terminated; then',
+    '    fact server.failure cveTerminated',
+    '  fi',
+    '  leave ServerFailedToStart',
+    '}',
+    'started() {',
+    '  [ -s "$TOKEN_FILE" ] || start_failed',
+    '  case $SOCKET_MODE:$1 in',
+    '    yes:/*) fact server.socketPath "$1" ;;',
+    '    no:*[!0-9]*|no:|no:0*) start_failed ;;',
+    '    no:*) fact server.port "$1" ;;',
+    '    *) start_failed ;;',
+    '  esac',
+    '  fact server.pid "$2"',
+    '  fact server.token "$(cat "$TOKEN_FILE" 2>/dev/null)"',
+    '  fact server.log "$LOG_FILE"',
+    '  if [ "$LAUNCHED" = yes ]; then',
+    '    fact server.reused no',
+    '  else',
+    '    fact server.reused yes',
+    '  fi',
+    '  fact host.kernel "$(uname -r 2>/dev/null)"',
+    '  fact timing.start "$(elapsed_milliseconds "$STARTED_AT")"',
+    '  leave Ok',
+    '}',
+    ...(installTree === '' ? [] : ['ensure_install_link']),
+    '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
+    'take_lock_or_finish "$COMMIT"',
+    'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    'if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
+    '  SERVER_PID=$RUNNING_PID',
+    '  LAUNCHED=no',
+    'else',
+    '  prepare_environment',
+    ...REQUIREMENTS_HELPER_LINES,
+    '  if [ ! -s "$TOKEN_FILE" ]; then',
+    '    WRITE_ERROR=$( (umask 077; tr -dc \'A-Za-z0-9\' </dev/urandom | head -c 32 >"$TOKEN_FILE") 2>&1 )',
+    '  fi',
+    '  [ -s "$TOKEN_FILE" ] || write_failed_leave "$TOKEN_FILE" "${WRITE_ERROR:-the token file is empty}"',
+    '  if [ "$SOCKET_MODE" = yes ]; then',
+    "    SOCKET_HEX=$(tr -dc 'a-f0-9' </dev/urandom | head -c 32)",
+    "    SOCKET_VARIANT=$(tr -dc '89ab' </dev/urandom | head -c 1)",
+    `    SOCKET_NAME=$(printf '%s' "$SOCKET_HEX" | sed "s/^\\(........\\)\\(....\\).\\(...\\).\\(...\\)\\(............\\)$/\\1-\\2-4\\3-$SOCKET_VARIANT\\4-\\5/")`,
+    "    TAB=$(printf '\\t')",
+    "    NEWLINE='",
+    "'",
+    '    if [ -z "${TMPDIR+set}" ]; then',
+    '      SOCKET_FOLDER=/tmp',
+    '    else',
+    '      case $TMPDIR in',
+    "        '') SOCKET_FOLDER=/tmp; fact server.socketFolderFallback empty ;;",
+    '        *" "*|*"$TAB"*|*"$NEWLINE"*) SOCKET_FOLDER=/tmp; fact server.socketFolderFallback whiteSpace ;;',
+    '        /*) if [ -d "$TMPDIR" ] && [ -w "$TMPDIR" ]; then',
+    '             SOCKET_FOLDER=$TMPDIR',
+    '           else',
+    '             SOCKET_FOLDER=/tmp; fact server.socketFolderFallback unusable',
+    '           fi ;;',
+    '        *) SOCKET_FOLDER=/tmp; fact server.socketFolderFallback relative ;;',
+    '      esac',
+    '    fi',
+    '    SOCKET_FILE="$SOCKET_FOLDER/code-$SOCKET_NAME"',
+    '  fi',
+    `  ${startOptions(start)}`,
+    '  WRITE_ERROR=$( (umask 077; printf \'\' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"',
+    `  printf '%s\\n' ${shellQuote(LAUNCHING_LINE)}`,
+    '  fact server.launching yes',
+    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+    '  SERVER_PID=$!',
+    '  WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }',
+    '  LAUNCHED=yes',
+    'fi',
+    'if sleep 0.2 2>/dev/null; then TICK=0.2; TICKS=$((READY_SECONDS * 5)); else TICK=1; TICKS=$READY_SECONDS; fi',
+    'WAITED=0',
+    'while [ "$WAITED" -lt "$TICKS" ]; do',
+    '  SERVER_PORT_READ=$(ready_port)',
+    '  [ -z "$SERVER_PORT_READ" ] || started "$SERVER_PORT_READ" "$SERVER_PID"',
+    '  if ! kill -0 "$SERVER_PID" 2>/dev/null; then',
+    '    [ "$LAUNCHED" = yes ] || start_failed',
+    '    ! cve_terminated || start_failed',
+    '  fi',
+    '  sleep "$TICK"',
+    '  WAITED=$((WAITED + 1))',
+    'done',
+    'start_failed',
+  ];
+}
+
+/**
+ * Installs each extension with the installed server's own command line, one after the other, and reports one answer
+ * per extension: `server.extension.<position>.status` is `installed` or `failed`, and `message` is the last line the
+ * command printed. A failure of one extension never stops the others, and the step itself ends `Ok`.
+ */
+function installExtensionsBody(start: StartParameters): string[] {
+  const words = start.extensions.map(extension => shellQuote(extension));
+  return [
+    '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
+    'prepare_environment',
+    `set -- ${words.join(' ')}`,
+    'POSITION=0',
+    'EXTENSION_LOG=$BOOT_PREFIX.extension.$$',
+    'for EXTENSION in "$@"; do',
+    '  if "$INSTALL_DIR/$LAUNCHER" --install-extension "$EXTENSION" </dev/null >"$EXTENSION_LOG" 2>&1; then',
+    '    EXTENSION_STATUS=installed',
+    '  else',
+    '    EXTENSION_STATUS=failed',
+    '  fi',
+    '  fact "server.extension.$POSITION.status" "$EXTENSION_STATUS"',
+    '  fact "server.extension.$POSITION.message" "$(tail -n 1 "$EXTENSION_LOG" 2>/dev/null | cut -c1-300)"',
+    '  POSITION=$((POSITION + 1))',
+    'done',
+    'rm -f "$EXTENSION_LOG"',
+    'finish Ok',
+  ];
+}
+
+const KILL_BODY: readonly string[] = [
+  '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
+  'stop_servers',
+  'rm -f "${DATA_DIR:?}"/.*.pid',
+  'rm -rf "${DATA_DIR:?}/bin"',
+  'finish Ok',
+];
+
+const DISCARD_BODY: readonly string[] = ['finish Ok'];
+
+const UNINSTALL_BODY: readonly string[] = [
+  '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
+  'stop_servers',
+  'if [ "$DATA_ROOT" != "$HOME" ]; then',
+  '  [ -n "$HOME" ] || finish Ok',
+  '  DATA_DIR=$HOME/$DATA_FOLDER',
+  '  stop_servers',
+  'fi',
+  'rm -rf "${DATA_DIR:?}"',
+  'finish Ok',
+];
+
+const CLEANUP_BODY: readonly string[] = [
+  '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
+  '[ -d "$DATA_DIR/bin" ] || finish Ok',
+  'INDEX=0',
+  'ls -t "$DATA_DIR/bin" 2>/dev/null | while IFS= read -r NAME; do',
+  '  INDEX=$((INDEX + 1))',
+  '  [ "$NAME" != "$COMMIT" ] || continue',
+  '  KIND=$(folder_kind "$NAME")',
+  '  case $CLEANUP_KIND in',
+  '    keepNewest)',
+  '      [ "$INDEX" -gt "$KEEP_COUNT" ] && remove_install "$NAME"',
+  '      ;;',
+  '    onlyCurrentRemoveLeftovers)',
+  '      [ "$KIND" = other ] || remove_install "$NAME"',
+  '      ;;',
   '    *)',
-  '      fact server.lockPath "$LOCK_CANDIDATE"',
-  '      fact server.lockInTemporary "$LOCK_IN_TEMPORARY"',
-  '      write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR"',
+  '      [ "$KIND" != commit ] || remove_install "$NAME"',
   '      ;;',
   '  esac',
-  '}',
-  'lock_release() {',
-  '  [ -n "${LOCK_HELD:-}" ] || return 0',
-  '  if [ "$(lock_method)" = flock ]; then',
-  '    exec 9>&-',
-  '  else',
-  '    rm -f "$LOCK_HELD" "$LOCK_HELD.target"',
-  '  fi',
-  "  LOCK_HELD=''",
-  '}',
-];
-
-/** Whether the host's `wget` is BusyBox's, which takes fewer options than GNU's. */
-export const BUSYBOX_FUNCTIONS: readonly string[] = [
-  'wget_is_busybox() {',
-  '  wget --help 2>&1 </dev/null | grep -i busybox >/dev/null 2>&1',
-  '}',
-];
-
-/** The download with the first downloader the host has, `wget` before `curl`, configuration files skipped. */
-export const FETCH_FUNCTIONS: readonly string[] = [
-  'fetch_archive() {',
-  "  FETCH_ERROR=''",
-  '  FETCH_STATUS=0',
-  '  if have wget; then',
-  '    if wget_is_busybox; then',
-  '      FETCH_ERROR=$(wget -q -T "$DOWNLOAD_SECONDS" -O "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
-  '    elif [ "$USE_CONFIGURATION_FILES" = yes ]; then',
-  '      FETCH_ERROR=$(wget -q -S -T "$DOWNLOAD_SECONDS" -O "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
-  '    else',
-  '      FETCH_ERROR=$(wget --no-config -q -S -T "$DOWNLOAD_SECONDS" -O "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
-  '    fi',
-  '  elif have curl; then',
-  '    if [ "$USE_CONFIGURATION_FILES" = yes ]; then',
-  '      FETCH_ERROR=$(curl -fsSL --max-time "$DOWNLOAD_SECONDS" -o "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
-  '    else',
-  '      FETCH_ERROR=$(curl -q -fsSL --max-time "$DOWNLOAD_SECONDS" -o "$2" "$1" </dev/null 2>&1) || FETCH_STATUS=$?',
-  '    fi',
-  '  else',
-  '    return 127',
-  '  fi',
-  '  [ "$FETCH_STATUS" = 0 ] && return 0',
-  "  LAST_RESPONSE=$(printf '%s\\n' \"$FETCH_ERROR\" | grep -o 'HTTP/1\\.[01] [0-9][0-9][0-9]' | tail -n 1)",
-  '  case $LAST_RESPONSE in',
-  "    'HTTP/1.0 404' | 'HTTP/1.1 404') fact server.downloadStatus 404 ;;",
-  "    '') case $FETCH_ERROR in *'error: 404'*) fact server.downloadStatus 404 ;; esac ;;",
-  '  esac',
-  '  return "$FETCH_STATUS"',
-  '}',
+  'done',
+  'finish Ok',
 ];
 
 /**
- * Unpack an archive into a folder, then move the archive's one top folder up into the target. A tar archive is listed
- * first so that the unpack can report whole percents, at most once per 5 points and once at 100.
+ * Ends the CLI that `startCli` started, only while its process is still that CLI: its first argument is the CLI's own
+ * file and its second `command-shell`, read field by field from `/proc`, so neither a recycled process id nor a
+ * process that merely mentions the file passes. Without `/proc` the fields can't be read, and nothing is ended.
  */
-export const UNPACK_FUNCTIONS: readonly string[] = [
-  'progress() {',
-  `  printf '%s %s %s\\n' ${shellQuote(PROGRESS_PREFIX)} "$1" "$2"`,
-  '}',
-  'unpack_progress() {',
-  '  COUNT=0',
-  '  LAST=0',
-  '  while read -r ENTRY_NAME; do',
-  '    COUNT=$((COUNT + 1))',
-  '    PERCENT=$((COUNT * 100 / $1))',
-  '    if [ "$PERCENT" -lt 100 ] && [ $((PERCENT - LAST)) -ge 5 ]; then',
-  '      progress unpack "$PERCENT"',
-  '      LAST=$PERCENT',
-  '    fi',
-  '  done',
-  '}',
-  'extract_tar() {',
-  '  TOTAL=$(tar -tzf "$1" </dev/null 2>/dev/null | wc -l | tr -d " ")',
-  '  [ "${TOTAL:-0}" -gt 0 ] || return 1',
-  '  progress unpack 0',
-  '  { tar -xzvf "$1" -C "$2" </dev/null 2>&1; echo $? >"$2.status"; } | unpack_progress "$TOTAL"',
-  '  EXTRACT_CODE=$(cat "$2.status" 2>/dev/null)',
-  '  rm -f "$2.status"',
-  '  [ "$EXTRACT_CODE" = 0 ] || return 1',
-  '  progress unpack 100',
-  '}',
-  'extract_zip() {',
-  '  progress unpack 0',
-  '  unzip -q "$1" -d "$2" </dev/null || return 1',
-  '  progress unpack 100',
-  '}',
-  'unpack_into() {',
-  '  UNPACK_STAGE=$2.stage.$$',
-  '  rm -rf "$UNPACK_STAGE"',
-  '  mkdir -p "$UNPACK_STAGE" "$2" || return 1',
-  '  case $ARCHIVE_FORMAT in',
-  '    zip) extract_zip "$1" "$UNPACK_STAGE" || return 1 ;;',
-  '    *) extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;',
-  '  esac',
-  '  unpack_move_top "$UNPACK_STAGE" "$2"',
-  '}',
-  'unpack_move_top() {',
-  '  ENTRIES=0',
-  "  WRAPPER=''",
-  '  for ENTRY in "$1"/* "$1"/.[!.]*; do',
-  '    [ -e "$ENTRY" ] || continue',
-  '    ENTRIES=$((ENTRIES + 1))',
-  '    WRAPPER=$ENTRY',
-  '  done',
-  '  SOURCE=$1',
-  '  if [ "$ENTRIES" = 1 ] && [ -d "$WRAPPER" ] && [ ! -L "$WRAPPER" ]; then',
-  '    SOURCE=$WRAPPER',
-  '  fi',
-  '  MOVED=0',
-  '  for ENTRY in "$SOURCE"/* "$SOURCE"/.[!.]*; do',
-  '    [ -e "$ENTRY" ] || continue',
-  '    mv "$ENTRY" "$2"/ || return 1',
-  '    MOVED=1',
-  '  done',
-  '  rm -rf "$1"',
-  '  [ "$MOVED" = 1 ]',
-  '}',
-];
-
-/**
- * The install into a shared tree: the unpack goes into a sibling of the tree that is renamed once it is whole, and
- * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable.
- */
-export const TREE_FUNCTIONS: readonly string[] = [
-  'ensure_install_link() {',
-  '  if [ -L "$INSTALL_DIR" ]; then',
-  '    if [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
-  '      fact server.installLink kept',
-  '      return 0',
-  '    fi',
-  '    rm -f "$INSTALL_DIR"',
-  '  elif [ -d "$INSTALL_DIR" ]; then',
-  '    if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
-  '      fact server.installLink realFolder',
-  '      return 0',
-  '    fi',
-  '    rm -rf "$INSTALL_DIR"',
-  '  fi',
-  '  LINK_ERROR=$(mkdir -p "$DATA_DIR/bin" 2>&1) || write_failed_leave "$DATA_DIR/bin" "$LINK_ERROR"',
-  '  LINK_ERROR=$(ln -s "$INSTALL_TREE" "$INSTALL_DIR" 2>&1) || {',
-  '    if [ -L "$INSTALL_DIR" ] && [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
-  '      fact server.installLink kept',
-  '      return 0',
-  '    fi',
-  '    write_failed_leave "$INSTALL_DIR" "$LINK_ERROR"',
-  '  }',
-  '  fact server.installLink made',
-  '}',
-  'install_tree() {',
-  '  TREE_STAGING=${INSTALL_TREE}_$STAGING_SUFFIX',
-  '  unpack_into "$1" "$TREE_STAGING" || return 1',
-  '  [ -x "$TREE_STAGING/$LAUNCHER" ] || return 1',
-  '  if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
-  '    rm -rf "$TREE_STAGING"',
-  '    return 0',
-  '  fi',
-  '  mv "$TREE_STAGING" "$INSTALL_TREE" || return 1',
-  '  rm -rf "${INSTALL_TREE:?}/${TREE_STAGING##*/}"',
-  '  [ -x "$INSTALL_TREE/$LAUNCHER" ]',
-  '}',
-];
-
-/** Whether a process id is a live process whose command line holds a folder, as the server under it does. */
-export const PROCESS_FUNCTIONS: readonly string[] = [
-  'is_server_process() {',
-  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
-  '  kill -0 "$1" 2>/dev/null || return 1',
-  '  if [ -r "/proc/$1/cmdline" ]; then',
-  "    PROCESS_LINE=$(tr '\\0' ' ' <\"/proc/$1/cmdline\" 2>/dev/null)",
-  '  else',
-  '    PROCESS_LINE=$(ps -p "$1" -o args= 2>/dev/null)',
-  '    if [ -z "$PROCESS_LINE" ]; then',
-  '      PROCESS_LINE=$(ps -o pid= -o args= 2>/dev/null | sed -n "s/^ *$1 //p")',
-  '    fi',
-  '  fi',
-  '  case $PROCESS_LINE in',
-  '    *"$2"*) return 0 ;;',
-  '  esac',
-  '  return 1',
-  '}',
-];
-
-/**
- * Whether a process belongs to a server tree under the folder its second argument names: the file it runs is under that
- * folder, or it is a POSIX shell running a script there, as a server's launcher does. The arguments of the command line
- * are read as fields, so that a program that only names a path under the folder, such as `tail -f` or an editor, is not
- * taken for a server.
- */
-export const SERVER_TREE_FUNCTIONS: readonly string[] = [
-  'is_server_tree_process() {',
+const STOP_CLI_BODY: readonly string[] = [
+  'is_cli_process() {',
   "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
   '  [ -r "/proc/$1/cmdline" ] || return 1',
-  "  TREE_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
-  '  TREE_PROGRAM=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 1p)',
-  '  TREE_FIRST=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 2p)',
-  '  case $TREE_PROGRAM in',
-  '    "$2"*) return 0 ;;',
-  '  esac',
-  '  case ${TREE_PROGRAM##*/} in',
-  '    sh|bash|dash|ash)',
-  '      case $TREE_FIRST in',
-  '        "$2"*) return 0 ;;',
-  '      esac',
-  '      ;;',
-  '  esac',
-  '  return 1',
+  "  CLI_ARGUMENT_0=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | sed -n 1p)",
+  "  CLI_ARGUMENT_1=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | sed -n 2p)",
+  '  [ "$CLI_ARGUMENT_0" = "$CLI_FILE" ] && [ "$CLI_ARGUMENT_1" = command-shell ]',
   '}',
+  'if is_cli_process "$CLI_STOP_PID"; then',
+  '  kill "$CLI_STOP_PID" 2>/dev/null',
+  '  fact cli.stopped yes',
+  'else',
+  '  fact cli.stopped no',
+  'fi',
+  'finish Ok',
 ];
 
-/**
- * Stop the servers of the data folder: those of a direct install, whose process ids are recorded in it and whose command
- * lines hold `bin/`, and every process of a server tree, found by the file it runs being under `bin/` or `cli/servers/`.
- * The sweep reaches a server's extension host and file watcher, which outlive a main process that ended. A process that
- * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone.
- */
-export const STOP_FUNCTIONS: readonly string[] = [
-  'stop_servers() {',
-  '  for PID_FILE in "$DATA_DIR"/.*.pid; do',
-  '    [ -f "$PID_FILE" ] || continue',
-  '    SERVER_PID=$(cat "$PID_FILE" 2>/dev/null)',
-  '    is_server_process "$SERVER_PID" "$DATA_DIR/bin/" || continue',
-  '    if have pkill; then',
-  '      pkill -P "$SERVER_PID" 2>/dev/null',
-  '    fi',
-  '    kill "$SERVER_PID" 2>/dev/null',
-  '  done',
-  '  for PROC_DIR in /proc/[0-9]*; do',
-  '    SERVER_PID=${PROC_DIR#/proc/}',
-  '    [ "$SERVER_PID" != "$$" ] || continue',
-  '    is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||',
-  '      is_server_tree_process "$SERVER_PID" "$DATA_DIR/cli/servers/" ||',
-  '      continue',
-  '    if have pkill; then',
-  '      pkill -P "$SERVER_PID" 2>/dev/null',
-  '    fi',
-  '    kill "$SERVER_PID" 2>/dev/null',
-  '  done',
-  '}',
-];
+type BodyStep = Exclude<
+  BootstrapRequest['step'],
+  'start' | 'installExtensions' | 'probe' | 'install'
+>;
 
-/** The kind of a folder under `bin/`: a 40-character commit, a `<commit>-<suffix>` leftover, or something else. */
-export const FOLDER_KIND_FUNCTIONS: readonly string[] = [
-  'folder_kind() {',
-  '  HEAD_PART=$(printf \'%s\' "$1" | cut -c1-40)',
-  '  case $HEAD_PART in',
-  '    *[!0-9a-f]*) echo other; return ;;',
-  '  esac',
-  '  if [ "${#HEAD_PART}" != 40 ]; then',
-  '    echo other',
-  '  elif [ "${#1}" = 40 ]; then',
-  '    echo commit',
-  '  else',
-  '    case $1 in',
-  '      "$HEAD_PART"-*) echo leftover ;;',
-  '      *) echo other ;;',
-  '    esac',
-  '  fi',
-  '}',
-  'remove_install() {',
-  '  if lock_take "$1"; then',
-  '    rm -rf "${DATA_DIR:?}/bin/$1" "$DATA_DIR/.$1.log" "$DATA_DIR/.$1.pid" "$DATA_DIR/.$1.token" "$DATA_DIR/.$1.socket.log" "$DATA_DIR/.$1.socket.pid" "$DATA_DIR/.$1.socket.token"',
-  '    lock_release',
-  '  fi',
-  '}',
-];
+function bodyOf(step: BodyStep): readonly string[] {
+  switch (step) {
+    case 'installCli':
+      return INSTALL_CLI_BODY;
+    case 'startCli':
+      return START_CLI_BODY;
+    case 'stopCli':
+      return STOP_CLI_BODY;
+    case 'discard':
+      return DISCARD_BODY;
+    case 'kill':
+      return KILL_BODY;
+    case 'uninstall':
+      return UNINSTALL_BODY;
+    case 'cleanup':
+      return CLEANUP_BODY;
+    default:
+      return STEPWISE_BODIES[step];
+  }
+}
+
+function stepBody(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): readonly string[] {
+  switch (request.step) {
+    case 'start':
+      return startBody(parameters.start, parameters.installTree);
+    case 'installExtensions':
+      return installExtensionsBody(parameters.start);
+    case 'probe':
+      return probeBody(parameters.installTree);
+    case 'install':
+      return parameters.installTree === '' ? INSTALL_BODY : INSTALL_TREE_BODY;
+    default:
+      return bodyOf(request.step);
+  }
+}
+
+/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
+export function posixScript(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): string {
+  const body = stepBody(request, parameters);
+  return [
+    ...GUARD,
+    ...parameterValuesOf(parameters).map(
+      ([name, value]) => `${name}=${shellQuote(value)}`,
+    ),
+    // The install and start scripts set the policy's umask; the token and log files keep their own.
+    '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
+    ...rolesOf(request, parameters).flatMap(role => POSIX_FUNCTIONS[role]),
+    ...body,
+    '',
+  ].join('\n');
+}
