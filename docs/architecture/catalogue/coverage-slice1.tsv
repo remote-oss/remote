@@ -70,21 +70,21 @@ F-2102.AC-8	todo
 F-2102.AC-9	todo	
 F-2102.AC-10	todo	
 F-2102.AC-11	todo	
-F-2102.AC-12	todo	
-F-2102.AC-13	todo	
+F-2102.AC-12	acceptance	
+F-2102.AC-13	acceptance	
 F-2102.AC-14	acceptance	
 F-2102.AC-15	acceptance	
 F-2102.AC-16	acceptance	
 F-2102.AC-17	acceptance	
 F-2102.AC-18	acceptance	
-F-2102.AC-19	todo	
-F-2102.AC-20	todo	
+F-2102.AC-19	acceptance	
+F-2102.AC-20	acceptance	
 F-2102.AC-21	acceptance	
 F-2102.AC-22	acceptance	
 F-2102.AC-23	unit	
 F-2102.AC-24	acceptance	
-F-2102.AC-25	todo	
-F-2102.AC-26	todo	
+F-2102.AC-25	acceptance	
+F-2102.AC-26	acceptance	
 F-2102.AC-27	todo	
 F-2102.AC-28	todo	
 F-2102.AC-29	acceptance	
@@ -97,7 +97,7 @@ F-2102.AC-35	todo
 F-2102.AC-36	todo	
 F-2102.AC-37	todo	
 F-2102.AC-38	todo	
-F-2102.AC-39	todo	
+F-2102.AC-39	acceptance	
 F-2102.AC-40	acceptance	
 F-2104.AC-1	unit	
 F-2104.AC-2	unit	
@@ -764,7 +764,7 @@ F-2405.AC-20	acceptance
 F-2405.AC-21	acceptance	
 F-2405.AC-22	todo	
 F-2405.AC-23	acceptance	
-F-2405.AC-24	todo	
+F-2405.AC-24	acceptance	
 F-2405.AC-25	acceptance	
 F-2405.AC-26	acceptance	
 F-2405.AC-27	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
@@ -861,7 +861,7 @@ F-2411.AC-25	acceptance
 F-2411.AC-26	acceptance	
 F-2411.AC-27	core	core: the Cannot reconnect dialog's Cancel and the disconnected indicator
 F-2411.AC-28	acceptance	
-F-2411.AC-29	todo	
+F-2411.AC-29	acceptance	
 F-2411.AC-30	acceptance	
 F-2411.AC-31	acceptance	
 F-2411.AC-32	acceptance	
@@ -875,7 +875,7 @@ F-2412.AC-6	acceptance
 F-2412.AC-7	acceptance	
 F-2412.AC-8	acceptance	
 F-2412.AC-9	acceptance	
-F-2412.AC-10	todo	
+F-2412.AC-10	acceptance	
 F-2412.AC-11	acceptance	
 F-2412.AC-12	acceptance	
 F-2412.AC-13	acceptance	
@@ -900,7 +900,7 @@ F-2412.AC-31	acceptance
 F-2412.AC-32	acceptance	
 F-2412.AC-33	acceptance	
 F-2412.AC-34	acceptance	
-F-2412.AC-35	todo	
+F-2412.AC-35	acceptance	
 F-2412.AC-36	acceptance	
 F-2412.AC-37	acceptance	
 F-2501.AC-1	unit	
@@ -926,7 +926,7 @@ F-2501.AC-20	acceptance
 F-2501.AC-21	unit	
 F-2501.AC-22	acceptance	
 F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
-F-2501.AC-24	todo	
+F-2501.AC-24	acceptance	
 F-2501.AC-25	acceptance	
 F-2501.AC-26	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2501.AC-27	acceptance	
@@ -937,7 +937,8 @@ F-2501.AC-31	acceptance
 F-2501.AC-32	acceptance	
 F-2501.AC-33	acceptance	
 F-2501.AC-34	deferred	chained ssh-remote authorities (F-2501 6.8) are not built in 0.2
-F-2501.AC-35	todo	
+F-2501.AC-35	acceptance	
+F-2501.AC-36	todo	
 F-2502.AC-1	unit	
 F-2502.AC-2	core	core: the window title and the Explorer header
 F-2502.AC-3	core	core: the remote indicator's text and icon
@@ -1017,12 +1018,12 @@ F-2507.AC-41	acceptance
 F-2507.AC-42	acceptance	
 F-2507.AC-43	acceptance	
 F-2508.AC-1	acceptance	
-F-2508.AC-2	todo	
+F-2508.AC-2	acceptance	
 F-2508.AC-3	acceptance	
 F-2508.AC-4	acceptance	
 F-2508.AC-5	acceptance	
 F-2508.AC-6	acceptance	
-F-2508.AC-7	todo	
+F-2508.AC-7	acceptance	
 F-2508.AC-8	acceptance	
 F-2508.AC-9	acceptance	
 F-2508.AC-10	acceptance	
@@ -1033,7 +1034,7 @@ F-2508.AC-14	acceptance
 F-2508.AC-15	acceptance	
 F-2508.AC-16	acceptance	
 F-2508.AC-17	acceptance	
-F-2508.AC-18	todo	
+F-2508.AC-18	acceptance	
 F-2508.AC-19	acceptance	
 F-2508.AC-20	acceptance	
 F-2508.AC-21	todo	
@@ -1048,11 +1049,11 @@ F-2508.AC-29	acceptance
 F-2508.AC-30	acceptance	
 F-2508.AC-31	acceptance	
 F-2508.AC-32	acceptance	
-F-2508.AC-33	todo	
+F-2508.AC-33	acceptance	
 F-2508.AC-34	core	core: the debugger's modal; on this server build js-debug falls back to the server's node
 F-2508.AC-35	core	core: the trust prompt's Manage action and the Workspace Trust editor are core's; the pinned editor's startup prompt has no Manage button
 F-2508.AC-36	acceptance	
-F-2508.AC-37	todo	
+F-2508.AC-37	acceptance	
 F-2509.AC-1	unit	
 F-2509.AC-2	acceptance	
 F-2509.AC-3	acceptance	
@@ -1160,7 +1161,7 @@ F-2605.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-27	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2704.AC-1	todo	
+F-2704.AC-1	acceptance	
 F-2704.AC-2	acceptance	
 F-2704.AC-3	acceptance	
 F-2704.AC-4	acceptance	
@@ -1171,27 +1172,27 @@ F-2704.AC-8	acceptance
 F-2704.AC-9	acceptance	
 F-2704.AC-11	acceptance	
 F-2704.AC-12	acceptance	
-F-2704.AC-13	todo	
+F-2704.AC-13	acceptance	
 F-2704.AC-14	acceptance	
 F-2704.AC-15	acceptance	
 F-2704.AC-16	acceptance	
 F-2704.AC-17	acceptance	
 F-2704.AC-18	acceptance	
-F-2704.AC-19	todo	
+F-2704.AC-19	acceptance	
 F-2704.AC-20	acceptance	
 F-2704.AC-21	acceptance	
 F-2704.AC-22	acceptance	
-F-2704.AC-23	todo	
-F-2704.AC-24	todo	
-F-2704.AC-25	todo	
+F-2704.AC-23	acceptance	
+F-2704.AC-24	core	core: the title and indicator of a window with no authority are core's; the row proves Close Remote leaves an empty local window
+F-2704.AC-25	acceptance	
 F-2704.AC-26	acceptance	
 F-2704.AC-27	acceptance	
 F-2704.AC-28	acceptance	
 F-2704.AC-29	acceptance	
 F-2704.AC-30	acceptance	
-F-2704.AC-31	todo	
+F-2704.AC-31	acceptance	
 F-2704.AC-32	acceptance	
-F-2704.AC-33	todo	
+F-2704.AC-33	acceptance	
 F-3902.AC-1	todo	
 F-3902.AC-2	unit	
 F-3902.AC-3	acceptance	
@@ -1200,7 +1201,7 @@ F-3902.AC-5	acceptance
 F-3902.AC-6	acceptance	
 F-3902.AC-7	acceptance	
 F-3902.AC-8	acceptance	
-F-3902.AC-9	todo	
+F-3902.AC-9	acceptance	
 F-3902.AC-10	unit	
 F-3902.AC-11	unit	
 F-3902.AC-12	acceptance	
@@ -1217,3 +1218,4 @@ F-3902.AC-22	deferred	CLI path dormant in 0.2: no shipped product names a CLI so
 F-3902.AC-23	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-24	acceptance	
 F-3902.AC-25	acceptance	
+F-3902.AC-26	todo	

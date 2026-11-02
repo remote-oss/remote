@@ -654,6 +654,48 @@ describe('connection handler (contracts §4 S9)', () => {
       );
     });
 
+    it('F-2102 AC-27: a refuse from the waiting window closes nothing, and the owner still answers', async () => {
+      const asked = await askQuestion();
+      const refused = await send(2, {type: 'refuse', promptId: 1});
+      const openAfter = asked.closed;
+      const answered = await send(1, {
+        type: 'answer',
+        promptId: 1,
+        text: 'secret',
+      });
+      await settled();
+      deepStrictEqual(
+        [refused, openAfter, answered, asked.received, eventTypes()],
+        [
+          {type: 'questionRefused', accepted: false},
+          false,
+          {type: 'answered', accepted: true},
+          [{type: 'answer', text: 'secret'}],
+          ['prompt', 'promptClosed'],
+        ],
+      );
+    });
+
+    it('F-2102 AC-36: a waiting window that leaves leaves the owner’s question open, and the owner still answers', async () => {
+      const asked = await askQuestion();
+      handler.onLeasesChanged([1]);
+      const answered = await send(1, {
+        type: 'answer',
+        promptId: 1,
+        text: 'secret',
+      });
+      await settled();
+      deepStrictEqual(
+        [answered, asked.closed, asked.received, eventTypes()],
+        [
+          {type: 'answered', accepted: true},
+          true,
+          [{type: 'answer', text: 'secret'}],
+          ['prompt', 'promptClosed'],
+        ],
+      );
+    });
+
     it('closes the open question before the login is reported failed', async () => {
       await askQuestion();
       spawner.started[0]?.exit(255);

@@ -17,6 +17,8 @@ interface ExpectedRequests {
   count?: number;
   path?: string;
   clientOnly?: boolean;
+  /** The host's downloader asked first and failed, and the client's followed. */
+  hostThenClient?: boolean;
 }
 
 /** One install case of the run, as tests/acceptance/suite-install/cases.json lists it. */
@@ -196,8 +198,12 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
             ? seen.length > 0 &&
               seen.every(each => !isHostDownloader(each.userAgent))
             : true,
+          requests.hostThenClient === true
+            ? seen.findIndex(each => isHostDownloader(each.userAgent)) === 0 &&
+              seen.some(each => !isHostDownloader(each.userAgent))
+            : true,
         ],
-        [seen.length, [], true],
+        [seen.length, [], true, true],
         `requests: ${JSON.stringify(seen)}`,
       );
     });

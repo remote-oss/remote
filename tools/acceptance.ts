@@ -368,7 +368,7 @@ export function sshConfigOf(
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `jumped` (the harness account through the harness host as a `ProxyJump`); `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
  * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
  * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
@@ -376,7 +376,9 @@ export function sshConfigOf(
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
- * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11, and
+ * `agentfwd-tmpdir` and `agentfwd-notmp`, forwarding it for an account whose login shell sets TMPDIR (the Alpine host's)
+ * and for one that may not create links in /tmp (the Ubuntu 26.04 host's); three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
  * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
  * sockets of the ControlMaster aliases are in `controlFolder`.
@@ -441,6 +443,20 @@ export function harnessSshConfig(
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    '',
+    // The harness account reached through the harness host as a jump host: the target is the host's own sshd, at the port it listens on inside.
+    'Host jumped',
+    '  HostName 127.0.0.1',
+    '  Port 22',
+    '  User harness',
+    '  ProxyJump harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
     '',
     // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
     // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
@@ -761,6 +777,21 @@ export function harnessSshConfig(
       accountAlias(
         alias,
         'harness',
+        port,
+        runFolder,
+        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
+        agentSocket,
+      ),
+    ),
+    // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
+    // for one that may not create links in /tmp (the Ubuntu 26.04 host's).
+    ...[
+      ['agentfwd-tmpdir', 'harness-tmpdir'],
+      ['agentfwd-notmp', 'harness-notmp'],
+    ].flatMap(([alias, user]) =>
+      accountAlias(
+        alias ?? '',
+        user ?? '',
         port,
         runFolder,
         [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
@@ -1465,7 +1496,11 @@ export async function runLaunches(
           );
         }
         if (launch.hostSetup !== undefined) {
-          runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
+          runHostSetup(
+            command,
+            hostContainerOf(launch),
+            withHarnessBases(launch.hostSetup, bases),
+          );
         }
         writeUserSettings(
           runFolder,

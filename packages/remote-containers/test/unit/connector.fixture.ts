@@ -95,8 +95,6 @@ interface EngineCall {
 
 /** What a test steers and reads: the fakes, their answers and what they recorded. */
 export interface Scene {
-  /** The `DOCKER_HOST` of the editor's environment; unset when undefined. */
-  dockerHost: string | undefined;
   /** Whether the folder the payload names exists on the machine. */
   folderExists: boolean;
   /** The configuration files discovery finds in a folder, in the picker's order. */
@@ -228,7 +226,6 @@ export function sceneOf(
   const sink = new MemorySink();
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
-    dockerHost: undefined,
     folderExists: true,
     candidates: [],
     attemptsBegun: 0,
@@ -478,9 +475,6 @@ export function sceneOf(
       return {
         HOME: '/home/u',
         GITHUB_TOKEN: 's3cr3t-token',
-        ...(scene.dockerHost === undefined
-          ? {}
-          : {DOCKER_HOST: scene.dockerHost}),
       };
     },
     intents: {

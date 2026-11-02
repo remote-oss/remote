@@ -15,6 +15,7 @@ const WINDOW_TEMPLATES = {
 /** What the connection knows of its identity. */
 export interface WindowIdentity {
   name: string | undefined;
+  /** The engine's label: its host if the connection is pinned to one, else its Docker context. */
   context: string | undefined;
 }
 

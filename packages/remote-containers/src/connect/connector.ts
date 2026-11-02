@@ -31,6 +31,11 @@ import {
 } from '../cli/cli-lines.ts';
 import {featureFailureOf, requestedFeaturesOf} from '../cli/failing-feature.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
+import {
+  environmentOfPinned,
+  engineLabelOf,
+  withEnvironment,
+} from '../engine/effective-engine.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
 import type {EngineCoordinates} from '../shutdown/protocol.ts';
@@ -65,7 +70,6 @@ import {
   type TrustNeeds,
   type TrustPort,
 } from '../trust/trust-gate.ts';
-import {withContext} from './context-engine.ts';
 import {
   extensionHostEnvironmentOf,
   type ProbeMode,
@@ -718,17 +722,9 @@ export function containerConnectorOf(
     folder: DevContainerFolder,
     tools: Pick<Tools, 'dockerPath'>,
   ): EngineCoordinates {
-    const dockerHost = dependencies.editorEnvironment.DOCKER_HOST;
     return {
       dockerPath: tools.dockerPath,
-      environment: {
-        ...(folder.context === undefined
-          ? {}
-          : {DOCKER_CONTEXT: folder.context}),
-        ...(dockerHost === undefined || dockerHost === ''
-          ? {}
-          : {DOCKER_HOST: dockerHost}),
-      },
+      environment: environmentOfPinned(folder),
     };
   }
 
@@ -796,15 +792,11 @@ export function containerConnectorOf(
       settings,
       dockerPath: executable.file,
       configFile: folder.configFile.fsPath ?? folder.configFile.path,
-      engine:
-        folder.context === undefined
-          ? unwrapped
-          : withContext(unwrapped, folder.context),
-      bridge: dependencies.cliFor(
-        folder.context === undefined
-          ? dependencies.editorEnvironment
-          : {...dependencies.editorEnvironment, DOCKER_CONTEXT: folder.context},
-      ),
+      engine: withEnvironment(unwrapped, () => environmentOfPinned(folder)),
+      bridge: dependencies.cliFor({
+        ...dependencies.editorEnvironment,
+        ...environmentOfPinned(folder),
+      }),
     };
   }
 
@@ -1206,7 +1198,7 @@ export function containerConnectorOf(
           : undefined,
         engineIsLocal({
           context: folder.context,
-          dockerHost: dependencies.editorEnvironment.DOCKER_HOST,
+          dockerHost: folder.host,
         }),
       ),
       trusted: false,
@@ -1224,7 +1216,7 @@ export function containerConnectorOf(
       channel,
       server,
       relay,
-      identity: {name, context: folder.context},
+      identity: {name, context: engineLabelOf(folder)},
       connected,
       ports: {
         forwardPorts: merged?.forwardPorts,

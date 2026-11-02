@@ -31,6 +31,7 @@ import traceback
 import caselib
 import driver
 import fixture
+import narrowing
 import normalize
 import redact
 import provision
@@ -185,7 +186,7 @@ def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counte
         known = [c["name"] for c in (case.get("fixture") or {}).get("containers") or []] + run.known_names
         sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log, run_target=run.run_target())
         sess.user_settings = lambda keys: run.read_user_settings(keys)
-        sess.client_listeners = lambda holder=None: run.client_listeners(holder)
+        sess.client_listeners = lambda holder=None, address=None: run.client_listeners(holder, address)
         sess.mark_urls()   # opened_urls counts from here: this case's URLs only
         run.start_window()
         run.ready(sess)
@@ -534,8 +535,8 @@ def replay_case(path, host, slot, result_path, log=print):
         if tr["failure"]:
             res.update(result="fail", reason="step failed: " + str(tr["failure"].get("error"))[:300])
         else:
-            mism = [d for oid in set(case.get("expect") or {}) | set(tr["normalized"])
-                    for d in normalize.diff((case.get("expect") or {}).get(oid), tr["normalized"].get(oid), "/" + oid)]
+            # through the case's narrowing, when it has a sound one (narrowing.py); the expect itself is never changed
+            mism = narrowing.mismatches(case, tr["normalized"], caselib.writer_digest(case), normalize.diff)
             if case.get("flaky"):
                 res.update(result="flaky", mismatches=mism)
             else:
@@ -582,8 +583,7 @@ def confirm_case(path, runs, host, slot, log=print):
             if tr["failure"]:
                 log(f"{case['id']}: confirmation run {tr['run_id']} failed: {str(tr['failure'].get('error'))[:300]}")
                 return "failed"
-            d = [x for oid in set(case["expect"]) | set(tr["normalized"])
-                 for x in normalize.diff(case["expect"].get(oid), tr["normalized"].get(oid), "/" + oid)]
+            d = narrowing.mismatches(case, tr["normalized"], caselib.writer_digest(case), normalize.diff)
             if d:
                 mism.append((tr["run_id"], d))
     if mism:

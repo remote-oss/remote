@@ -361,7 +361,11 @@ default: dismiss the dialog and its pick). An install case that keeps nothing al
 `/home/harness/.vscodium-server-insiders` and `/tmp/srv`. A case's settings may name the download host's bases as
 `${HARNESS_DOWNLOADS_HTTP}`, `${HARNESS_DOWNLOADS_HTTPS}`, `${HARNESS_DOWNLOADS_LICENSED}` and
 `${HARNESS_DOWNLOADS_LOCAL}`; the run puts them in when it writes the launch's settings, and leaves the product's own
-`${…}` placeholders as written. Before each launch the run notes how many requests the download host has logged, in
+`${…}` placeholders as written. The same names, and `${HARNESS_DOWNLOADS_PORT}` (the download host's port), are put into a
+case's `setup` commands: the cases `host-404-fallback` and `host-junk-fallback` start a relay on the host's loopback
+(`nc -lk -p <port> -e nc downloads <port>`) so that one template URL, on the client-only base, reaches the download host
+from both sides; the download host's `hostrefused` and `hostjunk` sources answer the host's `wget` or `curl` with a 404 or
+with junk and any other client with the archive. Before each launch the run notes how many requests the download host has logged, in
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 
@@ -738,6 +742,8 @@ Besides `harness`, the host image has fifteen users, and the run's `ssh_config` 
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
+| `agentfwd-tmpdir` | `harness-tmpdir` | the run's key, forwarding the run's agent as `agentfwd` does; the login shell (`tmpdir-shell`) sets `TMPDIR` to `~/tmp`, a folder of the account's own, then is `sh`, for a command, a script on standard input and a login terminal alike |
+| `agentfwd-notmp` | `harness-notmp` | the Ubuntu 26.04 host only: the run's key, forwarding the run's agent; an ACL entry on `/tmp` (`u:harness-notmp:r-x`) lets the account create nothing there, while OpenSSH 10.2 keeps the forwarded socket under `~/.ssh/agent`, so the agent still works; a row lifts it as root with `setfacl -x u:harness-notmp /tmp` and puts it back with `setfacl -m u:harness-notmp:r-x /tmp` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |

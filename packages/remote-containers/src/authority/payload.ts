@@ -4,6 +4,7 @@
  */
 
 import type {DecodedTarget} from 'lib-authority';
+import type {PinnedEngine} from '../engine/effective-engine.ts';
 import {recordOf} from '../json-record.ts';
 
 /** A `file` or `vscode-fileHost` URI as the editor writes it, in that member order. */
@@ -23,12 +24,11 @@ interface UriParts {
   toString(): string;
 }
 
-/** A folder opened in a container: the host folder, the Docker context if it is not the default, and the file. */
-export interface DevContainerFolder {
+/** A folder opened in a container: the host folder, the engine it is pinned to if not the default, and the file. */
+export interface DevContainerFolder extends PinnedEngine {
   kind: 'folder';
   hostPath: string;
   localDocker: boolean;
-  context?: string;
   configFile: SerializedUri;
 }
 
@@ -59,12 +59,16 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
 
 /** The payload of a target: its JSON text, members in a fixed order, as lowercase hex. */
 export function devContainerPayloadOf(target: DevContainerFolder): string {
+  const pinned = (
+    ['context', 'host', 'certPath', 'tlsVerify'] as const
+  ).flatMap((member): Array<[string, string]> => {
+    const value = target[member];
+    return value === undefined ? [] : [[member, value]];
+  });
   const text = JSON.stringify({
     hostPath: target.hostPath,
     localDocker: target.localDocker,
-    ...(target.context === undefined
-      ? {}
-      : {settings: {context: target.context}}),
+    ...(pinned.length === 0 ? {} : {settings: Object.fromEntries(pinned)}),
     configFile: target.configFile,
   });
   return Buffer.from(text, 'utf8').toString('hex');
@@ -96,29 +100,39 @@ function configFileOf(value: unknown): SerializedUri | undefined {
   };
 }
 
-/** The Docker context of a payload: none, a name, or `false` for a `settings` member of the wrong shape. */
-function contextOf(settings: unknown): string | undefined | false {
+/** The engine of a payload: none, its members, or `false` for a `settings` member of the wrong shape. */
+function engineOf(settings: unknown): PinnedEngine | false {
   if (settings === undefined) {
-    return undefined;
+    return {};
   }
   const record = recordOf(settings);
-  return record !== undefined &&
-    typeof record.context === 'string' &&
-    record.context !== ''
-    ? record.context
-    : false;
+  if (record === undefined) {
+    return false;
+  }
+  const engine: PinnedEngine = {};
+  for (const member of ['context', 'host', 'certPath', 'tlsVerify'] as const) {
+    const value = record[member];
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value !== 'string' || value === '') {
+      return false;
+    }
+    engine[member] = value;
+  }
+  return Object.keys(engine).length === 0 ? false : engine;
 }
 
 /** The target a JSON object names, or the refusal for its shape. */
 function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   const record = recordOf(parsed);
-  const context = contextOf(record?.settings);
+  const engine = engineOf(record?.settings);
   const configFile = configFileOf(record?.configFile);
   if (
     typeof record?.hostPath !== 'string' ||
     record.hostPath === '' ||
     typeof record.localDocker !== 'boolean' ||
-    context === false ||
+    engine === false ||
     configFile === undefined
   ) {
     return {malformed: 'shape'};
@@ -127,7 +141,7 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
     kind: 'folder',
     hostPath: record.hostPath,
     localDocker: record.localDocker,
-    ...(context === undefined ? {} : {context}),
+    ...engine,
     configFile,
   };
 }

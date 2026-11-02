@@ -3,7 +3,8 @@
 - Status: accepted (the lead, 2026-10-06); amended 2026-10-20 by the user's instruction (D-102): the floor moves from
   1.139 to 1.125. Raised or lowered only by an amendment like this one. Decision 4's floor list gained the container
   open on 2026-11-01 (#1570, #1575), and the connect past the licence by the user's D-104 the same day. The third core
-  difference's reach was measured on 2026-11-02 (#1634): no row of the Ports view shows it.
+  difference's reach was measured on 2026-11-02 (#1634): no row of the Ports view shows it. On 2026-11-02 the user's
+  D-106 carried the licence acceptance from the genuine CI job to the rooms, the labs and any CI.
 - Date: 2026-10-06; amended 2026-10-20
 - Deciders: `remote-architect`; the floor of 2026-10-20 is the user's
 - Scope: all packages
@@ -76,16 +77,20 @@ of 1.125 (D-102), so that is now accepted, and the decisions below keep its cost
        installs our Dev Containers alone, downloads from the run's stand-in licensed host, and ends in Cancel at the
        licence modal;
      - the Remote Explorer's rows without a connect, through the genuine launch's explorer row (tooling-69).
-   - **Past the licence, by D-104 (the user, 2026-11-01):** a connect, and the surfaces that need one, need the
-     server of genuine 1.125.0's own commit, which is Microsoft's server under its licence. The user accepted that
-     licence for the lab's CI. So in the genuine job only, the automation clicks "Accept and Continue" on our licence
-     modal (R-68's dialog, as a user would) once per fresh profile, and the server downloads from Microsoft. The floor
-     run then covers, on both versions, as each row lands:
+   - **Past the licence, by D-104 (the user, 2026-11-01) and D-106 (2026-11-02):** a connect, and the surfaces that
+     need one, need the server of genuine 1.125.0's own commit, which is Microsoft's server under its licence.
+     - The user accepted that licence for the lab's CI (D-104). Then, on 2026-11-02, for the rooms, the labs and any
+       CI (D-106).
+     - So wherever a launch runs genuine VS Code, the automation clicks "Accept and Continue" on our licence modal
+       (R-68's dialog, as a user would) once per fresh profile, and the server downloads from Microsoft.
+
+     The floor run then covers, on both versions, as each row lands:
      - a Remote - SSH connect to the run's SSH host past the licence;
      - a container open past the licence (`genuine-containers`, F-1402 AC-3 and AC-5);
      - the Ports view after a connect. Its rows that assert one of the three core differences name the version they
        describe.
-   - **What stays as it was:** no job but the genuine one downloads a Microsoft server or accepts its licence;
+   - **What stays as it was:** only a launch of genuine VS Code downloads a Microsoft server or accepts its licence
+     (a launch with `publisherDownloads` names the genuine version it runs), so the VSCodium launches download none;
      Microsoft's own extensions are never installed (AGENTS.md); our product never accepts for the user (R-68).
      VSCodium's server doesn't match a 1.125.0 client, so the VSCodium jobs stay on the recorded version. A Code -
      OSS 1.125.0 build is no longer needed for connect coverage on the floor.

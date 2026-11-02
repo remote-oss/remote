@@ -14,6 +14,7 @@ import {
   nextEmptyWindow,
   onHost,
   onHostAs,
+  openWindow,
   recordLines,
   reloadWindow,
   terminalsOf,
@@ -217,6 +218,51 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       [true, true, ['hostPick'], state],
     );
     await closeAllButLocal();
+  });
+
+  it('F-2412 AC-35 (c100-host-kinds): on the Alpine host whose login shell is BusyBox sh and which has no bash, directly and through a ProxyJump, an uninstall shows no UI and removes the data folder', async () => {
+    await closeAllButLocal();
+    // The image carries bash for the rows that want it; this one runs without it, and puts it back in the `finally`.
+    await onHostAs('root', 'mv', '/bin/bash', '/bin/bash.off');
+    try {
+      const login = (
+        await onHostAs('harness', 'sh', '-c', 'getent passwd harness')
+      ).trim();
+      const facts = {
+        alpine: (await onHostAs('harness', 'cat', '/etc/os-release')).includes(
+          'ID=alpine',
+        ),
+        loginShell: login.split(':').at(-1),
+        bash: (
+          await onHostAs('harness', 'sh', '-c', 'command -v bash || echo none')
+        ).trim(),
+      };
+      const seen: unknown[] = [];
+      for (const [alias, window] of [
+        ['harness', 'u35a'],
+        ['jumped', 'u35b'],
+      ] as const) {
+        await openWindow(alias, window);
+        await connectedWithin(window, INSTALL_MILLISECONDS);
+        const installed = await existsOnHost(DATA_FOLDER);
+        await closeAllButLocal();
+        const mark = await uninstallWith('local', [pickHost(alias)]);
+        await removedWithin(DATA_FOLDER);
+        seen.push([alias, installed, surfacesSince(mark, 'local')]);
+      }
+      deepStrictEqual(
+        [facts, seen],
+        [
+          {alpine: true, loginShell: '/bin/sh', bash: 'none'},
+          [
+            ['harness', true, ['hostPick']],
+            ['jumped', true, ['hostPick']],
+          ],
+        ],
+      );
+    } finally {
+      await onHostAs('root', 'mv', '/bin/bash.off', '/bin/bash');
+    }
   });
 
   it('F-2412 AC-7: the next open installs the server again', async () => {

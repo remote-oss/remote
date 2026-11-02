@@ -779,8 +779,11 @@ describe('the container connector: the connect (card containers-08)', () => {
 
   it('F-0417 BR-5, BR-13: a connect registers its connection with the shutdown helper after the trust gate, with the folder, the configuration file and the engine as it was', async () => {
     const scene = sceneOf({dockerPath: '/opt/docker'});
-    scene.dockerHost = 'unix:///run/docker.sock';
-    await connected(scene);
+    await scene.connector.connect(
+      inputOf(
+        devContainerPayloadOf({...FOLDER, host: 'unix:///run/docker.sock'}),
+      ),
+    );
     deepStrictEqual(scene.shutdownSent[0], {
       type: 'register',
       connectionId: 'connection-1',
@@ -795,9 +798,8 @@ describe('the container connector: the connect (card containers-08)', () => {
     });
   });
 
-  it('F-0417 BR-13: a Docker context in the authority reaches the helper as DOCKER_CONTEXT, and an empty DOCKER_HOST is no variable', async () => {
+  it('F-0417 BR-13: a Docker context in the authority reaches the helper as DOCKER_CONTEXT, and no host is no variable', async () => {
     const scene = sceneOf();
-    scene.dockerHost = '';
     await scene.connector.connect(
       inputOf(devContainerPayloadOf({...FOLDER, context: 'colima'})),
     );
@@ -2618,9 +2620,16 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
 
   it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
     const scene = sceneOf();
-    scene.dockerHost = 'tcp://10.0.0.5:2375';
     scene.configuration = configurationWith({appPort: [8080]});
-    deepStrictEqual((await connected(scene)).environmentTunnels, []);
+    const connection = await scene.connector.connect(
+      inputOf(devContainerPayloadOf({...FOLDER, host: 'tcp://10.0.0.5:2375'})),
+    );
+    deepStrictEqual(
+      'environmentTunnels' in connection
+        ? connection.environmentTunnels
+        : connection,
+      [],
+    );
   });
 
   it('F-1101 BR-14: a configuration that cannot be read hands core none', async () => {

@@ -69,6 +69,13 @@ import {
 } from './connect/register-connector.ts';
 import {runServerSteps} from './connect/server-steps.ts';
 import {folderDialogOptions} from './open/folder-dialog.ts';
+import {
+  type EngineSources,
+  engineEnvironment,
+  pinnedEngineOf,
+  withAmbientContext,
+  withEnvironment,
+} from './engine/effective-engine.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
@@ -470,6 +477,19 @@ function featureDiagnosticsHost(): DiagnosticsHost {
   };
 }
 
+/** The sources of the effective engine, read from the editor as they are now. */
+function engineSources(): EngineSources {
+  const configuration = vscode.workspace.getConfiguration();
+  return {
+    containersEnvironment: configuration.get('containers.environment'),
+    dockerEnvironment: configuration.get('docker.environment'),
+    dockerHost: configuration.get('docker.host'),
+    certPath: configuration.get('docker.certPath'),
+    tlsVerify: configuration.get('docker.tlsVerify'),
+    processEnvironment: process.env,
+  };
+}
+
 /** Called by the editor when the extension activates. */
 export async function activate(
   context: vscode.ExtensionContext,
@@ -613,7 +633,10 @@ export async function activate(
         logFailure,
       }),
     preflight: logger => ({
-      engineFor: nodeEngineHost,
+      engineFor: file =>
+        withEnvironment(nodeEngineHost(file), () =>
+          engineEnvironment(engineSources()),
+        ),
       dockerPath: () =>
         vscode.workspace.getConfiguration().get(settings.dockerPath.id),
       dialogs: {
@@ -883,11 +906,16 @@ export async function activate(
               base,
               cancellation ?? new AbortController().signal,
             ),
-          currentContext: () =>
-            currentContext(
-              served.preflight,
-              firstFolder(),
-              new AbortController().signal,
+          pinnedEngine: async () =>
+            pinnedEngineOf(
+              withAmbientContext(
+                engineEnvironment(engineSources()),
+                await currentContext(
+                  served.preflight,
+                  firstFolder(),
+                  new AbortController().signal,
+                ),
+              ),
             ),
         },
         dialogs: served.preflight.dialogs,
@@ -1124,7 +1152,7 @@ export async function activate(
         logger,
       }),
       newConnectionId: randomUUID,
-      engineFor: file => served.preflight.engineFor(file),
+      engineFor: nodeEngineHost,
       cliFor: environment => bridgeFor(environment, logger),
       lifecycleFor: (engine, bridge, presenter) =>
         containerLifecycleOf({

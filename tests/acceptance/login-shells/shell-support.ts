@@ -11,6 +11,11 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {
+  connectSurface,
+  statusItemText,
+  windowTitle,
+} from '../windows/renderer.ts';
+import {
   closeAllButLocal,
   dismissals,
   INSTALL_MILLISECONDS,
@@ -93,6 +98,14 @@ export async function taskEnvironment(
 ): Promise<Record<string, string>> {
   const file = `/tmp/${label}-env`;
   await runProcessTask(window, '/bin/sh', ['-c', `env > ${file}`]);
+  return takeEnvironment(user, file);
+}
+
+/** The `NAME=value` lines of `file`, written on the host as `user`, as a map; the file is removed. */
+export async function takeEnvironment(
+  user: string,
+  file: string,
+): Promise<Record<string, string>> {
   const text = await onHostAs(user, 'cat', file);
   await onHostAs(user, 'rm', '-f', file);
   return Object.fromEntries(
@@ -181,4 +194,17 @@ export async function failedOn(
 export async function freshServer(user: string): Promise<void> {
   await closeAllButLocal();
   await stopServer(user);
+}
+
+/** The title of window `window` and its remote indicator once that reads `indicator`, with the toasts it shows. */
+export async function windowFace(
+  window: string,
+  indicator: string,
+): Promise<{title: string; indicator: string; toasts: string[]}> {
+  const read = await statusItemText(window, 'status.host', indicator, 30_000);
+  return {
+    title: await windowTitle(window),
+    indicator: read,
+    toasts: (await connectSurface(window)).toasts,
+  };
 }

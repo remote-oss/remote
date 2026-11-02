@@ -125,8 +125,15 @@ jobs:
       - id: select
         env:
           BEFORE: ${{ github.event.before }}
+        # A push whose `before` is no commit in this clone (all zeros, or a main rewritten by a force push) has no range
+        # to select from: the output is then empty, which the VSCodium job's matrix reads as its default, every part.
         run: |
-          parts=$(node tools/acceptance-select.ts --base "$BEFORE" --head "$GITHUB_SHA" --parts)
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            parts=$(node tools/acceptance-select.ts --base "$BEFORE" --head "$GITHUB_SHA" --parts)
+          else
+            echo "::notice::the push's before ($BEFORE) is no commit here: every part runs"
+            parts=''
+          fi
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
 
   checks:

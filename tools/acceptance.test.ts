@@ -699,6 +699,26 @@ describe('acceptance', () => {
     );
   });
 
+  it("coverage-100: the run's ssh_config has the jumped alias, the harness account through the harness host as a jump host, with its own known-hosts file", () => {
+    strictEqual(
+      accountBlock('jumped'),
+      [
+        'Host jumped',
+        '  HostName 127.0.0.1',
+        '  Port 22',
+        '  User harness',
+        '  ProxyJump harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking accept-new',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_jumped',
+      ].join('\n'),
+    );
+  });
+
   it('coverage-85: Host changedkey is the harness host whose own known-hosts file pins another key, with the check off', () => {
     strictEqual(
       accountBlock('changedkey'),
@@ -970,6 +990,26 @@ describe('acceptance', () => {
       ['agentfwd', 'agentfwd-off'].map(alias =>
         [
           ...sharedLines(alias, 'harness').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
+    );
+  });
+
+  it("F-2311: Hosts agentfwd-tmpdir and agentfwd-notmp log in to harness-tmpdir and harness-notmp with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd-tmpdir', 'agentfwd-notmp'].map(alias => accountBlock(alias)),
+      [
+        ['agentfwd-tmpdir', 'harness-tmpdir'],
+        ['agentfwd-notmp', 'harness-notmp'],
+      ].map(([alias, user]) =>
+        [
+          ...sharedLines(alias ?? '', user ?? '').map(line =>
             line === '  IdentityAgent none'
               ? '  IdentityAgent /run/agent.sock'
               : line,
@@ -2656,6 +2696,34 @@ describe('acceptance', () => {
           ],
           2,
         ],
+      );
+    });
+
+    it("coverage-87: a launch's host setup has the run's download port put in", async () => {
+      const seen: string[] = [];
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [
+          {
+            ...PORTS,
+            hostSetup: [{command: 'nc -lk -p ${HARNESS_DOWNLOADS_PORT}'}],
+          },
+        ],
+        (program, programArguments) => {
+          seen.push([program, ...programArguments].join(' '));
+          return {status: 0, stdout: '', stderr: ''};
+        },
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {HARNESS_DOWNLOADS_PORT: '8080'},
+      );
+      deepStrictEqual(
+        seen.filter(call => call.startsWith('docker')),
+        ['docker exec --user root c0ffee sh -c nc -lk -p 8080'],
       );
     });
 
