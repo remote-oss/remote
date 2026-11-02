@@ -310,6 +310,8 @@ export function ofTransfer(
       return {kind: 'serverInstall', reason: INSTALL_FAILED};
     case 'copy':
       return ofChannel(failure.failure);
+    case 'copyStalled':
+      return logged('unknown', 'the copy to the host stalled');
     case 'copyToolMissing':
       return logged('unknown', 'scp could not be started', {
         id: 'scpInstallationNotFound',

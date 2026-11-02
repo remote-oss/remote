@@ -7,6 +7,7 @@ import {
   createServerSteps,
 } from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
+import {type ServerPolicyRecord, sshPolicyFor} from 'lib-server';
 import {
   channelAnswering,
   dependencies,
@@ -1122,5 +1123,57 @@ describe('the server steps: the default extensions', () => {
     const channel = channelAnswering([]);
     await steps.installExtensions(INPUT, leaseOn(channel), NEVER_CANCELLED);
     deepStrictEqual(channel.calls.length, 0);
+  });
+});
+
+describe('the stall bounds of the transfer (card connect-122)', () => {
+  /** The stall bound the client download is asked with under `policy`. */
+  async function downloadStallUnder(
+    policy: ServerPolicyRecord,
+  ): Promise<number | undefined> {
+    const asked: number[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        policy,
+        download: {
+          download: request => {
+            asked.push(request.stallMilliseconds);
+            return Promise.resolve({
+              kind: 'failed' as const,
+              detail: 'offline',
+            });
+          },
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    await steps.transfer(
+      INPUT,
+      leaseOn(channelAnswering(lines('Ok'))),
+      HOST,
+      result.plan,
+      () => undefined,
+      new AbortController().signal,
+    );
+    return asked[0];
+  }
+
+  it('F-2405 AC-21: the client download is asked for the stall bound of the policy', async () => {
+    deepStrictEqual(
+      [
+        await downloadStallUnder({
+          ...sshPolicyFor('always'),
+          downloadStallMilliseconds: 12_345,
+        }),
+        await downloadStallUnder({
+          ...sshPolicyFor('always'),
+          transferStallMilliseconds: undefined,
+        }),
+      ],
+      [12_345, 30_000],
+    );
   });
 });
