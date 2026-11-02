@@ -131,6 +131,7 @@ export type FunctionRole =
   | 'busybox'
   | 'fetch'
   | 'unpack'
+  | 'identity'
   | 'leave'
   | 'process'
   | 'serverTree'
@@ -151,11 +152,12 @@ const STEP_ROLES: Readonly<
     'busybox',
     'fetch',
     'unpack',
+    'identity',
     'leave',
   ],
   discard: ['common'],
   prepare: ['common'],
-  unpack: ['common', 'unpack'],
+  unpack: ['common', 'unpack', 'identity'],
   activate: ['common'],
   start: ['common', 'environment', 'lock', 'process', 'leave'],
   installExtensions: ['common', 'environment'],

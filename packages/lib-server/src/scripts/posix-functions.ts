@@ -432,6 +432,30 @@ const FOLDER_KIND_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * Makes the unpacked server's `product.json` name the client's commit, so that the server answers the handshake the
+ * client expects: a server from an earlier release keeps its own commit otherwise. The file is edited through a
+ * temporary file, because BSD `sed` has no `-i`. An equal commit leaves the file untouched; a file with no commit of
+ * 40 lowercase hex digits is a failure.
+ */
+const IDENTITY_FUNCTIONS: readonly string[] = [
+  'rewrite_identity() {',
+  '  IDENTITY_FILE=$1/product.json',
+  '  [ -f "$IDENTITY_FILE" ] || return 1',
+  `  IDENTITY_OLD=$(sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\\([0-9a-f]\\{40\\}\\)".*/\\1/p' "$IDENTITY_FILE" </dev/null | head -n 1)`,
+  '  [ -n "$IDENTITY_OLD" ] || return 1',
+  '  [ "$IDENTITY_OLD" != "$COMMIT" ] || return 0',
+  '  IDENTITY_TEMP=$IDENTITY_FILE.identity.$$',
+  `  if sed 's/\\("commit"[[:space:]]*:[[:space:]]*"\\)'"$IDENTITY_OLD"'"/\\1'"$COMMIT"'"/' "$IDENTITY_FILE" >"$IDENTITY_TEMP" && mv -f "$IDENTITY_TEMP" "$IDENTITY_FILE"; then`,
+  '    fact server.identityFrom "$IDENTITY_OLD"',
+  '    fact server.identityTo "$COMMIT"',
+  '    return 0',
+  '  fi',
+  '  rm -f "$IDENTITY_TEMP"',
+  '  return 1',
+  '}',
+];
+
 /** Ends the script with a status after releasing the lock it holds. */
 const LEAVE_FUNCTIONS: readonly string[] = [
   'leave() {',
@@ -450,6 +474,7 @@ export const POSIX_FUNCTIONS: Readonly<
   busybox: BUSYBOX_FUNCTIONS,
   fetch: FETCH_FUNCTIONS,
   unpack: UNPACK_FUNCTIONS,
+  identity: IDENTITY_FUNCTIONS,
   leave: LEAVE_FUNCTIONS,
   process: PROCESS_FUNCTIONS,
   serverTree: SERVER_TREE_FUNCTIONS,

@@ -89,14 +89,23 @@ describe('the POSIX bootstrap script', () => {
         path.join(installFolder(host), 'bin', 'launcher'),
         [],
         {SERVER_READY_AFTER: '1'},
-        path.join(dataFolder(), '.abc123.log'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.log',
+        ),
       );
       writeFileSync(
-        path.join(dataFolder(), '.abc123.pid'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.pid',
+        ),
         `${String(slow.pid)}\n`,
       );
       writeFileSync(
-        path.join(dataFolder(), '.abc123.token'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.token',
+        ),
         'token-of-the-first-start',
       );
     }
@@ -105,11 +114,17 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       const stranger = background('/bin/sleep', ['300'], {});
       writeFileSync(
-        path.join(dataFolder(), '.abc123.pid'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.pid',
+        ),
         `${String(stranger.pid)}\n`,
       );
       writeFileSync(
-        path.join(dataFolder(), '.abc123.log'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.log',
+        ),
         'Extension host agent listening on 4242\n',
       );
       deepStrictEqual(
@@ -153,7 +168,10 @@ describe('the POSIX bootstrap script', () => {
       chmodSync(dataFolder(), 0o755);
       deepStrictEqual(
         facts.writeFailedPath,
-        path.join(dataFolder(), '.abc123.token'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.token',
+        ),
       );
     });
 
@@ -186,7 +204,10 @@ describe('the POSIX bootstrap script', () => {
                 ],
             [
               'CreateInstallDirFailed',
-              path.join(installFolder(host), 'boot-lock.user.abc123'),
+              path.join(
+                installFolder(host),
+                'boot-lock.user.abc1230000000000000000000000000000000000',
+              ),
               true,
             ],
           );
@@ -195,7 +216,10 @@ describe('the POSIX bootstrap script', () => {
     }
 
     it('#668 R3: a lock path that is a directory in a writable install folder is a write failure naming the lock path', () => {
-      const lock = path.join(installFolder(host), 'boot-lock.user.abc123');
+      const lock = path.join(
+        installFolder(host),
+        'boot-lock.user.abc1230000000000000000000000000000000000',
+      );
       mkdirSync(lock, {recursive: true});
       const facts = serverFactsOf(host, single('install'), parametersFor());
       deepStrictEqual(
@@ -210,9 +234,15 @@ describe('the POSIX bootstrap script', () => {
     });
 
     it('#668 R3: the same install with the lock in the temporary folder goes through', () => {
-      mkdirSync(path.join(installFolder(host), 'boot-lock.user.abc123'), {
-        recursive: true,
-      });
+      mkdirSync(
+        path.join(
+          installFolder(host),
+          'boot-lock.user.abc1230000000000000000000000000000000000',
+        ),
+        {
+          recursive: true,
+        },
+      );
       const parameters = parametersFor();
       lockInTemporaryFolder(host, parameters);
       deepStrictEqual(statusOf(host, single('install'), parameters), 'Ok');
@@ -276,7 +306,7 @@ describe('the POSIX bootstrap script', () => {
       );
       const lock = path.join(
         installFolder(host),
-        'boot-lock.user.abc123.target',
+        'boot-lock.user.abc1230000000000000000000000000000000000.target',
       );
       for (let wait = 0; wait < 50 && !existsSync(lock); wait++) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -291,7 +321,10 @@ describe('the POSIX bootstrap script', () => {
           await installInterruptedBy(signal, shellProgram);
           deepStrictEqual(
             existsSync(
-              path.join(installFolder(host), 'boot-lock.user.abc123.target'),
+              path.join(
+                installFolder(host),
+                'boot-lock.user.abc1230000000000000000000000000000000000.target',
+              ),
             ),
             false,
           );
@@ -324,7 +357,10 @@ describe('the POSIX bootstrap script', () => {
       const stranger = background('/bin/sh', ['-c', trapScript(marker)], {});
       untilUp(marker);
       writeFileSync(
-        path.join(dataFolder(), '.abc123.pid'),
+        path.join(
+          dataFolder(),
+          '.abc1230000000000000000000000000000000000.pid',
+        ),
         `${String(stranger.pid)}\n`,
       );
       runScript(host, single('kill'), parametersFor());
@@ -411,7 +447,7 @@ describe('the POSIX bootstrap script', () => {
         dataFolder(),
         'cli',
         'servers',
-        'Stable-abc123',
+        'Stable-abc1230000000000000000000000000000000000',
         'server',
         'bin',
         'launcher',
@@ -472,7 +508,7 @@ describe('the POSIX bootstrap script', () => {
     }
 
     function serverFile(): string {
-      return `${dataFolder()}/cli/servers/Stable-abc123/server/node`;
+      return `${dataFolder()}/cli/servers/Stable-abc1230000000000000000000000000000000000/server/node`;
     }
 
     /** The custom root of the connect-75 rows, as the host's install setting names it. */
@@ -563,14 +599,14 @@ describe('the POSIX bootstrap script', () => {
 
     /** The install's own `node`, under bin/<commit>/, which every process of a direct install's server runs. */
     function installNode(): string {
-      return `${dataFolder()}/bin/abc123/node`;
+      return `${dataFolder()}/bin/abc1230000000000000000000000000000000000/node`;
     }
 
     it('F-2411.BR-3: kill stops an extension host under bin/ that no pid file names', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {
         extensionHost: started('extensionHost', installNode(), [
-          `${dataFolder()}/bin/abc123/out/bootstrap-fork`,
+          `${dataFolder()}/bin/abc1230000000000000000000000000000000000/out/bootstrap-fork`,
           '--type=extensionHost',
         ]),
       };
@@ -582,7 +618,7 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {
         fileWatcher: started('fileWatcher', installNode(), [
-          `${dataFolder()}/bin/abc123/out/bootstrap-fork`,
+          `${dataFolder()}/bin/abc1230000000000000000000000000000000000/out/bootstrap-fork`,
           '--type=fileWatcher',
         ]),
       };
@@ -596,7 +632,13 @@ describe('the POSIX bootstrap script', () => {
         launcher: startedScript(
           'launcher',
           'sh',
-          path.join(dataFolder(), 'bin', 'abc123', 'bin', 'code-server'),
+          path.join(
+            dataFolder(),
+            'bin',
+            'abc1230000000000000000000000000000000000',
+            'bin',
+            'code-server',
+          ),
         ),
       };
       untilUp(markers);
@@ -615,7 +657,10 @@ describe('the POSIX bootstrap script', () => {
     it('F-2411.BR-3: kill leaves the exec-server launcher', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {
-        launcher: started('launcher', `${dataFolder()}/code-abc123`),
+        launcher: started(
+          'launcher',
+          `${dataFolder()}/code-abc1230000000000000000000000000000000000`,
+        ),
       };
       untilUp(markers);
       deepStrictEqual(afterStep('kill', markers), []);
@@ -643,9 +688,17 @@ describe('the POSIX bootstrap script', () => {
 
     it('F-2411.BR-4: kill keeps cli/servers/, the connection token and the agent-host token, and removes bin/', () => {
       runScript(host, single('install'), parametersFor());
-      mkdirSync(path.join(dataFolder(), 'cli', 'servers', 'Stable-abc123'), {
-        recursive: true,
-      });
+      mkdirSync(
+        path.join(
+          dataFolder(),
+          'cli',
+          'servers',
+          'Stable-abc1230000000000000000000000000000000000',
+        ),
+        {
+          recursive: true,
+        },
+      );
       for (const token of ['connection-token', 'agent-host-token']) {
         writeFileSync(path.join(dataFolder(), 'cli', token), 'token');
       }
@@ -653,7 +706,12 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         [
           existsSync(
-            path.join(dataFolder(), 'cli', 'servers', 'Stable-abc123'),
+            path.join(
+              dataFolder(),
+              'cli',
+              'servers',
+              'Stable-abc1230000000000000000000000000000000000',
+            ),
           ),
           existsSync(path.join(dataFolder(), 'cli', 'connection-token')),
           existsSync(path.join(dataFolder(), 'cli', 'agent-host-token')),
@@ -697,7 +755,7 @@ describe('the POSIX bootstrap script', () => {
             '.server-data',
             'cli',
             'servers',
-            'Stable-abc123',
+            'Stable-abc1230000000000000000000000000000000000',
             'server',
             'node',
           ),
@@ -714,7 +772,13 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {
         server: started('server', serverFile()),
-        launcher: started('launcher', path.join(dataFolder(), 'code-abc123')),
+        launcher: started(
+          'launcher',
+          path.join(
+            dataFolder(),
+            'code-abc1230000000000000000000000000000000000',
+          ),
+        ),
         node: started('node', '/usr/bin/node', ['/home/user/app.js']),
         mainThread: started('mainThread', 'MainThread'),
         naming: started('naming', 'sleep', ['30', serverFile()]),

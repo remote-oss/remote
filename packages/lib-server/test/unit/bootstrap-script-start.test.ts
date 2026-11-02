@@ -465,7 +465,9 @@ describe('the POSIX bootstrap script', () => {
 
       it('F-2410 BR-7: the socket server is still alive after a port start beside it', () => {
         runScript(host, single('start'), socket());
-        const socketProcess = processIdOf('.abc123.socket.pid');
+        const socketProcess = processIdOf(
+          '.abc1230000000000000000000000000000000000.socket.pid',
+        );
         runScript(host, single('start'), parametersFor());
         deepStrictEqual(
           [serverStarts(), alive(socketProcess)],
@@ -482,8 +484,8 @@ describe('the POSIX bootstrap script', () => {
         runScript(host, single('start'), socket());
         runScript(host, single('start'), parametersFor());
         const processes = [
-          processIdOf('.abc123.socket.pid'),
-          processIdOf('.abc123.pid'),
+          processIdOf('.abc1230000000000000000000000000000000000.socket.pid'),
+          processIdOf('.abc1230000000000000000000000000000000000.pid'),
         ];
         runScript(host, single('kill'), parametersFor());
         await exited(processes);
@@ -494,9 +496,15 @@ describe('the POSIX bootstrap script', () => {
         runScript(host, single('start'), socket());
         deepStrictEqual(
           dataFiles()
-            .filter(name => name.startsWith('.abc123'))
+            .filter(name =>
+              name.startsWith('.abc1230000000000000000000000000000000000'),
+            )
             .sort(),
-          ['.abc123.socket.log', '.abc123.socket.pid', '.abc123.socket.token'],
+          [
+            '.abc1230000000000000000000000000000000000.socket.log',
+            '.abc1230000000000000000000000000000000000.socket.pid',
+            '.abc1230000000000000000000000000000000000.socket.token',
+          ],
         );
       });
 

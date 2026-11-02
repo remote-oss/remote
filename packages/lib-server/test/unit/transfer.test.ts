@@ -37,11 +37,12 @@ const CLIENT_FOLDER = '/client/tmp';
 
 const HOST_FOLDER = '/host/tmp';
 
-const INSTALL_FOLDER = '/home/user/.server-data/bin/abc123';
+const INSTALL_FOLDER =
+  '/home/user/.server-data/bin/abc1230000000000000000000000000000000000';
 
 const TOKEN = 'token1';
 
-const ARCHIVE_NAME = `server-abc123-1700000000000-${TOKEN}.tar.gz`;
+const ARCHIVE_NAME = `server-abc1230000000000000000000000000000000000-1700000000000-${TOKEN}.tar.gz`;
 
 const LOCAL_FILE = path.join(CLIENT_FOLDER, ARCHIVE_NAME);
 
@@ -74,7 +75,8 @@ const BOUNDS = {
   maximumBytes: 1_000_000,
 };
 
-const KEPT = '/client/cache/abc123/server.tar.gz';
+const KEPT =
+  '/client/cache/abc1230000000000000000000000000000000000/server.tar.gz';
 
 const TEMPORARY = `${KEPT}_1700000000000-${TOKEN}`;
 
@@ -348,6 +350,30 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
       kind: 'transferred',
       installFolder: INSTALL_FOLDER,
     });
+  });
+
+  it('F-3902 AC-16: an install whose block carries the identity facts logs one line naming the source, both commits and the risk', async () => {
+    const {logLines} = await runTransfer({
+      installs: [
+        block(
+          'Ok',
+          `server.installDir=${INSTALL_FOLDER}`,
+          'server.identityFrom=1234567890abcdef1234567890abcdef12345678',
+          'server.identityTo=abc1230000000000000000000000000000000000',
+        ),
+      ],
+    });
+    deepStrictEqual(logLines, [
+      `info The server from ${ADDRESS} was built for commit 1234567890abcdef1234567890abcdef12345678; its identity now reads abc1230000000000000000000000000000000000. Whether the two builds work together beyond the handshake is your risk.`,
+    ]);
+  });
+
+  it('F-3902 AC-16: an install without the identity facts logs no such line', async () => {
+    const {logLines} = await runTransfer({installs: [INSTALLED]});
+    deepStrictEqual(
+      logLines.filter(line => line.includes('was built for commit')),
+      [],
+    );
   });
 
   it('F-0419 BR-17: a step that found the server installed under the lock, timing no unpack, is reported as installed by another', async () => {
@@ -1697,7 +1723,7 @@ describe("the names of the transfer's files (F-6301.BR-14)", () => {
   it('F-6301.BR-14: the copy on the host carries the token too', async () => {
     const {channel} = await runTransfer({...KEEP, token: 'b'});
     deepStrictEqual(copiesOf(channel), [
-      `${KEPT} -> ${HOST_FOLDER}/server-abc123-1700000000000-b.tar.gz`,
+      `${KEPT} -> ${HOST_FOLDER}/server-abc1230000000000000000000000000000000000-1700000000000-b.tar.gz`,
     ]);
   });
 
@@ -1708,7 +1734,12 @@ describe("the names of the transfer's files (F-6301.BR-14)", () => {
     });
     deepStrictEqual(
       downloads.map(request => request.destination),
-      [path.join(CLIENT_FOLDER, 'server-abc123-1700000000000-b.tar.gz')],
+      [
+        path.join(
+          CLIENT_FOLDER,
+          'server-abc1230000000000000000000000000000000000-1700000000000-b.tar.gz',
+        ),
+      ],
     );
   });
 });

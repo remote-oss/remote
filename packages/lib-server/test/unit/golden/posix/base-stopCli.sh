@@ -4,7 +4,7 @@ fi
 INSTALL_ROOT=''
 DATA_FOLDER='.server-data'
 LAUNCHER='bin/launcher'
-COMMIT='abc123'
+COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH=''
 ARCHIVE_REMOVE='no'

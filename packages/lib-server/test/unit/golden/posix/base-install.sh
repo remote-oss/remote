@@ -4,7 +4,7 @@ fi
 INSTALL_ROOT=''
 DATA_FOLDER='.server-data'
 LAUNCHER='bin/launcher'
-COMMIT='abc123'
+COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH=''
 ARCHIVE_REMOVE='no'
@@ -258,6 +258,21 @@ unpack_move_top() {
   rm -rf "$1"
   [ "$MOVED" = 1 ]
 }
+rewrite_identity() {
+  IDENTITY_FILE=$1/product.json
+  [ -f "$IDENTITY_FILE" ] || return 1
+  IDENTITY_OLD=$(sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' "$IDENTITY_FILE" </dev/null | head -n 1)
+  [ -n "$IDENTITY_OLD" ] || return 1
+  [ "$IDENTITY_OLD" != "$COMMIT" ] || return 0
+  IDENTITY_TEMP=$IDENTITY_FILE.identity.$$
+  if sed 's/\("commit"[[:space:]]*:[[:space:]]*"\)'"$IDENTITY_OLD"'"/\1'"$COMMIT"'"/' "$IDENTITY_FILE" >"$IDENTITY_TEMP" && mv -f "$IDENTITY_TEMP" "$IDENTITY_FILE"; then
+    fact server.identityFrom "$IDENTITY_OLD"
+    fact server.identityTo "$COMMIT"
+    return 0
+  fi
+  rm -f "$IDENTITY_TEMP"
+  return 1
+}
 leave() {
   lock_release
   finish "$1"
@@ -282,6 +297,7 @@ DOWNLOADED_AT=$(now_seconds)
 unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes
 [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"
 [ -z "${UNPACK_FAILED:-}" ] && [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed
+rewrite_identity "$INSTALL_DIR" || leave UnpackFailed
 fact server.installDir "$INSTALL_DIR"
 fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"
 fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"

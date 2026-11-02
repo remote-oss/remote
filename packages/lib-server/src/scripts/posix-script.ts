@@ -140,6 +140,7 @@ const INSTALL_BODY: readonly string[] = [
   'unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes',
   '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
   '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
+  'rewrite_identity "$INSTALL_DIR" || leave UnpackFailed',
   'fact server.installDir "$INSTALL_DIR"',
   'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
   'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
@@ -170,6 +171,7 @@ const INSTALL_TREE_BODY: readonly string[] = [
   '  install_tree "$ARCHIVE" || UNPACK_FAILED=yes',
   '  [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
   '  [ -z "${UNPACK_FAILED:-}" ] || leave UnpackFailed',
+  '  rewrite_identity "$INSTALL_TREE" || leave UnpackFailed',
   '  fact server.treeInstalled yes',
   '  fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
   '  fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
@@ -283,6 +285,7 @@ const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
     'unpack_into "$STAGING.archive" "$STAGING" || UNPACK_FAILED=yes',
     'rm -f "$STAGING.archive"',
     '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
+    'rewrite_identity "$STAGING" || finish UnpackFailed',
     'finish Ok',
   ],
   activate: [
