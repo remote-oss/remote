@@ -131,6 +131,8 @@ function optionsOf(
     viewIds: ['remoteTargets'],
     templates: TEMPLATES,
     translate: template => template,
+    homeFolder: '/home/user',
+    platform: 'linux',
     dataFolderName: () => Promise.resolve('.vscode-oss'),
     logFailure: () => undefined,
     ...changes,

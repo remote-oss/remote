@@ -21,7 +21,7 @@ export {
   buildOptionsQuery,
   TUNNEL_SUCCESS_LINE,
 } from './arguments/invocation.ts';
-export type {ClientPlatform} from './config/platform.ts';
+export {type ClientPlatform, clientPlatformOf} from './config/platform.ts';
 export type {
   ClientLocations,
   ConfigFileReader,

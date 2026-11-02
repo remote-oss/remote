@@ -211,7 +211,7 @@ async function activated(
       fixture.events.push('setup');
       return Promise.resolve();
     },
-    'other',
+    'linux',
     record,
   );
   return {...fixture, context};
@@ -281,7 +281,7 @@ describe('the activation of a window (card explorer-03c)', () => {
       fixture.editor,
       contextOf() as never,
       () => Promise.resolve(),
-      'other',
+      'linux',
     );
     deepStrictEqual(
       fixture.events.filter(event => event.startsWith('warning')),

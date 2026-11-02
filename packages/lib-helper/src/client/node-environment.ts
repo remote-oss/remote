@@ -84,20 +84,22 @@ export type ClientWaits = Pick<
   'helloLimitMilliseconds' | 'startLimitMilliseconds' | 'retryMilliseconds'
 >;
 
-/** The client environment of this process, with `runtime` the editor's executable and the consumer's `waits`. */
+/** The client environment of this process on `platform` (the caller reads it), with `runtime` the editor's executable and the consumer's `waits`. */
 export function nodeClientEnvironment(
   runtime: string,
   waits: ClientWaits,
+  platform: string,
 ): ClientEnvironment {
   return {
     files: nodeFilePort,
-    endpoints: nodeEndpointPort(),
+    endpoints: nodeEndpointPort(platform),
     spawn: spawnerOf(spawn),
     timer: nodeTimer,
     clock: Date.now,
     newNonce: () => randomBytes(16).toString('hex'),
     runtime,
-    endpointFolder: runtimeFolder(process.platform, process.env, tmpdir()),
+    platform,
+    endpointFolder: runtimeFolder(platform, process.env, tmpdir()),
     processId: process.pid,
     parentEnvironment: process.env,
     ...waits,

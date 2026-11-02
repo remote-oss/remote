@@ -9,6 +9,7 @@ import type {
   Registration,
 } from 'lib-companion';
 import {SSH_COMPANION_ID} from 'lib-companion';
+import type {ClientPlatform} from 'lib-ssh';
 import {
   type ActivePull,
   CONNECTED_MARKER,
@@ -16,7 +17,6 @@ import {
 } from '../model/connected-marker.ts';
 import {
   buildSshRows,
-  type ClientPlatform,
   type FolderRow,
   type HostRow,
 } from '../model/ssh-group.ts';

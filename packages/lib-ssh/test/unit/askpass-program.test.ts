@@ -205,7 +205,7 @@ describe('askpass over a socket', () => {
 
   it('carries a question to a window and its answer back, on a socket only the user can open', async () => {
     const socket = askpassEndpointPath(folder, 'helper', NONCE);
-    const port = nodeEndpointPort();
+    const port = nodeEndpointPort(process.platform);
     const endpoint = new AskpassEndpoint({
       nonce: NONCE,
       displayHost: 'h.invalid',

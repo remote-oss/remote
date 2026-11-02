@@ -79,7 +79,7 @@ export async function attemptSharedSession(
 ): Promise<SharedSessionAttempt> {
   const runtimeFolder = mkdtempSync(path.join(tmpdir(), 'shared-session-'));
   const files = new MemoryFilePort();
-  const endpoints = nodeEndpointPort();
+  const endpoints = nodeEndpointPort(process.platform);
   let nonces = 0;
   function newNonce(): string {
     nonces += 1;
@@ -117,6 +117,7 @@ export async function attemptSharedSession(
       clock: Date.now,
       newNonce,
       runtime: process.execPath,
+      platform: process.platform,
       endpointFolder: runtimeFolder,
       processId: process.pid,
       parentEnvironment: process.env,

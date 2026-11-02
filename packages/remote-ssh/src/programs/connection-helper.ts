@@ -28,7 +28,7 @@ function logLine(line: string): void {
 
 runConnectionHelper({
   parameters: helperParameters(process.env),
-  port: nodeEndpointPort(),
+  port: nodeEndpointPort(process.platform),
   clock: Date.now,
   scheduler: {setTimer: nodeTimer},
   files: nodeFilePort,
