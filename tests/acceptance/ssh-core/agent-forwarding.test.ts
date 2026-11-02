@@ -314,6 +314,7 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
       ).catch(() => undefined);
       deepStrictEqual(
         {
+          terminalTmpdir: await printedAfter('c99-tmpdir', 'TMP', '$TMPDIR'),
           owners: (await hostLinks()).map(link => link.split(' ')[0]),
           inHomeTmp: (
             await onHostAs(
@@ -324,7 +325,11 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
             )
           ).trim(),
         },
-        {owners: [TMPDIR_USER], inHomeTmp: ''},
+        {
+          terminalTmpdir: `/home/${TMPDIR_USER}/tmp`,
+          owners: [TMPDIR_USER],
+          inHomeTmp: '',
+        },
       );
     } finally {
       await closeWindow('c99-tmpdir').catch(() => undefined);

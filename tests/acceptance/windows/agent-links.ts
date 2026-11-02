@@ -21,10 +21,10 @@ export async function hostLinks(): Promise<string[]> {
 export async function serverSessionSocket(user = 'harness'): Promise<string> {
   return (
     await onHostAs(
-      'root',
+      user,
       'sh',
       '-c',
-      `for pid in $(pgrep -u ${user} -f '[.]vscodium-server-insiders/bin/'); do tr '\\0' '\\n' < /proc/$pid/environ 2>/dev/null | sed -n 's/^SSH_AUTH_SOCK=//p'; done | head -1`,
+      `for pid in $(pgrep -f '[.]vscodium-server-insiders/bin/'); do tr '\\0' '\\n' < /proc/$pid/environ 2>/dev/null | sed -n 's/^SSH_AUTH_SOCK=//p'; done | head -1`,
     )
   ).trim();
 }
