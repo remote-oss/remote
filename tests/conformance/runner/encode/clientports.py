@@ -216,7 +216,7 @@ def hold(planned):
 def still_held(planned, seconds=5):
     """The names of the plan's held ports that a listener still can't bind after up to `seconds`, as a listener binds
     (SO_REUSEADDR: the holder's closed connections linger in TIME_WAIT, which no listener waits for)."""
-    def bound(family, address, port):
+    def taken(family, address, port):
         s = socket.socket(family, socket.SOCK_STREAM)
         try:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -231,13 +231,16 @@ def still_held(planned, seconds=5):
     held = [p for p in planned if p["kind"] in PLACES]
     deadline = time.monotonic() + seconds
     while True:
-        left = [p["name"] for p in held if any(bound(f, a, p["port"]) for f, a in PLACES[p["kind"]])]
+        left = [p["name"] for p in held if any(taken(f, a, p["port"]) for f, a in PLACES[p["kind"]])]
         if not left or time.monotonic() > deadline:
             return left
         time.sleep(0.1)
 
 
 # ---- start, stop, and the slot's leftovers
+STARTED = {}   # pid: the Popen of each holder this process started, waited for at stop (no zombie, no 5 s wait)
+
+
 def pid_file(slots_dir, slot):
     return os.path.join(slots_dir, f"client-ports-{slot}.json")
 
@@ -250,12 +253,20 @@ def stop(slots_dir, slot):
             pid = json.load(f)["pid"]
     except (OSError, ValueError, KeyError):
         return True
+    holder = STARTED.pop(pid, None)
     try:
         os.kill(pid, signal.SIGTERM)
-        for _ in range(50):
-            os.kill(pid, 0)
-            time.sleep(0.1)
-        os.kill(pid, signal.SIGKILL)
+        if holder is not None:   # this process's own child: kill(pid, 0) would find it as a zombie until it is reaped
+            try:
+                holder.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                holder.kill()
+                holder.wait()
+        else:
+            for _ in range(50):
+                os.kill(pid, 0)
+                time.sleep(0.1)
+            os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         pass
     os.remove(path)
@@ -277,6 +288,7 @@ def start(planned, slots_dir, slot, run_id):
         raise PortError("the client port holder didn't start: " + why)
     p.stdout.close()   # the holder writes nothing after its ready line
     p.stderr.close()
+    STARTED[p.pid] = p
     os.makedirs(slots_dir, exist_ok=True)
     with open(pid_file(slots_dir, slot), "w", encoding="utf-8") as f:
         json.dump({"pid": p.pid, "run": run_id, "ports": planned}, f)
