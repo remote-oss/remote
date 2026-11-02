@@ -985,6 +985,30 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-84: Host x11-untrusted forwards X11 without the trusted request', () => {
+    strictEqual(
+      accountBlock('x11-untrusted'),
+      [
+        ...sharedLines('x11-untrusted', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-match gives ForwardX11 only in a Match block for its name', () => {
+    strictEqual(
+      accountBlock('x11-match'),
+      [
+        ...sharedLines('x11-match', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  Match originalhost x11-match',
+        '  ForwardX11 yes',
+        '  ForwardX11Trusted yes',
+      ].join('\n'),
+    );
+  });
+
   it('coverage-19: Host badkey logs in to the harness host with a key the host does not accept', () => {
     strictEqual(
       accountBlock('badkey'),

@@ -768,6 +768,18 @@ export function harnessSshConfig(
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
+    // The same without the trusted request, so the server's X11 extensions are the untrusted client's.
+    ...accountAlias('x11-untrusted', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+    ]),
+    // ForwardX11 given only in a Match block that applies to the alias.
+    ...accountAlias('x11-match', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'Match originalhost x11-match',
+      'ForwardX11 yes',
+      'ForwardX11Trusted yes',
+    ]),
     'Host badkey',
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
