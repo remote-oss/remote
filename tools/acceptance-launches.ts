@@ -313,6 +313,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-flows.test.ts',
   'authoring-optional.test.ts',
   'authoring-options.test.ts',
+  'authoring-pick.test.ts',
   'authoring-sweep.test.ts',
   'authoring-templates.test.ts',
   'authoring-user-data.test.ts',

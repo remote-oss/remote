@@ -351,12 +351,12 @@ F-0403.AC-1	acceptance
 F-0403.AC-2	acceptance	
 F-0403.AC-3	core	core: the folder dialog's typing, descending, .. and confirming are core's file dialog
 F-0403.AC-4	deferred	containers 0.4: C12 attach later
-F-0403.AC-5	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-6	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-7	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-8	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-9	deferred	containers release 1: increment 2 (authoring)
-F-0403.AC-10	deferred	containers release 1: increment 2 (authoring)
+F-0403.AC-5	todo	
+F-0403.AC-6	acceptance	
+F-0403.AC-7	acceptance	
+F-0403.AC-8	todo	
+F-0403.AC-9	acceptance	
+F-0403.AC-10	acceptance	
 F-0403.AC-11	deferred	containers release 1: later (personalization and relays)
 F-0403.AC-12	acceptance	
 F-0403.AC-13	acceptance	
@@ -369,7 +369,7 @@ F-0403.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-20	acceptance	
 F-0403.AC-21	deferred	containers release 1: later (the log terminal, F-0104)
 F-0403.AC-22	deferred	containers release 1: later (remote engines)
-F-0403.AC-23	deferred	containers release 1: increment 2 (authoring)
+F-0403.AC-23	acceptance	
 F-0403.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-25	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0403.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
