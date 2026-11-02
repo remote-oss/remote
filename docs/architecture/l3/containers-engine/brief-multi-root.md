@@ -16,7 +16,7 @@ Decisions: D-105, R-60, R-31 (`reading-1808-own-link`).
 In a saved multi-root workspace, Reopen in Container does nothing today. Six criteria of release-1 families wait on it:
 F-0301 AC-22 and AC-50, F-0106 AC-44, F-0101 AC-3b, and F-0406 AC-30 and AC-31. Group 8's own 20 lines wait too.
 
-## 2. The four decisions
+## 2. The decisions
 
 1. **The payload doesn't change.**
    - A workspace window's `dev-container` payload is F-0501 BR-2a's folder payload, as observed for folders. `hostPath` is
@@ -65,6 +65,21 @@ F-0301 AC-22 and AC-50, F-0106 AC-44, F-0101 AC-3b, and F-0406 AC-30 and AC-31. 
        - "Current Workspace" writes the `.code-workspace` file's own workspace state, with the same key and shape as
          the folder case.
    - An **untitled** multi-root window keeps the folder wording, S426 (BR-1), with its existing trigger.
+
+5. **A saved `.code-workspace` with exactly one root takes the workspace route** (daedalus's question on #1204).
+   - **The reopen:** a saved workspace file is one window kind whatever its root count. F-0401 6.5 covers
+     "`.code-workspace` files", and F-0402 BR-1 words every saved workspace file as a workspace. So Reopen in
+     Container uses the configuration beside the workspace file and the one mount of its folder, and the window
+     reopens the workspace file (title "<workspace> (Workspace) [Dev Container: <name>]"). F-0406 brings it back to
+     the workspace file (BR-11).
+     - When the workspace file sits in its single root, as is usual, that configuration is the root's own, and the
+       result differs from the folder route only in reopening the workspace file.
+   - **The notification** uses the workspace wording: S427 with S405, "Workspace contains a Dev Container configuration
+     file. Reopen workspace…". F-0402 BR-1 names S405 for "a single-folder saved workspace" window. Its trigger is
+     decision 4's, a listed root with a configuration. A workspace file in its own root therefore notifies, because
+     that root's configuration is a listed root's.
+   - This shape wasn't observed with one root. It is the multi-root route applied to the window kind, and no criterion
+     asserts another.
 
 ## 3. Components
 
