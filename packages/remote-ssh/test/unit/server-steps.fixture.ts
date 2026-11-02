@@ -118,6 +118,7 @@ export function dependencies(
 ): ServerStepDependencies {
   return {
     onHostDownloadRefused: () => undefined,
+    copyAvailable: () => Promise.resolve(true),
     profile: PROFILE,
     policy: SSH_POLICY,
     settings: settingsWith({

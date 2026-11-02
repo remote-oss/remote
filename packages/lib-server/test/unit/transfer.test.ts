@@ -176,6 +176,8 @@ interface Setup {
   removed?: string[];
   /** The text of the client's netrc, or the error reading it throws; there is no file when absent. */
   netrc?: string | Error;
+  /** Whether the program the archive is copied with can be started; the transfer is not asked when absent. */
+  copyAvailable?: boolean;
 }
 
 async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
@@ -258,6 +260,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
         },
       },
       lockLoop: setup.lockLoop ?? runOnce,
+      ...(setup.copyAvailable === undefined
+        ? {}
+        : {copyAvailable: () => Promise.resolve(setup.copyAvailable === true)}),
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
       onPhase: phase => {
         phases.push(phase);
@@ -552,6 +557,28 @@ describe('a download on the client (F-2405.BR-3, BR-5)', () => {
   it('F-2405.5.0: the archive is copied to the host temporary folder', async () => {
     const {channel} = await runTransfer({plan: CLIENT});
     deepStrictEqual(copiesOf(channel), [`${LOCAL_FILE} -> ${REMOTE_COPY}`]);
+  });
+
+  it('F-2405 AC-14: a copy program that cannot start fails the transfer before the copying stage, and nothing is copied', async () => {
+    const {outcome, phases, channel} = await runTransfer({
+      plan: CLIENT,
+      copyAvailable: false,
+    });
+    deepStrictEqual(
+      [failureOf(outcome), phases.map(phase => phase.kind), copiesOf(channel)],
+      [{kind: 'copyToolMissing'}, ['downloadingLocally'], []],
+    );
+  });
+
+  it('F-2405 AC-14: a copy program that starts lets the copy go on', async () => {
+    const {outcome, channel} = await runTransfer({
+      plan: CLIENT,
+      copyAvailable: true,
+    });
+    deepStrictEqual(
+      [outcome.kind, copiesOf(channel)],
+      ['transferred', [`${LOCAL_FILE} -> ${REMOTE_COPY}`]],
+    );
   });
 
   it('F-2405.5.0: the install reads the copied archive and removes it', async () => {
