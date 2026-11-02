@@ -7,6 +7,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   classify,
   type ConnectionNotice,
+  type LoginTerminalName,
   type SessionRunner,
   type SharedRecord,
   type SshRequest,
@@ -99,6 +100,7 @@ function fixture(
   options: {
     dynamic?: boolean;
     reveal?: boolean;
+    name?: LoginTerminalName;
     timeoutSeconds?: number;
     fromHost?: boolean;
     level?: Level;
@@ -107,6 +109,7 @@ function fixture(
   const {
     dynamic = false,
     reveal = false,
+    name = 'install',
     timeoutSeconds = 10,
     fromHost = false,
     level = 'info',
@@ -153,6 +156,7 @@ function fixture(
       },
     }),
     revealLoginTerminals: () => reveal,
+    terminalName: () => name,
     connectWait: () => ({
       connectTimeoutSeconds: timeoutSeconds,
       fromHost,
@@ -252,6 +256,12 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       [made.terminals.opened.length, terminal.name, terminal.revealedAtOpen],
       [1, 'install', true],
     );
+  });
+
+  it('connect-113, F-2308 AC-19: the terminal is opened with the name the dependencies give', async () => {
+    const made = fixture({name: 'Uninstall VS Code Server'});
+    const {terminal} = await started(made);
+    deepStrictEqual(terminal.name, 'Uninstall VS Code Server');
   });
 
   it('F-2410 AC-32: with the login terminal setting off the install terminal is opened hidden and a password question never reveals it', async () => {

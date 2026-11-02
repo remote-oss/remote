@@ -68,6 +68,8 @@ function stepWith(
     retryMilliseconds?: number;
     input?: string;
     reconnection?: boolean;
+    /** `remote.SSH.useExecServer`: on unless the row says otherwise, as by default. */
+    execServer?: boolean;
   } = {},
 ) {
   const clock = new FakeClock();
@@ -117,6 +119,7 @@ function stepWith(
         },
       };
     },
+    useExecServer: () => options.execServer ?? true,
     revealLoginTerminals: () => options.reveal ?? false,
     connectWait: () =>
       options.connectWait ?? {
@@ -550,18 +553,70 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     );
   });
 
-  it('connect-105, F-2304 6.9: on a first resolve of the second ssh, a port that closes the connection that proved it accepting is no failure: the step opens and the window reconnects', async () => {
-    const context = stepWith();
+  /** Opens the tunnel of `options` and has the port close the connection that proved it accepting, as a refused forward does. */
+  async function refusedFirstForward(
+    options: Parameters<typeof stepWith>[0],
+    pause: number,
+  ) {
+    const context = stepWith(options);
     const pending = context.open();
     await settled();
     context.opened().write(`${TUNNEL_SUCCESS_LINE}\n`);
     await advance(context.clock, 30);
     context.local.probes[0]?.close();
-    await advance(context.clock, 30);
+    await advance(context.clock, pause);
+    return {context, pending};
+  }
+
+  it('connect-105, connect-109, F-2304 6.9: on a first resolve of the second ssh without the exec server, a port that closes the connection that proved it accepting is no failure: the step opens and the window reconnects', async () => {
+    const {context, pending} = await refusedFirstForward(
+      {execServer: false},
+      30,
+    );
     deepStrictEqual(
       [(await pending).kind, context.local.probes.map(probe => probe.closed)],
       ['done', [true]],
     );
+  });
+
+  it('connect-109, F-2104 7.E8: on a first resolve of the second ssh with the exec server, the same refusal fails the step with the reason "Connection closed."', async () => {
+    const {pending} = await refusedFirstForward({execServer: true}, 0);
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {
+        kind: 'channelClosed',
+        reason: {text: 'Connection closed.'},
+      },
+    });
+  });
+
+  it('connect-109, F-2410 7.E1: on the socket path the first refusal fails the step with or without the exec server', async () => {
+    const kinds: string[] = [];
+    for (const execServer of [true, false]) {
+      const {pending} = await refusedFirstForward(
+        {settings: SOCKET, server: SOCKET_SERVER, execServer},
+        0,
+      );
+      const result = await pending;
+      kinds.push(result.kind === 'failed' ? result.failure.kind : result.kind);
+    }
+    deepStrictEqual(kinds, ['channelClosed', 'channelClosed']);
+  });
+
+  it('connect-109: a reconnection gets no refusal bound on any path', async () => {
+    const seen: string[] = [];
+    for (const options of [
+      {execServer: true},
+      {execServer: false},
+      {settings: SOCKET, server: SOCKET_SERVER, execServer: true},
+    ]) {
+      const {pending} = await refusedFirstForward(
+        {...options, reconnection: true},
+        30,
+      );
+      seen.push((await pending).kind);
+    }
+    deepStrictEqual(seen, ['done', 'done', 'done']);
   });
 
   it('#299 ruling 1b: the handshake line the test prints is the one the reader knows', () => {

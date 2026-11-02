@@ -179,7 +179,11 @@ export interface WiringPorts {
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
     TunnelStepDependencies,
-    'environment' | 'connectWait' | 'tunnelInvocation' | 'tunnelInput'
+    | 'environment'
+    | 'connectWait'
+    | 'tunnelInvocation'
+    | 'tunnelInput'
+    | 'useExecServer'
   >;
   cliPath: CliWiring;
   /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */
@@ -402,6 +406,7 @@ export function stepsOf(
   });
   const tunnelStep = openTunnelStep({
     ...ports.tunnel,
+    useExecServer: ports.settings.useExecServer,
     connectWait: () =>
       terminalWaitOf(
         lookedUp(state).connectTimeout,
