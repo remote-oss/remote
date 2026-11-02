@@ -126,6 +126,10 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
 
   async function killOnHost(target: SshTarget): Promise<void> {
     const outcome = await ports.perform('kill', target);
+    if (outcome.result === 'cancelled') {
+      ports.logger.info('the kill was cancelled before it ran');
+      return;
+    }
     if (outcome.result !== 'stepRan') {
       ports.logger.warn(`the kill failed: ${outcome.cause}`);
     } else {
