@@ -190,6 +190,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # the pinned pwsh and PSScriptAnalyzer, first on the PATH, for the unit rows of the PowerShell host scripts
+      - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: pnpm test:unit --parallel --jobs 4
         env:
           TMPDIR: ${{ runner.temp }}
@@ -217,6 +219,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm identifiers
+      - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH" # as the unit job
       - run: pnpm coverage --shard ${{ matrix.shard }}/4
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
