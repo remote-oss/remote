@@ -1909,31 +1909,37 @@ describe('the script read per question, the cursor from the record and the held 
     return passing ? {...heldEntry(), passCursor: true} : heldEntry();
   }
 
-  it('tooling-103: a held entry with passCursor lets the next question take the next entry while it waits, and counts once', async () => {
+  /** A masked input held behind `go`, then a pick asked while it waits: the pick's answer and the way to release the input. */
+  async function pickWhileHeld(passing: boolean) {
     const entries: ScriptEntry[] = [
-      passingEntry(true),
+      passingEntry(passing),
       {surface: 'pick', match: 'authenticity', answer: 'yes'},
     ];
     const {adapters, files} = scripted(entries, WINDOW, SIGNALS_FOLDER);
     const done = adapters.prompts.maskedInput(PASSWORD, NEVER);
     const during = await adapters.prompts.pick(FINGERPRINT, NEVER);
-    signal(files, 'go');
+    return {
+      adapters,
+      files,
+      during,
+      release: async () => {
+        signal(files, 'go');
+        return done;
+      },
+    };
+  }
+
+  it('tooling-103: a held entry with passCursor lets the next question take the next entry while it waits, and counts once', async () => {
+    const {adapters, during, release} = await pickWhileHeld(true);
     deepStrictEqual(
-      [during, await done, adapters.unusedEntries()],
+      [during, await release(), adapters.unusedEntries()],
       ['yes', 'secret', 0],
     );
   });
 
   it('tooling-103: a held entry without passCursor keeps the cursor, so the next question is dismissed', async () => {
-    const entries: ScriptEntry[] = [
-      passingEntry(false),
-      {surface: 'pick', match: 'authenticity', answer: 'yes'},
-    ];
-    const {adapters, files} = scripted(entries, WINDOW, SIGNALS_FOLDER);
-    const done = adapters.prompts.maskedInput(PASSWORD, NEVER);
-    await adapters.prompts.pick(FINGERPRINT, NEVER);
-    signal(files, 'go');
-    await done;
+    const {files, release} = await pickWhileHeld(false);
+    await release();
     deepStrictEqual(
       files
         .lines()
