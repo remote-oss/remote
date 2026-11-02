@@ -8,6 +8,7 @@ import {
   folderTargetOf,
   type SerializedUri,
   serializedUriOf,
+  windowOriginOf,
 } from '../../src/authority/payload.ts';
 
 const CONFIG_PATH = '/home/u/p/.devcontainer/devcontainer.json';
@@ -249,6 +250,72 @@ describe('the folder of a window’s decoded target (card containers-11)', () =>
         decodedFolderOf(containerTarget('zz')),
       ],
       [undefined, undefined, undefined, undefined],
+    );
+  });
+});
+
+describe('the origin a window reopens at, from its own authority (card containers-135)', () => {
+  /** A dev-container authority over the payload. */
+  function containerAuthority(payload: string): string {
+    return encodeAuthority({
+      family: 'dev-container',
+      target: {payload},
+      rawHostString: payload,
+    });
+  }
+
+  it('F-0406 BR-13: a window with no authority names no origin', () => {
+    deepStrictEqual(windowOriginOf(undefined), undefined);
+  });
+
+  it('F-0406 BR-13: an authority that is not a dev container names no origin', () => {
+    deepStrictEqual(
+      [
+        windowOriginOf(
+          encodeAuthority({
+            family: 'ssh-remote',
+            target: {kind: 'plain', text: 'u@h'},
+            rawHostString: 'u@h',
+          }),
+        ),
+        windowOriginOf(
+          encodeAuthority({
+            family: 'attached-container',
+            target: {payload: '7b7d'},
+            rawHostString: '7b7d',
+          }),
+        ),
+      ],
+      [undefined, undefined],
+    );
+  });
+
+  it('F-0406 BR-13: a payload that is not a hex names no origin', () => {
+    deepStrictEqual(windowOriginOf(containerAuthority('zz')), undefined);
+  });
+
+  it('F-0406 BR-13: a legacy payload names its host folder', () => {
+    deepStrictEqual(
+      windowOriginOf(containerAuthority(hexOf('/home/user/project'))),
+      {kind: 'local', folder: '/home/user/project'},
+    );
+  });
+
+  it('F-0406 BR-13: a folder payload with a file configuration names its host folder, with a context', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(
+          devContainerPayloadOf({...FOLDER, context: 'desktop-linux'}),
+        ),
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-13: a folder payload whose configuration is not on this machine names no origin', () => {
+    deepStrictEqual(
+      windowOriginOf(containerAuthority(devContainerPayloadOf(SSH_FOLDER))),
+      undefined,
     );
   });
 });
