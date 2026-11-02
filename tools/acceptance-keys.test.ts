@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   agentEnvironment,
   agentSocketPath,
+  changedKeyHostsFile,
   controlFolderOf,
   SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
@@ -100,6 +101,25 @@ describe('makeRunKeys', function () {
         withEmpty.status !== 0,
       ],
       [0, true, true, true],
+    );
+  });
+
+  it("coverage-85: the changed-key alias's known-hosts file pins, under the alias's name, a key the host isn't given", () => {
+    const [line = '', ...more] = readFileSync(
+      changedKeyHostsFile(folder),
+      'utf8',
+    )
+      .trimEnd()
+      .split('\n');
+    const [name, type, key] = line.split(' ');
+    deepStrictEqual(
+      [
+        more.length,
+        name,
+        type,
+        keys.hostArguments.some(argument => argument.includes(key ?? '-')),
+      ],
+      [0, 'changedkey', 'ssh-ed25519', false],
     );
   });
 

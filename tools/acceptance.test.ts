@@ -700,6 +700,26 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-85: Host changedkey is the harness host whose own known-hosts file pins another key, with the check off', () => {
+    strictEqual(
+      accountBlock('changedkey'),
+      [
+        'Host changedkey',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  HostKeyAlias changedkey',
+        '  StrictHostKeyChecking no',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_changedkey',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [

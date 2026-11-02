@@ -76,6 +76,7 @@ const LINUX_ALIASES = [
   'noforward',
   'nosocket',
   'noall',
+  'changedkey',
   'fwd-clearall',
   'fwd-exit',
   'fwd-busy-exit',
