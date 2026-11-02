@@ -17,6 +17,11 @@ import {
   userSettings,
 } from './harness.ts';
 import {DATA_FOLDER, freshHost, INSTALL_MILLISECONDS} from './maintenance.ts';
+import {
+  listeningSockets,
+  removeOwnSockets,
+  socketFiles,
+} from './socket-files.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -25,26 +30,6 @@ const SOCKET_MODE = {
   'remote.SSH.remoteServerListenOnSocket': true,
   'remote.SSH.remotePlatform': {harness: 'linux'},
 };
-
-/** The sockets the server proper listens on in the host's `/tmp`, as `/tmp/code-<uuid>`, from the kernel's list. */
-async function listeningSockets(): Promise<string[]> {
-  return (
-    await onHost(
-      'sh',
-      '-c',
-      'awk \'$4=="00010000" && $8 ~ /^\\/tmp\\/code-/ {print $8}\' /proc/net/unix | sort',
-    )
-  )
-    .split('\n')
-    .filter(line => line !== '');
-}
-
-/** The files `/tmp/code-<uuid>` of the host, whatever their type. */
-async function socketFiles(): Promise<string[]> {
-  return (await onHost('sh', '-c', 'ls -d /tmp/code-* 2>/dev/null; true'))
-    .split('\n')
-    .filter(line => line !== '');
-}
 
 /** The process id the server of the socket kind has in its pid file, or nothing while it has none. */
 async function socketServerPid(): Promise<string> {
@@ -131,7 +116,7 @@ describe('the server on a socket (card coverage-81)', function () {
   before(async () => {
     saved = readUserSettings();
     await freshHost();
-    await onHost('sh', '-c', 'rm -f /tmp/code-*');
+    await removeOwnSockets();
     await userSettings(SOCKET_MODE);
   });
 
