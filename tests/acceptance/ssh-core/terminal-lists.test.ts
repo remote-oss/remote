@@ -136,14 +136,22 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
         60_000,
       );
       await inWindow('c125-select', 'workbench.action.debug.stop');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      inWindow('c125-select', 'workbench.action.debug.selectandstart').catch(
-        () => undefined,
-      );
-      const groups = await groupsOf('c125-select');
-      const placeholder = (await waitForQuickPick('c125-select', 30_000))
-        .placeholder;
-      await pressEscape('c125-select');
+      // The editor records the configuration it ran a moment after the session ends: ask again until it lists it first.
+      let groups: Array<[string, string]> = [];
+      let placeholder = '';
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        inWindow('c125-select', 'workbench.action.debug.selectandstart').catch(
+          () => undefined,
+        );
+        groups = await groupsOf('c125-select');
+        placeholder = (await waitForQuickPick('c125-select', 30_000))
+          .placeholder;
+        await pressEscape('c125-select');
+        if (groups[0]?.[1] === 'Most Recent') {
+          break;
+        }
+      }
       deepStrictEqual(
         [placeholder, groups],
         [
