@@ -118,6 +118,7 @@ function stepWith(
       };
     },
     revealLoginTerminals: () => options.reveal ?? false,
+    forwardRefused: () => undefined,
     connectWait: () =>
       options.connectWait ?? {
         connectTimeoutSeconds: 0,

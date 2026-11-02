@@ -58,7 +58,7 @@ function stepWith(
     cancellation?: AbortSignal;
     limits?: typeof LIMITS;
     /** What the host's check says of the server's port: listening, not, or no answer. */
-    listening?: 'yes' | 'no' | 'none';
+    listening?: 'yes' | 'no' | 'none' | 'status' | 'silent';
     onSettingUp?: () => void;
   } = {},
 ): {
@@ -119,8 +119,13 @@ function stepWith(
             failure: {kind: 'spawnFailed' as const, detail: 'no shell'},
           });
         }
-        onLine(`remote-oss-listening=${options.listening ?? 'yes'}`);
-        return Promise.resolve({kind: 'exited' as const, status: 0});
+        if (options.listening !== 'silent') {
+          onLine(`remote-oss-listening=${options.listening ?? 'yes'}`);
+        }
+        return Promise.resolve({
+          kind: 'exited' as const,
+          status: options.listening === 'status' ? 3 : 0,
+        });
       },
     } as unknown as ConnectionLease['channel'],
   };
@@ -252,6 +257,18 @@ describe('the step that opens the window tunnel', () => {
       listening: 'none',
     });
     deepStrictEqual([outcome.ended, outcome.refused], ['failed', 0]);
+  });
+
+  it('connect-106: a host check that exits with a failing status or prints no answer is no answer, and the probing goes on to the bound', async () => {
+    const seen: string[] = [];
+    for (const listening of ['status', 'silent'] as const) {
+      const outcome = await refusalRun({
+        dialScript: ['closedBeforeReply'],
+        listening,
+      });
+      seen.push(`${String(outcome.ended)} ${String(outcome.refused)}`);
+    }
+    deepStrictEqual(seen, ['failed 0', 'failed 0']);
   });
 
   it('connect-106: an unreachable relay with the connection’s ssh alive is a refused forward', async () => {
