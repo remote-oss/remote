@@ -1380,6 +1380,18 @@ describe('acceptance', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       workspace.write('dist/vscode-remote-extensionpack-0.1.0.vsix', '');
+      /** The install of a launch that has the containers extension and nothing else beside the run's. */
+      function containersOnly(label: string) {
+        return {
+          folder: path.join('/run', `extensions-${label}`),
+          files: [
+            '/dist/remote-ssh.vsix',
+            '/run/window-agent.vsix',
+            path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+          ],
+          client: 'vscodium',
+        };
+      }
       deepStrictEqual(
         installsOf(
           workspace.root,
@@ -1419,15 +1431,7 @@ describe('acceptance', () => {
             'containers-no-proposals',
             'containers-trust',
             'containers-volume',
-          ].map(label => ({
-            folder: path.join('/run', `extensions-${label}`),
-            files: [
-              '/dist/remote-ssh.vsix',
-              '/run/window-agent.vsix',
-              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
-            ],
-            client: 'vscodium',
-          })),
+          ].map(containersOnly),
           {
             folder: path.join('/run', 'extensions-containers-explorer'),
             files: [
@@ -1520,15 +1524,7 @@ describe('acceptance', () => {
             'containers-context',
             'containers-env-host',
             'containers-env-ctx',
-          ].map(label => ({
-            folder: path.join('/run', `extensions-${label}`),
-            files: [
-              '/dist/remote-ssh.vsix',
-              '/run/window-agent.vsix',
-              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
-            ],
-            client: 'vscodium',
-          })),
+          ].map(containersOnly),
           ...['extensionpack', 'extensionpack-german'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
