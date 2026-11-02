@@ -66,6 +66,8 @@ export interface TunnelStepDependencies {
     login: TerminalLogin,
     input: ConnectInput,
   ): {onQuestion(text: string): void; dispose(): void};
+  /** `remote.SSH.useExecServer`: with it the second ssh's refused first forward is a failure. */
+  useExecServer(): boolean;
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
   /** What decides the length of the connect wait, which also bounds a question of the tunnel login that nobody can see. */
@@ -262,10 +264,11 @@ async function openTerminalTunnel(
       ...dependencies.limits,
       readyMilliseconds: FORWARD_READY_MILLISECONDS,
     },
-    // After a connect has worked the refusal stays a reconnection, which is how the window recovers a lost one. Only
-    // the socket path fails on a refused forward; the second ssh's refused port forward reconnects, with the platform
-    // pick of each attempt.
-    ...(input.isReconnection || path !== 'socket'
+    // After a connect has worked the refusal stays a reconnection. On a first resolve, the socket path and the second
+    // ssh with the exec server fail on a refused forward; the second ssh without it reconnects, with the platform pick
+    // of each attempt.
+    ...(input.isReconnection ||
+    (path === 'secondSsh' && !dependencies.useExecServer())
       ? {}
       : {refusalMilliseconds: FORWARD_REFUSAL_MILLISECONDS}),
     stopSession: () => {
