@@ -9,6 +9,7 @@ import {
   reopenStarted,
   variable,
   connectedToContainer,
+  waitFor,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
@@ -89,6 +90,14 @@ describe('F-0502 the resolution of a dev container window (card containers-43)',
         60_000,
       );
       await connectedToContainer(name);
+      await waitFor(
+        `window ${name}'s remote indicator to leave Opening Remote...`,
+        async () =>
+          !(await statusBarText(name, 'status.host')).startsWith(
+            'Opening Remote',
+          ),
+        30_000,
+      );
       const lines = logSince(logMark);
       const state = {
         resolving: lines.includes('Resolving Remote'),

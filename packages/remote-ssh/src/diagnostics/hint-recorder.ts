@@ -3,7 +3,8 @@
  * in the hint store of the extension's global state.
  */
 
-import type {FailureHint, FilledString} from 'lib-ssh';
+import type {FailureHint, FailureReason, FilledString} from 'lib-ssh';
+import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
 import {
@@ -37,9 +38,31 @@ export interface HintRecorder {
   record(hint: FailureHint): void;
 }
 
+/**
+ * The text of a string of the failure table or of our own, with its values; an id in neither table gives the id itself,
+ * so that no hint ever stops the connect that records it.
+ */
+function idText(reference: FilledString, translate: Translate): string {
+  if (isFailureStringId(reference.id)) {
+    return textOfId(reference.id, translate, reference.values);
+  }
+  try {
+    return ownText(reference, translate);
+  } catch {
+    return reference.id;
+  }
+}
+
 /** The text of a hint's message or mitigation. */
 function textOf(part: string | FilledString, translate: Translate): string {
-  return typeof part === 'string' ? part : ownText(part, translate);
+  return typeof part === 'string' ? part : idText(part, translate);
+}
+
+/** The text of a hint's details: a reason's own text, or a string of either table. */
+function reasonText(reason: FailureReason, translate: Translate): string {
+  return 'text' in reason
+    ? reason.text
+    : idText({id: reason.id, values: []}, translate);
 }
 
 /** The recorder over `state`. */
@@ -62,6 +85,9 @@ export function hintRecorderOf(
             kind: 'error',
             status: hint.status,
             message: textOf(hint.message, environment.translate),
+            ...(hint.details === undefined
+              ? {}
+              : {details: reasonText(hint.details, environment.translate)}),
             mitigations: hint.mitigations.map(each =>
               textOf(each, environment.translate),
             ),

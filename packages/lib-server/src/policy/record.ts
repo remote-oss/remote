@@ -58,6 +58,10 @@ export interface ServerPolicyRecord {
   cleanup: Cleanup;
   installMode: InstallMode;
   prefetch: Prefetch;
+  /** How long the client's download of the archive may go without a byte before it is ended. */
+  downloadStallMilliseconds: number;
+  /** How long the copy of the archive to the host may go without growing before it is ended; none means no bound. */
+  transferStallMilliseconds: number | undefined;
 }
 
 /** One problem a candidate record has, with the JSON-path-like position of the bad value. */

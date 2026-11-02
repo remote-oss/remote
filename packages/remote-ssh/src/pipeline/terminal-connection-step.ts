@@ -29,8 +29,14 @@ import {
   type TerminalEnd,
   TerminalSessionRunner,
   type TerminalLogin,
+  type FailureHint,
 } from 'lib-ssh';
-import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
+import {goesOnAfterLoginTimeout} from './connection-request.ts';
+import {
+  clientRefusal,
+  CONNECT_WAIT_TIMEOUT,
+  ofClassification,
+} from './failure.ts';
 import {isForwardingLine, logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
@@ -76,6 +82,8 @@ export interface TerminalConnectionDependencies {
   terminalName(): LoginTerminalName;
   /** What decides the length of the connect wait: the timeout, whether the host set it, and the ceiling. */
   connectWait(): ConnectWaitSettings;
+  /** Keeps `hint` for the session, as the hint store does. */
+  recordHint(hint: FailureHint): void;
   logger: Logger;
 }
 
@@ -87,15 +95,10 @@ function failureOf(end: TerminalEnd, lines: readonly string[]): StepFailure {
   if (end.code === undefined && !end.hadOutput && end.reason !== 'user') {
     return {kind: 'cancelled', reason: {id: 'trustRefused'}};
   }
-  const classification = classify(lines, end.code, 'connection', 'terminal');
-  return {
-    kind: classification.kind,
-    ...(classification.reason === undefined
-      ? {}
-      : {reason: classification.reason}),
-    hints: classification.hints,
-    ...(end.code === undefined ? {} : {sshExitStatus: end.code}),
-  };
+  return ofClassification(
+    classify(lines, end.code, 'connection', 'terminal'),
+    end.code,
+  );
 }
 
 /** The step that opens the connection of a connect in terminal mode. */
@@ -118,6 +121,7 @@ export function openTerminalConnectionStep(
     return new Promise<StepResult<ConnectionLease>>(settle => {
       const lines: string[] = [];
       const waitSettings = dependencies.connectWait();
+      const goesOn = goesOnAfterLoginTimeout(terms);
       let handedOver = false;
       let authenticated = false;
       let finished = false;
@@ -186,13 +190,14 @@ export function openTerminalConnectionStep(
         authenticated = true;
         reader.stop();
         dropQuestions();
-        // The login shell's startup gets a wait of its own, as long as the bootstrap's bound.
-        wait.start();
+        // The login shell's startup gets a wait of its own, as long as the bootstrap's bound; a session that goes on after
+        // the bound waits for the script's start as well.
+        wait.start(goesOn ? 2 : 1);
         const runner: TerminalSessionRunner = new TerminalSessionRunner({
           terminal,
           scheduler: dependencies.scheduler,
           prelude: connectionStart(
-            sessionStartFor(waitSettings),
+            sessionStartFor(waitSettings, goesOn),
             terms.remoteCommandInEffect,
           ).prelude,
           newMarker: () => dependencies.newMarker(),
@@ -214,6 +219,12 @@ export function openTerminalConnectionStep(
           return;
         }
         dependencies.logger.info(bootstrapLogLine(event));
+        if (event.kind === 'timeout' && goesOn) {
+          dependencies.logger.warn(
+            `the login shell gave no environment within ${String(event.seconds)} s; the server starts with ssh's environment`,
+          );
+          return;
+        }
         fail(
           event.kind === 'timeout' ? CONNECT_WAIT_TIMEOUT : {kind: 'unknown'},
         );
@@ -240,6 +251,7 @@ export function openTerminalConnectionStep(
             channel,
             waits: undefined,
             socksPort: socksPort ?? 0,
+            startedLogin: true,
             storedRecord: undefined,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {
@@ -257,6 +269,16 @@ export function openTerminalConnectionStep(
 
       const splitter = new LineSplitter(line => {
         lines.push(line);
+        // With our dynamic forward on this run, ssh's refusal of forwarding is the end of the window's tunnel.
+        const refusal =
+          socksPort === undefined ? undefined : clientRefusal(line);
+        if (refusal !== undefined && !finished) {
+          refusal.hints.forEach(hint => {
+            dependencies.recordHint(hint);
+          });
+          fail(ofClassification(refusal));
+          return;
+        }
         if (
           !authenticated &&
           !finished &&

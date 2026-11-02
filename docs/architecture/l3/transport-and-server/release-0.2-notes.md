@@ -12,12 +12,29 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
     remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
 
-- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>")**; the
-  reference shows "Disconnected from SSH" until a connect has succeeded.
+- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>") and in the window title ("<folder> [SSH: <host>]")**; the
+  reference shows "Disconnected from SSH" and "<folder> [SSH]" until a connect has succeeded.
   - F-2307 AC-7 and F-2206 7.E1 describe the indicator without the host for an authority that never connected, while
-    F-2410 AC-12 and AC-31 describe it with the host for the same state. Ours registers the host label at the first
-    resolve's start, everywhere (athena's ruling on #1681; spec question on remote-oss/remote-ssh#40). Rows:
+    F-2410 AC-12 and AC-31 describe it with the host for the same state; F-2704 AC-25 gives the title without the host,
+    and AC-23 the reloading window's title as the folder alone. Ours registers the host label at the first resolve's
+    start, everywhere (athena's ruling on #1681 and #1608; spec question on remote-oss/remote-ssh#40). Rows:
     `ruling-1681-first-label`.
+
+- **Remote - SSH's local server download copies the archive without the reference's `.done` marker files**; the install starts only after the copy has completed in the same session.
+  - F-2405 AC-8, AC-16, BR-9 and BR-10 describe a marker file that the reference's copy leaves beside the archive, which
+    its install watches for because the copy and the install are separate steps. Ours copies over the held connection
+    and starts the install only after the copy has reported success, so it needs no completion signal and an archive
+    that is missing after its copy cannot be installed from. BR-9's client side and POST-2, the `vscode_server_<epoch-ms>`
+    folder of the archive and its marker that the reference never removes, are covered by the same ruling: ours keeps
+    no such folder (athena's ruling on #1607; spec question on
+    remote-oss/remote-ssh#50). Rows: `ruling-1607-no-marker`.
+
+- **A question that Remote - SSH does not recognise, left unanswered in a hidden login terminal, ends in the connection failure dialog after the connect wait**; the reference keeps waiting until it is answered.
+  - F-2308 AC-12, 7.E3 and BR-5 have the reference keep waiting, so that the dialog appears only when the user answers
+    after the server dropped the login. Ours bounds a question nobody can reach by the connect wait (the connect
+    timeout and a margin of 2 seconds, F-2105 BR-3 and BR-4), so the dialog is already there when the server drops the
+    login. Brief ruling 3 for the terminal mode (daedalus on #299, corrected by athena on #385) and R-79; spec
+    question on remote-oss/remote-ssh#41. Rows: `ruling-299-question-bound`.
 
 - **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
   - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
@@ -83,3 +100,45 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-1601-host-key-pick)
+- **A window that joins a running local connection server writes no setting line.**
+  - F-2604 AC-1 and AC-15 put the line "ERROR: TCP port forwarding appears to be disabled…" (STR:S046) in the log of the
+    connect that started the shared `ssh`. A window that joined a login already running, a reload of the window
+    included, logs the refused-channel lines the helper relays but not that line (BR-2, 6.5; `ruling-1773-joiner-lines`,
+    athena on #1773). Each connect still keeps its own hint.
+    Rows: (ruling-1773-joiner-lines)
+
+- **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode.**
+  - F-2106 AC-14 expects ssh's "Pseudo-terminal will not be allocated…" warning in the log when the setting is on and the
+    host entry has no `RequestTTY`. Our connection command always carries a remote command (the prelude), so with
+    `RequestTTY` unset ssh asks for no terminal and writes no warning. `-T` is still present exactly when the setting is
+    falsy and no terminal is allocated (athena's ruling on #1606; `ruling-1606-no-tty-warning`).
+    Rows: (ruling-1606-no-tty-warning)
+
+- **In terminal mode with pty allocation permitted and `RequestTTY yes`, the session gets a pseudo-terminal and ssh writes no warning.**
+  - F-2106 AC-14 expects ssh's warning in the log in terminal mode too, as the reference gives ssh a non-terminal standard
+    input there. Ours runs ssh in its own login terminal (F-2102), so its standard input is a terminal; with `-T` absent,
+    `RequestTTY yes` requests a pty, the session gets one and ssh has nothing to warn about
+    (`ruling-1779-terminal-pty`, athena on #1779). We do not override the user's `RequestTTY`.
+    Rows: (ruling-1779-terminal-pty)
+
+- **The Remote - SSH log replaces any run of 32 or more letters, digits, underscores or hyphens with `[redacted]`, except commit and digest ids and key fingerprints, to keep tokens out of the log.**
+  - Hyphens inside a run count towards the 32; hyphens at its ends stay as written. A value the log shows "as written"
+    (for example a configFile path, F-2201 AC-46) shows such a segment redacted. The guard is not loosened for one
+    criterion, and it applies to every value any criterion quotes into the log (R-26; `ruling-1794-log-redaction`,
+    athena on #1794).
+    Rows: (ruling-1794-log-redaction)
+
+## Known issues
+
+- **In a new Remote - SSH window, Terminal: Select Default Profile, Debug: Select and Start Debugging and Tasks: Run Task show empty lists, or nothing, until a terminal has been opened in the window.**
+  Open a terminal first.
+  - F-2508 AC-14, AC-28 and AC-29 read their Givens as a window whose terminals have been used (`reading-1768-terminal-first`).
+    The empty lists before the first terminal are VS Code's own behaviour: the requests are answered and nothing of
+    ours shapes them (measured on 1.139.1, connect-125, #1768). Whether to report it upstream is the user's call.
+
+- **When a reconnection fails, for example after a cancelled passphrase, VS Code may show no "Cannot reconnect" dialog.**
+  The indicator reads "Disconnected from SSH: <host>". Reload the window to connect again.
+  - F-2307 AC-13 and AC-26 describe core's "Cannot reconnect. Please reload the window." dialog after a cancelled
+    passphrase input on a reconnection. Ours hands core an unhandled "not available" error, which core's loop gives up
+    on without showing the dialog (measured in the editor's own log, also for an ordinary authentication failure on a
+    reconnection); the dialog is core's rendering (athena's ruling on #1725).

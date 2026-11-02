@@ -217,6 +217,8 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
   ],
   ['install path', ofPlan({kind: 'invalidInstallPath', reason: 'relative'})],
   ['download', ofTransfer({kind: 'serverDownload', cause: 'downloadFailed'})],
+  ['no scp', ofTransfer({kind: 'copyToolMissing'})],
+  ['copy stalled', ofTransfer({kind: 'copyStalled'})],
   [
     'local download',
     ofTransfer({
@@ -416,6 +418,13 @@ describe('the reading of each library failure (no library text is shown)', () =>
       ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']}),
       {kind: 'prerequisiteMissing', logDetail: 'missing: tar, gzip'},
     );
+  });
+
+  it('F-2405 AC-21: a copy that stalled is an unclassified failure with no reason of its own', () => {
+    deepStrictEqual(ofTransfer({kind: 'copyStalled'}), {
+      kind: 'unknown',
+      logDetail: 'the copy to the host stalled',
+    });
   });
 
   it('F-2403 7.E1: a script status of ServerDownloadFailed gives the download reason S043', () => {

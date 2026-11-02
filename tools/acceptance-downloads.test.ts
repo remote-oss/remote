@@ -89,6 +89,7 @@ function get(
   scheme: 'http' | 'https',
   port: number,
   pathName: string,
+  agent = 'unit-row',
 ): Promise<Received> {
   return new Promise((resolve, reject) => {
     const send = scheme === 'http' ? httpRequest : httpsRequest;
@@ -98,7 +99,7 @@ function get(
         port,
         path: pathName,
         rejectUnauthorized: false,
-        headers: {'user-agent': 'unit-row'},
+        headers: {'user-agent': agent},
       },
       response => {
         const chunks: Buffer[] = [];
@@ -325,6 +326,37 @@ describe('the download host', function () {
     );
   });
 
+  it('coverage-87: hostrefused gives the downloaders of a host an empty 404 and any other client the archive', async () => {
+    const answers = await Promise.all(
+      ['Wget', 'curl/8.0', 'node'].map(agent =>
+        get('http', host.httpPort, '/hostrefused/linux-x64/abc', agent),
+      ),
+    );
+    deepStrictEqual(
+      answers.map(each => [each.status, each.body.length === 0]),
+      [
+        [404, true],
+        [404, true],
+        [200, false],
+      ],
+    );
+  });
+
+  it('coverage-87: hostjunk gives the downloaders of a host bytes that are not the archive and any other client the archive', async () => {
+    const answers = await Promise.all(
+      ['Wget', 'node'].map(agent =>
+        get('http', host.httpPort, '/hostjunk/linux-x64/abc', agent),
+      ),
+    );
+    deepStrictEqual(
+      answers.map(each => [each.status, each.body.equals(glibcArchive)]),
+      [
+        [200, false],
+        [200, true],
+      ],
+    );
+  });
+
   it('tooling-27: junk gives 64 KiB that are not the archive', async () => {
     const received = await get('http', host.httpPort, '/junk/x');
     deepStrictEqual(
@@ -501,6 +533,35 @@ describe('the download host', function () {
     const dropped = (await get('http', host.httpPort, DROP_HUNG_PATH)).status;
     await hung.catch(() => undefined);
     deepStrictEqual([before, dropped, settled], [false, 204, true]);
+  });
+
+  it('coverage-87: stall sends the first megabyte and holds the connection open until the hung connections are dropped', async () => {
+    const outcome = await new Promise<{bytes: number; ended: boolean}>(
+      resolve => {
+        let bytes = 0;
+        let ended = false;
+        const outgoing = httpRequest(
+          {host: '127.0.0.1', port: host.httpPort, path: '/stall/x'},
+          response => {
+            response.on('data', (chunk: Buffer) => {
+              bytes += chunk.length;
+            });
+            response.on('close', () => {
+              ended = true;
+            });
+            response.on('error', () => undefined);
+          },
+        );
+        outgoing.on('error', () => undefined);
+        outgoing.end();
+        setTimeout(() => {
+          const result = {bytes, ended};
+          resolve(result);
+        }, 600);
+      },
+    );
+    await get('http', host.httpPort, DROP_HUNG_PATH);
+    deepStrictEqual(outcome, {bytes: 1024 * 1024, ended: false});
   });
 
   it('tooling-27: the HTTPS port serves the same behaviours', async () => {
@@ -895,6 +956,7 @@ describe('the download host in the run', () => {
         HARNESS_DOWNLOADS_LICENSED: 'https://update.code.visualstudio.com:8443',
         HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
         HARNESS_DOWNLOADS_LOG: '/run/requests.log',
+        HARNESS_DOWNLOADS_PORT: '8080',
         HARNESS_DOWNLOADS_TLS_LOG: '/run/downloads-tls.log',
       },
     );

@@ -176,12 +176,18 @@ interface Setup {
   removed?: string[];
   /** The text of the client's netrc, or the error reading it throws; there is no file when absent. */
   netrc?: string | Error;
+  /** Whether the program the archive is copied with can be started; the transfer is not asked when absent. */
+  copyAvailable?: boolean;
+  /** The stall bound of the copy in milliseconds; the copy has none when absent. */
+  copyStall?: number;
+  /** Makes the host Windows, so that a look at a file's size is a PowerShell script. */
+  windows?: boolean;
 }
 
 async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
   const channel = new RecordingChannel({
     identity: 'host',
-    platformHint: 'linux',
+    platformHint: setup.windows === true ? 'windows' : 'linux',
     scripts: setup.answers ?? (setup.installs ?? [INSTALLED]).map(answering),
     copies: setup.copies ?? [{matches: () => true, ending: {kind: 'copied'}}],
     hostPaths: new Map(
@@ -206,6 +212,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
       },
       clientFolder: CLIENT_FOLDER,
       downloadBounds: setup.bounds ?? BOUNDS,
+      ...(setup.copyStall === undefined
+        ? {}
+        : {copyStallMilliseconds: setup.copyStall}),
       temporaryToken: setup.token ?? TOKEN,
       cache: setup.cache ?? {kind: 'none'},
       verification: setup.verification ?? ['none'],
@@ -258,6 +267,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
         },
       },
       lockLoop: setup.lockLoop ?? runOnce,
+      ...(setup.copyAvailable === undefined
+        ? {}
+        : {copyAvailable: () => Promise.resolve(setup.copyAvailable === true)}),
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
       onPhase: phase => {
         phases.push(phase);
@@ -554,6 +566,28 @@ describe('a download on the client (F-2405.BR-3, BR-5)', () => {
     deepStrictEqual(copiesOf(channel), [`${LOCAL_FILE} -> ${REMOTE_COPY}`]);
   });
 
+  it('F-2405 AC-14: a copy program that cannot start fails the transfer before the copying stage, and nothing is copied', async () => {
+    const {outcome, phases, channel} = await runTransfer({
+      plan: CLIENT,
+      copyAvailable: false,
+    });
+    deepStrictEqual(
+      [failureOf(outcome), phases.map(phase => phase.kind), copiesOf(channel)],
+      [{kind: 'copyToolMissing'}, ['downloadingLocally'], []],
+    );
+  });
+
+  it('F-2405 AC-14: a copy program that starts lets the copy go on', async () => {
+    const {outcome, channel} = await runTransfer({
+      plan: CLIENT,
+      copyAvailable: true,
+    });
+    deepStrictEqual(
+      [outcome.kind, copiesOf(channel)],
+      ['transferred', [`${LOCAL_FILE} -> ${REMOTE_COPY}`]],
+    );
+  });
+
   it('F-2405.5.0: the install reads the copied archive and removes it', async () => {
     const {channel} = await runTransfer({plan: CLIENT});
     deepStrictEqual(
@@ -742,9 +776,12 @@ describe('failures of the copy and the install (V4)', () => {
     deepStrictEqual(failureOf(outcome), {kind: 'cancelled'});
   });
 
-  it('V4: a failed copy does not start the install', async () => {
-    const {channel} = await runTransfer(copyFailing(COPY_FAILURE));
-    deepStrictEqual(installsOf(channel), []);
+  it('F-2405 AC-16 (ruling-1607-no-marker): a copy that did not complete starts no install, so an archive that is missing after its copy cannot be installed from', async () => {
+    const {channel, outcome} = await runTransfer(copyFailing(COPY_FAILURE));
+    deepStrictEqual(
+      {failure: failureOf(outcome), installs: installsOf(channel)},
+      {failure: {kind: 'copy', failure: COPY_FAILURE}, installs: []},
+    );
   });
 
   it('V4: a cancelled client download is a cancellation', async () => {
@@ -1788,6 +1825,151 @@ describe('the transfer with credentials (card server-23)', () => {
           line.includes('machine'),
       ),
       [],
+    );
+  });
+});
+
+describe('the copy to the host that makes no progress (card connect-122)', () => {
+  const CLIENT = {where: 'client'} as const;
+
+  /** The answers to the looks at the copied file's size, one each, then the answer to any other script. */
+  function sizeAnswers(sizes: readonly number[]): ScriptAnswer[] {
+    return [
+      ...sizes.map((size): ScriptAnswer => ({
+        interpreter: 'posixShell',
+        matches: script => script.startsWith('wc -c'),
+        lines: [String(size)],
+        ending: {kind: 'exit', status: 0},
+      })),
+      answering([]),
+      answering([]),
+    ];
+  }
+
+  const HELD: CopyAnswer[] = [
+    {matches: () => true, ending: {kind: 'holdUntilCancelled'}},
+  ];
+
+  it('F-2405 AC-21: a copy whose file does not grow is ended at the stall bound', async () => {
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: HELD,
+      copyStall: 90,
+      answers: sizeAnswers(new Array<number>(50).fill(100)),
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'copyStalled'});
+  });
+
+  it('F-2405 AC-21: a copy whose file grows is not ended by the bound, only by its caller', async () => {
+    const caller = new AbortController();
+    setTimeout(() => {
+      caller.abort();
+    }, 300);
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: HELD,
+      copyStall: 90,
+      cancellation: caller.signal,
+      answers: sizeAnswers([...Array(50).keys()].map(step => step * 10)),
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'cancelled'});
+  });
+
+  it('F-2405 AC-21: a copy that fails at once ends on its failure, not on the bound', async () => {
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: copiesFailing({kind: 'copyFailed', detail: 'scp: exit 1'}),
+      copyStall: 90,
+      answers: sizeAnswers([]),
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'copy',
+      failure: {kind: 'copyFailed', detail: 'scp: exit 1'},
+    });
+  });
+
+  it('F-2405 AC-21: a look at the size that fails counts as no growth', async () => {
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: HELD,
+      copyStall: 90,
+      answers: [
+        ...Array.from({length: 3}, (): ScriptAnswer => ({
+          interpreter: 'posixShell',
+          matches: script => script.startsWith('wc -c'),
+          lines: [],
+          ending: {
+            kind: 'fail',
+            failure: {kind: 'channelClosed', detail: 'closed'},
+          },
+        })),
+        ...Array.from({length: 50}, () => answering([])),
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'copyStalled'});
+  });
+
+  it('F-2405 AC-21: on a Windows host the size is looked at in PowerShell, quotes doubled, and a file that does not grow stalls', async () => {
+    const looked: string[] = [];
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: HELD,
+      copyStall: 90,
+      windows: true,
+      answers: Array.from({length: 50}, () => ({
+        interpreter: 'powershell' as const,
+        matches: (script: string) => {
+          looked.push(script);
+          return true;
+        },
+        lines: ['100'],
+        ending: {kind: 'exit' as const, status: 0},
+      })),
+    });
+    deepStrictEqual(
+      [failureOf(outcome), looked[0]?.startsWith('(Get-Item -LiteralPath')],
+      [{kind: 'copyStalled'}, true],
+    );
+  });
+
+  /** A held copy whose login shows the given inputs. */
+  function heldWithInputs(
+    inputs: ReadonlyArray<{open: boolean; afterMilliseconds: number}>,
+  ): CopyAnswer[] {
+    return [
+      {matches: () => true, ending: {kind: 'holdUntilCancelled'}, inputs},
+    ];
+  }
+
+  it('F-2405 AC-21: an input of the copy login left open past the bound does not end the copy', async () => {
+    const caller = new AbortController();
+    setTimeout(() => {
+      caller.abort();
+    }, 300);
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: heldWithInputs([{open: true, afterMilliseconds: 10}]),
+      copyStall: 90,
+      cancellation: caller.signal,
+      answers: sizeAnswers(new Array<number>(50).fill(0)),
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'cancelled'});
+  });
+
+  it('F-2405 AC-21: the bound starts over when the input closes, and a file that then does not grow ends the copy at it', async () => {
+    const started = Date.now();
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      copies: heldWithInputs([
+        {open: true, afterMilliseconds: 10},
+        {open: false, afterMilliseconds: 250},
+      ]),
+      copyStall: 90,
+      answers: sizeAnswers(new Array<number>(50).fill(0)),
+    });
+    deepStrictEqual(
+      [failureOf(outcome), Date.now() - started >= 250 + 80],
+      [{kind: 'copyStalled'}, true],
     );
   });
 });

@@ -251,7 +251,13 @@
       "path": "tests/acceptance/terminal-login"
     },
     {
+      "path": "tests/acceptance/terminal-odd"
+    },
+    {
       "path": "tests/acceptance/passphrase"
+    },
+    {
+      "path": "tests/acceptance/passphrase-late"
     },
     {
       "path": "tests/acceptance/extensionpack-german"

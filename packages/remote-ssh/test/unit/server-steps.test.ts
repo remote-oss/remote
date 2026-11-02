@@ -5,8 +5,10 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   cliNotUsedLine,
   createServerSteps,
+  type ServerStepDependencies,
 } from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
+import {type ServerPolicyRecord, sshPolicyFor} from 'lib-server';
 import {
   channelAnswering,
   dependencies,
@@ -1122,5 +1124,126 @@ describe('the server steps: the default extensions', () => {
     const channel = channelAnswering([]);
     await steps.installExtensions(INPUT, leaseOn(channel), NEVER_CANCELLED);
     deepStrictEqual(channel.calls.length, 0);
+  });
+});
+
+/** Runs the transfer of a downloading plan with `changes` to the dependencies; the host answers `status`. */
+async function transferWith(
+  changes: Partial<ServerStepDependencies>,
+  status: string,
+): Promise<void> {
+  const steps = createServerSteps(dependencies(changes));
+  const result = steps.plan(INPUT, HOST);
+  if (!('plan' in result) || result.plan.kind !== 'download') {
+    throw new Error('the plan should download');
+  }
+  await steps.transfer(
+    INPUT,
+    leaseOn(channelAnswering(lines(status))),
+    HOST,
+    result.plan,
+    () => undefined,
+    new AbortController().signal,
+  );
+}
+
+describe('the host download that is refused with local download off (card connect-121)', () => {
+  /** What `onHostDownloadRefused` heard when the host answered `status` under `policy`; the client's download fails. */
+  async function heard(
+    status: string,
+    policy: ServerPolicyRecord,
+  ): Promise<string[]> {
+    const causes: string[] = [];
+    await transferWith(
+      {
+        policy,
+        download: {
+          download: () =>
+            Promise.resolve({kind: 'failed' as const, detail: 'offline'}),
+        },
+        onHostDownloadRefused: cause => {
+          causes.push(cause);
+        },
+      },
+      status,
+    );
+    return causes;
+  }
+
+  it('F-2405 AC-20: a failed download on the host with the mode off is told as downloadFailed', async () => {
+    deepStrictEqual(await heard('ServerDownloadFailed', sshPolicyFor('off')), [
+      'downloadFailed',
+    ]);
+  });
+
+  it('F-2405 AC-20: a host with no download tool and the mode off is told as noDownloader', async () => {
+    deepStrictEqual(await heard('NoDownloaderAvailable', sshPolicyFor('off')), [
+      'noDownloader',
+    ]);
+  });
+
+  it('F-2405 AC-20: with the mode auto neither failure is told', async () => {
+    deepStrictEqual(
+      [
+        await heard('ServerDownloadFailed', sshPolicyFor('auto')),
+        await heard('NoDownloaderAvailable', sshPolicyFor('auto')),
+      ],
+      [[], []],
+    );
+  });
+
+  it('F-2405 AC-20: with the client downloading alone the host is never blamed', async () => {
+    deepStrictEqual(
+      await heard('ServerDownloadFailed', {
+        ...sshPolicyFor('off'),
+        downloadPlacement: {kind: 'clientOnly'},
+      }),
+      [],
+    );
+  });
+
+  it('F-2405 AC-20: another failure of the host with the mode off is not told', async () => {
+    deepStrictEqual(await heard('UnpackFailed', sshPolicyFor('off')), []);
+  });
+});
+
+describe('the stall bounds of the transfer (card connect-122)', () => {
+  /** The stall bound the client download is asked with under `policy`. */
+  async function downloadStallUnder(
+    policy: ServerPolicyRecord,
+  ): Promise<number | undefined> {
+    const asked: number[] = [];
+    await transferWith(
+      {
+        policy,
+        download: {
+          download: request => {
+            asked.push(request.stallMilliseconds);
+            return Promise.resolve({
+              kind: 'failed' as const,
+              detail: 'offline',
+            });
+          },
+        },
+      },
+      'Ok',
+    );
+    return asked[0];
+  }
+
+  it('F-2405 AC-21: the client download is asked for the stall bound of the policy', async () => {
+    deepStrictEqual(
+      [
+        await downloadStallUnder({
+          ...sshPolicyFor('always'),
+          downloadStallMilliseconds: 12_345,
+        }),
+        await downloadStallUnder({
+          ...sshPolicyFor('always'),
+          transferStallMilliseconds: undefined,
+        }),
+      ],
+      [12_345, 30_000],
+    );
   });
 });

@@ -1,3 +1,4 @@
+import type {FailureHint} from 'lib-ssh';
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {NOISE_LINES} from 'lib-host/testing/noise';
@@ -90,6 +91,7 @@ interface Fixture {
   terminals: RecordingTerminals;
   questions: string[];
   questionsDisposed: number;
+  hints: FailureHint[];
   runners: SessionRunner[];
   dependencies: TerminalConnectionDependencies;
   logged(): string[];
@@ -104,6 +106,8 @@ function fixture(
     timeoutSeconds?: number;
     fromHost?: boolean;
     level?: Level;
+    /** The platform of the terms: decided (linux) unless a row needs the probe to find out. */
+    platform?: ConnectionTerms['platform'];
   } = {},
 ): Fixture {
   const {
@@ -113,6 +117,7 @@ function fixture(
     timeoutSeconds = 10,
     fromHost = false,
     level = 'info',
+    platform = 'linux',
   } = options;
   const clock = new FakeClock();
   const terminals = new RecordingTerminals();
@@ -123,18 +128,22 @@ function fixture(
     terminals,
     questions: [],
     questionsDisposed: 0,
+    hints: [],
     runners: [],
     dependencies: undefined as never,
     open: cancellation =>
       openTerminalConnectionStep(made.dependencies)(
         INPUT,
-        TERMS,
+        {...TERMS, platform},
         cancellation ?? new AbortController().signal,
       ),
   };
   let markers = 0;
   made.dependencies = {
     terminals,
+    recordHint: hint => {
+      made.hints.push(hint);
+    },
     installRequest: (input, terms, socksPort) => requestFor(socksPort),
     dynamicForwarding: () => dynamic,
     freePort: () => Promise.resolve(41000),
@@ -624,11 +633,85 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual((await result).kind, 'done');
   });
 
-  it('F-2704 AC-11: a login shell that outlasted its bound fails the connect as a timeout, and is logged', async () => {
+  it('connect-123, F-2604 AC-13: with the SOCKS forward on the install run, the line that says ssh disabled forwarding for a changed key fails the connect at once with the reason Port forwarding is disabled, and keeps the hint', async () => {
+    const made = fixture({dynamic: true});
+    const {result, terminal} = await started(made);
+    terminal.write(
+      'Port forwarding is disabled to avoid man-in-the-middle attacks.\n',
+    );
+    deepStrictEqual(
+      [await result, made.hints.map(hint => hint.status)],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'forwardingDisabled',
+            reason: {id: 'S107'},
+            hints: made.hints,
+          },
+        },
+        ['MitmPortForwardingDisabled'],
+      ],
+    );
+  });
+
+  it('connect-123: with no SOCKS forward on the install run the same line changes nothing for it', async () => {
     const made = fixture();
+    const {terminal} = await started(made);
+    terminal.write(
+      'Port forwarding is disabled to avoid man-in-the-middle attacks.\n',
+    );
+    await settled();
+    deepStrictEqual(made.hints, []);
+  });
+
+  it('F-2704 AC-11: a login shell that outlasted its bound fails the connect as a timeout, and is logged, when the probe has the platform to find out', async () => {
+    const made = fixture({platform: 'unknown'});
     const {result, terminal} = await started(made);
     terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
     deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
+  });
+
+  it('connect-111: with the platform decided, a login shell that outlasted its bound is logged as a warning and the connect goes on to the ready line', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 12\n`);
+    await settled();
+    terminal.write('LAYER1-READY\n');
+    deepStrictEqual(
+      [
+        (await result).kind,
+        made
+          .logged()
+          .filter(line =>
+            line.startsWith('the login shell gave no environment'),
+          ),
+      ],
+      [
+        'done',
+        [
+          "the login shell gave no environment within 12 s; the server starts with ssh's environment",
+        ],
+      ],
+    );
+  });
+
+  it('connect-111: with the platform decided, the wait after the login line is twice the connect wait, so the script has room after the bound', async () => {
+    const made = fixture({timeoutSeconds: 10});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    made.clock.advance(23_000);
+    let ended = false;
+    void result.then(() => {
+      ended = true;
+    });
+    await settled();
+    const early = ended;
+    made.clock.advance(2000);
+    deepStrictEqual(
+      [early, await result],
+      [false, {kind: 'failed', failure: TIMED_OUT}],
+    );
   });
 
   it("F-2704 AC-13: a login shell that ended by itself fails the connect with no reason of ssh's", async () => {
@@ -639,7 +722,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
   });
 
   it('F-2704 AC-11: the wait still runs after the login line, so a session that stays silent times out', async () => {
-    const made = fixture({timeoutSeconds: 10});
+    const made = fixture({timeoutSeconds: 10, platform: 'unknown'});
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED_ONLY);
     made.clock.advance(13_000);
@@ -650,7 +733,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const waited = fixture({timeoutSeconds: 10});
     const silent = await started(waited);
     waited.clock.advance(12_000);
-    const booted = fixture();
+    const booted = fixture({platform: 'unknown'});
     const outlasted = await started(booted);
     outlasted.terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
     deepStrictEqual(

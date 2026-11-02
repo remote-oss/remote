@@ -1282,6 +1282,15 @@ export async function activate(
         presenter: recoveryPortsOf(vscode, {
           writeAttemptLog: async () =>
             writeAttemptLog(attemptLog, context.logUri.fsPath, Date.now()),
+          fileExists: file =>
+            Promise.resolve(
+              vscode.workspace.fs.stat(
+                vscode.Uri.from({scheme: file.scheme, path: file.path}),
+              ),
+            ).then(
+              () => true,
+              () => false,
+            ),
           keepEdit: (folder, configFile, logFile) =>
             storePendingEdit(
               context.globalState,

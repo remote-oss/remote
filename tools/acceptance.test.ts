@@ -78,6 +78,7 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
+import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
@@ -414,6 +415,7 @@ const LAUNCH_ORDER = [
   'agent',
   'agent-off',
   'x11',
+  'x11-noxauth',
   'failure-refused',
   'terminal',
   'socket',
@@ -424,6 +426,8 @@ const LAUNCH_ORDER = [
   'windows',
   'terminal-login',
   'passphrase-input',
+  'terminal-odd',
+  'passphrase-late',
   'login-shells',
   'preconnect',
   'config-files',
@@ -476,12 +480,7 @@ function workflowParts(): {workflow: string; parts: string[]} {
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {
-    workflow,
-    parts: JSON.parse(
-      /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
-    ) as string[],
-  };
+  return {workflow, parts: partsOfWorkflow(workflow)};
 }
 
 function chosenLabels(
@@ -720,6 +719,76 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-85: Host changedkey is the harness host whose own known-hosts file pins another key, with the check off', () => {
+    strictEqual(
+      accountBlock('changedkey'),
+      [
+        'Host changedkey',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  HostKeyAlias changedkey',
+        '  StrictHostKeyChecking no',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_changedkey',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-85: Host noforward-key is the harness account with the key whose line on the host refuses port forwarding', () => {
+    strictEqual(
+      accountBlock('noforward-key'),
+      [
+        'Host noforward-key',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_noportfwd',
+        '  IdentitiesOnly yes',
+        '  StrictHostKeyChecking accept-new',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-86: Host pty-force, pty-yes and pty-no are the harness account with the run key and the RequestTTY of their name', () => {
+    deepStrictEqual(
+      ['force', 'yes', 'no'].map(request => accountBlock(`pty-${request}`)),
+      ['force', 'yes', 'no'].map(request =>
+        [
+          `Host pty-${request}`,
+          '  HostName 127.0.0.1',
+          '  Port 49153',
+          '  User harness',
+          '  IdentityFile /run/id_ed25519',
+          '  IdentitiesOnly yes',
+          '  BatchMode yes',
+          '  IdentityAgent none',
+          `  RequestTTY ${request}`,
+          '  StrictHostKeyChecking accept-new',
+          '  ConnectTimeout 10',
+          '  UserKnownHostsFile /run/known_hosts',
+        ].join('\n'),
+      ),
+    );
+  });
+
+  it('coverage-84: Host x11-forbidden logs in to harness-nox11 with the run key and asks for X11 forwarding', () => {
+    strictEqual(
+      accountBlock('x11-forbidden'),
+      [
+        ...sharedLines('x11-forbidden', 'harness-nox11'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [
@@ -755,12 +824,17 @@ describe('acceptance', () => {
     );
   });
 
-  it('tooling-34: Host twofactor and Host expired log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
+  it('tooling-34, coverage-82: Host twofactor, Host expired and Host ask-odd log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
     deepStrictEqual(
-      [accountBlock('twofactor'), accountBlock('expired')],
+      [
+        accountBlock('twofactor'),
+        accountBlock('expired'),
+        accountBlock('ask-odd'),
+      ],
       [
         ['twofactor', 'harness-2fa'],
         ['expired', 'harness-expired'],
+        ['ask-odd', 'harness-odd'],
       ].map(([name = '', user = '']) =>
         [
           ...sharedLines(name, user),
@@ -927,12 +1001,77 @@ describe('acceptance', () => {
     );
   });
 
+  it("F-2311: Hosts agentfwd-tmpdir and agentfwd-notmp log in to harness-tmpdir and harness-notmp with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd-tmpdir', 'agentfwd-notmp'].map(alias => accountBlock(alias)),
+      [
+        ['agentfwd-tmpdir', 'harness-tmpdir'],
+        ['agentfwd-notmp', 'harness-notmp'],
+      ].map(([alias, user]) =>
+        [
+          ...sharedLines(alias ?? '', user ?? '').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
+    );
+  });
+
   it('connect-39: Host x11fwd logs in to harness with the run key and forwards X11 as trusted', () => {
     strictEqual(
       accountBlock('x11fwd'),
       [
         ...sharedLines('x11fwd', 'harness'),
         ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+        '  ForwardX11Trusted yes',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-untrusted forwards X11 without the trusted request', () => {
+    strictEqual(
+      accountBlock('x11-untrusted'),
+      [
+        ...sharedLines('x11-untrusted', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-timeout is untrusted with a cookie of one minute, and Host x11-noauth names no xauth', () => {
+    strictEqual(
+      [accountBlock('x11-timeout'), accountBlock('x11-noauth')].join('\n---\n'),
+      [
+        [
+          ...sharedLines('x11-timeout', 'harness'),
+          ...KEY_ALIAS_LINES,
+          '  ForwardX11 yes',
+          '  ForwardX11Trusted no',
+          '  ForwardX11Timeout 60s',
+        ].join('\n'),
+        [
+          ...sharedLines('x11-noauth', 'harness'),
+          ...KEY_ALIAS_LINES,
+          '  ForwardX11 yes',
+          '  XAuthLocation /nonexistent/xauth',
+        ].join('\n'),
+      ].join('\n---\n'),
+    );
+  });
+
+  it('coverage-84: Host x11-match gives ForwardX11 only in a Match block for its name', () => {
+    strictEqual(
+      accountBlock('x11-match'),
+      [
+        ...sharedLines('x11-match', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  Match originalhost x11-match',
         '  ForwardX11 yes',
         '  ForwardX11Trusted yes',
       ].join('\n'),
@@ -2560,6 +2699,34 @@ describe('acceptance', () => {
       );
     });
 
+    it("coverage-87: a launch's host setup has the run's download port put in", async () => {
+      const seen: string[] = [];
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [
+          {
+            ...PORTS,
+            hostSetup: [{command: 'nc -lk -p ${HARNESS_DOWNLOADS_PORT}'}],
+          },
+        ],
+        (program, programArguments) => {
+          seen.push([program, ...programArguments].join(' '));
+          return {status: 0, stdout: '', stderr: ''};
+        },
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {HARNESS_DOWNLOADS_PORT: '8080'},
+      );
+      deepStrictEqual(
+        seen.filter(call => call.startsWith('docker')),
+        ['docker exec --user root c0ffee sh -c nc -lk -p 8080'],
+      );
+    });
+
     const DEBIAN_PORTS: Launch = {
       ...PORTS,
       label: 'ports-debian',
@@ -3294,7 +3461,7 @@ describe('acceptance', () => {
     });
 
     it('ruling 1: a failing connect opens a window on its alias', () => {
-      deepStrictEqual(configurations()[6]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+refused/home/harness',
       ]);
@@ -3303,8 +3470,8 @@ describe('acceptance', () => {
     it('ruling 1: a failing connect answers from its own script and record', () => {
       deepStrictEqual(
         [
-          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
-          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
+          configurations()[7]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
+          configurations()[7]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
         ],
         [
           path.join('/run', 'failure-refused-script.json'),
@@ -3439,7 +3606,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 15}, () => EXECUTABLE),
+        Array.from({length: 16}, () => EXECUTABLE),
       );
     });
 
@@ -3450,7 +3617,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 15}, () => true),
+        Array.from({length: 16}, () => true),
       );
     });
 
@@ -3467,6 +3634,7 @@ describe('acceptance', () => {
           ['agent', 'dist-forwarding/**/*.test.cjs'],
           ['agent-off', 'dist-forwarding/**/*.test.cjs'],
           ['x11', 'dist-forwarding/**/*.test.cjs'],
+          ['x11-noxauth', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
@@ -3481,7 +3649,7 @@ describe('acceptance', () => {
     });
 
     it('D-85: the terminal launch opens the folder on ssh-remote+harness', () => {
-      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[8]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+harness/home/harness',
       ]);
@@ -3687,7 +3855,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[9]?.launchArgs.filter(argument =>
+        configurations()[10]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -3736,6 +3904,7 @@ describe('acceptance', () => {
           'agent',
           'agent-off',
           'x11',
+          'x11-noxauth',
           'failure-refused',
           'terminal',
           'socket',
@@ -3761,6 +3930,7 @@ describe('acceptance', () => {
           'agent',
           'agent-off',
           'x11',
+          'x11-noxauth',
           'failure-refused',
           'terminal',
           'socket',
@@ -3781,7 +3951,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 14}, () =>
+        Array.from({length: 15}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -4057,6 +4227,23 @@ describe('acceptance', () => {
           genuineJob.includes('HARNESS_GENUINE_VERSION: ${{ matrix.version }}'),
         ],
         [true, false, 2, [['genuine'], ['genuine']], true],
+      );
+    });
+
+    it('#1430: the scheduled split’s parts make every launch of `all` but the genuine group’s, and no launch in two parts', () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const {parts} = workflowParts();
+      const made = parts.flatMap(part =>
+        chosenLabels(launches, part.split(',')),
+      );
+      const wanted = chosenLabels(launches, ['all', '!@genuine']);
+      // a group also makes its named-only launches (containers-podman), which `all` leaves out
+      deepStrictEqual(
+        [
+          wanted.filter(label => !made.includes(label)),
+          made.length === new Set(made).size,
+        ],
+        [[], true],
       );
     });
 

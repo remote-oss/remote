@@ -1,7 +1,8 @@
 /**
  * @fileoverview The further keys of an acceptance run: a key protected by the run's passphrase, a second key, a copy
- * of the second key whose file anyone may read, and a certificate signed by the run's own authority. The passphrase
- * reaches `ssh-keygen` through an askpass script that reads it from a file, so no command line ever holds it.
+ * of the second key whose file anyone may read, a certificate signed by the run's own authority, a key whose line on
+ * the host refuses port forwarding, and a known-hosts file that pins a key the host doesn't have. The passphrase reaches `ssh-keygen` through an askpass script that reads it
+ * from a file, so no command line ever holds it.
  */
 
 import {
@@ -18,6 +19,14 @@ import {type Started, startDetached} from './acceptance-plain.ts';
 
 /** The principal the run's certificate is signed for: the host's certificate-only account. */
 export const CERTIFIED_PRINCIPAL = 'harness-cert';
+
+/** The alias whose host key has changed: its own known-hosts file pins another key under this name (`HostKeyAlias`). */
+export const CHANGED_KEY_ALIAS = 'changedkey';
+
+/** The known-hosts file of the changed-key alias in `runFolder`. */
+export function changedKeyHostsFile(runFolder: string): string {
+  return path.join(runFolder, `known_hosts_${CHANGED_KEY_ALIAS}`);
+}
 
 /** How many aliases of the passphrase key a run has besides `passkey`, named `passkey-1` and on: one for each row that needs a connection of its own. */
 const PASSKEY_COPIES = 24;
@@ -38,6 +47,9 @@ export const PASSKEY_VARIANTS = [
   'several-files',
   'certonly',
   'certonly-nocert',
+  'certpass',
+  'agent-var-set',
+  'agent-var-unset',
 ] as const;
 
 /** The names of the copies of the passphrase key's alias: `passkey-1` to the last. */
@@ -68,6 +80,10 @@ export interface RunKeys {
   looseKey: string;
   /** The key the certificate is for; its certificate is `<file>-cert.pub`. */
   certifiedKey: string;
+  /** A key without a passphrase that the host accepts with `no-port-forwarding` on its line. */
+  noForwardingKey: string;
+  /** A key protected by the run's passphrase, with a certificate for the same principal at `<file>-cert.pub`. */
+  certifiedPassphraseKey: string;
   /** The `docker run` arguments that give the host the further public keys and the authority. */
   hostArguments: string[];
 }
@@ -116,7 +132,8 @@ function plainKey(command: CommandRunner, file: string, comment: string): void {
 
 /**
  * Makes the run's further keys in `runFolder`. The host is to accept the passphrase key and the second key (so also its
- * loose copy) for its key accounts, and the certificate for `harness-cert`.
+ * loose copy) for its key accounts, the no-forwarding key for them with `no-port-forwarding`, and the certificate for
+ * `harness-cert`.
  */
 export function makeRunKeys(
   command: CommandRunner,
@@ -149,6 +166,15 @@ export function makeRunKeys(
   plainKey(command, authority, 'acceptance-ca');
   const certifiedKey = path.join(runFolder, 'id_certified');
   plainKey(command, certifiedKey, 'acceptance-certified');
+  const noForwardingKey = path.join(runFolder, 'id_noportfwd');
+  plainKey(command, noForwardingKey, 'acceptance-no-port-forwarding');
+  // A key the host never has, pinned as the changed-key alias's host key, so ssh finds the host's own key changed.
+  const pinnedKey = path.join(runFolder, 'changed_host_key');
+  plainKey(command, pinnedKey, 'acceptance-changed-host');
+  writeFileSync(
+    changedKeyHostsFile(runFolder),
+    `${CHANGED_KEY_ALIAS} ${publicKeyOf(pinnedKey)}\n`,
+  );
   checked(command, 'ssh-keygen', [
     '-q',
     '-s',
@@ -159,6 +185,23 @@ export function makeRunKeys(
     CERTIFIED_PRINCIPAL,
     `${certifiedKey}.pub`,
   ]);
+  const certifiedPassphraseKey = path.join(runFolder, 'id_certpass');
+  protectedKey(
+    command,
+    passphraseAskpass,
+    certifiedPassphraseKey,
+    'acceptance-certpass',
+  );
+  checked(command, 'ssh-keygen', [
+    '-q',
+    '-s',
+    authority,
+    '-I',
+    'acceptance-passphrase',
+    '-n',
+    CERTIFIED_PRINCIPAL,
+    `${certifiedPassphraseKey}.pub`,
+  ]);
   return {
     passphraseKey,
     passphraseFile,
@@ -168,9 +211,14 @@ export function makeRunKeys(
     secondKey,
     looseKey,
     certifiedKey,
+    noForwardingKey,
+    certifiedPassphraseKey,
     hostArguments: [
       '--env',
-      `AUTHORIZED_KEYS_FURTHER=${[passphraseKey, secondKey].map(publicKeyOf).join('\n')}`,
+      `AUTHORIZED_KEYS_FURTHER=${[
+        ...[passphraseKey, secondKey].map(publicKeyOf),
+        `no-port-forwarding ${publicKeyOf(noForwardingKey)}`,
+      ].join('\n')}`,
       '--env',
       `CA_PUBLIC_KEY=${publicKeyOf(authority)}`,
     ],

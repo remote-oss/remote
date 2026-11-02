@@ -77,6 +77,17 @@ const LINUX_ALIASES = [
   'noforward',
   'nosocket',
   'noall',
+  'x11-forbidden',
+  'changedkey',
+  'noforward-key',
+  'pty-force',
+  'pty-yes',
+  'pty-no',
+  'x11fwd',
+  'x11-untrusted',
+  'x11-match',
+  'x11-timeout',
+  'x11-noauth',
   'fwd-clearall',
   'fwd-exit',
   'fwd-busy-exit',
@@ -118,13 +129,13 @@ export async function connectedWith(
   };
 }
 
-/** Runs `rowBody` with the user settings as they were at its start put back after it. */
-export async function keepingSettings(
-  rowBody: () => Promise<void>,
-): Promise<void> {
+/** Runs `rowBody` with the user settings as they were at its start put back after it, and gives what it gave. */
+export async function keepingSettings<Result = void>(
+  rowBody: () => Promise<Result>,
+): Promise<Result> {
   const saved = readUserSettings();
   try {
-    await rowBody();
+    return await rowBody();
   } finally {
     restoreUserSettings(saved);
   }

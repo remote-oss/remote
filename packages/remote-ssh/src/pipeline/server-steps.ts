@@ -87,6 +87,10 @@ export interface ServerStepDependencies {
   download: DownloadPort;
   credentials: CredentialsPort;
   files: ClientFilePort;
+  /** Tells that the host could not download the archive while the client may not: `downloadFailed`, or `noDownloader`. */
+  onHostDownloadRefused: (cause: 'downloadFailed' | 'noDownloader') => void;
+  /** Whether the program the client's archive is copied to the host with can be started. */
+  copyAvailable: () => Promise<boolean>;
   lockLoop: HostLockLoop;
   /** The client's temporary folder, where a downloaded archive that is not kept waits. */
   clientFolder: string;
@@ -399,8 +403,15 @@ export function createServerSteps(
         cancellation,
       );
     },
-    transfer: (input, lease, host, downloadPlan, onPhase, cancellation) =>
-      transfer(
+    transfer: async (
+      input,
+      lease,
+      host,
+      downloadPlan,
+      onPhase,
+      cancellation,
+    ) => {
+      const outcome = await transfer(
         {
           plan: downloadPlan,
           parameters: parametersFor({
@@ -409,7 +420,16 @@ export function createServerSteps(
           }),
           clientFolder: dependencies.clientFolder,
           cache: dependencies.archiveCache,
-          downloadBounds: dependencies.downloadBounds,
+          downloadBounds: {
+            ...dependencies.downloadBounds,
+            stallMilliseconds: dependencies.policy.downloadStallMilliseconds,
+          },
+          ...(dependencies.policy.transferStallMilliseconds === undefined
+            ? {}
+            : {
+                copyStallMilliseconds:
+                  dependencies.policy.transferStallMilliseconds,
+              }),
           temporaryToken: dependencies.newTemporaryToken(),
           verification: dependencies.policy.verification,
           hostFolder: host.temporaryFolder,
@@ -421,11 +441,25 @@ export function createServerSteps(
           download: dependencies.download,
           credentials: dependencies.credentials,
           files: dependencies.files,
+          copyAvailable: dependencies.copyAvailable,
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
         },
-      ),
+      );
+      const placement = dependencies.policy.downloadPlacement;
+      if (
+        outcome.kind === 'failed' &&
+        outcome.failure.kind === 'serverDownload' &&
+        (outcome.failure.cause === 'downloadFailed' ||
+          outcome.failure.cause === 'noDownloader') &&
+        placement.kind === 'hostFirst' &&
+        placement.mode === 'off'
+      ) {
+        dependencies.onHostDownloadRefused(outcome.failure.cause);
+      }
+      return outcome;
+    },
     start: (input, lease, host, licenceAccepted, cancellation) =>
       startOrReuse(
         lease.channel,
@@ -450,7 +484,10 @@ export function createServerSteps(
           transfer: {
             clientFolder: dependencies.clientFolder,
             cache: dependencies.archiveCache,
-            downloadBounds: dependencies.downloadBounds,
+            downloadBounds: {
+              ...dependencies.downloadBounds,
+              stallMilliseconds: dependencies.policy.downloadStallMilliseconds,
+            },
             temporaryToken: dependencies.newTemporaryToken(),
             verification: dependencies.policy.verification,
             hostFolder: host.temporaryFolder,

@@ -30,14 +30,21 @@ async function linesUntil(
   wanted: (lines: string[]) => boolean,
 ): Promise<string[]> {
   let lines: string[] = [];
-  await waitFor(
-    `the terminal of ${window} to print`,
-    async () => {
-      lines = (await terminalText(window)).split('\n');
-      return wanted(lines);
-    },
-    40_000,
-  );
+  try {
+    await waitFor(
+      `the terminal of ${window} to print`,
+      async () => {
+        lines = (await terminalText(window)).split('\n');
+        return wanted(lines);
+      },
+      40_000,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; the terminal's last lines: ${JSON.stringify(lines.slice(-12))}`,
+      {cause: caught},
+    );
+  }
   return lines;
 }
 
@@ -100,6 +107,7 @@ describe('the code command opens host files in the window (card coverage-80)', f
           (await onHost('cat', file)).trim(),
         ],
         [false, 'EXIT_0', 'saved text'],
+        `the terminal's last lines: ${JSON.stringify(lines.slice(-12))}`,
       );
     } finally {
       await closeWindow('c80-wait').catch(() => undefined);

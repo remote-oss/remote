@@ -145,6 +145,11 @@ export function connectionRequestOf(
   };
 }
 
+/** Whether a session whose login shell's startup outlasts its bound goes on with ssh's environment: only when the platform is decided. */
+export function goesOnAfterLoginTimeout(terms: ConnectionTerms): boolean {
+  return terms.platform !== 'unknown';
+}
+
 /**
  * The `ssh` request of the install connection in terminal mode: the session start as the remote program (none when the
  * host's RemoteCommand is in effect: the program then goes in on the session's input), and either our
@@ -160,7 +165,7 @@ export function installRequestOf(
   connectWait: ConnectWaitSettings,
 ): SshRequest {
   const {remoteProgram} = connectionStart(
-    sessionStartFor(connectWait),
+    sessionStartFor(connectWait, goesOnAfterLoginTimeout(terms)),
     terms.remoteCommandInEffect,
   );
   return {

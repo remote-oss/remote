@@ -843,4 +843,53 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       },
     );
   });
+
+  it('F-2308 AC-22 (c82-tunnel-unknown): an unrecognized question in the hidden tunnel terminal, left unanswered, ends in the failure dialog once the connect wait has passed', async () => {
+    await setUserSetting(DYNAMIC_FORWARDING, false);
+    await setUserSetting(CONNECT_TIMEOUT, 5);
+    const name = await proxyAskTerminalOpened('c82-tunnel-unknown');
+    try {
+      await clickToastLink(name, 'Setting up SSH Host', 'details');
+      await untilPrompt(name, 'Proceed?');
+      await typeInTerminal(name, 'y\n');
+      await waitFor(
+        'the password quick input',
+        async () =>
+          (await quickPickOf(name))?.placeholder.startsWith(
+            'Enter password',
+          ) === true,
+        90_000,
+      );
+      await answerInputBox(name, hostPassword());
+      await waitFor(
+        'the tunnel phase',
+        async () =>
+          (await notifications(name)).some(text =>
+            text.includes('Setting up SSH tunnel'),
+          ),
+        90_000,
+      );
+      const asked = Date.now();
+      const dialog = await waitForDialog(name, 120_000);
+      const seconds = (Date.now() - asked) / 1000;
+      deepStrictEqual(
+        {
+          details: dialog.details,
+          buttons: [...dialog.buttons].sort(),
+          about: seconds >= 4 && seconds <= 12,
+          seconds,
+        },
+        {
+          details: 'Could not establish connection to "proxy-ask-terminal".',
+          buttons: ['Close Remote', 'More Actions...', 'Retry'],
+          about: true,
+          seconds,
+        },
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await setUserSetting(CONNECT_TIMEOUT, undefined);
+      await setUserSetting(DYNAMIC_FORWARDING, undefined);
+    }
+  });
 });

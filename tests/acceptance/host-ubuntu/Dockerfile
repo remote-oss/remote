@@ -8,17 +8,23 @@
 # packets of port 22 and bring them back (the container runs with NET_ADMIN), xauth lets sshd forward X11, procps gives
 # the process tools, and netcat-openbsd the nc the rows talk to a port with. busybox (not as /bin/sh) gives the stand-in
 # server a listener that runs a program per connection, which OpenBSD's nc has no option for. libstdc++6 is what the
-# glibc server's node needs, installed by name so that it never depends on another package pulling it in. Two more
+# glibc server's node needs, installed by name so that it never depends on another package pulling it in. Three more
 # users log in by keyboard-interactive through PAM, Ubuntu's sshd being built with it: harness-2fa answers a password,
 # then a one-time code of the run's secret (libpam-google-authenticator, after pam_unix in sshd's auth stack), and
-# harness-expired a password that start-sshd marks expired, so the login asks for a new one (F-2306 AC-27).
+# harness-expired a password that start-sshd marks expired, so the login asks for a new one (F-2306 AC-27). A third,
+# harness-odd, is first asked "Favourite colour? " with its answer shown, a question the extension doesn't recognise:
+# the same module asks it with a prompt of its own and a fixed secret, its result ignored; then the password. Left
+# unanswered, the login ends at sshd's LoginGraceTime, 120 s, a global setting (F-2308 AC-12). harness-notmp logs in
+# by key and may not create anything in /tmp: start-sshd gives it an ACL entry there without write (acl gives setfacl),
+# which a row removes with `setfacl -x u:harness-notmp /tmp` and puts back. This host's OpenSSH (10.2) keeps a
+# forwarded agent's socket under ~/.ssh/agent, so the agent still reaches the account (F-2311 AC-23, AC-26).
 # ubuntu:26.04, pinned by the digest of its multi-platform index so that every run builds the same host.
 FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     openssh-server openssh-client xauth iptables procps netcat-openbsd wget curl ca-certificates busybox libstdc++6 \
-    bash zsh fish tcsh csh mksh libpam-google-authenticator \
+    bash zsh fish tcsh csh mksh libpam-google-authenticator acl \
   && rm -rf /var/lib/apt/lists/* \
   && ssh-keygen -A \
   && useradd -m -s /bin/sh harness \
@@ -31,16 +37,26 @@ RUN apt-get update \
     'AllowTcpForwarding yes' \
     'AllowAgentForwarding yes' \
     'X11Forwarding yes' \
-    'Match User harness-2fa,harness-expired' \
+    'Match User harness-2fa,harness-expired,harness-odd' \
     '  KbdInteractiveAuthentication yes' \
     '  PasswordAuthentication no' \
     '  PubkeyAuthentication no' \
     > /etc/ssh/sshd_config.d/harness.conf \
-  && sed -i 's/^@include common-auth$/auth required pam_unix.so\nauth required pam_google_authenticator.so nullok/' \
-    /etc/pam.d/sshd \
-  && grep -qx 'auth required pam_google_authenticator.so nullok' /etc/pam.d/sshd \
+  && printf '%s\n' \
+    'auth [success=1 default=ignore] pam_succeed_if.so quiet user != harness-odd' \
+    'auth [default=ignore] pam_google_authenticator.so secret=/etc/ssh/harness-odd.question user=root echo_verification_code [authtok_prompt=Favourite colour? ]' \
+    'auth required pam_unix.so' \
+    'auth required pam_google_authenticator.so nullok' \
+    > /etc/pam.d/harness-auth \
+  && sed -i 's/^@include common-auth$/@include harness-auth/' /etc/pam.d/sshd \
+  && grep -qx '@include harness-auth' /etc/pam.d/sshd \
+  && printf '%s\n' 'JBSWY3DPEHPK3PXP' '" TOTP_AUTH' > /etc/ssh/harness-odd.question \
+  && chmod 400 /etc/ssh/harness-odd.question \
   && useradd -m -s /bin/sh harness-2fa \
-  && useradd -m -s /bin/sh harness-expired
+  && useradd -m -s /bin/sh harness-expired \
+  && useradd -m -s /bin/sh harness-odd \
+  && useradd -m -s /bin/sh harness-notmp \
+  && usermod -p '*' harness-notmp
 
 COPY --from=alpine-host mute-shell /usr/local/bin/mute-shell
 RUN chmod 755 /usr/local/bin/mute-shell \

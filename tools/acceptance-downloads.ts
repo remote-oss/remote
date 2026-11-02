@@ -487,13 +487,15 @@ function machineArchiveOf(
 }
 
 /**
- * The archive's answers: whole (`ok`), cut after its first megabyte (`cut`) or in chunks at a slow pace (`slow`); 404
- * when the run serves no archive for the platform asked.
+ * The archive's answers: whole (`ok`), cut after its first megabyte (`cut`), stopped after its first megabyte with the
+ * connection held open (`stall`) or in chunks at a slow pace (`slow`); 404 when the run serves no archive for the
+ * platform asked.
  */
 function answerArchive(
   request: IncomingMessage,
   response: ServerResponse,
   archiveFile: string | undefined,
+  held: Set<Socket>,
 ): void {
   if (archiveFile === undefined) {
     response.writeHead(404, {'Content-Length': 0});
@@ -508,6 +510,15 @@ function answerArchive(
         request.socket.destroy();
       });
       return;
+    case 'stall':
+      response.writeHead(200, {
+        'Content-Length': body.length,
+        'Access-Control-Allow-Origin': '*',
+      });
+      response.write(body.subarray(0, CUT_BYTES));
+      held.add(request.socket);
+      request.socket.once('close', () => held.delete(request.socket));
+      return;
     case 'slow':
       sendSlowly(response, body);
       return;
@@ -515,6 +526,29 @@ function answerArchive(
       response.writeHead(200, {'Content-Length': body.length});
       response.end(body);
   }
+}
+
+/**
+ * The answer of `hostrefused` and `hostjunk`, which fail only the downloaders of a host (`wget` and `curl`): an empty
+ * 404 for the first, bytes that are not the archive for the second; any other client gets the archive whole.
+ */
+function answerToDownloaders(
+  request: IncomingMessage,
+  response: ServerResponse,
+  archiveFile: string | undefined,
+  held: Set<Socket>,
+): void {
+  if (!/wget|curl/i.test(request.headers['user-agent'] ?? '')) {
+    answerArchive(request, response, archiveFile, held);
+    return;
+  }
+  if (String(request.url).split('/')[1] === 'hostrefused') {
+    response.writeHead(404, {'Content-Length': 0});
+    response.end();
+    return;
+  }
+  response.writeHead(200, {'Content-Length': JUNK_BYTES});
+  response.end(randomBytes(JUNK_BYTES));
 }
 
 /** The answer to one request, chosen by the first segment of its path. */
@@ -543,11 +577,22 @@ function answer(
       return;
     case 'ok':
     case 'cut':
+    case 'stall':
     case 'slow':
       answerArchive(
         request,
         response,
         archiveFileOf(String(request.url), options),
+        held,
+      );
+      return;
+    case 'hostrefused':
+    case 'hostjunk':
+      answerToDownloaders(
+        request,
+        response,
+        archiveFileOf(String(request.url), options),
+        held,
       );
       return;
     case 'machine':
@@ -555,6 +600,7 @@ function answer(
         request,
         response,
         machineArchiveOf(String(request.url), options),
+        held,
       );
       return;
     case 'missing':
@@ -749,6 +795,7 @@ export function downloadVariables(
     HARNESS_DOWNLOADS_LICENSED: `https://${UPDATE_SERVICE_NAME}:${String(host.httpsPort)}`,
     HARNESS_DOWNLOADS_LOCAL: `http://127.0.0.1:${String(host.httpPort)}`,
     HARNESS_DOWNLOADS_LOG: logFile,
+    HARNESS_DOWNLOADS_PORT: String(host.httpPort),
     HARNESS_DOWNLOADS_TLS_LOG: tlsLogFile,
   };
 }

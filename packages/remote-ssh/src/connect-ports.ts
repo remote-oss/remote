@@ -70,7 +70,11 @@ import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
-import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
+import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
+import {
+  openingAttached,
+  refusalWatchOf,
+} from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
@@ -397,6 +401,9 @@ export function wiringPortsOf(
       scheduler: machine.scheduler,
       newMarker: machine.helpers.newNonce,
       terminalName: () => 'install',
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
       ...loginSurfaces,
     },
     server: {
@@ -409,6 +416,9 @@ export function wiringPortsOf(
       download: machine.download,
       credentials: machine.credentials,
       files: machine.clientFiles,
+      onHostDownloadRefused: cause => {
+        surfaces.hints.record(downloadRefusalHint(cause, surfaces.translate));
+      },
       lockLoop: hostLockLoopOf(
         machine.clock,
         HOST_LOCK_ATTEMPTS,
@@ -441,6 +451,9 @@ export function wiringPortsOf(
     },
     tunnel: {
       terminals: surfaces.terminals,
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
       ...loginSurfaces,
       settings: () => tunnelSettingsOf(settings),
       local: machine.local,
@@ -513,7 +526,15 @@ export function connectAssemblyOf(
   const connector = connectorFrom({
     stepsFor: onPhase => {
       watch.begin();
-      return stepsOf(ports, onPhase);
+      const steps = stepsOf(ports, onPhase);
+      return {
+        ...steps,
+        openConnection: openingAttached(
+          (input, terms, cancellation) =>
+            steps.openConnection(input, terms, cancellation),
+          watch,
+        ),
+      };
     },
     options: {
       // A getter, so each connect reads the setting as it is then.

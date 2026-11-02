@@ -2522,6 +2522,19 @@ export interface DetailedQuickPickRow extends QuickPickRow {
   icons: string[];
 }
 
+/** The label of each row of the quick pick open in window `name` with the heading of the group the row starts, empty for a row that starts none. */
+export async function quickPickGroups(
+  name: string,
+): Promise<Array<[string, string]>> {
+  return evaluate<Array<[string, string]>>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => [
+      (row.querySelector('.label-name')?.textContent ?? row.querySelector('.monaco-highlighted-label')?.textContent ?? '').trim(),
+      row.querySelector('.quick-input-list-separator')?.textContent ?? '',
+    ])`,
+  );
+}
+
 /** The rows of the quick pick open in window `name`, with what each shows; none when no quick pick is open. */
 export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
   return evaluate<QuickPickRow[]>(
@@ -2883,6 +2896,14 @@ export async function editorGroupLabels(name: string): Promise<string[][]> {
 /** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
 export async function editorTabs(name: string): Promise<EditorTab[]> {
   return (await editorGroups(name)).flat();
+}
+
+/** Whether the keyboard focus of window `name` is inside the Output panel. */
+export async function outputPanelFocused(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    'document.activeElement?.closest(\'[id="workbench.panel.output"]\') != null',
+  );
 }
 
 /** Whether the keyboard focus of window `name` is inside a text editor. */

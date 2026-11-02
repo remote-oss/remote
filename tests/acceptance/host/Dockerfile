@@ -1,23 +1,24 @@
 # The SSH host of the acceptance tests: OpenSSH's server, key login only, and one user whose login shell is POSIX sh
-# unless HOST_SHELL names another of the shells installed here. Fifteen more users serve tests that need another
+# unless HOST_SHELL names another of the shells installed here. Sixteen more users serve tests that need another
 # kind of account: harness-pw (password login only), harness-nofwd (TCP forwarding refused), harness-nosock
 # (stream-local forwarding refused), harness-noall (all forwarding refused), harness-mute (a login shell that answers
 # only a command given with -c), harness-ro (a server data folder that exists and cannot be written), harness-i686 (a
 # host whose `uname -m` says i686), harness-fish (a login shell that is fish), harness-bash (a login shell that is
 # bash), harness-zsh (a login shell that is zsh), harness-dash (a dash login shell whose name is sh), harness-ksh (a
-# login shell that is ksh), harness-csh (a login shell that is csh), harness-tcsh (a login shell that is tcsh) and
-# harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
-# /etc/ssh/ca.pub by start-sshd).
+# login shell that is ksh), harness-csh (a login shell that is csh), harness-tcsh (a login shell that is tcsh),
+# harness-tmpdir (a login shell that sets TMPDIR to ~/tmp, then is sh) and harness-cert, which accepts only a
+# certificate signed by the run's own authority (CA_PUBLIC_KEY, written to /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
-# packets of port 22 and bring them back (the container runs with NET_ADMIN). xauth lets sshd forward X11, and
+# packets of port 22 and bring them back (the container runs with NET_ADMIN). xauth lets sshd forward X11, xdpyinfo is
+# the X client the rows run against the forwarded display, and
 # openssh-client brings ssh-add, with which a terminal lists the keys of a forwarded agent. git lets a terminal row
 # commit with the editor as its message editor (F-2508 AC-6), and nodejs gives the debug and task rows a `node` on
 # the PATH (F-2508 AC-12, AC-13, AC-28, AC-29, AC-34); the server keeps its own.
 # alpine:3.22, pinned by the digest of its multi-platform index so that every run builds the same host.
 FROM alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
 
-RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ curl wget git nodejs bash zsh dash fish tcsh mksh loksh shadow \
+RUN apk add --no-cache openssh-server openssh-client xauth xdpyinfo iptables libstdc++ curl wget git nodejs bash zsh dash fish tcsh mksh loksh shadow \
   && ssh-keygen -A \
   && for shell in /bin/bash /bin/zsh /usr/bin/dash /usr/bin/fish /bin/tcsh /bin/csh /bin/mksh /bin/ksh /usr/local/bin/sh; do \
        grep -qx "$shell" /etc/shells || echo "$shell" >> /etc/shells; \
@@ -33,6 +34,8 @@ RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ cu
   && sed -i 's/^harness-nosock:!/harness-nosock:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-noall \
   && sed -i 's/^harness-noall:!/harness-noall:*/' /etc/shadow \
+  && adduser -D -s /bin/sh harness-nox11 \
+  && sed -i 's/^harness-nox11:!/harness-nox11:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-i686 \
   && sed -i 's/^harness-i686:!/harness-i686:*/' /etc/shadow \
   && adduser -D -s /usr/bin/fish harness-fish \
@@ -69,6 +72,13 @@ RUN chmod 755 /opt/i686/bin/uname \
   && printf '%s\n' 'PATH=/opt/i686/bin:$PATH' 'export PATH' > /home/harness-i686/.profile \
   && chown harness-i686:harness-i686 /home/harness-i686/.profile
 
+COPY tmpdir-shell /usr/local/bin/tmpdir-shell
+RUN chmod 755 /usr/local/bin/tmpdir-shell \
+  && echo /usr/local/bin/tmpdir-shell >> /etc/shells \
+  && adduser -D -s /usr/local/bin/tmpdir-shell harness-tmpdir \
+  && sed -i 's/^harness-tmpdir:!/harness-tmpdir:*/' /etc/shadow \
+  && install -d -m 700 -o harness-tmpdir -g harness-tmpdir /home/harness-tmpdir/tmp
+
 COPY mute-shell /usr/local/bin/mute-shell
 RUN echo /usr/local/bin/mute-shell >> /etc/shells \
   && adduser -D -s /usr/local/bin/mute-shell harness-mute \
@@ -90,6 +100,8 @@ RUN echo /usr/local/bin/mute-shell >> /etc/shells \
     '  AllowStreamLocalForwarding no' \
     'Match User harness-noall' \
     '  DisableForwarding yes' \
+    'Match User harness-nox11' \
+    '  X11Forwarding no' \
     'Match User harness-cert' \
     '  AuthorizedKeysFile none' \
     '  TrustedUserCAKeys /etc/ssh/ca.pub' \

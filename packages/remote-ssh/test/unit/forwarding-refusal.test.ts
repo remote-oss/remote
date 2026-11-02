@@ -2,7 +2,12 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {FailureHint} from 'lib-ssh';
-import {refusalWatchOf} from '../../src/diagnostics/forwarding-refusal.ts';
+import {
+  openingAttached,
+  refusalWatchOf,
+} from '../../src/diagnostics/forwarding-refusal.ts';
+import type {ConnectInput, ConnectionTerms} from '../../src/pipeline/steps.ts';
+import {channelAnswering, leaseOn} from './server-steps.fixture.ts';
 import {logSshLines} from '../../src/pipeline/ssh-log.ts';
 
 const REFUSED =
@@ -67,17 +72,6 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-2: the next connect logs it again', () => {
-    const {watch, sink} = watching();
-    logSshLines(watch.logger, [REFUSED], undefined);
-    watch.begin();
-    logSshLines(watch.logger, [REFUSED], undefined);
-    deepStrictEqual(
-      sink.lines.filter(line => line.message === SETTING_TEXT).length,
-      2,
-    );
-  });
-
   it('F-2604 AC-3: the refusal is recorded once, as the classifier gives it', () => {
     const {watch, hints} = watching();
     logSshLines(watch.logger, [REFUSED, REFUSED], undefined);
@@ -125,5 +119,90 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
       [sink.lines.map(line => line.level), watch.logger.scope],
       [['trace', 'debug', 'warn', 'error', 'info'], []],
     );
+  });
+
+  it('F-2604 AC-15: a connect that started the login logs the setting text, and one that joined it does not, though both record the hint', () => {
+    const {watch, sink, hints} = watching();
+    watch.begin();
+    watch.attach(true);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    watch.begin();
+    watch.attach(false);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      [
+        sink.lines.filter(line => line.message === SETTING_TEXT).length,
+        sink.lines.filter(line => line.message === `[ssh] ${REFUSED}`).length,
+        hints.length,
+      ],
+      [1, 2, 2],
+    );
+  });
+
+  it('F-2604 AC-15 (ruling-1773-joiner-lines): a joiner that logs the refused-channel lines still gets them in its log', () => {
+    const {watch, sink} = watching();
+    watch.begin();
+    watch.attach(false);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      sink.lines.map(line => line.message),
+      [`[ssh] ${REFUSED}`],
+    );
+  });
+
+  it('F-2604 AC-15: a new helper after the old one was killed is started by the connect again, and logs the setting text again, as the next connect of any started login does', () => {
+    const {watch, sink} = watching();
+    watch.begin();
+    watch.attach(true);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    watch.begin();
+    watch.attach(true);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      sink.lines.filter(line => line.message === SETTING_TEXT).length,
+      2,
+    );
+  });
+
+  it('F-2604 AC-15: a refusal line that arrives before the connection is open logs no setting text, whoever started the login', () => {
+    const {watch, sink} = watching();
+    watch.begin();
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      sink.lines.filter(line => line.message === SETTING_TEXT).length,
+      0,
+    );
+  });
+
+  it('F-2604 AC-15: the step that opens the connection tells the watch whether the connect started the login, and a failed one tells nothing', async () => {
+    const told: boolean[] = [];
+    const watch = {
+      attach: (startedLogin: boolean) => {
+        told.push(startedLogin);
+      },
+    };
+    const lease = leaseOn(channelAnswering([]));
+    const input: ConnectInput = {
+      target: {kind: 'plain', text: 'devbox'},
+      rawHostString: 'devbox',
+      attempt: 1,
+      isReconnection: false,
+      windowId: 'window-1',
+      windowWorkspace: undefined,
+    };
+    const terms: ConnectionTerms = {
+      platform: 'linux',
+      remoteCommandInEffect: false,
+    };
+    const signal = new AbortController().signal;
+    await openingAttached(
+      () => Promise.resolve({kind: 'done', value: lease}),
+      watch,
+    )(input, terms, signal);
+    await openingAttached(
+      () => Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      watch,
+    )(input, terms, signal);
+    deepStrictEqual(told, [true]);
   });
 });

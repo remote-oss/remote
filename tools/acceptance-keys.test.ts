@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   agentEnvironment,
   agentSocketPath,
+  changedKeyHostsFile,
   controlFolderOf,
   SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
@@ -103,6 +104,25 @@ describe('makeRunKeys', function () {
     );
   });
 
+  it("coverage-85: the changed-key alias's known-hosts file pins, under the alias's name, a key the host isn't given", () => {
+    const [line = '', ...more] = readFileSync(
+      changedKeyHostsFile(folder),
+      'utf8',
+    )
+      .trimEnd()
+      .split('\n');
+    const [name, type, key] = line.split(' ');
+    deepStrictEqual(
+      [
+        more.length,
+        name,
+        type,
+        keys.hostArguments.some(argument => argument.includes(key ?? '-')),
+      ],
+      [0, 'changedkey', 'ssh-ed25519', false],
+    );
+  });
+
   it("tooling-29: the stranger key opens with the run's passphrase and isn't given to the host", () => {
     const opened = runProgram('ssh-keygen', ['-y', '-f', keys.strangerKey], {
       SSH_ASKPASS: keys.passphraseAskpass,
@@ -147,6 +167,29 @@ describe('makeRunKeys', function () {
     );
   });
 
+  it('coverage-96: the certified passphrase key needs the passphrase, and its certificate is for harness-cert', () => {
+    deepStrictEqual(
+      {
+        opensWithout:
+          runProgram('ssh-keygen', [
+            '-y',
+            '-P',
+            '',
+            '-f',
+            keys.certifiedPassphraseKey,
+          ]).status === 0,
+        principal: /Principals:\s+harness-cert/.test(
+          runProgram('ssh-keygen', [
+            '-L',
+            '-f',
+            `${keys.certifiedPassphraseKey}-cert.pub`,
+          ]).output,
+        ),
+      },
+      {opensWithout: false, principal: true},
+    );
+  });
+
   it("coverage-19: the unauthorised key has no passphrase and isn't given to the host", () => {
     deepStrictEqual(
       [
@@ -160,10 +203,10 @@ describe('makeRunKeys', function () {
     );
   });
 
-  it('tooling-29: the host is given the passphrase and second public keys, and the authority', () => {
+  it('tooling-29, coverage-85: the host is given the passphrase and second public keys, the no-forwarding key with its option, and the authority', () => {
     deepStrictEqual(keys.hostArguments, [
       '--env',
-      `AUTHORIZED_KEYS_FURTHER=${publicKeyOf(keys.passphraseKey)}\n${publicKeyOf(keys.secondKey)}`,
+      `AUTHORIZED_KEYS_FURTHER=${publicKeyOf(keys.passphraseKey)}\n${publicKeyOf(keys.secondKey)}\nno-port-forwarding ${publicKeyOf(keys.noForwardingKey)}`,
       '--env',
       `CA_PUBLIC_KEY=${publicKeyOf(path.join(folder, 'ca'))}`,
     ]);

@@ -432,12 +432,13 @@ export function withRunTokens<Value>(
   );
 }
 
-/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases and its certificate file. */
+/** The harness variables a launch's settings and host setup may name, as `${<name>}`: the download host's bases, its port and its certificate file. */
 const HARNESS_BASE_NAMES: readonly string[] = [
   'HARNESS_DOWNLOADS_HTTP',
   'HARNESS_DOWNLOADS_HTTPS',
   'HARNESS_DOWNLOADS_LICENSED',
   'HARNESS_DOWNLOADS_LOCAL',
+  'HARNESS_DOWNLOADS_PORT',
   'HARNESS_DOWNLOADS_CERTIFICATE',
 ];
 
@@ -710,7 +711,7 @@ function forwardingLaunch(
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); `agent`,
  * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
- * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
+ * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; `x11-noxauth` runs it on the `x11fwd` alias of the Debian 12 host, which has no `xauth`; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
  * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
@@ -754,6 +755,7 @@ export function launchesOf(root: string): Launch[] {
       'remote.SSH.enableAgentForwarding': false,
     }),
     forwardingLaunch('x11', 'x11fwd'),
+    {...forwardingLaunch('x11-noxauth', 'x11fwd'), hostBase: 'debian-12'},
     ...failureCases(root).map((failure): Launch => ({
       label: failureLabel(failure.label ?? failure.alias),
       runner: 'runner-remote',
@@ -878,7 +880,37 @@ export function launchesOf(root: string): Launch[] {
         HOME: '<run>/home-passphrase',
       },
     },
-    {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
+    // Terminal mode on the Ubuntu 26.04 host, whose account harness-odd asks a question the extension does not recognise.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'terminal-odd',
+      suite: 'terminal-odd',
+      hostBase: 'ubuntu-26.04',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {'ask-odd': 'linux'},
+        'window.dialogStyle': 'custom',
+      },
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+    },
+    // The editor starts with SSH_AUTH_SOCK naming a socket where no agent runs yet; a row starts the agent later.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'passphrase-late',
+      suite: 'passphrase-late',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+        'remote.SSH.remotePlatform': {'passkey-add-yes': 'linux'},
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_AUTH_SOCK: '<run>/late-agent.sock',
+      },
+    },
+    // Its rows read the window's title and remote indicator, as the renderer helpers do.
+    {...RENDERER_LAUNCH, label: 'login-shells', suite: 'login-shells'},
     {
       label: 'preconnect',
       kind: 'plain',

@@ -82,7 +82,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `vscode-remote://ssh-remote+agentfwd/home/harness` (`ForwardAgent` with the run's agent socket; `agent-off` on
   `agentfwd-off`, the same alias under another name so that it finds no connection of `agent`, with
   `remote.SSH.enableAgentForwarding` false) and `vscode-remote://ssh-remote+x11fwd/home/harness` (`ForwardX11`). They
-  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case;
+  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case; `x11-noxauth` is
+  the `x11` window on the Debian 12 host, which has no `xauth`;
 - `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
   `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the
@@ -360,7 +361,11 @@ default: dismiss the dialog and its pick). An install case that keeps nothing al
 `/home/harness/.vscodium-server-insiders` and `/tmp/srv`. A case's settings may name the download host's bases as
 `${HARNESS_DOWNLOADS_HTTP}`, `${HARNESS_DOWNLOADS_HTTPS}`, `${HARNESS_DOWNLOADS_LICENSED}` and
 `${HARNESS_DOWNLOADS_LOCAL}`; the run puts them in when it writes the launch's settings, and leaves the product's own
-`${…}` placeholders as written. Before each launch the run notes how many requests the download host has logged, in
+`${…}` placeholders as written. The same names, and `${HARNESS_DOWNLOADS_PORT}` (the download host's port), are put into a
+case's `setup` commands: the cases `host-404-fallback` and `host-junk-fallback` start a relay on the host's loopback
+(`nc -lk -p <port> -e nc downloads <port>`) so that one template URL, on the client-only base, reaches the download host
+from both sides; the download host's `hostrefused` and `hostjunk` sources answer the host's `wget` or `curl` with a 404 or
+with junk and any other client with the archive. Before each launch the run notes how many requests the download host has logged, in
 `<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
 host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 
@@ -724,7 +729,7 @@ VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has fourteen users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has fifteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -733,11 +738,20 @@ Besides `harness`, the host image has fourteen users, and the run's `ssh_config`
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
 | `twofactor` | `harness-2fa` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password and then a one-time code of the run's secret (`HARNESS_TOTP_FILE`; RFC 6238, six digits, a window of three steps) |
 | `expired` | `harness-expired` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password, marked expired, so the login asks for the current password and a new one twice |
+| `ask-odd` | `harness-odd` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, first `Favourite colour? ` with the answer shown, a question the extension doesn't recognise (any answer goes on), then `Password: `, the run's password; left unanswered, sshd drops the login at its `LoginGraceTime`, 120 s, a global setting |
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
+| `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
+| `agentfwd-tmpdir` | `harness-tmpdir` | the run's key, forwarding the run's agent as `agentfwd` does; the login shell (`tmpdir-shell`) sets `TMPDIR` to `~/tmp`, a folder of the account's own, then is `sh`, for a command, a script on standard input and a login terminal alike |
+| `agentfwd-notmp` | `harness-notmp` | the Ubuntu 26.04 host only: the run's key, forwarding the run's agent; an ACL entry on `/tmp` (`u:harness-notmp:r-x`) lets the account create nothing there, while OpenSSH 10.2 keeps the forwarded socket under `~/.ssh/agent`, so the agent still works; a row lifts it as root with `setfacl -x u:harness-notmp /tmp` and puts it back with `setfacl -m u:harness-notmp:r-x /tmp` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
+| `noforward-key` | `harness` | a key of its own (`id_noportfwd`), given to the key accounts with `no-port-forwarding` on its `authorized_keys` line: sshd allows forwarding, and the key's sessions get none |
+| `x11-timeout`, `x11-noauth` | `harness` | `ForwardX11 yes` untrusted with `ForwardX11Timeout 60s`, or with an `XAuthLocation` that names no program (F-2312) |
+| `x11-untrusted`, `x11-match` | `harness` | the run's key with `ForwardX11 yes` alone, or `ForwardX11 yes` and `ForwardX11Trusted yes` given only in a `Match originalhost` block (F-2312) |
+| `pty-force`, `pty-yes`, `pty-no` | `harness` | the run's key with `RequestTTY force`, `yes` or `no` in the entry (F-2106) |
+| `changedkey` | `harness` | the run's key against its own `known_hosts_changedkey`, which pins another key under `HostKeyAlias changedkey`, with `StrictHostKeyChecking no`: ssh finds the host key changed, connects, and disables password and keyboard-interactive login and every forward ("Port forwarding is disabled to avoid man-in-the-middle attacks.") |
 | `fwd-busy`, `fwd-busy-exit`, `fwd-static`, `fwd-gateway`, `fwd-remote`, `fwd-dynamic`, `fwd-open`, `fwd-noopen`, `fwd-clearall`, `fwd-exit`, `fwd-dynamic-exit` | `harness` | the run's key; each adds forwards to the client's configuration: `LocalForward 13020 127.0.0.1:8660` (`fwd-busy`, and `fwd-busy-exit` with `ExitOnForwardFailure yes`), `LocalForward 13010 127.0.0.1:8657` (`fwd-static`), `GatewayPorts yes` with `LocalForward 13001 127.0.0.1:8661` (`fwd-gateway`), `RemoteForward 19000 127.0.0.1:19101` (`fwd-remote`), `DynamicForward 11080` (`fwd-dynamic`) and a dynamic `RemoteForward` with `PermitRemoteOpen any` (`fwd-open`, port 19201) or `none` (`fwd-noopen`, port 19200), `ClearAllForwardings yes` (`fwd-clearall`), `ExitOnForwardFailure yes` alone (`fwd-exit`) and `DynamicForward 13030` with `ExitOnForwardFailure yes` (`fwd-dynamic-exit`) |
 | `i686` | `harness-i686` | the run's key; its `~/.profile` puts a folder first on `PATH` whose `uname -m` prints `i686` (the connect's shell is a login shell) |
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
@@ -770,8 +784,11 @@ The VSCodium run also makes further keys in its folder (`tools/acceptance-keys.t
 | `id_second` | ed25519 without a passphrase |
 | `id_loose` | a copy of `id_second` with mode 0644, which ssh refuses to use |
 | `ca`, `id_certified`, `id_certified-cert.pub` | the run's own authority, and a key it signed for the principal `harness-cert` |
+| `id_noportfwd` | ed25519 without a passphrase, comment `acceptance-no-port-forwarding` |
+| `changed_host_key`, `known_hosts_changedkey` | a throwaway key the host never has, and the known-hosts file of `changedkey` that pins it |
 
-The host accepts `id_passphrase` and `id_second` for its key accounts (`AUTHORIZED_KEYS_FURTHER`), and the user
+The host accepts `id_passphrase` and `id_second` for its key accounts (`AUTHORIZED_KEYS_FURTHER`), `id_noportfwd` for them
+with `no-port-forwarding` before it on its line, and the user
 `harness-cert` accepts only a certificate of the run's authority (`TrustedUserCAKeys`, from `CA_PUBLIC_KEY`). Their
 aliases leave the agent to the environment and set no `BatchMode`, so ssh may ask for a passphrase:
 

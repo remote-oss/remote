@@ -26,6 +26,10 @@ export interface FakeClient {
   loggedName?: string;
   /** A check deletes the program, so a call after it finds no program. */
   vanishes?: boolean;
+  /** The commands of an `scp` beside the program, which a copy to the host runs; none writes no `scp`. */
+  copyCommands?: string;
+  /** A variable the real client runs with, as `NAME=value`; none runs it with the run's environment. */
+  exported?: string;
 }
 
 const OPENSSH_BANNER = 'OpenSSH_9.6p1, OpenSSL 3.0.13';
@@ -117,6 +121,22 @@ export const FAKE_CLIENTS: readonly FakeClient[] = [
     mode: 0o755,
     vanishes: true,
   },
+  {
+    folder: 'copy-stalls',
+    banner: OPENSSH_BANNER,
+    stream: 'stderr',
+    status: 0,
+    mode: 0o755,
+    copyCommands: 'exec sleep 600',
+  },
+  {
+    folder: 'bad-display',
+    banner: OPENSSH_BANNER,
+    stream: 'stderr',
+    status: 0,
+    mode: 0o755,
+    exported: 'DISPLAY=1',
+  },
 ];
 
 /** The folder the fakes live in. */
@@ -154,12 +174,12 @@ export function clientScript(client: FakeClient, callsLog: string): string {
   if (client.vanishes === true) {
     lines.push('  rm -f "$0"');
   }
-  lines.push(
-    `  exit ${String(client.status)}`,
-    'fi',
-    `exec ${REAL_SSH} "$@"`,
-    '',
-  );
+  lines.push(`  exit ${String(client.status)}`, 'fi');
+  if (client.exported !== undefined) {
+    const [name = '', ...value] = client.exported.split('=');
+    lines.push(`export ${name}=${quoted(value.join('='))}`);
+  }
+  lines.push(`exec ${REAL_SSH} "$@"`, '');
   return lines.join('\n');
 }
 
@@ -174,6 +194,11 @@ export function writeClients(runFolder: string): void {
     const file = path.join(folder, 'ssh');
     writeFileSync(file, clientScript(client, callsLog));
     chmodSync(file, client.mode);
+    if (client.copyCommands !== undefined) {
+      const copy = path.join(folder, 'scp');
+      writeFileSync(copy, `#!/bin/sh\n${client.copyCommands}\n`);
+      chmodSync(copy, 0o755);
+    }
   }
   writeFileSync(callsLog, '');
 }

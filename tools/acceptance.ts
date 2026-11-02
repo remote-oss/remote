@@ -68,6 +68,8 @@ import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
+  changedKeyHostsFile,
+  CHANGED_KEY_ALIAS,
   controlFolderOf,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
@@ -366,13 +368,17 @@ export function sshConfigOf(
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `jumped` (the harness account through the harness host as a `ProxyJump`), `routed` (the harness
- * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `jumped` (the harness account through the harness host as a `ProxyJump`); `routed` (the harness
+ * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
+ * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
+ * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
- * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11, and
+ * `agentfwd-tmpdir` and `agentfwd-notmp`, forwarding it for an account whose login shell sets TMPDIR (the Alpine host's)
+ * and for one that may not create links in /tmp (the Ubuntu 26.04 host's); three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
  * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
  * sockets of the ControlMaster aliases are in `controlFolder`.
@@ -452,10 +458,27 @@ export function harnessSshConfig(
     '  ConnectTimeout 10',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
     '',
+    // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
+    // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
+    `Host ${CHANGED_KEY_ALIAS}`,
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    `  HostKeyAlias ${CHANGED_KEY_ALIAS}`,
+    '  StrictHostKeyChecking no',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${changedKeyHostsFile(runFolder)}`,
+    '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
-    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, and a forced change.
+    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, a forced change, and a
+    // question the extension doesn't recognise before the password.
     ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
     ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
+    ...accountAlias('ask-odd', 'harness-odd', port, runFolder, KBD_LINES),
     // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
     ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
       'PubkeyAuthentication no',
@@ -495,6 +518,10 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
+    ...accountAlias('x11-forbidden', 'harness-nox11', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+    ]),
     ...accountAlias(
       'nosocket',
       'harness-nosock',
@@ -694,6 +721,19 @@ export function harnessSshConfig(
       [],
       false,
     ),
+    // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
+    ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
+    // The harness account with a RequestTTY of its own.
+    ...['force', 'yes', 'no'].flatMap(request =>
+      keyAlias(
+        `pty-${request}`,
+        'harness',
+        port,
+        runFolder,
+        ['id_ed25519'],
+        ['BatchMode yes', 'IdentityAgent none', `RequestTTY ${request}`],
+      ),
+    ),
     ...keyAlias('several-files', 'harness', port, runFolder, [
       'id_missing',
       'id_passphrase_stranger',
@@ -707,6 +747,28 @@ export function harnessSshConfig(
     ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_certified',
     ]),
+    ...keyAlias('certpass', CERTIFIED_PRINCIPAL, port, runFolder, [
+      'id_certpass',
+    ]),
+    // The agent named by a variable of the editor's environment, set or not (no key file of its own).
+    ...keyAlias(
+      'agent-var-set',
+      'harness',
+      port,
+      runFolder,
+      [],
+      ['IdentityAgent $HARNESS_AGENT_SOCKET'],
+      false,
+    ),
+    ...keyAlias(
+      'agent-var-unset',
+      'harness',
+      port,
+      runFolder,
+      [],
+      ['IdentityAgent $HARNESS_NO_SUCH_VARIABLE'],
+      false,
+    ),
     ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_second',
     ]),
@@ -721,8 +783,48 @@ export function harnessSshConfig(
         agentSocket,
       ),
     ),
+    // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
+    // for one that may not create links in /tmp (the Ubuntu 26.04 host's).
+    ...[
+      ['agentfwd-tmpdir', 'harness-tmpdir'],
+      ['agentfwd-notmp', 'harness-notmp'],
+    ].flatMap(([alias, user]) =>
+      accountAlias(
+        alias ?? '',
+        user ?? '',
+        port,
+        runFolder,
+        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
+        agentSocket,
+      ),
+    ),
     ...accountAlias('x11fwd', 'harness', port, runFolder, [
       ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted yes',
+    ]),
+    // The same without the trusted request, so the server's X11 extensions are the untrusted client's.
+    ...accountAlias('x11-untrusted', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+    ]),
+    // Untrusted forwarding whose cookie expires after a minute.
+    ...accountAlias('x11-timeout', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted no',
+      'ForwardX11Timeout 60s',
+    ]),
+    // A client that cannot find its xauth, so ssh forwards nothing.
+    ...accountAlias('x11-noauth', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'XAuthLocation /nonexistent/xauth',
+    ]),
+    // ForwardX11 given only in a Match block that applies to the alias.
+    ...accountAlias('x11-match', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'Match originalhost x11-match',
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
@@ -1394,7 +1496,11 @@ export async function runLaunches(
           );
         }
         if (launch.hostSetup !== undefined) {
-          runHostSetup(command, hostContainerOf(launch), launch.hostSetup);
+          runHostSetup(
+            command,
+            hostContainerOf(launch),
+            withHarnessBases(launch.hostSetup, bases),
+          );
         }
         writeUserSettings(
           runFolder,

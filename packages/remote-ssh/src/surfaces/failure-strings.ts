@@ -76,6 +76,7 @@ export type FailureStringId =
   | 'preconnectValueList'
   | 'preconnectValueNumber'
   | 'preconnectValueObject'
+  | 'scpInstallationNotFound'
   | 'trustRefused';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
@@ -150,6 +151,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
   trustRefused: 'Got bad result from install script',
+  scpInstallationNotFound: 'scp installation not found',
 };
 
 /** The two dialogs of a missing or unusable server download location, which have no string id yet. */
@@ -180,7 +182,9 @@ export function textOfTemplate(
 }
 
 /** Whether the id has a template here. */
-function isKnownId(stringId: string): stringId is FailureStringId {
+export function isFailureStringId(
+  stringId: string,
+): stringId is FailureStringId {
   return Object.hasOwn(FAILURE_TEMPLATES, stringId);
 }
 
@@ -197,7 +201,7 @@ export function reasonText(
     return reason.text === '' ? undefined : reason.text;
   }
   if ('values' in reason) {
-    if (!isKnownId(reason.id)) {
+    if (!isFailureStringId(reason.id)) {
       return undefined;
     }
     const values: string[] = [];
@@ -211,5 +215,7 @@ export function reasonText(
     }
     return textOfId(reason.id, translate, values);
   }
-  return isKnownId(reason.id) ? textOfId(reason.id, translate) : undefined;
+  return isFailureStringId(reason.id)
+    ? textOfId(reason.id, translate)
+    : undefined;
 }

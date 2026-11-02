@@ -117,6 +117,8 @@ export function dependencies(
   changes: Partial<ServerStepDependencies> = {},
 ): ServerStepDependencies {
   return {
+    onHostDownloadRefused: () => undefined,
+    copyAvailable: () => Promise.resolve(true),
     profile: PROFILE,
     policy: SSH_POLICY,
     settings: settingsWith({
@@ -185,6 +187,7 @@ export function leaseOn(channel: RecordingChannel): ConnectionLease {
     channel,
     waits: undefined,
     socksPort: 1080,
+    startedLogin: true,
     storedRecord: undefined,
     storeSharedRecord: () => Promise.resolve(true),
     onNotice: () => () => undefined,
