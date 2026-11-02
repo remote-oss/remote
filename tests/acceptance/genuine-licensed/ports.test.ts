@@ -181,6 +181,8 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
     return shown;
   }
 
+  // [oss] src/vs/workbench/contrib/remote/browser/remoteExplorer.ts: the Forwarded Ports status item's command is
+  // `${TUNNEL_VIEW_ID}.focus` at 1.125.0 and `TOGGLE_VIEW_ACTION_ID` (`remoteExplorer.toggleForwardedPortsView`) at 1.139.1.
   atVersion(FLOOR)(
     'ADR-0007 floor (ports-status-item, 1.125): core focuses the Ports view when the Forwarded Ports status item is clicked, and a second click leaves it shown',
     async () => {
@@ -290,23 +292,21 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
     return (await portProtocolChoices(window, String(remote))).choices;
   }
 
-  atVersion(FLOOR)(
-    'ADR-0007 floor (ports-protocol, 1.125): core’s protocol context is https for an http listener, so the Change Port Protocol menu has HTTPS checked',
-    async () => {
-      deepStrictEqual(await protocolOf(8687), [
-        ['HTTP', false],
-        ['HTTPS', true],
-      ]);
-    },
-  );
+  // [oss] src/vs/workbench/contrib/remote/browser/tunnelView.ts, `onFocusChanged` (line 997 at both tags): the view's
+  // protocol context key is `item.protocol === Https ? Https : Https` at 1.125.0, always https, and `... ? Https : Http`
+  // at 1.139.1. A row's own context menu does not read that key: its context carries the row's own protocol (the
+  // `TunnelProtocolContextKey` set from `element.tunnel.protocol` in the table's row context), so the Change Port
+  // Protocol menu shows the listener's real protocol at both versions, which the row below asserts.
+  it('ADR-0007 floor (ports-protocol-menu): the Change Port Protocol menu of an http listener’s row has HTTP checked, at both versions', async () => {
+    deepStrictEqual(await protocolOf(8687), [
+      ['HTTP', true],
+      ['HTTPS', false],
+    ]);
+  });
 
-  atVersion(RECORDED)(
-    'ADR-0007 floor (ports-protocol, 1.139): core’s protocol context is http for an http listener, so the Change Port Protocol menu has HTTP checked',
-    async () => {
-      deepStrictEqual(await protocolOf(8689), [
-        ['HTTP', true],
-        ['HTTPS', false],
-      ]);
-    },
-  );
+  // Not reproducible as ADR-0007 describes it: the always-https context of 1.125.0 is the view-level key of
+  // `onFocusChanged`, which no menu of a row reads, and the genuine job at 1.125.0 measured the row's menu with HTTP
+  // checked (run 41365739306), the same as at 1.139.1. Posted on #1634 for athena's amendment of the ADR.
+  it.skip('ADR-0007 floor (ports-protocol, 1.125): the Ports view’s protocol context is https for an http listener (skipped: no row read shows it, see #1634)', () =>
+    undefined);
 });
