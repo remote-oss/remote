@@ -532,7 +532,10 @@ describe('New Window on Active Host (card coverage-42)', function () {
     });
 
     it('F-2303 AC-22: with the server listening on a socket the new window asks for the password itself', async () => {
-      await userSettings({'remote.SSH.remoteServerListenOnSocket': true});
+      await userSettings({
+        'remote.SSH.remoteServerListenOnSocket': true,
+        'remote.SSH.remotePlatform': {harness: 'linux', password: 'linux'},
+      });
       // The password account's server the earlier rows left listens on a port, not on a socket.
       await onHostAs(
         'harness-pw',
