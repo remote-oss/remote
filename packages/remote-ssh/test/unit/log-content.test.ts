@@ -11,6 +11,7 @@ import {
   maskOf,
   notValidLine,
   pathSettingLine,
+  ptySettingLine,
   rejectedLine,
   resolvedLine,
   resolverLine,
@@ -70,6 +71,16 @@ describe('the lines of the client search and the probed platform (card connect-2
     deepStrictEqual(
       [pathSettingLine(''), pathSettingLine('/opt/a "b"/ssh')],
       ['remote.SSH.path = ""', 'remote.SSH.path = "/opt/a \\"b\\"/ssh"'],
+    );
+  });
+
+  it('F-2106 AC-13: the pty line shows the effective value, true only for the boolean true', () => {
+    deepStrictEqual(
+      [ptySettingLine(true), ptySettingLine(false)],
+      [
+        'remote.SSH.permitPtyAllocation = true',
+        'remote.SSH.permitPtyAllocation = false',
+      ],
     );
   });
 

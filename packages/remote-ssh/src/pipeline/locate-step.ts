@@ -29,6 +29,7 @@ import {
   configFileLine,
   notValidLine,
   pathSettingLine,
+  ptySettingLine,
   rejectedLine,
   searchedLines,
   usingLine,
@@ -53,6 +54,9 @@ export interface ConnectState {
 export interface LocateStepDependencies {
   /** The value of `remote.SSH.path`, as the user wrote it; empty when unset. */
   settingValue: () => string;
+
+  /** The effective value of `remote.SSH.permitPtyAllocation`: `true` only when the setting is the boolean `true`. */
+  ptySetting: () => boolean;
   /** The value of `remote.SSH.configFile`, as the user wrote it; empty when unset. */
   configFile: () => string;
   /** How the connection runs, which the reading of a failed lookup depends on. */
@@ -263,6 +267,7 @@ export function locateClientStep(
       dependencies.logger.info(configFileLine(configured.path));
     }
     dependencies.logger.info(pathSettingLine(dependencies.settingValue()));
+    dependencies.logger.info(ptySettingLine(dependencies.ptySetting()));
     for (const candidate of candidates(
       dependencies.settingValue(),
       dependencies.environment,

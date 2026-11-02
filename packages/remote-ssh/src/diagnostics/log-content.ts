@@ -49,6 +49,11 @@ export function pathSettingLine(value: string): string {
   return `remote.SSH.path = ${JSON.stringify(value)}`;
 }
 
+/** The effective value of `remote.SSH.permitPtyAllocation` as the log shows it: `true` only for the boolean true. */
+export function ptySettingLine(value: boolean): string {
+  return `remote.SSH.permitPtyAllocation = ${String(value)}`;
+}
+
 /** A candidate of the client search is about to be checked. */
 export function checkingLine(program: string): string {
   return `Checking ssh client: ${program}`;
