@@ -27,7 +27,6 @@ import {
   editConfiguration,
   folderOf,
   freePort,
-  forwardByHand,
   localPortOf,
   occupy,
   portsOf,
@@ -37,6 +36,7 @@ import {
   rowsWhen,
   showPorts,
 } from './ports-support.ts';
+import {forwardByHand} from '../windows/forward-support.ts';
 
 const execFileAsync = promisify(execFile);
 

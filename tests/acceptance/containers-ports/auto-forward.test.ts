@@ -26,7 +26,6 @@ import {
   freePort,
   browserOpens,
   ensureListening,
-  forwardByHand,
   isFree,
   listenInTerminal,
   localPortOf,
@@ -38,6 +37,7 @@ import {
   rowsWhen,
   showPorts,
 } from './ports-support.ts';
+import {forwardByHand} from '../windows/forward-support.ts';
 
 const execFileAsync = promisify(execFile);
 

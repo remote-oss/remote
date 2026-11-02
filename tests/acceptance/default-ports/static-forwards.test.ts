@@ -23,12 +23,12 @@ import {
   portsRows,
   statusItem,
 } from '../windows/renderer.ts';
+import {holdLocal} from './forward-support.ts';
 import {
-  holdLocal,
   listenOnHost,
   showPorts,
   tunnelFor,
-} from './forward-support.ts';
+} from '../windows/forward-support.ts';
 import {greetingOf} from './greeting.ts';
 
 const execFileAsync = promisify(execFile);
