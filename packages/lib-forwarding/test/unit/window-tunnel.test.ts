@@ -408,6 +408,30 @@ describe('what the window tunnel through the relay logs (card connect-131)', () 
     ]);
   });
 
+  it('says a failure that is no error object by its text', async () => {
+    const lines: string[] = [];
+    const clock = new FakeClock();
+    const outcome = openRelayTunnel({
+      dialer: {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a dialer that breaks its contract, on purpose
+        dial: () => Promise.reject('the dialer gave a bare text'),
+      },
+      local: new FakeLocalPort(),
+      scheduler: clock.scheduler(),
+      target: {kind: 'port', port: 4321},
+      localPort: 50000,
+      limits: LIMITS,
+      onLine: line => {
+        lines.push(line);
+      },
+    });
+    await advanced(clock, LIMITS.readyMilliseconds + 1000);
+    await outcome;
+    deepStrictEqual(lines.slice(0, 1), [
+      "a probe to the host's port 4321 failed: the dialer gave a bare text",
+    ]);
+  });
+
   it('says its socket target without a path', async () => {
     const lines: string[] = [];
     const clock = new FakeClock();
