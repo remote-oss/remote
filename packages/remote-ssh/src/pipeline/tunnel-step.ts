@@ -21,7 +21,6 @@ import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
   type Classification,
-  classify,
   CONNECTION_CLOSED_TEXT,
   connectWaitMilliseconds,
   type FailureHint,
@@ -36,7 +35,7 @@ import {
   type TerminalLogin,
 } from 'lib-ssh';
 import {isAborted, portOf} from './connect.ts';
-import {ofClassification} from './failure.ts';
+import {clientRefusal, ofClassification} from './failure.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
 import {logSshLines} from './ssh-log.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
@@ -233,13 +232,9 @@ async function openTerminalTunnel(
   // The tunnel's terminal holds nothing but ssh, so all of its lines are ssh's own.
   const sshOutput = new LineSplitter(line => {
     logSshLines(dependencies.logger, [line], undefined);
-    const classified = classify([line], undefined, 'tunnel', 'terminal');
-    if (
-      classified.hints.some(
-        hint => hint.status === 'MitmPortForwardingDisabled',
-      )
-    ) {
-      refuse?.(classified);
+    const refusal = clientRefusal(line);
+    if (refusal !== undefined) {
+      refuse?.(refusal);
     }
   });
   session.onOutput(text => {

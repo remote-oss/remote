@@ -16,11 +16,12 @@ import type {
 } from 'lib-server';
 import type {AcquireFailure} from 'lib-helper';
 import type {TemplateProblem} from 'lib-product';
-import type {
-  Classification,
-  ConnectionFailure,
-  FailureHint,
-  FailureKind,
+import {
+  type Classification,
+  classify,
+  type ConnectionFailure,
+  type FailureHint,
+  type FailureKind,
 } from 'lib-ssh';
 
 /** The kinds of a failed connect: the failures of `ssh` itself and those of the server install and start. */
@@ -68,6 +69,19 @@ export function ofClassification(
     hints: classification.hints,
     ...(sshExitStatus === undefined ? {} : {sshExitStatus}),
   };
+}
+
+/**
+ * The classification of a line of ssh's output that says the client disabled port forwarding to avoid a
+ * man-in-the-middle attack (a changed host key under `StrictHostKeyChecking no`), or nothing for any other line.
+ */
+export function clientRefusal(line: string): Classification | undefined {
+  const classified = classify([line], undefined, 'tunnel', 'terminal');
+  return classified.hints.some(
+    hint => hint.status === 'MitmPortForwardingDisabled',
+  )
+    ? classified
+    : undefined;
 }
 
 /** A failure that shows no library text: the library's words go to the log. */

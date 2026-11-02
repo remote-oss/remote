@@ -397,6 +397,9 @@ export function wiringPortsOf(
       scheduler: machine.scheduler,
       newMarker: machine.helpers.newNonce,
       terminalName: () => 'install',
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
       ...loginSurfaces,
     },
     server: {

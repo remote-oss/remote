@@ -1100,8 +1100,8 @@ F-2604.AC-9	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2604.AC-10	acceptance	
 F-2604.AC-11	unit	
 F-2604.AC-12	acceptance	
-F-2604.AC-13	todo	
-F-2604.AC-14	todo	
+F-2604.AC-13	acceptance	
+F-2604.AC-14	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2604.AC-15	todo	
 F-2604.AC-16	acceptance	
 F-2604.AC-17	acceptance	

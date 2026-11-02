@@ -120,13 +120,13 @@ export async function connectedWith(
   };
 }
 
-/** Runs `rowBody` with the user settings as they were at its start put back after it. */
-export async function keepingSettings(
-  rowBody: () => Promise<void>,
-): Promise<void> {
+/** Runs `rowBody` with the user settings as they were at its start put back after it, and gives what it gave. */
+export async function keepingSettings<Result = void>(
+  rowBody: () => Promise<Result>,
+): Promise<Result> {
   const saved = readUserSettings();
   try {
-    await rowBody();
+    return await rowBody();
   } finally {
     restoreUserSettings(saved);
   }
