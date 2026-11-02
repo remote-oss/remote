@@ -122,6 +122,7 @@ describe('public-surface', () => {
       'packages/remote-x/ThirdPartyNotices.txt',
       'Microsoft Corporation\n',
     );
+    workspace.write('packages/remote-x/NOTICE.md', 'Microsoft Corporation\n');
     workspace.write('packages/remote-x/LICENSE', 'Microsoft Corporation\n');
     deepStrictEqual(checkPublicSurface(workspace.root), []);
   });

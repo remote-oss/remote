@@ -34,7 +34,7 @@ function inventoryFixture(fixtureFolder: string): string[] {
 }
 
 /** Third-party texts keep their own words (ADR-0008, decision 5). */
-const THIRD_PARTY_FILE = /^(LICENSE|ThirdPartyNotices)/;
+const THIRD_PARTY_FILE = /^(LICENSE|NOTICE|ThirdPartyNotices)/;
 
 /** The folders under docs/ that are working documents and leave before publication (ADR-0008, decision 4). */
 const PRIVATE_DOCS = new Set(['architecture', 'adr']);
