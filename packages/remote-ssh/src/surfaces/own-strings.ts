@@ -27,6 +27,8 @@ export const OWN_TEMPLATES = {
   S046: 'ERROR: TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.',
   S150: "The remote server's SSH configuration may have TCP forwarding disabled",
   S005: "Add the setting '{0}' to the server's '{1}' (or similar) configuration file",
+  S049: 'Enable {0} to allow VS Code to download the required resources locally',
+  S050: 'Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server',
   S116: 'Restart the SSH server on the remote machine to apply any changes to the configuration',
   showLogLinkText: 'Show log',
   socksForwardingFailedNotice:

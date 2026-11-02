@@ -22,6 +22,8 @@ export type DiagnosticStringId =
   | 'S014'
   | 'S032'
   | 'S046'
+  | 'S049'
+  | 'S050'
   | 'S079'
   | 'S094'
   | 'S097'

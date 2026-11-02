@@ -117,6 +117,7 @@ export function dependencies(
   changes: Partial<ServerStepDependencies> = {},
 ): ServerStepDependencies {
   return {
+    onHostDownloadRefused: () => undefined,
     profile: PROFILE,
     policy: SSH_POLICY,
     settings: settingsWith({
