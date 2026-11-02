@@ -128,6 +128,7 @@ import {
 } from './surfaces/lifecycle-terminal.ts';
 import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
 import {ensureTrusted} from './trust/trust-gate.ts';
+import {openOwnSettings} from './settings/settings-command.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -1003,6 +1004,13 @@ export async function activate(
               ),
             translate,
           }),
+        },
+        settings: {
+          execute: openOwnSettings(
+            (command, ...parameters) =>
+              vscode.commands.executeCommand(command, ...parameters),
+            context.extension.id,
+          ),
         },
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),

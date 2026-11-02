@@ -159,6 +159,7 @@ const ENGLISH = {
     'Rebuild and Reopen in Container',
   'commands.Rebuildwithoutcacheandreopenincontainer.title':
     'Rebuild Without Cache and Reopen in Container',
+  'commands.Settings.title': 'Settings',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -382,6 +383,11 @@ describe('the manifest', () => {
               dark: 'resources/dark/refresh.svg',
             },
           },
+          {
+            command: 'remote-containers.settings',
+            title: '%commands.Settings.title%',
+            category: 'Dev Containers',
+          },
         ],
         menus: {
           commandPalette: [
@@ -435,6 +441,10 @@ describe('the manifest', () => {
             {command: 'remote-containers.showDetails', when: 'false'},
             {command: 'remote-containers.inspectDockerResource', when: 'false'},
             {command: 'remote-containers.showContainerLog', when: 'false'},
+            {
+              command: 'remote-containers.settings',
+              when: '!remote-containers:standingDown',
+            },
           ],
           'view/title': [
             {
