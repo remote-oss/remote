@@ -24,7 +24,21 @@ import {
   quickPickOf,
   waitForDialog,
 } from '../windows/renderer.ts';
-import {readFileSync} from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import path from 'node:path';
+import {
+  editorLogsFolder,
+  readUserSettings,
+  restoreUserSettings,
+  secretHits,
+} from '../windows/harness.ts';
+import {setUserSetting} from '../windows/folder-windows.ts';
 
 /** The placeholder of the passphrase input, with nothing after it (STR:S064). */
 const PLACEHOLDER = 'Enter passphrase for ssh key ';
@@ -580,5 +594,139 @@ describe('the passphrase input of a key (card coverage-96)', function () {
     } finally {
       await closeWindow(name).catch(() => undefined);
     }
+  });
+
+  it('F-2307 AC-16 (c96-ask-escape): Escape at the question adds the key, and the window connects', async () => {
+    deepStrictEqual(await askedToAdd('passkey-ask-escape', 'c96-ask-escape'), {
+      shown: QUESTION,
+      held: true,
+    });
+  });
+
+  it('F-2307 AC-18 (c96-cert-only): a key with a certificate beside it, for a host that accepts only the certificate, connects with no input', async () => {
+    const {name, sawInput} = await connectedWithoutInput(
+      'certonly',
+      'c96-cert-only',
+    );
+    await closeWindow(name).catch(() => undefined);
+    deepStrictEqual(sawInput, false);
+  });
+
+  it('F-2307 AC-18 (c96-cert-missing): without any certificate found the connect ends in the Permission denied dialog, with no input', async () => {
+    deepStrictEqual(
+      await refusedWithoutInput('certonly-nocert', 'c96-cert-missing'),
+      {
+        dialog: refused('certonly-nocert'),
+        input: undefined,
+      },
+    );
+  });
+
+  it('F-2307 AC-23 (c96-terminal-mode): in the terminal mode exactly one passphrase input appears per connection, and the right passphrase connects', async () => {
+    await setUserSetting('remote.SSH.useLocalServer', false);
+    const name = await openKeyWindow('passkey-16', 'c96-terminal-mode');
+    try {
+      const opened: string[] = [];
+      await untilPassphraseInput(name);
+      // The first input is still on screen when the answer is given.
+      let open = true;
+      await answerInputBox(name, passphrase());
+      await waitFor(
+        'the window to connect',
+        async () => {
+          const input = await inputBoxOf(name);
+          const shown = input !== undefined;
+          if (shown && !open) {
+            opened.push(input.placeholder);
+          }
+          open = shown;
+          return (
+            (await windowState(name)).remoteName === 'ssh-remote' &&
+            (await connectSurface(name)).indicator === 'SSH: passkey-16'
+          );
+        },
+        120_000,
+      );
+      deepStrictEqual(opened, []);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await setUserSetting('remote.SSH.useLocalServer', undefined);
+    }
+  });
+
+  it('F-2307 AC-32 (c96-no-attempts): with maxReconnectionAttempts 0 the shared connection ended still reconnects and asks for the passphrase again', async () => {
+    await setUserSetting('remote.SSH.maxReconnectionAttempts', 0);
+    const name = await connectedWithPassphrase('passkey-17', 'c96-no-attempts');
+    try {
+      await killSharedConnection(name, 'passkey-17');
+      const input = await untilPassphraseInput(name);
+      await answerInputBox(name, passphrase());
+      await untilConnected(name, 'passkey-17');
+      deepStrictEqual(input?.placeholder, PLACEHOLDER);
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await setUserSetting('remote.SSH.maxReconnectionAttempts', undefined);
+    }
+  });
+
+  it('F-2307 AC-33 (c96-config-mode): a configuration file with mode 0666 in a folder with mode 0777 gives no warning or dialog, and the window connects', async () => {
+    const before = readUserSettings();
+    const original = (JSON.parse(before ?? '{}') as Record<string, unknown>)[
+      'remote.SSH.configFile'
+    ];
+    const folder = mkdtempSync(
+      path.join(variable('HARNESS_RUN_FOLDER'), 'config-mode-'),
+    );
+    chmodSync(folder, 0o777);
+    const file = path.join(folder, 'config');
+    writeFileSync(file, readFileSync(String(original)), {mode: 0o666});
+    chmodSync(file, 0o666);
+    await setUserSetting('remote.SSH.configFile', file);
+    try {
+      const {name, sawInput} = await connectedWithoutInput(
+        'several-files',
+        'c96-config-mode',
+      );
+      try {
+        deepStrictEqual(
+          {
+            sawInput,
+            dialog: await dialogOf(name),
+            toasts: (await notifications(name)).filter(
+              text => !text.startsWith('Setting up SSH Host'),
+            ),
+          },
+          {sawInput: false, dialog: undefined, toasts: []},
+        );
+      } finally {
+        await closeWindow(name).catch(() => undefined);
+      }
+    } finally {
+      restoreUserSettings(before);
+    }
+  });
+
+  it('F-2307 AC-24 (c96-nowhere): after the flows of this feature, the passphrase is in no file of the profile, the logs, the extensions’ folders or the user’s home, and the search finds it where the harness keeps it', () => {
+    const folder = variable('HARNESS_RUN_FOLDER');
+    const places = [
+      {client: path.join(folder, 'home-passphrase')},
+      {client: variable('HARNESS_USER_DATA')},
+      {client: editorLogsFolder()},
+      ...readdirSync(folder)
+        .filter(name => name.startsWith('extensions'))
+        .map(name => ({client: path.join(folder, name)})),
+      {client: variable('REMOTE_OSS_ACCEPTANCE_LOG')},
+      {client: variable('REMOTE_OSS_ACCEPTANCE_RECORD')},
+    ];
+    deepStrictEqual(
+      {
+        found: secretHits([passphrase()], places),
+        control: secretHits(
+          [passphrase()],
+          [{client: path.join(folder, 'passphrase')}],
+        ).length,
+      },
+      {found: [], control: 1},
+    );
   });
 });

@@ -36,6 +36,8 @@ export const PASSKEY_VARIANTS = [
   'nokey-agent-none',
   'agent-other-file',
   'several-files',
+  'certonly',
+  'certonly-nocert',
 ] as const;
 
 /** The names of the copies of the passphrase key's alias: `passkey-1` to the last. */
