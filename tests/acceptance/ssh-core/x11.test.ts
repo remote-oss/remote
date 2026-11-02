@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   appendScript,
   connectedWithin,
+  connectionLog,
   openWindow,
   onHostAs,
   readUserSettings,
@@ -16,6 +17,8 @@ import {
   userSettings,
   variable,
   waitFor,
+  windowEvents,
+  windowNames,
   windowState,
 } from '../windows/harness.ts';
 import {hostSessionIds} from '../windows/pty-support.ts';
@@ -62,6 +65,20 @@ function clientFileKinds(): string[] {
     .filter(file => !noise.test(file))
     .map(file => file.replace(/[0-9a-f]{32}/g, 'H').replace(/\d+/g, 'N'))
     .sort();
+}
+
+/** Runs New Window on Active Host in window `name` and gives the empty window it opens; a window that does not open adds the windows and the log to the error. */
+async function newWindowFrom(name: string): Promise<string> {
+  try {
+    return await nextEmptyWindow(() =>
+      inWindow(name, 'opensshremotes.openEmptyWindowOnCurrentHost'),
+    );
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; the windows: ${JSON.stringify(windowNames())}; ${name}'s last events: ${JSON.stringify(windowEvents(name).slice(-6))}\nthe log:\n${connectionLog().slice(-40).join('\n')}`,
+      {cause: caught},
+    );
+  }
 }
 
 describe('F-2312: X11 forwarding into the remote environment', function () {
@@ -202,10 +219,7 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
     await keepingSettings(async () => {
       await x11Window('c84-first', 'x11fwd');
       const first = await inTerminal('c84-first', DISPLAY_PROBE);
-      const second = await nextEmptyWindow(() =>
-        inWindow('c84-first', 'opensshremotes.openEmptyWindowOnCurrentHost'),
-      );
-      await connectedWithin(second, 90_000).catch(() => undefined);
+      const second = await newWindowFrom('c84-first');
       await waitFor(
         'the second window to be remote',
         async () => (await windowState(second)).remoteName === 'ssh-remote',
