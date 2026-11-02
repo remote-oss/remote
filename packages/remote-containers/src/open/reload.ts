@@ -4,6 +4,7 @@
  * right before it.
  */
 
+import {posix} from 'node:path';
 import {encodeAuthority, openRemote, type OpenerHost} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import {
@@ -39,8 +40,10 @@ export interface ReloadRequest {
   title: string;
   /** The window the container opens in: this one, which leaves the container it holds, or a new one. */
   target: 'current' | 'new';
-  /** The host folder the container is for. */
+  /** The host folder the container is for: for a workspace, the folder that holds its `.code-workspace` file. */
   folder: string;
+  /** Set for a saved workspace: the path of its `.code-workspace` file relative to `folder`, with `/` separators. */
+  workspaceFile?: string;
   /** The Docker executable the context is asked of. */
   dockerFile: string;
   chosen: {configFile: string; workspaceFolder: string};
@@ -91,11 +94,17 @@ export async function reloadIntoContainer(
       target: {payload},
       rawHostString: payload,
     }),
-    {
-      path: chosen.workspaceFolder,
-      pathKind: 'folder',
-      target: request.target,
-    },
+    request.workspaceFile === undefined
+      ? {
+          path: chosen.workspaceFolder,
+          pathKind: 'folder',
+          target: request.target,
+        }
+      : {
+          path: posix.join(chosen.workspaceFolder, request.workspaceFile),
+          pathKind: 'workspace',
+          target: request.target,
+        },
   );
   if (opened.kind === 'rejected') {
     logger.warn(`${title} was refused: ${opened.reason}`);

@@ -851,8 +851,20 @@ export async function activate(
         window: {
           remoteName: () => vscode.env.remoteName,
           folders: windowFolders,
+          workspaceFile: () => {
+            const file = vscode.workspace.workspaceFile;
+            return file === undefined
+              ? undefined
+              : {scheme: file.scheme, fsPath: file.fsPath};
+          },
           serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
         },
+        informModal: text =>
+          vscode.window.showInformationMessage('', {
+            modal: true,
+            detail: text,
+          }),
+        translate,
         ensureTrusted: commandTitle =>
           ensureTrusted(served.trust, {
             translate,
