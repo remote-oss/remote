@@ -2885,6 +2885,14 @@ export async function editorTabs(name: string): Promise<EditorTab[]> {
   return (await editorGroups(name)).flat();
 }
 
+/** Whether the keyboard focus of window `name` is inside the Output panel. */
+export async function outputPanelFocused(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    'document.activeElement?.closest(\'[id="workbench.panel.output"]\') != null',
+  );
+}
+
 /** Whether the keyboard focus of window `name` is inside a text editor. */
 export async function editorHasFocus(name: string): Promise<boolean> {
   return evaluate<boolean>(
