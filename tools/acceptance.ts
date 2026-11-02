@@ -367,7 +367,7 @@ export function sshConfigOf(
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
- * host's other accounts: `password` (login by password only), `password-retry` (the password account that asks again after a wrong password, three prompts, by password only, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
+ * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
@@ -442,7 +442,7 @@ export function harnessSshConfig(
     ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
     ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
     // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
-    ...accountAlias('password-retry', 'harness-pw', port, runFolder, [
+    ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
       'PubkeyAuthentication no',
       'PreferredAuthentications password',
       'NumberOfPasswordPrompts 3',

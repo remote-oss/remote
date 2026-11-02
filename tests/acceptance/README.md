@@ -722,7 +722,7 @@ VSCodium server archive ends in `UnpackFailed`, so the existing rows stop at the
 
 ## The host's other accounts (D-85)
 
-Besides `harness`, the host image has thirteen users, and the run's `ssh_config` has an alias for each use of them. The
+Besides `harness`, the host image has fourteen users, and the run's `ssh_config` has an alias for each use of them. The
 `Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
 `sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
 
@@ -731,6 +731,7 @@ Besides `harness`, the host image has thirteen users, and the run's `ssh_config`
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
 | `twofactor` | `harness-2fa` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password and then a one-time code of the run's secret (`HARNESS_TOTP_FILE`; RFC 6238, six digits, a window of three steps) |
 | `expired` | `harness-expired` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password, marked expired, so the login asks for the current password and a new one twice |
+| `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |

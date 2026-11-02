@@ -752,7 +752,7 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('password-retry'),
       [
-        ...sharedLines('password-retry', 'harness-pw'),
+        ...sharedLines('password-retry', 'harness-pwonly'),
         '  PubkeyAuthentication no',
         '  PreferredAuthentications password',
         '  NumberOfPasswordPrompts 3',

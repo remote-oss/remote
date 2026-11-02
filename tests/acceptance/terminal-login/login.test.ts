@@ -35,18 +35,22 @@ const CONNECT_TIMEOUT = 'remote.SSH.connectTimeout';
 const LOCAL_SERVER = 'remote.SSH.useLocalServer';
 
 /** The folder of the password account that a window opens, one per row, so that each window has a name of its own. */
-async function passwordFolder(label: string): Promise<string> {
-  await onHostAs('harness-pw', 'mkdir', '-p', `/home/harness-pw/${label}`);
+async function passwordFolder(account: string, label: string): Promise<string> {
+  await onHostAs(account, 'mkdir', '-p', `/home/${account}/${label}`);
   return label;
 }
 
-/** Opens a window on folder `label` of the password account behind the alias `host`, from the local window; the window is named `label`. */
-async function openAccountWindow(host: string, label: string): Promise<string> {
-  await passwordFolder(label);
+/** Opens a window on folder `label` of the home of `account`, the user behind the alias `host`, from the local window; the window is named `label`. */
+async function openAccountWindow(
+  host: string,
+  label: string,
+  account = 'harness-pw',
+): Promise<string> {
+  await passwordFolder(account, label);
   void inWindow(
     'local',
     'acceptance.agent.openWindow',
-    `vscode-remote://ssh-remote+${host}/home/harness-pw/${label}`,
+    `vscode-remote://ssh-remote+${host}/home/${account}/${label}`,
   );
   return label;
 }
@@ -58,6 +62,9 @@ function openPasswordWindow(label: string): Promise<string> {
 
 /** The password prompt of the install terminal of the password account. */
 const PASSWORD_PROMPT = "harness-pw@127.0.0.1's password:";
+
+/** The password prompt of the install terminal of the password-only account. */
+const PASSWORD_ONLY_PROMPT = "harness-pwonly@127.0.0.1's password:";
 
 /** A tab label as the panel lists it: core adds the terminal's description after the name. */
 function tabName(label: string): string {
@@ -105,11 +112,17 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     const shown = {
       panel: await panelShown(name),
       focused: await terminalFocused(name),
-      quick: await quickPickOf(name),
     };
     const facts = await untilPrompt(name, PASSWORD_PROMPT);
+    // The extension asks its questions a moment after the prompt is printed.
+    await new Promise(resolve => setTimeout(resolve, 2000));
     deepStrictEqual(
-      {...shown, terminals: facts?.terminals, active: facts?.active},
+      {
+        ...shown,
+        quick: await quickPickOf(name),
+        terminals: facts?.terminals,
+        active: facts?.active,
+      },
       {
         panel: true,
         focused: true,
@@ -131,14 +144,21 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       async () => (await windowState(name)).remoteName === 'ssh-remote',
       120_000,
     );
+    const shown = {
+      panel: await panelShown(name),
+      focused: await terminalFocused(name),
+      quick: await quickPickOf(name),
+    };
     const facts = await terminalFacts(name);
     deepStrictEqual(
+      {...shown, terminals: facts.terminals, active: facts.active},
       {
-        terminals: facts.terminals,
-        active: facts.active,
-        quick: await quickPickOf(name),
+        panel: true,
+        focused: true,
+        quick: undefined,
+        terminals: ['install'],
+        active: 'install',
       },
-      {terminals: ['install'], active: 'install', quick: undefined},
     );
     await closeWindow(name);
   });
@@ -179,8 +199,12 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
 
   it('F-2308 AC-16 (c82-wrong): a wrong password typed in the terminal brings ssh’s Permission denied line and the prompt again, and no editor UI', async () => {
     await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openAccountWindow('password-retry', 'c82-wrong');
-    await untilPrompt(name, PASSWORD_PROMPT);
+    const name = await openAccountWindow(
+      'password-retry',
+      'c82-wrong',
+      'harness-pwonly',
+    );
+    await untilPrompt(name, PASSWORD_ONLY_PROMPT);
     await typeInTerminal(name, 'not-the-password\n');
     const facts = await untilPrompt(
       name,
@@ -189,7 +213,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     deepStrictEqual(
       {
         prompts: (
-          facts?.text?.match(/harness-pw@127\.0\.0\.1's password:/g) ?? []
+          facts?.text?.match(/harness-pwonly@127\.0\.0\.1's password:/g) ?? []
         ).length,
         quick: await quickPickOf(name),
         dialog: await dialogOf(name),
@@ -204,12 +228,16 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
 
   it('F-2308 AC-25 (c82-denied): wrong passwords as often as ssh allows end in the Permission denied dialog, the indicator is disconnected, the install terminal is gone, and Retry makes a new revealed one with the prompt', async () => {
     await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openAccountWindow('password-retry', 'c82-denied');
+    const name = await openAccountWindow(
+      'password-retry',
+      'c82-denied',
+      'harness-pwonly',
+    );
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await untilPrompt(
         name,
         attempt === 0
-          ? PASSWORD_PROMPT
+          ? PASSWORD_ONLY_PROMPT
           : 'Permission denied, please try again.',
       );
       await typeInTerminal(name, `wrong-${String(attempt)}\n`);
@@ -231,14 +259,13 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       focused: await terminalFocused(name),
       tabs: (await terminalTabsOf(name)).map(tabName),
     };
-    const facts = await untilPrompt(name, PASSWORD_PROMPT);
+    const facts = await untilPrompt(name, PASSWORD_ONLY_PROMPT);
     deepStrictEqual(
       {failed, again, retried: facts?.terminals},
       {
         failed: {
           dialog: [
-            // The list in the parentheses is the host's own: its password account also offers keyboard-interactive.
-            'Could not establish connection to "password-retry": Permission denied (password,keyboard-interactive).',
+            'Could not establish connection to "password-retry": Permission denied (password).',
             ['Close Remote', 'More Actions...', 'Retry'],
           ],
           indicator: true,
