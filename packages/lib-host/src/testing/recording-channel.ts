@@ -47,6 +47,8 @@ export interface CopyAnswer {
   /** Whether this answer is for the given remote path. */
   matches: (remotePath: string) => boolean;
   ending: {kind: 'copied'} | FailingEnding | HeldEnding;
+  /** Inputs the copy's login shows: each is told to the request's `onInput` that many milliseconds after the copy starts. */
+  inputs?: ReadonlyArray<{open: boolean; afterMilliseconds: number}>;
 }
 
 /** One call the channel received, in the order received. */
@@ -166,11 +168,16 @@ export class RecordingChannel implements HostChannel {
     if (request.cancellation.aborted) {
       return cancelledBy(request.cancellation);
     }
-    const {ending} = takeAnswer(
+    const {ending, inputs} = takeAnswer(
       this.copyAnswers,
       candidate => candidate.matches(request.remotePath),
       `a copy to ${request.remotePath}`,
     );
+    for (const input of inputs ?? []) {
+      setTimeout(() => {
+        request.onInput?.(input.open);
+      }, input.afterMilliseconds);
+    }
     switch (ending.kind) {
       case 'copied':
         return {kind: 'copied'};

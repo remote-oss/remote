@@ -72,17 +72,6 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-2: the next connect logs it again', () => {
-    const {watch, sink} = watching();
-    logSshLines(watch.logger, [REFUSED], undefined);
-    watch.begin();
-    logSshLines(watch.logger, [REFUSED], undefined);
-    deepStrictEqual(
-      sink.lines.filter(line => line.message === SETTING_TEXT).length,
-      2,
-    );
-  });
-
   it('F-2604 AC-3: the refusal is recorded once, as the classifier gives it', () => {
     const {watch, hints} = watching();
     logSshLines(watch.logger, [REFUSED, REFUSED], undefined);
@@ -161,7 +150,7 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-15: a new helper after the old one was killed is started by the connect again, and logs the setting text again', () => {
+  it('F-2604 AC-15: a new helper after the old one was killed is started by the connect again, and logs the setting text again, as the next connect of any started login does', () => {
     const {watch, sink} = watching();
     watch.begin();
     watch.attach(true);
@@ -175,13 +164,13 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-15: a connect on which nothing was attached logs the setting text, as a session of one window does', () => {
+  it('F-2604 AC-15: a refusal line that arrives before the connection is open logs no setting text, whoever started the login', () => {
     const {watch, sink} = watching();
     watch.begin();
     logSshLines(watch.logger, [REFUSED], undefined);
     deepStrictEqual(
       sink.lines.filter(line => line.message === SETTING_TEXT).length,
-      1,
+      0,
     );
   });
 

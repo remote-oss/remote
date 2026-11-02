@@ -29,9 +29,14 @@ import {
   type TerminalEnd,
   TerminalSessionRunner,
   type TerminalLogin,
+  type FailureHint,
 } from 'lib-ssh';
 import {goesOnAfterLoginTimeout} from './connection-request.ts';
-import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
+import {
+  clientRefusal,
+  CONNECT_WAIT_TIMEOUT,
+  ofClassification,
+} from './failure.ts';
 import {isForwardingLine, logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
@@ -77,6 +82,8 @@ export interface TerminalConnectionDependencies {
   terminalName(): LoginTerminalName;
   /** What decides the length of the connect wait: the timeout, whether the host set it, and the ceiling. */
   connectWait(): ConnectWaitSettings;
+  /** Keeps `hint` for the session, as the hint store does. */
+  recordHint(hint: FailureHint): void;
   logger: Logger;
 }
 
@@ -88,15 +95,10 @@ function failureOf(end: TerminalEnd, lines: readonly string[]): StepFailure {
   if (end.code === undefined && !end.hadOutput && end.reason !== 'user') {
     return {kind: 'cancelled', reason: {id: 'trustRefused'}};
   }
-  const classification = classify(lines, end.code, 'connection', 'terminal');
-  return {
-    kind: classification.kind,
-    ...(classification.reason === undefined
-      ? {}
-      : {reason: classification.reason}),
-    hints: classification.hints,
-    ...(end.code === undefined ? {} : {sshExitStatus: end.code}),
-  };
+  return ofClassification(
+    classify(lines, end.code, 'connection', 'terminal'),
+    end.code,
+  );
 }
 
 /** The step that opens the connection of a connect in terminal mode. */
@@ -267,6 +269,16 @@ export function openTerminalConnectionStep(
 
       const splitter = new LineSplitter(line => {
         lines.push(line);
+        // With our dynamic forward on this run, ssh's refusal of forwarding is the end of the window's tunnel.
+        const refusal =
+          socksPort === undefined ? undefined : clientRefusal(line);
+        if (refusal !== undefined && !finished) {
+          refusal.hints.forEach(hint => {
+            dependencies.recordHint(hint);
+          });
+          fail(ofClassification(refusal));
+          return;
+        }
         if (
           !authenticated &&
           !finished &&

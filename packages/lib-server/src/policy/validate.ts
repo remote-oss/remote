@@ -13,6 +13,8 @@ const FIELD_NAMES: string[] = [
   'cleanup',
   'installMode',
   'prefetch',
+  'downloadStallMilliseconds',
+  'transferStallMilliseconds',
 ];
 
 const KNOWN_PLACEMENT_KINDS = new Set<string>([
@@ -74,6 +76,8 @@ export function validatePolicyRecord(
     verification: readonly string[];
     allowedExtraStartOptions: readonly string[];
     extensionEntries: string;
+    downloadStallMilliseconds: number;
+    transferStallMilliseconds: number | undefined;
     installUmask: string;
     requirementsCheck: string;
     cleanup: {kind: string; count: number};
@@ -141,6 +145,15 @@ export function validatePolicyRecord(
   }
   if (!KNOWN_INSTALL_UMASKS.has(asData.installUmask)) {
     problem('installUmask', 'invalid value');
+  }
+  if (!positiveInteger(asData.downloadStallMilliseconds)) {
+    problem('downloadStallMilliseconds', 'must be a positive integer');
+  }
+  if (
+    asData.transferStallMilliseconds !== undefined &&
+    !positiveInteger(asData.transferStallMilliseconds)
+  ) {
+    problem('transferStallMilliseconds', 'must be a positive integer');
   }
   const prefetch = asData.prefetch;
   if (prefetch.kind === 'onProductUpdate') {

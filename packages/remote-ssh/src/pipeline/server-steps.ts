@@ -420,7 +420,16 @@ export function createServerSteps(
           }),
           clientFolder: dependencies.clientFolder,
           cache: dependencies.archiveCache,
-          downloadBounds: dependencies.downloadBounds,
+          downloadBounds: {
+            ...dependencies.downloadBounds,
+            stallMilliseconds: dependencies.policy.downloadStallMilliseconds,
+          },
+          ...(dependencies.policy.transferStallMilliseconds === undefined
+            ? {}
+            : {
+                copyStallMilliseconds:
+                  dependencies.policy.transferStallMilliseconds,
+              }),
           temporaryToken: dependencies.newTemporaryToken(),
           verification: dependencies.policy.verification,
           hostFolder: host.temporaryFolder,
@@ -475,7 +484,10 @@ export function createServerSteps(
           transfer: {
             clientFolder: dependencies.clientFolder,
             cache: dependencies.archiveCache,
-            downloadBounds: dependencies.downloadBounds,
+            downloadBounds: {
+              ...dependencies.downloadBounds,
+              stallMilliseconds: dependencies.policy.downloadStallMilliseconds,
+            },
             temporaryToken: dependencies.newTemporaryToken(),
             verification: dependencies.policy.verification,
             hostFolder: host.temporaryFolder,

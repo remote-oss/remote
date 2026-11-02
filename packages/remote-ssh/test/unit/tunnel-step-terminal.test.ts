@@ -4,6 +4,7 @@ import {FakeClock} from 'lib-helper/testing/fake-clock';
 import type {TunnelSettings} from 'lib-forwarding';
 import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import {
+  type FailureHint,
   type Forward,
   type Invocation,
   type ConnectWaitSettings,
@@ -89,7 +90,11 @@ function stepWith(
       : port === undefined
         ? {noPort: true}
         : {port};
+  const recorded: FailureHint[] = [];
   const step = openTunnelStep({
+    recordHint: hint => {
+      recorded.push(hint);
+    },
     settings: () => options.settingsNow?.() ?? options.settings ?? SECOND_SSH,
     local,
     scheduler: clock.scheduler(),
@@ -165,6 +170,7 @@ function stepWith(
     disposals,
     waits: () => waits,
     portsChosen: () => portsChosen,
+    recorded,
   };
 }
 
@@ -363,6 +369,44 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     await settled();
     return {...context, pending};
   }
+
+  const MITM_LINE =
+    'Port forwarding is disabled to avoid man-in-the-middle attacks.';
+
+  it('connect-123, F-2604 AC-13: the line ssh gives for a changed key under StrictHostKeyChecking no fails the step at once with the reason Port forwarding is disabled, stops the session and records the hint', async () => {
+    const context = stepWith();
+    const pending = context.open();
+    await settled();
+    context.opened().write(`${MITM_LINE}\n`);
+    await settled();
+    deepStrictEqual(
+      [
+        await pending,
+        context.opened().disposed,
+        context.recorded.map(hint => [hint.status, hint.details]),
+        context.local.connected.length,
+      ],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'forwardingDisabled',
+            reason: {id: 'S107'},
+            hints: context.recorded,
+          },
+        },
+        true,
+        [['MitmPortForwardingDisabled', {id: 'S107'}]],
+        0,
+      ],
+    );
+  });
+
+  it('connect-123: the other forward-failure line of the tunnel still holds the step to its bound, and records no hint', async () => {
+    const context = await forwardFailed();
+    await advance(context.clock, 9_900, 100);
+    deepStrictEqual(context.recorded, []);
+  });
 
   it('F-2104 AC-35: a forward-failure line then the success line stops the session, logs the line and tells the caller the forward is awaited, and the step holds', async () => {
     const context = await forwardFailed();

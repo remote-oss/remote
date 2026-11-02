@@ -5,6 +5,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   cliNotUsedLine,
   createServerSteps,
+  type ServerStepDependencies,
 } from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {type ServerPolicyRecord, sshPolicyFor} from 'lib-server';
@@ -1126,6 +1127,26 @@ describe('the server steps: the default extensions', () => {
   });
 });
 
+/** Runs the transfer of a downloading plan with `changes` to the dependencies; the host answers `status`. */
+async function transferWith(
+  changes: Partial<ServerStepDependencies>,
+  status: string,
+): Promise<void> {
+  const steps = createServerSteps(dependencies(changes));
+  const result = steps.plan(INPUT, HOST);
+  if (!('plan' in result) || result.plan.kind !== 'download') {
+    throw new Error('the plan should download');
+  }
+  await steps.transfer(
+    INPUT,
+    leaseOn(channelAnswering(lines(status))),
+    HOST,
+    result.plan,
+    () => undefined,
+    new AbortController().signal,
+  );
+}
+
 describe('the host download that is refused with local download off (card connect-121)', () => {
   /** What `onHostDownloadRefused` heard when the host answered `status` under `policy`; the client's download fails. */
   async function heard(
@@ -1133,8 +1154,8 @@ describe('the host download that is refused with local download off (card connec
     policy: ServerPolicyRecord,
   ): Promise<string[]> {
     const causes: string[] = [];
-    const steps = createServerSteps(
-      dependencies({
+    await transferWith(
+      {
         policy,
         download: {
           download: () =>
@@ -1143,19 +1164,8 @@ describe('the host download that is refused with local download off (card connec
         onHostDownloadRefused: cause => {
           causes.push(cause);
         },
-      }),
-    );
-    const result = steps.plan(INPUT, HOST);
-    if (!('plan' in result) || result.plan.kind !== 'download') {
-      throw new Error('the plan should download');
-    }
-    await steps.transfer(
-      INPUT,
-      leaseOn(channelAnswering(lines(status))),
-      HOST,
-      result.plan,
-      () => undefined,
-      new AbortController().signal,
+      },
+      status,
     );
     return causes;
   }
@@ -1194,5 +1204,46 @@ describe('the host download that is refused with local download off (card connec
 
   it('F-2405 AC-20: another failure of the host with the mode off is not told', async () => {
     deepStrictEqual(await heard('UnpackFailed', sshPolicyFor('off')), []);
+  });
+});
+
+describe('the stall bounds of the transfer (card connect-122)', () => {
+  /** The stall bound the client download is asked with under `policy`. */
+  async function downloadStallUnder(
+    policy: ServerPolicyRecord,
+  ): Promise<number | undefined> {
+    const asked: number[] = [];
+    await transferWith(
+      {
+        policy,
+        download: {
+          download: request => {
+            asked.push(request.stallMilliseconds);
+            return Promise.resolve({
+              kind: 'failed' as const,
+              detail: 'offline',
+            });
+          },
+        },
+      },
+      'Ok',
+    );
+    return asked[0];
+  }
+
+  it('F-2405 AC-21: the client download is asked for the stall bound of the policy', async () => {
+    deepStrictEqual(
+      [
+        await downloadStallUnder({
+          ...sshPolicyFor('always'),
+          downloadStallMilliseconds: 12_345,
+        }),
+        await downloadStallUnder({
+          ...sshPolicyFor('always'),
+          transferStallMilliseconds: undefined,
+        }),
+      ],
+      [12_345, 30_000],
+    );
   });
 });

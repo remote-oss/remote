@@ -90,6 +90,7 @@ function stepWith(
         ? {noPort: true}
         : {port};
   const step = openTunnelStep({
+    recordHint: () => undefined,
     settings: () => options.settings ?? SOCKS_SETTINGS,
     local,
     scheduler: clock.scheduler(),

@@ -1,3 +1,4 @@
+import type {FailureHint} from 'lib-ssh';
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {NOISE_LINES} from 'lib-host/testing/noise';
@@ -90,6 +91,7 @@ interface Fixture {
   terminals: RecordingTerminals;
   questions: string[];
   questionsDisposed: number;
+  hints: FailureHint[];
   runners: SessionRunner[];
   dependencies: TerminalConnectionDependencies;
   logged(): string[];
@@ -126,6 +128,7 @@ function fixture(
     terminals,
     questions: [],
     questionsDisposed: 0,
+    hints: [],
     runners: [],
     dependencies: undefined as never,
     open: cancellation =>
@@ -138,6 +141,9 @@ function fixture(
   let markers = 0;
   made.dependencies = {
     terminals,
+    recordHint: hint => {
+      made.hints.push(hint);
+    },
     installRequest: (input, terms, socksPort) => requestFor(socksPort),
     dynamicForwarding: () => dynamic,
     freePort: () => Promise.resolve(41000),
@@ -625,6 +631,38 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     terminal.write(AUTHENTICATED_ONLY);
     terminal.write('LAYER1-READY\n');
     deepStrictEqual((await result).kind, 'done');
+  });
+
+  it('connect-123, F-2604 AC-13: with the SOCKS forward on the install run, the line that says ssh disabled forwarding for a changed key fails the connect at once with the reason Port forwarding is disabled, and keeps the hint', async () => {
+    const made = fixture({dynamic: true});
+    const {result, terminal} = await started(made);
+    terminal.write(
+      'Port forwarding is disabled to avoid man-in-the-middle attacks.\n',
+    );
+    deepStrictEqual(
+      [await result, made.hints.map(hint => hint.status)],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'forwardingDisabled',
+            reason: {id: 'S107'},
+            hints: made.hints,
+          },
+        },
+        ['MitmPortForwardingDisabled'],
+      ],
+    );
+  });
+
+  it('connect-123: with no SOCKS forward on the install run the same line changes nothing for it', async () => {
+    const made = fixture();
+    const {terminal} = await started(made);
+    terminal.write(
+      'Port forwarding is disabled to avoid man-in-the-middle attacks.\n',
+    );
+    await settled();
+    deepStrictEqual(made.hints, []);
   });
 
   it('F-2704 AC-11: a login shell that outlasted its bound fails the connect as a timeout, and is logged, when the probe has the platform to find out', async () => {

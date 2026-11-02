@@ -15,6 +15,9 @@ function frozen(record: ServerPolicyRecord): ServerPolicyRecord {
   return record;
 }
 
+/** How long Remote - SSH waits without progress on a client download or on the copy to the host. */
+const SSH_STALL_MILLISECONDS = 30 * 1000;
+
 /** The SSH policy: the host downloads the archive, nothing is cached, and five installs are kept. */
 export const SSH_POLICY: ServerPolicyRecord = frozen({
   downloadPlacement: {kind: 'hostFirst', mode: 'auto'},
@@ -28,6 +31,8 @@ export const SSH_POLICY: ServerPolicyRecord = frozen({
   cleanup: {kind: 'keepNewest', count: 5},
   installMode: 'singleScript',
   prefetch: {kind: 'none'},
+  downloadStallMilliseconds: SSH_STALL_MILLISECONDS,
+  transferStallMilliseconds: SSH_STALL_MILLISECONDS,
 });
 
 /** Where Remote - SSH may download the server archive: `remote.SSH.localServerDownload`'s values. */
@@ -57,6 +62,8 @@ export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   cleanup: {kind: 'onlyCurrentKeepLeftovers'},
   installMode: 'singleScript',
   prefetch: {kind: 'none'},
+  downloadStallMilliseconds: 60 * 1000,
+  transferStallMilliseconds: undefined,
 });
 
 const WSL_PREFETCH_SETTING_KEY = 'remote.WSL.downloadInBackground';
@@ -91,6 +98,8 @@ export function wslPolicy(input: {
       platformWindowDays: 14,
       licence: 'skipUnaccepted',
     },
+    downloadStallMilliseconds: 60 * 1000,
+    transferStallMilliseconds: undefined,
   };
   return frozen(record);
 }

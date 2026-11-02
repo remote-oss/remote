@@ -401,6 +401,9 @@ export function wiringPortsOf(
       scheduler: machine.scheduler,
       newMarker: machine.helpers.newNonce,
       terminalName: () => 'install',
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
       ...loginSurfaces,
     },
     server: {
@@ -448,6 +451,9 @@ export function wiringPortsOf(
     },
     tunnel: {
       terminals: surfaces.terminals,
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
       ...loginSurfaces,
       settings: () => tunnelSettingsOf(settings),
       local: machine.local,

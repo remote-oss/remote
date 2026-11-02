@@ -281,6 +281,7 @@ function portsOf(
       return {dispose: () => undefined};
     },
     terminal: {
+      recordHint: () => undefined,
       terminals: seen.terminals,
       scheduler: seen.clock.scheduler(),
       dynamicForwarding: () => false,
@@ -302,6 +303,7 @@ function portsOf(
           },
     ),
     tunnel: {
+      recordHint: () => undefined,
       terminals: seen.terminals,
       attachQuestions: () => ({
         onQuestion: () => undefined,

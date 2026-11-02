@@ -21,7 +21,7 @@ export interface RefusalPort {
 /** A logger that watches the lines of ssh it is given, and what starts a connect. */
 export interface RefusalWatch {
   logger: Logger & Required<SshLogger>;
-  /** Starts a connect: the next refusal is recorded again, and logged again unless its connection logged it. */
+  /** Starts a connect: the next refusal is recorded again, and logged only when the connect has started the login. */
   begin(): void;
   /** The connect's connection is open: whether this connect started its login. A connect that joined one logs no setting line. */
   attach(startedLogin: boolean): void;
@@ -84,7 +84,8 @@ export function refusalWatchOf(
     logger: watching,
     begin: () => {
       state.recorded = false;
-      state.logged = false;
+      // Until the connection is open and says it started the login, a refusal line relayed to this window is another connect's.
+      state.logged = true;
       port.begin();
     },
     attach: startedLogin => {
