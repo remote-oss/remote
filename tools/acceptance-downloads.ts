@@ -538,7 +538,7 @@ function answerToDownloaders(
   archiveFile: string | undefined,
   held: Set<Socket>,
 ): void {
-  if (!/wget|curl/i.test(String(request.headers['user-agent'] ?? ''))) {
+  if (!/wget|curl/i.test(request.headers['user-agent'] ?? '')) {
     answerArchive(request, response, archiveFile, held);
     return;
   }
