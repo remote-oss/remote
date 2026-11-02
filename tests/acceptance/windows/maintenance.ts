@@ -246,15 +246,17 @@ export async function closeAllButLocal(): Promise<void> {
   leftBefore = await hostServerProcesses();
 }
 
-/** Ends the host's servers and removes their installs, so that the next connect installs the server afresh. */
-export async function freshHost(): Promise<void> {
+/** Ends the servers of `account` on the host and removes their installs, so that the next connect installs the server afresh. */
+export async function freshHost(account = 'harness'): Promise<void> {
   await closeAllButLocal();
   // The bracket keeps pkill's pattern from matching this shell's own command line.
-  const servers = `${DATA_FOLDER.replace('/.', '/[.]')}/bin/`;
-  await onHost(
+  const folder = DATA_FOLDER.replace('/harness/', `/${account}/`);
+  const servers = `${folder.replace('/.', '/[.]')}/bin/`;
+  await onHostAs(
+    account,
     'sh',
     '-c',
-    `pkill -f '${servers}' || true; rm -rf '${DATA_FOLDER}/bin' '${DATA_FOLDER}/cli'`,
+    `pkill -f '${servers}' || true; rm -rf '${folder}/bin' '${folder}/cli'`,
   );
 }
 
