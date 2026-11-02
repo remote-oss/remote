@@ -19,6 +19,7 @@ const SIGNAL = new AbortController().signal;
 
 const SETTINGS: TermsSettings = {
   useLocalServer: true,
+  useLocalServerSetting: true,
   remotePlatform: {},
   windowsRemotes: [],
   enableRemoteCommand: false,

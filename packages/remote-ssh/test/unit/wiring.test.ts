@@ -205,6 +205,7 @@ function portsOf(
         remotePlatform: {},
         windowsRemotes: [],
         useLocalServer: true,
+        useLocalServerSetting: true,
         enableRemoteCommand: false,
       }),
       pickPlatform: () => Promise.resolve(undefined),
@@ -911,6 +912,7 @@ describe('the stage that precedes a prompt (card connect-78)', () => {
             remotePlatform: {},
             windowsRemotes: [],
             useLocalServer: false,
+            useLocalServerSetting: false,
             enableRemoteCommand: false,
           }),
           pickPlatform: () => {
