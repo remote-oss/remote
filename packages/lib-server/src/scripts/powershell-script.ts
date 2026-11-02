@@ -354,6 +354,144 @@ const CLEANUP_BODY: readonly string[] = [
   "Complete-Step 'Ok'",
 ];
 
+/** The CLI's install: its archive given or downloaded into a stage, unpacked, and its program moved into the data folder. */
+const INSTALL_CLI_BODY: readonly string[] = [
+  'function Clear-Staging {',
+  '  Remove-Item -LiteralPath $CLI_STAGING -Recurse -Force -ErrorAction SilentlyContinue',
+  "  Get-ChildItem -Path ($CLI_STAGING + '.stage.*') -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue",
+  "  $CliBin = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin')",
+  '  if (@(Get-ChildItem -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue).Count -eq 0) {',
+  '    Remove-Item -LiteralPath $CliBin -Force -ErrorAction SilentlyContinue',
+  '  }',
+  '}',
+  '$StartedAt = Get-NowSeconds',
+  "if ($DATA_ROOT -eq '' -or $CLI_NAME -eq '') {",
+  "  Complete-Step 'CreateInstallDirFailed'",
+  '}',
+  'try {',
+  '  New-Folder $INSTALL_DIR',
+  '} catch {',
+  '  Write-Failed $INSTALL_DIR (Get-FailureMessage $_)',
+  '}',
+  'Enter-LockOrComplete $COMMIT',
+  'if (Test-Path -LiteralPath $CLI_FILE -PathType Leaf) {',
+  "  Add-Fact 'cli.path' $CLI_FILE",
+  "  Exit-Step 'Ok'",
+  '}',
+  'try {',
+  '  New-Folder $CLI_STAGING',
+  '} catch {',
+  '  $Message = Get-FailureMessage $_',
+  '  Exit-Lock',
+  '  Write-Failed $CLI_STAGING $Message',
+  '}',
+  'Initialize-Environment',
+  "if ($ARCHIVE_PATH -ne '') {",
+  '  $Archive = $ARCHIVE_PATH',
+  '} else {',
+  "  $Archive = $CLI_STAGING + '.archive.' + $PID",
+  '  if ((Save-Archive $ARCHIVE_URL $Archive) -ne 0) {',
+  '    Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue',
+  '    Clear-Staging',
+  "    Exit-Step 'ServerDownloadFailed'",
+  '  }',
+  '}',
+  '$DownloadedAt = Get-NowSeconds',
+  '$Unpacked = Expand-ServerArchive $Archive $CLI_STAGING',
+  "if ($ARCHIVE_PATH -eq '') {",
+  '  Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue',
+  '}',
+  '$Staged = [System.IO.Path]::Combine($CLI_STAGING, $LAUNCHER)',
+  'if (-not $Unpacked -or -not (Test-Path -LiteralPath $Staged -PathType Leaf)) {',
+  '  Clear-Staging',
+  "  Exit-Step 'UnpackFailed'",
+  '}',
+  'try {',
+  '  Move-Item -LiteralPath $Staged -Destination $CLI_FILE -Force -ErrorAction Stop',
+  '} catch {',
+  '  Clear-Staging',
+  "  Exit-Step 'UnpackFailed'",
+  '}',
+  'Clear-Staging',
+  "Add-Fact 'cli.path' $CLI_FILE",
+  "Add-Fact 'timing.download' ([string](($DownloadedAt - $StartedAt) * 1000))",
+  "Add-Fact 'timing.install' ([string](Get-ElapsedMilliseconds $DownloadedAt))",
+  "Exit-Step 'Ok'",
+];
+
+/**
+ * The CLI's start: the token checked or rewritten in the CLI's data folder, the CLI launched with its parent when the
+ * native query gives one, and its port waited for in its log.
+ */
+const START_CLI_BODY: readonly string[] = [
+  'if (-not (Test-Path -LiteralPath $CLI_FILE -PathType Leaf)) {',
+  "  Complete-Step 'ServerFailedToStart'",
+  '}',
+  'if (-not $env:VSCODE_CLI_REQUIRE_TOKEN) {',
+  "  Add-Fact 'cli.tokenMissing' 'yes'",
+  "  Complete-Step 'ServerFailedToStart'",
+  '}',
+  "$TokenFile = [System.IO.Path]::Combine($CLI_DATA, 'connection-token')",
+  'try {',
+  '  New-Folder $CLI_DATA',
+  '  if (-not (Test-ConnectionToken $TokenFile)) {',
+  '    Write-ConnectionToken $TokenFile',
+  '  }',
+  '} catch {',
+  "  Complete-Step 'ServerFailedToStart'",
+  '}',
+  'if (-not (Test-ConnectionToken $TokenFile)) {',
+  "  Add-Fact 'cli.tokenInvalid' 'yes'",
+  "  Complete-Step 'ServerFailedToStart'",
+  '}',
+  "Add-Fact 'cli.connectionToken' ([System.IO.File]::ReadAllText($TokenFile))",
+  "$CliLog = [System.IO.Path]::Combine($DATA_DIR, '.cli.' + $COMMIT + '.log')",
+  `$CliArguments = 'command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "' + $CLI_DATA + '"'`,
+  '$Parent = Get-ParentProcessId',
+  'if ($Parent -gt 0) {',
+  "  $CliArguments = $CliArguments + ' --parent-process-id ' + $Parent",
+  "  Add-Fact 'cli.parent' 'native'",
+  '} else {',
+  "  Add-Fact 'cli.parent' 'none'",
+  '}',
+  'try {',
+  "  [System.IO.File]::WriteAllText($CliLog, '')",
+  "  $CliProcess = Start-Program @{FilePath = $CLI_FILE; ArgumentList = $CliArguments; PassThru = $true; RedirectStandardOutput = $CliLog; RedirectStandardError = ($CliLog + '.err')}",
+  '} catch {',
+  "  Complete-Step 'ServerFailedToStart'",
+  '}',
+  'for ($Waited = 0; $Waited -lt ([int]$READY_SECONDS * 5); $Waited++) {',
+  '  $CliPort = Get-CliReadyPort',
+  "  if ($CliPort -ne '') {",
+  "    Add-Fact 'cli.port' $CliPort",
+  "    Add-Fact 'cli.pid' ([string]$CliProcess.Id)",
+  "    Add-Fact 'cli.log' $CliLog",
+  "    Complete-Step 'Ok'",
+  '  }',
+  '  if ($CliProcess.HasExited) {',
+  "    Complete-Step 'ServerFailedToStart'",
+  '  }',
+  '  Start-Sleep -Milliseconds 200',
+  '}',
+  'Stop-Process -Id $CliProcess.Id -Force -ErrorAction SilentlyContinue',
+  "Complete-Step 'ServerFailedToStart'",
+];
+
+/** The CLI's stop: the recorded process ended only while it is still the CLI, by its program's path. */
+const STOP_CLI_BODY: readonly string[] = [
+  "$Stopped = 'no'",
+  '$Recorded = $null',
+  "if ($CLI_STOP_PID -match '^[0-9]+$' -and [long]$CLI_STOP_PID -gt 1) {",
+  '  $Recorded = Get-Process -Id ([int]$CLI_STOP_PID) -ErrorAction SilentlyContinue',
+  '}',
+  'if ($null -ne $Recorded -and [string]::Equals([string]$Recorded.Path, $CLI_FILE, [System.StringComparison]::OrdinalIgnoreCase)) {',
+  '  Stop-Process -Id $Recorded.Id -Force -ErrorAction SilentlyContinue',
+  "  $Stopped = 'yes'",
+  '}',
+  "Add-Fact 'cli.stopped' $Stopped",
+  "Complete-Step 'Ok'",
+];
+
 function bodyOf(
   request: BootstrapRequest,
   parameters: ScriptParameters,
@@ -375,6 +513,12 @@ function bodyOf(
       return UNINSTALL_BODY;
     case 'cleanup':
       return CLEANUP_BODY;
+    case 'installCli':
+      return INSTALL_CLI_BODY;
+    case 'startCli':
+      return START_CLI_BODY;
+    case 'stopCli':
+      return STOP_CLI_BODY;
     default:
       return ["Complete-Step 'Ok'"];
   }
@@ -390,6 +534,9 @@ export const POWERSHELL_STEPS: ReadonlySet<BootstrapRequest['step']> = new Set([
   'kill',
   'uninstall',
   'cleanup',
+  'installCli',
+  'startCli',
+  'stopCli',
 ]);
 
 /**

@@ -180,6 +180,12 @@ function factsOf(
         value,
       ]),
     ),
+    ...Object.fromEntries(
+      Object.entries(block.cliFacts).map(([key, value]) => [
+        `cli.${key}`,
+        value,
+      ]),
+    ),
   };
   return {
     status: block.status,
@@ -1340,20 +1346,369 @@ describe('the PowerShell cleanup, run under pwsh', function () {
   });
 });
 
+/** The key of the CLI's place in the parameters. */
+const CLI_PARAMETERS = 'cli';
+
+/** The parameters of a CLI step: the CLI's name and data folder, and its archive. */
+function cliParameters(
+  host: PowershellHost,
+  overrides: Partial<ScriptParameters> = {},
+): ScriptParameters {
+  return {
+    ...parametersFor(),
+    launcher: 'codium',
+    archiveFormat: 'zip',
+    [CLI_PARAMETERS]: {
+      name: 'codium-abc123',
+      dataFolder: path.join(host.root, 'cli-data'),
+    },
+    ...overrides,
+  };
+}
+
+/** Where the CLI is installed for the parameters on the host. */
+function cliFileOf(host: PowershellHost, parameters: ScriptParameters): string {
+  return path.join(
+    host.home,
+    parameters.dataFolderName,
+    parameters.cli?.name ?? '',
+  );
+}
+
+describe('the PowerShell CLI install, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2403: the CLI is unpacked into a stage and its program moved into the data folder', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: serverArchive(host, 'codium'),
+    });
+    const outcome = factsOf(runOn(host, single('installCli'), parameters), [
+      'cli.path',
+    ]);
+    deepStrictEqual(
+      [
+        outcome,
+        readFileSync(cliFileOf(host, parameters), 'utf8'),
+        existsSync(path.join(host.home, parameters.dataFolderName, 'cli-bin')),
+      ],
+      [
+        {status: 'Ok', 'cli.path': cliFileOf(host, parameters)},
+        'launcher',
+        false,
+      ],
+    );
+  });
+
+  it('F-2403: an installed CLI is kept', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: path.join(host.root, 'absent.zip'),
+    });
+    mkdirSync(path.dirname(cliFileOf(host, parameters)), {recursive: true});
+    writeFileSync(cliFileOf(host, parameters), 'kept');
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('installCli'), parameters), []),
+        readFileSync(cliFileOf(host, parameters), 'utf8'),
+      ],
+      [{status: 'Ok'}, 'kept'],
+    );
+  });
+
+  it('F-2403: an archive without the CLI fails to unpack, and the stage is cleared', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: serverArchive(host, 'other'),
+    });
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('installCli'), parameters), []),
+        existsSync(path.join(host.home, parameters.dataFolderName, 'cli-bin')),
+      ],
+      [{status: 'UnpackFailed'}, false],
+    );
+  });
+
+  it('F-2403: a CLI download answered 404 fails, and says so', async () => {
+    const {server, address} = await serving(404, Buffer.from('missing'));
+    try {
+      const host = powershellHost();
+      deepStrictEqual(
+        factsOf(
+          await runOnWhileServing(
+            host,
+            single('installCli'),
+            cliParameters(host, {archiveUrl: address}),
+          ),
+          ['server.downloadStatus'],
+        ),
+        {status: 'ServerDownloadFailed', 'server.downloadStatus': '404'},
+      );
+    } finally {
+      server.close();
+    }
+  });
+});
+
+/** The token's stand-ins for `entries`, and the parent `parent` unless the native query is to run. */
+function cliStub(
+  host: PowershellHost,
+  entries: readonly StandInEntry[],
+  parent: number | 'native',
+): string {
+  return [
+    tokenStub(host, entries),
+    ...(parent === 'native'
+      ? []
+      : [`function Get-ParentProcessId { return ${String(parent)} }`]),
+  ].join('\n');
+}
+
+/** A stand-in CLI that names its arguments in its log, says it listens on 4243, and stays up a while. */
+function standInCli(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  body: string,
+): void {
+  const cliFile = cliFileOf(host, parameters);
+  mkdirSync(path.dirname(cliFile), {recursive: true});
+  writeFileSync(cliFile, `#!/bin/sh\n${body}\n`);
+  chmodSync(cliFile, 0o755);
+}
+
+const READY_CLI = [
+  'echo "args: $*"',
+  'echo "Listening on 127.0.0.1:4243"',
+  'sleep 5',
+].join('\n');
+
+/** The Windows variables with the CLI's token requirement set. */
+const CLI_VARIABLES = {...WINDOWS_VARIABLES, VSCODE_CLI_REQUIRE_TOKEN: '1'};
+
+/** The CLI's token file for the parameters. */
+function tokenOf(parameters: ScriptParameters): string {
+  return path.join(parameters.cli?.dataFolder ?? '', 'connection-token');
+}
+
+/** The CLI's own log for the parameters on the host. */
+function cliLogOf(host: PowershellHost, parameters: ScriptParameters): string {
+  return readFileSync(
+    path.join(
+      host.home,
+      parameters.dataFolderName,
+      `.cli.${parameters.commit}.log`,
+    ),
+    'utf8',
+  );
+}
+
+/**
+ * A CLI start on a new host with a ready stand-in CLI, a token file holding `token` beforehand (or none), the token ACL
+ * `entries` and the parent `parent`; gives the host, the parameters and the result block.
+ */
+function startedCli(
+  token: string | undefined,
+  entries: Parameters<typeof cliStub>[1],
+  parent: Parameters<typeof cliStub>[2],
+): {
+  host: PowershellHost;
+  parameters: ScriptParameters;
+  block: ResultBlock | 'none';
+} {
+  const host = powershellHost();
+  const parameters = cliParameters(host);
+  standInCli(host, parameters, READY_CLI);
+  if (token !== undefined) {
+    mkdirSync(path.dirname(tokenOf(parameters)), {recursive: true});
+    writeFileSync(tokenOf(parameters), token);
+  }
+  return {
+    host,
+    parameters,
+    block: runOn(
+      host,
+      single('startCli'),
+      parameters,
+      CLI_VARIABLES,
+      cliStub(host, entries, parent),
+    ),
+  };
+}
+
+/** Whether the token file holds a new 32-character secret. */
+function isNewToken(parameters: ScriptParameters): boolean {
+  return /^[A-Za-z0-9]{32}$/.test(readFileSync(tokenOf(parameters), 'utf8'));
+}
+
+describe('the PowerShell CLI start, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2403: the CLI starts with a new token whose ACL is set before the secret, and with its native parent', () => {
+    const {host, parameters, block} = startedCli(
+      undefined,
+      THREE_PRINCIPALS,
+      4242,
+    );
+    deepStrictEqual(
+      [
+        factsOf(block, ['cli.port', 'cli.parent']),
+        isNewToken(parameters),
+        readFileSync(aclRecordOf(host), 'utf8').trim().split('\n'),
+        cliLogOf(host, parameters).includes('--parent-process-id 4242'),
+      ],
+      [
+        {status: 'Ok', 'cli.port': '4243', 'cli.parent': 'native'},
+        true,
+        [
+          'protected True',
+          'length 0',
+          `rule ${USER_SID} FullControl Allow`,
+          'rule S-1-5-18 FullControl Allow',
+          'rule S-1-5-32-544 FullControl Allow',
+        ],
+        true,
+      ],
+    );
+  });
+
+  it('F-2403: where the native parent query fails, the CLI starts without the flag, and says so', () => {
+    const {host, parameters, block} = startedCli(
+      undefined,
+      THREE_PRINCIPALS,
+      'native',
+    );
+    deepStrictEqual(
+      [
+        factsOf(block, ['cli.parent']),
+        cliLogOf(host, parameters).includes('--parent-process-id'),
+      ],
+      [{status: 'Ok', 'cli.parent': 'none'}, false],
+    );
+  });
+
+  it('F-2403: a token only the user, SYSTEM and Administrators may read is kept, a deny entry and a non-reading right ignored', () => {
+    const {parameters} = startedCli(
+      'kept-token',
+      [
+        ...THREE_PRINCIPALS,
+        {principal: 'S-1-5-32-545', rights: 2032127, type: 'Deny'},
+        {principal: 'S-1-5-32-545', rights: 0x100000, type: 'Allow'},
+      ],
+      0,
+    );
+    deepStrictEqual(readFileSync(tokenOf(parameters), 'utf8'), 'kept-token');
+  });
+
+  it('F-2403: a token another principal may read is rewritten, compared by SID', () => {
+    const {parameters} = startedCli(
+      'loose-token',
+      [
+        ...THREE_PRINCIPALS,
+        {principal: 'S-1-5-32-545', rights: 0x1, type: 'Allow'},
+      ],
+      0,
+    );
+    deepStrictEqual(isNewToken(parameters), true);
+  });
+
+  it('F-2403: no token required, no CLI, or a CLI that ends early fails the start', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host);
+    const stub = cliStub(host, THREE_PRINCIPALS, 0);
+    const missing = factsOf(
+      runOn(host, single('startCli'), parameters, CLI_VARIABLES, stub),
+      [],
+    );
+    standInCli(host, parameters, 'exit 1');
+    deepStrictEqual(
+      [
+        missing,
+        factsOf(
+          runOn(host, single('startCli'), parameters, WINDOWS_VARIABLES, stub),
+          ['cli.tokenMissing'],
+        ),
+        factsOf(
+          runOn(host, single('startCli'), parameters, CLI_VARIABLES, stub),
+          [],
+        ),
+      ],
+      [
+        {status: 'ServerFailedToStart'},
+        {status: 'ServerFailedToStart', 'cli.tokenMissing': 'yes'},
+        {status: 'ServerFailedToStart'},
+      ],
+    );
+  });
+});
+
+describe('the PowerShell CLI stop, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2403: the recorded CLI is ended while it is still the CLI, and nothing else is', async () => {
+    const host = powershellHost();
+    const base = cliParameters(host);
+    const cliFile = cliFileOf(host, base);
+    mkdirSync(path.dirname(cliFile), {recursive: true});
+    copyFileSync('/bin/sleep', cliFile);
+    chmodSync(cliFile, 0o755);
+    const cliProgram = spawn(cliFile, ['30'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    cliProgram.unref();
+    const other = sleeperIn(path.join(host.root, 'other'));
+    try {
+      const outcomes = [cliProgram.pid ?? 0, other, 'x1'].map(processId =>
+        factsOf(
+          runOn(host, single('stopCli'), {
+            ...base,
+            [CLI_PARAMETERS]: {
+              ...(base.cli ?? {name: '', dataFolder: ''}),
+              stopProcessId: processId as number,
+            },
+          }),
+          ['cli.stopped'],
+        ),
+      );
+      deepStrictEqual(
+        [outcomes, await endedSoon(cliProgram.pid ?? 0), isRunning(other)],
+        [
+          [
+            {status: 'Ok', 'cli.stopped': 'yes'},
+            {status: 'Ok', 'cli.stopped': 'no'},
+            {status: 'Ok', 'cli.stopped': 'no'},
+          ],
+          true,
+          true,
+        ],
+      );
+    } finally {
+      process.kill(other);
+    }
+  });
+});
+
 describe('the PowerShell bootstrap script, as text', () => {
   it('F-2701: a step it does not have yet still answers with a failure', () => {
     deepStrictEqual(
-      scriptFor(single('stopCli'), 'powershell', parametersFor()).includes(
-        'status=ServerFailedToStart',
-      ),
+      scriptFor(
+        {installMode: 'stepwise', step: 'prepare'},
+        'powershell',
+        parametersFor(),
+      ).includes('status=ServerFailedToStart'),
       true,
     );
   });
 
   it('F-2701: rendering a step it does not have is a programming error', () => {
     throws(
-      () => powershellScript(single('stopCli'), parametersFor()),
-      /no stopCli step/,
+      () =>
+        powershellScript(
+          {installMode: 'stepwise', step: 'prepare'},
+          parametersFor(),
+        ),
+      /no prepare step/,
     );
   });
 
