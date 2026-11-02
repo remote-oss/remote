@@ -878,6 +878,20 @@ export function launchesOf(root: string): Launch[] {
         HOME: '<run>/home-passphrase',
       },
     },
+    // Terminal mode on the Ubuntu 26.04 host, whose account harness-odd asks a question the extension does not recognise.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'terminal-odd',
+      suite: 'terminal-odd',
+      hostBase: 'ubuntu-26.04',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {'ask-odd': 'linux'},
+        'window.dialogStyle': 'custom',
+      },
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+    },
     {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
     {
       label: 'preconnect',

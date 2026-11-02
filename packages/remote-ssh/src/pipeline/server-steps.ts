@@ -87,6 +87,8 @@ export interface ServerStepDependencies {
   download: DownloadPort;
   credentials: CredentialsPort;
   files: ClientFilePort;
+  /** Whether the program the client's archive is copied to the host with can be started. */
+  copyAvailable: () => Promise<boolean>;
   lockLoop: HostLockLoop;
   /** The client's temporary folder, where a downloaded archive that is not kept waits. */
   clientFolder: string;
@@ -421,6 +423,7 @@ export function createServerSteps(
           download: dependencies.download,
           credentials: dependencies.credentials,
           files: dependencies.files,
+          copyAvailable: dependencies.copyAvailable,
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
           onPhase,
