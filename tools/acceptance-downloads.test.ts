@@ -1025,7 +1025,7 @@ describe('cliArchiveOf', () => {
   function pinsOf(body: string): Record<string, PinnedCliArchive> {
     return {
       'linux-x64': {
-        address: 'https://example.test/cli-linux-x64.tar.gz',
+        assetId: 41,
         sha256: createHash('sha256').update(body).digest('hex'),
       },
     };
@@ -1067,7 +1067,9 @@ describe('cliArchiveOf', () => {
       [
         path.join(folder, cliArchiveName('linux-x64')),
         path.join(folder, cliArchiveName('linux-x64')),
-        ['https://example.test/cli-linux-x64.tar.gz'],
+        [
+          'https://api.github.com/repos/remote-oss/cli-archives/releases/assets/41',
+        ],
         'cli',
       ],
     );
@@ -1111,7 +1113,6 @@ describe('the download host in the run', () => {
       const answers: Record<string, string> = {
         [serverArchiveName('alpine-arm64')]: 'alpine',
         [serverArchiveName('linux-arm64')]: 'glibc',
-        'cli-linux-arm64.tar.gz': 'cli',
       };
       const asked: string[] = [];
       function download(address: string): Promise<Uint8Array> {
@@ -1129,9 +1130,15 @@ describe('the download host in the run', () => {
         pinned,
         undefined,
         {
-          'linux-arm64': {
-            address: 'https://example.test/cli-linux-arm64.tar.gz',
-            sha256: createHash('sha256').update('cli').digest('hex'),
+          pins: {
+            'linux-arm64': {
+              assetId: 42,
+              sha256: createHash('sha256').update('cli').digest('hex'),
+            },
+          },
+          download: address => {
+            asked.push(`cli ${address}`);
+            return Promise.resolve(Buffer.from('cli'));
           },
         },
       );
@@ -1150,7 +1157,7 @@ describe('the download host in the run', () => {
         ),
       );
       await downloads.stop();
-      const cliAsked = asked.filter(name => name.startsWith('cli-'));
+      const cliAsked = asked.filter(name => name.startsWith('cli '));
       asked.length = 0;
       const plain = await startRunDownloads(
         gateway,
@@ -1162,8 +1169,14 @@ describe('the download host in the run', () => {
       );
       await plain.stop();
       deepStrictEqual(
-        [served, cliAsked, asked.filter(name => name.startsWith('cli-'))],
-        [['cli', ''], ['cli-linux-arm64.tar.gz'], []],
+        [served, cliAsked, asked.filter(name => name.startsWith('cli '))],
+        [
+          ['cli', ''],
+          [
+            'cli https://api.github.com/repos/remote-oss/cli-archives/releases/assets/42',
+          ],
+          [],
+        ],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});

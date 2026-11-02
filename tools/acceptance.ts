@@ -48,6 +48,7 @@ import {build} from 'esbuild';
 import {
   downloadHostArguments,
   CLI_ARCHIVES,
+  CLI_ARCHIVES_REPOSITORY,
   EARLIER_SERVER_ARCHIVE,
   type RunDownloads,
   startRunDownloads,
@@ -2530,6 +2531,49 @@ export async function downloadWithRetry(
   );
 }
 
+/** The statuses of a redirect, which a release asset answers with its signed address. */
+const REDIRECTS: readonly number[] = [301, 302, 303, 307, 308];
+
+/**
+ * Downloads a private release asset from its API `address` with `token`, with one retry. The API answers with a
+ * redirect to a signed address, which is fetched without the token. With no token, the download fails and names the
+ * variable that holds it.
+ */
+export async function privateAssetDownload(
+  address: string,
+  token: string | undefined,
+  fetcher: typeof fetch = fetch,
+  pause: Sleeper = delay,
+): Promise<Uint8Array> {
+  if (token === undefined || token === '') {
+    throw new Error(
+      `${address}: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read ${CLI_ARCHIVES_REPOSITORY}`,
+    );
+  }
+  return withOneRetry(
+    async () => {
+      const answer = await fetcher(address, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/octet-stream',
+        },
+        redirect: 'manual',
+      });
+      const signed = answer.headers.get('location');
+      const response =
+        REDIRECTS.includes(answer.status) && signed !== null
+          ? await fetcher(signed)
+          : answer;
+      if (!response.ok) {
+        throw new Error(`${address}: ${String(response.status)}`);
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    pause,
+    console.log.bind(console),
+  );
+}
+
 /** Unpacks a gzipped tar archive into `folder`. */
 export function unpackArchive(archive: Uint8Array, folder: string): void {
   mkdirSync(folder, {recursive: true});
@@ -2593,7 +2637,16 @@ if (isMainModule(import.meta.url)) {
             undefined,
             undefined,
             earlier ? EARLIER_SERVER_ARCHIVE : undefined,
-            cliArchives ? CLI_ARCHIVES : undefined,
+            cliArchives
+              ? {
+                  pins: CLI_ARCHIVES,
+                  download: address =>
+                    privateAssetDownload(
+                      address,
+                      process.env.REMOTE_OSS_CLI_ARCHIVES_TOKEN,
+                    ),
+                }
+              : undefined,
           ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(

@@ -86,10 +86,18 @@ export const EARLIER_SERVER_ARCHIVE: ServerRelease = {
   },
 };
 
-/** One pinned archive of the editor CLI: where the run fetches it, and its sha256. */
+/** One pinned archive of the editor CLI: its release asset in the CLI archives' repository, and its sha256. */
 export interface PinnedCliArchive {
-  address: string;
+  assetId: number;
   sha256: string;
+}
+
+/** The private repository whose release assets are the CLI archives; only a token that may read it fetches them. */
+export const CLI_ARCHIVES_REPOSITORY = 'remote-oss/cli-archives';
+
+/** The API address a CLI archive's release asset is downloaded from. */
+function cliAssetAddress(assetId: number): string {
+  return `https://api.github.com/repos/${CLI_ARCHIVES_REPOSITORY}/releases/assets/${String(assetId)}`;
 }
 
 /**
@@ -243,7 +251,7 @@ export async function cliArchiveOf(
     ? undefined
     : pinnedFileOf(
         path.join(cacheFolder, cliArchiveName(platform)),
-        pinned.address,
+        cliAssetAddress(pinned.assetId),
         pinned.sha256,
         {download, writeFile},
         'the CLI archive download does not match its checksum',
@@ -995,7 +1003,8 @@ export interface RunDownloads {
  * Starts the download host of a run in `runFolder`: the Alpine and glibc server archives for this machine's
  * architecture from the cache under `root`, the run's certificate, and the two ports on the loopback address and on
  * Docker's bridge gateway. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`; with
- * `cliPins`, the editor CLI's archives they pin for those platforms, served under `/cli/<platform>/`.
+ * `cliSource`, the editor CLI's archives its pins name for those platforms, fetched with its own download and served under
+ * `/cli/<platform>/`.
  */
 export async function startRunDownloads(
   command: CommandRunner,
@@ -1005,7 +1014,10 @@ export async function startRunDownloads(
   architecture: string = process.arch,
   checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
   earlier?: ServerRelease,
-  cliPins?: Readonly<Record<string, PinnedCliArchive>>,
+  cliSource?: {
+    pins: Readonly<Record<string, PinnedCliArchive>>;
+    download: Download;
+  },
 ): Promise<RunDownloads> {
   const platforms = servedPlatforms(architecture);
   const archiveFiles: Record<string, string> = {};
@@ -1030,14 +1042,14 @@ export async function startRunDownloads(
       );
     }
     const cliFile =
-      cliPins === undefined
+      cliSource === undefined
         ? undefined
         : await cliArchiveOf(
             path.join(root, '.vscode-test', 'downloads'),
             platform,
-            download,
+            cliSource.download,
             writeFileSync,
-            cliPins,
+            cliSource.pins,
           );
     if (cliFile !== undefined) {
       cliArchiveFiles[platform] = cliFile;

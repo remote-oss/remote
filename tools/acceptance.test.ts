@@ -28,6 +28,7 @@ import {
   FRESH_RESOLVE_WAIT_MILLISECONDS,
   type Sleeper,
   downloadWithRetry,
+  privateAssetDownload,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -4180,6 +4181,105 @@ describe('acceptance', () => {
         ),
         new Uint8Array([7, 8]),
       );
+    });
+
+    /** How a private asset download with `token` over `fetcher` ends: its failure's message, or `resolved`. */
+    function assetFailureOf(
+      token: string | undefined,
+      fetcher: typeof fetch,
+    ): Promise<string> {
+      return privateAssetDownload(
+        'https://api.example.invalid/assets/41',
+        token,
+        fetcher,
+        () => Promise.resolve(),
+      ).then(
+        () => 'resolved',
+        (caught: unknown) =>
+          caught instanceof Error ? caught.message : String(caught),
+      );
+    }
+
+    it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
+      const asked: unknown[] = [];
+      const bytes = await privateAssetDownload(
+        'https://api.example.invalid/assets/41',
+        'secret',
+        (address, init) => {
+          asked.push([
+            address instanceof Request ? address.url : address.toString(),
+            init?.headers,
+            init?.redirect,
+          ]);
+          return Promise.resolve(
+            init === undefined
+              ? new Response(new Uint8Array([9]))
+              : new Response(null, {
+                  status: 302,
+                  headers: {location: 'https://signed.example.invalid/x'},
+                }),
+          );
+        },
+        () => Promise.resolve(),
+      );
+      deepStrictEqual(
+        [bytes, asked],
+        [
+          new Uint8Array([9]),
+          [
+            [
+              'https://api.example.invalid/assets/41',
+              {
+                Authorization: 'Bearer secret',
+                Accept: 'application/octet-stream',
+              },
+              'manual',
+            ],
+            ['https://signed.example.invalid/x', undefined, undefined],
+          ],
+        ],
+      );
+    });
+
+    it('tooling-111: an asset served without a redirect is taken as it is', async () => {
+      deepStrictEqual(
+        await privateAssetDownload(
+          'https://api.example.invalid/assets/41',
+          'secret',
+          () => Promise.resolve(new Response(new Uint8Array([4]))),
+          () => Promise.resolve(),
+        ),
+        new Uint8Array([4]),
+      );
+    });
+
+    it('tooling-111: an asset the token may not read throws after its one retry, and a redirect with no address is an error', async () => {
+      const outcomes = await Promise.all(
+        [
+          new Response(null, {status: 404}),
+          new Response(null, {status: 302}),
+        ].map(answer =>
+          assetFailureOf('secret', () => Promise.resolve(answer.clone())),
+        ),
+      );
+      deepStrictEqual(outcomes, [
+        'https://api.example.invalid/assets/41: 404',
+        'https://api.example.invalid/assets/41: 302',
+      ]);
+    });
+
+    it('tooling-111: with no token the download fails at once and names the variable', async () => {
+      const outcomes = await Promise.all(
+        [undefined, ''].map(token =>
+          assetFailureOf(token, () =>
+            Promise.reject(new Error('no fetch expected')),
+          ),
+        ),
+      );
+      deepStrictEqual(outcomes, [
+        'https://api.example.invalid/assets/41: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read remote-oss/cli-archives',
+        'https://api.example.invalid/assets/41: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read remote-oss/cli-archives',
+      ]);
     });
 
     it('#253 Q14: an archive is unpacked into the folder and its own file removed', () => {
