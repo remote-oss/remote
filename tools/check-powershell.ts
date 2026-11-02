@@ -7,6 +7,7 @@
  */
 
 import {spawnSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {isMainModule, messageOf, REPOSITORY_ROOT} from './repository.ts';
 
@@ -20,9 +21,22 @@ export const GOLDEN_POWERSHELL_FOLDER = path.join(
   'powershell',
 );
 
-/** The pwsh arguments that analyse every script under `folder` for 5.1 and print the findings as one JSON array. */
-export function analyzerArguments(folder: string): string[] {
+/** The PSScriptAnalyzer version `tools/install-pwsh` pins, from its `PSSA_VERSION=` line; throws when there is none. */
+export function pinnedAnalyzerVersion(installScript: string): string {
+  const pinned = /^PSSA_VERSION=([0-9.]+)$/m.exec(installScript)?.[1];
+  if (pinned === undefined) {
+    throw new Error('tools/install-pwsh pins no PSSA_VERSION');
+  }
+  return pinned;
+}
+
+/**
+ * The pwsh arguments that load the pinned PSScriptAnalyzer, analyse every script under `folder` for 5.1, and print the
+ * findings as one JSON array.
+ */
+export function analyzerArguments(folder: string, version: string): string[] {
   const command = [
+    `Import-Module PSScriptAnalyzer -RequiredVersion '${version}'`,
     "$settings = @{IncludeRules = @('PSUseCompatibleSyntax'); Rules = @{PSUseCompatibleSyntax = @{Enable = $true; TargetVersions = @('5.1')}}}",
     `$findings = @(Invoke-ScriptAnalyzer -Path '${folder.replaceAll("'", "''")}' -Recurse -Settings $settings)`,
     'ConvertTo-Json -Compress -InputObject @($findings | ForEach-Object { @{file = $_.ScriptName; line = $_.Line; message = $_.Message} })',
@@ -64,7 +78,15 @@ if (isMainModule(import.meta.url)) {
   try {
     const analysis = spawnSync(
       'pwsh',
-      analyzerArguments(path.join(REPOSITORY_ROOT, GOLDEN_POWERSHELL_FOLDER)),
+      analyzerArguments(
+        path.join(REPOSITORY_ROOT, GOLDEN_POWERSHELL_FOLDER),
+        pinnedAnalyzerVersion(
+          readFileSync(
+            path.join(REPOSITORY_ROOT, 'tools', 'install-pwsh'),
+            'utf8',
+          ),
+        ),
+      ),
       {encoding: 'utf8'},
     );
     if (analysis.error !== undefined || analysis.status !== 0) {

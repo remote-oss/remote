@@ -3,17 +3,50 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {analyzerArguments, findingsOf} from './check-powershell.ts';
+import {readFileSync} from 'node:fs';
+import {
+  analyzerArguments,
+  findingsOf,
+  pinnedAnalyzerVersion,
+} from './check-powershell.ts';
+
+const PINNED = pinnedAnalyzerVersion(
+  readFileSync(path.join(import.meta.dirname, 'install-pwsh'), 'utf8'),
+);
 
 describe('check-powershell', () => {
   describe('analyzerArguments', () => {
     it('quotes the folder as one PowerShell string', () => {
       deepStrictEqual(
-        analyzerArguments("/tmp/it's here")
+        analyzerArguments("/tmp/it's here", '1.25.0')
           .at(-1)
           ?.includes("'/tmp/it''s here'"),
         true,
       );
+    });
+
+    it('loads the pinned module before it analyses', () => {
+      deepStrictEqual(
+        analyzerArguments('/tmp/x', '1.25.0')
+          .at(-1)
+          ?.startsWith(
+            "Import-Module PSScriptAnalyzer -RequiredVersion '1.25.0';",
+          ),
+        true,
+      );
+    });
+  });
+
+  describe('pinnedAnalyzerVersion', () => {
+    it('reads the PSSA_VERSION line', () => {
+      deepStrictEqual(
+        pinnedAnalyzerVersion('set -eu\nPSSA_VERSION=1.25.0\nOTHER=1\n'),
+        '1.25.0',
+      );
+    });
+
+    it('refuses a script that pins none', () => {
+      throws(() => pinnedAnalyzerVersion('set -eu\n'), /pins no PSSA_VERSION/);
     });
   });
 
@@ -52,7 +85,7 @@ describe('check-powershell', () => {
           path.join(folder, 'step.ps1'),
           '$a = $null\n$b = $a ?? 1\n',
         );
-        const analysis = spawnSync('pwsh', analyzerArguments(folder), {
+        const analysis = spawnSync('pwsh', analyzerArguments(folder, PINNED), {
           encoding: 'utf8',
         });
         deepStrictEqual(
