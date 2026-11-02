@@ -37,7 +37,12 @@ export {
   type ForwardedTunnelRequest,
   openForwardedTunnel,
 } from './window-tunnel/forwarded.ts';
-export {socksDialer, type SocksDialerInit} from './window-tunnel/socks.ts';
+export {
+  RelayClosedBeforeReply,
+  RelayUnreachable,
+  socksDialer,
+  type SocksDialerInit,
+} from './window-tunnel/socks.ts';
 export {
   type DuplexStreams,
   nodeLocalPort,

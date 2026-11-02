@@ -92,7 +92,7 @@ export function isAborted(signal: AbortSignal): boolean {
  * handed to `discard`, so that it is not leaked.
  */
 async function bounded<Value>(
-  work: (signal: AbortSignal) => Promise<Value>,
+  work: (signal: AbortSignal, disarm: () => void) => Promise<Value>,
   milliseconds: number | undefined,
   cancellation: AbortSignal,
   discard: (late: Value) => void,
@@ -100,17 +100,25 @@ async function bounded<Value>(
   if (cancellation.aborted) {
     return {interrupted: 'cancelled'};
   }
-  const signal =
+  const timeout = new AbortController();
+  const timer =
     milliseconds === undefined
-      ? cancellation
-      : AbortSignal.any([cancellation, AbortSignal.timeout(milliseconds)]);
+      ? undefined
+      : setTimeout(() => {
+          timeout.abort();
+        }, milliseconds);
+  function disarm(): void {
+    clearTimeout(timer);
+  }
+  const signal = AbortSignal.any([cancellation, timeout.signal]);
   const ended = new Promise<'ended'>(resolve => {
     signal.addEventListener('abort', () => {
       resolve('ended');
     });
   });
-  const running = work(signal);
+  const running = work(signal, disarm);
   const result = await Promise.race([running.then(value => ({value})), ended]);
+  disarm();
   if (result === 'ended') {
     running.then(discard, () => undefined);
     return {interrupted: isAborted(cancellation) ? 'cancelled' : 'timeout'};
@@ -237,7 +245,10 @@ async function runSteps(
 
   /** A bounded step that gives a result; a result that is not its value is the failure to return. */
   async function runBounded<Value>(
-    work: (signal: AbortSignal) => Promise<StepResult<Value>>,
+    work: (
+      signal: AbortSignal,
+      disarm: () => void,
+    ) => Promise<StepResult<Value>>,
     milliseconds: number | undefined,
     onTimeout: FailureDetail,
     discard: (late: Value) => void,
@@ -486,7 +497,7 @@ async function runSteps(
     );
   }
   const tunnel = await runBounded(
-    signal =>
+    (signal, disarm) =>
       steps.openTunnel(
         input,
         lease,
@@ -498,6 +509,7 @@ async function runSteps(
         () => {
           options.onPhase({kind: 'settingUpTunnel'});
         },
+        disarm,
       ),
     // A second `ssh` has bounds of its own and a login to wait for, which a limit sized for the relay would cut off.
     steps.tunnelPath() === 'socks' ? waits.tunnelMilliseconds : undefined,

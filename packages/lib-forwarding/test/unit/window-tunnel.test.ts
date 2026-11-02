@@ -27,6 +27,7 @@ function relay(
   listenAnswer: Answer = 'work',
   heldBytesMaximum: number = LIMITS.heldBytesMaximum,
   onWaiting?: () => void,
+  confirmRefusal?: RelayTunnelRequest['confirmRefusal'],
 ): RelayFixture {
   const clock = new FakeClock();
   const dialer = new FakeDialer(dialScript);
@@ -39,8 +40,16 @@ function relay(
     localPort: 50000,
     limits: {...LIMITS, heldBytesMaximum},
     ...(onWaiting === undefined ? {} : {onWaiting}),
+    ...(confirmRefusal === undefined ? {} : {confirmRefusal}),
   };
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
+}
+
+/** A relay whose caller confirms a refusal, with every probe answered as `answer`. */
+function confirmedRelay(answer: DialAnswer): RelayFixture {
+  return relay([answer], 'work', LIMITS.heldBytesMaximum, undefined, () =>
+    Promise.resolve(true),
+  );
 }
 
 describe('the window tunnel through the relay', () => {
@@ -83,6 +92,70 @@ describe('the window tunnel through the relay', () => {
       [(await pending).kind, local.closedPorts],
       ['tunnelNotReady', [50000]],
     );
+  });
+
+  it('connect-106: twenty probes in a row closed by the relay before its reply are a refused forward, before the bound, and close the port', async () => {
+    const {open, clock, local} = confirmedRelay('closedBeforeReply');
+    const pending = open();
+    for (let round = 0; round < 20; round++) {
+      await advanced(clock, 500);
+    }
+    deepStrictEqual(
+      [await pending, local.closedPorts],
+      [{kind: 'relayRefused', cause: 'closedBeforeReply'}, [50000]],
+    );
+  });
+
+  it('connect-106: twenty probes in a row that find nothing at the relay’s port are a refused forward too', async () => {
+    const {open, clock} = confirmedRelay('unreachable');
+    const pending = open();
+    for (let round = 0; round < 20; round++) {
+      await advanced(clock, 500);
+    }
+    deepStrictEqual(await pending, {
+      kind: 'relayRefused',
+      cause: 'unreachable',
+    });
+  });
+
+  it('connect-106: a refusal the caller does not confirm goes on probing to the bound, and opens on a later probe that works', async () => {
+    const clock = new FakeClock();
+    const dialer = new FakeDialer([
+      ...Array.from({length: 22}, (): DialAnswer => 'closedBeforeReply'),
+      'work',
+    ]);
+    const local = new FakeLocalPort('work');
+    let asked = 0;
+    const pending = openRelayTunnel({
+      dialer,
+      local,
+      scheduler: clock.scheduler(),
+      target: {kind: 'port', port: 4321},
+      localPort: 50000,
+      limits: {...LIMITS, readyMilliseconds: 30_000},
+      confirmRefusal: () => {
+        asked += 1;
+        return Promise.resolve(false);
+      },
+    });
+    for (let round = 0; round < 60; round++) {
+      await advanced(clock, 500);
+    }
+    deepStrictEqual([(await pending).kind, asked], ['open', 1]);
+  });
+
+  it('connect-106: with no one to confirm a refusal, closed probes are not ready at the bound, as for a family that never asks', async () => {
+    const {open, clock} = relay(['closedBeforeReply']);
+    const pending = open();
+    await advanced(clock, 10_000);
+    deepStrictEqual((await pending).kind, 'tunnelNotReady');
+  });
+
+  it('connect-106: one probe that fails otherwise among those closed before the reply keeps the outcome not ready', async () => {
+    const {open, clock} = relay(['closedBeforeReply', 'fail']);
+    const pending = open();
+    await advanced(clock, 10_000);
+    deepStrictEqual((await pending).kind, 'tunnelNotReady');
   });
 
   it('is not ready at the bound when the dialer never answers, never a hang', async () => {

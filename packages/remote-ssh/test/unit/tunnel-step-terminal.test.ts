@@ -121,6 +121,7 @@ function stepWith(
     },
     useExecServer: () => options.execServer ?? true,
     revealLoginTerminals: () => options.reveal ?? false,
+    forwardRefused: () => undefined,
     connectWait: () =>
       options.connectWait ?? {
         connectTimeoutSeconds: 0,

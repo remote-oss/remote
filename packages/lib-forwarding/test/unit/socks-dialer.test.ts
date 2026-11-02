@@ -1,6 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
-import {socksDialer, type Duplex} from '../../src/index.ts';
+import {
+  RelayClosedBeforeReply,
+  RelayUnreachable,
+  socksDialer,
+  type Duplex,
+} from '../../src/index.ts';
 import {
   type Answer,
   type FakeConnection,
@@ -41,11 +46,13 @@ function fixture(connectScript: readonly Answer[] = ['work']): Fixture {
 function outcomeOf(promise: Promise<Duplex>): {
   state: 'pending' | 'open' | 'failed';
   reason?: string;
+  error?: unknown;
   stream?: Duplex;
 } {
   const outcome: {
     state: 'pending' | 'open' | 'failed';
     reason?: string;
+    error?: unknown;
     stream?: Duplex;
   } = {state: 'pending'};
   promise.then(
@@ -55,6 +62,7 @@ function outcomeOf(promise: Promise<Duplex>): {
     },
     (caught: unknown) => {
       outcome.state = 'failed';
+      outcome.error = caught;
       outcome.reason =
         caught instanceof Error ? caught.message : String(caught);
     },
@@ -234,6 +242,20 @@ describe('the dialer of the SOCKS relay', () => {
     deepStrictEqual(outcome.reason, 'the relay closed the connection');
   });
 
+  it('connect-106: a relay that closes after the greeting, before a byte of the reply, fails with the error of a refused forward', async () => {
+    const {dial, relay} = fixture();
+    const outcome = outcomeOf(dial());
+    await settled();
+    relay()?.receive(GREETING_ANSWER);
+    await settled();
+    relay()?.close();
+    await settled();
+    deepStrictEqual(
+      [outcome.reason, outcome.error instanceof RelayClosedBeforeReply],
+      ['the relay closed the connection before its reply', true],
+    );
+  });
+
   it('fails at the bound when the relay never answers, and closes it', async () => {
     const {dial, relay, clock} = fixture();
     const outcome = outcomeOf(dial());
@@ -258,7 +280,10 @@ describe('the dialer of the SOCKS relay', () => {
     const {dial} = fixture(['fail']);
     const outcome = outcomeOf(dial());
     await settled();
-    deepStrictEqual(outcome.reason, 'connection refused');
+    deepStrictEqual(
+      [outcome.reason, outcome.error instanceof RelayUnreachable],
+      ['the relay cannot be reached: connection refused', true],
+    );
   });
 
   it('refuses a socket path, which the relay cannot reach', async () => {
