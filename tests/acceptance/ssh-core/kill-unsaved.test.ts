@@ -42,15 +42,30 @@ function notices(name: string): string[] {
   return recordLines('notice', name).map(line => line.question);
 }
 
-/** The process ids of the host's server: the main process that keeps running whichever window comes and goes. */
-async function serverMain(): Promise<string[]> {
-  const listing = await onHostAs('root', 'ps', '-o', 'pid,args');
+/** The processes of the host, with their parents and command lines. */
+async function processes(): Promise<
+  Array<{processId: string; parent: string; command: string}>
+> {
+  const listing = await onHostAs('root', 'ps', '-o', 'pid,ppid,args');
   return listing
     .split('\n')
-    .filter(
-      line => line.includes('out/server-main.js') && !line.includes('grep'),
-    )
-    .map(line => line.trim().split(/\s+/)[0] ?? '');
+    .slice(1)
+    .map(line => line.trim().split(/\s+/))
+    .filter(columns => columns.length > 2)
+    .map(columns => ({
+      processId: columns[0] ?? '',
+      parent: columns[1] ?? '',
+      command: columns.slice(2).join(' '),
+    }));
+}
+
+/** Whether the server main process `processId` of the host runs. */
+async function serverRuns(processId: string): Promise<boolean> {
+  return (await processes()).some(
+    entry =>
+      entry.processId === processId &&
+      entry.command.includes('out/server-main.js'),
+  );
 }
 
 /** Closes window `name` whose untitled editor still holds unsaved text, answering core's question with Don't Save. */
@@ -83,25 +98,34 @@ describe('Kill Current VS Code Server with unsaved work (card coverage-100)', fu
     restoreUserSettings(settingsBefore);
   });
 
-  /** A window on the host with an untitled editor holding unsaved text, and the host's server process. */
-  async function withUnsaved(name: string): Promise<{servers: string[]}> {
+  /** A window on the host with an untitled editor holding unsaved text, and the server process that window's extension host belongs to. */
+  async function withUnsaved(name: string): Promise<{server: string}> {
+    const known = (await processes()).map(entry => entry.processId);
     await openWindow('harness', name);
     await connectedWithin(name, INSTALL_MILLISECONDS);
+    // The host may run other servers, idle ones among them: the window's is the parent of its new extension host.
+    const [own] = (await processes())
+      .filter(
+        entry =>
+          !known.includes(entry.processId) &&
+          entry.command.includes('--type=extensionHost'),
+      )
+      .map(entry => entry.parent);
     await inWindow(name, 'acceptance.agent.openUntitled', UNSAVED);
     await waitFor(
       'the untitled editor to be unsaved',
       async () => (await dirtyDocumentsOf(name)).length > 0,
       15_000,
     );
-    const servers = await serverMain();
+    const server = own ?? '';
     // The command ends when the window has gone local, which core's question holds up: it is not awaited here.
     const killing = inWindow(name, 'opensshremotes.cleanCurrentRemoteServer');
     killing.catch(() => undefined);
-    return {servers};
+    return {server};
   }
 
   it('F-2411 AC-29 (c100-kill-cancel): the notice and core’s save question show together while the window stays an SSH window; Cancel keeps the window, the unsaved text and the server', async () => {
-    const {servers} = await withUnsaved('k29a');
+    const {server} = await withUnsaved('k29a');
     try {
       const dialog = await waitForDialog('k29a', 60_000);
       await waitFor(
@@ -123,7 +147,7 @@ describe('Kill Current VS Code Server with unsaved work (card coverage-100)', fu
           remoteName: after.remoteName,
           dirty: (await dirtyDocumentsOf('k29a')).length,
           indicator: (await statusItem('k29a', 'status.host')).text,
-          servers: await serverMain(),
+          serverRuns: await serverRuns(server),
         },
         {
           shown: {
@@ -134,7 +158,7 @@ describe('Kill Current VS Code Server with unsaved work (card coverage-100)', fu
           remoteName: 'ssh-remote',
           dirty: 1,
           indicator: 'SSH: harness',
-          servers,
+          serverRuns: true,
         },
       );
     } finally {
@@ -143,21 +167,21 @@ describe('Kill Current VS Code Server with unsaved work (card coverage-100)', fu
   });
 
   it('F-2411 AC-29 (c100-kill-dont-save): Don’t Save turns the window into an empty local window, and the server keeps running', async () => {
-    const {servers} = await withUnsaved('k29b');
+    const {server} = await withUnsaved('k29b');
     await waitForDialog('k29b', 60_000);
     const local = await nextEmptyWindow(() =>
       answerDialog('k29b', "Don't Save"),
     );
     const state = await windowState(local);
     deepStrictEqual(
-      [state.remoteName, state.folders, await serverMain()],
-      [null, [], servers],
+      [state.remoteName, state.folders, await serverRuns(server)],
+      [null, [], true],
     );
     await closeWindow(local);
   });
 
   it('F-2411 AC-29 (c100-kill-save): Save writes the file on the host and then turns the window local, and the server keeps running', async () => {
-    const {servers} = await withUnsaved('k29c');
+    const {server} = await withUnsaved('k29c');
     await waitForDialog('k29c', 60_000);
     await answerDialog('k29c', 'Save');
     await waitFor(
@@ -175,9 +199,9 @@ describe('Kill Current VS Code Server with unsaved work (card coverage-100)', fu
         (await existsOnHost(SAVED_FILE))
           ? (await onHostAs('harness', 'cat', SAVED_FILE)).trim()
           : null,
-        await serverMain(),
+        await serverRuns(server),
       ],
-      [null, [], UNSAVED, servers],
+      [null, [], UNSAVED, true],
     );
     await closeWindow(local);
   });
