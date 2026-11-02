@@ -241,6 +241,7 @@ export const STEP_OUTCOMES: Readonly<
       {key: 'server.installLink', only: POSIX_ONLY},
       {key: 'server.prerequisitesHelper', only: POSIX_ONLY},
       {key: 'server.prerequisites.<line>', only: POSIX_ONLY},
+      {key: 'host.note', only: POWERSHELL_ONLY},
     ],
   },
   installExtensions: {
@@ -291,6 +292,7 @@ export type FunctionRole =
   | 'unpack'
   | 'leave'
   | 'process'
+  | 'secretToken'
   | 'serverTree'
   | 'stop'
   | 'cliPort'
@@ -315,7 +317,7 @@ const STEP_ROLES: Readonly<
   prepare: ['common'],
   unpack: ['common', 'unpack'],
   activate: ['common'],
-  start: ['common', 'environment', 'lock', 'process', 'leave'],
+  start: ['common', 'environment', 'lock', 'process', 'secretToken', 'leave'],
   installExtensions: ['common', 'environment'],
   installCli: [
     'common',

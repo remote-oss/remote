@@ -22,7 +22,15 @@ describe('the bootstrap steps as data', () => {
       const parameters = {...parametersFor(), installTree: '/srv/tree'};
       deepStrictEqual(
         rolesOf({installMode: 'singleScript', step: 'start'}, parameters),
-        ['common', 'environment', 'lock', 'process', 'leave', 'tree'],
+        [
+          'common',
+          'environment',
+          'lock',
+          'process',
+          'secretToken',
+          'leave',
+          'tree',
+        ],
       );
     });
 
@@ -37,7 +45,7 @@ describe('the bootstrap steps as data', () => {
     it('leaves the tree role out of a start without a tree', () => {
       deepStrictEqual(
         rolesOf({installMode: 'singleScript', step: 'start'}, parametersFor()),
-        ['common', 'environment', 'lock', 'process', 'leave'],
+        ['common', 'environment', 'lock', 'process', 'secretToken', 'leave'],
       );
     });
   });

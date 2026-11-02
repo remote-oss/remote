@@ -51,6 +51,20 @@ const COMMON_FUNCTIONS: readonly string[] = [
   '  }',
   '  return $Exception.Message',
   '}',
+  'function New-Secret {',
+  "  $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'",
+  '  $Bytes = New-Object byte[] 32',
+  '  $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()',
+  '  $Generator.GetBytes($Bytes)',
+  '  $Generator.Dispose()',
+  '  return -join ($Bytes | ForEach-Object { $Characters[$_ % 62] })',
+  '}',
+  'function Start-Program([hashtable]$Launch) {',
+  "  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {",
+  "    $Launch.WindowStyle = 'Hidden'",
+  '  }',
+  '  return Start-Process @Launch',
+  '}',
   'function Get-NowSeconds {',
   '  return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()',
   '}',
@@ -223,6 +237,91 @@ const UNPACK_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * The server a PID file records, when it still runs: the file holds the process id and its start time in ticks, and a
+ * process whose start lies more than a second away is a recycled id. The second allows for platforms that compute the
+ * start from the boot time. No WMI or CIM query is made, which a standard user may be refused.
+ */
+const PROCESS_FUNCTIONS: readonly string[] = [
+  'function Get-RecordedServer([string]$File) {',
+  '  try {',
+  "    $Fields = @((Get-Content -LiteralPath $File -TotalCount 1 -ErrorAction Stop) -split ' ')",
+  '    if ($Fields.Count -ne 2) {',
+  '      return $null',
+  '    }',
+  '    $Found = Get-Process -Id ([int]$Fields[0]) -ErrorAction Stop',
+  '    if ($Found.HasExited -or [Math]::Abs($Found.StartTime.Ticks - [long]$Fields[1]) -gt 10000000) {',
+  '      return $null',
+  '    }',
+  '    return $Found',
+  '  } catch {',
+  '    return $null',
+  '  }',
+  '}',
+];
+
+/** The rights of a file's allow entry that let a principal read or write the secret, or change who may. */
+const SECRET_RIGHTS = '0xD00C0007';
+
+/**
+ * The connection token's functions: a token is kept only when it is a regular file, not a reparse point, holding 1 to
+ * 128 characters of [0-9A-Za-z_-], whose allow entries that grant reading or writing go only to the user, SYSTEM and
+ * Administrators, compared by SID; otherwise it is rewritten with that ACL, set before the secret is written. The
+ * Windows-only parts are functions of their own.
+ */
+const SECRET_TOKEN_FUNCTIONS: readonly string[] = [
+  'function Get-CurrentUserSid {',
+  '  return [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+  '}',
+  'function Get-TokenPrincipals {',
+  "  return @((Get-CurrentUserSid), 'S-1-5-18', 'S-1-5-32-544')",
+  '}',
+  'function Test-TokenAccess([string]$File) {',
+  '  $Allowed = Get-TokenPrincipals',
+  '  foreach ($Entry in @((Get-Acl -LiteralPath $File).Access)) {',
+  `    if ([string]$Entry.AccessControlType -ne 'Allow' -or ([long]$Entry.FileSystemRights -band ${SECRET_RIGHTS}) -eq 0) {`,
+  '      continue',
+  '    }',
+  '    if ($Allowed -notcontains $Entry.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) {',
+  '      return $false',
+  '    }',
+  '  }',
+  '  return $true',
+  '}',
+  'function Set-TokenAcl([string]$File) {',
+  '  $Security = New-Object System.Security.AccessControl.FileSecurity',
+  '  $Security.SetAccessRuleProtection($true, $false)',
+  '  foreach ($Principal in Get-TokenPrincipals) {',
+  "    $Security.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule((New-Object System.Security.Principal.SecurityIdentifier $Principal), 'FullControl', 'Allow')))",
+  '  }',
+  '  Set-Acl -LiteralPath $File -AclObject $Security',
+  '}',
+  'function Test-ConnectionToken([string]$File) {',
+  '  $Item = Get-Item -LiteralPath $File -Force -ErrorAction SilentlyContinue',
+  '  if ($null -eq $Item -or $Item.PSIsContainer -or ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {',
+  '    return $false',
+  '  }',
+  "  if ([System.IO.File]::ReadAllText($File) -cnotmatch '^[0-9A-Za-z_-]{1,128}$') {",
+  '    return $false',
+  '  }',
+  '  try {',
+  '    return (Test-TokenAccess $File)',
+  '  } catch {',
+  '    return $false',
+  '  }',
+  '}',
+  'function Write-ConnectionToken([string]$File) {',
+  "  $Part = $File + '.' + $PID",
+  "  [System.IO.File]::WriteAllText($Part, '')",
+  '  Set-TokenAcl $Part',
+  '  [System.IO.File]::WriteAllText($Part, (New-Secret))',
+  '  if (Test-Path -LiteralPath $File) {',
+  '    Remove-Item -LiteralPath $File -Force -ErrorAction Stop',
+  '  }',
+  '  Move-Item -LiteralPath $Part -Destination $File -ErrorAction Stop',
+  '}',
+];
+
 /** Ends the script with a status after releasing the lock it holds. */
 const LEAVE_FUNCTIONS: readonly string[] = [
   'function Exit-Step([string]$Status) {',
@@ -245,7 +344,8 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   fetch: FETCH_FUNCTIONS,
   unpack: UNPACK_FUNCTIONS,
   leave: LEAVE_FUNCTIONS,
-  process: [],
+  process: PROCESS_FUNCTIONS,
+  secretToken: SECRET_TOKEN_FUNCTIONS,
   serverTree: [],
   stop: [],
   cliPort: [],
