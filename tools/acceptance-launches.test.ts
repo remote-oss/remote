@@ -691,6 +691,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer-trust',
         'explorer-home',
         'explorer-rows',
+        'explorer-folders',
         'explorer-no-proposals',
         'add-host',
         'explorer-standdown',
