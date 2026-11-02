@@ -68,6 +68,8 @@ import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
+  changedKeyHostsFile,
+  CHANGED_KEY_ALIAS,
   controlFolderOf,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
@@ -367,7 +369,9 @@ export function sshConfigOf(
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
- * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
+ * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
+ * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
+ * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
@@ -437,6 +441,21 @@ export function harnessSshConfig(
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    '',
+    // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
+    // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
+    `Host ${CHANGED_KEY_ALIAS}`,
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    `  HostKeyAlias ${CHANGED_KEY_ALIAS}`,
+    '  StrictHostKeyChecking no',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${changedKeyHostsFile(runFolder)}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
     // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, a forced change, and a
@@ -682,6 +701,8 @@ export function harnessSshConfig(
       [],
       false,
     ),
+    // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
+    ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
     ...keyAlias('several-files', 'harness', port, runFolder, [
       'id_missing',
       'id_passphrase_stranger',
