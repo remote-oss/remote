@@ -525,7 +525,6 @@ export function connectAssemblyOf(
       presenter: surfaces.presenter,
       cancellable: false,
       allowsTrust: false,
-      progressAtStart: true,
       startTitle: target => {
         // A new connect starts here: a stage without a message of its own has nothing before it to keep.
         shownTitle = '';
@@ -533,6 +532,11 @@ export function connectAssemblyOf(
         return textOfId(title.id as FailureStringId, translate, title.values);
       },
       titleOf: phase => {
+        if (phase.name === 'opened') {
+          // The stage with no text: the progress shows the host alone, whatever stage came before it.
+          shownTitle = '';
+          return shownTitle;
+        }
         const title = phaseTitleOf(phase);
         // A stage without a message of its own keeps the one shown before it.
         if (title !== undefined) {

@@ -172,7 +172,7 @@ async function openTerminalTunnel(
   path: 'secondSsh' | 'socket',
   given: Parameters<ConnectSteps['openTunnel']>,
 ): Promise<TunnelResult> {
-  const [input, , server, onWaiting, cancellation] = given;
+  const [input, , server, onWaiting, cancellation, onSettingUp] = given;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
@@ -180,6 +180,7 @@ async function openTerminalTunnel(
   if (!('port' in chosen)) {
     return notOpenedFor(chosen);
   }
+  onSettingUp?.();
   const localPort = chosen.port;
   if (isAborted(cancellation)) {
     return CANCELLED;
@@ -355,7 +356,7 @@ export function openTunnelStep(
   async function openTunnel(
     ...given: Parameters<ConnectSteps['openTunnel']>
   ): Promise<TunnelResult> {
-    const [, lease, server, onWaiting] = given;
+    const [, lease, server, onWaiting, , onSettingUp] = given;
     const path = tunnelPath();
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
@@ -364,6 +365,7 @@ export function openTunnelStep(
     if (!('port' in chosen)) {
       return notOpenedFor(chosen);
     }
+    onSettingUp?.();
     const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
     const outcome = await openRelayTunnel({
