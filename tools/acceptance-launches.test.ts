@@ -670,6 +670,32 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('tooling-107: the explorer launches, and only they, record the pushes their inbox receives in a file of the run', () => {
+    const named = launchesOf(REPOSITORY_ROOT)
+      .filter(
+        launch =>
+          launch.environment?.REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD !==
+          undefined,
+      )
+      .map(launch => [
+        launch.label,
+        launch.environment?.REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD,
+      ]);
+    deepStrictEqual(
+      named,
+      [
+        'explorer',
+        'explorer-alone',
+        'explorer-trust',
+        'explorer-home',
+        'explorer-rows',
+        'explorer-no-proposals',
+        'add-host',
+        'explorer-standdown',
+      ].map(label => [label, '<run>/companion-record.jsonl']),
+    );
+  });
+
   it('coverage-25b: the explorer-standdown launch installs Remote Explorer and carries the reference explorer’s stand-in', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
