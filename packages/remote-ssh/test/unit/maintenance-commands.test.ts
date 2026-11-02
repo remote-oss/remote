@@ -171,7 +171,7 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     );
   });
 
-  it('F-2206 AC-26: Escape at the platform pick ends the kill with the kill-failed notice and no local end', async () => {
+  it('F-2206 AC-26: Kill VS Code Server on Host... with the platform pick cancelled ends silently: no notice, and the log line', async () => {
     const scenario = setup({
       outcome: {
         result: 'cancelled',
@@ -180,8 +180,12 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     });
     await scenario.kill();
     deepStrictEqual(
-      [scenario.notices, scenario.ended],
-      [[['Failed to kill VS Code Server on dev.', ['Open Logs']]], []],
+      [
+        scenario.notices,
+        scenario.ended,
+        scenario.sink.lines.map(line => [line.level, line.message]),
+      ],
+      [[], [], [['info', 'the kill was cancelled before it ran']]],
     );
   });
 
@@ -508,7 +512,7 @@ describe('Kill Current VS Code Server (F-2411 6.1, 6.2, 6.5)', () => {
     ]);
   });
 
-  it('F-2206 AC-26: Kill Current with Escape at the platform pick ends no local server', async () => {
+  it('F-2206 AC-26: Kill Current VS Code Server with the platform pick cancelled ends silently: no notice, no local end, and the log line', async () => {
     const scenario = setup({
       held: TERMINAL_MODE,
       outcome: {
@@ -518,8 +522,13 @@ describe('Kill Current VS Code Server (F-2411 6.1, 6.2, 6.5)', () => {
     });
     await scenario.killCurrent();
     deepStrictEqual(
-      [scenario.ended, scenario.order],
-      [[], ['notice Failed to kill VS Code Server on dev.']],
+      [
+        scenario.notices,
+        scenario.ended,
+        scenario.order,
+        scenario.sink.lines.map(line => [line.level, line.message]),
+      ],
+      [[], [], [], [['info', 'the kill was cancelled before it ran']]],
     );
   });
 

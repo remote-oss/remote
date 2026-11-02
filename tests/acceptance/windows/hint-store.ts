@@ -14,6 +14,7 @@ export type HintRecords = Array<{
     kind?: string;
     status?: string;
     message?: string;
+    details?: string;
     mitigations?: string[];
     resources?: string[];
   }>;

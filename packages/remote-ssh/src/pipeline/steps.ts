@@ -88,6 +88,8 @@ export interface ConnectionLease {
   waits: ConnectWaits | undefined;
   /** The loopback port of the connection's SOCKS relay, which the window's tunnel rides. */
   socksPort: number;
+  /** Whether this connect started the login of the connection: it was told `loginStarted` or `loginOwned`. A connect that joined a login already running, a reload's included, did not. */
+  startedLogin: boolean;
   /** What an earlier window of the connection left for reuse; none when nothing was stored. */
   storedRecord: SharedRecord | undefined;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
