@@ -733,6 +733,7 @@ Besides `harness`, the host image has fourteen users, and the run's `ssh_config`
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
 | `twofactor` | `harness-2fa` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password and then a one-time code of the run's secret (`HARNESS_TOTP_FILE`; RFC 6238, six digits, a window of three steps) |
 | `expired` | `harness-expired` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, the run's password, marked expired, so the login asks for the current password and a new one twice |
+| `ask-odd` | `harness-odd` | the Ubuntu 26.04 host only: keyboard-interactive through PAM, first `Favourite colour? ` with the answer shown, a question the extension doesn't recognise (any answer goes on), then `Password: `, the run's password; left unanswered, sshd drops the login at its `LoginGraceTime`, 120 s, a global setting |
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |

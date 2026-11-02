@@ -439,9 +439,11 @@ export function harnessSshConfig(
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
-    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, and a forced change.
+    // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, a forced change, and a
+    // question the extension doesn't recognise before the password.
     ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
     ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
+    ...accountAlias('ask-odd', 'harness-odd', port, runFolder, KBD_LINES),
     // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
     ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
       'PubkeyAuthentication no',

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs the run's public key, given in AUTHORIZED_KEY, and the further keys of AUTHORIZED_KEYS_FURTHER (one per line,
 # may be empty) for the users harness and harness-mute, and writes CA_PUBLIC_KEY (may be empty) to /etc/ssh/ca.pub. On an
-# image with the keyboard-interactive accounts, it gives both HOST_PASSWORD, marks harness-expired's expired and writes
+# image with the keyboard-interactive accounts, it gives the three HOST_PASSWORD, marks harness-expired's expired and writes
 # harness-2fa's one-time-code file from HOST_TOTP_SECRET; then it forgets both variables. It leaves the host with the
 # download tool HOST_FETCH names (gnu-wget, the default; curl; none; BusyBox's wget is the Alpine host's), sets
 # HOST_SHELL as harness's login shell when given, then runs sshd in the foreground. It is the Alpine host's start-sshd
@@ -16,7 +16,7 @@ done
 printf '%s\n' "${CA_PUBLIC_KEY:-}" > /etc/ssh/ca.pub
 # The images that share this script (Ubuntu 18.04's, Debian 12's) have neither account.
 if id harness-2fa >/dev/null 2>&1; then
-  printf '%s:%s\n' harness-2fa "${HOST_PASSWORD}" harness-expired "${HOST_PASSWORD}" | chpasswd
+  printf '%s:%s\n' harness-2fa "${HOST_PASSWORD}" harness-expired "${HOST_PASSWORD}" harness-odd "${HOST_PASSWORD}" | chpasswd
   chage -d 0 harness-expired
   # No rate limit and no reuse check, so the rows' logins are never throttled; a window of three codes.
   printf '%s\n' "${HOST_TOTP_SECRET}" '" TOTP_AUTH' '" WINDOW_SIZE 3' > /home/harness-2fa/.google_authenticator
