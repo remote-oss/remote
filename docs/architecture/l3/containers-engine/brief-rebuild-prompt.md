@@ -4,7 +4,7 @@ Owner: athena (architect). Issue: #1204 (daedalus's request; triton's §6 stop o
 remote-oss/remote-containers#47 (F-0303, `spec:reviewed`), seeded in `coverage-containers-r2.tsv`. F-0405 AC-9 (release
 1) waits on it. Decisions: D-105, R-27, ADR-0010, R-60.
 
-## 1. The component: C16 config-watch (new)
+## 1. The component: C20 config-watch (new)
 
 - **What it does:** it watches the files of a connected dev container's configuration, keeps their acknowledgment,
   and raises STR:S083 with "Rebuild" and "Ignore". It runs in the UI extension host of a connected dev-container window,
@@ -22,6 +22,8 @@ remote-oss/remote-containers#47 (F-0303, `spec:reviewed`), seeded in `coverage-c
   - `devcontainer.json`: the SHA-256 (lowercase hex) of the object C4's tolerant JSONC reader recovers (comments,
     trailing commas, a missing final brace), re-serialized as compact JSON with the keys in file order. So comments and
     spacing don't count, and a key reorder does.
+    - **Build it from the parse tree, in file order** (proteus on #1880). A JavaScript object would put integer-like keys,
+      such as `portsAttributes`' `"8080"` and `"3000"`, in numeric order, and their reorder wouldn't count.
   - A build file: the SHA-256 of its raw bytes.
 - **The acknowledgment** lives in the window's own `workspaceState` (the dev-container workspace's storage), under a
   key of ours (R-27), with the observed shape: `{"configurationState": {"contentHashes": {"<identifier>": "<hash>"}}}`.
@@ -69,8 +71,8 @@ remote-oss/remote-containers#47 (F-0303, `spec:reviewed`), seeded in `coverage-c
 - **A deleted file (7.E5, BR-12):** a file that doesn't exist is not diverged and shows nothing. Its hash is kept, so
   recreating identical content stays quiet. The live watch keeps watching the folder.
 - **No first-connect notification (VS-10):** that's what seeding gives.
-- **An unconnected local window (7.E2, F-0303 AC-9):** C16 starts only in a connected dev-container window.
-- **The Recovery Container (6.6):** C16 watches whichever file the payload's `configFile` names. The recovery family
+- **An unconnected local window (7.E2, F-0303 AC-9):** C20 starts only in a connected dev-container window.
+- **The Recovery Container (6.6):** C20 watches whichever file the payload's `configFile` names. The recovery family
   (F-0410's container) decides which file that is, so 6.6 comes with that family.
 - **Executing in WSL (12):** the once-per-activation behaviour for `devcontainer.json` is the WSL family's,
   `host: windows` (ADR-0013).
