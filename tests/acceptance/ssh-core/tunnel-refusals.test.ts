@@ -5,14 +5,16 @@ import {
   closeWindow,
   emptyWindows,
   inWindow,
+  onHost,
   openWindow,
   recordLines,
   signal,
   userSettings,
+  variable,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
+import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
 import {portsRows, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
@@ -384,6 +386,40 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         );
       });
     });
+  });
+
+  it('F-2104 AC-48 (c79-bind-host): a bind host that is not the loopback of the host leaves the window unconnected on the SOCKS path and on the second ssh, with the server listening on that address', async () => {
+    const address = variable('HARNESS_ROUTED_ADDRESS');
+    const seen: Array<[string, string | undefined, boolean]> = [];
+    for (const settings of [{}, SECOND_SSH]) {
+      // A server that runs already keeps the address it was started on, so each connect starts one.
+      await freshHost();
+      await keepingSettings(async () => {
+        const failed = await failing(
+          'c79-bind-host',
+          'harness',
+          {...settings, 'remote.SSH.bindHost': {harness: address}},
+          25_000,
+        );
+        seen.push([
+          failed.indicator,
+          dialogsOf(failed)[0]?.question,
+          (await onHost('netstat', '-ltn')).includes(`${address}:`),
+        ]);
+      });
+    }
+    deepStrictEqual(seen, [
+      [
+        'Disconnected from SSH: harness',
+        'Could not establish connection to "harness".',
+        true,
+      ],
+      [
+        'Disconnected from SSH: harness',
+        'Could not establish connection to "harness".',
+        true,
+      ],
+    ]);
   });
 
   it('F-2104 AC-37 (c79-socket-password): in socket mode a password host is asked twice, the second while Setting up SSH tunnel shows, an ssh process holds the window port on 127.0.0.1 only, the host logs two logins and the window connects', async () => {
