@@ -296,7 +296,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-15 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects with no failure dialog', async () => {
+  it('F-2106 AC-15 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
     await keepingSettings(async () => {
       const found = await ptyConnect('c86-force-dialog', 'pty-force', {
         [PERMIT]: true,
@@ -304,14 +304,15 @@ describe('F-2106: pseudo-terminal allocation', function () {
       deepStrictEqual(
         [
           found.connected,
+          found.sessions.some(each => each.startsWith('pts')),
           recordLines('failureDialog', 'c86-force-dialog').length,
         ],
-        [true, 0],
+        [true, true, 0],
       );
     });
   });
 
-  it('F-2106 AC-8 (reading-1779-forced-pty): a window on RequestTTY force reconnects after its connection is killed, with no Cannot reconnect dialog and no failure dialog', async () => {
+  it('F-2106 AC-8 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, [PERMIT]: true});
       await freshHost();
@@ -327,9 +328,17 @@ describe('F-2106: pseudo-terminal allocation', function () {
         },
       ]);
       await inWindow(name, 'opensshremotes.cleanLocalServer');
-      await new Promise(resolve => setTimeout(resolve, 20_000));
-      await reloadWindow(name);
-      await connectedWithin(name, 120_000);
+      await waitFor(
+        'the sessions of the killed connection to end',
+        async () => (await hostSessions()).length === 0,
+        60_000,
+      );
+      await waitFor(
+        'the window’s own reconnection to open a session on a terminal',
+        async () =>
+          (await hostSessions()).some(session => session.startsWith('pts')),
+        120_000,
+      );
       deepStrictEqual(
         [
           (await dialogOf(name))?.details.includes('Cannot reconnect') ?? false,
