@@ -67,6 +67,7 @@ export interface AgentEvent {
     | 'untitledDocuments'
     | 'tunnels'
     | 'environment'
+    | 'called'
     | 'editorText';
   time: number;
   id?: string;
@@ -1361,6 +1362,28 @@ export async function environmentOf(
     )
   )?.value;
   return typeof value === 'string' ? value : null;
+}
+
+/** What a command run by `callCommand` gave: its value, or the message it rejected with. */
+export interface CallResult {
+  value: unknown;
+  rejection: string | undefined;
+}
+
+/** Has window `name` run `commandId` with `parameters` and gives its value, or the message of its rejection. */
+export async function callCommand(
+  name: string,
+  commandId: string,
+  ...parameters: unknown[]
+): Promise<CallResult> {
+  const event = await reported(
+    name,
+    'called',
+    'acceptance.agent.call',
+    commandId,
+    ...parameters,
+  );
+  return {value: event?.value ?? null, rejection: event?.message};
 }
 
 /** Has window `name` report its state once, and gives that report. */

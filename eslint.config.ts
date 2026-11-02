@@ -138,6 +138,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/explorer-home/tsconfig.json',
   './tests/acceptance/add-host/tsconfig.json',
   './tests/acceptance/explorer-rows/tsconfig.json',
+  './tests/acceptance/explorer-folders/tsconfig.json',
   './tests/acceptance/explorer-no-proposals/tsconfig.json',
   './tests/acceptance/explorer-standdown/tsconfig.json',
   './tests/acceptance/trust/tsconfig.json',

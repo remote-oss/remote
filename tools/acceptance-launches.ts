@@ -995,6 +995,13 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...EXPLORER_LAUNCH,
+      label: 'explorer-folders',
+      suite: 'explorer-folders',
+      // The confirmation of File: Clear Recently Opened... is drawn in the window, where the renderer helpers read it.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+    },
+    {
+      ...EXPLORER_LAUNCH,
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
