@@ -211,16 +211,22 @@ export async function openRelayTunnel(
     };
   }
   let closeRan = false;
-  function close(): void {
+  /** Closes the port and its connections, once, and says nothing of why. */
+  function shut(): boolean {
     if (closeRan) {
-      return;
+      return false;
     }
     closeRan = true;
-    tell(
-      `the window port ${String(request.localPort)} was closed by its owner`,
-    );
     listening.close();
     closeConnections();
+    return true;
+  }
+  function close(): void {
+    if (shut()) {
+      tell(
+        `the window port ${String(request.localPort)} was closed by its owner`,
+      );
+    }
   }
   let waitingTold = false;
   let lastProbeFailure = '';
@@ -275,7 +281,12 @@ export async function openRelayTunnel(
     return {kind: 'listenFailed', detail: ended.detail};
   }
   if (!ready) {
-    close();
+    shut();
+    tell(
+      failures.confirmed
+        ? `the window port ${String(request.localPort)} was closed: the host refuses the forward`
+        : `the window port ${String(request.localPort)} was closed: no probe worked before the bound`,
+    );
     return failures.confirmed
       ? {kind: 'relayRefused', cause: failures.cause}
       : {kind: 'tunnelNotReady'};

@@ -375,6 +375,39 @@ describe('what the window tunnel through the relay logs (card connect-131)', () 
     deepStrictEqual(lines, ['the window port 50000 was closed by its owner']);
   });
 
+  it('says that the port was closed because no probe worked before the bound, and not that its owner closed it', async () => {
+    const lines: string[] = [];
+    const {open, clock} = logged(['fail'], lines);
+    const pending = open();
+    await advanced(clock, LIMITS.readyMilliseconds + 1000);
+    await pending;
+    deepStrictEqual(lines.slice(1), [
+      'the window port 50000 was closed: no probe worked before the bound',
+    ]);
+  });
+
+  it('says that the port was closed because the host refuses the forward, when the caller confirms it', async () => {
+    const lines: string[] = [];
+    const {open, clock} = relay(
+      ['closedBeforeReply'],
+      'work',
+      LIMITS.heldBytesMaximum,
+      undefined,
+      () => Promise.resolve(true),
+      line => {
+        lines.push(line);
+      },
+    );
+    const pending = open();
+    for (let round = 0; round < 20; round++) {
+      await advanced(clock, 500);
+    }
+    await pending;
+    deepStrictEqual(lines.slice(1), [
+      'the window port 50000 was closed: the host refuses the forward',
+    ]);
+  });
+
   it('says its socket target without a path', async () => {
     const lines: string[] = [];
     const clock = new FakeClock();
