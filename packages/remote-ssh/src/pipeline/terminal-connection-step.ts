@@ -249,6 +249,7 @@ export function openTerminalConnectionStep(
             channel,
             waits: undefined,
             socksPort: socksPort ?? 0,
+            shared: undefined,
             storedRecord: undefined,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {

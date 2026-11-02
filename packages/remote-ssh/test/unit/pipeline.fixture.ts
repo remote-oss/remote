@@ -215,6 +215,7 @@ export function leaseOf(recording: Recording): ConnectionLease {
     channel: {} as unknown as HostChannel,
     waits: undefined,
     socksPort: 1080,
+    shared: undefined,
     storedRecord: undefined,
     storeSharedRecord: record => {
       recording.records.push(record);
@@ -377,6 +378,7 @@ export function setup(): {
       onPhase: event => {
         recording.phases.push(event);
       },
+      onConnection: () => undefined,
       maximumReconnectionAttempts: null,
       preconnectMilliseconds: 1000,
       logger: createLogger(logSink, {minimumLevel: () => 'info'}),

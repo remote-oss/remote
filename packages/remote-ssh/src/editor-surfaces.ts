@@ -49,6 +49,10 @@ import type {TextInputPort} from './surfaces/text-input.ts';
 import type {Translate} from './surfaces/strings.ts';
 import type {SettingHost} from 'lib-identifiers';
 import {
+  refusalMemoryOf,
+  type RefusalMemoryState,
+} from './diagnostics/refusal-memory.ts';
+import {
   hintRecorderOf,
   type HintRecorderState,
 } from './diagnostics/hint-recorder.ts';
@@ -106,6 +110,8 @@ export interface SurfaceContext {
   noticeState: AcceptanceState;
   /** The extension's global state, where the hints of a connect are kept. */
   hintState: HintRecorderState;
+  /** The extension's global state, where the shared connections whose refusal was logged are kept. */
+  refusalState: RefusalMemoryState;
   /** The address of the documentation a hint points to. */
   documentation: () => string;
   /** The window's log, where a notice that could not be shown is noted. */
@@ -180,6 +186,7 @@ export function editorSurfacesOf(
     },
     notice: adapters.notice,
     noticeState: context.noticeState,
+    refusals: refusalMemoryOf(context.refusalState),
     hints: hintRecorderOf(context.hintState, {
       translate,
       documentation: context.documentation,

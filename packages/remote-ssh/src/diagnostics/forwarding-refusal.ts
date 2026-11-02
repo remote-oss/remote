@@ -1,13 +1,14 @@
 /**
  * @fileoverview What a refused forward leaves behind besides the notice: the line that names the server's setting, in
- * the log once per connect, and the hint kept for the session. Both come from ssh's bare lines, which the logger is
- * handed once each is logged.
+ * the log once per shared connection (once per connect for a session of one window), and the hint kept for each
+ * connect. Both come from ssh's bare lines, which the logger is handed once each is logged.
  */
 
 import type {Logger} from 'lib-log';
 import {classify, type FailureHint} from 'lib-ssh';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {SshLogger} from '../pipeline/ssh-log.ts';
+import type {RefusalMemory} from './refusal-memory.ts';
 import type {Translate} from '../surfaces/strings.ts';
 
 /** What the connect hands over when it recognises the refusal. */
@@ -21,8 +22,10 @@ export interface RefusalPort {
 /** A logger that watches the lines of ssh it is given, and what starts a connect. */
 export interface RefusalWatch {
   logger: Logger & Required<SshLogger>;
-  /** Starts a connect: the next refusal is logged and recorded again. */
+  /** Starts a connect: the next refusal is recorded again, and logged again unless its connection logged it. */
   begin(): void;
+  /** The connect rides the shared connection `shared`, or a session of its own when none. */
+  attach(shared: string | undefined): void;
 }
 
 /**
@@ -32,23 +35,36 @@ export interface RefusalWatch {
 export function refusalWatchOf(
   logger: Logger,
   port: RefusalPort,
+  memory: RefusalMemory,
   translate: Translate,
 ): RefusalWatch {
-  let seen = false;
+  const state: {
+    recorded: boolean;
+    logged: boolean;
+    shared: string | undefined;
+  } = {recorded: false, logged: false, shared: undefined};
   function noticed(line: string): void {
-    if (seen) {
+    if (state.recorded && state.logged) {
       return;
     }
     const found = classify([line], undefined, 'tunnel', 'shared');
     if (found.kind !== 'forwardingDisabled') {
       return;
     }
-    seen = true;
-    for (const line of found.logLines) {
-      logger.error(ownText({id: line, values: []}, translate));
+    if (!state.logged) {
+      state.logged = true;
+      for (const logLine of found.logLines) {
+        logger.error(ownText({id: logLine, values: []}, translate));
+      }
+      if (state.shared !== undefined) {
+        memory.remember(state.shared);
+      }
     }
-    for (const hint of found.hints) {
-      port.record(hint);
+    if (!state.recorded) {
+      state.recorded = true;
+      for (const hint of found.hints) {
+        port.record(hint);
+      }
     }
   }
   const watching: RefusalWatch['logger'] = {
@@ -76,8 +92,14 @@ export function refusalWatchOf(
   return {
     logger: watching,
     begin: () => {
-      seen = false;
+      state.recorded = false;
+      state.logged = false;
+      state.shared = undefined;
       port.begin();
+    },
+    attach: shared => {
+      state.shared = shared;
+      state.logged = shared !== undefined && memory.contains(shared);
     },
   };
 }

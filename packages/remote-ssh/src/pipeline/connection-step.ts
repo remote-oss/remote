@@ -86,9 +86,11 @@ export function openConnectionStep(
   dependencies: ConnectionStepDependencies,
 ): ConnectSteps['openConnection'] {
   return async (input, terms, cancellation) => {
+    const sharedHost =
+      input.connectionKey ?? payloadOf(sshTargetOf(input.target));
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
-      hostString: input.connectionKey ?? payloadOf(sshTargetOf(input.target)),
+      hostString: sharedHost,
       cancellation,
     });
     if (acquired.kind === 'refused') {
@@ -161,6 +163,7 @@ export function openConnectionStep(
         channel,
         waits: dependencies.waits(),
         socksPort: outcome.socksPort,
+        shared: `${sharedHost}:${String(outcome.socksPort)}`,
         storedRecord: outcome.sharedRecord ?? undefined,
         storeSharedRecord: record => {
           token = record.connectionToken;

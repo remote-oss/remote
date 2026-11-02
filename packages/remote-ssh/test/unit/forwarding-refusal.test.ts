@@ -17,14 +17,17 @@ function watching(): {
   sink: MemorySink;
   calls: string[];
   hints: FailureHint[];
+  remembered: string[];
 } {
   const sink = new MemorySink();
   const calls: string[] = [];
   const hints: FailureHint[] = [];
+  const remembered: string[] = [];
   return {
     sink,
     calls,
     hints,
+    remembered,
     watch: refusalWatchOf(
       createLogger(sink, {minimumLevel: (): Level => 'trace'}),
       {
@@ -33,6 +36,12 @@ function watching(): {
         },
         record: hint => {
           hints.push(hint);
+        },
+      },
+      {
+        contains: connection => remembered.includes(connection),
+        remember: connection => {
+          remembered.push(connection);
         },
       },
       template => template,
@@ -124,6 +133,54 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     deepStrictEqual(
       [sink.lines.map(line => line.level), watch.logger.scope],
       [['trace', 'debug', 'warn', 'error', 'info'], []],
+    );
+  });
+
+  it('F-2604 AC-15: two connects on one shared connection log the setting text once, and record the hint twice', () => {
+    const {watch, sink, hints} = watching();
+    watch.begin();
+    watch.attach('devbox:1080');
+    logSshLines(watch.logger, [REFUSED], undefined);
+    watch.begin();
+    watch.attach('devbox:1080');
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      [
+        sink.lines.filter(line => line.message === SETTING_TEXT).length,
+        hints.length,
+      ],
+      [1, 2],
+    );
+  });
+
+  it('F-2604 AC-15: a new shared connection logs the setting text again', () => {
+    const {watch, sink} = watching();
+    watch.begin();
+    watch.attach('devbox:1080');
+    logSshLines(watch.logger, [REFUSED], undefined);
+    watch.begin();
+    watch.attach('devbox:1081');
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      sink.lines.filter(line => line.message === SETTING_TEXT).length,
+      2,
+    );
+  });
+
+  it('F-2604 AC-15: a session of one window logs the setting text at every connect', () => {
+    const {watch, sink, remembered} = watching();
+    watch.begin();
+    watch.attach(undefined);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    watch.begin();
+    watch.attach(undefined);
+    logSshLines(watch.logger, [REFUSED], undefined);
+    deepStrictEqual(
+      [
+        sink.lines.filter(line => line.message === SETTING_TEXT).length,
+        remembered,
+      ],
+      [2, []],
     );
   });
 });

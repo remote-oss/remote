@@ -64,6 +64,8 @@ export interface ConnectOptions {
   /** How long the pre-connection script may take, with its question to the user. */
   preconnectMilliseconds: number;
   logger: Logger;
+  /** Tells which connection the connect rides when other windows share it, as soon as it is open. */
+  onConnection: (shared: string | undefined) => void;
   /** The editor's commit and quality, which the CLI path's `serve` names. */
   serve: {commit: string; quality: string};
   /** The value of `remote.SSH.useExecServer`, read when the connect starts. */
@@ -343,6 +345,7 @@ async function runSteps(
   }
   const lease = connection.value;
   held.lease = lease;
+  options.onConnection(lease.shared);
   if (lease.storedRecord === undefined) {
     // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
     // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
