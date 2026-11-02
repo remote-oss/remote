@@ -18,6 +18,7 @@ import {
   REPOSITORY_ROOT,
   resolveBinary,
 } from './repository.ts';
+import {vsixProblems} from './vsix-rules.ts';
 
 /** Runs vsce with the arguments in a package folder and returns its standard output; throws when it fails. */
 export type VsceRunner = (vsceArguments: string[], folder: string) => string;
@@ -27,6 +28,10 @@ interface Manifest {
   version?: string;
   main?: string;
   extensionPack?: string[];
+  publisher?: string;
+  license?: string;
+  icon?: string;
+  engines?: {vscode?: string};
 }
 
 /** Whether a manifest is a code-less pack: it lists an `extensionPack` and has no `main`, so there is no bundle to build. */
@@ -93,11 +98,18 @@ export function packageExtensions(
     }
     const listed = vsce(['ls', '--no-dependencies'], directory)
       .split('\n')
-      .filter(line => line.split(/[\\/]/).includes('node_modules'));
-    if (listed.length > 0) {
+      .filter(line => line !== '');
+    const bundled = listed.filter(line =>
+      line.split(/[\\/]/).includes('node_modules'),
+    );
+    if (bundled.length > 0) {
       throw new Error(
-        `packages/${folder}: the VSIX would hold ${listed.join(', ')}`,
+        `packages/${folder}: the VSIX would hold ${bundled.join(', ')}`,
       );
+    }
+    const problems = vsixProblems(folder, manifest, listed);
+    if (problems.length > 0) {
+      throw new Error(problems.join('\n'));
     }
     const output = path.join(
       root,

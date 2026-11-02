@@ -34,7 +34,7 @@ Report a problem or ask a question in the issue tracker, https://github.com/remo
 ## License
 
 MIT. The keyword documentation includes text from the OpenSSH manual page ssh_config(5), under the OpenSSH licence
-in `ThirdPartyNotices.txt`.
+in [NOTICE.md](NOTICE.md).
 
 ## For maintainers
 
