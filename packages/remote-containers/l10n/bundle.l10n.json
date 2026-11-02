@@ -181,5 +181,6 @@
   "Any Workspace": "Any Workspace",
   "Current Workspace": "Current Workspace",
   "Configuration file(s) changed: {0}. The container might need to be rebuilt to apply the changes.": "Configuration file(s) changed: {0}. The container might need to be rebuilt to apply the changes.",
-  "Rebuild": "Rebuild"
+  "Rebuild": "Rebuild",
+  "You need to first save your workspace in a folder containing all its workspace folders.": "You need to first save your workspace in a folder containing all its workspace folders."
 }

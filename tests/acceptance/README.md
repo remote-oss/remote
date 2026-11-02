@@ -683,19 +683,19 @@ The `genuine-licensed` launch is the one with `publisherDownloads`: it connects 
 
 A launch with `publisherDownloads: true` takes its server from Microsoft's update service, the server of the genuine
 client's own commit, and its rows accept the licence in the product's own modal, as the user decided on 2026-11-01
-(D-104, the genuine job only). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:
+(D-104), on any machine and in any CI job since 2026-11-02 (D-106). While it runs, the harness host resolves `update.code.visualstudio.com` through DNS:
 before the launch the run moves the host's line for that name out of `/etc/hosts` into `/etc/hosts.update-service`
 (rewriting the file in place, as it is a bind mount), and before the next launch without the field it puts the line
 back. The log says each change (`acceptance: the harness host resolves update.code.visualstudio.com through DNS`, then
 `… to the download host`). The client's download, as Dev Containers makes it, needs nothing from the run: the runner
 resolves the name itself.
 
-These launches run only in the genuine CI job (D-104; a run on any other machine is outside the user's decision until
-they rule on it). The field also marks every launch whose rows click "Accept and Continue", whether or not its server
-comes from the publisher, so all of them pass the same gate: the run refuses such a launch unless `GITHUB_ACTIONS` is
-`true`, `GITHUB_JOB` is `acceptance-genuine` and `HARNESS_GENUINE_VERSION` is set (`acceptance: <label>: a launch that
-takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): …`). Anyone
-can set those three variables, so the gate guards against an accident, not against intent. The tools rows check the
+These launches run wherever a launch runs genuine VS Code: the user's acceptance of the licence covers any machine and
+any CI job (D-106, which widened D-104's genuine CI job). The field also marks every launch whose rows click "Accept
+and Continue", whether or not its server comes from the publisher, so all of them pass the same gate: the run refuses
+such a launch unless `HARNESS_GENUINE_VERSION` names the genuine version it runs (`acceptance: <label>: a launch that
+takes the server from the editor's publisher or accepts its licence names the genuine version it runs (D-106): set
+HARNESS_GENUINE_VERSION`). Anyone can set the variable, so the gate guards against an accident, not against intent. The tools rows check the
 rest: every launch whose suite answers a dialog with "Accept and Continue" has the field, only such a launch names
 `update.code.visualstudio.com` or `vscode.download.prss.microsoft.com`, only a genuine launch on the harness host has
 the field, every genuine launch keeps `telemetry.telemetryLevel` off and `update.mode` none, no part of the VSCodium
@@ -714,7 +714,7 @@ a profile of its own, so the "Not Now" of the VSCodium `no-proposals` launch's r
 
     node tools/acceptance.ts --editor vscodium --launches genuine-containers
 
-`genuine-accept-a` and `genuine-accept-b` are `genuine-containers` with the editor's publisher as the server's address (`https://update.code.visualstudio.com`), the only launches whose rows accept the server's licence and download the server from the publisher, which the genuine job allows for them. Each launch has a profile of its own and the two share the run's `vscode` volume, so they run in this order: profile A accepts and installs the server of the client's commit into the volume and is asked nothing after a reload, for another container or after the editor restarts; profile B asks again, leaves no server process when it cancels, and when it accepts connects with the server already in the volume. Profile B's rows fail with what to run first when the volume holds no server of the client:
+`genuine-accept-a` and `genuine-accept-b` are `genuine-containers` with the editor's publisher as the server's address (`https://update.code.visualstudio.com`), the only launches whose rows accept the server's licence and download the server from the publisher, which D-106 allows wherever they run. Each launch has a profile of its own and the two share the run's `vscode` volume, so they run in this order: profile A accepts and installs the server of the client's commit into the volume and is asked nothing after a reload, for another container or after the editor restarts; profile B asks again, leaves no server process when it cancels, and when it accepts connects with the server already in the volume. Profile B's rows fail with what to run first when the volume holds no server of the client:
 
     node tools/acceptance.ts --editor vscodium --launches genuine-accept-a,genuine-accept-b
 

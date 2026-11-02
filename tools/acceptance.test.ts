@@ -1795,7 +1795,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-99, D-104: a launch whose server comes from the publisher is refused outside the genuine CI job, Actions, its job id and the version all named, and a run without one is never refused', () => {
+    it('tooling-99, D-106: a launch whose server comes from the publisher is refused unless it names the genuine version, on any machine and in any job, and a run without one is never refused', () => {
       const publisher: Launch = {
         label: 'publisher-probe',
         kind: 'plain',
@@ -1804,36 +1804,31 @@ describe('acceptance', () => {
         publisherDownloads: true,
       };
       const plain: Launch = {label: 'local', runner: 'runner', suite: 'suite'};
+      const named = {HARNESS_GENUINE_VERSION: '1.125.0'};
       const genuineJob = {
         GITHUB_ACTIONS: 'true',
         GITHUB_JOB: 'acceptance-genuine',
-        HARNESS_GENUINE_VERSION: '1.125.0',
       };
       const refused =
-        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB acceptance-genuine and HARNESS_GENUINE_VERSION set";
+        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence names the genuine version it runs (D-106): set HARNESS_GENUINE_VERSION";
       deepStrictEqual(
         [
-          publisherDownloadsRefusal([plain, publisher], genuineJob),
-          publisherDownloadsRefusal([plain, publisher], {}),
-          publisherDownloadsRefusal([publisher], {
-            HARNESS_GENUINE_VERSION: '1.125.0',
-          }),
-          publisherDownloadsRefusal([publisher], {
-            CI: 'true',
+          publisherDownloadsRefusal([plain, publisher], {
             ...genuineJob,
-            GITHUB_ACTIONS: 'false',
+            ...named,
           }),
+          publisherDownloadsRefusal([plain, publisher], named),
           publisherDownloadsRefusal([publisher], {
             ...genuineJob,
             GITHUB_JOB: 'acceptance-vscodium',
+            ...named,
           }),
-          publisherDownloadsRefusal([publisher], {
-            ...genuineJob,
-            HARNESS_GENUINE_VERSION: '',
-          }),
+          publisherDownloadsRefusal([plain, publisher], {}),
+          publisherDownloadsRefusal([publisher], genuineJob),
+          publisherDownloadsRefusal([publisher], {HARNESS_GENUINE_VERSION: ''}),
           publisherDownloadsRefusal([plain], {}),
         ],
-        [undefined, refused, refused, refused, refused, refused, undefined],
+        [undefined, undefined, undefined, refused, refused, refused, undefined],
       );
     });
 

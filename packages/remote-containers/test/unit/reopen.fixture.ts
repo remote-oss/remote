@@ -42,6 +42,10 @@ export interface Setup {
   contents: Record<string, string>;
   remoteName: string | undefined;
   folders: Array<{scheme: string; fsPath: string}>;
+  /** The window's workspace file; none for a folder window. */
+  workspaceFile: {scheme: string; fsPath: string} | undefined;
+  /** The details of the modal information dialogs the command showed. */
+  modals: string[];
   trust: TrustOutcome;
   /** The command titles the trust check was asked for. */
   titles: string[];
@@ -89,6 +93,8 @@ export function setup(): Setup {
     contents: {},
     remoteName: undefined,
     folders: [{scheme: 'file', fsPath: FOLDER}],
+    workspaceFile: undefined,
+    modals: [],
     trust: 'trusted',
     titles: [],
     updates: [],
@@ -143,6 +149,7 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     window: {
       remoteName: () => state.remoteName,
       folders: () => state.folders,
+      workspaceFile: () => state.workspaceFile,
       serializedFile: file => ({
         $mid: 1,
         fsPath: file,
@@ -151,6 +158,11 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         scheme: 'file',
       }),
     },
+    informModal: text => {
+      state.modals.push(text);
+      return Promise.resolve();
+    },
+    translate: template => template,
     ensureTrusted: async title => {
       state.titles.push(title);
       state.calls.push('ensureTrusted');
