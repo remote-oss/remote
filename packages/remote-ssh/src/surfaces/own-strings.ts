@@ -24,6 +24,10 @@ export const OWN_TEMPLATES = {
   S078: 'Host added!',
   S099: 'Open Config',
   S168: '{1} is not a valid host to bind',
+  S046: 'ERROR: TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.',
+  S150: "The remote server's SSH configuration may have TCP forwarding disabled",
+  S005: "Add the setting '{0}' to the server's '{1}' (or similar) configuration file",
+  S116: 'Restart the SSH server on the remote machine to apply any changes to the configuration',
   showLogLinkText: 'Show log',
   socksForwardingFailedNotice:
     'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})',
