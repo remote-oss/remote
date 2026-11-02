@@ -156,6 +156,39 @@ describe('vsix-rules', () => {
     );
   });
 
+  it('tooling-95: the Microsoft, EULA and .rtf forms fail even under a bundled dependency folder', () => {
+    deepStrictEqual(
+      [
+        vsixProblems(
+          'remote-containers',
+          {...manifest, name: 'remote-containers'},
+          [...files, 'dist/devcontainers-cli/EULA.rtf'],
+        ),
+        vsixProblems(
+          'remote-containers',
+          {...manifest, name: 'remote-containers'},
+          [...files, 'dist/devcontainers-cli/LICENSE-MS.txt'],
+        ),
+        vsixProblems(
+          'remote-containers',
+          {...manifest, name: 'remote-containers'},
+          [...files, 'dist/devcontainers-cli/docs/terms.rtf'],
+        ),
+      ],
+      [
+        [
+          'packages/remote-containers: the VSIX holds dist/devcontainers-cli/EULA.rtf',
+        ],
+        [
+          'packages/remote-containers: the VSIX holds dist/devcontainers-cli/LICENSE-MS.txt',
+        ],
+        [
+          'packages/remote-containers: the VSIX holds dist/devcontainers-cli/docs/terms.rtf',
+        ],
+      ],
+    );
+  });
+
   it('tooling-95: NOTICE.md does not match the notices rule', () => {
     deepStrictEqual(
       vsixProblems('remote-ssh-edit', {...manifest, name: 'remote-ssh-edit'}, [

@@ -36,9 +36,33 @@ function baseName(file: string): string {
   return file.split(/[\\/]/).pop() ?? '';
 }
 
+/** A terms or notices file by the rule's own names, base name as listed. */
+const TERMS_OR_NOTICES =
+  /^(ThirdPartyNotices|EULA|LICENSE[-_.]?(MS|Microsoft))/i;
+
+/** The plain licence and notices names a bundled dependency's folder keeps. */
+const BUNDLED_NOTICE_NAME = /^(ThirdPartyNotices|LICENSE)/i;
+
+/** The vendor's licence names the bundle folder's allowance never covers. */
+const MICROSOFT_LICENCE = /^LICENSE[-_.]?(MS|Microsoft)/i;
+
 /** Whether the listed path sits under one of the bundled dependency folders. */
 function underBundledDependency(file: string): boolean {
   return BUNDLED_DEPENDENCY_FOLDERS.some(folder => file.startsWith(folder));
+}
+
+/**
+ * Whether the file is a bundled dependency's own licence or notices file: under its folder, a plain `LICENSE` or
+ * `ThirdPartyNotices` name, never the vendor's licence names and never `.rtf`.
+ */
+function bundledNotice(file: string): boolean {
+  const base = baseName(file);
+  return (
+    underBundledDependency(file) &&
+    BUNDLED_NOTICE_NAME.test(base) &&
+    !MICROSOFT_LICENCE.test(base) &&
+    !base.endsWith('.rtf')
+  );
 }
 
 /** The release's packaging problems of the VSIX that `packages/<folder>` would write; an empty list packs. */
@@ -62,14 +86,11 @@ export function vsixProblems(
     );
   }
   for (const file of files) {
-    if (underBundledDependency(file)) {
+    if (bundledNotice(file)) {
       continue;
     }
     const base = baseName(file);
-    if (
-      /^(ThirdPartyNotices|EULA|LICENSE[-_.]?(MS|Microsoft))/i.test(base) ||
-      base.endsWith('.rtf')
-    ) {
+    if (TERMS_OR_NOTICES.test(base) || base.endsWith('.rtf')) {
       problems.push(`packages/${folder}: the VSIX holds ${file}`);
     }
   }
