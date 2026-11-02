@@ -69,6 +69,8 @@ import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
+import type {HintRecorder} from './diagnostics/hint-recorder.ts';
+import {refusalWatchOf} from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
@@ -139,6 +141,8 @@ export interface ConnectSurfaces {
   /** The non-modal notices, and the profile's record of the answers to them. */
   notice: NoticePort;
   noticeState: AcceptanceState;
+  /** The recorder of the hints a connect leaves for the session. */
+  hints: HintRecorder;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   /** The question before a pre-connection script runs, and the record of the scripts the user trusts. */
@@ -499,20 +503,24 @@ export function connectAssemblyOf(
   connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
   const tracker = new LoginTerminalTracker(surfaces.terminals);
+  const watch = refusalWatchOf(logger, surfaces.hints, surfaces.translate);
   const ports = wiringPortsOf(
     {...surfaces, terminals: tracker},
     machine,
-    logger,
+    watch.logger,
   );
   const connector = connectorFrom({
-    stepsFor: onPhase => stepsOf(ports, onPhase),
+    stepsFor: onPhase => {
+      watch.begin();
+      return stepsOf(ports, onPhase);
+    },
     options: {
       // A getter, so each connect reads the setting as it is then.
       get maximumReconnectionAttempts() {
         return valueOf(surfaces.settings, 'maxReconnectionAttempts');
       },
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
-      logger,
+      logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
         return switchOf(surfaces.settings, 'useExecServer');
