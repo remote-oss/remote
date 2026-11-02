@@ -311,6 +311,15 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     deepStrictEqual(questions, ["alex@dev's password: "]);
   });
 
+  it('connect-108, F-2308 AC-8: with the login terminal shown the tunnel attaches no questions', async () => {
+    const {open, opened, logins, questions, clock} = stepWith({reveal: true});
+    void open();
+    await settled();
+    opened().write("alex@dev's password: ");
+    await advance(clock, 120);
+    deepStrictEqual([logins.length, questions], [0, []]);
+  });
+
   it('F-2003 BR-8: every line of the SSH Tunnel terminal is logged as ssh’s, including a refused channel', async () => {
     const {open, opened, sink} = stepWith();
     void open();
@@ -509,8 +518,11 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
   });
 
   /** A tunnel login that printed the handshake and then a question no one recognises, with the step still pending. */
-  async function silentQuestion(connectWait: ConnectWaitSettings) {
-    const context = stepWith({connectWait});
+  async function silentQuestion(
+    connectWait: ConnectWaitSettings,
+    reveal = false,
+  ) {
+    const context = stepWith({connectWait, reveal});
     const pending = context.open();
     let outcome: Awaited<typeof pending> | undefined;
     void pending.then(result => {
@@ -530,6 +542,12 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
 
   it('#299 ruling 1b: a question nobody can see fails the step as a timeout once the connect wait has passed', async () => {
     const {clock, outcome} = await silentQuestion(TEN_SECONDS);
+    await advance(clock, 12_100, 100);
+    deepStrictEqual(outcome(), {kind: 'failed', failure: {kind: 'timeout'}});
+  });
+
+  it('connect-108: with the login terminal shown a question nobody can see still fails the step as a timeout', async () => {
+    const {clock, outcome} = await silentQuestion(TEN_SECONDS, true);
     await advance(clock, 12_100, 100);
     deepStrictEqual(outcome(), {kind: 'failed', failure: {kind: 'timeout'}});
   });

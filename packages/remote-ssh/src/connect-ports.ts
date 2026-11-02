@@ -115,6 +115,7 @@ import {
   type PromptEditor,
 } from './surfaces/prompt-surface.ts';
 import type {Translate} from './surfaces/strings.ts';
+import {LoginTerminalTracker} from './surfaces/login-terminal-tracker.ts';
 import {attachTerminalQuestions} from './surfaces/terminal-questions.ts';
 
 /** The editor's surfaces a connect shows, each over the editor. */
@@ -462,7 +463,12 @@ export function connectAssemblyOf(
   logger: Logger,
   connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
-  const ports = wiringPortsOf(surfaces, machine, logger);
+  const tracker = new LoginTerminalTracker(surfaces.terminals);
+  const ports = wiringPortsOf(
+    {...surfaces, terminals: tracker},
+    machine,
+    logger,
+  );
   const connector = connectorFrom({
     stepsFor: onPhase => stepsOf(ports, onPhase),
     options: {
@@ -477,7 +483,12 @@ export function connectAssemblyOf(
         return switchOf(surfaces.settings, 'useExecServer');
       },
     },
-    revealLog: surfaces.revealLog,
+    revealLog: () => {
+      tracker.revealDetails(
+        terminalModeOf(surfaces.settings),
+        surfaces.revealLog,
+      );
+    },
     terminalMode: () => terminalModeOf(surfaces.settings),
     applyTerminalEnvironment: surfaces.applyTerminalEnvironment,
   });
