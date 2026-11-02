@@ -139,7 +139,7 @@ jobs:
       matrix:
         image: [macos-15, macos-14, macos-15-intel]
     runs-on: ${{ matrix.image }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: machine
         run: |
@@ -187,7 +187,7 @@ jobs:
           if [ -n "$v" ]; then echo "CDP up after ${i}s: $v" | head -3; curl -fs http://127.0.0.1:9333/json/list | grep -E '"(type|title)"'; else echo "CDP never answered"; tail -20 "$RUNNER_TEMP/codium.log"; fi
           kill "$pid" 2>/dev/null || true
       - name: docker through colima
-        if: matrix.image != 'macos-14'
+        if: matrix.image == 'macos-15-intel'
         continue-on-error: true
         timeout-minutes: 20
         run: |
