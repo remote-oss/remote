@@ -78,6 +78,7 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
+import {workflowParts as partsOfWorkflow} from './acceptance-select.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
 import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
@@ -414,6 +415,7 @@ const LAUNCH_ORDER = [
   'agent',
   'agent-off',
   'x11',
+  'x11-noxauth',
   'failure-refused',
   'terminal',
   'socket',
@@ -478,12 +480,7 @@ function workflowParts(): {workflow: string; parts: string[]} {
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
     'utf8',
   );
-  return {
-    workflow,
-    parts: JSON.parse(
-      /\|\| '(\["@.*?\])'/.exec(workflow)?.[1] ?? '[]',
-    ) as string[],
-  };
+  return {workflow, parts: partsOfWorkflow(workflow)};
 }
 
 function chosenLabels(
@@ -984,6 +981,7 @@ describe('acceptance', () => {
     );
   });
 
+<<<<<<< HEAD
   it('coverage-99: Host agentfwd-no logs in to harness with the run key and gives ForwardAgent no', () => {
     strictEqual(
       accountBlock('agentfwd-no'),
@@ -992,6 +990,25 @@ describe('acceptance', () => {
         ...KEY_ALIAS_LINES,
         '  ForwardAgent no',
       ].join('\n'),
+=======
+  it("F-2311: Hosts agentfwd-tmpdir and agentfwd-notmp log in to harness-tmpdir and harness-notmp with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd-tmpdir', 'agentfwd-notmp'].map(alias => accountBlock(alias)),
+      [
+        ['agentfwd-tmpdir', 'harness-tmpdir'],
+        ['agentfwd-notmp', 'harness-notmp'],
+      ].map(([alias, user]) =>
+        [
+          ...sharedLines(alias ?? '', user ?? '').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
+>>>>>>> 9fbe625699b7900e70db6a0d19d454a3b4058c98
     );
   });
 
@@ -3407,7 +3424,7 @@ describe('acceptance', () => {
     });
 
     it('ruling 1: a failing connect opens a window on its alias', () => {
-      deepStrictEqual(configurations()[6]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+refused/home/harness',
       ]);
@@ -3416,8 +3433,8 @@ describe('acceptance', () => {
     it('ruling 1: a failing connect answers from its own script and record', () => {
       deepStrictEqual(
         [
-          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
-          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
+          configurations()[7]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
+          configurations()[7]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
         ],
         [
           path.join('/run', 'failure-refused-script.json'),
@@ -3552,7 +3569,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 15}, () => EXECUTABLE),
+        Array.from({length: 16}, () => EXECUTABLE),
       );
     });
 
@@ -3563,7 +3580,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 15}, () => true),
+        Array.from({length: 16}, () => true),
       );
     });
 
@@ -3580,6 +3597,7 @@ describe('acceptance', () => {
           ['agent', 'dist-forwarding/**/*.test.cjs'],
           ['agent-off', 'dist-forwarding/**/*.test.cjs'],
           ['x11', 'dist-forwarding/**/*.test.cjs'],
+          ['x11-noxauth', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
@@ -3594,7 +3612,7 @@ describe('acceptance', () => {
     });
 
     it('D-85: the terminal launch opens the folder on ssh-remote+harness', () => {
-      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[8]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+harness/home/harness',
       ]);
@@ -3800,7 +3818,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[9]?.launchArgs.filter(argument =>
+        configurations()[10]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -3849,6 +3867,7 @@ describe('acceptance', () => {
           'agent',
           'agent-off',
           'x11',
+          'x11-noxauth',
           'failure-refused',
           'terminal',
           'socket',
@@ -3874,6 +3893,7 @@ describe('acceptance', () => {
           'agent',
           'agent-off',
           'x11',
+          'x11-noxauth',
           'failure-refused',
           'terminal',
           'socket',
@@ -3894,7 +3914,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 14}, () =>
+        Array.from({length: 15}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );

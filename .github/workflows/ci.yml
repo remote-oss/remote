@@ -2,7 +2,9 @@
 # Triggers (athena on #142, ruling 4): every pull request from this repository runs the checks and the cheap acceptance
 # jobs (slice 1, server lifecycle) at its head, so that "passing in CI" means the head, not the last dispatch. The
 # costly jobs (real server, VSCodium, host variants) stay opt-in on a manual dispatch, and always run on the tag of a
-# release (`<package>-v<semver>`). Every push to main runs the VSCodium job alone: the backstop for main's launches. The jobs run on the self-hosted runners, so they use no Actions minutes.
+# release (`<package>-v<semver>`). Every push to main runs the VSCodium launches the merged change can reach (the
+# post-merge run), and the schedule runs all of them: the backstops for main's launches, which PR CI never runs. The
+# jobs run on the self-hosted runners, so they use no Actions minutes.
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
@@ -44,8 +46,8 @@ on:
         type: boolean
         default: false
   # every two hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
-  # PR CI never runs. It ran on every merge until 2026-10-20, which kept one of the eight runners busy with it almost all
-  # the time; the other jobs ran on the pull request's merge ref
+  # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of the eight runners busy with it
+  # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select)
   # and once a day the genuine VS Code job runs alone on main. Each job reads which of the two fired
   schedule:
     - cron: '17 */2 * * *'
@@ -97,6 +99,35 @@ jobs:
           else
             echo docs-only=false >> "$GITHUB_OUTPUT"
           fi
+
+  # After a merge to main: the parts of the VSCodium job that the merged change can reach (acceptance-select over the
+  # push's range), so that two pull requests that pass alone and break each other once both are in show red within the
+  # hour, on main, rather than at the next backstop. PR CI runs no VSCodium launch, so this is the first run that meets
+  # a change together with everything merged before it. GitHub keeps one pending job per part, so merges in quick
+  # succession collapse into a run of the latest main, which holds each of them.
+  post-merge-select:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # a git diff and the launch table only, so a GitHub runner, as the changes job
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      parts: ${{ steps.select.outputs.parts }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: select
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          parts=$(node tools/acceptance-select.ts --base "$BEFORE" --head "$GITHUB_SHA" --parts)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
 
   checks:
     if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
@@ -304,7 +335,13 @@ jobs:
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
   acceptance-vscodium:
     name: acceptance (vscodium, ${{ matrix.launches }})
-    if: inputs.vscodium || github.event.schedule == '17 */2 * * *' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    needs: post-merge-select
+    # a merge to main runs the parts post-merge-select gives, none when its change reaches no launch
+    if: >-
+      !cancelled() && (inputs.vscodium || github.event.schedule == '17 */2 * * *' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.post-merge-select.result == 'success' && needs.post-merge-select.outputs.parts != '[]'))
     # Every launch of the suite (`all`) runs as six parts on six runners at once: the ssh launches in two, ssh-core and
     # windows (about 40 and 30 minutes) and the rest of the group (about an hour), since the group outgrew the job's 120
     # minutes on 2026-11-02 (41428931974 was cancelled with three launches left); the two parts of the `containers`
@@ -316,7 +353,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
@@ -435,6 +472,7 @@ jobs:
     name: ci-gate
     needs:
       - changes
+      - post-merge-select
       - checks
       - unit
       - quality
@@ -452,7 +490,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes checks unit quality slice-1 server host-variants real-server vscodium genuine: $RESULTS"
+          echo "changes post-merge-select checks unit quality slice-1 server host-variants real-server vscodium genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||

@@ -12,11 +12,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
     remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
 
-- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>")**; the
-  reference shows "Disconnected from SSH" until a connect has succeeded.
+- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>") and in the window title ("<folder> [SSH: <host>]")**; the
+  reference shows "Disconnected from SSH" and "<folder> [SSH]" until a connect has succeeded.
   - F-2307 AC-7 and F-2206 7.E1 describe the indicator without the host for an authority that never connected, while
-    F-2410 AC-12 and AC-31 describe it with the host for the same state. Ours registers the host label at the first
-    resolve's start, everywhere (athena's ruling on #1681; spec question on remote-oss/remote-ssh#40). Rows:
+    F-2410 AC-12 and AC-31 describe it with the host for the same state; F-2704 AC-25 gives the title without the host,
+    and AC-23 the reloading window's title as the folder alone. Ours registers the host label at the first resolve's
+    start, everywhere (athena's ruling on #1681 and #1608; spec question on remote-oss/remote-ssh#40). Rows:
     `ruling-1681-first-label`.
 
 - **Remote - SSH's local server download copies the archive without the reference's `.done` marker files**; the install starts only after the copy has completed in the same session.
@@ -121,6 +122,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     Rows: (ruling-1779-terminal-pty)
 
 ## Known issues
+
+- **In a new Remote - SSH window, Terminal: Select Default Profile, Debug: Select and Start Debugging and Tasks: Run Task show empty lists, or nothing, until a terminal has been opened in the window.**
+  Open a terminal first.
+  - F-2508 AC-14, AC-28 and AC-29 read their Givens as a window whose terminals have been used (`reading-1768-terminal-first`).
+    The empty lists before the first terminal are VS Code's own behaviour: the requests are answered and nothing of
+    ours shapes them (measured on 1.139.1, connect-125, #1768). Whether to report it upstream is the user's call.
 
 - **When a reconnection fails, for example after a cancelled passphrase, VS Code may show no "Cannot reconnect" dialog.**
   The indicator reads "Disconnected from SSH: <host>". Reload the window to connect again.

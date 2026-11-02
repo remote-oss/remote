@@ -45,9 +45,12 @@ describe('the terminal in an SSH window (card coverage-80)', function () {
             'HOOK',
             '${VSCODE_IPC_HOOK_CLI:+set}',
           ),
-          (
-            await printedAfter('c80-environment', 'FIRST', '${PATH%%:*}')
-          ).endsWith('/bin/remote-cli'),
+          // The shell says whether the first entry ends so, as a long path wraps over two rows in a narrow terminal.
+          await printedAfter(
+            'c80-environment',
+            'FIRST',
+            '$(case "${PATH%%:*}" in */bin/remote-cli) echo yes;; *) echo no;; esac)',
+          ),
           await printedAfter('c80-environment', 'AUTH', '[$SSH_AUTH_SOCK]'),
           await printedAfter('c80-environment', 'DISP', '[$DISPLAY]'),
           await printedAfter(
@@ -56,7 +59,7 @@ describe('the terminal in an SSH window (card coverage-80)', function () {
             '${SSH_CONNECTION:+set}',
           ),
         ],
-        ['vscode', 'set', true, '[]', '[]', 'set'],
+        ['vscode', 'set', 'yes', '[]', '[]', 'set'],
       );
     } finally {
       await closeWindow('c80-environment').catch(() => undefined);

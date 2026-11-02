@@ -12,13 +12,14 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import {userInfo} from 'node:os';
+import {tmpdir, userInfo} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {redact} from 'lib-log';
@@ -42,6 +43,7 @@ import {
   variable,
   waitFor,
   windowState,
+  withLogTail,
 } from '../windows/harness.ts';
 
 /** The question of the host pick. */
@@ -626,9 +628,12 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
   });
 
   it('F-2201 AC-46: a setting of white space only, or one that starts with a space, lists no host and fails the connect before ssh is started, with the value as written in the log', async () => {
-    const spaced = path.join(RUN_FOLDER, 'cfg-space');
+    // A short folder of its own: the log rewrites a run of 32 word characters, which the run folder's name can be.
+    const shortFolder = mkdtempSync(path.join(tmpdir(), 'c2-'));
+    const spaced = path.join(shortFolder, 'cfg-space');
     writeFileSync(spaced, hostBlock('cfghost'));
     const seen: unknown[] = [];
+    const first = connectionLog().length;
     for (const [index, value] of ['   ', ` ${spaced}`].entries()) {
       await configFileSetting(value);
       const picked = await hostPickResult();
@@ -648,10 +653,30 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
           ),
       ]);
     }
-    deepStrictEqual(seen, [
-      [FIXED_ROWS, [], 'Could not establish connection to "cfghost".', 0, true],
-      [FIXED_ROWS, [], 'Could not establish connection to "cfghost".', 0, true],
-    ]);
+    rmSync(shortFolder, {recursive: true, force: true});
+    deepStrictEqual(
+      seen,
+      [
+        [
+          FIXED_ROWS,
+          [],
+          'Could not establish connection to "cfghost".',
+          0,
+          true,
+        ],
+        [
+          FIXED_ROWS,
+          [],
+          'Could not establish connection to "cfghost".',
+          0,
+          true,
+        ],
+      ],
+      withLogTail(
+        'the connection log of the two windows:',
+        connectionLog().slice(first),
+      ),
+    );
   });
 
   it('F-2201 AC-46: an absolute path ending in a space or a newline is read as written: its host is listed, a window connects with ssh handed that exact file, and the file pick offers and opens it as written', async () => {

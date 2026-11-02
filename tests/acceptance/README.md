@@ -82,7 +82,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `vscode-remote://ssh-remote+agentfwd/home/harness` (`ForwardAgent` with the run's agent socket; `agent-off` on
   `agentfwd-off`, the same alias under another name so that it finds no connection of `agent`, with
   `remote.SSH.enableAgentForwarding` false) and `vscode-remote://ssh-remote+x11fwd/home/harness` (`ForwardX11`). They
-  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case;
+  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case; `x11-noxauth` is
+  the `x11` window on the Debian 12 host, which has no `xauth`;
 - `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
   `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the
@@ -737,6 +738,8 @@ Besides `harness`, the host image has fifteen users, and the run's `ssh_config` 
 | `password-retry` | `harness-pwonly` | login by password only, with three password prompts: sshd offers no keyboard-interactive to this user, so a refusal reads `Permission denied (password).`; the password is the run's own, as `password`'s |
 | `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `x11-forbidden` | `harness-nox11` | the run's key; sshd refuses X11 forwarding (`X11Forwarding no`), and the entry asks for it with `ForwardX11 yes` |
+| `agentfwd-tmpdir` | `harness-tmpdir` | the run's key, forwarding the run's agent as `agentfwd` does; the login shell (`tmpdir-shell`) sets `TMPDIR` to `~/tmp`, a folder of the account's own, then is `sh`, for a command, a script on standard input and a login terminal alike |
+| `agentfwd-notmp` | `harness-notmp` | the Ubuntu 26.04 host only: the run's key, forwarding the run's agent; an ACL entry on `/tmp` (`u:harness-notmp:r-x`) lets the account create nothing there, while OpenSSH 10.2 keeps the forwarded socket under `~/.ssh/agent`, so the agent still works; a row lifts it as root with `setfacl -x u:harness-notmp /tmp` and puts it back with `setfacl -m u:harness-notmp:r-x /tmp` |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |

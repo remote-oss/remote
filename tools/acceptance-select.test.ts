@@ -2,9 +2,16 @@
  * @fileoverview acceptance-select: the launches of the VSCodium run a change can reach.
  */
 
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
-import {launchesInput, selectLaunches} from './acceptance-select.ts';
+import {
+  launchesInput,
+  partsOf,
+  selectLaunches,
+  workflowParts,
+} from './acceptance-select.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 
 /** A launch table of each kind the selector reads: runner and plain launches, with and without extensions. */
@@ -190,5 +197,106 @@ describe('acceptance-select', () => {
 
   it('an empty change reaches no launch', () => {
     strictEqual(labelsFor().length, 0);
+  });
+
+  describe('the parts of the VSCodium job a merge to main needs (post-merge run)', () => {
+    /** Parts of the fixture table, as ci.yml writes its own: labels, and a part made of two. */
+    const PARTS = [
+      'local,remote',
+      'explorer-one',
+      'containers-one,containers-two',
+      'containers-three',
+    ];
+
+    it('a selection of every launch needs every part, each as it is written', () => {
+      deepStrictEqual(
+        partsOf(
+          selectLaunches(['tools/acceptance.ts'], LAUNCHES),
+          LAUNCHES,
+          PARTS,
+        ),
+        PARTS,
+      );
+    });
+
+    it('a part with some of its launches selected gives those labels, and a part with none is left out', () => {
+      deepStrictEqual(
+        partsOf(
+          {labels: ['containers-two', 'containers-three'], reasons: []},
+          LAUNCHES,
+          PARTS,
+        ),
+        ['containers-two', 'containers-three'],
+      );
+    });
+
+    it('a selection of no launch needs no part, and a launch in no part is left out', () => {
+      deepStrictEqual(
+        [
+          partsOf(selectLaunches(['docs/a.md'], LAUNCHES), LAUNCHES, PARTS),
+          partsOf(
+            {labels: ['trust-one', 'windows'], reasons: []},
+            LAUNCHES,
+            PARTS,
+          ),
+        ],
+        [[], []],
+      );
+    });
+
+    it('a part that names no launch is an error naming the part', () => {
+      throws(
+        () => partsOf({labels: ['local'], reasons: []}, LAUNCHES, ['gone']),
+        /ci.yml's part gone: unknown launch label\(s\): gone/,
+      );
+    });
+
+    it("ci.yml's own parts are read from its VSCodium matrix", () => {
+      deepStrictEqual(
+        workflowParts(
+          readFileSync(
+            path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+            'utf8',
+          ),
+        ),
+        [
+          '@ssh,!ssh-core,!windows',
+          'ssh-core,windows',
+          'containers-a',
+          'containers-b',
+          '@containers,!containers',
+          '@explorer,@hosts',
+        ],
+      );
+    });
+
+    it('a workflow whose VSCodium job names no parts is an error', () => {
+      throws(() => workflowParts('jobs: {}'), /names no parts/);
+    });
+
+    it("the repository's launches: the two containers parts stay two parts, and every launch needs ci.yml's six as written", () => {
+      const launches = launchesOf(REPOSITORY_ROOT);
+      const parts = workflowParts(
+        readFileSync(
+          path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+          'utf8',
+        ),
+      );
+      deepStrictEqual(
+        [
+          partsOf(
+            {labels: ['containers-a', 'containers-b'], reasons: []},
+            launches,
+            parts,
+          ),
+          partsOf(
+            selectLaunches(['tools/acceptance.ts'], launches),
+            launches,
+            parts,
+          ),
+        ],
+        [['containers-a', 'containers-b'], parts],
+      );
+    });
   });
 });

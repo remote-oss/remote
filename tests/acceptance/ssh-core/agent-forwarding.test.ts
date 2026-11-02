@@ -166,7 +166,7 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
     }
   });
 
-  it('F-2311 AC-10 (c99-setting-off): with the setting false on a host with no server, there is no link and a new terminal has the socket of the session that started the server', async () => {
+  it('F-2311 AC-10 (c99-setting-off): with the setting false on a host with no server, there is no link, the extension contributes no SSH_AUTH_SOCK, and a new terminal has the socket of the session that started the server', async () => {
     await keepingSettings(async () => {
       await userSettings({'remote.SSH.enableAgentForwarding': false});
       await connectedOn(FORWARDING, 'c99-setting-off');
@@ -180,8 +180,11 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
           {
             links: await hostLinks(),
             sessionSocket: socket === (await serverSessionSocket()),
+            contributed: ownContributions(
+              await contributionsNow('c99-setting-off'),
+            ).filter(entry => entry.startsWith('SSH_AUTH_SOCK')),
           },
-          {links: [], sessionSocket: true},
+          {links: [], sessionSocket: true, contributed: []},
           socket,
         );
       } finally {
