@@ -73,9 +73,12 @@ export interface Connected {
 const LINUX_ALIASES = [
   'harness',
   'password',
+  'password-retry',
   'noforward',
   'nosocket',
   'noall',
+  'changedkey',
+  'noforward-key',
   'fwd-clearall',
   'fwd-exit',
   'fwd-busy-exit',

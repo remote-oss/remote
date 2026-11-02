@@ -25,16 +25,16 @@ import {
   portsColumns,
   portsRows,
 } from '../windows/renderer.ts';
-import {connectingPrograms, holdOpen} from '../windows/forward-support.ts';
-import {DATA_FOLDER} from '../windows/maintenance.ts';
 import {
-  holdLocal,
-  listenHoldingOnHost,
+  connectingPrograms,
+  holdOpen,
   listenOnHost,
   localPortOf,
   showPorts,
   tunnelFor,
-} from './forward-support.ts';
+} from '../windows/forward-support.ts';
+import {DATA_FOLDER} from '../windows/maintenance.ts';
+import {holdLocal, listenHoldingOnHost} from './forward-support.ts';
 import {greetingOf} from './greeting.ts';
 
 const execFileAsync = promisify(execFile);

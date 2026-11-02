@@ -257,6 +257,7 @@ export function steps(
     lookupBeforeConnection: () => true,
     locateClient: () =>
       Promise.resolve(note('locateClient', {kind: 'done', value: WAITS})),
+    holdLookupFailure: failure => Promise.resolve(failure),
     decideTerms: () =>
       Promise.resolve(note('decideTerms', {kind: 'done', value: TERMS})),
     openConnection: () =>

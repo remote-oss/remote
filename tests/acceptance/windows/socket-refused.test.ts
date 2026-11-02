@@ -3,7 +3,6 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
-  onHost,
   openWindow,
   readUserSettings,
   recordLines,
@@ -13,6 +12,7 @@ import {
   type RecordLine,
 } from './harness.ts';
 import {freshHost, INSTALL_MILLISECONDS} from './maintenance.ts';
+import {listeningSockets} from './socket-files.ts';
 
 /** The buttons of a failure dialog, in the order the record has them. */
 const THREE_BUTTONS = ['Close Remote', 'Retry', 'More Actions...'];
@@ -35,19 +35,6 @@ function storedPlatform(): unknown {
     : (JSON.parse(text) as Record<string, unknown>)[
         'remote.SSH.remotePlatform'
       ];
-}
-
-/** The sockets of the user `user`'s server in the host's `/tmp`, as `/tmp/code-<uuid>`, that the kernel lists as listening. */
-async function listeningSockets(user: string): Promise<string[]> {
-  return (
-    await onHost(
-      'sh',
-      '-c',
-      `for path in $(awk '$4=="00010000" && $8 ~ /^\\/tmp\\/code-/ {print $8}' /proc/net/unix); do [ "$(stat -c %U "$path")" = ${user} ] && echo "$path"; done; true`,
-    )
-  )
-    .split('\n')
-    .filter(line => line !== '');
 }
 
 /** The entries that dismiss the failure dialog and the pick of actions of window `name`. */

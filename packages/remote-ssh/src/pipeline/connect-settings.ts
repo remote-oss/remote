@@ -105,6 +105,7 @@ export function connectionSettingsOf(
 export function termsSettingsOf(host: SettingHost): TermsSettings {
   return {
     useLocalServer: effectiveUseLocalServer(tunnelSettingsOf(host)),
+    useLocalServerSetting: switchOf(host, 'useLocalServer'),
     remotePlatform: valueOf(host, 'remotePlatform'),
     windowsRemotes: valueOf(host, 'windowsRemotes'),
     enableRemoteCommand: switchOf(host, 'enableRemoteCommand'),

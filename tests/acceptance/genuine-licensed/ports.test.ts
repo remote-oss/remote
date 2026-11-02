@@ -14,9 +14,9 @@ import {
   waitFor,
   windowNames,
 } from '../windows/harness.ts';
+import {forwardByHand} from '../windows/forward-support.ts';
 import {
   answerDialog,
-  answerInputBox,
   clickStatusItem,
   dialogOf,
   portProtocolChoices,
@@ -76,13 +76,6 @@ function greetingOf(port: number): Promise<string | undefined> {
       resolve(undefined);
     });
   });
-}
-
-/** Forwards `port` of the window by hand, as a user does with Forward a Port. */
-async function forwardByHand(window: string, port: number): Promise<void> {
-  const forwarding = inWindow(window, 'remote.tunnel.forwardCommandPalette');
-  await answerInputBox(window, String(port));
-  await forwarding;
 }
 
 /** The local port of the row for `remotePort`, from the window's tunnels. */

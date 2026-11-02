@@ -745,9 +745,9 @@ export function progressFor(
       shown(request.title);
       return real
         .withProgress(request, update =>
-          task((title, details) => {
+          task((title, details, increment, stage) => {
             shown(title, details);
-            update(title, details);
+            update(title, details, increment, stage);
           }),
         )
         .finally(() => {

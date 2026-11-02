@@ -700,6 +700,43 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-85: Host changedkey is the harness host whose own known-hosts file pins another key, with the check off', () => {
+    strictEqual(
+      accountBlock('changedkey'),
+      [
+        'Host changedkey',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  HostKeyAlias changedkey',
+        '  StrictHostKeyChecking no',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_changedkey',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-85: Host noforward-key is the harness account with the key whose line on the host refuses port forwarding', () => {
+    strictEqual(
+      accountBlock('noforward-key'),
+      [
+        'Host noforward-key',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_noportfwd',
+        '  IdentitiesOnly yes',
+        '  StrictHostKeyChecking accept-new',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [
@@ -735,12 +772,17 @@ describe('acceptance', () => {
     );
   });
 
-  it('tooling-34: Host twofactor and Host expired log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
+  it('tooling-34, coverage-82: Host twofactor, Host expired and Host ask-odd log in to the keyboard-interactive accounts by keyboard-interactive only, every prompt asked, without BatchMode', () => {
     deepStrictEqual(
-      [accountBlock('twofactor'), accountBlock('expired')],
+      [
+        accountBlock('twofactor'),
+        accountBlock('expired'),
+        accountBlock('ask-odd'),
+      ],
       [
         ['twofactor', 'harness-2fa'],
         ['expired', 'harness-expired'],
+        ['ask-odd', 'harness-odd'],
       ].map(([name = '', user = '']) =>
         [
           ...sharedLines(name, user),

@@ -11,8 +11,10 @@ const PLATFORMS: readonly string[] = ['linux', 'macOS', 'windows'];
 
 /** The settings the decision reads, as the editor reports them. */
 export interface PlatformSettings {
-  /** `remote.SSH.useLocalServer`: the shared connection is on. */
+  /** The shared connection as the connect uses it: `remote.SSH.useLocalServer`, and off in socket mode. */
   useLocalServer: boolean;
+  /** `remote.SSH.useLocalServer` as it is set, which the host's remote command follows, whatever mode the connect uses. */
+  useLocalServerSetting: boolean;
   /** `remote.SSH.remotePlatform`, a map from a host name or a pattern to a platform. */
   remotePlatform: unknown;
   /** `remote.SSH.windowsRemotes`, a list of exact host names. */
@@ -86,8 +88,8 @@ export function decidePlatform(
 }
 
 /**
- * Whether the host's remote command runs: only when `remote.SSH.enableRemoteCommand` and the shared connection are
- * on and no entry of `remote.SSH.remotePlatform` names a platform for the host.
+ * Whether the host's remote command runs: only when `remote.SSH.enableRemoteCommand` and `remote.SSH.useLocalServer`
+ * are on, whatever mode the connect uses, and no entry of `remote.SSH.remotePlatform` names a platform for the host.
  */
 export function remoteCommandInEffect(
   enableRemoteCommand: boolean,
@@ -96,9 +98,21 @@ export function remoteCommandInEffect(
 ): boolean {
   return (
     enableRemoteCommand &&
-    settings.useLocalServer &&
+    settings.useLocalServerSetting &&
     platformEntry(settings.remotePlatform, host) === undefined
   );
+}
+
+/** The platform the editor names for an operating system the probe reports. */
+export const PLATFORM_OF_PROBE = {linux: 'linux', darwin: 'macOS'} as const;
+
+/** The platform a stored record's operating system names, or `unknown` for one the editor has no name for. */
+export function platformOfRecord(
+  operatingSystem: string,
+): RemotePlatform | 'unknown' {
+  return operatingSystem === 'linux' || operatingSystem === 'darwin'
+    ? PLATFORM_OF_PROBE[operatingSystem]
+    : 'unknown';
 }
 
 /** What to write to `remote.SSH.remotePlatform` after a connect worked: nothing, or the exact key with the platform. */
