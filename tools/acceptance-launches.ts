@@ -892,6 +892,21 @@ export function launchesOf(root: string): Launch[] {
       },
       environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
     },
+    // The editor starts with SSH_AUTH_SOCK naming a socket where no agent runs yet; a row starts the agent later.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'passphrase-late',
+      suite: 'passphrase-late',
+      settings: {
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+        'remote.SSH.remotePlatform': {'passkey-add-yes': 'linux'},
+      },
+      environment: {
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+        SSH_AUTH_SOCK: '<run>/late-agent.sock',
+      },
+    },
     {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
     {
       label: 'preconnect',

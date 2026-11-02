@@ -87,6 +87,7 @@
         "terminal-login/*.test.ts",
         "terminal-odd/*.test.ts",
         "passphrase/*.test.ts",
+        "passphrase-late/*.test.ts",
         "extensionpack-german/*.test.ts",
         "extensionpack-partial/*.test.ts",
         "extensionpack-language/*.test.ts",
@@ -128,7 +129,7 @@
     "packages/*/src/web-extension.ts": ["exports"],
   },
   // System tools the tests run, which no package provides.
-  "ignoreBinaries": ["shellcheck", "ssh-add", "ss"],
+  "ignoreBinaries": ["shellcheck", "ssh-add", "ssh-agent", "ss"],
   "ignoreDependencies": [
     // The editor provides it to the acceptance tests at run time; @types/vscode types it.
     "vscode",

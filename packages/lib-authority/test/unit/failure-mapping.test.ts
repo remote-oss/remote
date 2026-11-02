@@ -23,6 +23,19 @@ describe('mapFailure (card authority-02 table)', () => {
     deepStrictEqual(mapFailure(failed), {kind: 'notAvailable', handled: false});
   });
 
+  it('F-2307 AC-13: a reconnection’s authentication failure is notAvailable handled false', () => {
+    deepStrictEqual(
+      mapFailure({
+        kind: 'authentication',
+        retryable: false,
+        isReconnection: true,
+        silent: false,
+        userAlreadyNotified: false,
+      }),
+      {kind: 'notAvailable', handled: false},
+    );
+  });
+
   it('silent -> notAvailable handled false', () => {
     const failed = allSet();
     failed.retryable = false;
