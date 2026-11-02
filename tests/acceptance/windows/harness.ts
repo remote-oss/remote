@@ -739,6 +739,14 @@ export function emptyWindows(): string[] {
 }
 
 /**
+ * The names of the empty windows that are open now. A closed window gives its name back and the next empty window takes
+ * the lowest free one, so the names that ever had an events file do not tell the windows that are there.
+ */
+export function openEmptyWindows(): string[] {
+  return emptyWindows().filter(isOpen);
+}
+
+/**
  * The name the next empty window will claim: `empty-1` when none is claimed yet, and one more than the highest
  * claimed when some are. A test that must script a window before it exists writes its entries for this name.
  */
@@ -765,10 +773,10 @@ export function nextEmptyName(): string {
 export async function nextEmptyWindow(
   action: () => void | Promise<void>,
 ): Promise<string> {
-  const before = new Set(emptyWindows());
+  const before = new Set(openEmptyWindows());
   await action();
   function fresh(): string[] {
-    return emptyWindows().filter(name => !before.has(name));
+    return openEmptyWindows().filter(name => !before.has(name));
   }
   let opened: string | undefined;
   await waitUntil(
