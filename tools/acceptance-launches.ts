@@ -5,6 +5,7 @@
 
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {passkeyCopies} from './acceptance-keys.ts';
 import type {HostBase} from './host-variants.ts';
 
 /** The window the remote launches open: the harness host's home folder over `ssh-remote`. */
@@ -849,6 +850,26 @@ export function launchesOf(root: string): Launch[] {
         'window.dialogStyle': 'custom',
         // Core hides the tab list of a single terminal; the rows read what the panel lists.
         'terminal.integrated.tabs.hideCondition': 'never',
+      },
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+    },
+    // The passphrase key's window connects through the shared local connection server with the extension's own inputs, read through the renderer, and the run's empty agent.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'passphrase-input',
+      suite: 'passphrase',
+      settings: {
+        // The remote name after the folder, as core's own label gives it.
+        'window.title': '[${rootName}]${remoteName}',
+        'window.dialogStyle': 'custom',
+        'remote.SSH.remotePlatform': Object.fromEntries(
+          [
+            'passkey',
+            ...passkeyCopies(),
+            'passkey-then-second',
+            'loosekey',
+          ].map(alias => [alias, 'linux']),
+        ),
       },
       environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
     },
