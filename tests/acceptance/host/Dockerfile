@@ -12,11 +12,12 @@
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
 # packets of port 22 and bring them back (the container runs with NET_ADMIN). xauth lets sshd forward X11, and
 # openssh-client brings ssh-add, with which a terminal lists the keys of a forwarded agent. git lets a terminal row
-# commit with the editor as its message editor (F-2508 AC-6).
+# commit with the editor as its message editor (F-2508 AC-6), and nodejs gives the debug and task rows a `node` on
+# the PATH (F-2508 AC-12, AC-13, AC-28, AC-29, AC-34); the server keeps its own.
 # alpine:3.22, pinned by the digest of its multi-platform index so that every run builds the same host.
 FROM alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
 
-RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ curl wget git bash zsh dash fish tcsh mksh loksh shadow \
+RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ curl wget git nodejs bash zsh dash fish tcsh mksh loksh shadow \
   && ssh-keygen -A \
   && for shell in /bin/bash /bin/zsh /usr/bin/dash /usr/bin/fish /bin/tcsh /bin/csh /bin/mksh /bin/ksh /usr/local/bin/sh; do \
        grep -qx "$shell" /etc/shells || echo "$shell" >> /etc/shells; \
