@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
+import type {ClientPlatform} from 'lib-ssh';
 import {
   buildSshRows,
-  type ClientPlatform,
   folderPresentation,
   folderRowId,
   hostRowId,
@@ -11,7 +11,7 @@ import {
 
 /** The label of the recent folder `path`, which no client platform changes. */
 function labelOf(path: string): string {
-  return folderPresentation(path, 'devbox', 'other').label;
+  return folderPresentation(path, 'devbox', 'linux').label;
 }
 
 /** The description of `path` under `devbox` on a client of `platform`. */
@@ -242,7 +242,7 @@ describe('the hostRow model of the SSH group', () => {
   });
 
   it('F-5104.AC-41: the accessible name of a folder row is its tooltip and ", has actions"', () => {
-    deepStrictEqual(folderPresentation('/w/bravo', 'devbox', 'other'), {
+    deepStrictEqual(folderPresentation('/w/bravo', 'devbox', 'linux'), {
       label: 'bravo',
       description: '/w/bravo',
       tooltip: "'/w/bravo' on devbox",
@@ -275,7 +275,7 @@ describe('the hostRow model of the SSH group', () => {
     ['.code-workspace', '.code-workspace', '/.code-workspace'],
   ] as const) {
     it(`F-5104.AC-27: ${JSON.stringify(path)} shows the label ${JSON.stringify(label)}, the path ${JSON.stringify(description)} and its tooltip`, () => {
-      deepStrictEqual(folderPresentation(path, 'devbox', 'other'), {
+      deepStrictEqual(folderPresentation(path, 'devbox', 'linux'), {
         label,
         description,
         tooltip: `'${description}' on devbox`,
@@ -326,10 +326,11 @@ describe('the hostRow model of the SSH group', () => {
       deepStrictEqual(
         [
           labelOf(path),
-          descriptionOf(path, 'other'),
+          descriptionOf(path, 'linux'),
+          descriptionOf(path, 'macOS'),
           descriptionOf(path, 'windows'),
         ],
-        [label, onOther, onWindows],
+        [label, onOther, onOther, onWindows],
       );
     });
   }
@@ -344,7 +345,8 @@ describe('the hostRow model of the SSH group', () => {
         '/w/bravo',
       ].map(path => [
         folderPresentation(path, 'devbox', 'windows'),
-        folderPresentation(path, 'devbox', 'other'),
+        folderPresentation(path, 'devbox', 'linux'),
+        folderPresentation(path, 'devbox', 'macOS'),
       ]),
       [
         '/',
@@ -353,8 +355,9 @@ describe('the hostRow model of the SSH group', () => {
         '/home/x/with space',
         '/w/bravo',
       ].map(path => [
-        folderPresentation(path, 'devbox', 'other'),
-        folderPresentation(path, 'devbox', 'other'),
+        folderPresentation(path, 'devbox', 'linux'),
+        folderPresentation(path, 'devbox', 'linux'),
+        folderPresentation(path, 'devbox', 'linux'),
       ]),
     );
   });

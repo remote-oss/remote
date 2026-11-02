@@ -3,8 +3,7 @@
  * per recent folder or workspace. It works on plain values, so the tree and the companion's answers stay outside it.
  */
 
-/** The client's platform as the rows tell it apart: the Windows forms of a path read differently on a Windows client. */
-export type ClientPlatform = 'windows' | 'other';
+import type {ClientPlatform} from 'lib-ssh';
 
 /** What a recent folder's row shows. */
 interface FolderPresentation {
@@ -124,7 +123,7 @@ export function buildSshRows(
   aliases: readonly string[],
   history: ReadonlyMap<string, readonly string[]>,
   sortSetting: unknown,
-  platform: ClientPlatform = 'other',
+  platform: ClientPlatform = 'linux',
 ): HostRow[] {
   return aliases.map(alias => ({
     rowId: hostRowId(alias),

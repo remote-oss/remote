@@ -9,7 +9,7 @@ import {runAskpassProgram} from 'lib-ssh';
 runAskpassProgram({
   programArguments: process.argv.slice(2),
   environment: process.env,
-  port: nodeEndpointPort(),
+  port: nodeEndpointPort(process.platform),
   output: text => process.stdout.write(text),
 })
   .then(status => {

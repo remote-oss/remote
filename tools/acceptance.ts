@@ -789,6 +789,11 @@ export function harnessSshConfig(
         agentSocket,
       ),
     ),
+    // ForwardAgent given as no, which forwards nothing, as unset does.
+    ...accountAlias('agentfwd-no', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardAgent no',
+    ]),
     // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
     // for one that may not create links in /tmp (the Ubuntu 26.04 host's).
     ...[

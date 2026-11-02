@@ -101,7 +101,7 @@ describe('a helper process', function () {
 
   it('starts once, serves two leases, and ends by its grace after the last release', async () => {
     const environment = {
-      ...nodeClientEnvironment(process.execPath, WAITS),
+      ...nodeClientEnvironment(process.execPath, WAITS, process.platform),
       endpointFolder: folder,
     };
     const request = {
@@ -129,7 +129,7 @@ describe('a helper process', function () {
     first.release();
     second.release();
     await delay(1500);
-    const reconnect = await nodeEndpointPort()
+    const reconnect = await nodeEndpointPort(process.platform)
       .connect(endpoint)
       .then(
         () => 'connected',
@@ -174,7 +174,7 @@ describe("a helper started outside its starter's tree", function () {
       }
       await exited;
       const environment = {
-        ...nodeClientEnvironment(process.execPath, WAITS),
+        ...nodeClientEnvironment(process.execPath, WAITS, process.platform),
         endpointFolder: folder,
       };
       const lease = leaseOf(

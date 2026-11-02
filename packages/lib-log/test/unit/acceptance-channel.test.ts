@@ -1,5 +1,8 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {acceptanceChannelPortFor} from '../../src/index.ts';
+import {
+  acceptanceChannelPortFor,
+  acceptanceLogFileOf,
+} from '../../src/index.ts';
 import {
   AppendedText,
   NotingChannels,
@@ -126,5 +129,20 @@ describe('acceptanceChannelPortFor (card containers-37)', () => {
     ).createOutputChannel('Dev Containers');
     channel.appendLine('line');
     deepStrictEqual([...files.appended], [['/run/other.txt', 'line\n']]);
+  });
+});
+
+describe('acceptanceLogFileOf (card connect-130b)', () => {
+  it('names the file only when the switch is 1 and the variable is not empty', () => {
+    deepStrictEqual(
+      [
+        {REMOTE_OSS_ACCEPTANCE: '1', [VARIABLE]: LOG_FILE},
+        {[VARIABLE]: LOG_FILE},
+        {REMOTE_OSS_ACCEPTANCE: 'yes', [VARIABLE]: LOG_FILE},
+        {REMOTE_OSS_ACCEPTANCE: '1'},
+        {REMOTE_OSS_ACCEPTANCE: '1', [VARIABLE]: ''},
+      ].map(environment => acceptanceLogFileOf(environment, VARIABLE)),
+      [LOG_FILE, undefined, undefined, undefined, undefined],
+    );
   });
 });

@@ -94,6 +94,26 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.reopenLocally",
+        "title": "%commands.Reopenlocally.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.reopenInWSL",
+        "title": "%commands.Reopeninwsl.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.reopenInSSH",
+        "title": "%commands.Reopeninssh.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.reopenInTunnel",
+        "title": "%commands.Reopenintunnel.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.showReopenInContainerNotificationReset",
         "title": "%commands.Showreopenincontainernotificationreset.title%",
         "category": "Dev Containers"
@@ -203,6 +223,22 @@
           "when": "!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.reopenLocally",
+          "when": "canReopenLocally && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInWSL",
+          "when": "canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInSSH",
+          "when": "canReopenInSSH && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInTunnel",
+          "when": "canReopenInTunnel && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
           "command": "remote-containers.explorerTargetsRefresh",
           "when": "false"
         },
@@ -276,6 +312,26 @@
           "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.reopenLocally",
+          "group": "1_folder@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenLocally && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInWSL",
+          "group": "1_folder@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInSSH",
+          "group": "1_folder@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenInSSH && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInTunnel",
+          "group": "1_folder@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && canReopenInTunnel && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
           "command": "remote-containers.openFolderInContainerInCurrentWindow",
           "group": "1_folder@1",
           "when": "view == targetsContainers && viewItem =~ /(^| )openFolder( |$)/ && !remote-containers:standingDown"
@@ -346,6 +402,26 @@
           "command": "remote-containers.openFolder",
           "group": "remote_30_dev-container_2_actions@8",
           "when": "!hideConnectCommands && workspaceFolderCount == 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenLocally",
+          "group": "remote_30_dev-container_2_actions@7",
+          "when": "canReopenLocally && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInWSL",
+          "group": "remote_30_dev-container_2_actions@7",
+          "when": "canReopenInWSL && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInSSH",
+          "group": "remote_30_dev-container_2_actions@7",
+          "when": "canReopenInSSH && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.reopenInTunnel",
+          "group": "remote_30_dev-container_2_actions@7",
+          "when": "canReopenInTunnel && !hideConnectCommands && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.createDevContainerFile",

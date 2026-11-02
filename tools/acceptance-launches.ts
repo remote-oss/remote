@@ -174,6 +174,10 @@ const EXPLORER_LAUNCH = {
   withExtensions: ['remote-oss.remote-explorer'],
   // The remote name after the folder, as core's own label gives it, so a claimed window's page is found by its state.
   settings: {'window.title': '[${rootName}]${remoteName}'},
+  // The explorer appends each push its inbox receives from Remote - SSH to this file, which `companionCalls` reads.
+  environment: {
+    REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD: '<run>/companion-record.jsonl',
+  },
 } as const;
 
 /** The editor's gallery variables pointed at a closed port, so that the Extensions view has no gallery data. */
@@ -315,6 +319,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-flows.test.ts',
   'authoring-optional.test.ts',
   'authoring-options.test.ts',
+  'authoring-pick.test.ts',
   'authoring-sweep.test.ts',
   'authoring-templates.test.ts',
   'authoring-user-data.test.ts',
@@ -981,12 +986,19 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
-      environment: {HOME: '<run>/home'},
+      environment: {...EXPLORER_LAUNCH.environment, HOME: '<run>/home'},
     },
     {
       ...EXPLORER_LAUNCH,
       label: 'explorer-rows',
       suite: 'explorer-rows',
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-folders',
+      suite: 'explorer-folders',
+      // The confirmation of File: Clear Recently Opened... is drawn in the window, where the renderer helpers read it.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
     },
     {
       ...EXPLORER_LAUNCH,
@@ -999,7 +1011,10 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'add-host',
       suite: 'add-host',
-      environment: {HOME: '<run>/add-host-home'},
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/add-host-home',
+      },
     },
     {
       ...EXPLORER_LAUNCH,

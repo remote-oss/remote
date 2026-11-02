@@ -49,6 +49,7 @@ runHelper(
     createShutdownRegistry({runDocker, setTimer: nodeTimer, logLine}),
   ),
   logLine,
+  process.platform,
 )
   .then(() => {
     // The helper has ended by its policy or a stop; the editor's runtime may still hold handles that keep it up.

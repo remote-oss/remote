@@ -1,17 +1,19 @@
 import {strictEqual} from 'node:assert';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
+import type {Interpreter} from 'lib-host';
 import {
   type BootstrapRequest,
   scriptFor,
   type ScriptParameters,
 } from '../../src/index.ts';
+import {POWERSHELL_STEPS} from '../../src/scripts/powershell-script.ts';
 import {parametersFor} from './fake-host.ts';
 
 /** The key of the CLI's place in the parameters. */
 const CLI_PARAMETERS = 'cli';
 
-const GOLDEN_FOLDER = path.join(import.meta.dirname, 'golden', 'posix');
+const GOLDEN_FOLDER = path.join(import.meta.dirname, 'golden');
 
 /** Set to rewrite the golden files from the renderer instead of comparing, after a change meant to show in review. */
 const REWRITE = process.env.GOLDEN_REWRITE === '1';
@@ -67,13 +69,18 @@ function fullParameters(): ScriptParameters {
 }
 
 function goldenRow(
+  interpreter: Interpreter,
   file: string,
   request: BootstrapRequest,
   parameters: () => ScriptParameters,
 ): void {
   it(file, () => {
-    const rendered = scriptFor(request, 'posixShell', parameters());
-    const golden = path.join(GOLDEN_FOLDER, file);
+    const rendered = scriptFor(request, interpreter, parameters());
+    const golden = path.join(
+      GOLDEN_FOLDER,
+      interpreter === 'posixShell' ? 'posix' : 'powershell',
+      file,
+    );
     if (REWRITE) {
       writeFileSync(golden, rendered);
     }
@@ -81,13 +88,16 @@ function goldenRow(
   });
 }
 
+const PARAMETER_SETS = [
+  ['base', parametersFor],
+  ['full', fullParameters],
+] as const;
+
 describe('the POSIX bootstrap script, as rendered', () => {
-  for (const [label, parameters] of [
-    ['base', parametersFor],
-    ['full', fullParameters],
-  ] as const) {
+  for (const [label, parameters] of PARAMETER_SETS) {
     for (const step of SINGLE_SCRIPT_STEPS) {
       goldenRow(
+        'posixShell',
         `${label}-${step}.sh`,
         {installMode: 'singleScript', step},
         parameters,
@@ -95,8 +105,24 @@ describe('the POSIX bootstrap script, as rendered', () => {
     }
     for (const step of STEPWISE_ACTIONS) {
       goldenRow(
+        'posixShell',
         `${label}-stepwise-${step}.sh`,
         {installMode: 'stepwise', step},
+        parameters,
+      );
+    }
+  }
+});
+
+describe('the PowerShell bootstrap script, as rendered', () => {
+  for (const [label, parameters] of PARAMETER_SETS) {
+    for (const step of SINGLE_SCRIPT_STEPS.filter(each =>
+      POWERSHELL_STEPS.has(each),
+    )) {
+      goldenRow(
+        'powershell',
+        `${label}-${step}.ps1`,
+        {installMode: 'singleScript', step},
         parameters,
       );
     }

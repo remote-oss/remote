@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type * as vscode from 'vscode';
 import {SSH_COMPANION_ID} from 'lib-companion';
+import type {PushRecorder} from '../../src/companion/push-record.ts';
 import {commands} from '../../src/identifiers.generated.ts';
 import {
   activateInWindow,
@@ -199,6 +200,7 @@ function contextOf(): Context {
 
 async function activated(
   options: EditorOptions,
+  record?: PushRecorder,
 ): Promise<Fixture & {context: Context}> {
   const fixture = fixtureOf(options);
   const context = contextOf();
@@ -209,7 +211,8 @@ async function activated(
       fixture.events.push('setup');
       return Promise.resolve();
     },
-    'other',
+    'linux',
+    record,
   );
   return {...fixture, context};
 }
@@ -278,7 +281,7 @@ describe('the activation of a window (card explorer-03c)', () => {
       fixture.editor,
       contextOf() as never,
       () => Promise.resolve(),
-      'other',
+      'linux',
     );
     deepStrictEqual(
       fixture.events.filter(event => event.startsWith('warning')),
@@ -591,6 +594,77 @@ describe('the activation of a window (card explorer-03c)', () => {
       [outcomes, scenario.events.filter(event => event.startsWith('ask '))],
       [[undefined, undefined], []],
     );
+  });
+
+  it('tooling-107: a push the inbox reads is recorded once with its envelope, before its handler runs', async () => {
+    const recorded: Array<[string, unknown, number]> = [];
+    const scenario = await activated({}, (commandId, envelope) => {
+      recorded.push([commandId, envelope, scenario.events.length]);
+    });
+    await treeOf(scenario);
+    const asked = scenario.events.length;
+    const push = {
+      interfaceVersion: VERSION,
+      outcome: 'none',
+      folders: ['vscode-remote://ssh-remote+harness/home/harness/a'],
+    };
+    await commandOf(scenario, INBOX.setActiveFolders)?.(push);
+    await commandOf(
+      scenario,
+      INBOX.sshHostsChanged,
+    )?.({
+      interfaceVersion: VERSION,
+    });
+    deepStrictEqual(
+      [
+        recorded.map(([commandId, envelope]) => [commandId, envelope]),
+        // The hosts push asks the companion for the hosts again after it is recorded, not before.
+        recorded.map(([, , seen]) => seen - asked),
+      ],
+      [
+        [
+          [INBOX.setActiveFolders, {...push, folders: push.folders}],
+          [INBOX.sshHostsChanged, {interfaceVersion: VERSION}],
+        ],
+        [0, 0],
+      ],
+    );
+  });
+
+  it('tooling-107: a push the inbox refuses, a foreign argument or a newer major version, is not recorded', async () => {
+    const recorded: string[] = [];
+    const scenario = await activated({}, commandId => {
+      recorded.push(commandId);
+    });
+    await treeOf(scenario);
+    await commandOf(scenario, INBOX.setActiveFolders)?.({});
+    await commandOf(
+      scenario,
+      INBOX.setActiveFolders,
+    )?.({
+      interfaceVersion: {major: 2, minor: 0},
+      outcome: 'none',
+    });
+    await commandOf(
+      scenario,
+      INBOX.sshHostsChanged,
+    )?.({
+      interfaceVersion: {major: 2, minor: 0},
+    });
+    deepStrictEqual(recorded, []);
+  });
+
+  it('tooling-107: with no recorder the inbox records nothing and still handles the push', async () => {
+    const scenario = await activated({});
+    await treeOf(scenario);
+    const asked = scenario.events.length;
+    await commandOf(
+      scenario,
+      INBOX.sshHostsChanged,
+    )?.({
+      interfaceVersion: VERSION,
+    });
+    deepStrictEqual(scenario.events.length - asked > 0, true);
   });
 
   it('F-5901.AC-19: where the other runs, the inbox is not served', async () => {

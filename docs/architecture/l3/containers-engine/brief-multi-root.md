@@ -36,6 +36,13 @@ F-0301 AC-22 and AC-50, F-0106 AC-44, F-0101 AC-3b, and F-0406 AC-30 and AC-31. 
      `.devcontainer/<sub>/devcontainer.json`).
      - **None:** the "Add Dev Container Configuration Files" wizard (F-0302 / F-0801). This holds even when every listed
        root carries a configuration (AC-22, F-0106 AC-44).
+       - **Where it writes** (themis's question): beside the workspace file, at `<hostPath>/.devcontainer/devcontainer.json`,
+         the same place the reopen reads (F-0801 6.8 step 3: a configuration next to the `.code-workspace` file is the one
+         that gives S027's row its S082 "Configuration already exists").
+       - **The location pick** keeps its plain two rows (S027, focused, and the user-data row), with no stage pick and no
+         S304 folder pick (F-0801 6.8 steps 1 and 2).
+       - **Absolute paths:** a workspace with absolute folder paths and a configuration beside its file gets F-0404's
+         absolute-path dialog first (F-0801 6.8 step 4).
      - **One:** a direct connect.
      - **Several:** 5.0 step 4's picker, with the same rows, relative paths and "Open File" buttons.
    - Per-root configurations are never consulted by Reopen in Container. They are by "Open Container Configuration
@@ -64,7 +71,17 @@ F-0301 AC-22 and AC-50, F-0106 AC-44, F-0101 AC-3b, and F-0406 AC-30 and AC-31. 
        - "Any Workspace" writes the one global slot that "Any Folder" writes.
        - "Current Workspace" writes the `.code-workspace` file's own workspace state, with the same key and shape as
          the folder case.
-   - An **untitled** multi-root window keeps the folder wording, S426 (BR-1), with its existing trigger.
+   - **An untitled multi-root window has a form of its own** (F-0402 6.5; themis's question). Today's notification shows
+     nothing there, because `reopen-notification.ts` returns early for any window without exactly one folder.
+     - **When:** a configuration is found for any of its roots, by BR-1's per-root discovery aggregated, and the untitled
+       workspace isn't suppressed in its own workspace state.
+     - **Text:** the folder skeleton S426 ("…Reopen folder…"), never S427. Its `{0}` is always STR:S368 ("There is a
+       [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository."),
+       even with one root's configuration (6.5 step 3). The link runs Open Container Configuration File, which picks across
+       the roots.
+     - **Don't Show Again...:** the folder follow-up S151 ("Any Folder" or "Current Folder"). "Current Folder" writes the
+       untitled workspace's own workspace state (6.5 step 6).
+     - **Reopen in Container:** it takes decision 2's untitled route, F-0404's S415 dialog, and the window stays local.
 
 5. **A saved `.code-workspace` with exactly one root takes the workspace route** (daedalus's question on #1204).
    - **The reopen:** a saved workspace file is one window kind whatever its root count. F-0401 6.5 covers

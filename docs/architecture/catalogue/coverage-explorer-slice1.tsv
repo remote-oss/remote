@@ -1,36 +1,36 @@
 ac	tag	reason
-F-2503.AC-1	deferred	explorer slice 1: increment 2
+F-2503.AC-1	acceptance	
 F-2503.AC-2	unit	
-F-2503.AC-3	deferred	explorer slice 1: increment 2
-F-2503.AC-4	deferred	explorer slice 1: increment 2
-F-2503.AC-5	deferred	explorer slice 1: increment 2
-F-2503.AC-6	deferred	explorer slice 1: increment 2
-F-2503.AC-7	deferred	explorer slice 1: increment 2
-F-2503.AC-8	deferred	explorer slice 1: increment 2
-F-2503.AC-9	deferred	explorer slice 1: increment 2
-F-2503.AC-10	deferred	explorer slice 1: increment 2
-F-2503.AC-11	deferred	explorer slice 1: increment 2
+F-2503.AC-3	acceptance	
+F-2503.AC-4	acceptance	
+F-2503.AC-5	acceptance	
+F-2503.AC-6	acceptance	
+F-2503.AC-7	acceptance	
+F-2503.AC-8	acceptance	
+F-2503.AC-9	acceptance	
+F-2503.AC-10	acceptance	
+F-2503.AC-11	acceptance	
 F-2503.AC-12	unit	
 F-2503.AC-13	unit	
-F-2503.AC-14	deferred	explorer slice 1: increment 2
-F-2503.AC-15	deferred	explorer slice 1: increment 2
-F-2503.AC-16	deferred	explorer slice 1: increment 2
-F-2503.AC-17	deferred	explorer slice 1: increment 2
-F-2503.AC-18	deferred	explorer slice 1: increment 2
-F-2503.AC-19	deferred	explorer slice 1: increment 2
-F-2503.AC-20	deferred	explorer slice 1: increment 2
-F-2503.AC-21	deferred	explorer slice 1: increment 2
-F-2503.AC-22	deferred	explorer slice 1: increment 2
-F-2503.AC-23	deferred	explorer slice 1: increment 2
-F-2503.AC-24	deferred	explorer slice 1: increment 2
-F-2503.AC-25	deferred	explorer slice 1: increment 2
-F-2503.AC-26	deferred	explorer slice 1: increment 2
-F-2503.AC-27	deferred	explorer slice 1: increment 2
+F-2503.AC-14	acceptance	
+F-2503.AC-15	acceptance	
+F-2503.AC-16	acceptance	
+F-2503.AC-17	acceptance	
+F-2503.AC-18	acceptance	
+F-2503.AC-19	acceptance	
+F-2503.AC-20	acceptance	
+F-2503.AC-21	acceptance	
+F-2503.AC-22	acceptance	
+F-2503.AC-23	acceptance	
+F-2503.AC-24	acceptance	
+F-2503.AC-25	acceptance	
+F-2503.AC-26	acceptance	
+F-2503.AC-27	acceptance	
 F-2503.AC-28	unit	
-F-2503.AC-29	deferred	explorer slice 1: increment 2
+F-2503.AC-29	acceptance	
 F-2503.AC-30	unit	
-F-2503.AC-31	deferred	explorer slice 1: increment 2
-F-2503.AC-32	deferred	explorer slice 1: increment 2
+F-2503.AC-31	acceptance	
+F-2503.AC-32	acceptance	
 F-2503.AC-33	deferred	explorer slice 1: increment 2
 F-5001.AC-1	acceptance	
 F-5001.AC-2	acceptance	

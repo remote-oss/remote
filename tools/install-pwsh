@@ -70,5 +70,7 @@ if [ ! -f "$module/PSScriptAnalyzer.psd1" ]; then
   mv "$module.partial" "$module"
 fi
 
+# The module that loads at the pinned version, with its folder: an image may carry a copy of its own, and the one here
+# comes first on pwsh's module path.
 "$bin/pwsh" -NoLogo -NoProfile -NonInteractive -Command \
-  "'pwsh ' + \$PSVersionTable.PSVersion.ToString(); 'PSScriptAnalyzer ' + (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object Version -eq '$PSSA_VERSION').Version.ToString()"
+  "'pwsh ' + \$PSVersionTable.PSVersion.ToString(); \$loaded = Import-Module PSScriptAnalyzer -RequiredVersion '$PSSA_VERSION' -PassThru; 'PSScriptAnalyzer ' + \$loaded.Version.ToString() + ' from ' + \$loaded.ModuleBase"

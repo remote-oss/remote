@@ -1,6 +1,6 @@
 /**
- * @fileoverview The endpoint port on Node.js: a Unix socket that only the user can open, one JSON value per line.
- * The Windows named pipe is provisional and refuses until it has been run on Windows.
+ * @fileoverview The endpoint port on Node.js: a Unix socket that only the user can open, or on Windows a named pipe,
+ * one JSON value per line.
  */
 
 import {createConnection, createServer, type Socket} from 'node:net';
@@ -75,22 +75,12 @@ export function lineConnection(socket: Socket): EndpointConnection {
   };
 }
 
-/** The answer of every endpoint call on Windows until the named pipe has been run there. */
-function refuseProvisional(): Promise<never> {
-  return Promise.reject(
-    new Error(
-      'helper endpoints on Windows (named pipes) are not available yet',
-    ),
-  );
-}
-
-/** The endpoint port of this platform; on Windows every call rejects as provisional. */
-export function nodeEndpointPort(
-  platform: string = process.platform,
-): EndpointPort {
-  if (platform === 'win32') {
-    return {listen: refuseProvisional, connect: refuseProvisional};
-  }
+/**
+ * The endpoint port of this platform: the same `net` code serves a socket file and, on Windows, a named pipe. A socket
+ * file is made readable by its user alone; a pipe has no file mode, so no mask is set for one.
+ */
+export function nodeEndpointPort(platform: string): EndpointPort {
+  const ownerOnly = platform !== 'win32';
   return {
     listen: (endpoint, onConnection) =>
       new Promise<EndpointServer>((resolve, reject) => {
@@ -98,13 +88,20 @@ export function nodeEndpointPort(
           onConnection(lineConnection(socket));
         });
         // The mask is process-wide while the listen is pending, which a single-purpose helper process can bear.
-        const previousMask = process.umask(OWNER_ONLY_MASK);
+        const previousMask = ownerOnly
+          ? process.umask(OWNER_ONLY_MASK)
+          : undefined;
+        function restoreMask(): void {
+          if (previousMask !== undefined) {
+            process.umask(previousMask);
+          }
+        }
         server.once('error', error => {
-          process.umask(previousMask);
+          restoreMask();
           reject(error);
         });
         server.listen(endpoint, () => {
-          process.umask(previousMask);
+          restoreMask();
           resolve({
             close: () =>
               new Promise<void>(closed => {
