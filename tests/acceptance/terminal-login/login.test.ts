@@ -13,9 +13,10 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  answerToast,
+  paletteRun,
   answerInputBox,
   chooseQuickPickItem,
-  paletteRun,
   pressEscape,
   clickToastLink,
   connectSurface,
@@ -24,6 +25,7 @@ import {
   panelShown,
   quickPickOf,
   terminalFocused,
+  toastLinkTitles,
   terminalSpans,
   terminalTabsOf,
   typeInTerminal,
@@ -447,9 +449,24 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     return name;
   }
 
-  /** Runs Uninstall VS Code Server on Host... in window `name` and picks the host `alias` once the pick is open. */
-  async function uninstallHost(name: string, alias: string): Promise<void> {
-    void inWindow(name, 'opensshremotes.cleanDevBox');
+  /** Closes window `name` after answering the Killed notice, which the kill waits on and a window cannot close behind. */
+  async function closeAfterKill(name: string): Promise<void> {
+    await waitFor(
+      'the Killed notice',
+      async () =>
+        (await notifications(name)).some(text =>
+          text.startsWith('Killed VS Code Server on'),
+        ),
+      120_000,
+    );
+    await answerToast(name, 'Killed VS Code Server on', 'Open Logs');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    await closeWindow(name);
+  }
+
+  /** Runs Kill VS Code Server on Host... in window `name` and picks the host `alias` once the pick is open. */
+  async function killHost(name: string, alias: string): Promise<void> {
+    void inWindow(name, 'opensshremotes.cleanRemoteServer');
     await waitFor(
       'the host pick',
       async () => (await quickPickOf(name)) !== undefined,
@@ -458,10 +475,67 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
     await chooseQuickPickItem(name, alias);
   }
 
+  /** Waits until the uninstall terminal is listed in the panel of window `name`, or no longer. */
+  function untilKillTab(name: string, listed: boolean): Promise<void> {
+    return waitFor(
+      `the Uninstall VS Code Server tab to be ${listed ? 'listed' : 'gone'}`,
+      async () =>
+        (await tabNames(name)).includes('Uninstall VS Code Server') === listed,
+      120_000,
+    );
+  }
+
+  /** The text on the screen of the terminal window `name` shows, once it holds `text`. */
+  async function screenWith(name: string, text: string): Promise<string> {
+    await waitFor(
+      `the terminal of ${name} to show ${text}`,
+      async () => (await screenOf(name)).includes(text),
+      90_000,
+    );
+    return screenOf(name);
+  }
+
+  it('F-2308 AC-19 (c82-uninstall-shown): with the setting on the Uninstall VS Code Server terminal is revealed with ssh’s prompt and closes by itself when done', async () => {
+    const name = await connectedByTerminal('c82-uninstall-shown');
+    await killHost(name, 'password');
+    await untilKillTab(name, true);
+    await screenWith(name, PASSWORD_PROMPT);
+    const shown = {
+      panel: await panelShown(name),
+      focused: await terminalFocused(name),
+    };
+    await typeInTerminal(name, `${hostPassword()}\n`);
+    await untilKillTab(name, false);
+    deepStrictEqual(
+      {shown, left: await tabNames(name)},
+      {shown: {panel: true, focused: true}, left: ['install']},
+    );
+    await closeAfterKill(name);
+  });
+
+  it('F-2308 AC-28 (c82-uninstall-other): in a connected window the kill on another password host reveals an Uninstall VS Code Server terminal beside install, takes the password there, closes itself, and install and the panel stay', async () => {
+    const name = await connectedByTerminal('c82-uninstall-other');
+    await killHost(name, 'password-retry');
+    await untilKillTab(name, true);
+    const beside = await tabNames(name);
+    await screenWith(name, PASSWORD_ONLY_PROMPT);
+    await typeInTerminal(name, `${hostPassword()}\n`);
+    await untilKillTab(name, false);
+    deepStrictEqual(
+      {beside, left: await tabNames(name), panel: await panelShown(name)},
+      {
+        beside: ['install', 'Uninstall VS Code Server'],
+        left: ['install'],
+        panel: true,
+      },
+    );
+    await closeAfterKill(name);
+  });
+
   it('F-2308 AC-19 (c82-uninstall-hidden): with the setting off the Uninstall VS Code Server terminal stays hidden and the password comes as a quick input', async () => {
     const name = await connectedByTerminal('c82-uninstall-hidden');
     await setUserSetting(SHOW_TERMINAL, false);
-    await uninstallHost(name, 'password');
+    await killHost(name, 'password');
     await waitFor(
       'the password quick input',
       async () =>
@@ -478,7 +552,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       tabs: ['install'],
       quick: 'Enter password for harness-pw@127.0.0.1',
     });
-    await closeWindow(name);
+    await closeAfterKill(name);
   });
 
   /** The text on the screen of the terminal window `name` shows, read in the page. */
@@ -489,7 +563,7 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       .replaceAll('\u00a0', ' ');
   }
 
-  it('F-2308 AC-8 (c82-tunnel-hidden): with dynamic forwarding off and the setting off the tunnel phase reads Setting up SSH tunnel, the SSH Tunnel terminal stays hidden, its password comes as a second quick input, and details reveals it', async () => {
+  it('F-2308 AC-7, AC-8 (c82-tunnel-hidden): with dynamic forwarding off and the setting off the tunnel phase reads Setting up SSH tunnel with a details link titled Show details in terminal, the SSH Tunnel terminal stays hidden, its password comes as a second quick input, and details reveals it', async () => {
     await setUserSetting(DYNAMIC_FORWARDING, false);
     await setUserSetting(SHOW_TERMINAL, false);
     const name = await openPasswordWindow('c82-tunnel-hidden');
@@ -507,9 +581,12 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
         ),
       90_000,
     );
-    const phase = (await notifications(name)).find(text =>
-      text.includes('Setting up SSH tunnel'),
-    );
+    const phase = {
+      text: (await notifications(name)).find(text =>
+        text.includes('Setting up SSH tunnel'),
+      ),
+      titles: await toastLinkTitles(name, 'Setting up SSH Host'),
+    };
     await waitFor(
       'the second password quick input',
       async () =>
@@ -534,7 +611,10 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
         quick: (await quickPickOf(name))?.placeholder,
       },
       {
-        phase: 'Setting up SSH Host password: (details) Setting up SSH tunnel',
+        phase: {
+          text: 'Setting up SSH Host password: (details) Setting up SSH tunnel',
+          titles: ['Show details in terminal'],
+        },
         hidden: {panel: false, tabs: []},
         revealed: ['SSH Tunnel'],
         quick: 'Enter password for harness-pw@127.0.0.1',

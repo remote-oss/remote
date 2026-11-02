@@ -1928,6 +1928,20 @@ export async function clickToastLink(
   }
 }
 
+/** The titles (tooltips) of the links in the message of the toast of window `name` that starts with `messageStart`, in order; none when there is no such toast. */
+export async function toastLinkTitles(
+  name: string,
+  messageStart: string,
+): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+  const item = [...document.querySelectorAll('.notifications-toasts .notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  return item === undefined ? [] : [...item.querySelectorAll('.notification-list-item-message a')].map(each => each.getAttribute('title') ?? '');
+})()`,
+  );
+}
+
 /** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */
 const OPEN_CENTRE = '.notifications-center.visible';
 
