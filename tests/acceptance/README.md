@@ -740,6 +740,7 @@ Besides `harness`, the host image has fourteen users, and the run's `ssh_config`
 | `nosocket` | `harness-nosock` | the run's key; sshd refuses stream-local forwarding (`AllowStreamLocalForwarding no`), which socket mode's tunnel needs |
 | `noall` | `harness-noall` | the run's key; sshd refuses all forwarding (`DisableForwarding yes`) |
 | `noforward-key` | `harness` | a key of its own (`id_noportfwd`), given to the key accounts with `no-port-forwarding` on its `authorized_keys` line: sshd allows forwarding, and the key's sessions get none |
+| `x11-timeout`, `x11-noauth` | `harness` | `ForwardX11 yes` untrusted with `ForwardX11Timeout 60s`, or with an `XAuthLocation` that names no program (F-2312) |
 | `x11-untrusted`, `x11-match` | `harness` | the run's key with `ForwardX11 yes` alone, or `ForwardX11 yes` and `ForwardX11Trusted yes` given only in a `Match originalhost` block (F-2312) |
 | `pty-force`, `pty-yes`, `pty-no` | `harness` | the run's key with `RequestTTY force`, `yes` or `no` in the entry (F-2106) |
 | `changedkey` | `harness` | the run's key against its own `known_hosts_changedkey`, which pins another key under `HostKeyAlias changedkey`, with `StrictHostKeyChecking no`: ssh finds the host key changed, connects, and disables password and keyboard-interactive login and every forward ("Port forwarding is disabled to avoid man-in-the-middle attacks.") |

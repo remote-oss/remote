@@ -85,6 +85,8 @@ const LINUX_ALIASES = [
   'x11fwd',
   'x11-untrusted',
   'x11-match',
+  'x11-timeout',
+  'x11-noauth',
   'fwd-clearall',
   'fwd-exit',
   'fwd-busy-exit',
