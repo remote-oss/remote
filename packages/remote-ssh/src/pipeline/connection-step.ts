@@ -17,6 +17,7 @@ import {payloadOf} from '../connect/connect-commands.ts';
 import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import {sshTargetOf} from './host-settings.ts';
+import {platformOfRecord} from './platform.ts';
 import {logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
@@ -138,8 +139,15 @@ export function openConnectionStep(
     dependencies.adoptRunFacts(outcome.runFacts);
     token = outcome.sharedRecord?.connectionToken;
     let channel: HostChannel;
+    // A connection another window set up is reused as it is: the platform its record names decides the channel, not an
+    // entry of the settings.
+    const record = outcome.sharedRecord ?? undefined;
+    const reused =
+      record === undefined
+        ? terms
+        : {...terms, platform: platformOfRecord(record.operatingSystem)};
     try {
-      channel = dependencies.channelFor(connection, terms, input);
+      channel = dependencies.channelFor(connection, reused, input);
     } catch (caught) {
       end();
       return {
