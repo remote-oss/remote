@@ -251,6 +251,9 @@
       "path": "tests/acceptance/terminal-login"
     },
     {
+      "path": "tests/acceptance/terminal-odd"
+    },
+    {
       "path": "tests/acceptance/passphrase"
     },
     {

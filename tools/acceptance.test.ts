@@ -424,6 +424,7 @@ const LAUNCH_ORDER = [
   'windows',
   'terminal-login',
   'passphrase-input',
+  'terminal-odd',
   'login-shells',
   'preconnect',
   'config-files',
