@@ -840,7 +840,12 @@ export function launchesOf(root: string): Launch[] {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
         'remote.SSH.showLoginTerminal': true,
-        'remote.SSH.remotePlatform': {password: 'linux'},
+        'remote.SSH.remotePlatform': {
+          password: 'linux',
+          'password-retry': 'linux',
+          'proxy-ask': 'linux',
+          'proxy-ask-terminal': 'linux',
+        },
         'window.dialogStyle': 'custom',
         // Core hides the tab list of a single terminal; the rows read what the panel lists.
         'terminal.integrated.tabs.hideCondition': 'never',
