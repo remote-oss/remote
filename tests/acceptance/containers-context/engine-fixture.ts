@@ -4,6 +4,7 @@
  */
 
 import {execFile} from 'node:child_process';
+import * as network from 'node:net';
 import {mkdirSync, rmSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -73,9 +74,13 @@ function clientOf(engine: {
 /**
  * Starts a Docker daemon in a container of the run (the daemon of the `docker:dind` image, TLS or not), waits for it to
  * answer, and creates the container that only it holds from a copy of the run's dev container image under a repository
- * of its own.
+ * of its own. A `shared` folder is mounted into the daemon's container at the same path, so that a dev container the daemon
+ * makes can bind a folder opened from there (the daemon's own /tmp is hidden by the image).
  */
-export async function secondEngine(withTls: boolean): Promise<SecondEngine> {
+export async function secondEngine(
+  withTls: boolean,
+  shared?: string,
+): Promise<SecondEngine> {
   const name = runScopedName(withTls ? 'c133-tls' : 'c133-plain');
   const marker = runScopedName(withTls ? 'c133tlsonly' : 'c133plainonly');
   const port = withTls ? '2376' : '2375';
@@ -89,6 +94,7 @@ export async function secondEngine(withTls: boolean): Promise<SecondEngine> {
     ...runLabelArguments(),
     '-e',
     `DOCKER_TLS_CERTDIR=${withTls ? '/certs' : ''}`,
+    ...(shared === undefined ? [] : ['-v', `${shared}:${shared}`]),
     '-p',
     `127.0.0.1::${port}`,
     SECOND_ENGINE_IMAGE,
@@ -219,4 +225,45 @@ export async function engineSettingsAre(
   ).filter(([key]) => !ENGINE_SETTINGS.includes(key));
   restoreUserSettings(JSON.stringify(Object.fromEntries(kept), null, 2));
   await userSettings(change);
+}
+
+/** A `tcp://` address on this machine that passes every connection on to the local Docker socket. */
+export interface SocketProxy {
+  address: string;
+  close(): Promise<void>;
+}
+
+/** Listens on a free port of 127.0.0.1 and relays each connection to the local Docker socket. */
+export async function socketProxy(): Promise<SocketProxy> {
+  const socket = (
+    process.env.DOCKER_HOST ?? 'unix:///var/run/docker.sock'
+  ).replace(/^unix:\/\//, '');
+  const connections = new Set<network.Socket>();
+  const server = network.createServer({allowHalfOpen: true}, client => {
+    const engine = network.connect({path: socket, allowHalfOpen: true});
+    for (const each of [client, engine]) {
+      connections.add(each);
+      each.on('close', () => connections.delete(each));
+      each.on('error', () => each.destroy());
+    }
+    client.pipe(engine).pipe(client);
+  });
+  await new Promise<void>(resolve =>
+    server.listen(0, '127.0.0.1', () => {
+      resolve();
+    }),
+  );
+  const {port} = server.address() as network.AddressInfo;
+  return {
+    address: `tcp://127.0.0.1:${String(port)}`,
+    close: () =>
+      new Promise<void>(resolve => {
+        for (const each of connections) {
+          each.destroy();
+        }
+        server.close(() => {
+          resolve();
+        });
+      }),
+  };
 }
