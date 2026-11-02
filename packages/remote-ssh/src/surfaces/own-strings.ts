@@ -15,6 +15,7 @@ export const OWN_TEMPLATES = {
   S085: 'Killed VS Code Server on {0}.',
   S076: 'Failed to kill VS Code Server on {0}.',
   S101: 'Open Logs',
+  S132: 'Show details in terminal',
   platformStoredNotice:
     'You selected "{0}" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
   S039: "Don't Show Again",

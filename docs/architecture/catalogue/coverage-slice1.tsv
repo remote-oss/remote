@@ -1,5 +1,5 @@
 ac	tag	reason
-F-2001.AC-1	todo	
+F-2001.AC-1	acceptance	
 F-2001.AC-2	acceptance	
 F-2001.AC-3	acceptance	
 F-2001.AC-4	acceptance	
@@ -7,14 +7,14 @@ F-2001.AC-5	acceptance
 F-2001.AC-6	acceptance	
 F-2001.AC-7	core	core: Developer: Show Running Extensions' list, its activation time and host marker
 F-2001.AC-8	todo	
-F-2001.AC-9	todo	
-F-2001.AC-10	todo	
-F-2001.AC-11	todo	
+F-2001.AC-9	acceptance	
+F-2001.AC-10	acceptance	
+F-2001.AC-11	acceptance	
 F-2001.AC-12	core	core: the trust grant's handling (no reload, no extension host restart)
 F-2001.AC-13	todo	
 F-2001.AC-14	acceptance	
 F-2001.AC-15	todo	
-F-2001.AC-16	todo	
+F-2001.AC-16	acceptance	
 F-2001.AC-17	todo	
 F-2001.AC-18	todo	
 F-2001.AC-19	unit	
@@ -323,7 +323,7 @@ F-2204.AC-36	acceptance
 F-2204.AC-37	unit	
 F-2204.AC-38	unit	
 F-2204.AC-39	unit	
-F-2204.AC-40	todo	
+F-2204.AC-40	acceptance	
 F-2204.AC-41	acceptance	
 F-2206.AC-1	acceptance	
 F-2206.AC-2	acceptance	

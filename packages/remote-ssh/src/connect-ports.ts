@@ -391,6 +391,7 @@ export function wiringPortsOf(
       freePort: machine.freeSocksPort,
       scheduler: machine.scheduler,
       newMarker: machine.helpers.newNonce,
+      terminalName: () => 'install',
       ...loginSurfaces,
     },
     server: {
@@ -474,6 +475,17 @@ export function wiringPortsOf(
   };
 }
 
+/** The name of the terminal a Kill or an Uninstall logs in with. */
+const MAINTENANCE_TERMINAL = 'Uninstall VS Code Server';
+
+/** The ports of a Kill or an Uninstall: those of a connect, with the login in a terminal of its own name. */
+export function maintenancePortsOf(ports: WiringPorts): WiringPorts {
+  return {
+    ...ports,
+    terminal: {...ports.terminal, terminalName: () => MAINTENANCE_TERMINAL},
+  };
+}
+
 /** The host alias of a decoded target; a target that is not an ssh one names none. */
 function aliasOf(target: DecodedTarget): string {
   return 'kind' in target.target ? hostAlias(target.target) : '';
@@ -523,7 +535,7 @@ export function connectAssemblyOf(
       const runKey = machine.helpers.newNonce();
       try {
         return await runMaintenance(
-          stepsOf(ports, () => undefined),
+          stepsOf(maintenancePortsOf(ports), () => undefined),
           maintenanceInputOf(target, runKey),
           action,
           new AbortController().signal,

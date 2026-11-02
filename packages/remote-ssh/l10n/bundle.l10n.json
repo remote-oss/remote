@@ -110,5 +110,6 @@
   "'{0}' will be executed on your local machine.": "'{0}' will be executed on your local machine.",
   "Allow": "Allow",
   "Allow and Don't Ask Again": "Allow and Don't Ask Again",
-  "Skip": "Skip"
+  "Skip": "Skip",
+  "Show details in terminal": "Show details in terminal"
 }

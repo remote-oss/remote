@@ -33,6 +33,25 @@ export const LOCAL_ENTRIES: readonly string[] = [
   'Remote-SSH: Uninstall VS Code Server from Host...',
 ];
 
+/** The 15 "Remote-SSH:" entries of the Command Palette in a connected SSH window (F-2001 6.2 step 7, remote-ssh#11). */
+export const CONNECTED_ENTRIES: readonly string[] = [
+  'Remote-SSH: Add New SSH Host...',
+  'Remote-SSH: Clear previous session metadata (used for enhanced error reporting)',
+  'Remote-SSH: Connect Current Window to Host...',
+  'Remote-SSH: Connect to Host...',
+  'Remote-SSH: Help',
+  'Remote-SSH: Kill Current VS Code Server',
+  'Remote-SSH: Kill Local Connection Server For Host...',
+  'Remote-SSH: Kill VS Code Server on Host...',
+  'Remote-SSH: New Window on Active Host',
+  'Remote-SSH: Open SSH Configuration File...',
+  'Remote-SSH: Provide Feedback',
+  'Remote-SSH: Report Issue...',
+  'Remote-SSH: Settings',
+  'Remote-SSH: Show Log',
+  'Remote-SSH: Uninstall VS Code Server from Host...',
+];
+
 /** The extension host logs the editor has written so far, one for each window, as paths below the logs folder. */
 function extensionHostLogs(): string[] {
   const logs = editorLogsFolder();

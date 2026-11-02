@@ -17,6 +17,7 @@ import {
   type BootstrapEvent,
   type ConnectionNotice,
   LineSplitter,
+  type LoginTerminalName,
   type LoginTerminals,
   followLoginOutput,
   PromptReader,
@@ -71,6 +72,8 @@ export interface TerminalConnectionDependencies {
   ): {onQuestion(text: string): void; dispose(): void};
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
+  /** The name of the terminal the login runs in: the connect's own, or the maintenance run's. */
+  terminalName(): LoginTerminalName;
   /** What decides the length of the connect wait: the timeout, whether the host set it, and the ceiling. */
   connectWait(): ConnectWaitSettings;
   logger: Logger;
@@ -109,7 +112,7 @@ export function openTerminalConnectionStep(
     const revealed = dependencies.revealLoginTerminals();
     const terminal = dependencies.terminals.open(
       buildInvocation(dependencies.installRequest(input, terms, socksPort)),
-      'install',
+      dependencies.terminalName(),
       revealed,
     );
     return new Promise<StepResult<ConnectionLease>>(settle => {

@@ -4,6 +4,7 @@ import {
   type EditorResolver,
   type ResolvedConnection,
   resolverEditorOf,
+  type ProgressUpdate,
 } from '../../src/index.ts';
 
 const DETAILS = 'opensshremotes.showDetails';
@@ -212,13 +213,13 @@ describe('the editor behind the resolver host', () => {
 
   /** The progress messages for the stages `run` reports, in order. */
   async function messagesFor(
-    report: (
-      update: (title: string, details: boolean, increment?: number) => void,
-    ) => void,
+    report: (update: ProgressUpdate) => void,
+    detailsTitle?: (stage: string) => string | undefined,
   ): Promise<string[]> {
     const seen: Seen = {events: []};
     await resolverEditorOf(fakeEditor(seen), {
       detailsCommand: DETAILS,
+      ...(detailsTitle === undefined ? {} : {detailsTitle}),
     }).progress.withProgress(
       {
         title: 'Setting up SSH Host box',
@@ -246,6 +247,46 @@ describe('the editor behind the resolver host', () => {
         `message ([details](command:${DETAILS})) Initializing VS Code Server`,
         'message Downloading VS Code Server',
       ],
+    );
+  });
+
+  it('connect-113, F-2308 AC-7: the details link has the title the options give for its stage, read at each report', async () => {
+    let titled = true;
+    deepStrictEqual(
+      await messagesFor(
+        update => {
+          update('Setting up SSH tunnel', true, undefined, 'settingUpTunnel');
+          update(
+            'Initializing VS Code Server',
+            true,
+            undefined,
+            'initializing',
+          );
+          titled = false;
+          update('Setting up SSH tunnel', true, undefined, 'settingUpTunnel');
+        },
+        stage =>
+          titled && stage === 'settingUpTunnel'
+            ? 'Show details in terminal'
+            : undefined,
+      ),
+      [
+        `message ([details](command:${DETAILS} "Show details in terminal")) Setting up SSH tunnel`,
+        `message ([details](command:${DETAILS})) Initializing VS Code Server`,
+        `message ([details](command:${DETAILS})) Setting up SSH tunnel`,
+      ],
+    );
+  });
+
+  it('connect-113: a report that names no stage has the link without a title', async () => {
+    deepStrictEqual(
+      await messagesFor(
+        update => {
+          update('Setting up SSH tunnel', true);
+        },
+        () => 'Show details in terminal',
+      ),
+      [`message ([details](command:${DETAILS})) Setting up SSH tunnel`],
     );
   });
 

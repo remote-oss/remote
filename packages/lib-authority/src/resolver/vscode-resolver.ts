@@ -17,6 +17,8 @@ import {phaseMessage} from './progress-message.ts';
 export interface ResolverEditorOptions {
   /** The command the progress's "(details)" link runs; registered by the extension, never contributed. */
   detailsCommand: string;
+  /** The tooltip of the "(details)" link of the stage named `stage` as it is now, read at each report; none keeps the editor's own. */
+  detailsTitle?: (stage: string) => string | undefined;
   /** The source of the window's candidate ports that the resolver declares to the editor; none keeps the editor's default. */
   candidatePortSource?: 'output';
 }
@@ -96,9 +98,16 @@ function progressOf(
               request.onCancel();
             });
             try {
-              return await task((text, details, increment) => {
+              return await task((text, details, increment, stage) => {
                 progress.report({
-                  message: phaseMessage(text, details, options.detailsCommand),
+                  message: phaseMessage(
+                    text,
+                    details,
+                    options.detailsCommand,
+                    stage === undefined
+                      ? undefined
+                      : options.detailsTitle?.(stage),
+                  ),
                   ...(increment === undefined ? {} : {increment}),
                 });
               });
