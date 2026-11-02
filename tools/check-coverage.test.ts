@@ -14,7 +14,7 @@ import {
   CONTAINERS_RELEASE_ONE_SCOPE,
   COVERAGE_SCOPES,
   EXPLORER_SLICE_ONE_SCOPE,
-  EXTENSIONPACK_RELEASE_ONE_SCOPE,
+  EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -845,12 +845,12 @@ describe('check-coverage', () => {
       strictEqual(new Set(features).size, features.length);
     });
 
-    it('coverage-25a: the repository check reads every coverage file, and the total of the last one is its line count', () => {
+    it('coverage-25a, seed-01: the repository check reads every coverage file, and the total of the last one is its line count', () => {
       const report = checkCoverage(REPOSITORY_ROOT);
       const counts = report.kind === 'checked' ? report.counts : [];
       const last = counts.at(-1);
       const lines = readFileSync(
-        path.join(REPOSITORY_ROOT, EXTENSIONPACK_RELEASE_ONE_SCOPE.file),
+        path.join(REPOSITORY_ROOT, EXTENSIONPACK_RELEASE_TWO_SCOPE.file),
         'utf8',
       )
         .trim()
