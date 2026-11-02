@@ -816,16 +816,20 @@ function scriptCleanRun(
   state: {
     containers?: string[];
     networks?: string[];
+    volumes?: string[];
     leftContainers?: string;
     leftNetworks?: string;
+    leftVolumes?: string;
     imageGone?: boolean;
   } = {},
 ): void {
   const {
     containers = [],
     networks = [],
+    volumes = [],
     leftContainers = '',
     leftNetworks = '',
+    leftVolumes = '',
   } = state;
   scripted.passes(''); // docker ps, the dev containers' images
   scripted.passes(containers.map(name => `${name}\n`).join('')); // docker ps, the first listing
@@ -836,6 +840,10 @@ function scriptCleanRun(
   networks.forEach(() => {
     scripted.passes();
   }); // docker network rm
+  scripted.passes(volumes.map(name => `${name}\n`).join('')); // docker volume ls, the run's volumes
+  volumes.forEach(() => {
+    scripted.passes();
+  }); // docker volume rm
   scripted.passes(); // pkill
   scripted.passes(); // pkill, stale editors
   for (let index = 0; index <= HOST_BASE_VARIANTS.length; index += 1) {
@@ -848,6 +856,7 @@ function scriptCleanRun(
   }
   scripted.passes(leftContainers); // docker ps, the second listing
   scripted.passes(leftNetworks); // docker network ls, the second listing
+  scripted.passes(leftVolumes); // docker volume ls, the second listing
 }
 
 describe('cleanRun (card tooling-10)', () => {
@@ -887,6 +896,16 @@ describe('cleanRun (card tooling-10)', () => {
         program: 'docker',
         argv: [
           'network',
+          'ls',
+          '--quiet',
+          '--filter',
+          'label=remote-oss.acceptance.run=77-2',
+        ],
+      },
+      {
+        program: 'docker',
+        argv: [
+          'volume',
           'ls',
           '--quiet',
           '--filter',
@@ -949,6 +968,16 @@ describe('cleanRun (card tooling-10)', () => {
           'label=remote-oss.acceptance.run=77-2',
         ],
       },
+      {
+        program: 'docker',
+        argv: [
+          'volume',
+          'ls',
+          '--quiet',
+          '--filter',
+          'label=remote-oss.acceptance.run=77-2',
+        ],
+      },
     ]);
   });
 
@@ -958,7 +987,7 @@ describe('cleanRun (card tooling-10)', () => {
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 12);
+    strictEqual(scripted.calls.length, 14);
   });
 
   it('tooling-74: a daemon the rows emptied, with no host, registry, network or image left, is clean and nothing is removed', () => {
@@ -1045,6 +1074,48 @@ describe('cleanRun (card tooling-10)', () => {
     );
   });
 
+  it("removes the run's labelled volumes, a Compose fixture's, after its networks and before the images", () => {
+    const scripted = scriptedCommands();
+    scriptCleanRun(scripted, {
+      containers: ['c1'],
+      networks: ['n1'],
+      volumes: ['project_data', 'project_cache'],
+    });
+
+    cleanRun(scripted, RUN_ID);
+
+    deepStrictEqual(
+      scripted.calls
+        .filter(
+          call =>
+            (call.argv[0] === 'network' && call.argv[1] === 'rm') ||
+            (call.argv[0] === 'volume' && call.argv[1] === 'rm') ||
+            call.argv[0] === 'rm',
+        )
+        .map(call => call.argv.join(' ')),
+      [
+        'rm --force --volumes c1',
+        'network rm n1',
+        'volume rm --force project_data',
+        'volume rm --force project_cache',
+      ],
+    );
+  });
+
+  it("throws naming the volume when one still carries the run's label", () => {
+    const scripted = scriptedCommands();
+    scriptCleanRun(scripted, {leftNetworks: 'n9\n', leftVolumes: 'v9\n'});
+
+    throws(
+      () => {
+        cleanRun(scripted, RUN_ID);
+      },
+      {
+        message: `the run ${RUN_ID} still owns networks after the clean-up: n9 and volumes after the clean-up: v9`,
+      },
+    );
+  });
+
   it("prunes nothing and filters every container listing by the run's label alone", () => {
     const scripted = scriptedCommands();
     scriptCleanRun(scripted, {containers: ['c1']});
@@ -1095,7 +1166,7 @@ describe('cleanRun (card tooling-10)', () => {
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 12);
+    strictEqual(scripted.calls.length, 14);
   });
 
   it("containers-09: notes the run's dev containers' images before removing the containers, then removes them and the run's dev container tag", () => {
@@ -1107,6 +1178,7 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes(); // docker rm --force d1
     scripted.passes(); // docker rm --force c1
     scripted.passes(''); // docker network ls, the run's networks
+    scripted.passes(''); // docker volume ls, the run's volumes
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force, the host
@@ -1117,6 +1189,7 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps, the second listing
     scripted.passes(''); // docker network ls, the second listing
+    scripted.passes(''); // docker volume ls, the second listing
 
     cleanRun(scripted, RUN_ID);
 
