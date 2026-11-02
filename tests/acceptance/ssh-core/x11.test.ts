@@ -271,4 +271,24 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
       await x11Close('c84-terminal-reload');
     });
   });
+
+  it('F-2312 AC-19 (c84-forbidden): on a host that forbids X11 forwarding the connection succeeds with no UI, no DISPLAY is contributed and a new terminal on a freshly started server has an empty DISPLAY', async () => {
+    await keepingSettings(async () => {
+      await x11Window('c84-forbidden', 'x11-forbidden');
+      const text = await inTerminal(
+        'c84-forbidden',
+        'echo "DISPLAY=[$DISPLAY]"',
+      );
+      deepStrictEqual(
+        [
+          text.trim(),
+          ownContributions(await contributionsNow('c84-forbidden')),
+          recordLines('notice', 'c84-forbidden').length,
+          recordLines('failureDialog', 'c84-forbidden').length,
+        ],
+        ['DISPLAY=[]', [], 0, 0],
+      );
+      await x11Close('c84-forbidden');
+    });
+  });
 });

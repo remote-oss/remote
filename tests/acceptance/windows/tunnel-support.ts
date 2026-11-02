@@ -77,6 +77,7 @@ const LINUX_ALIASES = [
   'noforward',
   'nosocket',
   'noall',
+  'x11-forbidden',
   'changedkey',
   'noforward-key',
   'pty-force',

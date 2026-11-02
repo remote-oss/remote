@@ -761,6 +761,17 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-84: Host x11-forbidden logs in to harness-nox11 with the run key and asks for X11 forwarding', () => {
+    strictEqual(
+      accountBlock('x11-forbidden'),
+      [
+        ...sharedLines('x11-forbidden', 'harness-nox11'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+      ].join('\n'),
+    );
+  });
+
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
     return [
