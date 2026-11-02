@@ -237,6 +237,15 @@ describe('the step that opens the window tunnel', () => {
     );
   });
 
+  it('connect-106: closed probes whose check says the server does not listen go on probing, and a server that starts later opens', async () => {
+    const script: DialAnswer[] = [
+      ...Array.from({length: 25}, (): DialAnswer => 'closedBeforeReply'),
+      'work',
+    ];
+    const outcome = await refusalRun({dialScript: script, listening: 'no'});
+    deepStrictEqual([outcome.ended, outcome.refused], ['done', 0]);
+  });
+
   it('connect-106: closed probes and a host check that gave no answer are today’s outcome too', async () => {
     const outcome = await refusalRun({
       dialScript: ['closedBeforeReply'],

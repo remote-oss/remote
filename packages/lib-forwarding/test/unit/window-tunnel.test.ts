@@ -109,6 +109,32 @@ describe('the window tunnel through the relay', () => {
     });
   });
 
+  it('connect-106: a refusal the caller does not confirm goes on probing to the bound, and opens on a later probe that works', async () => {
+    const clock = new FakeClock();
+    const dialer = new FakeDialer([
+      ...Array.from({length: 22}, (): DialAnswer => 'closedBeforeReply'),
+      'work',
+    ]);
+    const local = new FakeLocalPort('work');
+    let asked = 0;
+    const pending = openRelayTunnel({
+      dialer,
+      local,
+      scheduler: clock.scheduler(),
+      target: {kind: 'port', port: 4321},
+      localPort: 50000,
+      limits: {...LIMITS, readyMilliseconds: 30_000},
+      confirmRefusal: () => {
+        asked += 1;
+        return Promise.resolve(false);
+      },
+    });
+    for (let round = 0; round < 60; round++) {
+      await advanced(clock, 500);
+    }
+    deepStrictEqual([(await pending).kind, asked], ['open', 1]);
+  });
+
   it('connect-106: one probe that fails otherwise among those closed before the reply keeps the outcome not ready', async () => {
     const {open, clock} = relay(['closedBeforeReply', 'fail']);
     const pending = open();

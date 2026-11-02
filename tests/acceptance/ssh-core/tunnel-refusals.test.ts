@@ -320,6 +320,15 @@ describe('the tunnel of a window that its host or its configuration refuses (car
           .map(line => line.question),
         notices: lines.filter(line => line.surface === 'notice').length,
         indicator: (await statusItem(name, 'status.host')).text,
+        // The probing went on to the bound of ten seconds after the wait began, not to the end of the run of closed ones.
+        atTheBound: Math.round(
+          ((lines.find(line => line.surface === 'failureDialog')?.time ?? 0) -
+            (lines.find(
+              line =>
+                line.question === 'Waiting for port forwarding to be ready',
+            )?.time ?? 0)) /
+            1000,
+        ),
       };
       signal('c79-socks-dead-end');
       await closeWindow(name).catch(() => undefined);
@@ -327,6 +336,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         dialogs: ['Could not establish connection to "noforward".'],
         notices: 0,
         indicator: 'Disconnected from SSH: noforward',
+        atTheBound: 10,
       });
     });
   });

@@ -54,6 +54,13 @@ export interface RelayTunnelRequest {
   limits: WaitLimits;
   /** Told once, when the first probe through the dialer did not work and the tunnel goes on waiting. */
   onWaiting?: () => void;
+  /**
+   * Asked once, when twenty probes in a row were closed by the relay or found no relay, with the cause: true ends the
+   * wait as a refused forward; false goes on probing until the bound, as for any other failure. No answer means true.
+   */
+  confirmRefusal?: (
+    cause: 'closedBeforeReply' | 'unreachable',
+  ) => Promise<boolean>;
 }
 
 /**
@@ -192,6 +199,8 @@ export async function openRelayTunnel(
   let waitingTold = false;
   const failures = {
     closedInARow: 0,
+    asked: false,
+    confirmed: false,
     cause: 'closedBeforeReply' as 'closedBeforeReply' | 'unreachable',
   };
   const refusal = new AbortController();
@@ -209,8 +218,12 @@ export async function openRelayTunnel(
             caught instanceof RelayUnreachable
               ? 'unreachable'
               : 'closedBeforeReply';
-          if (failures.closedInARow >= REFUSAL_PROBES) {
-            refusal.abort();
+          if (failures.closedInARow >= REFUSAL_PROBES && !failures.asked) {
+            failures.asked = true;
+            if ((await request.confirmRefusal?.(failures.cause)) !== false) {
+              failures.confirmed = true;
+              refusal.abort();
+            }
           }
         } else {
           failures.closedInARow = 0;
@@ -231,7 +244,7 @@ export async function openRelayTunnel(
   }
   if (!ready) {
     close();
-    return failures.closedInARow >= REFUSAL_PROBES
+    return failures.confirmed
       ? {kind: 'relayRefused', cause: failures.cause}
       : {kind: 'tunnelNotReady'};
   }

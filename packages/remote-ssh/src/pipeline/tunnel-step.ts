@@ -445,21 +445,18 @@ export function openTunnelStep(
       localPort,
       limits: dependencies.limits,
       onWaiting,
+      // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
+      confirmRefusal: async cause => {
+        const fact =
+          cause === 'closedBeforeReply'
+            ? await serverListens(lease.channel, portOf(server), cancellation)
+            : !connectionLost;
+        dependencies.logger.info(refusalLine(cause, fact, portOf(server)));
+        return fact === true;
+      },
     });
     stopNotices();
     if (outcome.kind === 'relayRefused') {
-      // A close before the reply is also what a dead server port gives, and an unreachable relay what a dead ssh
-      // gives: one check at the end of the run tells which, and the log names the fact that decided.
-      const fact =
-        outcome.cause === 'closedBeforeReply'
-          ? await serverListens(lease.channel, portOf(server), cancellation)
-          : !connectionLost;
-      dependencies.logger.info(
-        refusalLine(outcome.cause, fact, portOf(server)),
-      );
-      if (fact !== true) {
-        return NOT_OPENED;
-      }
       dependencies.forwardRefused();
       // The connect goes on waiting, with its progress, until the window is closed or reloaded: no dialog, no retry.
       disarmBound?.();
