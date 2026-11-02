@@ -6,6 +6,7 @@ import {
   connectedWithin,
   fingerprintOf,
   onHost,
+  openWindow,
   recordLines,
   runShellTask,
   userSettings,
@@ -13,6 +14,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {freshHost, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {statusItemText} from '../windows/renderer.ts';
 import {printedAfter, windowWithTerminal} from '../windows/terminal-support.ts';
 import {keepingSettings} from '../windows/tunnel-support.ts';
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
@@ -82,10 +84,18 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
     await freshHost();
   });
 
-  it('F-2311 AC-2 (c99-link): a window on a host entry with ForwardAgent yes has, within 2 s of the indicator, a link owned by the remote user that points at the socket sshd gave the session', async () => {
+  it('F-2311 AC-2 (c99-link): a window on a host entry with ForwardAgent yes has, within 2 s of the indicator reading SSH: agentfwd, a link owned by the remote user that points at the socket sshd gave the session, with no terminal opened', async () => {
     await agentAdd(keyFile(), {confirm: false});
-    await connectedOn(FORWARDING, 'c99-link');
+    await freshHost();
+    await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
+    await openWindow(FORWARDING, 'c99-link');
     try {
+      await statusItemText(
+        'c99-link',
+        'status.host',
+        `SSH: ${FORWARDING}`,
+        INSTALL_MILLISECONDS,
+      );
       let links: string[] = [];
       await waitFor(
         'the agent link',
