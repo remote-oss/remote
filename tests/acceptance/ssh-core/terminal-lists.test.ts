@@ -47,12 +47,12 @@ async function windowWithTerminal(folder: string): Promise<void> {
 
 /** The process ids of the server's pid files on the host, sorted: the same ones before and after mean the same server. */
 async function serverProcessIds(): Promise<string[]> {
-  const ids = await onHost(
+  const pidText = await onHost(
     'sh',
     '-c',
     `cat /home/harness/${editorProduct().serverDataFolderName}/.*.pid`,
   );
-  return ids
+  return pidText
     .split('\n')
     .filter(line => line.trim() !== '')
     .sort();
