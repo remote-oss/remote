@@ -1,5 +1,5 @@
 import {deepStrictEqual, ok} from 'node:assert';
-import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, rmSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
@@ -25,6 +25,7 @@ import {
 import {
   closeAllButLocal,
   DATA_FOLDER,
+  addHarnessCopy,
   existsOnHost,
   FIXED_ROWS,
   HOST_QUESTION,
@@ -35,6 +36,8 @@ import {
   passwordAskHosts,
   perWindowMode,
   pickHost,
+  platformAnswer,
+  restoreConfig,
   runWith,
   serverProcesses,
   serversGoneWithin,
@@ -48,13 +51,6 @@ const UNINSTALL_FAILED = 'Failed to run command';
 
 /** The data folder of the password accounts' server. */
 const PASSWORD_DATA_FOLDER = '/home/harness-pw/.vscodium-server-insiders';
-
-/** The answer that takes platform `answer` in the platform pick. */
-function platform(
-  answer: 'linux' | 'windows' | 'macOS' | 'dismiss',
-): AppendedEntry {
-  return {surface: 'platformPick', match: 'platform', answer};
-}
 
 /** Runs an uninstall in window `window` with `answers` scripted for it, and gives the mark it started from. */
 function uninstallWith(
@@ -139,24 +135,6 @@ function passwordHostName(): string {
       config.slice(config.indexOf('Host password\n')),
     )?.[1] ?? ''
   );
-}
-
-/** Adds a copy of the `harness` block named `alias` to the run's ssh_config, and gives the original text back. */
-function addHarnessCopy(alias: string): string {
-  const file = variable('HARNESS_SSH_CONFIG');
-  const original = readFileSync(file, 'utf8');
-  const start = original.indexOf('Host harness\n');
-  const block = original.slice(start, original.indexOf('\n\n', start));
-  writeFileSync(
-    file,
-    `${original}\n${block.replace('Host harness', `Host ${alias}`)}\n`,
-  );
-  return original;
-}
-
-/** Puts the run's ssh_config back to `original`. */
-function restoreConfig(original: string): void {
-  writeFileSync(variable('HARNESS_SSH_CONFIG'), original);
 }
 
 describe('Uninstall VS Code Server (card coverage-40)', function () {
@@ -537,12 +515,12 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       await setting('remote.SSH.useLocalServer', undefined);
     });
 
-    it('F-2412 AC-18: the platform pick is asked, no terminal stays, and Linux uninstalls', async () => {
+    it('F-2412 AC-18, F-2206 AC-33: the platform pick is asked, no terminal stays, and Linux uninstalls', async () => {
       await makeDataFolder();
       const terminals = await terminalsOf('local');
       const mark = await uninstallWith('local', [
         pickHost('harness'),
-        platform('linux'),
+        platformAnswer('linux'),
       ]);
       await removedWithin(DATA_FOLDER);
       deepStrictEqual(
@@ -551,11 +529,11 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       );
     });
 
-    it('F-2412 AC-29: the next uninstall asks again, and no platform entry was written', async () => {
+    it('F-2412 AC-29, F-2206 AC-33: the next uninstall asks again, and no platform entry was written', async () => {
       await makeDataFolder();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
-        platform('linux'),
+        platformAnswer('linux'),
       ]);
       await removedWithin(DATA_FOLDER);
       deepStrictEqual(
@@ -587,7 +565,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         await removedWithin(DATA_FOLDER);
         const other = await uninstallWith('local', [
           pickHost('password'),
-          platform('dismiss'),
+          platformAnswer('dismiss'),
         ]);
         deepStrictEqual(
           [exact, wildcard, surfacesSince(other, 'local')],
@@ -599,12 +577,12 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       }
     });
 
-    it('F-2412 AC-31: Escape at the platform pick ends the uninstall with nothing changed', async () => {
+    it('F-2412 AC-31, F-2206 AC-33: Escape at the platform pick ends the uninstall with nothing changed', async () => {
       await makeDataFolder();
       const before = userFiles();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
-        platform('dismiss'),
+        platformAnswer('dismiss'),
       ]);
       filesAround.push(['AC-31', before, userFiles()]);
       deepStrictEqual(
@@ -623,7 +601,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       const servers = await serverProcesses();
       const mark = await uninstallWith('local', [
         pickHost('harness'),
-        platform('windows'),
+        platformAnswer('windows'),
       ]);
       await new Promise(resolve => setTimeout(resolve, 2000));
       deepStrictEqual(
@@ -639,7 +617,10 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     });
 
     it('F-2412 AC-33: macOS uninstalls as Linux does', async () => {
-      await uninstallWith('local', [pickHost('harness'), platform('macOS')]);
+      await uninstallWith('local', [
+        pickHost('harness'),
+        platformAnswer('macOS'),
+      ]);
       await removedWithin(DATA_FOLDER);
       await waitFor(
         'the server processes to end',
@@ -685,7 +666,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       const mark = recordLines().length;
       await uninstallWith('local', [
         pickHost('password-ask'),
-        platform('linux'),
+        platformAnswer('linux'),
       ]).catch(() => undefined);
       await new Promise(resolve => setTimeout(resolve, 5000));
       await inWindow('local', 'acceptance.agent.state');

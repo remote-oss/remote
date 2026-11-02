@@ -27,6 +27,8 @@ export type PhaseName =
   | 'settingUpTunnel'
   | 'waitingForForwarding'
   | 'startingServer'
+  /** The resolve's first visible stage, which has no text: the progress opens with the title alone. */
+  | 'opened'
   | 'runningPreconnectScript'
   | 'serverDownloadPercent';
 
@@ -110,13 +112,19 @@ export interface ProgressRequest {
   onDetails: () => void;
 }
 
+/** A report of the progress: the stage's text, whether it carries the details link, the bar's increment and the stage's name. */
+export type ProgressUpdate = (
+  title: string,
+  details: boolean,
+  increment?: number,
+  stage?: string,
+) => void;
+
 /** Progress the user sees while a connect runs. */
 export interface ProgressPort {
   withProgress<Result>(
     request: ProgressRequest,
-    task: (
-      update: (title: string, details: boolean, increment?: number) => void,
-    ) => Promise<Result>,
+    task: (update: ProgressUpdate) => Promise<Result>,
   ): Promise<Result>;
 }
 
@@ -163,12 +171,6 @@ export interface ResolverOptions {
    * off opens the progress on its first stage that is not quiet, or after the fallback.
    */
   progressDelayMilliseconds?: number;
-  /**
-   * Whether the progress opens when a resolve starts, with the start title alone and before any stage: the family's
-   * progress shows from the resolve's start, so a connect that fails before its first stage has shown it all the same.
-   * It closes when the resolve ends.
-   */
-  progressAtStart?: boolean;
   /**
    * The family's canonical mapping, registered as the resolver's `getCanonicalURI` (windows contracts §3.2): the local
    * path a `vscode-remote` URI of this window stands for, or nothing. `warn` logs a mapping that failed.
@@ -368,10 +370,10 @@ export async function registerResolver(
     decoded: DecodedTarget,
     input: ConnectInput,
   ): Promise<Connected | Failed> {
-    let shown: {title: string; details: boolean; staged: boolean} | undefined;
-    let report:
-      | ((title: string, details: boolean, increment?: number) => void)
+    let shown:
+      | {title: string; details: boolean; staged: boolean; stage: string}
       | undefined;
+    let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
     let unreported = 0;
     let downloaded = 0;
@@ -414,7 +416,7 @@ export async function registerResolver(
             report = update;
             if (shown !== undefined) {
               reported = {title: shown.title, details: shown.details};
-              update(shown.title, shown.details, incrementOf());
+              update(shown.title, shown.details, incrementOf(), shown.stage);
             }
             await settled;
           },
@@ -428,12 +430,14 @@ export async function registerResolver(
       options.progressDelayMilliseconds ?? PROGRESS_FALLBACK_MILLISECONDS,
       open,
     );
-    if (options.progressAtStart === true) {
-      open();
-    }
     const stop = connector.onPhase(phase => {
       const title = options.titleOf(phase, decoded);
-      shown = {title, details: phase.details === true, staged: title !== ''};
+      shown = {
+        title,
+        details: phase.details === true,
+        staged: title !== '',
+        stage: phase.name,
+      };
       if (phase.name === 'serverDownloadPercent') {
         const percent = phase.percent ?? 0;
         unreported += Math.max(0, percent - downloaded);
@@ -447,7 +451,7 @@ export async function registerResolver(
           increment !== undefined
         ) {
           reported = {title: shown.title, details: shown.details};
-          report(shown.title, shown.details, increment);
+          report(shown.title, shown.details, increment, shown.stage);
         }
       } else if (
         phase.quiet !== true &&

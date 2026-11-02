@@ -261,6 +261,7 @@ function portsOf(
       dynamicForwarding: () => false,
       freePort: () => Promise.resolve(41000),
       newMarker: () => 'marker',
+      terminalName: () => 'install',
       attachQuestions: () => ({
         onQuestion: () => undefined,
         dispose: () => undefined,

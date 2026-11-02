@@ -173,6 +173,13 @@ export interface RecordLine {
   time: number;
 }
 
+/** Whether a record line is a question of the window, not a display-only line of its progress. */
+export function isQuestion(line: RecordLine): boolean {
+  return !['progress', 'downloadProgress', 'progressEnd'].includes(
+    line.surface,
+  );
+}
+
 /** A question the scripted adapters of the launch's windows answer from the script, in the order the windows ask them. */
 export interface WindowScriptEntry {
   surface: 'hostPick' | 'filePick';

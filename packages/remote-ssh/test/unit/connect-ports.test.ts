@@ -14,6 +14,7 @@ import type {RunBase, SharedConnection} from 'lib-ssh';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   connectAssemblyOf,
+  maintenancePortsOf,
   type ConnectMachine,
   type ConnectSurfaces,
   sshOverridePolicy,
@@ -334,6 +335,13 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it('connect-107: the stage with no text resets the message, so that the progress opened by it shows the host alone', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    options.titleOf({name: 'initializing'}, decoded('dev'));
+    deepStrictEqual(options.titleOf({name: 'opened'}, decoded('dev')), '');
+  });
+
   it("F-2304: a new connect's share downloaded does not keep the last connect's message", () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
@@ -355,12 +363,6 @@ describe('the connect assembled from the editor and the machine', () => {
       [options.family, options.cancellable, options.allowsTrust],
       ['ssh-remote', false, false],
     );
-  });
-
-  it('connect-104, F-2104 AC-42: ssh-remote opens its progress at the resolve’s start', () => {
-    const {surfaces, machine, recorded} = assemblyInputs();
-    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
-    deepStrictEqual(options.progressAtStart, true);
   });
 
   /** The connector's and the client check's answers on the mode, for the user's `written` settings. */
@@ -1131,6 +1133,18 @@ describe("the assembly's maintenance run (card connect-23)", () => {
       loggerOf(recorded),
     ).maintain('kill', {host: 'dev'});
     deepStrictEqual(outcome.result, 'connectionFailed');
+  });
+
+  it('connect-113, F-2308 AC-19, AC-28: a connect logs in in a terminal named install, a kill or an uninstall in one named Uninstall VS Code Server', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const ports = wiringPortsOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(
+      [
+        ports.terminal.terminalName(),
+        maintenancePortsOf(ports).terminal.terminalName(),
+      ],
+      ['install', 'Uninstall VS Code Server'],
+    );
   });
 
   /** The record files a helper client on a fresh file port reads during `action`, each once. */

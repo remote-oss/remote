@@ -22,6 +22,7 @@ const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
   settingUpTunnel: 'S130',
   waitingForForwarding: 'S158',
   startingServer: undefined,
+  opened: undefined,
   runningPreconnectScript: 'S118',
   serverDownloadPercent: undefined,
 };
@@ -41,4 +42,14 @@ export function phaseTitleOf(phase: ConnectPhase): StringRef | undefined {
     id: stringId,
     values: phase.name === 'runningPreconnectScript' ? [SHOW_LOG_LINK] : [],
   };
+}
+
+/** The tooltip of the "(details)" link of a stage: "Show details in terminal" for the tunnel stage in the terminal mode, and none otherwise. */
+export function detailsTitleOf(
+  stage: string,
+  terminalMode: boolean,
+): StringRef | undefined {
+  return stage === 'settingUpTunnel' && terminalMode
+    ? {id: 'S132', values: []}
+    : undefined;
 }
