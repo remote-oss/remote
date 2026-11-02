@@ -622,7 +622,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       ['Opening Remote...', undefined, true],
       [
         'Disconnected from SSH: harness',
-        'Could not establish connection to "harness".',
+        'Could not establish connection to "harness": Connection closed.',
         true,
       ],
     ]);
