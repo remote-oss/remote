@@ -220,7 +220,7 @@ export const EXPLORER_SLICE_ONE_SCOPE: CoverageScope = {
 export const EXPLORER_RELEASE_TWO_SCOPE: CoverageScope = {
   name: 'explorer-r2',
   file: path.join(CATALOGUE_FOLDER, 'coverage-explorer-r2.tsv'),
-  features: ['F-5201', 'F-5202', 'F-5301'],
+  features: ['F-5201', 'F-5202', 'F-5104', 'F-5301'],
   repository: 'remote-explorer',
 };
 
@@ -248,6 +248,17 @@ export const EXTENSIONPACK_RELEASE_TWO_SCOPE: CoverageScope = {
   repository: 'remote-extensionpack',
 };
 
+/** The features of Remote - SSH release 2. */
+export const SSH_RELEASE_TWO_FEATURES: readonly string[] = ['F-2702'];
+
+/** The coverage file of Remote - SSH release 2. */
+export const SSH_RELEASE_TWO_SCOPE: CoverageScope = {
+  name: 'ssh-r2',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-ssh-r2.tsv'),
+  features: SSH_RELEASE_TWO_FEATURES,
+  repository: 'remote-ssh',
+};
+
 /** Every coverage file the check reads. */
 export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
@@ -257,6 +268,7 @@ export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   CONTAINERS_RELEASE_TWO_SCOPE,
   EXPLORER_RELEASE_TWO_SCOPE,
   EXTENSIONPACK_RELEASE_TWO_SCOPE,
+  SSH_RELEASE_TWO_SCOPE,
 ];
 
 /**

@@ -14,8 +14,8 @@ import {
   CONTAINERS_RELEASE_ONE_SCOPE,
   COVERAGE_SCOPES,
   EXPLORER_SLICE_ONE_SCOPE,
-  EXTENSIONPACK_RELEASE_TWO_SCOPE,
   SLICE_ONE_SCOPE,
+  SSH_RELEASE_TWO_SCOPE,
 } from './spec-acceptance-criteria.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -850,7 +850,7 @@ describe('check-coverage', () => {
       const counts = report.kind === 'checked' ? report.counts : [];
       const last = counts.at(-1);
       const lines = readFileSync(
-        path.join(REPOSITORY_ROOT, EXTENSIONPACK_RELEASE_TWO_SCOPE.file),
+        path.join(REPOSITORY_ROOT, SSH_RELEASE_TWO_SCOPE.file),
         'utf8',
       )
         .trim()
