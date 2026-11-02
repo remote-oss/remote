@@ -4,7 +4,6 @@
  */
 
 import {readFile} from 'node:fs/promises';
-import {homedir} from 'node:os';
 import type * as vscode from 'vscode';
 import type {ProposalName} from './probe.ts';
 import {
@@ -25,6 +24,10 @@ export interface FamilySetupOptions {
   templates: SetupTexts;
   /** A template in the display language: the extension's `vscode.l10n.t`. */
   translate: (template: string) => string;
+  /** The home folder of the running user, read once in the extension's composition root. */
+  homeFolder: string;
+  /** `process.platform`, read once in the extension's composition root. */
+  platform: string;
   /** The editor's data folder name, from its product.json; read only when the setup needs it. */
   dataFolderName: () => PromiseLike<string>;
   logFailure: (message: string) => void;
@@ -77,10 +80,10 @@ export function familySetupPortsOf(
       viewIds: options.viewIds,
       argv: {
         portableFolder: process.env.VSCODE_PORTABLE,
-        homeFolder: homedir(),
+        homeFolder: options.homeFolder,
         dataFolderName: options.dataFolderName,
       },
-      platform: process.platform,
+      platform: options.platform,
       texts: {
         setup: options.translate(options.templates.setup),
         failedAttempt: options.translate(options.templates.failedAttempt),

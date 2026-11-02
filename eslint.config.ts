@@ -13,6 +13,16 @@ import {layoutPlugin} from './tools/eslint-plugins/layout.ts';
 import {namesPlugin} from './tools/eslint-plugins/names.ts';
 import {testsPlugin} from './tools/eslint-plugins/tests.ts';
 
+const PLATFORM_MESSAGE =
+  'Read the platform and the home folder in a composition root and pass them in (ADR-0013).';
+
+const TESTING_PATTERNS = [
+  {
+    regex: '(^|/)testing/',
+    message: 'Test doubles under src/testing/ are for tests only.',
+  },
+];
+
 const ABBREVIATIONS = [
   'cfg',
   'ctx',
@@ -385,21 +395,46 @@ export default defineConfig(
     rules: {'comments/public-surface': 'error'},
   },
   {
-    // Test doubles live under src/testing/ and are imported only by tests, so no bundle can carry one.
+    // Test doubles live under src/testing/ and are imported only by tests, so no bundle can carry one. The platform and the
+    // home folder are read in a composition root and passed in (ADR-0013, decision 1).
     files: ['packages/*/src/**/*.ts'],
     ignores: ['packages/*/src/testing/**', '**/*.test.ts', '**/*.fixture.ts'],
     rules: {
+      'no-restricted-properties': [
+        'error',
+        ...[
+          ['process', 'platform'],
+          ['os', 'platform'],
+          ['os', 'homedir'],
+        ].map(([object, property]) => ({
+          object,
+          property,
+          message: PLATFORM_MESSAGE,
+        })),
+      ],
       'no-restricted-imports': [
         'error',
         {
-          patterns: [
-            {
-              regex: '(^|/)testing/',
-              message: 'Test doubles under src/testing/ are for tests only.',
-            },
-          ],
+          paths: ['node:os', 'os'].map(name => ({
+            name,
+            importNames: ['homedir', 'platform'],
+            message: PLATFORM_MESSAGE,
+          })),
+          patterns: TESTING_PATTERNS,
         },
       ],
+    },
+  },
+  {
+    // The composition roots, which the build bundles as entries, are the only files that read them.
+    files: [
+      'packages/*/src/extension.ts',
+      'packages/*/src/web-extension.ts',
+      'packages/*/src/programs/*.ts',
+    ],
+    rules: {
+      'no-restricted-properties': 'off',
+      'no-restricted-imports': ['error', {patterns: TESTING_PATTERNS}],
     },
   },
   {

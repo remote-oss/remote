@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import {readFile} from 'node:fs/promises';
-import {homedir} from 'node:os';
+import {homedir, tmpdir} from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {
@@ -29,7 +29,7 @@ import {
   systemTimers,
 } from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
-import {listHosts} from 'lib-ssh';
+import {clientPlatformOf, listHosts} from 'lib-ssh';
 import type {Logger} from 'lib-log';
 import {type ProductProfile, profileOf} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
@@ -77,7 +77,7 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
-import {clientPlatformOf, nodeFacts, nodeMachineOf} from './node-machine.ts';
+import {nodeMachineOf} from './node-machine.ts';
 import {terminalModeOf, textOf} from './pipeline/connect-settings.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import {detailsTitleOf} from './surfaces/progress-titles.ts';
@@ -280,6 +280,8 @@ export async function activate(
         viewIds: [],
         templates: SETUP_TEXT_TEMPLATES,
         translate,
+        homeFolder: homedir(),
+        platform: process.platform,
         dataFolderName: dataFolderNameOfEditor,
         logFailure,
         notices: adapters.notice,
@@ -483,7 +485,13 @@ async function registerConnectOf(
       profile: await editorProfile(),
       httpGet: (address, init) => fetch(address, init),
     },
-    nodeFacts(),
+    {
+      platform: process.platform,
+      environment: process.env,
+      homeFolder: homedir(),
+      temporaryFolder: tmpdir(),
+      workingDirectory: process.cwd(),
+    },
   );
   const registration = await registerConnect(
     {

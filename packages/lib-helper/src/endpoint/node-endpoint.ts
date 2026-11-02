@@ -85,9 +85,7 @@ function refuseProvisional(): Promise<never> {
 }
 
 /** The endpoint port of this platform; on Windows every call rejects as provisional. */
-export function nodeEndpointPort(
-  platform: string = process.platform,
-): EndpointPort {
+export function nodeEndpointPort(platform: string): EndpointPort {
   if (platform === 'win32') {
     return {listen: refuseProvisional, connect: refuseProvisional};
   }

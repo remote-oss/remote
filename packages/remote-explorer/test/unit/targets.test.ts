@@ -186,7 +186,7 @@ function setup(present = true): Setup {
     },
     connectedText: 'connected',
     folderSettings: () => ({...settings}),
-    clientPlatform: 'other',
+    clientPlatform: 'linux',
   });
   const changes: number[] = [];
   targets.onDidChange(() => changes.push(changes.length));
@@ -426,7 +426,7 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
       configFileChanges: () => ({dispose: () => undefined}),
       connectedText: 'connected',
       folderSettings: () => ({sortOrder: undefined, collapse: undefined}),
-      clientPlatform: 'other',
+      clientPlatform: 'linux',
     });
     const changes: number[] = [];
     targets.onDidChange(() => changes.push(1));

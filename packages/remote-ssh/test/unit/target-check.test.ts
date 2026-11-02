@@ -7,14 +7,14 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {mkdtemp, rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {homedir, tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {decodeAuthority, type Failed} from 'lib-authority';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {ConnectMachine} from '../../src/connect-ports.ts';
 import {connectAssemblyOf} from '../../src/connect-ports.ts';
-import {nodeFacts, nodeMachineOf} from '../../src/node-machine.ts';
+import {nodeMachineOf} from '../../src/node-machine.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
 
 /** What the settings host gives the connect; every other setting is undefined. */
@@ -60,7 +60,13 @@ describe("F-2205's resolver rows through the real connect (card connect-22, #325
         profile: PROFILE,
         httpGet: () => Promise.reject(new Error('no download in this test')),
       },
-      {...nodeFacts(), environment: {...process.env}},
+      {
+        platform: process.platform,
+        environment: {...process.env},
+        homeFolder: homedir(),
+        temporaryFolder: tmpdir(),
+        workingDirectory: process.cwd(),
+      },
     );
     const started: string[] = [];
     const recordingMachine: ConnectMachine = {

@@ -630,6 +630,8 @@ export async function activate(
         viewIds: [views.targetsContainers],
         templates: SETUP_TEXT_TEMPLATES,
         translate,
+        homeFolder: os.homedir(),
+        platform: process.platform,
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
@@ -1143,6 +1145,7 @@ export async function activate(
     const shutdownHelper = nodeClientEnvironment(
       process.execPath,
       SHUTDOWN_CLIENT_WAITS,
+      process.platform,
     );
     const connector = containerConnectorOf({
       shutdown: createWindowLease({

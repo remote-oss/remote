@@ -43,6 +43,7 @@ export function inheritedEnvironment(
 export function runHelper(
   handler: MessageHandler,
   logLine: (line: string) => void,
+  platform: string,
 ): Promise<ServeEnd> {
   const parameters = helperParameters(process.env);
   return serve({
@@ -53,7 +54,7 @@ export function runHelper(
     payload: parameters.payload,
     policy: parameters.policy,
     handler,
-    port: nodeEndpointPort(),
+    port: nodeEndpointPort(platform),
     clock: Date.now,
     scheduler: {setTimer: nodeTimer},
     helloLimitMilliseconds: HELLO_LIMIT,

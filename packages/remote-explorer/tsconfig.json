@@ -14,6 +14,9 @@
       "path": "../lib-product"
     },
     {
+      "path": "../lib-ssh"
+    },
+    {
       "path": "../lib-standdown"
     }
   ]
