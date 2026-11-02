@@ -1050,7 +1050,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
-        'remote.SSH.remotePlatform': {harness: 'linux'},
+        'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
     {
