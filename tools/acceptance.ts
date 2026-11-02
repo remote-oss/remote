@@ -47,6 +47,7 @@ import {
 import {build} from 'esbuild';
 import {
   downloadHostArguments,
+  EARLIER_SERVER_ARCHIVE,
   type RunDownloads,
   startRunDownloads,
   UPDATE_SERVICE_NAME,
@@ -288,7 +289,12 @@ export interface HarnessDependencies {
     launch: Launch,
   ) => Promise<AttemptResult>;
   /** Starts the run's download host in the run's folder; the VSCodium run only. */
-  startDownloads: (root: string, runFolder: string) => Promise<RunDownloads>;
+  /** Starts the download host; `earlier` says whether a launch of the run asks for the earlier release's archives. */
+  startDownloads: (
+    root: string,
+    runFolder: string,
+    earlier: boolean,
+  ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
   /** Starts the run's registry for a launch that asks for one; the VSCodium run only. */
@@ -1117,7 +1123,11 @@ async function prepare(
   }
   const downloads =
     editor === 'vscodium'
-      ? await dependencies.startDownloads(root, runFolder)
+      ? await dependencies.startDownloads(
+          root,
+          runFolder,
+          chosen.some(launch => launch.earlierServerArchive === true),
+        )
       : undefined;
   if (downloads !== undefined) {
     stops.push(() => downloads.stop());
@@ -2531,11 +2541,16 @@ if (isMainModule(import.meta.url)) {
             undefined,
             devContainerImage,
           ),
-        startDownloads: startRunDownloads.bind(
-          undefined,
-          runCommand,
-          downloadWithRetry,
-        ),
+        startDownloads: (root, runFolder, earlier) =>
+          startRunDownloads(
+            runCommand,
+            downloadWithRetry,
+            root,
+            runFolder,
+            undefined,
+            undefined,
+            earlier ? EARLIER_SERVER_ARCHIVE : undefined,
+          ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
             root,

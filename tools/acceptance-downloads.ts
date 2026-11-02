@@ -53,6 +53,39 @@ export const SERVER_ARCHIVE = {
   },
 } as const;
 
+/** A VSCodium release whose server archives the download host serves: its tag, repository and the archives' checksums. */
+export interface ServerRelease {
+  tagName: string;
+  repository: string;
+  /** The release asset's sha256, by platform. */
+  sha256: Readonly<Record<string, string>>;
+  /** The commit the release's `product.json` names, for a release whose rows read it. */
+  commit?: string;
+}
+
+/**
+ * The latest release of the same repository before the pinned one that publishes the four server archives, for the
+ * rows that connect a client to the server of another commit. The run fetches it only for a launch that
+ * asks (`earlierServerArchive`). Measured once from the archive's `product.json`: commit
+ * `b969547887c4497ab088897c3f77de0bde849b83`, version `1.140.06729-insider`, against the pinned release's commit
+ * `bed945dd42ba59f994a249b12be656908e2c0ea1`.
+ */
+export const EARLIER_SERVER_ARCHIVE: ServerRelease = {
+  tagName: '1.140.06729-insider',
+  repository: 'VSCodium/vscodium-insiders',
+  commit: 'b969547887c4497ab088897c3f77de0bde849b83',
+  sha256: {
+    'alpine-arm64':
+      '7e735e6919c54623da126327753c3f92afd0cd24359c0042f576c9eb25573738',
+    'alpine-x64':
+      'e1fb7eb6fc0251f475f8fceff5056ebf4ecb9bd2794d1b2263003eb9e77e0a17',
+    'linux-arm64':
+      '6f0d5b631476bd0f578d43cedf3edab19863a0f0b3bfd35988198a39f7d18416',
+    'linux-x64':
+      'deaa6260b648d4ea9feed94e416870480c5d4aa6bcd0413a5aa2feb486bca5e0',
+  },
+};
+
 /** The update service's name, which the download host answers for under the run's own certificate. */
 export const UPDATE_SERVICE_NAME = 'update.code.visualstudio.com';
 
@@ -90,8 +123,11 @@ const SLOW_TICK_MILLISECONDS = 100;
 export const DROP_HUNG_PATH = '/control/drop-hung';
 
 /** The file name of the server archive for a platform (`alpine-x64`, `linux-x64`, …). */
-export function serverArchiveName(platform: string): string {
-  return `vscodium-reh-${platform}-${SERVER_ARCHIVE.tagName}.tar.gz`;
+export function serverArchiveName(
+  platform: string,
+  release: Pick<ServerRelease, 'tagName'> = SERVER_ARCHIVE,
+): string {
+  return `vscodium-reh-${platform}-${release.tagName}.tar.gz`;
 }
 
 /** The platforms a run serves for an architecture: the Alpine server, which a request naming none gets, then glibc's. */
@@ -123,8 +159,8 @@ export function requestedPlatform(url: string): string | undefined {
 export type Download = (address: string) => Promise<Uint8Array>;
 
 /**
- * The server archive for `platform` in `cacheFolder`, downloaded from the pinned release when it is missing or does
- * not match its checksum. Throws when the download does not match either.
+ * The server archive for `platform` in `cacheFolder`, downloaded from `release` (the pinned one unless another is
+ * given) when it is missing or does not match its checksum. Throws when the download does not match either.
  */
 export async function serverArchiveOf(
   cacheFolder: string,
@@ -132,17 +168,18 @@ export async function serverArchiveOf(
   download: Download,
   writeFile: (file: string, bytes: Uint8Array) => void,
   checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
+  release: ServerRelease = SERVER_ARCHIVE,
 ): Promise<string> {
   const expected = checksums[platform];
   if (expected === undefined) {
     throw new Error(`no server archive is pinned for ${platform}`);
   }
-  const file = path.join(cacheFolder, serverArchiveName(platform));
+  const file = path.join(cacheFolder, serverArchiveName(platform, release));
   if (existsSync(file) && sha256Of(readFileSync(file)) === expected) {
     return file;
   }
   const archive = await download(
-    `https://github.com/${SERVER_ARCHIVE.repository}/releases/download/${SERVER_ARCHIVE.tagName}/${serverArchiveName(platform)}`,
+    `https://github.com/${release.repository}/releases/download/${release.tagName}/${serverArchiveName(platform, release)}`,
   );
   if (sha256Of(archive) !== expected) {
     throw new Error('the server archive download does not match its checksum');
@@ -338,6 +375,8 @@ export interface DownloadHostOptions {
   addresses: readonly string[];
   /** The server archives by platform; a request that names no platform gets `defaultPlatform`'s. */
   archiveFiles: Readonly<Record<string, string>>;
+  /** The archives of the earlier release by platform, served under `/earlier/<platform>/`; none when no launch asks. */
+  earlierArchiveFiles?: Readonly<Record<string, string>>;
   defaultPlatform: string;
   certificateFile: string;
   keyFile: string;
@@ -471,6 +510,20 @@ function archiveFileOf(
 }
 
 /**
+ * The archive an `/earlier/` request gets: the earlier release's archive of the platform the path names, and none for
+ * a platform it has no archive of, or when the run fetched none.
+ */
+function earlierArchiveFileOf(
+  url: string,
+  options: Pick<DownloadHostOptions, 'earlierArchiveFiles'>,
+): string | undefined {
+  const platform = requestedPlatform(url);
+  return platform === undefined
+    ? undefined
+    : options.earlierArchiveFiles?.[platform];
+}
+
+/**
  * The archive a `/machine/` request gets: the run's archive of the system the request names (`linux` or `alpine`),
  * whatever architecture it names, for a host whose `uname` reports another machine than the one it runs on; none for a
  * system the run has no archive of, or a path that names no platform.
@@ -558,6 +611,7 @@ function answer(
   options: Pick<
     DownloadHostOptions,
     | 'archiveFiles'
+    | 'earlierArchiveFiles'
     | 'defaultPlatform'
     | 'templatesFolder'
     | 'controlFolder'
@@ -592,6 +646,14 @@ function answer(
         request,
         response,
         archiveFileOf(String(request.url), options),
+        held,
+      );
+      return;
+    case 'earlier':
+      answerArchive(
+        request,
+        response,
+        earlierArchiveFileOf(String(request.url), options),
         held,
       );
       return;
@@ -786,8 +848,20 @@ export function downloadVariables(
   logFile: string,
   tlsLogFile: string,
   certificateFile: string,
+  earlier?: {
+    platform: string;
+    release: Pick<ServerRelease, 'tagName' | 'commit'>;
+  },
 ): Record<string, string> {
   return {
+    ...(earlier === undefined
+      ? {}
+      : {
+          // The address the harness host reaches the earlier release's archive of its own platform at, with no placeholder.
+          HARNESS_EARLIER_SERVER_URL: `http://downloads:${String(host.httpPort)}/earlier/${earlier.platform}/${serverArchiveName(earlier.platform, earlier.release)}`,
+          HARNESS_EARLIER_SERVER_VERSION: earlier.release.tagName,
+          HARNESS_EARLIER_SERVER_COMMIT: earlier.release.commit ?? '',
+        }),
     HARNESS_DOWNLOADS_CERTIFICATE: certificateFile,
     HARNESS_FEATURE_TARBALL_URL: `https://localhost:${String(host.httpsPort)}/features/${FEATURE_TARBALL}`,
     HARNESS_DOWNLOADS_HTTP: `http://downloads:${String(host.httpPort)}`,
@@ -850,7 +924,7 @@ export interface RunDownloads {
 /**
  * Starts the download host of a run in `runFolder`: the Alpine and glibc server archives for this machine's
  * architecture from the cache under `root`, the run's certificate, and the two ports on the loopback address and on
- * Docker's bridge gateway.
+ * Docker's bridge gateway. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`.
  */
 export async function startRunDownloads(
   command: CommandRunner,
@@ -859,9 +933,11 @@ export async function startRunDownloads(
   runFolder: string,
   architecture: string = process.arch,
   checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
+  earlier?: ServerRelease,
 ): Promise<RunDownloads> {
   const platforms = servedPlatforms(architecture);
   const archiveFiles: Record<string, string> = {};
+  const earlierArchiveFiles: Record<string, string> = {};
   for (const platform of platforms) {
     archiveFiles[platform] = await serverArchiveOf(
       path.join(root, '.vscode-test', 'downloads'),
@@ -870,6 +946,16 @@ export async function startRunDownloads(
       writeFileSync,
       checksums,
     );
+    if (earlier !== undefined) {
+      earlierArchiveFiles[platform] = await serverArchiveOf(
+        path.join(root, '.vscode-test', 'downloads'),
+        platform,
+        download,
+        writeFileSync,
+        earlier.sha256,
+        earlier,
+      );
+    }
   }
   for (const file of removeStaleClientArchives(
     path.join(tmpdir(), 'vscode-remote-containers'),
@@ -888,6 +974,7 @@ export async function startRunDownloads(
   const host = await startDownloadHost({
     addresses: ['127.0.0.1', bridgeGateway(command)],
     archiveFiles,
+    earlierArchiveFiles,
     defaultPlatform: platforms[0],
     ...certificate,
     logFile,
@@ -902,6 +989,9 @@ export async function startRunDownloads(
       logFile,
       tlsLogFile,
       certificate.certificateFile,
+      earlier === undefined
+        ? undefined
+        : {platform: platforms[0], release: earlier},
     ),
     stop: () => host.stop(),
   };

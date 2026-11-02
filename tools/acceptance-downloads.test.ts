@@ -28,6 +28,7 @@ import {
   type DownloadHost,
   downloadHostArguments,
   downloadVariables,
+  EARLIER_SERVER_ARCHIVE,
   DROP_HUNG_PATH,
   makeCertificate,
   removeStaleClientArchives,
@@ -142,6 +143,7 @@ describe('the download host', function () {
     glibcArchive = Buffer.alloc(2 * 1024 * 1024 + 11, 'g');
     writeFileSync(path.join(folder, 'archive.tar.gz'), archive);
     writeFileSync(path.join(folder, 'glibc.tar.gz'), glibcArchive);
+    writeFileSync(path.join(folder, 'earlier-glibc.tar.gz'), 'earlier glibc');
     logFile = path.join(folder, 'requests.log');
     tlsLogFile = path.join(folder, 'tls.log');
     writeFileSync(logFile, '');
@@ -152,6 +154,9 @@ describe('the download host', function () {
       archiveFiles: {
         'alpine-x64': path.join(folder, 'archive.tar.gz'),
         'linux-x64': path.join(folder, 'glibc.tar.gz'),
+      },
+      earlierArchiveFiles: {
+        'linux-x64': path.join(folder, 'earlier-glibc.tar.gz'),
       },
       defaultPlatform: 'alpine-x64',
       ...certificate,
@@ -243,6 +248,26 @@ describe('the download host', function () {
       }),
     );
     deepStrictEqual(answers, ['alpine', 'glibc', 'alpine', 'glibc']);
+  });
+
+  it('tooling-108: under /earlier/, the earlier release’s archive of the platform the path names is served whole, and a platform it has none of, or none named, gives 404', async () => {
+    const answers = await Promise.all(
+      [
+        '/earlier/linux-x64/vscodium-reh-linux-x64-1.140.06729-insider.tar.gz',
+        '/earlier/alpine-x64/vscodium-reh-alpine-x64-1.140.06729-insider.tar.gz',
+        '/earlier/vscodium-reh.tar.gz',
+        '/earlier',
+      ].map(async pathName => {
+        const received = await get('http', host.httpPort, pathName);
+        return [received.status, received.body.toString().slice(0, 13)];
+      }),
+    );
+    deepStrictEqual(answers, [
+      [200, 'earlier glibc'],
+      [404, ''],
+      [404, ''],
+      [404, ''],
+    ]);
   });
 
   it('tooling-68: a path that names no platform gets the Alpine archive, as before', async () => {
@@ -643,10 +668,15 @@ describe('serverArchiveOf', () => {
   });
 
   it('tooling-27, tooling-68: names the pinned release asset of each platform', () => {
-    deepStrictEqual(['alpine-arm64', 'linux-x64'].map(serverArchiveName), [
-      `vscodium-reh-alpine-arm64-${SERVER_ARCHIVE.tagName}.tar.gz`,
-      `vscodium-reh-linux-x64-${SERVER_ARCHIVE.tagName}.tar.gz`,
-    ]);
+    deepStrictEqual(
+      ['alpine-arm64', 'linux-x64'].map(platform =>
+        serverArchiveName(platform),
+      ),
+      [
+        `vscodium-reh-alpine-arm64-${SERVER_ARCHIVE.tagName}.tar.gz`,
+        `vscodium-reh-linux-x64-${SERVER_ARCHIVE.tagName}.tar.gz`,
+      ],
+    );
   });
 
   it('tooling-68: the Alpine and the glibc server are pinned for both architectures', () => {
@@ -656,6 +686,84 @@ describe('serverArchiveOf', () => {
       'linux-arm64',
       'linux-x64',
     ]);
+  });
+
+  it('tooling-108: the earlier release has the four archives pinned, under its own tag', () => {
+    deepStrictEqual(
+      [
+        Object.keys(EARLIER_SERVER_ARCHIVE.sha256).sort(),
+        EARLIER_SERVER_ARCHIVE.repository,
+        EARLIER_SERVER_ARCHIVE.tagName === SERVER_ARCHIVE.tagName,
+        serverArchiveName('linux-x64', EARLIER_SERVER_ARCHIVE),
+      ],
+      [
+        ['alpine-arm64', 'alpine-x64', 'linux-arm64', 'linux-x64'],
+        SERVER_ARCHIVE.repository,
+        false,
+        `vscodium-reh-linux-x64-${EARLIER_SERVER_ARCHIVE.tagName}.tar.gz`,
+      ],
+    );
+  });
+
+  it('tooling-108: a missing archive of another release is downloaded from that release, checked against its checksums and written under its own name', async () => {
+    const body = Buffer.from('earlier');
+    const release = {
+      tagName: '1.0.0-insider',
+      repository: 'Example/repo',
+      sha256: {
+        'alpine-x64': createHash('sha256').update(body).digest('hex'),
+      },
+    };
+    const asked: string[] = [];
+    const result = await serverArchiveOf(
+      folder,
+      'alpine-x64',
+      address => {
+        asked.push(address);
+        return Promise.resolve(body);
+      },
+      writeFileSync,
+      release.sha256,
+      release,
+    );
+    deepStrictEqual(
+      [asked, path.basename(result), readFileSync(result, 'utf8')],
+      [
+        [
+          'https://github.com/Example/repo/releases/download/1.0.0-insider/vscodium-reh-alpine-x64-1.0.0-insider.tar.gz',
+        ],
+        'vscodium-reh-alpine-x64-1.0.0-insider.tar.gz',
+        'earlier',
+      ],
+    );
+  });
+
+  it('tooling-108: a download of another release that does not match its checksum throws and writes nothing', async () => {
+    const release = {
+      tagName: '1.0.0-insider',
+      repository: 'Example/repo',
+      sha256: {
+        'alpine-x64': createHash('sha256').update('right').digest('hex'),
+      },
+    };
+    const outcome = await serverArchiveOf(
+      folder,
+      'alpine-x64',
+      () => Promise.resolve(Buffer.from('wrong')),
+      writeFileSync,
+      release.sha256,
+      release,
+    ).then(
+      () => 'resolved',
+      (caught: unknown) => String(caught),
+    );
+    deepStrictEqual(
+      [
+        outcome.includes('does not match its checksum'),
+        existsSync(path.join(folder, serverArchiveName('alpine-x64', release))),
+      ],
+      [true, false],
+    );
   });
 
   it('tooling-27: a platform without a pinned archive throws', async () => {
@@ -871,6 +979,19 @@ describe('the platform a request names (card tooling-68)', () => {
   });
 });
 
+/** The command runner whose Docker answers with a bridge gateway of 127.0.0.2. */
+function gateway(): CommandResult {
+  return {status: 0, stdout: '127.0.0.2\n', stderr: ''};
+}
+
+/** A root with the cache folder of the archives, and a run folder, both new. */
+function temporaryRun(): {root: string; runFolder: string; cache: string} {
+  const base = mkdtempSync(path.join(tmpdir(), 'downloads-run-'));
+  const cache = path.join(base, 'root', '.vscode-test', 'downloads');
+  mkdirSync(cache, {recursive: true});
+  return {root: path.join(base, 'root'), runFolder: base, cache};
+}
+
 describe('the download host in the run', () => {
   it("tooling-27, tooling-68: a run's download host serves the cached archives on the loopback and the gateway only, and stops", async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'downloads-root-'));
@@ -931,6 +1052,96 @@ describe('the download host in the run', () => {
           ).split('\n').length - 1,
         ],
         ['refused', 'ended', ['cached', 'cached', 'glibc'], 4],
+      );
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it("tooling-108: a run whose launch asks fetches the earlier release's archives too and serves them under /earlier/, with their address and version in the variables; a run that does not ask fetches none", async () => {
+    const {root, runFolder, cache} = temporaryRun();
+    try {
+      const release = {
+        tagName: '0.9.0-insider',
+        repository: 'Example/repo',
+        commit: 'abc123',
+        sha256: {
+          'alpine-arm64': createHash('sha256')
+            .update('old alpine')
+            .digest('hex'),
+          'linux-arm64': createHash('sha256').update('old glibc').digest('hex'),
+        },
+      };
+      writeFileSync(
+        path.join(cache, serverArchiveName('alpine-arm64')),
+        'cached',
+      );
+      writeFileSync(
+        path.join(cache, serverArchiveName('linux-arm64')),
+        'glibc',
+      );
+      const bodies: Record<string, string> = {
+        [serverArchiveName('alpine-arm64', release)]: 'old alpine',
+        [serverArchiveName('linux-arm64', release)]: 'old glibc',
+      };
+      const asked: string[] = [];
+      const pinned = {
+        'alpine-arm64': createHash('sha256').update('cached').digest('hex'),
+        'linux-arm64': createHash('sha256').update('glibc').digest('hex'),
+      };
+      const downloads = await startRunDownloads(
+        gateway,
+        address => {
+          asked.push(address);
+          return Promise.resolve(
+            Buffer.from(bodies[path.basename(address)] ?? ''),
+          );
+        },
+        root,
+        runFolder,
+        'arm64',
+        pinned,
+        release,
+      );
+      const port = Number(
+        /:(\d+)$/.exec(downloads.variables.HARNESS_DOWNLOADS_LOCAL ?? '')?.[1],
+      );
+      const served = (
+        await getFrom(
+          '127.0.0.1',
+          port,
+          `/earlier/linux-arm64/${serverArchiveName('linux-arm64', release)}`,
+        )
+      ).toString();
+      await downloads.stop();
+      const plain = await startRunDownloads(
+        gateway,
+        () => Promise.reject(new Error('no download expected')),
+        root,
+        runFolder,
+        'arm64',
+        pinned,
+      );
+      const plainVariables = Object.keys(plain.variables);
+      await plain.stop();
+      deepStrictEqual(
+        [
+          asked.length,
+          served,
+          downloads.variables.HARNESS_EARLIER_SERVER_URL,
+          downloads.variables.HARNESS_EARLIER_SERVER_VERSION,
+          downloads.variables.HARNESS_EARLIER_SERVER_COMMIT,
+          plainVariables.filter(name => name.startsWith('HARNESS_EARLIER')),
+        ],
+        [
+          2,
+          'old glibc',
+          `http://downloads:${String(port)}/earlier/alpine-arm64/vscodium-reh-alpine-arm64-0.9.0-insider.tar.gz`,
+          '0.9.0-insider',
+          'abc123',
+          [],
+        ],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
