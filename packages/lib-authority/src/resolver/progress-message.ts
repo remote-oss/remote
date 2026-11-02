@@ -3,11 +3,22 @@
  * stages that carry it.
  */
 
-/** `text`, after the "(details)" link that runs `command` when `withLink` is set; the word is not translated. */
+/**
+ * `text`, after the "(details)" link that runs `command` when `withLink` is set; the word is not translated. The link
+ * has `title` for its tooltip when one is given.
+ */
 export function phaseMessage(
   text: string,
   withLink: boolean,
   command: string,
+  title?: string,
 ): string {
-  return withLink ? `([details](command:${command})) ${text}` : text;
+  if (!withLink) {
+    return text;
+  }
+  const target =
+    title === undefined
+      ? command
+      : `${command} "${title.replaceAll('"', '\\"')}"`;
+  return `([details](command:${target})) ${text}`;
 }

@@ -78,7 +78,8 @@ import {
   standDown,
 } from './identifiers.generated.ts';
 import {clientPlatformOf, nodeFacts, nodeMachineOf} from './node-machine.ts';
-import {textOf} from './pipeline/connect-settings.ts';
+import {terminalModeOf, textOf} from './pipeline/connect-settings.ts';
+import {ownText} from './surfaces/own-strings.ts';
 import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
   downloadProgressOf,
@@ -486,6 +487,10 @@ async function registerConnectOf(
       resolverEditor: acceptanceResolverEditorOf(
         resolverEditorOf(vscode, {
           detailsCommand: runtimeCommands.showDetails,
+          detailsTitle: () =>
+            terminalModeOf(host)
+              ? ownText({id: 'S132', values: []}, translate)
+              : undefined,
           candidatePortSource: 'output',
         }),
         windowName,

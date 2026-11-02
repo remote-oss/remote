@@ -215,10 +215,12 @@ describe('the editor behind the resolver host', () => {
     report: (
       update: (title: string, details: boolean, increment?: number) => void,
     ) => void,
+    detailsTitle?: () => string | undefined,
   ): Promise<string[]> {
     const seen: Seen = {events: []};
     await resolverEditorOf(fakeEditor(seen), {
       detailsCommand: DETAILS,
+      ...(detailsTitle === undefined ? {} : {detailsTitle}),
     }).progress.withProgress(
       {
         title: 'Setting up SSH Host box',
@@ -245,6 +247,24 @@ describe('the editor behind the resolver host', () => {
         'message Waiting',
         `message ([details](command:${DETAILS})) Initializing VS Code Server`,
         'message Downloading VS Code Server',
+      ],
+    );
+  });
+
+  it('connect-113, F-2308 AC-7: the details link has the title the options give now, read at each report', async () => {
+    let title: string | undefined = 'Show details in terminal';
+    deepStrictEqual(
+      await messagesFor(
+        update => {
+          update('Setting up SSH tunnel', true);
+          title = undefined;
+          update('Setting up SSH tunnel', true);
+        },
+        () => title,
+      ),
+      [
+        `message ([details](command:${DETAILS} "Show details in terminal")) Setting up SSH tunnel`,
+        `message ([details](command:${DETAILS})) Setting up SSH tunnel`,
       ],
     );
   });

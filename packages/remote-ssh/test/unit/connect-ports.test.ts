@@ -14,6 +14,7 @@ import type {RunBase, SharedConnection} from 'lib-ssh';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   connectAssemblyOf,
+  maintenancePortsOf,
   type ConnectMachine,
   type ConnectSurfaces,
   sshOverridePolicy,
@@ -1131,6 +1132,18 @@ describe("the assembly's maintenance run (card connect-23)", () => {
       loggerOf(recorded),
     ).maintain('kill', {host: 'dev'});
     deepStrictEqual(outcome.result, 'connectionFailed');
+  });
+
+  it('connect-113, F-2308 AC-19, AC-28: a connect logs in in a terminal named install, a kill or an uninstall in one named Uninstall VS Code Server', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const ports = wiringPortsOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(
+      [
+        ports.terminal.terminalName(),
+        maintenancePortsOf(ports).terminal.terminalName(),
+      ],
+      ['install', 'Uninstall VS Code Server'],
+    );
   });
 
   /** The record files a helper client on a fresh file port reads during `action`, each once. */
