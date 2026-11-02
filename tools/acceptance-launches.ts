@@ -174,6 +174,10 @@ const EXPLORER_LAUNCH = {
   withExtensions: ['remote-oss.remote-explorer'],
   // The remote name after the folder, as core's own label gives it, so a claimed window's page is found by its state.
   settings: {'window.title': '[${rootName}]${remoteName}'},
+  // The explorer appends each push its inbox receives from Remote - SSH to this file, which `companionCalls` reads.
+  environment: {
+    REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD: '<run>/companion-record.jsonl',
+  },
 } as const;
 
 /** The editor's gallery variables pointed at a closed port, so that the Extensions view has no gallery data. */
@@ -982,7 +986,7 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
-      environment: {HOME: '<run>/home'},
+      environment: {...EXPLORER_LAUNCH.environment, HOME: '<run>/home'},
     },
     {
       ...EXPLORER_LAUNCH,
@@ -1000,7 +1004,10 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'add-host',
       suite: 'add-host',
-      environment: {HOME: '<run>/add-host-home'},
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/add-host-home',
+      },
     },
     {
       ...EXPLORER_LAUNCH,

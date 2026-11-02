@@ -282,6 +282,31 @@ export function connectionLog(): string[] {
   return logLinesOf('REMOTE_OSS_ACCEPTANCE_LOG');
 }
 
+/** One push that Remote Explorer's inbox received from Remote - SSH, as the explorer records it. */
+export interface CompanionCall {
+  /** When the explorer received it, in milliseconds since the epoch. */
+  time: number;
+  commandId: string;
+  /** The envelope as the inbox read it. */
+  envelope: Record<string, unknown>;
+}
+
+/**
+ * The pushes the explorer's inbox received in this launch, in order, of the command `commandId` when given; none before
+ * the first. Only the launches with the explorer record them.
+ */
+export function companionCalls(commandId?: string): CompanionCall[] {
+  const file = variable('REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD');
+  if (!existsSync(file)) {
+    return [];
+  }
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => JSON.parse(line) as CompanionCall)
+    .filter(call => commandId === undefined || call.commandId === commandId);
+}
+
 /** The lines of the Dev Containers log, without their time stamps; none before the first is written. */
 export function containersLog(): string[] {
   return logLinesOf('REMOTE_OSS_ACCEPTANCE_CONTAINERS_LOG');

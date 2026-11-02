@@ -3,11 +3,13 @@
  * window, with the proposed-API setup and its strings.
  */
 
+import {appendFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {familySetupPortsOf, runSetup} from 'lib-authority';
 import {profileOf} from 'lib-product';
+import {recorderOf} from './companion/push-record.ts';
 import {enabledApiProposals, views} from './identifiers.generated.ts';
 import {activateInWindow} from './window-activation.ts';
 
@@ -59,5 +61,12 @@ export function activate(context: vscode.ExtensionContext): Promise<void> {
         true,
       ),
     process.platform === 'win32' ? 'windows' : 'other',
+    // The acceptance runs name a file that records each push the inbox receives; no other run records anything.
+    recorderOf(process.env, {
+      append: (file, line) => {
+        appendFileSync(file, line);
+      },
+      now: Date.now,
+    }),
   );
 }

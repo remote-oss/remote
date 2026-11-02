@@ -938,7 +938,7 @@ F-2501.AC-32	acceptance
 F-2501.AC-33	acceptance	
 F-2501.AC-34	deferred	chained ssh-remote authorities (F-2501 6.8) are not built in 0.2
 F-2501.AC-35	acceptance	
-F-2501.AC-36	todo	
+F-2501.AC-36	acceptance	
 F-2502.AC-1	unit	
 F-2502.AC-2	core	core: the window title and the Explorer header
 F-2502.AC-3	core	core: the remote indicator's text and icon
