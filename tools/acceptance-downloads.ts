@@ -487,13 +487,15 @@ function machineArchiveOf(
 }
 
 /**
- * The archive's answers: whole (`ok`), cut after its first megabyte (`cut`) or in chunks at a slow pace (`slow`); 404
- * when the run serves no archive for the platform asked.
+ * The archive's answers: whole (`ok`), cut after its first megabyte (`cut`), stopped after its first megabyte with the
+ * connection held open (`stall`) or in chunks at a slow pace (`slow`); 404 when the run serves no archive for the
+ * platform asked.
  */
 function answerArchive(
   request: IncomingMessage,
   response: ServerResponse,
   archiveFile: string | undefined,
+  held: Set<Socket>,
 ): void {
   if (archiveFile === undefined) {
     response.writeHead(404, {'Content-Length': 0});
@@ -507,6 +509,15 @@ function answerArchive(
       response.write(body.subarray(0, CUT_BYTES), () => {
         request.socket.destroy();
       });
+      return;
+    case 'stall':
+      response.writeHead(200, {
+        'Content-Length': body.length,
+        'Access-Control-Allow-Origin': '*',
+      });
+      response.write(body.subarray(0, CUT_BYTES));
+      held.add(request.socket);
+      request.socket.once('close', () => held.delete(request.socket));
       return;
     case 'slow':
       sendSlowly(response, body);
@@ -543,11 +554,13 @@ function answer(
       return;
     case 'ok':
     case 'cut':
+    case 'stall':
     case 'slow':
       answerArchive(
         request,
         response,
         archiveFileOf(String(request.url), options),
+        held,
       );
       return;
     case 'machine':
@@ -555,6 +568,7 @@ function answer(
         request,
         response,
         machineArchiveOf(String(request.url), options),
+        held,
       );
       return;
     case 'missing':

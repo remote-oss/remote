@@ -251,6 +251,21 @@
       "installedIn": "/home/harness/.vscodium-server-insiders"
     },
     {
+      "label": "local-no-marker",
+      "cite": "F-2405 AC-8 (ruling-1607-no-marker)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "outcome": "connected",
+      "stages": [
+        "Downloading VS Code Server locally",
+        "Copying VS Code Server to host with scp"
+      ],
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "noHostFiles": ["*.done"]
+    },
+    {
       "label": "local-allow-false",
       "cite": "F-2405 AC-5 (local-allow-false)",
       "settings": {
@@ -331,6 +346,30 @@
       },
       "outcome": "dialog",
       "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server."
+    },
+    {
+      "label": "local-stall",
+      "cite": "F-2405 AC-21 (local-stall)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/stall/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "dialogAfterSeconds": [25, 50]
+    },
+    {
+      "label": "local-copy-stall",
+      "cite": "F-2405 AC-21 (local-copy-stall)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always",
+        "remote.SSH.path": "<run>/clients/copy-stalls/ssh"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "noStages": ["Installing VS Code Server"],
+      "dialogAfterSeconds": [25, 70]
     },
     {
       "label": "local-ssh-proxy",

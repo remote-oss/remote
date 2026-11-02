@@ -1,6 +1,6 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import * as vscode from 'vscode';
-import {recordLines} from '../suite/harness.ts';
+import {onHost, recordLines} from '../suite/harness.ts';
 import casesFile from './cases.json' with {type: 'json'};
 import {
   archiveCopiesLeft,
@@ -36,6 +36,10 @@ interface InstallCase {
   requests?: ExpectedRequests;
   licenceDetail?: string;
   noArchiveLeft?: boolean;
+  /** File names, as `find -name` patterns, that nothing under the host's home and temporary folders may carry. */
+  noHostFiles?: string[];
+  /** The seconds, least and most, between the first progress line and the failure dialog. */
+  dialogAfterSeconds?: [number, number];
 }
 
 /** The install case of this window, named by the variable the harness gave it. */
@@ -216,6 +220,39 @@ describe(`the install case "${installCase?.label ?? 'unknown'}" of the VSCodium 
   if (installCase?.noArchiveLeft === true) {
     it(`${cite}: the client kept no copy of the archive`, async () => {
       deepStrictEqual(archiveCopiesLeft(label, await archiveSize()), []);
+    });
+  }
+
+  if (installCase?.noHostFiles !== undefined) {
+    const {noHostFiles} = installCase;
+    it(`${cite}: the host holds no file named ${noHostFiles.join(', ')}`, async () => {
+      deepStrictEqual(
+        await Promise.all(
+          noHostFiles.map(async pattern =>
+            (
+              await onHost(
+                'sh',
+                '-c',
+                `find /home/harness /tmp -name '${pattern}' 2>/dev/null; true`,
+              )
+            ).trim(),
+          ),
+        ),
+        noHostFiles.map(() => ''),
+      );
+    });
+  }
+
+  if (installCase?.dialogAfterSeconds !== undefined) {
+    const [least, most] = installCase.dialogAfterSeconds;
+    it(`${cite}: the dialog comes ${String(least)} to ${String(most)} seconds after the progress began`, () => {
+      const began = recordLines('progress').at(0)?.time ?? 0;
+      const ended = recordLines('failureDialog').at(0)?.time ?? 0;
+      const seconds = (ended - began) / 1000;
+      deepStrictEqual(
+        {inRange: seconds >= least && seconds <= most, seconds},
+        {inRange: true, seconds},
+      );
     });
   }
 });
