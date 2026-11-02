@@ -40,9 +40,13 @@ function sshConfig(): string {
   return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
 }
 
-/** Opens window `name` on the host with `settings`, lets the step stall, and reports what the window and the files did. */
+/** The seconds the window waits in the stalled stage before it is asked, well under the 30 seconds that end the stage. */
+const STALLED_SECONDS = 8;
+
+/** Opens window `name` on the host with `settings`, waits until the progress shows `stage` and the step has stalled, and reports what the window and the files did. */
 async function stalled(
   name: string,
+  stage: string,
   settings: Record<string, unknown>,
 ): Promise<Stalled> {
   await freshHost();
@@ -57,10 +61,11 @@ async function stalled(
   await openWindow('harness', name);
   try {
     await waitFor(
-      'the progress',
-      () => recordLines('progress', name).length > 0,
+      `the progress to show ${stage}`,
+      () => recordLines('progress', name).some(line => line.question === stage),
       60_000,
     );
+    await new Promise(resolve => setTimeout(resolve, STALLED_SECONDS * 1000));
     const usableDuringWait =
       (await commandsOf(name, 'opensshremotes.')).length > 0 &&
       recordLines('failureDialog', name).length === 0;
@@ -107,9 +112,13 @@ describe('the download steps that stop (card coverage-87)', function () {
 
   it('F-2405 AC-21 (local-stall): a client download that stops ends 25 to 50 seconds after it began, with the window usable meanwhile and the settings and ssh_config unchanged', async () => {
     await keepingSettings(async () => {
-      const outcome = await stalled('c87-stall', {
-        'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_LOCAL')}/stall/\${os}-\${arch}/\${commit}`,
-      });
+      const outcome = await stalled(
+        'c87-stall',
+        'Downloading VS Code Server locally',
+        {
+          'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_LOCAL')}/stall/\${os}-\${arch}/\${commit}`,
+        },
+      );
       deepStrictEqual(withinBound(outcome, 25, 50), {
         dialog: DOWNLOAD_DIALOG,
         seconds: '25 to 50',
@@ -122,13 +131,17 @@ describe('the download steps that stop (card coverage-87)', function () {
 
   it('F-2405 AC-21 (local-copy-stall): a copy that stops ends 25 to 70 seconds after it began, with the window usable meanwhile and the settings and ssh_config unchanged', async () => {
     await keepingSettings(async () => {
-      const outcome = await stalled('c87-copy-stall', {
-        'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_LOCAL')}/ok/\${os}-\${arch}/\${commit}`,
-        'remote.SSH.path': path.join(
-          variable('HARNESS_RUN_FOLDER'),
-          'clients/copy-stalls/ssh',
-        ),
-      });
+      const outcome = await stalled(
+        'c87-copy-stall',
+        'Copying VS Code Server to host with scp',
+        {
+          'remote.SSH.serverDownloadUrlTemplate': `${variable('HARNESS_DOWNLOADS_LOCAL')}/ok/\${os}-\${arch}/\${commit}`,
+          'remote.SSH.path': path.join(
+            variable('HARNESS_RUN_FOLDER'),
+            'clients/copy-stalls/ssh',
+          ),
+        },
+      );
       deepStrictEqual(withinBound(outcome, 25, 70), {
         dialog: COPY_DIALOG,
         seconds: '25 to 70',
