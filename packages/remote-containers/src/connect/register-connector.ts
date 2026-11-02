@@ -95,8 +95,9 @@ export async function registerContainerResolver(
   let recentLabelStored = false;
   let dialogs = 0;
   /**
-   * The label of a window that is disconnected and has none yet: the name this profile last connected the folder with,
-   * else none; never while a dialog is open.
+   * The label of a window that is disconnected and has none yet: the name the latest attempt read from the
+   * configuration, kept once its container was ready, or the name this profile last connected the folder with, else
+   * none; never while a dialog is open.
    */
   function registerDisconnectedLabel(): void {
     const target = handle?.currentConnection()?.decodedTarget;
@@ -108,9 +109,14 @@ export async function registerContainerResolver(
       host.labels,
       target,
       workspaceSuffixOf(
-        folder === undefined
-          ? undefined
-          : knownName(host.knownNames, folder.hostPath, configFileOf(folder)),
+        connector.attemptIdentity() ??
+          (folder === undefined
+            ? undefined
+            : knownName(
+                host.knownNames,
+                folder.hostPath,
+                configFileOf(folder),
+              )),
         translate,
       ),
     );

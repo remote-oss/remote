@@ -96,7 +96,7 @@ describe('the trust launch (card tooling-33)', function () {
     await answerDialog('r20', "No, I don't trust the authors");
   });
 
-  it('F-2001 AC-14: the window connects while core’s trust question is still open, and the extension asks nothing of its own', async () => {
+  it('F-2001 AC-14, F-2308 AC-26: the window connects while core’s trust question is still open, and the extension asks nothing of its own', async () => {
     await openWindow('harness', 'r14');
     const asked = await waitForDialog('r14');
     const state = await windowState('r14');

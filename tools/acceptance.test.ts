@@ -435,6 +435,7 @@ const LAUNCH_ORDER = [
   'explorer-home',
   'explorer-rows',
   'explorer-no-proposals',
+  'add-host',
   'explorer-standdown',
   'trust',
   'trust-terminal',
@@ -745,6 +746,46 @@ describe('acceptance', () => {
           '  PreferredAuthentications keyboard-interactive',
         ].join('\n'),
       ),
+    );
+  });
+
+  it('connect-108: Host password-retry is the password account that asks three times', () => {
+    strictEqual(
+      accountBlock('password-retry'),
+      [
+        ...sharedLines('password-retry', 'harness-pwonly'),
+        '  PubkeyAuthentication no',
+        '  PreferredAuthentications password',
+        '  NumberOfPasswordPrompts 3',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-82: Host proxy-ask-terminal asks on the terminal it has, before the handshake, and sets no ConnectTimeout', () => {
+    strictEqual(
+      accountBlock('proxy-ask-terminal'),
+      [
+        'Host proxy-ask-terminal',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness-pw',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking accept-new',
+        '  UserKnownHostsFile /run/known_hosts_proxy-ask-terminal',
+        ...PASSWORD_ALIAS_LINES,
+        `  ProxyCommand bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/49153 && { cat <&3 & exec cat >&3; }'`,
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-82: Host proxy-ask is the password account behind a ProxyCommand that asks on the terminal and then reaches the host', () => {
+    strictEqual(
+      accountBlock('proxy-ask'),
+      [
+        ...sharedLines('proxy-ask', 'harness-pw'),
+        ...PASSWORD_ALIAS_LINES,
+        `  ProxyCommand setsid bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/49153 && { cat <&3 & exec cat >&3; }'`,
+      ].join('\n'),
     );
   });
 
@@ -1142,6 +1183,7 @@ describe('acceptance', () => {
             'explorer-home',
             'explorer-rows',
             'explorer-no-proposals',
+            'add-host',
             'explorer-standdown',
           ].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
