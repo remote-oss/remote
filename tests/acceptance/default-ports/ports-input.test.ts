@@ -18,7 +18,7 @@ import {
   typeInFocus,
   typeInTerminal,
 } from '../windows/renderer.ts';
-import {showPorts} from './forward-support.ts';
+import {showPorts} from '../windows/forward-support.ts';
 
 /** The variable of the client's environment the rows look for: the launch gives it to the editor, and its value is not a word of the rows. */
 const CLIENT_VARIABLE = 'HARNESS_RUN_FOLDER';
@@ -78,7 +78,7 @@ describe('the Ports view of an SSH window (card coverage-100)', function () {
         `the Ports view to show port ${String(PRIVILEGED_PORT)}`,
         async () =>
           (await portsRows(window).catch(() => [])).some(
-            row => row.port === String(PRIVILEGED_PORT),
+            entry => entry.port === String(PRIVILEGED_PORT),
           ),
         30_000,
       );
