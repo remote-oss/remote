@@ -4,7 +4,6 @@ import {
   closeWindow,
   inWindow,
   onHostAs,
-  terminalFacts,
   terminalNames,
   waitFor,
 } from '../windows/harness.ts';
