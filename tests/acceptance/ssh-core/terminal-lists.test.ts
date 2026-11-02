@@ -14,6 +14,7 @@ import {
   chooseQuickPickRow,
   pageText,
   pressEscape,
+  quickPickFacts,
   quickPickGroups,
   quickPickRows,
   terminalText,
@@ -57,7 +58,7 @@ async function groupsOf(folder: string): Promise<Array<[string, string]>> {
 describe('the lists and the reload of an SSH window that uses its terminals (card connect-125)', function () {
   this.timeout(300_000);
 
-  it('F-2508 AC-14 (c125-profiles): Select Default Profile lists the host’s shells, each detected one with a path that exists on the host', async () => {
+  it('F-2508 AC-14 (reading-1768-terminal-first): Select Default Profile lists the host’s shells, each detected one with a path that exists on the host', async () => {
     await windowWithTerminal('c125-profiles');
     try {
       await runFromPalette('c125-profiles', 'Terminal: Select Default Profile');
@@ -93,7 +94,7 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
     }
   });
 
-  it('F-2508 AC-28 (c125-select-start): Select and Start Debugging lists the configuration used before under Most Recent, the other under launch.json, then Node.js... under contributed and Add Configuration... under configure', async () => {
+  it('F-2508 AC-28 (reading-1768-terminal-first): Select and Start Debugging lists the configuration used before under Most Recent, the other under launch.json, then Node.js... under contributed and Add Configuration... under configure', async () => {
     const root = '/home/harness/c125-select';
     await writeOnHost(`${root}/app.js`, "console.log('c125');");
     await writeOnHost(
@@ -127,19 +128,26 @@ describe('the lists and the reload of an SSH window that uses its terminals (car
         () => undefined,
       );
       const groups = await groupsOf('c125-select');
+      const placeholder = (await quickPickFacts('c125-select'))?.placeholder;
       await pressEscape('c125-select');
-      deepStrictEqual(groups, [
-        ['Run app', 'Most Recent'],
-        ['Other app', 'launch.json'],
-        ['Node.js...', 'contributed'],
-        ['Add Configuration...', 'configure'],
-      ]);
+      deepStrictEqual(
+        [placeholder, groups],
+        [
+          'Type the name of a launch configuration to run.',
+          [
+            ['Run app', 'Most Recent'],
+            ['Other app', 'launch.json'],
+            ['Node.js...', 'contributed'],
+            ['Add Configuration...', 'configure'],
+          ],
+        ],
+      );
     } finally {
       await closeWindow('c125-select').catch(() => undefined);
     }
   });
 
-  it('F-2508 AC-29 (c125-task): Run Task runs a shell task of the host in a terminal named after it, which shows the host’s name between the two lines', async () => {
+  it('F-2508 AC-29 (reading-1768-terminal-first): Run Task runs a shell task of the host in a terminal named after it, which shows the host’s name between the two lines', async () => {
     await writeOnHost(
       '/home/harness/c125-task/.vscode/tasks.json',
       JSON.stringify({
