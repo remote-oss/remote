@@ -1017,6 +1017,11 @@ export function launchesOf(root: string): Launch[] {
       suite: 'explorer-folders',
       // The confirmation of File: Clear Recently Opened... is drawn in the window, where the renderer helpers read it.
       settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      // The empty script makes Remote - SSH show its real pickers, which the SSH group's hand-overs in an SSH window read.
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
     },
     {
       ...EXPLORER_LAUNCH,
