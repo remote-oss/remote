@@ -1,0 +1,9 @@
+#!/bin/sh
+# A login shell that sets TMPDIR to a folder of the user's own, then is POSIX sh: as a login shell (argv[0] starting
+# with -) it starts sh as one too.
+TMPDIR="$HOME/tmp"
+export TMPDIR
+case "$0" in
+  -*) exec /bin/sh -l "$@" ;;
+esac
+exec /bin/sh "$@"

@@ -1,13 +1,13 @@
 # The SSH host of the acceptance tests: OpenSSH's server, key login only, and one user whose login shell is POSIX sh
-# unless HOST_SHELL names another of the shells installed here. Fifteen more users serve tests that need another
+# unless HOST_SHELL names another of the shells installed here. Sixteen more users serve tests that need another
 # kind of account: harness-pw (password login only), harness-nofwd (TCP forwarding refused), harness-nosock
 # (stream-local forwarding refused), harness-noall (all forwarding refused), harness-mute (a login shell that answers
 # only a command given with -c), harness-ro (a server data folder that exists and cannot be written), harness-i686 (a
 # host whose `uname -m` says i686), harness-fish (a login shell that is fish), harness-bash (a login shell that is
 # bash), harness-zsh (a login shell that is zsh), harness-dash (a dash login shell whose name is sh), harness-ksh (a
-# login shell that is ksh), harness-csh (a login shell that is csh), harness-tcsh (a login shell that is tcsh) and
-# harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
-# /etc/ssh/ca.pub by start-sshd).
+# login shell that is ksh), harness-csh (a login shell that is csh), harness-tcsh (a login shell that is tcsh),
+# harness-tmpdir (a login shell that sets TMPDIR to ~/tmp, then is sh) and harness-cert, which accepts only a
+# certificate signed by the run's own authority (CA_PUBLIC_KEY, written to /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
 # packets of port 22 and bring them back (the container runs with NET_ADMIN). xauth lets sshd forward X11, xdpyinfo is
@@ -71,6 +71,13 @@ COPY i686-uname /opt/i686/bin/uname
 RUN chmod 755 /opt/i686/bin/uname \
   && printf '%s\n' 'PATH=/opt/i686/bin:$PATH' 'export PATH' > /home/harness-i686/.profile \
   && chown harness-i686:harness-i686 /home/harness-i686/.profile
+
+COPY tmpdir-shell /usr/local/bin/tmpdir-shell
+RUN chmod 755 /usr/local/bin/tmpdir-shell \
+  && echo /usr/local/bin/tmpdir-shell >> /etc/shells \
+  && adduser -D -s /usr/local/bin/tmpdir-shell harness-tmpdir \
+  && sed -i 's/^harness-tmpdir:!/harness-tmpdir:*/' /etc/shadow \
+  && install -d -m 700 -o harness-tmpdir -g harness-tmpdir /home/harness-tmpdir/tmp
 
 COPY mute-shell /usr/local/bin/mute-shell
 RUN echo /usr/local/bin/mute-shell >> /etc/shells \
