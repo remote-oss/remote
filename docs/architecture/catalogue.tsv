@@ -149,7 +149,7 @@ F-2109	27	remote-ssh	feature	spec:draft	E21	ssh_config keywords passed through t
 F-2201	28	remote-ssh	feature	spec:draft	E22	Which SSH configuration files are read; remote.SSH.configFile; parse errors	A	ssh.config-source	lib-ssh	44	10	True	1	1	0	0		resolvers	ssh (-F option)	openssh	18
 F-2202	29	remote-ssh	feature	spec:draft	E22	Host list from the configuration: Host patterns, Include and Match	B	ssh.host-list	lib-ssh	34	6	False	1	1	0	0				openssh	11
 F-2203	30	remote-ssh	feature	spec:draft	E22	Open SSH Configuration File...	B	ssh.config-opener	lib-ssh	31	6	True	2	1	0	0					9
-F-2204	31	remote-ssh	feature	spec:draft	E22	Add New SSH Host...	B	ssh.add-host-wizard	lib-ssh	40	9	True	2	1	0	0	ssh-remote			openssh	9
+F-2204	31	remote-ssh	feature	spec:reviewed	E22	Add New SSH Host...	B	ssh.add-host-wizard	lib-ssh	41	9	True	2	1	0	0	ssh-remote			openssh	9
 F-2205	32	remote-ssh	feature	spec:draft	E22	Host and user name validation	A	ssh.name-validator	lib-identifiers	36	12	True	4	0	0	0	ssh-remote	resolvers	ssh (separate arguments, no shell)	openssh	18
 F-2206	33	remote-ssh	feature	spec:draft	E22	Remote platform per host: detection, the platform picker and remotePlatform	D	ssh.platform-resolver	lib-ssh	38	10	True	3	4	0	0	ssh-remote	resolvers	ssh;hidden terminal in non-local mode	openssh	21
 F-2301	34	remote-ssh	feature	spec:draft	E23	Connect to Host... (new window): the host picker and user@host input	B	ssh.host-picker	lib-authority	34	11	True	1	0	0	0	ssh-remote	resolvers			15

@@ -288,11 +288,11 @@ F-2204.AC-1	unit
 F-2204.AC-2	unit	
 F-2204.AC-3	unit	
 F-2204.AC-4	unit	
-F-2204.AC-5	todo	
+F-2204.AC-5	acceptance	
 F-2204.AC-6	unit	
 F-2204.AC-7	unit	
-F-2204.AC-8	todo	
-F-2204.AC-9	todo	
+F-2204.AC-8	acceptance	
+F-2204.AC-9	acceptance	
 F-2204.AC-10	unit	
 F-2204.AC-11	unit	
 F-2204.AC-12	unit	
@@ -309,21 +309,22 @@ F-2204.AC-22	unit
 F-2204.AC-23	unit	
 F-2204.AC-24	unit	
 F-2204.AC-25	unit	
-F-2204.AC-26	todo	
-F-2204.AC-27	todo	
-F-2204.AC-28	todo	
-F-2204.AC-29	todo	
+F-2204.AC-26	acceptance	
+F-2204.AC-27	acceptance	
+F-2204.AC-28	acceptance	
+F-2204.AC-29	acceptance	
 F-2204.AC-30	deferred	build order slice 1: the Remotes view is remote-explorer's
-F-2204.AC-31	todo	
+F-2204.AC-31	acceptance	
 F-2204.AC-32	unit	
-F-2204.AC-33	todo	
+F-2204.AC-33	acceptance	
 F-2204.AC-34	unit	
-F-2204.AC-35	todo	
-F-2204.AC-36	todo	
+F-2204.AC-35	acceptance	
+F-2204.AC-36	acceptance	
 F-2204.AC-37	unit	
 F-2204.AC-38	unit	
 F-2204.AC-39	unit	
 F-2204.AC-40	todo	
+F-2204.AC-41	acceptance	
 F-2206.AC-1	acceptance	
 F-2206.AC-2	acceptance	
 F-2206.AC-3	core	core: the quick pick's filter by typed text
