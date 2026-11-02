@@ -135,13 +135,32 @@ def descendants(roots, table):
     return found
 
 
-def window_listeners(user_data_dir, proc="/proc", target_address=None, holder=None, lab_ports=()):
+def same_address(left, right):
+    """Whether two IP literals name the same address, whatever their spelling (`::1` and `0:0:0:0:0:0:0:1`)."""
+    def packed(text):
+        family = socket.AF_INET6 if ":" in text else socket.AF_INET
+        return family, socket.inet_pton(family, text)
+    try:
+        return packed(left) == packed(right)
+    except OSError:
+        return False
+
+
+def is_address(text):
+    """Whether `text` is an IPv4 or IPv6 literal, without brackets or a port."""
+    return isinstance(text, str) and same_address(text, text)
+
+
+def window_listeners(user_data_dir, proc="/proc", target_address=None, holder=None, lab_ports=(), address=None):
     """{listening: [{address: "<address>:<port>", holder}, ...]} of the editor on `user_data_dir` and every process
     below it, and with `target_address` of the ssh processes connected to it wherever they run; or an error when no
     editor holds that profile's IPC socket. Sorted by holder, then address, then port, so two holders' ports the kernel
     picked keep their order once normalization has replaced them; a case's client ports (the slot's range, below the
     kernel's ephemeral range) come before a port the kernel picked. The port is text, so ${PORT_<NAME>} and a bound
-    value normalize in it. With `holder`, only that holder's listeners are kept; `lab_ports` are never listed."""
+    value normalize in it. With `holder`, only that holder's listeners are kept, and with `address` (an IP literal) only
+    the listeners on that address, as a criterion that names the loopback a client dials asks; `lab_ports` are never
+    listed."""
+    wanted = address
     table = processes(proc)
     roots = editor_processes(user_data_dir, table, proc)
     if not roots:
@@ -157,4 +176,5 @@ def window_listeners(user_data_dir, proc="/proc", target_address=None, holder=No
         found |= {(held_by,) + listening[inode][:2] for inode in held & set(listening)
                   if listening[inode][1] not in lab_ports}
     return {"listening": [{"address": f"[{address}]:{port}" if ":" in address else f"{address}:{port}",
-                           "holder": name} for name, address, port in sorted(found) if holder in (None, name)]}
+                           "holder": name} for name, address, port in sorted(found)
+                          if holder in (None, name) and (wanted is None or same_address(wanted, address))]}
