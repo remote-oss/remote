@@ -80,6 +80,23 @@ async function waitingOf(
   ];
 }
 
+/** Waits until window `name` shows the notice of the refusal; a wait that runs out says what the log of the connection held. */
+async function noticeOf(name: string): Promise<void> {
+  try {
+    await waitFor(
+      'the notice',
+      () => recordLines('notice', name).length > 0,
+      120_000,
+    );
+  } catch (error) {
+    const held = connectionLog().slice(-30).join('\n');
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}; the last lines of the connection log:\n${held}\nthe helpers: ${JSON.stringify(await connectionHelpers())}`,
+      {cause: error},
+    );
+  }
+}
+
 describe('F-2604: TCP forwarding disabled on the server', function () {
   this.timeout(900_000);
   beforeEach(async () => {
@@ -97,11 +114,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       await userSettings({...PLATFORMS});
       const name = 'c85-wait';
       await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       const together = await waitingOf(name);
       await new Promise(resolve => setTimeout(resolve, 180_000));
       deepStrictEqual(
@@ -119,11 +132,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       await userSettings({...PLATFORMS});
       const name = 'c85-close';
       await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       const settings = readUserSettings();
       const empty = await nextEmptyWindow(() =>
         inWindow(name, 'workbench.action.remote.close'),
@@ -238,11 +247,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         await userSettings({...PLATFORMS});
         const name = `c85-${disturbance}`;
         await opened('noforward', name);
-        await waitFor(
-          'the notice',
-          () => recordLines('notice', name).length > 0,
-          120_000,
-        );
+        await noticeOf(name);
         if (disturbance === 'network') {
           cutHostNetwork();
           try {
@@ -293,11 +298,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       const stored = forwardingEntries(since);
       await new Promise(resolve => setTimeout(resolve, 15_000));
       await inWindow(name, 'opensshremotes.showLog');
@@ -359,11 +360,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       await new Promise(resolve => setTimeout(resolve, 10_000));
       deepStrictEqual(
         [
@@ -384,11 +381,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const name = 'c85-second';
       const mark = connectionLog().length;
       await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       await new Promise(resolve => setTimeout(resolve, 10_000));
       deepStrictEqual(
         [
@@ -410,11 +403,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('noforward-key', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       await new Promise(resolve => setTimeout(resolve, 10_000));
       deepStrictEqual(
         {
@@ -440,11 +429,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('changedkey', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       await new Promise(resolve => setTimeout(resolve, 10_000));
       deepStrictEqual(
         {
@@ -536,11 +521,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       await userSettings({...PLATFORMS});
       const name = 'c85-reload';
       await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
+      await noticeOf(name);
       const mark = connectionLog().length;
       await reloadWindow(name);
       await new Promise(resolve => setTimeout(resolve, 20_000));
