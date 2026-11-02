@@ -23,81 +23,21 @@ import {
   answerDialog,
   answerNotification,
   notificationButtons,
-  notificationCentre,
   paletteRows,
   waitForDialog,
 } from '../windows/renderer.ts';
-import {inWindow} from '../windows/harness.ts';
 import {docker} from './resolve-support.ts';
+import {
+  changed,
+  CHANGED_START,
+  changedNotices,
+  clearNotifications,
+  connectedWindow,
+  noticesAfter,
+  noticesWhen,
+  rewriteConfiguration,
+} from '../windows/config-watch-support.ts';
 import {storeRoot} from '../windows/authoring-support.ts';
-
-/** The words of the notification for the files `names`. */
-function changed(names: string): string {
-  return `Configuration file(s) changed: ${names}. The container might need to be rebuilt to apply the changes.`;
-}
-
-/** The start of every such notification. */
-const CHANGED_START = 'Configuration file(s) changed:';
-
-/** Writes `changes` over the configuration of `folder` on the host, as an editor of another process would. */
-function rewriteConfiguration(
-  folder: string,
-  changes: Readonly<Record<string, unknown>>,
-): void {
-  const file = path.join(folder, '.devcontainer', 'devcontainer.json');
-  writeFileSync(
-    file,
-    JSON.stringify({
-      ...(JSON.parse(readFileSync(file, 'utf8')) as object),
-      ...changes,
-    }),
-  );
-}
-
-/** The notifications of window `name` about changed configuration files, newest first. */
-async function changedNotices(name: string): Promise<string[]> {
-  return (await notificationCentre(name)).filter(text =>
-    text.startsWith(CHANGED_START),
-  );
-}
-
-/** Waits until window `name` has `count` such notifications, and gives them. */
-async function noticesWhen(name: string, count: number): Promise<string[]> {
-  let seen: string[] = [];
-  await waitFor(
-    `${String(count)} notification(s) about changed files in window ${name}`,
-    async () => {
-      seen = await changedNotices(name);
-      return seen.length >= count;
-    },
-    30_000,
-  );
-  return seen;
-}
-
-/** Runs Clear All Notifications in window `name`. Measured: the command clears only after the centre has been opened by a read and hidden again, so the sequence is the one that clears. */
-async function clearNotifications(name: string): Promise<void> {
-  await inWindow(name, 'notifications.clearAll');
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  await changedNotices(name);
-  await inWindow(name, 'notifications.hideList');
-  await inWindow(name, 'notifications.clearAll');
-  await new Promise(resolve => setTimeout(resolve, 2000));
-}
-
-/** The notifications of window `name` about changed files after it has been left alone for `seconds`. */
-async function noticesAfter(name: string, seconds: number): Promise<string[]> {
-  await new Promise(resolve => setTimeout(resolve, seconds * 1000));
-  return changedNotices(name);
-}
-
-/** Opens `folder` in its container and gives the window, after the container and the window have settled. */
-async function connectedWindow(folder: string): Promise<string> {
-  const name = await openFolderWindow(folder);
-  await reopenInContainer(name);
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  return name;
-}
 
 /** The Dockerfile of the rows: the run's dev container image, nothing more. */
 function dockerfileText(): string {
