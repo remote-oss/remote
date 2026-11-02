@@ -7,6 +7,7 @@
  * of the run's pinned VSCodium build.
  */
 
+import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {isOpen, variable, windowState} from './harness.ts';
@@ -2511,6 +2512,99 @@ export async function detailedQuickPickRows(
       focused: row.classList.contains('focused'),
     }))`,
   );
+}
+
+/**
+ * The whole quick pick open in window `name`, in list order, however many rows its virtualized list renders at once.
+ * The list reveals its rows only to the pick's arrow key (a wheel moves it not at all), so the read walks the focus
+ * down to the set's `aria-setsize` and back to the row the pick opened on, keeping the focus where the next action
+ * of the test expects it. None when no quick pick is open.
+ */
+export async function allQuickPickRows(
+  name: string,
+): Promise<DetailedQuickPickRow[]> {
+  const reads = await evaluate<QuickPickRead[] | null>(
+    name,
+    `{(async () => {
+      const widget = document.querySelector('${QUICK_WIDGET}');
+      if (widget === null || widget.style.display === 'none') {
+        return null;
+      }
+      const list = widget.querySelector('.quick-input-list .monaco-list');
+      if (list === null) {
+        return null;
+      }
+      const rowOf = row => ({
+        position: Number(row.getAttribute('aria-posinset')),
+        setSize: Number(row.getAttribute('aria-setsize')),
+        label: row.querySelector('.label-name')?.textContent ?? '',
+        description: row.querySelector('.label-description')?.textContent ?? '',
+        detail: [...row.querySelectorAll('.quick-input-list-label-meta .monaco-icon-label')].filter(each => each.style.display !== 'none').map(each => each.textContent).join(''),
+        icons: [...row.querySelectorAll('.codicon')].flatMap(each => [...each.classList].filter(name => name.startsWith('codicon-'))),
+        buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+        focused: row.classList.contains('focused'),
+      });
+      const focusOf = () => {
+        const focused = list.querySelector('.monaco-list-row.focused');
+        return focused ? Number(focused.getAttribute('aria-posinset')) : null;
+      };
+      const read = () => {
+        const rows = [...list.querySelectorAll('.monaco-list-row')].map(rowOf);
+        return {rows, setSize: rows[0]?.setSize ?? 0, focus: focusOf()};
+      };
+      // The list reveals its next rows to the pick's arrow key; a synthetic wheel moves it not at all.
+      const key = name => list.dispatchEvent(new KeyboardEvent('keydown', {
+        key: name,
+        code: name,
+        keyCode: name === 'ArrowDown' ? 40 : 38,
+        which: name === 'ArrowDown' ? 40 : 38,
+        bubbles: true,
+        cancelable: true,
+      }));
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const settled = async before => {
+        for (let tick = 0; tick < 40 && focusOf() === before; tick += 1) {
+          await wait(16);
+        }
+        await wait(16);
+      };
+      const first = read();
+      const setSize = first.setSize;
+      if (setSize <= 1 || first.rows.length >= setSize) {
+        return [first];
+      }
+      const startFocus = first.focus;
+      const reads = [first];
+      const seen = new Set(first.rows.map(row => row.position));
+      let guard = 0;
+      while (seen.size < setSize && guard < setSize + 20) {
+        const before = focusOf() ?? startFocus;
+        key('ArrowDown');
+        await settled(before);
+        const step = read();
+        reads.push(step);
+        for (const row of step.rows) {
+          seen.add(row.position);
+        }
+        guard += 1;
+      }
+      // Restore the row the pick opened on: the test's next action moves from it, so it meets the pick as it did.
+      if (startFocus !== null) {
+        const now = focusOf() ?? startFocus;
+        const down = (startFocus - now + setSize) % setSize;
+        const up = (now - startFocus + setSize) % setSize;
+        const useDown = down <= up;
+        for (let step = 0; step < (useDown ? down : up); step += 1) {
+          const before = focusOf();
+          key(useDown ? 'ArrowDown' : 'ArrowUp');
+          await settled(before);
+        }
+      }
+      reads.push(read());
+      return reads;
+    })()}`,
+  );
+  return reads === null ? [] : combineQuickPickReads(reads);
 }
 
 /** Presses the button `button` beside the row labelled `label` of the quick pick open in window `name`. */

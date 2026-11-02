@@ -38,6 +38,10 @@ describe('the titles of the connection progress', () => {
     deepStrictEqual(phaseTitleOf({name: 'startingServer'}), undefined);
   });
 
+  it('connect-107: the opening stage has no message, which opens the progress with the title alone', () => {
+    deepStrictEqual(phaseTitleOf({name: 'opened'}), undefined);
+  });
+
   it('F-2304: the share downloaded has no message, so the last one stays', () => {
     deepStrictEqual(
       phaseTitleOf({name: 'serverDownloadPercent', percent: 40}),

@@ -183,7 +183,7 @@ describe('the local port range of a window (card coverage-79)', function () {
     }
   });
 
-  it('F-2104 AC-14, AC-17, AC-41 (c79-range-dialog): a range with every port held gives the dialog with its three buttons; Retry with the range still full gives it again; More Actions shows the five actions and Escape leaves the indicator Disconnected from SSH: harness', async () => {
+  it('F-2104 AC-14, AC-17, AC-41, AC-42 (c79-range-dialog): a range with every port held gives the dialog with its three buttons; Retry with the range still full gives it again, its progress reading the host alone until then; More Actions shows the five actions and Escape leaves the indicator Disconnected from SSH: harness', async () => {
     await keepingSettings(async () => {
       const held = await holdPorts([41070, 41071], '127.0.0.1');
       try {
@@ -207,8 +207,16 @@ describe('the local port range of a window (card coverage-79)', function () {
         // Escape answered the pick: the record must not gain a dialog or a pick afterwards, as it would if they reopened.
         await new Promise(resolve => setTimeout(resolve, 5000));
         const lines = recordLines(undefined, name);
+        const first = lines.findIndex(line => line.surface === 'failureDialog');
+        const second = lines.findIndex(
+          (line, index) => index > first && line.surface === 'failureDialog',
+        );
         deepStrictEqual(
           {
+            retryProgress: lines
+              .slice(first + 1, second)
+              .filter(line => line.surface === 'progress')
+              .map(line => [line.question, line.details]),
             dialogs: lines
               .filter(line => line.surface === 'failureDialog')
               .map(line => [line.question, line.buttons]),
@@ -218,6 +226,10 @@ describe('the local port range of a window (card coverage-79)', function () {
             indicator: (await statusItem(name, 'status.host')).text,
           },
           {
+            retryProgress: [
+              ['Setting up SSH Host harness', undefined],
+              ['', false],
+            ],
             dialogs: [
               [busyDialog('41070-41071'), BUTTONS],
               [busyDialog('41070-41071'), BUTTONS],
