@@ -1873,10 +1873,11 @@ describe('acceptance', () => {
           'ssh -F',
           'bundle suite',
           `docker rm`,
-          // the clean-up of what the run's label holds: containers, networks, editors, images, then the check
+          // the clean-up of what the run's label holds: containers, networks, volumes, editors, images, then the check
           'docker ps',
           'docker ps',
           'docker network',
+          'docker volume',
           'pkill -f',
           'pkill -O',
           'docker image',
@@ -1886,6 +1887,7 @@ describe('acceptance', () => {
           'docker image',
           'docker ps',
           'docker network',
+          'docker volume',
         ],
       );
     });
