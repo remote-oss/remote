@@ -1007,6 +1007,17 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-99: Host agentfwd-no logs in to harness with the run key and gives ForwardAgent no', () => {
+    strictEqual(
+      accountBlock('agentfwd-no'),
+      [
+        ...sharedLines('agentfwd-no', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardAgent no',
+      ].join('\n'),
+    );
+  });
+
   it("F-2311: Hosts agentfwd-tmpdir and agentfwd-notmp log in to harness-tmpdir and harness-notmp with the run key and forward the run's agent by its path", () => {
     deepStrictEqual(
       ['agentfwd-tmpdir', 'agentfwd-notmp'].map(alias => accountBlock(alias)),

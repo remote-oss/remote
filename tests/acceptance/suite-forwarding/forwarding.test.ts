@@ -4,15 +4,13 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import {agentAdd, fingerprintOf} from '../windows/harness.ts';
+import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 
 /** The case of this launch: `agent`, `agent-off`, `x11` or `x11-noxauth`. */
 const FORWARDING_CASE = process.env.HARNESS_FORWARDING_CASE ?? '';
 
 /** How long a terminal of the window has to write what it saw. */
 const TERMINAL_MILLISECONDS = 15_000;
-
-/** The form of an agent link's path. */
-const LINK_PATTERN = '/tmp/vscode-ssh-auth-sock-*';
 
 /** The log lines of this window's forwarding plans, which a failed assertion shows. */
 function forwardingLines(): string {
@@ -50,16 +48,6 @@ async function terminalWrites(command: string, file: string): Promise<string> {
   throw new Error(
     `the terminal wrote no ${file} within ${String(TERMINAL_MILLISECONDS)} ms\n${forwardingLines()}`,
   );
-}
-
-/** The agent links in /tmp of the host, each with its owner, as `<owner> <path>`. */
-async function hostLinks(): Promise<string[]> {
-  const listed = await onHost(
-    'sh',
-    '-c',
-    `for name in ${LINK_PATTERN}; do [ -L "$name" ] && stat -c '%U %n' "$name"; done; true`,
-  );
-  return listed.split('\n').filter(line => line !== '');
 }
 
 /**
