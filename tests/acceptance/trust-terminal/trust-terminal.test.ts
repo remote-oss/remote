@@ -9,7 +9,11 @@ import {
   signal,
   waitFor,
 } from '../windows/harness.ts';
-import {INSTALL_MILLISECONDS, setting} from '../windows/maintenance.ts';
+import {
+  INSTALL_MILLISECONDS,
+  setting,
+  storedPlatform,
+} from '../windows/maintenance.ts';
 import {answerDialog, waitForDialog} from '../windows/renderer.ts';
 
 /** The buttons of core's trust request, in the order the page holds them (measured on the run's build). */
@@ -80,6 +84,56 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
           afterChoice >= 10_000 && afterChoice < 14_000,
         ],
         [true, true],
+      );
+    } finally {
+      await setting('remote.SSH.connectTimeout', undefined);
+    }
+  });
+
+  it('F-2206 AC-38 (reading-1679-trust-cancel): with workspace trust on and an untrusted folder, picking Linux brings core’s trust dialog, and after Cancel the connect fails with one of the two reasons F-2601 AC-28 records, and nothing is stored', async () => {
+    const window = 'tt38';
+    await setting('remote.SSH.connectTimeout', 10);
+    try {
+      appendScript([
+        {surface: 'platformPick', match: 'platform', answer: 'linux', window},
+        {
+          surface: 'failureDialog',
+          match: 'Could not establish connection',
+          answer: 'dismiss',
+          window,
+        },
+        {
+          surface: 'mitigationPick',
+          match: 'Pick an action',
+          answer: 'dismiss',
+          window,
+        },
+      ] satisfies AppendedEntry[]);
+      await openWindow('harness-dash', window, 'harness-dash');
+      const shown = await waitForDialog(window);
+      await answerDialog(window, 'Cancel');
+      await waitFor(
+        'the failure dialog',
+        () => recordLines('failureDialog', window).length > 0,
+        120_000,
+      );
+      const [dialog] = recordLines('failureDialog', window);
+      deepStrictEqual(
+        [
+          shown.message,
+          shown.buttons,
+          [
+            'Could not establish connection to "harness-dash": Connecting with SSH timed out.',
+            'Could not establish connection to "harness-dash": Got bad result from install script.',
+          ].includes(dialog?.question ?? ''),
+          Object.keys(storedPlatform() as object).includes('harness-dash'),
+        ],
+        [
+          'Do you trust the authors of the files in this folder?',
+          REQUEST_BUTTONS,
+          true,
+          false,
+        ],
       );
     } finally {
       await setting('remote.SSH.connectTimeout', undefined);
