@@ -43,6 +43,7 @@ describe('more of the server on a socket (card coverage-81)', function () {
     saved = readUserSettings();
     sshConfig = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
     await freshHost();
+    await onHost('sh', '-c', 'rm -f /tmp/code-*');
     await userSettings({
       'remote.SSH.remoteServerListenOnSocket': true,
       'remote.SSH.remotePlatform': {
