@@ -986,7 +986,12 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
-      environment: {...EXPLORER_LAUNCH.environment, HOME: '<run>/home'},
+      // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/home',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
     },
     {
       ...EXPLORER_LAUNCH,

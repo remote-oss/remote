@@ -724,6 +724,73 @@ export async function rowActionTitles(
   return titles;
 }
 
+/**
+ * Moves the mouse of window `name` onto the one row labelled `rowLabel` of view `viewName`, or to the corner of the
+ * window when `rowLabel` is `undefined`, so that no row is hovered. It fails naming the row when the view has not one.
+ */
+export async function hoverRow(
+  name: string,
+  viewName: string,
+  rowLabel: string | undefined,
+): Promise<void> {
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      if (${JSON.stringify(rowLabel ?? null)} === null) {
+        return {x: 1, y: 1};
+      }
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel ?? '')});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  await dispatchInput(await pageOf(name), name, [
+    {
+      method: 'Input.dispatchMouseEvent',
+      params: {type: 'mouseMoved', ...point},
+    },
+  ]);
+  await new Promise(resolve => setTimeout(resolve, 300));
+}
+
+/**
+ * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name` that are
+ * drawn now, in the order shown: the row's actions stay out of sight until it is hovered, focused or selected.
+ */
+export async function shownRowActionTitles(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string[]> {
+  const titles = await evaluate<string[] | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      return rows.length !== 1
+        ? null
+        : [...rows[0].querySelectorAll('.actions .action-label')]
+            .filter(label => label.getBoundingClientRect().width > 0 && getComputedStyle(label.closest('.actions')).display !== 'none')
+            .map(label => label.getAttribute('aria-label') ?? '');
+    })()`,
+  );
+  if (titles === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  return titles;
+}
+
 /** The titles of the title actions of view `viewName` in window `name`, in the order shown; none when the view is not there. */
 export async function titleActions(
   name: string,
