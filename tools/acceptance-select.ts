@@ -4,7 +4,10 @@
  */
 
 import {execFileSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {type Launch, launchesOf} from './acceptance-launches.ts';
+import {chosenLaunches} from './acceptance.ts';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
 /** What the selection gives: the labels in the run's order, and per label the changed path that selected it. */
@@ -98,6 +101,45 @@ export function launchesInput(
     : selection.labels.join(',');
 }
 
+/**
+ * The parts the VSCodium job of `workflow` (ci.yml's text) runs a whole suite in, in order: its matrix's default, the
+ * selection each runner makes.
+ */
+export function workflowParts(workflow: string): string[] {
+  const parts = /\|\| '(\["@[^']*\])'/.exec(workflow)?.[1];
+  if (parts === undefined) {
+    throw new Error('ci.yml: the VSCodium job names no parts of the suite');
+  }
+  return JSON.parse(parts) as string[];
+}
+
+/**
+ * The parts of the VSCodium job a selection needs, in the order of `parts`: a part all of whose launches are selected
+ * as it is written, a part with some of them as those labels, and a part with none left out. A selected launch in no
+ * part (the genuine group's, which have a job of their own) is left out too.
+ */
+export function partsOf(
+  selection: Selection,
+  launches: readonly Launch[],
+  parts: readonly string[],
+): string[] {
+  const selected = new Set(selection.labels);
+  const needed: string[] = [];
+  for (const part of parts) {
+    const inPart = chosenLaunches(launches, part.split(','));
+    if (typeof inPart === 'string') {
+      throw new Error(`ci.yml's part ${part}: ${inPart}`);
+    }
+    const labels = inPart
+      .map(launch => launch.label)
+      .filter(label => selected.has(label));
+    if (labels.length > 0) {
+      needed.push(labels.length === inPart.length ? part : labels.join(','));
+    }
+  }
+  return needed;
+}
+
 /** The files a change touches: `git diff --name-only <base>...<head>`, from the merge base. */
 function changedFiles(base: string, head: string): string[] {
   return execFileSync(
@@ -110,14 +152,15 @@ function changedFiles(base: string, head: string): string[] {
 }
 
 const SELECT_USAGE =
-  'usage: node tools/acceptance-select.ts --base <sha> --head <sha>';
+  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--parts]';
 
 if (isMainModule(import.meta.url)) {
   const commandArguments = process.argv.slice(2);
   const base = commandArguments[commandArguments.indexOf('--base') + 1];
   const head = commandArguments[commandArguments.indexOf('--head') + 1];
+  const byParts = commandArguments.includes('--parts');
   if (
-    commandArguments.length !== 4 ||
+    commandArguments.length !== (byParts ? 5 : 4) ||
     !commandArguments.includes('--base') ||
     !commandArguments.includes('--head') ||
     base === undefined ||
@@ -131,6 +174,21 @@ if (isMainModule(import.meta.url)) {
     for (const line of selection.reasons) {
       console.error(`selected ${line}`);
     }
-    console.log(launchesInput(selection, launches));
+    console.log(
+      byParts
+        ? JSON.stringify(
+            partsOf(
+              selection,
+              launches,
+              workflowParts(
+                readFileSync(
+                  path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+                  'utf8',
+                ),
+              ),
+            ),
+          )
+        : launchesInput(selection, launches),
+    );
   }
 }
