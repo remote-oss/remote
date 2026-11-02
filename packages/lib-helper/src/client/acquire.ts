@@ -296,6 +296,7 @@ export async function acquire<Refusal = never>(
     namespace: request.namespace,
     recordKey: request.helperKey,
     endpoint: endpointPath(
+      environment.platform,
       environment.endpointFolder,
       request.namespace,
       request.helperKey,

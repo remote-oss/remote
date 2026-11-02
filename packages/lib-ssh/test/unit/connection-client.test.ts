@@ -151,6 +151,7 @@ describe('the window side of the shared connection (S9)', () => {
                 launcherFiles: {writeExecutable: () => Promise.resolve()},
                 newNonce: () => 'askpass-nonce',
                 spawner: sshRuns.spawn,
+                platform: 'linux',
                 editorEnvironment: {},
                 helloLimitMilliseconds: 500,
                 logLine: () => undefined,

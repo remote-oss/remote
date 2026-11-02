@@ -153,6 +153,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
               shells.push(shell);
               return shell;
             },
+            platform: 'linux',
             editorEnvironment: {},
             helloLimitMilliseconds: 500,
             logLine: () => undefined,

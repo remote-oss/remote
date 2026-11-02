@@ -35,6 +35,7 @@ runConnectionHelper({
   launcherFiles: nodeLauncherFiles,
   newNonce: () => randomBytes(16).toString('hex'),
   spawner: nodeProcessSpawner,
+  platform: process.platform,
   editorEnvironment: inheritedEnvironment(process.env),
   helloLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
   logLine,

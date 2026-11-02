@@ -106,6 +106,7 @@ export async function attemptSharedSession(
             launcherFiles: nodeLauncherFiles,
             newNonce,
             spawner: nodeProcessSpawner,
+            platform: process.platform,
             editorEnvironment: process.env,
             helloLimitMilliseconds: 2000,
             logLine: line => logged.push(line),
