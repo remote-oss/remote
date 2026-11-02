@@ -2156,6 +2156,14 @@ export async function notificationButtons(
   );
 }
 
+/** The id core gives window `name`, which a reload in place keeps; `null` when the page has none. */
+export async function vscodeWindowId(name: string): Promise<number | null> {
+  return evaluate<number | null>(
+    name,
+    `(() => (typeof window.vscodeWindowId === 'number' ? window.vscodeWindowId : null))()`,
+  );
+}
+
 /** Window `name`'s title, as its page has it. */
 export async function windowTitle(name: string): Promise<string> {
   return evaluate<string>(name, 'document.title');

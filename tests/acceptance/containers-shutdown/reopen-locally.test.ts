@@ -1,3 +1,9 @@
+/**
+ * @fileoverview F-0406 (card coverage-103, #1831): Reopen Folder Locally from a window on a dev container of the local
+ * Docker host. The rows run in the `containers-shutdown` launch, which watches what Docker does to the container
+ * after the window has left it.
+ */
+
 import {deepStrictEqual} from 'node:assert';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
@@ -15,11 +21,15 @@ import {
 } from '../windows/harness.ts';
 import {
   dialogOf,
+  notificationButtons,
   notificationCentre,
   paletteRows,
+  rowMenuAction,
   statusItem,
+  vscodeWindowId,
   windowTitle,
 } from '../windows/renderer.ts';
+import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 import {
   connectedWindow,
   removeContainersOf,
@@ -110,6 +120,7 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
     try {
       const plain = await statusItem('local', 'status.host');
       const windowsBefore = openWindows();
+      const identity = await vscodeWindowId(connected.window);
       const from = Date.now();
       await reloadingCommand(connected.window, REOPEN_LOCALLY);
       const seconds = (Date.now() - from) / 1000;
@@ -122,6 +133,8 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
           shown: after,
           folders: state.folders.map(entry => path.basename(entry)),
           sameWindows: openWindows().join(),
+          sameWindow: await vscodeWindowId(connected.window),
+          hasIdentity: identity !== null,
           seconds: seconds < 10,
           dialog: await dialogOf(connected.window),
           notice: await showsNotice(connected.window, 15_000),
@@ -141,6 +154,8 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
           },
           folders: [path.basename(connected.folder)],
           sameWindows: windowsBefore.join(),
+          sameWindow: identity,
+          hasIdentity: true,
           seconds: true,
           dialog: undefined,
           notice: true,
@@ -339,6 +354,25 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
       );
       const closed = await shownBy(folderless);
       const state = await windowState(folderless);
+      // The same with the row menu's Close Workspace, on a second window of the same kind.
+      const viaMenu = await connectedWindow('c103-close-menu');
+      let menuClosed: Awaited<ReturnType<typeof shownBy>> | undefined;
+      let menuState: Awaited<ReturnType<typeof windowState>> | undefined;
+      try {
+        const label = path.basename(viaMenu.folder);
+        await inWindow(viaMenu.window, 'workbench.view.remote');
+        await rowsWhen(viaMenu.window, rows =>
+          rows.some(each => each.label === label),
+        );
+        const menuWindow = await nextEmptyWindow(() =>
+          rowMenuAction(viaMenu.window, VIEW, label, 'Close Workspace'),
+        );
+        menuClosed = await shownBy(menuWindow);
+        menuState = await windowState(menuWindow);
+        await closeWindow(menuWindow).catch(() => undefined);
+      } finally {
+        await removeContainersOf(viaMenu.folder);
+      }
       const before = openWindows();
       void inWindow(folderless, REOPEN_LOCALLY).catch(() => undefined);
       await new Promise(resolve => setTimeout(resolve, 12_000));
@@ -356,6 +390,14 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
       deepStrictEqual(
         {
           closed: [closed.remoteName, state.folders],
+          title: closed.title.includes(path.basename(connected.folder)),
+          likeTheRowMenu: [
+            [menuClosed, menuState.folders],
+            [closed, state.folders],
+          ].every(
+            (entry, index, all) =>
+              JSON.stringify(entry) === JSON.stringify(all[0]),
+          ),
           noop: [
             afterNoop.shown.remoteName,
             afterNoop.shown.title === closed.title,
@@ -368,11 +410,13 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
         },
         {
           closed: ['dev-container', []],
+          title: false,
+          likeTheRowMenu: true,
           noop: ['dev-container', true, [], undefined, before],
           emptyState: [null],
           stopped: true,
         },
-        JSON.stringify(closed),
+        JSON.stringify([closed, menuClosed]),
       );
       await closeWindow(empty).catch(() => undefined);
     } finally {
@@ -403,11 +447,12 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
             ),
           30_000,
         );
-        seen.push(
+        seen.push([
           (await notificationCentre(connected.window)).filter(each =>
             each.includes('not possible in current context'),
           ).length,
-        );
+          await notificationButtons(connected.window, text),
+        ]);
       }
       deepStrictEqual(
         [
@@ -415,7 +460,15 @@ describe('Reopen Folder Locally from a dev container window (card coverage-103, 
           await shownBy(connected.window),
           await stateOf(connected.containerId),
         ],
-        [[1, 2, 3], before, {status: 'running', exitCode: 0}],
+        [
+          [
+            [1, []],
+            [2, []],
+            [3, []],
+          ],
+          before,
+          {status: 'running', exitCode: 0},
+        ],
       );
     } finally {
       await closeWindow(connected.window).catch(() => undefined);
