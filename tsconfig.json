@@ -245,6 +245,9 @@
       "path": "tests/acceptance/extensionpack"
     },
     {
+      "path": "tests/acceptance/terminal-login"
+    },
+    {
       "path": "tests/acceptance/extensionpack-german"
     },
     {

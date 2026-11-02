@@ -421,6 +421,7 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'terminal-login',
   'login-shells',
   'preconnect',
   'config-files',

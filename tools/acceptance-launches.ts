@@ -747,6 +747,22 @@ export function launchesOf(root: string): Launch[] {
       suite: 'windows',
       environment: {REMOTE_OSS_SENTINEL: 'sent1nel-<run>'},
     },
+    // Terminal mode with the login terminal shown and the extension's own prompts (no script), read through the renderer.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'terminal-login',
+      suite: 'terminal-login',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.showLoginTerminal': true,
+        'remote.SSH.remotePlatform': {password: 'linux'},
+        'window.dialogStyle': 'custom',
+        // Core hides the tab list of a single terminal; the rows read what the panel lists.
+        'terminal.integrated.tabs.hideCondition': 'never',
+      },
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+    },
     {label: 'login-shells', kind: 'plain', suite: 'login-shells'},
     {
       label: 'preconnect',

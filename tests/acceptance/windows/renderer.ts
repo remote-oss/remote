@@ -933,6 +933,25 @@ export async function windowSizeOf(name: string): Promise<string> {
   return evaluate<string>(name, '`${window.innerWidth}x${window.innerHeight}`');
 }
 
+/** Whether the panel of window `name` is shown, as the page lays it out. */
+export async function panelShown(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(() => {
+      const panel = document.querySelector('.part.panel');
+      return panel !== null && panel.getBoundingClientRect().height > 0 && !panel.classList.contains('hidden');
+    })()`,
+  );
+}
+
+/** The terminals the Terminal panel of window `name` lists in its tabs, in order; none while the panel is not shown. */
+export async function terminalTabsOf(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.terminal-tabs-entry')].map(entry => (entry.textContent ?? '').trim()).filter(label => label !== '')`,
+  );
+}
+
 /** What an Extensions view row shows. */
 export interface ExtensionRow {
   name: string;
