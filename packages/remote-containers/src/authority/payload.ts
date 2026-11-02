@@ -3,7 +3,7 @@
  * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
-import type {DecodedTarget} from 'lib-authority';
+import {type DecodedTarget, decodeAuthority} from 'lib-authority';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import {recordOf} from '../json-record.ts';
 
@@ -196,4 +196,39 @@ export function decodedFolderOf(
   return target !== undefined && 'kind' in target && target.kind === 'folder'
     ? target
     : undefined;
+}
+
+/** Where a dev container window's folder came from, as its payload names it. */
+export interface ReopenOrigin {
+  kind: 'local';
+  /** The host folder the container was opened from. */
+  folder: string;
+}
+
+/**
+ * The origin a dev container window can be reopened at: the payload's host folder, whatever folder the window shows
+ * now. None for a window that isn't a dev container, or whose payload names no folder on this machine.
+ */
+export function windowOriginOf(
+  authority: string | undefined,
+): ReopenOrigin | undefined {
+  if (authority === undefined) {
+    return undefined;
+  }
+  const decoded = decodeAuthority(authority);
+  if (
+    'malformed' in decoded ||
+    decoded.family !== 'dev-container' ||
+    !('payload' in decoded.target)
+  ) {
+    return undefined;
+  }
+  const target = devContainerTargetOf(decoded.target.payload);
+  if (
+    'malformed' in target ||
+    (target.kind === 'folder' && target.configFile.scheme !== 'file')
+  ) {
+    return undefined;
+  }
+  return {kind: 'local', folder: target.hostPath};
 }
