@@ -31,13 +31,23 @@ jobs:
             # shellcheck disable=SC2086
             rpm -V $packages | awk '$1 ~ /^..5/ && $2 != "c"' || true
           fi
-          case " $packages " in
-            *" docker-ce "* | *" containerd.io "*)
-              echo "restarting dockerd"
-              sudo supervisorctl -c /etc/remote-labs/supervisord.conf restart dockerd || echo "no supervisorctl restart: $(ps -o pid,ppid,comm -C dockerd)"
-              for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
-              ;;
-          esac
+          echo "--- PID 1 and the supervisors"
+          tr '\0' ' ' < /proc/1/cmdline; echo
+          ps -eo pid,ppid,comm | grep -E 'supervisord|dockerd|containerd|tini|runsvdir|s6' || true
+          ls /run/supervisor* /run/supervisor/ /etc/remote-labs/ 2>&1 | head -20
+          conf=$(sudo sh -c "grep -l 'program:dockerd' /etc/remote-labs/*.conf /etc/supervisord.conf /etc/supervisord.d/* 2>/dev/null" | head -1)
+          echo "dockerd's supervisor config: ${conf:-none}"
+          if ! docker info >/dev/null 2>&1; then
+            if [ -n "$conf" ] && sudo supervisorctl -c "$conf" status dockerd; then
+              sudo supervisorctl -c "$conf" start dockerd || sudo supervisorctl -c "$conf" restart dockerd
+            else
+              # no supervisor for it: started outside the job's process tree, so the runner's clean-up keeps it
+              sudo setsid nohup /usr/bin/dockerd --config-file /etc/docker/daemon.json > /tmp/dockerd.log 2>&1 < /dev/null &
+            fi
+            for i in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 1; done
+            tail -5 /tmp/dockerd.log 2>/dev/null || true
+          fi
+          rpm -V docker-ce docker-ce-cli containerd.io | awk '$1 ~ /^..5/' || true
           docker version --format 'docker {{.Client.Version}} / {{.Server.Version}}'
           docker ps --all --quiet | wc -l
           sleep 30
