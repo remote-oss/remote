@@ -368,7 +368,7 @@ export function sshConfigOf(
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `jumped` (the harness account through the harness host as a `ProxyJump`); `routed` (the harness
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
  * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
  * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
@@ -443,6 +443,20 @@ export function harnessSshConfig(
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    '',
+    // The harness account reached through the harness host as a jump host: the target is the host's own sshd, at the port it listens on inside.
+    'Host jumped',
+    '  HostName 127.0.0.1',
+    '  Port 22',
+    '  User harness',
+    '  ProxyJump harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
     '',
     // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
     // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.

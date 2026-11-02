@@ -93,12 +93,17 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     CLI layer (BR-6, BR-9). Ours runs one socket-mode server per host and commit, reused by later connects (T6 ruling
     on #299, 2026-10-12; `ruling-299-socket-reuse`, athena on #1601; spec question on remote-oss/remote-ssh#55).
     Rows: (ruling-299-socket-reuse)
-- **With the server on a socket, a host key that is not yet known is asked as a question of Remote - SSH, not in the
-  install terminal.** The progress notification shows first, and then the question with the key's fingerprint.
+- **A host key that is not yet known is asked as a question of Remote - SSH, in every flow, not in a terminal and not as a raw input.**
+  The progress notification shows first where there is one, and then the question as a pick with the key's fingerprint
+  in its title, the placeholder "Are you sure you want to continue?", and Continue and Cancel.
   - F-2410 AC-24 describes nothing but the progress notification showing while ssh waits, with the question in the
     install terminal behind "details". Ours asks it the way terminal mode does with `remote.SSH.showLoginTerminal` off
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
+  - F-2412 AC-10 describes the question of the maintenance commands as a quick input with core's message "Press 'Enter'
+    to confirm your input or 'Escape' to cancel", answered "yes". That raw input is the reference's fallback for a
+    wording it does not recognize; a recognized host-key question is F-2305's pick in every flow. Continue goes on and
+    records the key; Escape ends the command with the error of F-2412 AC-12 and records nothing (athena on #1687).
     Rows: (ruling-1601-host-key-pick)
 - **A window that joins a running local connection server writes no setting line.**
   - F-2604 AC-1 and AC-15 put the line "ERROR: TCP port forwarding appears to be disabled…" (STR:S046) in the log of the

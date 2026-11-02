@@ -699,6 +699,26 @@ describe('acceptance', () => {
     );
   });
 
+  it("coverage-100: the run's ssh_config has the jumped alias, the harness account through the harness host as a jump host, with its own known-hosts file", () => {
+    strictEqual(
+      accountBlock('jumped'),
+      [
+        'Host jumped',
+        '  HostName 127.0.0.1',
+        '  Port 22',
+        '  User harness',
+        '  ProxyJump harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking accept-new',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_jumped',
+      ].join('\n'),
+    );
+  });
+
   it('coverage-85: Host changedkey is the harness host whose own known-hosts file pins another key, with the check off', () => {
     strictEqual(
       accountBlock('changedkey'),
