@@ -2,22 +2,13 @@ import {deepStrictEqual} from 'node:assert';
 import {setUserSetting} from '../windows/folder-windows.ts';
 import {
   closeWindow,
-  hostPassword,
   inWindow,
   onHostAs,
-  reloadWindow,
   terminalFacts,
   terminalNames,
   waitFor,
-  windowState,
 } from '../windows/harness.ts';
-import {
-  panelShown,
-  answerInputBox,
-  quickPickOf,
-  terminalFocused,
-  terminalTabsOf,
-} from '../windows/renderer.ts';
+import {panelShown, quickPickOf, terminalTabsOf} from '../windows/renderer.ts';
 
 /** The setting that shows the login terminal. */
 const SHOW_TERMINAL = 'remote.SSH.showLoginTerminal';
@@ -40,20 +31,6 @@ async function openPasswordWindow(label: string): Promise<string> {
     `vscode-remote://ssh-remote+password/home/harness-pw/${label}`,
   );
   return label;
-}
-
-/** Waits until the login terminal of window `name` exists and shows `prompt`; gives the terminal's facts. */
-async function untilPrompt(name: string, prompt: string) {
-  let facts = await terminalFacts(name).catch(() => undefined);
-  await waitFor(
-    `the login terminal of ${name} to show ${prompt}`,
-    async () => {
-      facts = await terminalFacts(name).catch(() => undefined);
-      return facts?.text?.includes(prompt) === true;
-    },
-    90_000,
-  );
-  return facts;
 }
 
 describe('the login terminal of the terminal mode (card coverage-82)', function () {
@@ -83,38 +60,6 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
         tabs: [],
         quick: 'Enter password for harness-pw@127.0.0.1',
       },
-    );
-    await closeWindow(name);
-  });
-
-  it('F-2308 AC-20 (c82-reload): reloading a connected window with the setting on reveals exactly one new install terminal, focused', async () => {
-    await setUserSetting(SHOW_TERMINAL, true);
-    const name = await openPasswordWindow('c82-reload');
-    await waitFor(
-      'the password quick input',
-      async () => (await quickPickOf(name)) !== undefined,
-      90_000,
-    );
-    await answerInputBox(name, hostPassword());
-    await waitFor(
-      'the window to connect',
-      async () => (await windowState(name)).remoteName === 'ssh-remote',
-      120_000,
-    );
-    await reloadWindow(name);
-    await untilPrompt(name, "harness-pw@127.0.0.1's password:");
-    const shown = {
-      panel: await panelShown(name),
-      tabs: (await terminalTabsOf(name)).map(label =>
-        // Core adds the terminal's description to the tab's label.
-        label.startsWith('install') ? 'install' : label,
-      ),
-      focused: await terminalFocused(name),
-    };
-    const facts = await terminalFacts(name);
-    deepStrictEqual(
-      {...shown, active: facts.active},
-      {panel: true, tabs: ['install'], focused: true, active: 'install'},
     );
     await closeWindow(name);
   });

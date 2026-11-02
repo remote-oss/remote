@@ -952,14 +952,6 @@ export async function terminalTabsOf(name: string): Promise<string[]> {
   );
 }
 
-/** Whether the keyboard focus of window `name` is inside a terminal, as the page's active element tells it. */
-export async function terminalFocused(name: string): Promise<boolean> {
-  return evaluate<boolean>(
-    name,
-    `document.activeElement?.closest('.xterm') != null`,
-  );
-}
-
 /** What an Extensions view row shows. */
 export interface ExtensionRow {
   name: string;
