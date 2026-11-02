@@ -3,6 +3,7 @@ import {
   pageAmong,
   pageTitleByName,
   pageTitleFor,
+  pagesForState,
   pagesOfRemoteness,
   pressUntilClosed,
   type FolderDialogReading,
@@ -358,5 +359,54 @@ describe('pagesOfRemoteness', () => {
 
   it('tooling-91: of a local and a connected window on one folder, a remote window keeps the page with a remote part', () => {
     deepStrictEqual(pagesOfRemoteness([LOCAL, REMOTE], true), [REMOTE]);
+  });
+});
+
+describe('pagesForState', () => {
+  const pages = [
+    {id: 'p1', type: 'page', title: '[]'},
+    {id: 'p2', type: 'page', title: '[] [SSH: harness]'},
+    {id: 'p3', type: 'page', title: '[]'},
+  ];
+
+  it('card coverage-98: a folder-less window on a remote has the page whose title carries the remote', () => {
+    deepStrictEqual(
+      pagesForState(pages, {folders: [], remoteName: 'ssh-remote'}).map(
+        page => page.id,
+      ),
+      ['p2'],
+    );
+  });
+
+  it('card coverage-98: a folder-less window that has the remote but not its title yet has the pages titled with the empty brackets', () => {
+    deepStrictEqual(
+      pagesForState(
+        pages.filter(page => page.id !== 'p2'),
+        {
+          folders: [],
+          remoteName: 'ssh-remote',
+        },
+      ).map(page => page.id),
+      ['p1', 'p3'],
+    );
+  });
+
+  it('card coverage-98: a window with a folder is not given the empty-bracket pages', () => {
+    deepStrictEqual(
+      pagesForState(pages, {
+        folders: ['file:///work/a'],
+        remoteName: 'ssh-remote',
+      }),
+      [],
+    );
+  });
+
+  it('card coverage-98: a local folder-less window has the pages titled with the empty brackets', () => {
+    deepStrictEqual(
+      pagesForState(pages, {folders: [], remoteName: null}).map(
+        page => page.id,
+      ),
+      ['p1', 'p3'],
+    );
   });
 });
