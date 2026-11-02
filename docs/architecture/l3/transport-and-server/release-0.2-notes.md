@@ -122,6 +122,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Known issues
 
+- **In a new Remote - SSH window, Terminal: Select Default Profile, Debug: Select and Start Debugging and Tasks: Run Task show empty lists, or nothing, until a terminal has been opened in the window.**
+  Open a terminal first.
+  - F-2508 AC-14, AC-28 and AC-29 read their Givens as a window whose terminals have been used (`reading-1768-terminal-first`).
+    The empty lists before the first terminal are VS Code's own behaviour: the requests are answered and nothing of
+    ours shapes them (measured on 1.139.1, connect-125, #1768). Whether to report it upstream is the user's call.
+
 - **When a reconnection fails, for example after a cancelled passphrase, VS Code may show no "Cannot reconnect" dialog.**
   The indicator reads "Disconnected from SSH: <host>". Reload the window to connect again.
   - F-2307 AC-13 and AC-26 describe core's "Cannot reconnect. Please reload the window." dialog after a cancelled
