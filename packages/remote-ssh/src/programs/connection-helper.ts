@@ -5,6 +5,7 @@
  */
 
 import {randomBytes} from 'node:crypto';
+import {appendFileSync} from 'node:fs';
 import {
   helperParameters,
   inheritedEnvironment,
@@ -12,6 +13,7 @@ import {
   nodeFilePort,
   nodeTimer,
 } from 'lib-helper';
+import {helperLogLineOf} from '../diagnostics/helper-log.ts';
 import {
   nodeLauncherFiles,
   nodeProcessSpawner,
@@ -21,10 +23,19 @@ import {
 /** How long a connection to the helper may take to say hello, in milliseconds. */
 const HELLO_LIMIT_MILLISECONDS = 2000;
 
-/** Writes a line to the error stream, which the extension that started the helper keeps as its log. */
-function logLine(line: string): void {
-  process.stderr.write(`${line}\n`);
-}
+/** Writes a line to the error stream and, in an acceptance run, to the extension's log file. */
+const logLine = helperLogLineOf(process.env, {
+  write: text => {
+    process.stderr.write(text);
+  },
+  append: (file, text) => {
+    appendFileSync(file, text);
+  },
+});
+
+process.on('exit', code => {
+  logLine(`the connection helper exits with ${String(code)}`);
+});
 
 runConnectionHelper({
   parameters: helperParameters(process.env),
