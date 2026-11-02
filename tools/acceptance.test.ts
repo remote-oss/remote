@@ -799,17 +799,19 @@ describe('acceptance', () => {
   });
 
   it('coverage-96: each variant of the passphrase key has a block, and AddKeysToAgent names its value', () => {
+    const values = {
+      'passkey-add-yes': 'yes',
+      'passkey-ask-yes': 'ask',
+      'passkey-add-confirm': 'confirm',
+    };
     deepStrictEqual(
-      PASSKEY_VARIANTS.filter(alias => accountBlock(alias) === ''),
-      [],
-    );
-    deepStrictEqual(
-      ['yes', 'ask', 'confirm'].map(value =>
-        accountBlock(
-          `passkey-${value === 'yes' ? 'add-yes' : value === 'ask' ? 'ask-yes' : 'add-confirm'}`,
-        ).includes(`AddKeysToAgent ${value}`),
-      ),
-      [true, true, true],
+      {
+        missing: PASSKEY_VARIANTS.filter(alias => accountBlock(alias) === ''),
+        added: Object.entries(values).map(([alias, value]) =>
+          accountBlock(alias).includes(`AddKeysToAgent ${value}`),
+        ),
+      },
+      {missing: [], added: [true, true, true]},
     );
   });
 
