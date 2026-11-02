@@ -110,13 +110,19 @@ export interface ProgressRequest {
   onDetails: () => void;
 }
 
+/** A report of the progress: the stage's text, whether it carries the details link, the bar's increment and the stage's name. */
+export type ProgressUpdate = (
+  title: string,
+  details: boolean,
+  increment?: number,
+  stage?: string,
+) => void;
+
 /** Progress the user sees while a connect runs. */
 export interface ProgressPort {
   withProgress<Result>(
     request: ProgressRequest,
-    task: (
-      update: (title: string, details: boolean, increment?: number) => void,
-    ) => Promise<Result>,
+    task: (update: ProgressUpdate) => Promise<Result>,
   ): Promise<Result>;
 }
 
@@ -368,10 +374,10 @@ export async function registerResolver(
     decoded: DecodedTarget,
     input: ConnectInput,
   ): Promise<Connected | Failed> {
-    let shown: {title: string; details: boolean; staged: boolean} | undefined;
-    let report:
-      | ((title: string, details: boolean, increment?: number) => void)
+    let shown:
+      | {title: string; details: boolean; staged: boolean; stage: string}
       | undefined;
+    let report: ProgressUpdate | undefined;
     // The share of the bar added since the last report, and the download percent already counted.
     let unreported = 0;
     let downloaded = 0;
@@ -414,7 +420,7 @@ export async function registerResolver(
             report = update;
             if (shown !== undefined) {
               reported = {title: shown.title, details: shown.details};
-              update(shown.title, shown.details, incrementOf());
+              update(shown.title, shown.details, incrementOf(), shown.stage);
             }
             await settled;
           },
@@ -433,7 +439,12 @@ export async function registerResolver(
     }
     const stop = connector.onPhase(phase => {
       const title = options.titleOf(phase, decoded);
-      shown = {title, details: phase.details === true, staged: title !== ''};
+      shown = {
+        title,
+        details: phase.details === true,
+        staged: title !== '',
+        stage: phase.name,
+      };
       if (phase.name === 'serverDownloadPercent') {
         const percent = phase.percent ?? 0;
         unreported += Math.max(0, percent - downloaded);
@@ -447,7 +458,7 @@ export async function registerResolver(
           increment !== undefined
         ) {
           reported = {title: shown.title, details: shown.details};
-          report(shown.title, shown.details, increment);
+          report(shown.title, shown.details, increment, shown.stage);
         }
       } else if (
         phase.quiet !== true &&

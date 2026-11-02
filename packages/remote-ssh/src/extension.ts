@@ -80,6 +80,7 @@ import {
 import {clientPlatformOf, nodeFacts, nodeMachineOf} from './node-machine.ts';
 import {terminalModeOf, textOf} from './pipeline/connect-settings.ts';
 import {ownText} from './surfaces/own-strings.ts';
+import {detailsTitleOf} from './surfaces/progress-titles.ts';
 import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
   downloadProgressOf,
@@ -487,10 +488,10 @@ async function registerConnectOf(
       resolverEditor: acceptanceResolverEditorOf(
         resolverEditorOf(vscode, {
           detailsCommand: runtimeCommands.showDetails,
-          detailsTitle: () =>
-            terminalModeOf(host)
-              ? ownText({id: 'S132', values: []}, translate)
-              : undefined,
+          detailsTitle: stage => {
+            const title = detailsTitleOf(stage, terminalModeOf(host));
+            return title === undefined ? undefined : ownText(title, translate);
+          },
           candidatePortSource: 'output',
         }),
         windowName,

@@ -98,6 +98,7 @@ export {
   type PhaseName,
   type PresenterOutcome,
   type ProgressPort,
+  type ProgressUpdate,
   type ProgressRequest,
   type Readiness,
   type Registration,
