@@ -393,6 +393,26 @@ describe('the connect pipeline, what the log says of a resolve (card connect-65)
     ]);
   });
 
+  it('F-2201 AC-27: the failure of the lookup in terminal mode is the one the step holds it to, and no connection is opened', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        locateClient: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'unknown'}}),
+        holdLookupFailure: () => Promise.resolve({kind: 'cancelled'}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('openConnection'),
+      ],
+      ['cancelled', false],
+    );
+  });
+
   it('F-2003 BR-6 item 9: a server on a socket has no listening line', async () => {
     const {recording, options, logSink} = setup();
     await connect(

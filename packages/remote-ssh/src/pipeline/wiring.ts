@@ -9,7 +9,10 @@ import {
   applyDefaults as applyDefaultForwards,
   type TunnelOpener,
 } from '../forwarding/default-forwards.ts';
-import type {ReadSignal} from '../forwarding/default-forwards-timing.ts';
+import type {
+  DefaultReadEvents,
+  ReadSignal,
+} from '../forwarding/default-forwards-timing.ts';
 import type {FailurePresenter} from 'lib-authority';
 import {environmentTunnels, type LocalPort} from 'lib-forwarding';
 import type {Scheduler} from 'lib-helper';
@@ -19,6 +22,7 @@ import type {OverrideValue} from 'lib-product';
 import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
 import {
   buildInvocation,
+  ConnectWait,
   tunnelStart,
   connectWaitMilliseconds,
   type HostListResult,
@@ -46,6 +50,7 @@ import {
   HOST_ZERO_TIMEOUT_SECONDS,
 } from './bounds.ts';
 import type {PhaseEvent} from './connect.ts';
+import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
@@ -146,6 +151,8 @@ export interface WiringPorts {
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
   defaultRead(): Promise<ReadSignal>;
   terms: TermsStepDependencies;
+  /** Whether the workspace is trusted, and when it becomes so: a failed lookup of the terminal mode waits for it. */
+  trust: Pick<DefaultReadEvents, 'isTrusted' | 'onTrustGranted'>;
   /** The client step's dependencies, apart from this connect's state and what the settings give. */
   locate: Omit<
     LocateStepDependencies,
@@ -468,6 +475,34 @@ export function stepsOf(
     decideTerms: terms.decideTerms,
     lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
     locateClient,
+    holdLookupFailure: (failed, cancellation) => {
+      if (ports.trust.isTrusted() || cancellation.aborted) {
+        return Promise.resolve(failed);
+      }
+      return new Promise<StepFailure>(settle => {
+        const wait = new ConnectWait(
+          terminalWaitOf(undefined, connectionSettings().connectTimeout),
+          ports.terminal.scheduler,
+          () => {
+            end(CONNECT_WAIT_TIMEOUT);
+          },
+        );
+        const grant = ports.trust.onTrustGranted(() => {
+          end(failed);
+        });
+        function end(failure: StepFailure): void {
+          wait.stop();
+          grant.dispose();
+          cancellation.removeEventListener('abort', onAbort);
+          settle(failure);
+        }
+        function onAbort(): void {
+          end({kind: 'cancelled'});
+        }
+        cancellation.addEventListener('abort', onAbort);
+        wait.start();
+      });
+    },
     openConnection: (input, connectTerms, cancellation) => {
       held.opening = {input, terms: connectTerms};
       if (ports.locate.mode() === 'shared') {
