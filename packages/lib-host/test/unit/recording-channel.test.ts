@@ -47,6 +47,17 @@ async function linesAndOutcome(
   return [lines, outcome];
 }
 
+/** A channel whose one copy ends well and shows the given inputs of its login. */
+function copyingWithInputs(
+  inputs: ReadonlyArray<{open: boolean; afterMilliseconds: number}>,
+): RecordingChannel {
+  return new RecordingChannel({
+    identity: 'host',
+    platformHint: 'linux',
+    copies: [{matches: () => true, ending: {kind: 'copied'}, inputs}],
+  });
+}
+
 describe('recording channel (lib-host fake)', () => {
   it('answers identity and platform hint as set up', () => {
     const channel = new RecordingChannel({
@@ -341,20 +352,10 @@ describe('recording channel (lib-host fake)', () => {
   });
 
   it('tells the request of a copy the inputs of its login when the answer says', async () => {
-    const channel = new RecordingChannel({
-      identity: 'host',
-      platformHint: 'linux',
-      copies: [
-        {
-          matches: () => true,
-          ending: {kind: 'copied'},
-          inputs: [
-            {open: true, afterMilliseconds: 0},
-            {open: false, afterMilliseconds: 5},
-          ],
-        },
-      ],
-    });
+    const channel = copyingWithInputs([
+      {open: true, afterMilliseconds: 0},
+      {open: false, afterMilliseconds: 5},
+    ]);
     const told: boolean[] = [];
     await channel.copyToHost({
       ...copyRequest('/remote/a'),
@@ -367,17 +368,7 @@ describe('recording channel (lib-host fake)', () => {
   });
 
   it('tells nothing of inputs to a request that does not listen', async () => {
-    const channel = new RecordingChannel({
-      identity: 'host',
-      platformHint: 'linux',
-      copies: [
-        {
-          matches: () => true,
-          ending: {kind: 'copied'},
-          inputs: [{open: true, afterMilliseconds: 0}],
-        },
-      ],
-    });
+    const channel = copyingWithInputs([{open: true, afterMilliseconds: 0}]);
     deepStrictEqual(await channel.copyToHost(copyRequest('/remote/a')), {
       kind: 'copied',
     });
