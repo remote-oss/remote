@@ -21,6 +21,8 @@ interface LaunchCommon {
   settings?: Readonly<Record<string, unknown>>;
   /** Text written after the last member of the user settings file with no comma before it: a syntax error after the members. */
   settingsTail?: string;
+  /** Whether the run fetches the earlier VSCodium release's server archives and serves them under `/earlier/`; only the launch that connects to another commit's server asks. */
+  earlierServerArchive?: boolean;
   /** Variables added to the extension host's environment for this launch only. */
   environment?: Readonly<Record<string, string>>;
   /** Whether the editor is started with the proposed API enabled for the extensions under test; true when absent. */

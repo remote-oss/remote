@@ -241,7 +241,13 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve('localhost:5000');
   };
 
-  readonly startDownloads = (): Promise<RunDownloads> => {
+  /** Whether each start of the download host was asked for the earlier release's archives. */
+  readonly earlierAsked: boolean[] = [];
+
+  readonly startDownloads = (
+    ...asked: [root?: string, runFolder?: string, earlier?: boolean]
+  ): Promise<RunDownloads> => {
+    this.earlierAsked.push(asked[2] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -3165,6 +3171,19 @@ describe('acceptance', () => {
           ),
         ],
         [true, true],
+      );
+    });
+
+    it('tooling-108: the download host is asked for the earlier release only when a chosen launch asks, and no launch asks yet', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        [
+          harness.earlierAsked,
+          launchesOf(workspace.root).filter(
+            launch => launch.earlierServerArchive === true,
+          ),
+        ],
+        [[false], []],
       );
     });
 
