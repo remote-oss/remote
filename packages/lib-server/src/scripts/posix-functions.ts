@@ -455,7 +455,7 @@ export const POSIX_FUNCTIONS: Readonly<
   secretToken: [],
   serverTree: SERVER_TREE_FUNCTIONS,
   stop: STOP_FUNCTIONS,
-  cliPort: CLI_FUNCTIONS,
+  cliStart: CLI_FUNCTIONS,
   folderKind: FOLDER_KIND_FUNCTIONS,
   tree: TREE_FUNCTIONS,
 };

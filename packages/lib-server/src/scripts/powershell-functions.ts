@@ -382,6 +382,50 @@ const FOLDER_KIND_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * The CLI start's functions: its ready port in the log, and its parent process. The parent comes from a native query,
+ * and is none where the host refuses to compile it.
+ */
+const CLI_START_FUNCTIONS: readonly string[] = [
+  'function Get-CliReadyPort {',
+  "  $Found = Select-String -LiteralPath $CliLog -Pattern '^Listening on 127\\.0\\.0\\.1:([0-9]+)$' -ErrorAction SilentlyContinue | Select-Object -First 1",
+  '  if ($null -eq $Found) {',
+  "    return ''",
+  '  }',
+  '  return $Found.Matches[0].Groups[1].Value',
+  '}',
+  'function Get-ParentProcessId {',
+  '  try {',
+  "    Add-Type -ErrorAction Stop -TypeDefinition @'",
+  'using System;',
+  'using System.Runtime.InteropServices;',
+  'public static class RemoteOssParentProcess {',
+  '  [StructLayout(LayoutKind.Sequential)]',
+  '  private struct BasicInformation {',
+  '    public IntPtr ExitStatus;',
+  '    public IntPtr PebBaseAddress;',
+  '    public IntPtr AffinityMask;',
+  '    public IntPtr BasePriority;',
+  '    public IntPtr UniqueProcessId;',
+  '    public IntPtr InheritedFromUniqueProcessId;',
+  '  }',
+  '  [DllImport("ntdll.dll")]',
+  '  private static extern int NtQueryInformationProcess(IntPtr process, int informationClass, ref BasicInformation information, int length, out int returned);',
+  '  public static long Of(IntPtr process) {',
+  '    BasicInformation information = new BasicInformation();',
+  '    int returned;',
+  '    int status = NtQueryInformationProcess(process, 0, ref information, Marshal.SizeOf(information), out returned);',
+  '    return status == 0 ? information.InheritedFromUniqueProcessId.ToInt64() : 0;',
+  '  }',
+  '}',
+  "'@",
+  '    return [long][RemoteOssParentProcess]::Of((Get-Process -Id $PID).Handle)',
+  '  } catch {',
+  '    return 0',
+  '  }',
+  '}',
+];
+
 /** Ends the script with a status after releasing the lock it holds. */
 const LEAVE_FUNCTIONS: readonly string[] = [
   'function Exit-Step([string]$Status) {',
@@ -409,7 +453,7 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   secretToken: SECRET_TOKEN_FUNCTIONS,
   serverTree: [],
   stop: STOP_FUNCTIONS,
-  cliPort: [],
+  cliStart: CLI_START_FUNCTIONS,
   folderKind: FOLDER_KIND_FUNCTIONS,
   tree: [],
 };

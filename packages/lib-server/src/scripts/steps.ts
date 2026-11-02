@@ -257,6 +257,7 @@ export const STEP_OUTCOMES: Readonly<
       'cli.connectionToken',
       'cli.tokenMissing',
       'cli.tokenInvalid',
+      {key: 'cli.parent', only: POWERSHELL_ONLY},
     ],
   },
   stopCli: {statuses: ['Ok'], facts: ['cli.stopped']},
@@ -295,7 +296,7 @@ export type FunctionRole =
   | 'secretToken'
   | 'serverTree'
   | 'stop'
-  | 'cliPort'
+  | 'cliStart'
   | 'folderKind'
   | 'tree';
 
@@ -328,7 +329,7 @@ const STEP_ROLES: Readonly<
     'unpack',
     'leave',
   ],
-  startCli: ['common', 'cliPort'],
+  startCli: ['common', 'cliStart', 'secretToken'],
   stopCli: ['common'],
   kill: ['common', 'process', 'serverTree', 'stop'],
   uninstall: ['common', 'process', 'serverTree', 'stop'],
