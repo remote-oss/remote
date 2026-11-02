@@ -442,7 +442,7 @@ F-0409.AC-1	unit
 F-0409.AC-2	acceptance	
 F-0409.AC-3	acceptance	
 F-0409.AC-4	acceptance	
-F-0409.AC-5	deferred	containers release 1: increment 2 (shutdown)
+F-0409.AC-5	acceptance	
 F-0409.AC-6	acceptance	
 F-0409.AC-7	acceptance	
 F-0409.AC-8	acceptance	
@@ -701,7 +701,7 @@ F-0415.AC-35	unit
 F-0415.AC-36	acceptance	
 F-0415.AC-37	unit	
 F-0415.AC-38	unit	
-F-0415.AC-39	deferred	containers release 1: increment 2 (shutdown)
+F-0415.AC-39	acceptance	
 F-0415.AC-40	deferred	containers 0.4: F-0407 later
 F-0415.AC-41	unit	
 F-0416.AC-1	acceptance	
@@ -880,7 +880,7 @@ F-0501.AC-8	acceptance
 F-0501.AC-9	core	core: an authority nothing resolves opens a local empty window
 F-0501.AC-10	core	core: a single-colon vscode-remote argument read as a local path
 F-0501.AC-11	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
-F-0501.AC-12	deferred	containers release 1: increment 2 (shutdown)
+F-0501.AC-12	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-13	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-14	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-15	acceptance	
@@ -910,7 +910,7 @@ F-0502.AC-10	acceptance
 F-0502.AC-11	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-12	acceptance	
 F-0502.AC-13	acceptance	
-F-0502.AC-14	deferred	containers release 1: increment 2 (shutdown)
+F-0502.AC-14	core	core: the title and indicator of a window with no authority are core's; the row proves Close Remote Connection leaves an empty local window and the container exits with code 0
 F-0502.AC-15	acceptance	
 F-0502.AC-16	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-17	deferred	containers 0.4: C12 attach later
@@ -931,7 +931,7 @@ F-0502.AC-31	acceptance
 F-0502.AC-32	acceptance	
 F-0502.AC-33	acceptance	
 F-0502.AC-34	deferred	containers release 1: the full contribution set comes with later increments
-F-0502.AC-35	deferred	containers release 1: increment 2 (shutdown)
+F-0502.AC-35	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-36	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0502.AC-37	deferred	containers release 1: the full contribution set comes with later increments
 F-0502.AC-38	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -961,7 +961,7 @@ F-0503.AC-19	acceptance
 F-0503.AC-20	acceptance	
 F-0503.AC-21	acceptance	
 F-0503.AC-22	deferred	containers release 1: later (attach)
-F-0503.AC-23	deferred	containers release 1: increment 2 (shutdown)
+F-0503.AC-23	acceptance	
 F-0503.AC-24	deferred	containers release 1: later (attach)
 F-0503.AC-25	unit	
 F-0503.AC-26	unit	
