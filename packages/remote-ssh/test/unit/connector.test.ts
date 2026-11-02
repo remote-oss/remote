@@ -138,7 +138,7 @@ describe('the connector over the connect pipeline', () => {
   it('F-2304: the stages of the connect reach the phase listeners', async () => {
     deepStrictEqual((await phasesHeard({kind: 'downloading'})).slice(0, 3), [
       {name: 'initializing', details: true, quiet: true},
-      {name: 'startingServer'},
+      {name: 'opened'},
       {name: 'downloading'},
     ]);
   });
@@ -406,7 +406,7 @@ describe('the connector over the connect pipeline', () => {
         'Downloading VS Code Server: 0%',
         'Downloading VS Code Server: 50%',
         'Downloading VS Code Server: 100%',
-        'Progress: startingServer',
+        'Progress: opened',
         'Progress: settingUpTunnel',
       ],
     );
@@ -421,7 +421,7 @@ describe('the connector over the connect pipeline', () => {
       ),
       [
         'Progress: initializing',
-        'Progress: startingServer',
+        'Progress: opened',
         'Progress: settingUpTunnel',
       ],
     );

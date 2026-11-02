@@ -338,10 +338,7 @@ describe('the connect assembled from the editor and the machine', () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
     options.titleOf({name: 'initializing'}, decoded('dev'));
-    deepStrictEqual(
-      options.titleOf({name: 'startingServer'}, decoded('dev')),
-      '',
-    );
+    deepStrictEqual(options.titleOf({name: 'opened'}, decoded('dev')), '');
   });
 
   it("F-2304: a new connect's share downloaded does not keep the last connect's message", () => {

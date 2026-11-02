@@ -27,6 +27,8 @@ export type PhaseName =
   | 'settingUpTunnel'
   | 'waitingForForwarding'
   | 'startingServer'
+  /** The resolve's first visible stage, which has no text: the progress opens with the title alone. */
+  | 'opened'
   | 'runningPreconnectScript'
   | 'serverDownloadPercent';
 

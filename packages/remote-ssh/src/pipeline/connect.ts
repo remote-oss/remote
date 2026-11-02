@@ -44,7 +44,7 @@ export type PhaseEvent =
   | {kind: 'initializing'; quiet?: true}
   | {kind: 'promptShown'}
   /** The stage that has no text: it opens the progress with the host's title alone. */
-  | {kind: 'startingServer'}
+  | {kind: 'opened'}
   | {kind: 'runningPreconnectScript'}
   | {kind: 'waitingForOtherWindow'}
   | {kind: 'downloading'}
@@ -333,7 +333,7 @@ async function runSteps(
   if (lease.storedRecord === undefined) {
     // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
     // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
-    options.onPhase({kind: 'startingServer'});
+    options.onPhase({kind: 'opened'});
   }
   waits ??= lease.waits;
   if (waits === undefined) {

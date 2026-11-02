@@ -239,7 +239,7 @@ describe('the connect pipeline, when it works', () => {
     );
     deepStrictEqual(recording.phases, [
       {kind: 'initializing', quiet: true},
-      {kind: 'startingServer'},
+      {kind: 'opened'},
       {kind: 'downloading'},
       {kind: 'serverDownloadPercent', percent: 40},
       {kind: 'downloadingLocally'},
@@ -281,7 +281,7 @@ describe('the connect pipeline, when it works', () => {
   it('connect-107: a connect that reuses a stored, live connection stays quiet: no stage that opens the progress before its work', async () => {
     deepStrictEqual(
       (await phasesWithRecord(STORED_RECORD, 1)).some(
-        phase => phase.kind === 'startingServer',
+        phase => phase.kind === 'opened',
       ),
       false,
     );
@@ -290,14 +290,14 @@ describe('the connect pipeline, when it works', () => {
   it('connect-107: a connect with no stored connection reports the stage with no text, which opens the progress with the title alone', async () => {
     deepStrictEqual((await phasesWithRecord(undefined, 1)).slice(0, 2), [
       {kind: 'initializing', quiet: true},
-      {kind: 'startingServer'},
+      {kind: 'opened'},
     ]);
   });
 
   it('connect-107: a retry after a failure, which has no stored connection either, reports it too', async () => {
     deepStrictEqual(
       (await phasesWithRecord(undefined, 2)).some(
-        phase => phase.kind === 'startingServer',
+        phase => phase.kind === 'opened',
       ),
       true,
     );
