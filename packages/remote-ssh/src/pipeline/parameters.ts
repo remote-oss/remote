@@ -50,7 +50,7 @@ export interface ParameterInput {
   /** The user name on the host, for the name of the lock file. */
   remoteUser: string;
   /** The host's system once it is known; the lock is taken with `flock` only on Linux. */
-  hostOperatingSystem: 'linux' | 'darwin' | undefined;
+  hostOperatingSystem: 'linux' | 'darwin' | 'win32' | undefined;
   /** The address of the archive when the plan has one, else the empty text. */
   archiveUrl: string;
   epochMilliseconds: number;

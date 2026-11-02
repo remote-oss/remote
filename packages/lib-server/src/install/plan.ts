@@ -8,7 +8,7 @@ import type {DownloadPlacement} from '../policy/record.ts';
 
 /** What the planner knows about the host before any channel is used. */
 export interface HostFacts {
-  operatingSystem: 'linux' | 'darwin' | 'windows' | 'alpine';
+  operatingSystem: 'linux' | 'darwin' | 'win32' | 'alpine';
   architecture: string;
   homeFolder: string;
   existingLayouts: readonly ExistingLayout[];

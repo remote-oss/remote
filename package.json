@@ -27,6 +27,7 @@
     "check-consumed": "pnpm -s identifiers && node tools/identifiers.ts --consumed",
     "check-public-surface": "pnpm -s identifiers && node tools/public-surface.ts",
     "check-string-tables": "node tools/locale-tables.ts && node tools/string-tables.ts",
+    "check-powershell": "node tools/check-powershell.ts",
     "check-coverage": "node tools/check-coverage.ts",
     "coverage-table": "node tools/check-coverage.ts --table",
     "check-ci-gate": "node tools/check-ci-gate.ts",
