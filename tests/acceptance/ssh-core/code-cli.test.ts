@@ -9,7 +9,10 @@ import {
 } from '../windows/harness.ts';
 import {terminalText, typeInTerminal} from '../windows/renderer.ts';
 
-/** The lines the terminal of `window` printed for `command`, each tagged `label:` by sed and ended by a marker line. */
+/**
+ * The lines the terminal of `window` printed for `command`: those between a line that is exactly the start marker and a
+ * line that is exactly the end marker. The echo of the typed command is never one of them, whatever the terminal's width.
+ */
 async function linesOf(
   window: string,
   label: string,
@@ -17,7 +20,7 @@ async function linesOf(
 ): Promise<string[]> {
   await typeInTerminal(
     window,
-    `(${command}) 2>&1 | sed "s/^/${label}:/"; echo END_${label}\n`,
+    `echo START_${label}; (${command}) 2>&1; echo END_${label}\n`,
   );
   await waitFor(
     `the end of ${label} in window ${window}`,
@@ -27,10 +30,10 @@ async function linesOf(
         .some(line => line === `END_${label}`),
     60_000,
   );
-  return (await terminalText(window))
-    .split('\n')
-    .filter(line => line.startsWith(`${label}:`) && !line.includes('sed '))
-    .map(line => line.slice(label.length + 1));
+  const lines = (await terminalText(window)).split('\n');
+  const start = lines.lastIndexOf(`START_${label}`);
+  const end = lines.lastIndexOf(`END_${label}`);
+  return lines.slice(start + 1, end).filter(line => line !== '');
 }
 
 /** Opens a window on the host in a new folder `folder` with a terminal in it. */
