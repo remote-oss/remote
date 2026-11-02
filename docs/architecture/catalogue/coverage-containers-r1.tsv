@@ -1,7 +1,7 @@
 ac	tag	reason
 F-0101.AC-1	deferred	containers release 1: the full contribution set comes with later increments
 F-0101.AC-2	deferred	containers release 1: the full contribution set comes with later increments
-F-0101.AC-3	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0101.AC-3	acceptance	
 F-0101.AC-3b	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-4	todo	
 F-0101.AC-5	acceptance	
@@ -17,7 +17,7 @@ F-0101.AC-15	acceptance
 F-0101.AC-17	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-17b	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-18	acceptance	
-F-0101.AC-19	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0101.AC-19	acceptance	
 F-0101.AC-20	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-21	deferred	containers release 1: the full contribution set comes with later increments
 F-0101.AC-22	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
@@ -208,11 +208,11 @@ F-0301.AC-13	acceptance
 F-0301.AC-14	acceptance	
 F-0301.AC-15	unit	
 F-0301.AC-16	acceptance	
-F-0301.AC-17	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
-F-0301.AC-18	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-17	acceptance	
+F-0301.AC-18	acceptance	
 F-0301.AC-19	deferred	containers release 1: later (Open Container Configuration File, F-0812)
 F-0301.AC-20	deferred	containers release 1: later (Compose)
-F-0301.AC-21	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-21	acceptance	
 F-0301.AC-22	deferred	containers release 1: increment 2 (authoring)
 F-0301.AC-23	deferred	containers release 1: later (multi-root)
 F-0301.AC-24	deferred	containers release 1: later (multi-root)
@@ -220,7 +220,7 @@ F-0301.AC-25	acceptance
 F-0301.AC-26	unit	
 F-0301.AC-27	deferred	containers release 1: later (virtual workspaces)
 F-0301.AC-28	deferred	containers release 1: later (Open Container Configuration File, F-0812)
-F-0301.AC-29	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-29	acceptance	
 F-0301.AC-30	unit	
 F-0301.AC-31	unit	
 F-0301.AC-32	unit	
@@ -884,7 +884,7 @@ F-0501.AC-12	deferred	containers release 1: increment 2 (shutdown)
 F-0501.AC-13	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-14	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0501.AC-15	acceptance	
-F-0501.AC-16	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0501.AC-16	acceptance	
 F-0501.AC-17	deferred	containers release 1: the full contribution set comes with later increments
 F-0501.AC-18	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-19	deferred	containers release 1: the full contribution set comes with later increments
