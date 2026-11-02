@@ -985,7 +985,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'no-proposals',
       proposedApi: false,
     },
-    // The CLI path: the editor's copy names a CLI source; named only until a CLI archive is pinned.
+    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
     {
       label: 'cli-path',
       kind: 'plain',

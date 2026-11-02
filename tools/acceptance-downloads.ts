@@ -101,11 +101,28 @@ function cliAssetAddress(assetId: number): string {
 }
 
 /**
- * The editor CLI archives the run serves under `/cli/<platform>/`, by platform: builds that honour the server download
- * template (ADR-0006's facts of the CLI patch). VSCodium's published CLI doesn't, and none is pinned until the source
- * of one is decided, so the CLI-source launch's rows skip.
+ * The editor CLI archives the run serves under `/cli/<platform>/`, by platform: release `cli-1.140.06829-insider-1` of
+ * the CLI archives' repository, builds of the CLI patch that honour the server download template (ADR-0006's facts).
+ * Each digest is the one the release lists, measured against the downloaded bytes.
  */
-export const CLI_ARCHIVES: Readonly<Record<string, PinnedCliArchive>> = {};
+export const CLI_ARCHIVES: Readonly<Record<string, PinnedCliArchive>> = {
+  'alpine-arm64': {
+    assetId: 703590706,
+    sha256: 'c82c562e6412bade8a39a2d28b8ad6fdba6ada6a24dae0c53998127799316297',
+  },
+  'alpine-x64': {
+    assetId: 703590711,
+    sha256: 'f4d8e275c2c84cde9c93464e94970f8f6653c2d68c358e0b7a6944a7e34910d8',
+  },
+  'linux-arm64': {
+    assetId: 703590712,
+    sha256: '145be3e968465c3941178665193d304938fb6248cfe5c9e5be089365b52d2517',
+  },
+  'linux-x64': {
+    assetId: 703590713,
+    sha256: '004f3b46b222dbcb57d4f967e8ae377a52670f5fa6fd2cf9b8402f48d28f5ef3',
+  },
+};
 
 /** The update service's name, which the download host answers for under the run's own certificate. */
 export const UPDATE_SERVICE_NAME = 'update.code.visualstudio.com';

@@ -1031,8 +1031,20 @@ describe('cliArchiveOf', () => {
     };
   }
 
-  it('tooling-111: nothing is pinned yet, so a run serves no CLI archive', () => {
-    deepStrictEqual(CLI_ARCHIVES, {});
+  it('tooling-111: the four platforms the run serves its hosts are pinned, each by an asset id and a sha256', () => {
+    deepStrictEqual(
+      Object.entries(CLI_ARCHIVES).map(([platform, pinned]) => [
+        platform,
+        Number.isInteger(pinned.assetId),
+        /^[0-9a-f]{64}$/.test(pinned.sha256),
+      ]),
+      [
+        ['alpine-arm64', true, true],
+        ['alpine-x64', true, true],
+        ['linux-arm64', true, true],
+        ['linux-x64', true, true],
+      ],
+    );
   });
 
   it('tooling-111: a platform with no pin gives none, and nothing is downloaded', async () => {
