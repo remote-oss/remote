@@ -72,11 +72,18 @@ The Explorer has a second `ClientPlatform` of its own (`'windows' | 'other'`).
    them with no new card.
    - **macOS clients:** the rows run on the Mac runners in the scheduled job (D-93 keeps those runners off pull
      requests, not off schedules).
-   - **Windows clients:** the rows run on GitHub-hosted Windows runners in a scheduled job. The user allowed GitHub's
-     runners on 2026-10-20 (#1106), so this needs no new decision.
-   - **macOS and Windows hosts, and WSL2:** the rows run once a host exists. Whether the hosted Windows runners can be
-     one (nested virtualization for WSL2, a local OpenSSH server) is being measured, in proteus's probe, run
-     41467076289.
+   - **Measured on GitHub's hosted runners** (proteus's probe, run 41467076289, 2026-11-02; the user allowed GitHub's
+     runners on 2026-10-20, #1106):
+     - `windows-2025`: virtualization is on, `wsl --install Ubuntu-24.04` installs a WSL2 distro that runs, OpenSSH
+       for Windows' server answers on localhost, and VSCodium starts with its debugging port;
+     - `windows-2022`: no virtualization (`vmFirmware=False`), so no WSL2;
+     - `macos-14` and `macos-15`: VSCodium starts with its debugging port.
+   - So these rows run on hosted runners in a scheduled job, outside pull requests, as D-93 does for the Macs:
+     - Windows clients, Windows SSH hosts (localhost) and WSL2, on `windows-2025`;
+     - macOS clients, on `macos-14` or `macos-15`.
+
+     A `host:` reason stays on such a line only until its job exists.
+   - **macOS SSH hosts** weren't probed (Remote Login on a hosted Mac). Until they are, their rows wait for a host.
 7. **macOS hosts use the POSIX script, with BSD userland as data.** Where `stat`, `ps`, `sed -i`, `mktemp` or `getconf`
    differ, the script's functions detect the behaviour (a probe of the flag or form), not the name from `uname`. The
    detection is covered by a "BSD userland" fixture: stub commands with the documented BSD forms, first on the PATH in
@@ -88,7 +95,7 @@ The Explorer has a second `ClientPlatform` of its own (`'windows' | 'other'`).
 |---|---|---|
 | Platform as data, pure functions, Linux-tested; real-host rows written and waiting (chosen) | Builds everything now; every branch has a row today; a host later runs prepared rows; matches the existing seams | A stub can be wrong about Windows; the first real run may still find gaps |
 | Wait for hosts before building (the deferral D-105 removes) | Nothing built on assumptions | Contradicts D-105; Windows work piles up behind hardware |
-| GitHub-hosted Windows runners as the Windows client host (taken alongside, scheduled outside pull requests) | Real Windows clients, free on a public repository; the user allowed GitHub's runners on 2026-10-20 (#1106), so no new decision; they run decision 6's `host: windows` client rows | WSL2 (nested virtualization) and a Windows SSH host on them are being measured (proteus's probe, run 41467076289); until measured, those rows keep waiting for a host |
+| GitHub-hosted runners for the platform rows (taken, scheduled outside pull requests) | Allowed by the user on 2026-10-20 (#1106); measured: `windows-2025` runs WSL2, a localhost OpenSSH server and VSCodium; macOS runners run VSCodium | GitHub's machines, outside the lab; `windows-2022` has no virtualization; macOS SSH hosts not yet probed |
 | One script language (PowerShell on every host via `pwsh`) | One renderer | Hosts don't have `pwsh`; a POSIX host needs `sh` only (F-2402) |
 
 ## Consequences
