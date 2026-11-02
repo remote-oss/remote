@@ -6,7 +6,7 @@ import {
   closeWindow,
   connectionLog,
   cutHostNetwork,
-  emptyWindows,
+  hostConnections,
   inWindow,
   nextEmptyWindow,
   openWindow,
@@ -17,6 +17,7 @@ import {
   userSettings,
   variable,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {notifications, statusItem} from '../windows/renderer.ts';
@@ -28,8 +29,11 @@ const REFUSED = 'Failed to set up';
 /** The text of the log line that names the forwarding setting. */
 const SETTING_LINE = 'TCP port forwarding appears to be disabled';
 
-/** The hint store the extension keeps in its global state; none before it writes one. */
-function hintStore(): unknown {
+/** The records of the hint store the extension keeps in its global state; none before it writes one. */
+function hintRecords(): Array<{
+  started: string;
+  hints: Array<{status?: string}>;
+}> {
   const database = new DatabaseSync(
     path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
     {readOnly: true},
@@ -38,14 +42,24 @@ function hintStore(): unknown {
     const entry = database
       .prepare('SELECT value FROM ItemTable WHERE key = ?')
       .get('remote-oss.remote-ssh') as {value: string} | undefined;
-    return entry === undefined
-      ? undefined
-      : (JSON.parse(entry.value) as Record<string, unknown>)[
-          'remote.ssh.hints'
-        ];
+    const store =
+      entry === undefined
+        ? undefined
+        : ((JSON.parse(entry.value) as Record<string, unknown>)[
+            'remote.ssh.hints'
+          ] as {records?: ReturnType<typeof hintRecords>} | undefined);
+    return store?.records ?? [];
   } finally {
     database.close();
   }
+}
+
+/** How many forwarding hints the records that started at or after `since` (an ISO time) hold. */
+function forwardingHints(since: string): number {
+  return hintRecords()
+    .filter(record => record.started >= since)
+    .flatMap(record => record.hints)
+    .filter(hint => hint.status === 'AllowTcpForwardingDisabled').length;
 }
 
 /** Opens window `name` on `alias` with the notice of a refusal answered by dismissing it. */
@@ -106,10 +120,10 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         120_000,
       );
       const settings = readUserSettings();
-      const before = emptyWindows();
       const empty = await nextEmptyWindow(() =>
         inWindow(name, 'workbench.action.remote.close'),
       );
+      const emptyState = await windowState(empty);
       const again = 'c85-close-again';
       await opened('noforward', again);
       await waitFor(
@@ -119,13 +133,14 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       );
       deepStrictEqual(
         [
-          before.includes(empty),
+          [emptyState.remoteName, emptyState.folders],
           readUserSettings(),
-          recordLines().filter(line => line.question.includes('Analyzing'))
-            .length,
+          recordLines(undefined, again).filter(line =>
+            line.question.includes('Analyzing'),
+          ).length,
           await terminalsOf(again),
         ],
-        [false, settings, 0, []],
+        [[null, []], settings, 0, []],
       );
     });
   });
@@ -135,6 +150,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       await userSettings({...PLATFORMS});
       const name = 'c85-allowed';
       const mark = connectionLog().length;
+      const since = new Date().toISOString();
       await opened('harness', name);
       await waitFor(
         'the connection',
@@ -154,9 +170,9 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
                 line.includes(SETTING_LINE) ||
                 line.includes('administratively prohibited'),
             ),
-          hintStore(),
+          forwardingHints(since),
         ],
-        [0, false, undefined],
+        [0, false, 0],
       );
       await closeWindow(name).catch(() => undefined);
     });
@@ -184,6 +200,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         },
       ]);
       const mark = connectionLog().length;
+      const since = new Date().toISOString();
       await openWindow('noall', name);
       await waitFor(
         'the dialog',
@@ -196,41 +213,59 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           connectionLog()
             .slice(mark)
             .some(line => line.includes(SETTING_LINE)),
-          hintStore(),
+          forwardingHints(since),
         ],
         [
           'Could not establish connection to "noall": Connection closed.',
           false,
-          undefined,
+          0,
         ],
       );
     });
   });
 
-  it('F-2604 AC-17 (c85-network): a cut and restored network leaves the wait as it was, with no new notice, dialog or terminal', async () => {
-    await keepingSettings(async () => {
-      await userSettings({...PLATFORMS});
-      const name = 'c85-network';
-      await opened('noforward', name);
-      await waitFor(
-        'the notice',
-        () => recordLines('notice', name).length > 0,
-        120_000,
-      );
-      cutHostNetwork();
-      try {
+  it("F-2604 AC-17 (c85-disturbed): a cut and restored network, or the end of the window's ssh, leaves the wait as it was, with no new notice, dialog or terminal", async () => {
+    const seen: Array<Awaited<ReturnType<typeof waitingOf>>> = [];
+    const ended: string[] = [];
+    for (const disturbance of ['network', 'ssh']) {
+      await closeAllButLocal();
+      await keepingSettings(async () => {
+        await userSettings({...PLATFORMS});
+        const name = `c85-${disturbance}`;
+        await opened('noforward', name);
+        await waitFor(
+          'the notice',
+          () => recordLines('notice', name).length > 0,
+          120_000,
+        );
+        if (disturbance === 'network') {
+          cutHostNetwork();
+          try {
+            await new Promise(resolve => setTimeout(resolve, 20_000));
+          } finally {
+            restoreHostNetwork();
+          }
+        } else {
+          for (const connection of await hostConnections()) {
+            if (connection.program === 'ssh') {
+              process.kill(connection.processId);
+              ended.push('ssh');
+            }
+          }
+        }
         await new Promise(resolve => setTimeout(resolve, 20_000));
-      } finally {
-        restoreHostNetwork();
-      }
-      await new Promise(resolve => setTimeout(resolve, 20_000));
-      deepStrictEqual(await waitingOf(name), [
-        1,
-        0,
-        [],
-        'Opening Remote...',
+        seen.push(await waitingOf(name));
+      });
+    }
+    deepStrictEqual(
+      [seen, ended.length > 0],
+      [
+        [
+          [1, 0, [], 'Opening Remote...', true],
+          [1, 0, [], 'Opening Remote...', true],
+        ],
         true,
-      ]);
-    });
+      ],
+    );
   });
 });

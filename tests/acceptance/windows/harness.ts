@@ -485,16 +485,23 @@ export async function acceptedKeyLogins(since: string): Promise<number> {
 
 /**
  * The established TCP connections of this machine whose peer is the host container's published address, each with
- * the name of the program that holds it, from `ss -tnpH state established`.
+ * the name and the process id of the program that holds it, from `ss -tnpH state established`.
  */
-export async function hostConnections(): Promise<Array<{program: string}>> {
+export async function hostConnections(): Promise<
+  Array<{program: string; processId: number}>
+> {
   const {stdout} = await execFileAsync('ss', ['-tnpH', 'state', 'established']);
   const peer = `127.0.0.1:${String(hostPort())}`;
   return stdout
     .split('\n')
-    .map(line => /^\s*\d+\s+\d+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)"/.exec(line))
+    .map(line =>
+      /^\s*\d+\s+\d+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)",pid=(\d+)/.exec(line),
+    )
     .filter(match => match?.[1] === peer)
-    .map(match => ({program: match?.[2] ?? ''}));
+    .map(match => ({
+      program: match?.[2] ?? '',
+      processId: Number(match?.[3]),
+    }));
 }
 
 /** Cuts the host container's network, as a lost network is cut; a row that cuts restores it in a `finally`. */
