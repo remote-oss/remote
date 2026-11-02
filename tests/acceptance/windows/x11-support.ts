@@ -4,6 +4,7 @@
  */
 
 import {
+  activeEditorTextOf,
   closeWindow,
   connectedWithin,
   inWindow,
@@ -22,7 +23,7 @@ export const DISPLAY_PROBE =
 
 /** The folder of window `name` on the host. */
 function folderOn(name: string): string {
-  return `/home/harness/${name}`;
+  return `/home/harness/${name.startsWith('empty-') ? 'x11-out' : name}`;
 }
 
 /** Opens window `name` on `alias` with `settings` on a fresh host and waits until it is connected. */
@@ -66,6 +67,7 @@ export async function inTerminal(
   command: string,
 ): Promise<string> {
   const file = `${folderOn(name)}/terminal-${String(Date.now())}.txt`;
+  await onHostAs('harness', 'mkdir', '-p', folderOn(name));
   await inWindow(name, 'workbench.action.terminal.new');
   await new Promise(resolve => setTimeout(resolve, 3000));
   await inWindow(name, 'workbench.action.terminal.sendSequence', {
@@ -113,4 +115,50 @@ export async function inDebugger(
   );
   await inWindow(name, 'workbench.action.debug.start');
   return writtenAt(file);
+}
+
+/** The text "Terminal: Show Environment Contributions" shows in window `name`, once it is the active editor. */
+export async function environmentContributions(name: string): Promise<string> {
+  await inWindow(
+    name,
+    'workbench.action.terminal.showEnvironmentContributions',
+  );
+  let text = '';
+  await waitFor(
+    'the environment contributions',
+    async () => {
+      text = (await activeEditorTextOf(name)) ?? '';
+      return text.includes('DISPLAY');
+    },
+    30_000,
+  );
+  return text;
+}
+
+/** The entries of the extension's own section of the environment contributions `text` shows, or none without a section. */
+export function ownContributions(text: string): string[] {
+  const section =
+    /## Extension: remote-oss\.remote-ssh\n([\s\S]*?)(?=\n## |$)/.exec(text);
+  return (section?.[1] ?? '')
+    .split('\n')
+    .filter(line => line.startsWith('- `'))
+    .map(line => line.slice(3, -1));
+}
+
+/** The text "Terminal: Show Environment Contributions" shows in window `name`, without waiting for any entry. */
+export async function contributionsNow(name: string): Promise<string> {
+  await inWindow(
+    name,
+    'workbench.action.terminal.showEnvironmentContributions',
+  );
+  let text = '';
+  await waitFor(
+    'the environment contributions',
+    async () => {
+      text = (await activeEditorTextOf(name)) ?? '';
+      return text.includes('Terminal Environment Changes');
+    },
+    30_000,
+  );
+  return text;
 }

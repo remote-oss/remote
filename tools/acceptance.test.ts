@@ -996,6 +996,27 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-84: Host x11-timeout is untrusted with a cookie of one minute, and Host x11-noauth names no xauth', () => {
+    strictEqual(
+      [accountBlock('x11-timeout'), accountBlock('x11-noauth')].join('\n---\n'),
+      [
+        [
+          ...sharedLines('x11-timeout', 'harness'),
+          ...KEY_ALIAS_LINES,
+          '  ForwardX11 yes',
+          '  ForwardX11Trusted no',
+          '  ForwardX11Timeout 60s',
+        ].join('\n'),
+        [
+          ...sharedLines('x11-noauth', 'harness'),
+          ...KEY_ALIAS_LINES,
+          '  ForwardX11 yes',
+          '  XAuthLocation /nonexistent/xauth',
+        ].join('\n'),
+      ].join('\n---\n'),
+    );
+  });
+
   it('coverage-84: Host x11-match gives ForwardX11 only in a Match block for its name', () => {
     strictEqual(
       accountBlock('x11-match'),

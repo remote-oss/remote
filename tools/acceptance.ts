@@ -773,6 +773,19 @@ export function harnessSshConfig(
       ...keyLines(runFolder),
       'ForwardX11 yes',
     ]),
+    // Untrusted forwarding whose cookie expires after a minute.
+    ...accountAlias('x11-timeout', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted no',
+      'ForwardX11Timeout 60s',
+    ]),
+    // A client that cannot find its xauth, so ssh forwards nothing.
+    ...accountAlias('x11-noauth', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'XAuthLocation /nonexistent/xauth',
+    ]),
     // ForwardX11 given only in a Match block that applies to the alias.
     ...accountAlias('x11-match', 'harness', port, runFolder, [
       ...keyLines(runFolder),

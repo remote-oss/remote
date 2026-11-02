@@ -57,6 +57,19 @@ export async function hostSessions(): Promise<string[]> {
     .map(line => line.slice(line.indexOf('@') + 1));
 }
 
+/** The process ids of the sessions of the account `harness` on the host now. */
+export async function hostSessionIds(): Promise<string[]> {
+  const output = await onHost(
+    'sh',
+    '-c',
+    "ps -o pid,args | grep 'sshd-session: harness@' | grep -v grep; true",
+  );
+  return output
+    .split('\n')
+    .map(line => line.trim().split(/\s+/)[0] ?? '')
+    .filter(each => each !== '');
+}
+
 /** What a connect showed of its pseudo-terminal allocation. */
 export interface PtyConnect {
   /** Whether the window connected. */
