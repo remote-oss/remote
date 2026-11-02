@@ -2,7 +2,8 @@
  * @fileoverview The askpass program `ssh` runs: it hands the question to the helper's askpass endpoint and prints
  * the answer on standard output. It exits 1 when the question is refused, which `ssh` takes as a cancelled prompt; a
  * refused permission question (`ssh` sets `SSH_ASKPASS_PROMPT` to `confirm`) is answered with an empty line, which
- * `ssh` takes as allowed.
+ * `ssh` takes as allowed. When the endpoint cannot be reached, only the permissions a ControlMaster asks for a client
+ * that uses its connection are allowed so; every other question is refused.
  */
 
 import type {EndpointPort} from 'lib-helper';
@@ -33,6 +34,22 @@ const EXIT_ANSWERED = 0;
 const EXIT_REFUSED = 1;
 const EXIT_MISUSED = 2;
 
+/** The permission questions a ControlMaster asks for a client that uses its connection: to share it, and to open a forward. */
+const MASTER_QUESTIONS = [/^Allow shared connection /, /^Open \w+ forward /];
+
+/** The status for a permission question allowed with an empty line, which `ssh` takes as yes. */
+function allowed(askpass: AskpassProgramEnvironment): number {
+  askpass.output('\n');
+  return EXIT_ANSWERED;
+}
+
+/** The status for a question the endpoint closed: a permission question is allowed, any other is refused. */
+function refused(askpass: AskpassProgramEnvironment): number {
+  return askpass.environment[PROMPT_VARIABLE] === PERMISSION_PROMPT
+    ? allowed(askpass)
+    : EXIT_REFUSED;
+}
+
 /** Asks the question and prints the answer; resolves to the exit status. Nothing it handles is logged. */
 export async function runAskpassProgram(
   askpass: AskpassProgramEnvironment,
@@ -56,16 +73,17 @@ export async function runAskpassProgram(
     connection.send({type: 'ask', nonce, text: question});
     const text = await answer;
     if (text === undefined) {
-      if (askpass.environment[PROMPT_VARIABLE] === PERMISSION_PROMPT) {
-        askpass.output('\n');
-        return EXIT_ANSWERED;
-      }
-      return EXIT_REFUSED;
+      return refused(askpass);
     }
     askpass.output(`${text}\n`);
     return EXIT_ANSWERED;
   } catch {
-    // An endpoint that cannot be reached refuses the question like one that closes.
-    return EXIT_REFUSED;
+    // An endpoint that cannot be reached refuses the question like one that closes, except the permissions a
+    // ControlMaster asks for a client that uses its connection: the master outlives its helper and asks here, and
+    // allowing them keeps the connection in use.
+    return askpass.environment[PROMPT_VARIABLE] === PERMISSION_PROMPT &&
+      MASTER_QUESTIONS.some(each => each.test(question.trimStart()))
+      ? allowed(askpass)
+      : EXIT_REFUSED;
   }
 }
