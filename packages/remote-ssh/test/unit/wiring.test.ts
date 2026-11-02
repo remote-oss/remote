@@ -37,6 +37,7 @@ import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts'
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import {CONNECT_WAIT_TIMEOUT} from '../../src/pipeline/failure.ts';
+import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import type {ServerStepDependencies} from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput, StepFailure} from '../../src/pipeline/steps.ts';
 import type {PhaseEvent} from '../../src/pipeline/connect.ts';
@@ -144,8 +145,6 @@ function portsOf(
     defaultRead?: () => Promise<ReadSignal>;
     /** Whether the workspace is trusted; it is, unless the row says otherwise. */
     trusted?: boolean;
-    /** How the `scp` on the PATH answers; it cannot be started when absent. */
-    scp?: Answer;
     /** What replaces the server steps' ports. */
     serverPorts?: Partial<ServerStepDependencies>;
   } = {},
@@ -244,10 +243,7 @@ function portsOf(
       platform: 'linux',
       homeFolder: '/home/a',
       spawner: spawnerOf(
-        {
-          [SSH_PROGRAM]: OPENSSH,
-          ...(changes.scp === undefined ? {} : {scp: changes.scp}),
-        },
+        {[SSH_PROGRAM]: OPENSSH},
         changes.lookup ?? {kind: 'exit', output: OPTIONS_TEXT, status: 0},
         seen.spawned,
       ),
@@ -658,14 +654,20 @@ describe("the composition's forwarding of the later server steps", () => {
   /** The fixture's host with no server installed, so the plan downloads. */
   const fresh = HOST;
 
-  it("connect-14: the transfer is this connect's server steps' transfer", async () => {
-    const {ports} = portsOf();
-    const steps = stepsOf(ports);
+  /** The download the plan gives for the fixture's host, after the client step. */
+  async function downloadPlanOf(steps: ConnectSteps) {
     await steps.locateClient(inputFor('dev'));
     const planned = steps.plan(inputFor('dev'), fresh);
     if (!('plan' in planned) || planned.plan.kind !== 'download') {
       throw new Error('the plan should download');
     }
+    return planned.plan;
+  }
+
+  it("connect-14: the transfer is this connect's server steps' transfer", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    const plan = await downloadPlanOf(steps);
     const outcome = await steps.transfer(
       inputFor('dev'),
       leaseOn(
@@ -677,7 +679,7 @@ describe("the composition's forwarding of the later server steps", () => {
         ),
       ),
       fresh,
-      planned.plan,
+      plan,
       () => undefined,
       new AbortController().signal,
     );
@@ -706,17 +708,13 @@ describe("the composition's forwarding of the later server steps", () => {
       },
     });
     const steps = stepsOf(ports);
-    await steps.locateClient(inputFor('dev'));
-    const planned = steps.plan(inputFor('dev'), fresh);
-    if (!('plan' in planned) || planned.plan.kind !== 'download') {
-      throw new Error('the plan should download');
-    }
+    const plan = await downloadPlanOf(steps);
     const phases: string[] = [];
     const outcome = await steps.transfer(
       inputFor('dev'),
       leaseOn(channelAnswering(lines('Ok', 'server.installDir=/x'))),
       fresh,
-      planned.plan,
+      plan,
       phase => phases.push(phase.kind),
       new AbortController().signal,
     );

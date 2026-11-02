@@ -617,6 +617,9 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
   });
 });
 
+/** The bare name the copy program has when the client was found on the PATH. */
+const SCP_PROGRAM = 'scp';
+
 describe('the scp the connect copies with (card connect-120)', () => {
   /** Whether the check finds `scp` startable, with the programs `checks` answers and the sibling of a configured ssh kept. */
   async function startable(
@@ -662,7 +665,7 @@ describe('the scp the connect copies with (card connect-120)', () => {
 
   it('F-2405 AC-14: with no ssh kept the scp on the PATH is the one asked for', async () => {
     deepStrictEqual(
-      await startable({scp: {kind: 'exit', status: 1}}, undefined),
+      await startable({[SCP_PROGRAM]: {kind: 'exit', status: 1}}, undefined),
       [true, ['scp ']],
     );
   });
