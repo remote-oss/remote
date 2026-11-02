@@ -12,13 +12,14 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import {userInfo} from 'node:os';
+import {tmpdir, userInfo} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {redact} from 'lib-log';
@@ -627,7 +628,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
   });
 
   it('F-2201 AC-46: a setting of white space only, or one that starts with a space, lists no host and fails the connect before ssh is started, with the value as written in the log', async () => {
-    const spaced = path.join(RUN_FOLDER, 'cfg-space');
+    // A short folder of its own: the log rewrites a run of 32 word characters, which the run folder's name can be.
+    const shortFolder = mkdtempSync(path.join(tmpdir(), 'c2-'));
+    const spaced = path.join(shortFolder, 'cfg-space');
     writeFileSync(spaced, hostBlock('cfghost'));
     const seen: unknown[] = [];
     const first = connectionLog().length;
@@ -650,6 +653,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
           ),
       ]);
     }
+    rmSync(shortFolder, {recursive: true, force: true});
     deepStrictEqual(
       seen,
       [
