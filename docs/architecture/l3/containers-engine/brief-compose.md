@@ -43,6 +43,9 @@ tagged `later (Compose)`. Decisions: D-105, ADR-0002 rule 8, ADR-0005, ADR-0009,
        standalone Compose v1 has no `--format` and F-0201 AC-11 and AC-29 run it.
      - **C2 spawns Compose with the editor's environment,** as C3 spawns the CLI. So `COMPOSE_PROFILES` reaches this
        call and the CLI alike (AC-70).
+     - **The output is read from stdout only and never logged** (R-26; dike on #1908). Compose interpolates the
+       `.env` files and the environment into it, secrets included. The log gets the call's exit status, and Compose's
+       stderr on a failure.
    - **Why Compose's output rather than our own parse:** that output is the merged model Compose will build and start:
      overrides, interpolation, `extends` and active profiles applied. So it's the documented form ADR-0010 asks for,
      and what the build will actually use.
@@ -243,6 +246,9 @@ tagged `later (Compose)`. Decisions: D-105, ADR-0002 rule 8, ADR-0005, ADR-0009,
   - F-0413 is added to C7's features, and its S306 to C14's;
   - C9 gains "the Compose stop";
   - §3's dependency line gains `yaml` (C7 for the model and the declared `name:`, C14 for the wizard).
+- **`packages/remote-containers/package.json` gains `yaml` as a runtime dependency,** pinned like `jsonc-parser`. Today
+  it's in the lockfile only as a dev tool's dependency, so the move changes what the extension bundles (ADR-0002 rule 8,
+  and CI's licence check).
 
 ## 11. The cut and the cards
 
