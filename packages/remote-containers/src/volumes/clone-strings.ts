@@ -9,6 +9,9 @@ import {filled} from '../surfaces/filled.ts';
 /** The English template of each text, by the id of the editor's string table, or by a name of ours. */
 const CLONE_TEMPLATES = {
   S052: "Cannot access the repository '{0}'.",
+  S067: 'Choose a repository to clone in a Container Volume',
+  S068: 'Choose which repository to clone',
+  S071: 'Clone a repository from {0} in a Container Volume',
   S072: 'Clone git repository from URL',
   S075: 'Cloning a repository in a Dev Container may execute arbitrary code.',
   S252: 'Only clone a repository in a Dev Container if you trust its authors.',
@@ -19,6 +22,8 @@ const CLONE_TEMPLATES = {
   hostKeyContinue: 'Continue',
   selectConfiguration: 'Select Configuration',
   cancel: 'Cancel',
+  github: 'GitHub',
+  remoteSources: 'remote sources',
 } as const;
 
 /** The name of a text of the clone's command. */

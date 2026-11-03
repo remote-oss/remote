@@ -233,5 +233,10 @@
   "No other Dev Container configurations found in folder. Did you mean to open another folder in a container?": "No other Dev Container configurations found in folder. Did you mean to open another folder in a container?",
   "Open Folder in Container...": "Open Folder in Container...",
   "You must select a container configuration since the repository does not contain a dev container configuration. Without a dev container configuration the container cannot be started.": "You must select a container configuration since the repository does not contain a dev container configuration. Without a dev container configuration the container cannot be started.",
-  "Select Configuration": "Select Configuration"
+  "Select Configuration": "Select Configuration",
+  "Choose a repository to clone in a Container Volume": "Choose a repository to clone in a Container Volume",
+  "Choose which repository to clone": "Choose which repository to clone",
+  "Clone a repository from {0} in a Container Volume": "Clone a repository from {0} in a Container Volume",
+  "GitHub": "GitHub",
+  "remote sources": "remote sources"
 }

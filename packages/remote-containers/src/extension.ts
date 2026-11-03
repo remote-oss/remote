@@ -141,6 +141,7 @@ import type {ClonePromptSurface} from './volumes/git-prompts.ts';
 import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
 import {sourceRowsOf} from './volumes/source-pick.ts';
+import {githubOfferOf, pickGithubRepository} from './volumes/github-source.ts';
 import {volumeTargetOf} from './volumes/volume-payload.ts';
 import {
   type AttachPicker,
@@ -1036,6 +1037,7 @@ export async function activate(
                     new AbortController().signal,
                   )) === 'proceed',
                 pickSource: () => pickCloneSource(),
+                pickGithub: () => pickGithubRepository(githubPorts, translate),
                 precheck: (source, origin, cancellation) =>
                   precheck(
                     source,
@@ -1083,17 +1085,62 @@ export async function activate(
           },
         };
       }
-      /** The source pick: one row that clones the typed text, once there is text; the text, or nothing for Escape. */
-      function pickCloneSource(): Promise<string | undefined> {
-        const picker = vscode.window.createQuickPick();
+      /** The ports of the GitHub source, over the installed extensions. */
+      const githubPorts = {
+        installed: (extensionId: string) =>
+          vscode.extensions.getExtension(extensionId) !== undefined,
+        activate: (extensionId: string) =>
+          Promise.resolve(
+            vscode.extensions.getExtension(extensionId)?.activate(),
+          ),
+        logger: served.logger,
+      };
+      /**
+       * The source pick: the row that clones the typed text, once there is text, and the GitHub row when it is
+       * offered; what was chosen, or nothing for Escape.
+       */
+      function pickCloneSource(): Promise<
+        {kind: 'typed'; text: string} | {kind: 'github'} | undefined
+      > {
+        const offer = githubOfferOf(
+          githubPorts,
+          vscode.env.remoteName !== undefined,
+        );
+        const picker = vscode.window.createQuickPick<
+          vscode.QuickPickItem & {source?: 'url' | 'github'}
+        >();
         picker.placeholder = cloneText('sourcePlaceholder', translate);
-        picker.onDidChangeValue(value => {
-          picker.items = sourceRowsOf(value, translate);
-        });
+        function show(value: string): void {
+          picker.items = sourceRowsOf(value, translate, offer).map(sourceRow =>
+            sourceRow.kind === 'separator'
+              ? {
+                  label: sourceRow.label,
+                  kind: vscode.QuickPickItemKind.Separator,
+                }
+              : {
+                  label: sourceRow.label,
+                  description: sourceRow.description,
+                  source: sourceRow.kind,
+                  ...(sourceRow.kind === 'github'
+                    ? {iconPath: new vscode.ThemeIcon('github')}
+                    : {}),
+                },
+          );
+          const first = picker.items.find(item => item.source !== undefined);
+          picker.activeItems = first === undefined ? [] : [first];
+        }
+        show('');
+        picker.onDidChangeValue(show);
         return new Promise(resolve => {
           picker.onDidAccept(() => {
-            const chosen = picker.selectedItems[0] ?? picker.items[0];
-            resolve(chosen?.description);
+            const chosen = picker.selectedItems[0] ?? picker.activeItems[0];
+            resolve(
+              chosen?.source === 'github'
+                ? {kind: 'github'}
+                : chosen?.source === 'url'
+                  ? {kind: 'typed', text: chosen.description ?? ''}
+                  : undefined,
+            );
             picker.dispose();
           });
           picker.onDidHide(() => {
