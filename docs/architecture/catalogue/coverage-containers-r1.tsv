@@ -395,7 +395,7 @@ F-0405.AC-17	acceptance
 F-0405.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-19	acceptance	
 F-0405.AC-20	deferred	containers release 1: later (multi-root workspaces)
-F-0405.AC-21	deferred	containers release 1: later (Compose)
+F-0405.AC-21	acceptance	
 F-0405.AC-22	deferred	containers release 1: later (attach)
 F-0405.AC-23	core	core: the Manage button opens core's Workspace Trust editor
 F-0405.AC-24	deferred	containers release 1: later (the Remote Explorer views)
@@ -464,7 +464,7 @@ F-0409.AC-23	acceptance
 F-0409.AC-24	acceptance	
 F-0409.AC-25	unit	
 F-0409.AC-26	acceptance	
-F-0409.AC-27	deferred	containers release 1: later (Compose)
+F-0409.AC-27	acceptance	
 F-0409.AC-28	unit	
 F-0409.AC-30	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-31	acceptance	

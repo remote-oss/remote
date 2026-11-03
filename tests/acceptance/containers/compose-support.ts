@@ -327,3 +327,33 @@ export async function derivedImagesOf(folderName: string): Promise<string[]> {
     .split('\n')
     .filter(line => line !== '');
 }
+
+/** The id of the container of `service` in the Compose project `project`, running or not; empty when there is none. */
+export async function serviceContainerOf(
+  project: string,
+  service: string,
+): Promise<string> {
+  return docker(
+    'ps',
+    '--all',
+    '--quiet',
+    '--no-trunc',
+    '--filter',
+    `label=com.docker.compose.project=${project}`,
+    '--filter',
+    `label=com.docker.compose.service=${service}`,
+  );
+}
+
+/** What `command` prints in container `containerId`, run by `sh -c`, trimmed. */
+export async function printedIn(
+  containerId: string,
+  command: string,
+): Promise<string> {
+  return docker('exec', containerId, 'sh', '-c', command);
+}
+
+/** Runs `docker` with `parameters` and gives what it printed, trimmed. */
+export function dockerRun(...parameters: string[]): Promise<string> {
+  return docker(...parameters);
+}
