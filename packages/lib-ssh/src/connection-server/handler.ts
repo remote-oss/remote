@@ -78,6 +78,7 @@ export class ConnectionHandler implements MessageHandler {
   private leaseCount = 0;
   private state: ConnectionState = 'idle';
   private session: SshSession | undefined;
+  private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
   private killed = false;
 
@@ -92,12 +93,12 @@ export class ConnectionHandler implements MessageHandler {
       scheduler: options.scheduler,
       logLine: options.logLine,
       onPrompt: prompt => {
+        this.feed?.flush();
         this.tell({type: 'prompt', ...prompt});
         this.wait?.promptOpened();
       },
       onPromptClosed: promptId => {
-        this.tell({type: 'promptClosed', promptId});
-        this.wait?.promptAnswered();
+        this.closePrompt(promptId);
       },
     });
   }
@@ -195,10 +196,16 @@ export class ConnectionHandler implements MessageHandler {
   private answer(promptId: number, text: string): PlainData {
     const accepted = this.askpass.answer(promptId, text);
     if (accepted) {
-      this.tell({type: 'promptClosed', promptId});
-      this.wait?.promptAnswered();
+      this.closePrompt(promptId);
     }
     return {type: 'answered', accepted};
+  }
+
+  /** Tells the windows that a question closed, after ssh's lines that came before it. */
+  private closePrompt(promptId: number): void {
+    this.feed?.flush();
+    this.tell({type: 'promptClosed', promptId});
+    this.wait?.promptAnswered();
   }
 
   /**
@@ -259,6 +266,7 @@ export class ConnectionHandler implements MessageHandler {
     const feed = new SshLineFeed(batch => {
       this.tell({type: 'sshLines', lines: batch});
     }, this.options.scheduler);
+    this.feed = feed;
     let timedOut = false;
     const wait = new ConnectWait(
       this.options.waitSettings,
@@ -327,6 +335,7 @@ export class ConnectionHandler implements MessageHandler {
       this.askpass.closeAll();
       lines.flush();
       feed.flush();
+      this.feed = undefined;
       if (this.killed) {
         return;
       }

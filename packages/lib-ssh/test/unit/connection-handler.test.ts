@@ -586,6 +586,36 @@ describe('connection handler (contracts §4 S9)', () => {
       ]);
     });
 
+    it('F-2003 BR-6 item 7: ssh’s lines from before a question reach the windows before the question', async () => {
+      spawner.started[0]?.error('Authenticating to h.invalid:22\n');
+      await askQuestion();
+      deepStrictEqual(
+        order.filter(type => type !== 'ownerChanged'),
+        ['sshLines', 'prompt'],
+      );
+    });
+
+    it('F-2003 BR-6 item 7: a line ssh writes while the question is open reaches the windows before the question closes', async () => {
+      await askQuestion();
+      spawner.started[0]?.error('Permission denied, please try again.\n');
+      await send(1, {type: 'answer', promptId: 1, text: 'secret'});
+      deepStrictEqual(
+        order.filter(type => type !== 'ownerChanged'),
+        ['prompt', 'sshLines', 'promptClosed'],
+      );
+    });
+
+    it('F-2003 BR-6 item 7: a question that ssh drops closes after the lines that came before it', async () => {
+      await askQuestion();
+      spawner.started[0]?.error('Connection closed\n');
+      program.connection.close();
+      await settled();
+      deepStrictEqual(
+        order.filter(type => type !== 'ownerChanged'),
+        ['prompt', 'sshLines', 'promptClosed'],
+      );
+    });
+
     it("passes the first window's answer to ssh and closes the question for the others", async () => {
       await askQuestion();
       const reply = await send(2, {
