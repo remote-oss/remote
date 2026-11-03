@@ -151,7 +151,7 @@ on SSH hosts and tunnels) is group 16's.
 
 ## 5. Readings
 
-**`(reading-NNNN-tooltip-text)`, F-0904 BR-4:** the reference renders markdown found in a label value, so emphasis,
+**`(reading-2027-tooltip-text)`, F-0904 BR-4:** the reference renders markdown found in a label value, so emphasis,
 inline code, HTML and links all render. No criterion asks for it. Label values are anyone's text (any container or
 volume can carry them), so the tooltip escapes them:
 - `MarkdownString` with `isTrusted: false` and `supportHtml: false`;
@@ -160,7 +160,7 @@ volume can carry them), so the tooltip escapes them:
 
 AC-7's lines, the ")" included, are unchanged.
 
-**`(reading-NNNN-github-host)`, F-0904 BR-3:** the reference also gives `https://github.com.example.org/<owner>/<repo>`
+**`(reading-2027-github-host)`, F-0904 BR-3:** the reference also gives `https://github.com.example.org/<owner>/<repo>`
 the friendly label. No criterion asserts it, and the recognizer that C13 and the tooltip's GitHub link rely on is
 host-exact. So a look-alike host keeps its raw name, like any other host.
 
