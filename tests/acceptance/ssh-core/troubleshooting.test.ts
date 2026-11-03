@@ -307,13 +307,13 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
   it('F-2605 AC-6 (c136-password): three wrong passwords give the PermissionDenied row', async () => {
     appendScript([
       ...[1, 2, 3].map(() => ({
-        surface: 'maskedInput',
+        surface: 'maskedInput' as const,
         match: 'password',
         answer: {text: 'wrong-password'},
         window: 'c136-g',
       })),
       ...dismissals('c136-g'),
-    ] as const);
+    ]);
     await failedOn('password-retry', 'c136-g');
     try {
       const table = await tableOf('c136-g');
