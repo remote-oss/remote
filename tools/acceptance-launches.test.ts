@@ -172,6 +172,8 @@ function labelsFromExplorer(): string[] {
     'containers-context',
     'containers-env-host',
     'containers-env-ctx',
+    'containers-ssh-engine',
+    'containers-ssh-noclient',
     'extensionpack',
     'extensionpack-german',
     'extensionpack-partial',
@@ -543,6 +545,12 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ...['containers-ssh-engine', 'containers-ssh-noclient'].map(label => [
+          label,
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ]),
         ...['extensionpack', 'extensionpack-german'].map(label => [
           label,
           [
@@ -731,6 +739,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        ...['containers-ssh-engine', 'containers-ssh-noclient'].map(label => [
+          label,
+          label,
+          shared,
+          undefined,
+          undefined,
+        ]),
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -824,6 +839,8 @@ describe('the launches of the VSCodium run', () => {
         'containers-context',
         'containers-env-host',
         'containers-env-ctx',
+        'containers-ssh-engine',
+        'containers-ssh-noclient',
         'extensionpack',
         'extensionpack-german',
         'extensionpack-lp-de',
@@ -1875,7 +1892,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-nodocker also a PATH with no docker, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-nodocker also a PATH with no docker, containers-ssh-engine also the run’s ssh first on its PATH and containers-ssh-noclient a PATH of docker alone, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1936,6 +1953,20 @@ describe('the platform cases (card coverage-12)', () => {
           {
             DOCKER_CONFIG: '<run>/docker-config',
             DOCKER_CONTEXT: 'c133-env-dead',
+          },
+        ],
+        [
+          'containers-ssh-engine',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            PATH: '<run>/ssh-engine-bin:<path>',
+          },
+        ],
+        [
+          'containers-ssh-noclient',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            PATH: '<run>/docker-only-bin',
           },
         ],
       ],

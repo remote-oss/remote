@@ -266,7 +266,7 @@ async function realProgram(program: string): Promise<string> {
  * hosts file, with no agent, so that the run never reads the account's real `~/.ssh` (OpenSSH takes it from the password
  * database, not `HOME`); an `ssh` wrapper that runs the real one with that file; and the folder with `docker` alone.
  */
-async function writeSshClient(): Promise<void> {
+export async function writeSshClient(): Promise<void> {
   const folder = sshClientFolder();
   if (existsSync(path.join(folder, 'ssh_config'))) {
     return;

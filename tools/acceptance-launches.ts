@@ -1331,6 +1331,29 @@ export function launchesOf(root: string): Launch[] {
         DOCKER_CONTEXT: ENGINE_CONTEXT_NAME,
       },
     },
+    // A Docker daemon reached over SSH (tooling-123): a Docker configuration of its own for the contexts its rows make,
+    // and the run's own `ssh` first on the editor's PATH, which reads the run's ssh_config and known hosts file, never the
+    // account's ~/.ssh. The rows start the host and write that `ssh` (tests/acceptance/windows/engine-fixture.ts).
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-engine',
+      suite: 'containers-ssh-engine',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the editor's PATH holding `docker` alone and no `ssh`: the engine settings' PATH is ignored, so only
+    // the editor's own PATH can lack `ssh`.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-noclient',
+      suite: 'containers-ssh-noclient',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/docker-only-bin`,
+      },
+    },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
     {
       ...RENDERER_LAUNCH,

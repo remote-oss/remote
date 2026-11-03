@@ -242,6 +242,12 @@
       "path": "tests/acceptance/containers-env-ctx"
     },
     {
+      "path": "tests/acceptance/containers-ssh-engine"
+    },
+    {
+      "path": "tests/acceptance/containers-ssh-noclient"
+    },
+    {
       "path": "tests/acceptance/containers-index"
     },
     {
