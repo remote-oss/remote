@@ -71,8 +71,8 @@ export interface VolumeResolvePorts extends EngineStepPorts {
 interface PreparedVolume {
   kind: 'prepared';
   outcome: Extract<ContainerOutcome, {kind: 'ready'}>;
-  /** The bootstrap container, still running: the caller removes it once connected. */
-  bootstrap: string;
+  /** The bootstrap container, still running: the caller removes it once connected. None for a recovery container. */
+  bootstrap: string | undefined;
   /** The volume the clone is in. */
   volumeName: string;
   request: VolumeContainerRequest;
@@ -93,7 +93,7 @@ export type VolumeResolution =
 const FOLDER_REFUSED = /[/\\\u0000-\u001f\u007f]/;
 
 /** Whether `folder` can be a folder under `/workspaces`: one plain name. */
-function plainFolder(folder: string): boolean {
+export function plainFolder(folder: string): boolean {
   return !['', '.', '..'].includes(folder) && !FOLDER_REFUSED.test(folder);
 }
 

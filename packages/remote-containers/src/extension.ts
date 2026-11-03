@@ -154,7 +154,10 @@ import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
 import {sourceRowsOf} from './volumes/source-pick.ts';
 import {githubOfferOf, pickGithubRepository} from './volumes/github-source.ts';
-import {recoveryTargetOf} from './volumes/recovery-container.ts';
+import {
+  recoveryConfigFileOf,
+  recoveryTargetOf,
+} from './volumes/recovery-container.ts';
 import {volumeTargetOf} from './volumes/volume-payload.ts';
 import {
   type AttachPicker,
@@ -2242,6 +2245,17 @@ export async function activate(
             closeRemoteAfterResolve();
           }
           return added;
+        },
+        recoveryConfigFile: volumeName =>
+          recoveryConfigFileOf(
+            os.tmpdir(),
+            os.userInfo().username,
+            manifest.version,
+            volumeName,
+          ),
+        writeRecoveryFile: async (file, text) => {
+          await mkdir(path.dirname(file), {recursive: true});
+          await writeFile(file, text);
         },
         showShallow: repository => {
           void vscode.window.showWarningMessage(

@@ -297,6 +297,14 @@ function volumeDependenciesOf(
       );
       return bridge;
     },
+    recoveryConfigFile: volumeName =>
+      `/tmp/recovery/${volumeName}/.devcontainer.json`,
+    writeRecoveryFile: (file, text) => {
+      scene.volumeCalls.push(
+        `writeRecoveryFile ${file} ${String(text.length)}`,
+      );
+      return Promise.resolve();
+    },
     standIn: () => {
       scene.volumeCalls.push('standIn');
       return Promise.resolve({
