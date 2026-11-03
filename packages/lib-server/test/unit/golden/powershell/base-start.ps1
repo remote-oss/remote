@@ -79,6 +79,9 @@ function Start-Program([hashtable]$Launch) {
   }
   return Start-Process @Launch
 }
+function ConvertTo-WindowsArgument([string]$Value) {
+  return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }
@@ -297,7 +300,7 @@ if ($null -eq $ServerProcess) {
     Exit-Lock
     Write-Failed $TOKEN_FILE $Message
   }
-  $SERVER_ARGUMENTS = @('"--start-server"', '"--host"', '"127.0.0.1"', '"--port"', '"0"', '"--connection-token-file"', ('"' + $TOKEN_FILE + '"'), '"--telemetry-level"', '"off"', '"--enable-remote-auto-shutdown"') -join ' '
+  $SERVER_ARGUMENTS = @('"--start-server"', '"--host"', '"127.0.0.1"', '"--port"', '"0"', '"--connection-token-file"', (ConvertTo-WindowsArgument $TOKEN_FILE), '"--telemetry-level"', '"off"', '"--enable-remote-auto-shutdown"') -join ' '
   Write-Line 'server.launching=yes'
   Add-Fact 'server.launching' 'yes'
   $Launch = @{FilePath = ([System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)); ArgumentList = $SERVER_ARGUMENTS; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}

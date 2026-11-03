@@ -31,6 +31,8 @@ import {
   type ScriptParameters,
   type ScriptStep,
 } from '../../src/index.ts';
+import {powershellQuote, windowsArgument} from 'lib-host';
+import {POWERSHELL_FUNCTIONS} from '../../src/scripts/powershell-functions.ts';
 import {
   powershellParts,
   powershellScript,
@@ -307,6 +309,35 @@ describe('the PowerShell bootstrap script, run under pwsh', function () {
             parameters.commit,
           ),
         },
+      );
+    });
+
+    it('ADR-0013: a value holding any of PowerShell’s single-quote characters stays one string, and no code it carries runs', () => {
+      const host = powershellHost();
+      const seen = ["'", '\u2018', '\u2019', '\u201A', '\u201B'].map(quote => {
+        const root = `srv${quote}; Add-Fact 'host.injected' 'yes'; ${quote}x`;
+        const parameters = {...parametersFor(), installRoot: `~/${root}`};
+        return [
+          factsOf(runOn(host, single('probe'), parameters), [
+            'server.installDir',
+            'host.injected',
+          ]),
+          path.join(
+            host.home,
+            root,
+            parameters.dataFolderName,
+            'bin',
+            parameters.commit,
+          ),
+        ];
+      });
+      deepStrictEqual(
+        seen.map(([facts]) => facts),
+        seen.map(([, expected]) => ({
+          status: 'Ok',
+          'server.installDir': expected,
+          'host.injected': undefined,
+        })),
       );
     });
 
@@ -1716,6 +1747,56 @@ describe('the PowerShell bootstrap script, as text', () => {
     deepStrictEqual(
       scriptFor(single('probe'), 'powershell', parametersFor()).length < 8192,
       true,
+    );
+  });
+});
+
+describe('the Windows arguments of the PowerShell script, under pwsh', function () {
+  this.timeout(30000);
+
+  /** Values a command line splits wrongly unless they are quoted as the C runtime reads them. */
+  const VALUES = [
+    'plain',
+    'a b',
+    'say "hi"',
+    'a\\"b',
+    'C:\\dir\\',
+    'C:\\dir\\file',
+    '',
+  ];
+
+  it('ADR-0013: ConvertTo-WindowsArgument quotes as windowsArgument does, and .NET splits the joined line back into the values', () => {
+    const script = [
+      ...POWERSHELL_FUNCTIONS.common,
+      `$Values = @(${VALUES.map(value => powershellQuote(value)).join(', ')})`,
+      '$Quoted = @($Values | ForEach-Object { ConvertTo-WindowsArgument $_ })',
+      '$Quoted | ForEach-Object { [Console]::Out.Write(\'quoted \' + $_ + "`n") }',
+      "$Start = New-Object System.Diagnostics.ProcessStartInfo 'printf'",
+      "$Start.Arguments = (ConvertTo-WindowsArgument '%s|') + ' ' + ($Quoted -join ' ')",
+      '$Start.UseShellExecute = $false',
+      '$Start.RedirectStandardOutput = $true',
+      '$Child = [System.Diagnostics.Process]::Start($Start)',
+      '[Console]::Out.Write(\'split \' + $Child.StandardOutput.ReadToEnd() + "`n")',
+      '$Child.WaitForExit()',
+    ].join('\n');
+    const host = powershellHost();
+    const file = path.join(host.root, 'arguments.ps1');
+    writeFileSync(file, script);
+    const pwshRun = spawnSync(
+      'pwsh',
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', file],
+      {encoding: 'utf8'},
+    );
+    const lines = pwshRun.stdout.split('\n');
+    deepStrictEqual(
+      [
+        lines.filter(line => line.startsWith('quoted ')),
+        lines.find(line => line.startsWith('split ')),
+      ],
+      [
+        VALUES.map(value => `quoted ${windowsArgument(value)}`),
+        `split ${VALUES.map(value => `${value}|`).join('')}`,
+      ],
     );
   });
 });

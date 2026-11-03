@@ -79,6 +79,9 @@ function Start-Program([hashtable]$Launch) {
   }
   return Start-Process @Launch
 }
+function ConvertTo-WindowsArgument([string]$Value) {
+  return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }

@@ -4,14 +4,10 @@
  * line feed, so the result block reads the same as the POSIX script's.
  */
 
+import {powershellQuote} from 'lib-host';
 import {PROGRESS_PREFIX} from './progress-line.ts';
 import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 import type {FunctionRole} from './steps.ts';
-
-/** Quote a value for PowerShell as one single-quoted string, whatever it holds. */
-export function powershellQuote(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
 
 /** The functions every step uses: the result block, facts, programs, times and the data folder's places. */
 const COMMON_FUNCTIONS: readonly string[] = [
@@ -64,6 +60,9 @@ const COMMON_FUNCTIONS: readonly string[] = [
   "    $Launch.WindowStyle = 'Hidden'",
   '  }',
   '  return Start-Process @Launch',
+  '}',
+  'function ConvertTo-WindowsArgument([string]$Value) {',
+  `  return '"' + ([regex]::Replace($Value, '(\\\\*)"', '$1$1\\"') -replace '(\\\\+)$', '$1$1') + '"'`,
   '}',
   'function Get-NowSeconds {',
   '  return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()',
