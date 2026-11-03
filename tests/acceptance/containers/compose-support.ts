@@ -4,7 +4,7 @@
  */
 
 import {execFile} from 'node:child_process';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -35,6 +35,10 @@ export interface ComposeFolderOptions {
   workspaceEnv?: string;
   /** The content of the `.env` beside the compose file, when the row has one. */
   composeEnv?: string;
+  /** The whole text of the compose file, in place of the two services. */
+  composeText?: string;
+  /** A named volume the `app` service mounts at `/data`, declared in the compose file. */
+  namedVolume?: string;
   /** Other members of the configuration, which win over the defaults. */
   configuration?: Readonly<Record<string, unknown>>;
 }
@@ -87,16 +91,23 @@ export function composeFolder(options: ComposeFolderOptions): string {
   mkdirSync(path.join(folder, '.devcontainer'), {recursive: true});
   writeFileSync(
     path.join(composeFolder, 'docker-compose.yml'),
-    [
-      ...(options.headLines ?? []),
-      'services:',
-      ...serviceLines('app', [
-        '    volumes:',
-        `      - "${place.workspace}:/workspaces/${options.name}"`,
-      ]),
-      ...serviceLines('db'),
-      '',
-    ].join('\n'),
+    options.composeText ??
+      [
+        ...(options.headLines ?? []),
+        'services:',
+        ...serviceLines('app', [
+          '    volumes:',
+          `      - "${place.workspace}:/workspaces/${options.name}"`,
+          ...(options.namedVolume === undefined
+            ? []
+            : [`      - ${options.namedVolume}:/data`]),
+        ]),
+        ...serviceLines('db'),
+        ...(options.namedVolume === undefined
+          ? []
+          : ['volumes:', `  ${options.namedVolume}: {}`]),
+        '',
+      ].join('\n'),
   );
   if (options.overrideLines !== undefined) {
     writeFileSync(
@@ -193,4 +204,102 @@ export async function removeComposeContainers(): Promise<void> {
     await docker('rm', '--force', ...containers.split('\n'));
   }
   await docker('network', 'prune', '--force');
+}
+
+/** Writes the executable `<run>/c143-bin/<name>` with `lines`, and gives its path. */
+export function programFile(name: string, lines: readonly string[]): string {
+  return scriptAt(
+    path.join(variable('HARNESS_RUN_FOLDER'), 'c143-bin', name),
+    lines,
+  );
+}
+
+/** Writes the executable `file` with `lines`, making its folder, and gives it back. */
+export function scriptAt(file: string, lines: readonly string[]): string {
+  mkdirSync(path.dirname(file), {recursive: true});
+  writeFileSync(file, ['#!/bin/sh', ...lines, ''].join('\n'));
+  chmodSync(file, 0o755);
+  return file;
+}
+
+/** A Docker that works as the real one except that it has no Compose plugin. */
+export function dockerWithoutPlugin(): string {
+  return programFile('docker-no-plugin', [
+    '[ "$1" = compose ] && exit 1',
+    'exec docker "$@"',
+  ]);
+}
+
+/**
+ * A standalone Compose that reports `version` and otherwise runs the Docker plugin; it appends a line to `marker` for
+ * each call, when the row gives one.
+ */
+export function standaloneCompose(
+  name: string,
+  version: string,
+  marker?: string,
+): string {
+  return programFile(name, standaloneLines(version, marker));
+}
+
+/** The script of a standalone Compose that reports `version`. */
+export function standaloneLines(
+  version: string,
+  marker?: string,
+): readonly string[] {
+  return [
+    ...(marker === undefined ? [] : [`echo called >> '${marker}'`]),
+    `[ "$1" = version ] && { echo '${version}'; exit 0; }`,
+    'exec docker compose "$@"',
+  ];
+}
+
+/** The names of the running containers of the Compose project `project`, sorted. */
+export async function containerNamesOf(project: string): Promise<string[]> {
+  return (
+    await docker(
+      'ps',
+      '--filter',
+      `label=com.docker.compose.project=${project}`,
+      '--format',
+      '{{.Names}}',
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .sort();
+}
+
+/** The names of the volumes of the Compose project `project`, sorted. */
+export async function volumeNamesOf(project: string): Promise<string[]> {
+  return (
+    await docker(
+      'volume',
+      'ls',
+      '--filter',
+      `label=com.docker.compose.project=${project}`,
+      '--format',
+      '{{.Name}}',
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .sort();
+}
+
+/** The containers of Compose projects that the run made, running or not. */
+export async function composeContainersOfRun(): Promise<string[]> {
+  return (
+    await docker(
+      'ps',
+      '--all',
+      '--quiet',
+      '--filter',
+      'label=com.docker.compose.project',
+      '--filter',
+      `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '');
 }
