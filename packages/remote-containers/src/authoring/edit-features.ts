@@ -89,16 +89,13 @@ interface EntryInFile {
 /** The entries of an object node, by their key and value ranges. */
 function entriesOf(node: Node, text: string): EntryInFile[] {
   const entries: EntryInFile[] = [];
-  for (const child of node.children ?? []) {
-    if (child.type !== 'property') {
-      continue;
-    }
-    const [keyNode, valueNode] = child.children ?? [];
-    if (keyNode === undefined || valueNode === undefined) {
+  for (const property of node.children as readonly Node[]) {
+    const [keyNode, valueNode] = property.children as [Node, Node | undefined];
+    if (valueNode === undefined) {
       continue;
     }
     entries.push({
-      key: typeof keyNode.value === 'string' ? keyNode.value : '',
+      key: String(keyNode.value),
       text: text.slice(keyNode.offset, valueNode.offset + valueNode.length),
       keyText: text.slice(keyNode.offset, keyNode.offset + keyNode.length),
       keyStart: keyNode.offset,
@@ -110,7 +107,7 @@ function entriesOf(node: Node, text: string): EntryInFile[] {
 
 /** Whether an object node holds any property. */
 function hasProperties(node: Node): boolean {
-  return (node.children ?? []).some(child => child.type === 'property');
+  return (node.children as readonly Node[]).length > 0;
 }
 
 /**
@@ -125,9 +122,9 @@ export function editFeatures(text: string, picks: FeaturePicks): FeatureEdit {
   if (tree?.type !== 'object') {
     return {kind: 'notAnObject'};
   }
-  const featuresProperty = (tree.children ?? []).find(
-    child =>
-      child.type === 'property' && child.children?.[0]?.value === 'features',
+  const featuresProperty = (tree.children as readonly Node[]).find(
+    property =>
+      (property.children as [Node, Node | undefined])[0].value === 'features',
   );
   const featuresNode = featuresProperty?.children?.[1];
   if (featuresNode !== undefined && featuresNode.type !== 'object') {
@@ -209,16 +206,15 @@ export function editFeatures(text: string, picks: FeaturePicks): FeatureEdit {
   }
   const objectText = `{${interior}}`;
 
-  const edits = modify(text, ['features'], {}, {});
-  const edit = edits[0];
-  if (edit === undefined) {
-    return {kind: 'unchanged'};
-  }
   const content =
     featuresNode === undefined
       ? `${hasProperties(tree) ? ',' : ''}${lineEnds}${indentedOf(step, 1)}"features": ${objectText}`
       : objectText;
-  const newText = applyEdits(text, [{...edit, content}]);
+  const edits = modify(text, ['features'], {}, {});
+  let newText = text;
+  for (const edit of edits) {
+    newText = applyEdits(newText, [{...edit, content}]);
+  }
   return newText === text
     ? {kind: 'unchanged'}
     : {kind: 'edited', text: newText};

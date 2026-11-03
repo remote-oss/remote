@@ -77,6 +77,14 @@ const nodeOptions = Object.fromEntries([
   ['npm', '10'],
 ]);
 
+/** The wizard value of the rich row: arrays, nested objects and null, so the render covers every member form. */
+const richValue: Record<string, unknown> = {
+  scripts: ['a.sh', {name: 'x', ports: [8080, 8443]}],
+  empty: [],
+  gone: undefined,
+  server: {port: 8080},
+};
+
 /** The table: one row per criterion of the card's part A and per boundary, each comparing the whole output text. */
 const ROWS: Row[] = [
   {
@@ -279,6 +287,52 @@ const ROWS: Row[] = [
     text: '[1]\n',
     picks: picks([NODE], []),
     expected: {kind: 'notAnObject'},
+  },
+  {
+    name: 'F-0807.AC-14: a checked key into an empty root object adds "features" without a leading comma',
+    text: '{}\n',
+    picks: picks([COMMON], []),
+    expected: {
+      kind: 'edited',
+      text: `{\n  "features": {\n    "${COMMON}": {}\n  }}\n`,
+    },
+  },
+  {
+    name: 'F-0807.AC-14: a file with no indented lines is written with the default two-space indentation',
+    text: '{"features":{"x":{}}}\n',
+    picks: picks([COMMON], []),
+    expected: {
+      kind: 'edited',
+      text: `{"features":{"x":{},\n    "${COMMON}": {}}}\n`,
+    },
+  },
+  {
+    name: 'F-0807.AC-16: removing an entry between two kept ones joins the kept ones with a clean separator',
+    text: fileWith(
+      `{\n    "${COMMON}": {},\n    "${goFeature}": {},\n    "${NODE}": {}\n  }`,
+    ),
+    picks: picks([], [goFeature]),
+    expected: {
+      kind: 'edited',
+      text: fileWith(`{\n    "${COMMON}": {},\n    "${NODE}": {}\n  }`),
+    },
+  },
+  {
+    name: 'F-0807.BR-2: a wizard value with arrays, a nested object and null renders member by member',
+    text: fileWith(`{\n    "${NODE}": {}\n  }`),
+    picks: picks([NODE], [], {[NODE]: richValue}),
+    expected: {
+      kind: 'edited',
+      text: fileWith(
+        `{\n    "${NODE}": {\n      "scripts": [\n        "a.sh",\n        {\n          "name": "x",\n          "ports": [\n            8080,\n            8443\n          ]\n        }\n      ],\n      "empty": [],\n      "gone": null,\n      "server": {\n        "port": 8080\n      }\n    }\n  }`,
+      ),
+    },
+  },
+  {
+    name: 'containers-150: a features property with no value and nothing picked writes nothing',
+    text: '{\n  "features": {"a"\n}\n}',
+    picks: picks([], []),
+    expected: {kind: 'unchanged'},
   },
 ];
 
