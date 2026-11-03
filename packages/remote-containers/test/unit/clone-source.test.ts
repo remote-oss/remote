@@ -12,6 +12,16 @@ function accepted(input: string, origin: 'typed' | 'link' = 'typed') {
   return source;
 }
 
+/** What each input gives from each origin, typed then link: its refusal, or `accepted`. */
+function outcomesOf(inputs: readonly string[]): string[] {
+  return inputs.flatMap(input =>
+    (['typed', 'link'] as const).map(origin => {
+      const source = cloneSourceOf(input, origin);
+      return 'refused' in source ? source.refused : 'accepted';
+    }),
+  );
+}
+
 describe('the repository a clone takes (card containers-151)', () => {
   it('F-0701 BR-15: whitespace around the input is removed first, and nothing else is normalized', () => {
     deepStrictEqual(accepted('  https://h.invalid/r.git#x  '), {
@@ -97,39 +107,29 @@ describe('the repository a clone takes (card containers-151)', () => {
 
   it('a source whose repository name is empty, . or .. is refused from either origin, since it would be the folder', () => {
     deepStrictEqual(
-      [
+      outcomesOf([
         'https://h.invalid/..',
         'https://h.invalid/a/.',
         'https://h.invalid/.git',
         'git@h.invalid:/',
         'https://h.invalid/',
-      ].flatMap(input =>
-        (['typed', 'link'] as const).map(origin => {
-          const source = cloneSourceOf(input, origin);
-          return 'refused' in source ? source.refused : 'accepted';
-        }),
-      ),
+      ]),
       Array.from({length: 10}, () => 'folder'),
     );
   });
 
   it('a GitHub ref that starts with - is refused as an option from either origin', () => {
     deepStrictEqual(
-      [
+      outcomesOf([
         'https://github.com/o/r/tree/-c',
         'https://github.com/o/r/tree/--upload-pack=touch',
-      ].flatMap(input =>
-        (['typed', 'link'] as const).map(origin => {
-          const source = cloneSourceOf(input, origin);
-          return 'refused' in source ? source.refused : 'accepted';
-        }),
-      ),
+      ]),
       ['option', 'option', 'option', 'option'],
     );
   });
 
   it('a source that git would run a program for, or read as an option, is refused from either origin', () => {
-    const refusals = [
+    const refusals = outcomesOf([
       'ext::sh -c touch% /tmp/pwned',
       'fd::17',
       '--upload-pack=touch /tmp/pwned',
@@ -137,12 +137,7 @@ describe('the repository a clone takes (card containers-151)', () => {
       'ssh://-oProxyCommand=touch%20x/r',
       'user@-oProxyCommand=x:path',
       '   ',
-    ].flatMap(input =>
-      (['typed', 'link'] as const).map(origin => {
-        const source = cloneSourceOf(input, origin);
-        return 'refused' in source ? source.refused : 'accepted';
-      }),
-    );
+    ]);
     deepStrictEqual(refusals, [
       'protocol',
       'protocol',
@@ -163,17 +158,12 @@ describe('the repository a clone takes (card containers-151)', () => {
 
   it('a source with a line break, a carriage return, a tab or NUL inside is refused from either origin', () => {
     deepStrictEqual(
-      [
+      outcomesOf([
         'https://h.invalid/r\n[core]',
         'https://h.invalid/r\rx',
         'https://h.invalid/a\tb',
         'https://h.invalid/r\u0000x',
-      ].flatMap(input =>
-        (['typed', 'link'] as const).map(origin => {
-          const source = cloneSourceOf(input, origin);
-          return 'refused' in source ? source.refused : 'accepted';
-        }),
-      ),
+      ]),
       Array.from({length: 8}, () => 'control'),
     );
   });

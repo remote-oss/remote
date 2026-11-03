@@ -109,6 +109,8 @@ export {
   type AskpassProgramEnvironment,
   ENDPOINT_VARIABLE,
   NONCE_VARIABLE,
+  type AskpassProcess,
+  runAskpassMain,
   runAskpassProgram,
 } from './askpass/program.ts';
 export {

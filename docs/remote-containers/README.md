@@ -53,6 +53,23 @@ in Container** from the Command Palette, or choose **Reopen in Container** on th
 such a folder. The window reloads and shows **Connecting to Dev Container** while it builds or starts the container,
 installs the server in it and connects. The status bar then names the container.
 
+## Clone a repository into a container volume
+
+**Dev Containers: Clone Repository in Container Volume...** clones a repository into a Docker volume and opens it in a
+container, so its files never touch your machine's disk. Paste the repository's URL, or `owner/repo` for a GitHub
+repository, into the box that opens.
+
+### Only clone what you trust
+
+Opening a cloned repository in a container builds and runs what its `devcontainer.json` names: its images, its
+Dockerfile, its lifecycle commands and its Features. That is code from the repository's authors, run with your
+Docker daemon. The first time you clone in this editor profile, the editor asks you to confirm this. Clone only
+repositories whose authors you trust.
+
+Before anything is created, the extension checks on your machine that the repository can be read, with `git
+ls-remote`. When git or ssh needs a user name, a password, a passphrase or a host key's confirmation, the question
+appears in the editor. Nothing you type there is stored or logged.
+
 ## Where the editor server comes from
 
 The window in the container is powered by a server that matches your editor build exactly. On the first connection your

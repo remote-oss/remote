@@ -52,5 +52,6 @@
   "views.detailsContainers.name": "Details (Containers)",
   "setting.DefaultFeatures.description": "Configures the list of features to always install while creating a container.",
   "setting.Lockfile.description": "Controls whether a devcontainer-lock.json should be written.",
-  "setting.RepositoryConfigurationPaths.description": "Absolute paths of folders that hold dev container configurations for repositories. A configuration for a repository goes in <folder>/<host>/<path of the repository>/.devcontainer/devcontainer.json, with the host and the path as the repository's remote URL gives them. Only literal absolute paths are read: no ~ and no variables."
+  "setting.RepositoryConfigurationPaths.description": "Absolute paths of folders that hold dev container configurations for repositories. A configuration for a repository goes in <folder>/<host>/<path of the repository>/.devcontainer/devcontainer.json, with the host and the path as the repository's remote URL gives them. Only literal absolute paths are read: no ~ and no variables.",
+  "commands.Openrepositoryinuniquevolume.title": "Clone Repository in Container Volume..."
 }

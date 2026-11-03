@@ -200,5 +200,11 @@
   "No container configuration file found.": "No container configuration file found.",
   "Add Files...": "Add Files...",
   "Command 'Dev Containers: Configure Container Features...' resulted in an error": "Command 'Dev Containers: Configure Container Features...' resulted in an error",
-  "devcontainer command failed: {0}": "devcontainer command failed: {0}"
+  "devcontainer command failed: {0}": "devcontainer command failed: {0}",
+  "Cannot access the repository '{0}'.": "Cannot access the repository '{0}'.",
+  "Clone git repository from URL": "Clone git repository from URL",
+  "Cloning a repository in a Dev Container may execute arbitrary code.": "Cloning a repository in a Dev Container may execute arbitrary code.",
+  "Only clone a repository in a Dev Container if you trust its authors.": "Only clone a repository in a Dev Container if you trust its authors.",
+  "Got It": "Got It",
+  "Provide repository URL or pick a repository source.": "Provide repository URL or pick a repository source."
 }

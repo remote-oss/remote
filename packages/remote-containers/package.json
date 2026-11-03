@@ -195,6 +195,11 @@
         "command": "remote-containers.settings",
         "title": "%commands.Settings.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openRepositoryInUniqueVolume",
+        "title": "%commands.Openrepositoryinuniquevolume.title%",
+        "category": "Dev Containers"
       }
     ],
     "menus": {
@@ -290,6 +295,10 @@
         {
           "command": "remote-containers.settings",
           "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openRepositoryInUniqueVolume",
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         }
       ],
       "view/title": [
@@ -446,6 +455,11 @@
           "command": "remote-containers.rebuildContainer",
           "group": "remote_30_dev-container_2_actions@5",
           "when": "!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openRepositoryInUniqueVolume",
+          "group": "remote_30_dev-container_2_actions@5",
+          "when": "!hideConnectCommands && !remote-containers:standingDown && (workspaceFolderCount == 0 && remoteName =~ /^(wsl|ssh-remote|tunnel)$/ || workspaceFolderCount == 0 && !remoteName && !virtualWorkspace || remoteName =~ /tunnel*.*/ && gitOpenRepositoryCount == 0)"
         }
       ]
     },
