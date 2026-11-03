@@ -60,6 +60,20 @@ function withoutReturn(line: string): string {
   return line.endsWith('\r') ? line.slice(0, -1) : line;
 }
 
+/** The hint of a host whose sshd forbids TCP forwarding: what the classifier gives for ssh's refusal, and the tunnel step for the relay's. */
+export const FORWARDING_PROHIBITED_HINT: FailureHint = {
+  status: 'AllowTcpForwardingDisabled',
+  message: {id: 'S150', values: []},
+  mitigations: [
+    {
+      id: 'S005',
+      values: [FORWARDING_SETTING.setting, FORWARDING_SETTING.file],
+    },
+    {id: 'S116', values: []},
+  ],
+  resources: [FAILING_CONNECTIONS_TOPIC],
+};
+
 /**
  * Classifies the error lines of one run, in the order `ssh` wrote them. Only the lines before `Authenticated to` are
  * ssh's own diagnostics: a login's startup files run after it, and what they print is remote text. So every rule reads
@@ -123,20 +137,7 @@ export function classify(
   if (containsAfterSession(FAILURE_PATTERNS.forwardingProhibited)) {
     return {
       kind: 'forwardingDisabled',
-      hints: [
-        {
-          status: 'AllowTcpForwardingDisabled',
-          message: {id: 'S150', values: []},
-          mitigations: [
-            {
-              id: 'S005',
-              values: [FORWARDING_SETTING.setting, FORWARDING_SETTING.file],
-            },
-            {id: 'S116', values: []},
-          ],
-          resources: [FAILING_CONNECTIONS_TOPIC],
-        },
-      ],
+      hints: [FORWARDING_PROHIBITED_HINT],
       logLines: ['S046'],
     };
   }

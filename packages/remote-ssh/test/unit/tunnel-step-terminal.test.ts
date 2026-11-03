@@ -5,6 +5,7 @@ import type {TunnelSettings} from 'lib-forwarding';
 import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import {
   type FailureHint,
+  FORWARDING_PROHIBITED_HINT,
   type Forward,
   type Invocation,
   type ConnectWaitSettings,
@@ -70,7 +71,6 @@ function stepWith(
     input?: string;
     reconnection?: boolean;
     /** `remote.SSH.useExecServer`: on unless the row says otherwise, as by default. */
-    execServer?: boolean;
   } = {},
 ) {
   const clock = new FakeClock();
@@ -124,7 +124,6 @@ function stepWith(
         },
       };
     },
-    useExecServer: () => options.execServer ?? true,
     revealLoginTerminals: () => options.reveal ?? false,
     forwardRefused: () => undefined,
     connectWait: () =>
@@ -550,14 +549,15 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     return {...context, pending};
   }
 
-  it('F-2410 7.E1: on a first resolve, a port that closes the connection that proved it accepting fails the step with the reason "Connection closed."', async () => {
+  it('F-2410 7.E1, F-2604 AC-6 (ruling-1985-forwarding-fails): on a first resolve, a port that closes the connection that proved it accepting fails the step as a refused forward, with the reason and the hint', async () => {
     const {pending, local} = await accepted(false);
     local.probes[0]?.close();
     deepStrictEqual(await pending, {
       kind: 'failed',
       failure: {
-        kind: 'channelClosed',
-        reason: {text: 'Connection closed.'},
+        kind: 'forwardingDisabled',
+        reason: {id: 'forwardingRefused'},
+        hints: [FORWARDING_PROHIBITED_HINT],
       },
     });
   });
@@ -613,55 +613,40 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     return {context, pending};
   }
 
-  it('connect-105, connect-109, F-2304 6.9: on a first resolve of the second ssh without the exec server, a port that closes the connection that proved it accepting is no failure: the step opens and the window reconnects', async () => {
-    const {context, pending} = await refusedFirstForward(
-      {execServer: false},
-      30,
-    );
-    deepStrictEqual(
-      [(await pending).kind, context.local.probes.map(probe => probe.closed)],
-      ['done', [true]],
-    );
-  });
-
-  it('connect-109, F-2104 7.E8: on a first resolve of the second ssh with the exec server, the same refusal fails the step with the reason "Connection closed."', async () => {
-    const {pending} = await refusedFirstForward({execServer: true}, 0);
+  it('connect-109, F-2604 AC-6: the second ssh fails the same refusal at once, whatever the exec server setting is', async () => {
+    const {pending} = await refusedFirstForward({}, 0);
     deepStrictEqual(await pending, {
       kind: 'failed',
       failure: {
-        kind: 'channelClosed',
-        reason: {text: 'Connection closed.'},
+        kind: 'forwardingDisabled',
+        reason: {id: 'forwardingRefused'},
+        hints: [FORWARDING_PROHIBITED_HINT],
       },
     });
   });
 
-  it('connect-109, F-2410 7.E1: on the socket path the first refusal fails the step with or without the exec server', async () => {
-    const kinds: string[] = [];
-    for (const execServer of [true, false]) {
-      const {pending} = await refusedFirstForward(
-        {settings: SOCKET, server: SOCKET_SERVER, execServer},
-        0,
-      );
-      const result = await pending;
-      kinds.push(result.kind === 'failed' ? result.failure.kind : result.kind);
-    }
-    deepStrictEqual(kinds, ['channelClosed', 'channelClosed']);
+  it('connect-109, F-2410 7.E1: on the socket path the first refusal fails the step as a refused forward', async () => {
+    const {pending} = await refusedFirstForward(
+      {settings: SOCKET, server: SOCKET_SERVER},
+      0,
+    );
+    const result = await pending;
+    deepStrictEqual(
+      result.kind === 'failed' ? result.failure.kind : result.kind,
+      'forwardingDisabled',
+    );
   });
 
   it('connect-109: a reconnection gets no refusal bound on any path', async () => {
     const seen: string[] = [];
-    for (const options of [
-      {execServer: true},
-      {execServer: false},
-      {settings: SOCKET, server: SOCKET_SERVER, execServer: true},
-    ]) {
+    for (const options of [{}, {settings: SOCKET, server: SOCKET_SERVER}]) {
       const {pending} = await refusedFirstForward(
         {...options, reconnection: true},
         30,
       );
       seen.push((await pending).kind);
     }
-    deepStrictEqual(seen, ['done', 'done', 'done']);
+    deepStrictEqual(seen, ['done', 'done']);
   });
 
   it('#299 ruling 1b: the handshake line the test prints is the one the reader knows', () => {

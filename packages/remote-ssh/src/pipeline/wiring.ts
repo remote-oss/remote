@@ -419,7 +419,6 @@ export function stepsOf(
   });
   const tunnelStep = openTunnelStep({
     ...ports.tunnel,
-    useExecServer: ports.settings.useExecServer,
     connectWait: () =>
       terminalWaitOf(
         lookedUp(state).connectTimeout,

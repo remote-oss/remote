@@ -138,5 +138,6 @@
   "Status": "Status",
   "Message": "Message",
   "Mitigations": "Mitigations",
-  "Resources": "Resources"
+  "Resources": "Resources",
+  "TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.": "TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed."
 }

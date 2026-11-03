@@ -67,6 +67,7 @@ export type {
 export {
   classify,
   endWithFullStop,
+  FORWARDING_PROHIBITED_HINT,
   isDebugLine,
   logLinesOf,
 } from './diagnostics/classify.ts';
