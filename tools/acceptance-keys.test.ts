@@ -1,6 +1,13 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {existsSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
@@ -12,6 +19,7 @@ import {
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
   PASSPHRASE_KEY_COMMENT,
+  loosenKey,
   type RunKeys,
   sshConfigPath,
   startRunAgent,
@@ -350,6 +358,30 @@ describe('the run agent', function () {
           'ssh-add -D failed (2): Error connecting to agent: No such file or directory',
       },
     );
+  });
+
+  it("tooling-118: a loosened key is readable by anyone: mode 0644 elsewhere, and on Windows Everyone's read in its access list", () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'loose-key-'));
+    const file = path.join(folder, 'id_loose');
+    const commands: string[] = [];
+    try {
+      writeFileSync(file, 'key', {mode: 0o600});
+      loosenKey(runCommand, file, 'linux');
+      loosenKey(
+        (program, programArguments) => {
+          commands.push([program, ...programArguments].join(' '));
+          return {status: 0, stdout: '', stderr: ''};
+        },
+        'C:\\run\\id_loose',
+        'win32',
+      );
+      deepStrictEqual(
+        [statSync(file).mode & 0o777, commands],
+        [0o644, ['icacls C:\\run\\id_loose /grant *S-1-1-0:R']],
+      );
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 
   it('tooling-29: the agent sees no variable through which it could ask', () => {
