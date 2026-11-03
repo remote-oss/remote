@@ -1,0 +1,98 @@
+# The acceptance suite with a Windows and a macOS client, on GitHub's hosted runners (card platform-01, #1966; ADR-0013
+# decision 6). On a schedule and by dispatch only, never on a pull request (D-93), so no fork's code reaches a hosted
+# runner from here, and with no secret.
+#
+# - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
+#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
+#   image runs Windows containers only). VSCodium answers on its debugging port there (run 41467076289).
+# - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
+#
+# Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
+# summary. The run folder holds keys, so it is never uploaded.
+name: platform
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+    inputs:
+      windows-launches:
+        description: The launches of the Windows job, joined by commas; none skips the job
+        type: string
+        default: containers-a,containers-b,containers-trust,local,remote
+      macos-launches:
+        description: The launches of the macOS job, joined by commas; none skips the job
+        type: string
+        default: containers-a,containers-b,containers-trust,local,remote
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    if: github.event_name == 'schedule' || inputs.windows-launches != 'none'
+    runs-on: windows-2025
+    timeout-minutes: 240
+    concurrency:
+      group: platform-windows-${{ github.ref }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+      WSL_UTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The Linux side, an Ubuntu distro in WSL2 with its own Docker engine
+        timeout-minutes: 30
+        run: |
+          wsl --install Ubuntu-24.04 --no-launch --web-download
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io >/dev/null'
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'nohup dockerd -H unix:///var/run/docker.sock -H tcp://127.0.0.1:2375 >/var/log/dockerd.log 2>&1 &'
+          $up = $false
+          for ($i = 0; $i -lt 60 -and -not $up; $i++) {
+            Start-Sleep 2
+            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
+            $up = $LASTEXITCODE -eq 0
+          }
+          if (-not $up) { wsl -d Ubuntu-24.04 -u root -- tail -30 /var/log/dockerd.log; exit 1 }
+          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+      - name: The launches
+        run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+      - if: always()
+        run: pnpm acceptance:clean
+
+  macos:
+    if: github.event_name == 'schedule' || inputs.macos-launches != 'none'
+    runs-on: macos-15-intel
+    timeout-minutes: 240
+    concurrency:
+      group: platform-macos-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      LAUNCHES: ${{ inputs.macos-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Docker for linux/x86_64 through colima
+        timeout-minutes: 25
+        run: |
+          brew install colima docker >/dev/null
+          colima start --cpu 3 --memory 8
+          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+      - name: The launches
+        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+      - if: always()
+        run: pnpm acceptance:clean
