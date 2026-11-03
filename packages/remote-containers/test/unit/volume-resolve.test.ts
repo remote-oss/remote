@@ -334,6 +334,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
       kind: 'setupFailed',
       message: 'm',
       description: 'd',
+      containerId: undefined,
     };
     const scene = await sceneOf({
       outcome,
