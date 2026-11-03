@@ -647,6 +647,12 @@ describe('the manifest', () => {
               scope: 'application',
               description: '%setting.Dockerpath.description%',
             },
+            'dev.containers.dockerComposePath': {
+              type: 'string',
+              default: 'docker-compose',
+              scope: 'application',
+              description: '%setting.Dockercomposepath.description%',
+            },
             'remote.serverDownloadBaseUrl': {
               type: 'string',
               scope: 'application',

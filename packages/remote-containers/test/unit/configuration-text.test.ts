@@ -1,10 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  composeFileNamesOf,
   decodeConfiguration,
   dockerfileOf,
   dockerfileValueOf,
   hasContainerSource,
+  isComposeConfiguration,
   namesContainerSource,
+  namesNonComposeSource,
   labelOf,
   parseConfiguration,
 } from '../../src/config/configuration-text.ts';
@@ -197,6 +200,55 @@ describe('the text of a configuration (card containers-13)', () => {
         {image: 'x'},
       ].map(each => dockerfileOf(each, '/w/.devcontainer/devcontainer.json')),
       ['/w/D', '/w/.devcontainer/D', undefined, undefined],
+    );
+  });
+});
+
+describe('which configurations are Compose ones (brief-compose §3.6)', () => {
+  it('F-0413 AC-37: the compose file names are a string or a list of strings, and nothing else', () => {
+    deepStrictEqual(
+      [
+        composeFileNamesOf('a.yml'),
+        composeFileNamesOf(['a.yml', 'b.yml']),
+        composeFileNamesOf([]),
+        composeFileNamesOf([1]),
+        composeFileNamesOf(5),
+        composeFileNamesOf(undefined),
+      ],
+      [['a.yml'], ['a.yml', 'b.yml'], [], undefined, undefined, undefined],
+    );
+  });
+
+  it('F-0413 AC-38: an image, a dockerFile or a build.dockerfile is a non-Compose source, and a build with no dockerfile is not', () => {
+    deepStrictEqual(
+      [
+        namesNonComposeSource({image: 'x'}),
+        namesNonComposeSource({dockerFile: 'D'}),
+        namesNonComposeSource({build: {dockerfile: 'D'}}),
+        namesNonComposeSource({build: {context: '.'}}),
+        namesNonComposeSource({build: 'x'}),
+        namesNonComposeSource({build: ['x']}),
+        namesNonComposeSource({}),
+      ],
+      [true, true, true, false, false, false, false],
+    );
+  });
+
+  it('F-0413 AC-1: compose files and a service, with no image or Dockerfile source, make a Compose configuration', () => {
+    deepStrictEqual(
+      [
+        isComposeConfiguration({dockerComposeFile: 'c.yml', service: 'app'}),
+        isComposeConfiguration({dockerComposeFile: ['c.yml'], service: 'app'}),
+        isComposeConfiguration({dockerComposeFile: 'c.yml'}),
+        isComposeConfiguration({service: 'app'}),
+        isComposeConfiguration({dockerComposeFile: [1], service: 'app'}),
+        isComposeConfiguration({
+          dockerComposeFile: 'c.yml',
+          service: 'app',
+          image: 'x',
+        }),
+      ],
+      [true, true, false, false, false, false],
     );
   });
 });

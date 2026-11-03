@@ -42,6 +42,8 @@ interface Scene {
   storedAsked: number;
   /** The absolute paths that exist besides the configuration files; none by default, so a named Dockerfile is missing. */
   existing: string[];
+  /** What the Compose check answers; none when the flow has no such check. */
+  composeCheck: FirstCheckResult | undefined;
   calls: string[];
   rows: unknown[];
   targets: unknown[];
@@ -71,6 +73,7 @@ function sceneOf(contents: Scene['contents']): Scene {
     stored: undefined,
     storedAsked: 0,
     existing: [],
+    composeCheck: undefined,
     calls: [],
     rows: [],
     targets: [],
@@ -200,6 +203,14 @@ async function choose(
           return scene.reading ?? Promise.resolve(scene.read);
         },
       },
+      ...(scene.composeCheck === undefined
+        ? {}
+        : {
+            composeCheck: (folder: string) => {
+              scene.calls.push(`composeCheck ${folder}`);
+              return Promise.resolve(scene.composeCheck ?? 'proceed');
+            },
+          }),
       compare: new Intl.Collator('en', {sensitivity: 'accent'}).compare,
       translate: template => template,
       logger: createLogger(scene.sink, {minimumLevel: () => 'debug'}),
@@ -1031,5 +1042,93 @@ describe('choosing the configuration while the engine is checked (card container
       ],
       [false, false, 'chosen'],
     );
+  });
+
+  it('F-0301 AC-20, F-0411 AC-17: a Compose configuration with no workspaceFolder, or an empty one, shows S412 with Open devcontainer.json, before the Compose check, and the folder is rejected', async () => {
+    const results = [];
+    for (const text of [
+      '{"dockerComposeFile":"c.yml","service":"app"}',
+      '{"dockerComposeFile":["c.yml"],"service":"app","workspaceFolder":""}',
+    ]) {
+      const scene = sceneOf({[ONLY]: text});
+      scene.composeCheck = 'proceed';
+      results.push([
+        await choose(scene),
+        scene.calls.filter(call =>
+          /^(showError|openPreview|composeCheck)/.test(call),
+        ),
+      ]);
+    }
+    deepStrictEqual(results, [
+      [
+        {kind: 'rejected'},
+        [
+          'showError ["Workspace folder not specified in devcontainer.json.","",["Open devcontainer.json"]]',
+        ],
+      ],
+      [
+        {kind: 'rejected'},
+        [
+          'showError ["Workspace folder not specified in devcontainer.json.","",["Open devcontainer.json"]]',
+        ],
+      ],
+    ]);
+  });
+
+  it('F-0301 AC-63: Open devcontainer.json opens the file as a preview, and Cancel opens nothing', async () => {
+    const results = [];
+    for (const answer of ['Open devcontainer.json', undefined]) {
+      const scene = sceneOf({
+        [ONLY]: '{"dockerComposeFile":"c.yml","service":"app"}',
+      });
+      scene.errorAnswer = answer;
+      await choose(scene);
+      results.push(scene.calls.filter(call => call.startsWith('openPreview')));
+    }
+    deepStrictEqual(results, [
+      ['openPreview .devcontainer/devcontainer.json'],
+      [],
+    ]);
+  });
+
+  it('F-0201 AC-6: a Compose configuration with a workspaceFolder goes through the Compose check, whose stop ends the choice and whose pass lets it go on', async () => {
+    const results = [];
+    for (const check of ['stopped', 'proceed'] as const) {
+      const scene = sceneOf({
+        [ONLY]:
+          '{"dockerComposeFile":"c.yml","service":"app","workspaceFolder":"/workspace"}',
+      });
+      scene.composeCheck = check;
+      results.push([
+        (await choose(scene)).kind,
+        scene.calls.filter(call => call.startsWith('composeCheck')),
+      ]);
+    }
+    deepStrictEqual(results, [
+      ['stopped', ['composeCheck /w/p']],
+      ['chosen', ['composeCheck /w/p']],
+    ]);
+  });
+
+  it('F-0301 AC-64: a configuration with an image beside its compose file is no Compose one: no S412, no Compose check', async () => {
+    const scene = sceneOf({
+      [ONLY]: '{"dockerComposeFile":"c.yml","service":"app","image":42}',
+    });
+    scene.composeCheck = 'stopped';
+    deepStrictEqual(
+      [
+        (await choose(scene)).kind,
+        scene.calls.filter(call => /^(showError|composeCheck)/.test(call)),
+      ],
+      ['chosen', []],
+    );
+  });
+
+  it('F-0201 AC-5: a flow with no Compose check goes on with a Compose configuration', async () => {
+    const scene = sceneOf({
+      [ONLY]:
+        '{"dockerComposeFile":"c.yml","service":"app","workspaceFolder":"/workspace"}',
+    });
+    deepStrictEqual((await choose(scene)).kind, 'chosen');
   });
 });

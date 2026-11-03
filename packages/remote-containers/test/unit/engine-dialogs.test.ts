@@ -99,11 +99,12 @@ describe('the dialogs of the first check', () => {
     );
   });
 
-  it('R-31: Install, License and Documentation open exactly the three addresses', () => {
+  it('R-31: Install, License and the two Documentation buttons open exactly the four addresses', () => {
     deepStrictEqual(BUTTON_LINKS, {
       openInstall: ENGINE_LINKS.install,
       openLicence: ENGINE_LINKS.licence,
       openPermission: ENGINE_LINKS.permission,
+      openCompose: ENGINE_LINKS.compose,
     });
   });
 });

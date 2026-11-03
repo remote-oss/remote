@@ -512,6 +512,10 @@ export function containerLifecycleOf(dependencies: {
       ...(composeResolution.kind === 'ready'
         ? {environment: {COMPOSE_PROJECT_NAME: composeResolution.projectName}}
         : {}),
+      ...(composeResolution.kind === 'ready' &&
+      composeResolution.composeFile !== undefined
+        ? {composePath: composeResolution.composeFile}
+        : {}),
     };
     // a rebuild removes the folder's containers itself, whatever their labels: the CLI's remove would miss a legacy one
     // (it only finds the labels it's given), and its check of the disallowed Features runs before its remove. It does so

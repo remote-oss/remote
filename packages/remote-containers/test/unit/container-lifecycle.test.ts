@@ -4,6 +4,9 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
 import type {ComposeResolution} from '../../src/compose/resolver.ts';
+
+/** A resolution of a Compose project that is ready. */
+type ComposeReady = Extract<ComposeResolution, {kind: 'ready'}>;
 import type {StdinOf} from '../../src/cli/cli-host.ts';
 import type {CliTarget, UpOptions} from '../../src/cli/cli-arguments.ts';
 import type {
@@ -1926,6 +1929,7 @@ describe('containerLifecycleOf', () => {
       projectName,
       service: 'app',
       scope: ['app', 'db'],
+      composeFile: undefined,
       model: {
         resolvedName: undefined,
         declaredName: undefined,
@@ -1952,6 +1956,22 @@ describe('containerLifecycleOf', () => {
         '/storage/data',
         {COMPOSE_PROJECT_NAME: 'proj'},
       ],
+    );
+  });
+
+  it('F-0201 AC-11: the program of the second route reaches the CLI as the Compose path, and the plugin route gives none', async () => {
+    const standalone = fakeBridge();
+    const plugin = fakeBridge();
+    await prepareOf(
+      composeLifecycle(
+        {...(composeReady('proj') as ComposeReady), composeFile: '/opt/dc'},
+        standalone,
+      ).lifecycle,
+    );
+    await prepareOf(composeLifecycle(composeReady('proj'), plugin).lifecycle);
+    deepStrictEqual(
+      [standalone, plugin].map(each => each.ups[0]?.target.composePath),
+      ['/opt/dc', undefined],
     );
   });
 
