@@ -99,45 +99,40 @@ describe('the wizard on the folder’s own Dockerfile and Compose files (card co
   beforeEach(emptyStore);
 
   it('F-0801 AC-7 (c145b-stage): with a stored configuration, a Dockerfile and a Compose file, the stage pick lists the template row focused, the copy row with Open File, both From rows and Learn More', async () => {
-    await withWindow(
-      'c145b-stage',
-      {Dockerfile: 'FROM alpine\n', 'docker-compose.yml': ONE_APP},
-      async window => {
-        await writeToStore(window);
-        await writtenToStore(
-          window,
-          path.join(storeRoot(), 'c145b-stage', CONFIGURATION),
-        );
-        await inWindow(window, 'workbench.action.closeAllEditors');
-        await startCommand(window);
-        await chooseWorkspace(window);
-        const placeholder = (await quickPickOf(window))?.placeholder;
-        const rows = await detailedQuickPickRows(window);
-        await closeScreen(window);
-        deepStrictEqual(
+    await withWindow('c145b-stage', {}, async (window, folder) => {
+      // The store is written while the folder has no file of its own, so the wizard goes straight to the templates.
+      await writeToStore(window);
+      await writtenToStore(
+        window,
+        path.join(storeRoot(), 'c145b-stage', CONFIGURATION),
+      );
+      await inWindow(window, 'workbench.action.closeAllEditors');
+      writeFileSync(path.join(folder, 'Dockerfile'), 'FROM alpine\n');
+      writeFileSync(path.join(folder, 'docker-compose.yml'), ONE_APP);
+      await startCommand(window);
+      await chooseWorkspace(window);
+      const placeholder = (await quickPickOf(window))?.placeholder;
+      const rows = await detailedQuickPickRows(window);
+      await closeScreen(window);
+      deepStrictEqual(
+        [
+          placeholder,
+          rows.map(entry => [entry.label, entry.buttons, entry.focused]),
+          rows[0]?.detail,
+        ],
+        [
+          STAGE,
           [
-            placeholder,
-            rows.map(entry => [entry.label, entry.buttons, entry.focused]),
-            rows[0]?.detail,
+            [TEMPLATE_ROW, [], true],
+            ['Copy existing configuration to workspace', ['Open File'], false],
+            ["From 'Dockerfile'", [], false],
+            ["From 'docker-compose.yml'", [], false],
+            ['Learn More', [], false],
           ],
-          [
-            STAGE,
-            [
-              [TEMPLATE_ROW, [], true],
-              [
-                'Copy existing configuration to workspace',
-                ['Open File'],
-                false,
-              ],
-              ["From 'Dockerfile'", [], false],
-              ["From 'docker-compose.yml'", [], false],
-              ['Learn More', [], false],
-            ],
-            'Use a base configuration from the container template registry',
-          ],
-        );
-      },
-    );
+          'Use a base configuration from the container template registry',
+        ],
+      );
+    });
   });
 
   it('F-0801 AC-7, AC-13 (c145b-multi-root): 6.8 steps 1 and 2, a saved multi-root workspace whose roots hold a Dockerfile goes from the two-row location pick straight to the template list', async () => {

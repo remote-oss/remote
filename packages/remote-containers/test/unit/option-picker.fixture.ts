@@ -117,6 +117,16 @@ export function checking(labels: readonly string[]): Step {
   };
 }
 
+/** The step that checks the rows labelled `labels` and presses the title-bar Finish. */
+export function finishWith(labels: readonly string[]): Step {
+  return picker => {
+    picker.selectedItems = picker.items.filter(each =>
+      labels.includes(each.label),
+    );
+    picker.trigger(FINISH_BUTTON);
+  };
+}
+
 /** The step that presses Back. */
 export function pressBack(picker: FakeOptionPicker): void {
   picker.trigger(BACK_BUTTON);

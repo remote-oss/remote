@@ -64,6 +64,16 @@ export function cliFailureText(failure: CliFailure): string {
     : `${failure.kind}: ${failure.message}`;
 }
 
+/** The CLI's own account of a failure, for the user: its description, else its message, else what the log says. */
+export function cliDescriptionOf(failure: CliFailure): string {
+  if ('description' in failure && failure.description !== '') {
+    return failure.description;
+  }
+  return 'message' in failure && failure.message !== ''
+    ? failure.message
+    : cliFailureText(failure);
+}
+
 /** What `up` gives. */
 export type UpResult =
   | {
@@ -419,4 +429,46 @@ export function readTemplateMetadataResult(
   return 'failure' in parsed
     ? parsed.failure
     : {kind: 'metadata', metadata: parsed.fields};
+}
+
+/** The versions the CLI reports for one Feature of the configuration. */
+interface OutdatedFeature {
+  current: string | undefined;
+  wanted: string | undefined;
+  latest: string | undefined;
+}
+
+/** What `outdated` gave. */
+export type OutdatedResult =
+  {kind: 'outdated'; features: Record<string, OutdatedFeature>} | CliFailure;
+
+/** What `outdated` gave: the versions of each Feature the configuration lists, from its one JSON line. */
+export function readOutdatedResult(
+  result: string | undefined,
+  status: number | null,
+): OutdatedResult {
+  const parsed = templateFields(result, status);
+  if ('failure' in parsed) {
+    return parsed.failure;
+  }
+  const {features} = parsed.fields;
+  if (!isFields(features)) {
+    return {kind: 'malformedResult', field: 'features'};
+  }
+  return {
+    kind: 'outdated',
+    features: Object.fromEntries(
+      Object.entries(features).map(([reference, versions]) => {
+        const found = isFields(versions) ? versions : {};
+        return [
+          reference,
+          {
+            current: textOf(found.current),
+            wanted: textOf(found.wanted),
+            latest: textOf(found.latest),
+          },
+        ];
+      }),
+    ),
+  };
 }

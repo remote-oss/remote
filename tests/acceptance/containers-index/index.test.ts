@@ -1,5 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, mkdirSync, rmSync} from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {closeWindow, inWindow, variable} from '../windows/harness.ts';
@@ -55,6 +61,45 @@ describe('the wizard when the template catalogue cannot be had (card containers-
         ],
         [true, undefined, false],
       );
+    });
+  }
+
+  if (CASE === 'down') {
+    it('F-0807 AC-57 (c150-index-down): Configure Container Features with a catalogue that cannot be had shows the error with the cause, opens no pick and leaves the configuration as it was', async () => {
+      const folder = path.join(
+        variable('HARNESS_RUN_FOLDER'),
+        'authoring',
+        'c150-index-down',
+      );
+      rmSync(folder, {recursive: true, force: true});
+      mkdirSync(path.join(folder, '.devcontainer'), {recursive: true});
+      const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+      writeFileSync(file, '{\n    "image": "x"\n}\n');
+      const window = await openFolderWindow(folder);
+      try {
+        inWindow(window, 'remote-containers.configureContainerFeatures').catch(
+          () => undefined,
+        );
+        const dialog = await waitForDialog(window, 120_000);
+        const pick = await quickPickOf(window);
+        await pressEscape(window);
+        deepStrictEqual(
+          [
+            dialog.message,
+            dialog.details.includes('fetch failed'),
+            pick,
+            readFileSync(file, 'utf8'),
+          ],
+          [
+            "Command 'Dev Containers: Configure Container Features...' resulted in an error",
+            true,
+            undefined,
+            '{\n    "image": "x"\n}\n',
+          ],
+        );
+      } finally {
+        await closeWindow(window).catch(() => undefined);
+      }
     });
   }
 

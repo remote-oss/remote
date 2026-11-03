@@ -767,6 +767,65 @@ describe('the daemon refusal in the bridge (card containers-11)', () => {
   });
 });
 
+describe('the CLI bridge: outdated (card containers-150)', () => {
+  const OUTDATED =
+    '{"features":{"ghcr.io/devcontainers/features/git:1":{"current":"1.3.2","wanted":"1.3.2","wantedMajor":"1","latest":"1.3.8","latestMajor":"1"},"./local":"x"}}';
+
+  it('F-0807 5.0 step 8: outdated runs the CLI on the configuration with a JSON output and no container engine', async () => {
+    const {bridge, calls} = setup(ending(OUTDATED));
+    await bridge.outdated(TARGET, NEVER);
+    deepStrictEqual(calls, [
+      [
+        'outdated',
+        '--workspace-folder',
+        '/work/ws1',
+        '--config',
+        '/work/ws1/.devcontainer/devcontainer.json',
+        '--output-format',
+        'json',
+        '--log-level',
+        'info',
+        '--log-format',
+        'json',
+      ],
+    ]);
+  });
+
+  it('F-0807 5.0 step 8: the versions of each Feature come from the one JSON line, and an entry that is no object has none', async () => {
+    const {bridge} = setup(ending(OUTDATED));
+    deepStrictEqual(await bridge.outdated(TARGET, NEVER), {
+      kind: 'outdated',
+      features: {
+        'ghcr.io/devcontainers/features/git:1': {
+          current: '1.3.2',
+          wanted: '1.3.2',
+          latest: '1.3.8',
+        },
+        './local': {
+          current: undefined,
+          wanted: undefined,
+          latest: undefined,
+        },
+      },
+    });
+  });
+
+  it('F-0807 5.0 step 8: a failing exit, a line that is no object and a result with no features are each a failure', async () => {
+    deepStrictEqual(
+      [
+        await setup(ending(undefined, 1)).bridge.outdated(TARGET, NEVER),
+        await setup(ending('[]')).bridge.outdated(TARGET, NEVER),
+        await setup(ending('{}')).bridge.outdated(TARGET, NEVER),
+      ],
+      [
+        {kind: 'noResult', status: 1},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'malformedResult', field: 'features'},
+      ],
+    );
+  });
+});
+
 describe('the CLI bridge: templates (card containers-76)', () => {
   const REQUEST = {
     workspaceFolder: '/scratch/t1',

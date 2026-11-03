@@ -164,14 +164,65 @@ export type EditorChoice = 'vscode' | 'vscodium';
 export const VSCODIUM_RELEASE = {
   tagName: '1.140.06829-insider',
   repository: 'VSCodium/vscodium-insiders',
-  /** The release asset's sha256, by `<os>-<arch>` of the client. */
+  /**
+   * The release assets' sha256, by `<os>-<arch>` of the client, as the digests of the assets of the tag's release on
+   * GitHub (gh api repos/VSCodium/vscodium-insiders/releases/tags/<tag>; the linux ones re-verified against the
+   * downloaded archives).
+   */
   sha256: {
     'linux-x64':
       '7d8779cb07f5dd66810a94a45855d0ffbe5c286ffddbb88f8ecdca6b63a6813f',
     'linux-arm64':
       'e0ad855b10ec0928f8f832bbf9d12536918b6ecb8cec4600431654ff27a72c37',
+    'darwin-x64':
+      'faa2b47908666e22e5a954fb779edbbe399de8c04778c3d57722734f882286f5',
+    'darwin-arm64':
+      '96ebfe8c654e42a359c60d2141200022dbd82d54842ae9091bd800f24345af8e',
+    'win32-x64':
+      '5fdd3aa13aa926d735fdf2102b07b0c520a7782ce5fcd06b632c99f2152b926a',
   },
 } as const;
+
+/** The release asset of one platform, and the editor's executable it unpacks into, inside the unpack folder. */
+export interface VscodiumBuild {
+  /** The release asset's file name at the pinned tag. */
+  asset: string;
+  /** The editor's executable, inside the unpack folder. */
+  executable: string;
+}
+
+/**
+ * The VSCodium builds the harness can start, by the client's `<os>-<arch>`: the tag's release asset for each, and the
+ * executable inside what it unpacks to. The macOS binary of the build is named after the product, measured in the
+ * bundle; the Windows executable is the build's `VSCodium - Insiders.exe`, measured in the release's central directory.
+ */
+export const VSCODIUM_PLATFORMS: Readonly<Record<string, VscodiumBuild>> = {
+  'linux-x64': {
+    asset: `VSCodium-linux-x64-${VSCODIUM_RELEASE.tagName}.tar.gz`,
+    executable: 'codium-insiders',
+  },
+  'linux-arm64': {
+    asset: `VSCodium-linux-arm64-${VSCODIUM_RELEASE.tagName}.tar.gz`,
+    executable: 'codium-insiders',
+  },
+  'darwin-x64': {
+    asset: `VSCodium-darwin-x64-${VSCODIUM_RELEASE.tagName}.zip`,
+    executable: 'VSCodium - Insiders.app/Contents/MacOS/VSCodium - Insiders',
+  },
+  'darwin-arm64': {
+    asset: `VSCodium-darwin-arm64-${VSCODIUM_RELEASE.tagName}.zip`,
+    executable: 'VSCodium - Insiders.app/Contents/MacOS/VSCodium - Insiders',
+  },
+  'win32-x64': {
+    asset: `VSCodium-win32-x64-${VSCODIUM_RELEASE.tagName}.zip`,
+    executable: 'VSCodium - Insiders.exe',
+  },
+};
+
+/** The download address of a release asset at the pinned tag. */
+export function releaseAssetUrlOf(asset: string): string {
+  return `https://github.com/${VSCODIUM_RELEASE.repository}/releases/download/${VSCODIUM_RELEASE.tagName}/${asset}`;
+}
 
 /** The packages whose VSIX files are installed into the editor under test, by their extension id. */
 const EXTENSIONS_UNDER_TEST = new Map([
@@ -2046,24 +2097,24 @@ export async function vscodiumExecutableOf(
   checksums: Readonly<Record<string, string>> = VSCODIUM_RELEASE.sha256,
 ): Promise<string> {
   const key = `${platform}-${architecture}`;
+  const build = VSCODIUM_PLATFORMS[key];
+  if (build === undefined) {
+    throw new Error(`no VSCodium build is pinned for ${key}`);
+  }
   const folder = path.join(
     root,
     '.vscode-test',
     `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
   );
-  const executable = path.join(folder, 'codium-insiders');
+  const executable = path.join(folder, build.executable);
   if (existsSync(executable)) {
     return executable;
   }
   const expected = checksums[key];
   if (expected === undefined) {
-    throw new Error(
-      `no VSCodium build is pinned for ${platform}-${architecture}`,
-    );
+    throw new Error(`no VSCodium build is pinned for ${key}`);
   }
-  const archive = await transfer.download(
-    `https://github.com/${VSCODIUM_RELEASE.repository}/releases/download/${VSCODIUM_RELEASE.tagName}/VSCodium-${key}-${VSCODIUM_RELEASE.tagName}.tar.gz`,
-  );
+  const archive = await transfer.download(releaseAssetUrlOf(build.asset));
   if (createHash('sha256').update(archive).digest('hex') !== expected) {
     throw new Error('the VSCodium download does not match its checksum');
   }
@@ -2552,12 +2603,34 @@ export async function privateAssetDownload(
   );
 }
 
-/** Unpacks a gzipped tar archive into `folder`. */
+/** The kind of a release archive, by its first bytes: a gzip's `1f 8b` mark, or a zip (which the checksum has already proven to be the release's). */
+export function archiveKindOf(archive: Uint8Array): 'zip' | 'tar.gz' {
+  return archive.length >= 2 && archive[0] === 0x1f && archive[1] === 0x8b
+    ? 'tar.gz'
+    : 'zip';
+}
+
+/** The `tar` arguments that unpack `archiveFile` into `folder`: `-xzf` for a gzipped tar, `-xf` for a zip, whose `tar` is bsdtar on the platforms the zip arrives on. */
+export function tarArgsOf(
+  kind: 'zip' | 'tar.gz',
+  archiveFile: string,
+  folder: string,
+): string[] {
+  return kind === 'zip'
+    ? ['-xf', archiveFile, '-C', folder]
+    : ['-xzf', archiveFile, '-C', folder];
+}
+
+/** Unpacks a release archive into `folder`, by its kind: a gzipped tar or a zip, the platform's `tar` reading both where a zip arrives. */
 export function unpackArchive(archive: Uint8Array, folder: string): void {
   mkdirSync(folder, {recursive: true});
-  const archiveFile = path.join(folder, 'archive.tar.gz');
+  const kind = archiveKindOf(archive);
+  const archiveFile = path.join(
+    folder,
+    kind === 'zip' ? 'archive.zip' : 'archive.tar.gz',
+  );
   writeFileSync(archiveFile, archive);
-  checked(runCommand, 'tar', ['-xzf', archiveFile, '-C', folder]);
+  checked(runCommand, 'tar', tarArgsOf(kind, archiveFile, folder));
   rmSync(archiveFile);
 }
 

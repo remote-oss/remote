@@ -56,8 +56,12 @@ import {
   runLaunches,
   runTestCli,
   standInEngines,
+  archiveKindOf,
+  releaseAssetUrlOf,
+  tarArgsOf,
   unpackArchive,
   USAGE,
+  VSCODIUM_PLATFORMS,
   VSCODIUM_RELEASE,
   vscodiumConfiguration,
   vscodiumConfigurations,
@@ -461,6 +465,7 @@ const LAUNCH_ORDER = [
   'agent-notmp',
   'default-ports',
   'ssh-core',
+  'ssh-containers',
   'no-proposals',
   'explorer',
   'explorer-alone',
@@ -1476,6 +1481,7 @@ describe('acceptance', () => {
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
             client: 'vscodium',
           },
+          containersOnly('ssh-containers'),
           ...[
             'explorer',
             'explorer-alone',
@@ -4208,11 +4214,74 @@ describe('acceptance', () => {
 
     it('#253 Q14: a platform with no pinned build throws', async () => {
       await rejects(
-        vscodiumExecutableOf(workspace.root, 'darwin', 'arm64', {
+        vscodiumExecutableOf(workspace.root, 'win32', 'arm64', {
           download: () => Promise.resolve(new Uint8Array()),
           unpack: () => undefined,
         }),
-        {message: 'no VSCodium build is pinned for darwin-arm64'},
+        {message: 'no VSCodium build is pinned for win32-arm64'},
+      );
+    });
+
+    it('platform-01: every pinned platform gives its asset URL and its executable path', async () => {
+      for (const [key, build] of Object.entries(VSCODIUM_PLATFORMS)) {
+        const [platform, architecture] = key.split('-');
+        const archive = new Uint8Array([1, 2, 3]);
+        let url = '';
+        let unpacks = 0;
+        const executable = await vscodiumExecutableOf(
+          workspace.root,
+          platform,
+          architecture,
+          {
+            download: target => {
+              url = target;
+              return Promise.resolve(archive);
+            },
+            unpack: () => {
+              unpacks += 1;
+            },
+          },
+          {[key]: createHash('sha256').update(archive).digest('hex')},
+        );
+        deepStrictEqual(
+          [executable, url, unpacks],
+          [
+            path.join(
+              workspace.root,
+              '.vscode-test',
+              `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
+              build.executable,
+            ),
+            releaseAssetUrlOf(build.asset),
+            1,
+          ],
+        );
+      }
+    });
+
+    it('platform-01: the archive kind comes from its first bytes', () => {
+      deepStrictEqual(
+        [
+          archiveKindOf(new Uint8Array([0x1f, 0x8b])),
+          archiveKindOf(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
+          archiveKindOf(new Uint8Array([0x50, 0x4b])),
+          archiveKindOf(new Uint8Array([0x1f])),
+          archiveKindOf(new Uint8Array([0x1f, 0x00])),
+        ],
+        ['tar.gz', 'zip', 'zip', 'zip', 'zip'],
+      );
+    });
+
+    it('platform-01: tar unpacks a zip with -xf and a gzipped tar with -xzf', () => {
+      deepStrictEqual(
+        [
+          tarArgsOf('zip', 'archive.zip', 'out'),
+          tarArgsOf('tar.gz', 'archive.tar.gz', 'out'),
+        ],
+        [
+          ['-xf', 'archive.zip', '-C', 'out'],
+          ['-xzf', 'archive.tar.gz', '-C', 'out'],
+        ],
       );
     });
 

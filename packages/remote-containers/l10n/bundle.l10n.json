@@ -196,5 +196,9 @@
   "Workspace does not define any folders": "Workspace does not define any folders",
   "Continue": "Continue",
   "Select a service": "Select a service",
-  "'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.": "'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true."
+  "'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.": "'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.",
+  "No container configuration file found.": "No container configuration file found.",
+  "Add Files...": "Add Files...",
+  "Command 'Dev Containers: Configure Container Features...' resulted in an error": "Command 'Dev Containers: Configure Container Features...' resulted in an error",
+  "devcontainer command failed: {0}": "devcontainer command failed: {0}"
 }

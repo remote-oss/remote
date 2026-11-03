@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {checkPublicSurface} from './public-surface.ts';
+import {chatUsages, checkPublicSurface} from './public-surface.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -203,5 +203,72 @@ describe('public-surface', () => {
 
   it('passes a tree without a docs folder', () => {
     deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
+  describe('F-3907: no chat or language-model use in remote-ssh or lib-ssh', () => {
+    const SOURCE_FORMS = [
+      'vscode.chat',
+      'vscode.lm',
+      'chat.createChatParticipant',
+      'lm.selectChatModels',
+    ];
+
+    for (const form of SOURCE_FORMS) {
+      it(`F-2606.AC-26: source text of remote-ssh using ${form} fails, naming the file, the line and the form`, () => {
+        workspace.write(
+          'packages/remote-ssh/src/usage.ts',
+          `export const x = 1;\nexport const api = ${form};\n`,
+        );
+        deepStrictEqual(chatUsages(workspace.root), [
+          `packages/remote-ssh/src/usage.ts:2: '${form}' (F-3907: no chat or language-model use)`,
+        ]);
+      });
+    }
+
+    it('F-2606.AC-26: source text of lib-ssh using vscode.lm fails too', () => {
+      workspace.write(
+        'packages/lib-ssh/src/usage.ts',
+        'export const models = vscode.lm;\n',
+      );
+      deepStrictEqual(chatUsages(workspace.root), [
+        "packages/lib-ssh/src/usage.ts:1: 'vscode.lm' (F-3907: no chat or language-model use)",
+      ]);
+    });
+
+    const DEPENDENCY_FORMS = [
+      '@vscode/prompt-tsx',
+      '@vscode/chat-extension-utils',
+      'openai',
+      '@azure/openai',
+      '@anthropic-ai/sdk',
+      'ai',
+      'langchain',
+      '@langchain/core',
+      '@ai-sdk/openai',
+    ];
+
+    for (const name of DEPENDENCY_FORMS) {
+      it(`F-2606.AC-26: a dependency named ${name} fails, naming the manifest and the line`, () => {
+        workspace.write(
+          'packages/remote-ssh/package.json',
+          JSON.stringify({dependencies: {[name]: '1.0.0'}}),
+        );
+        deepStrictEqual(chatUsages(workspace.root), [
+          `packages/remote-ssh/package.json:1: '${name}' (F-3907: no chat or language-model use)`,
+        ]);
+      });
+    }
+
+    it('F-2606.AC-26: a dependency of another package is not a finding', () => {
+      workspace.write(
+        'packages/remote-x/package.json',
+        JSON.stringify({dependencies: {openai: '1.0.0'}}),
+      );
+      deepStrictEqual(chatUsages(workspace.root), []);
+    });
+
+    it('F-2606.AC-26: the repository’s remote-ssh and lib-ssh hold no chat or language-model use', () => {
+      deepStrictEqual(chatUsages(REPOSITORY_ROOT), []);
+    });
   });
 });

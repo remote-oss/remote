@@ -354,6 +354,10 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'configuration-errors.test.ts',
   'configuration-open.test.ts',
   'configuration-picker.test.ts',
+  'configure-features-after.test.ts',
+  'configure-features-pick.test.ts',
+  'configure-features-states.test.ts',
+  'configure-features.test.ts',
   'connect-progress.test.ts',
   'connect-reading.test.ts',
   'containers-log.test.ts',
@@ -997,6 +1001,17 @@ export function launchesOf(root: string): Launch[] {
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
     {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-containers',
+      suite: 'ssh-containers',
+      withExtensions: ['remote-oss.remote-containers'],
+      registry: true,
+      templates: true,
+      // The dialogs are the in-window ones, which the renderer helpers can read and answer.
+      settings: {...RENDERER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+    },
     {
       label: 'no-proposals',
       kind: 'plain',

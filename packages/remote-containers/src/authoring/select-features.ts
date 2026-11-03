@@ -32,6 +32,8 @@ export interface FeatureChoice {
 /** What the stage needs: the quick input the screen is made with. */
 export interface FeaturesPorts {
   quick: QuickInputPorts;
+  /** True when the screen is the first thing the user sees, so that it has no Back button. */
+  withoutBack?: true;
 }
 
 /** How the stage ends. */
@@ -83,6 +85,7 @@ export async function askFeatures(
       title: text(ports.quick.translate, FEATURE_TEMPLATES.S301),
       placeholder: text(ports.quick.translate, FEATURE_TEMPLATES.S308),
       finishButton: true,
+      ...(ports.withoutBack === true ? {withoutBack: true as const} : {}),
       items: listed.map(feature => ({
         key: featureKeyOf(feature),
         label: feature.name,

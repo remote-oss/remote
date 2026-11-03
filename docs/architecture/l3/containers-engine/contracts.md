@@ -190,3 +190,55 @@ export function runWizard(request: {title: string; folder: string; target?: Wiza
   before the questions, so a Skip leaves the user's own file alone and a failure writes nothing.
 - The curated table's prefix is the folder of the ids of the templates in the collection whose repository is the
   specification's (`https://github.com/devcontainers/templates`); with no such collection the flat list shows.
+
+```ts
+export interface FeatureEntry {key: string; value: Record<string, unknown>;}
+export interface FeaturePicks {checked: readonly FeatureEntry[]; unchecked: readonly string[];}
+export type FeatureEdit = {kind: 'edited'; text: string} | {kind: 'unchanged'} | {kind: 'notAnObject'};
+export function editFeatures(text: string, picks: FeaturePicks): FeatureEdit;
+export function catalogueKeyOf(entryKey: string, catalogue: readonly CatalogueFeature[]): string | undefined;
+```
+
+- `editFeatures` is the pure edit of a configuration's `"features"` object (F-0807, brief §2.4): over `jsonc-parser`'s
+  `modify` and `applyEdits`, with the file's own indentation and line ends detected, it adds the checked entries (after
+  every existing entry, in the order the picks give them), replaces a present key with its value, and removes the
+  unchecked keys, keeping every other byte: comments, indentation, line ends and every other key. A trailing comment
+  ends up after the last appended entry.
+- `unchanged` is what no write gives: no `features` key and nothing picked, or a byte-identical result. `notAnObject` is
+  a `features` value that is not an object (an array or a string); the caller writes nothing and opens nothing in both
+  cases (BR-9, 7.E6).
+- `catalogueKeyOf` is BR-1's id matching: the catalogue key of the feature whose registry, namespace and id the entry
+  names under any version form; a digest-pinned reference, the same id under another registry, a bare legacy id and a
+  local path name nothing.
+
+```ts
+export function configureFeaturesOf(ports: ConfigureFeaturesPorts): () => Promise<FeaturesOutcome | undefined>;
+export type FeaturesOutcome =
+  | {kind: 'written'; file: string} | {kind: 'unchanged'} | {kind: 'cancelled'} | {kind: 'failed'; detail: string} | {kind: 'adding'};
+```
+
+- `configureFeaturesOf` is the Configure Container Features command (F-0807, brief §2.1 to §2.3) up to the pick: it finds the
+  configuration files of the window's roots that are on a disk (a local folder, or a folder of a remote window addressed on its own
+  host; a virtual root is never read or written, BR-19), with F-0301's discovery (the dotfile first, then
+  `.devcontainer/devcontainer.json`, then one subfolder level) and, in a local window, the folder's configuration in the store
+  of user data. One file is used at once; several are picked among with F-0301's selector, where Escape or "Open File" ends the
+  run. With none it shows the modal "No container configuration file found." whose "Add Files..." hands over to the wizard of
+  F-0801; a file that cannot be read as JSON gives the error dialog and no pick. A call made while a run is on returns at once.
+- "Add Files..." (`addFilesForFeatures`) runs F-0801's wizard for the window's folder: a saved workspace is checked as Reopen in
+  Container checks it (the modal of the first problem of its folder list, Continue or Cancel), an unsaved one of several folders
+  is told to be saved first, and a window of an SSH, WSL or tunnel host adds the files on that host, with no choice of location.
+- `featuresRunOf` is what follows the choice of the file: the catalogue is fetched (a failure gives the error dialog
+  "Command '…' resulted in an error" with the cause, and no pick); Select Features opens with no Back button and the Features the
+  file lists checked (`catalogueKeyOf`); what is accepted goes to `editFeatures` as picks that name Features by their catalogue
+  key, never by the key the file uses for them, the checked ones in the catalogue's order, and the text is written to the file
+  where it lives, whatever an open editor holds; the file then opens as a preview at the first line and column. A file that cannot be
+  written is left as it is and the error is shown. Finish writes the checked Features as `{}`; OK with a Feature checked asks
+  "Keep Feature defaults or configure options?" once (`askFeatureOptions` with `alwaysAsk`, so a Feature that declares no option
+  is asked about too), where Keep Defaults writes as Finish does and Configure Options walks F-0803's screens for each checked
+  Feature in catalogue order, from the schema's defaults and never the file's values. Escape on the question goes into the walk,
+  a second Escape or Back on its first screen ends the run with nothing written, and OK with nothing checked asks nothing.
+- After a write, `versionCheckOf` (F-0807 5.0 step 8) puts the written text in a scratch folder of this machine and runs the CLI's
+  `outdated` on it through C3's `outdated` (`CliBridge.outdated`: `--output-format json`, no Docker program, as it reads
+  registries and not the engine), then removes the folder. What it finds is one line in the Dev Containers log; a failure of
+  any step is one line too and reaches no dialog. The run does not wait for it, and a run that wrote nothing starts none. A
+  window attached to a dev container needs nothing here for the rebuild prompt: C20's watch of the configuration shows it.

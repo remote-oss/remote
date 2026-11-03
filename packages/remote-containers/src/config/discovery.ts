@@ -57,7 +57,7 @@ function hasFile(
 /** The configurations found in `folder`, in the order of the picker; `compare` orders the subfolders' names. */
 export async function discoverConfigurations(
   folder: string,
-  files: ConfigFiles,
+  files: Pick<ConfigFiles, 'list'>,
   compare: (left: string, right: string) => number,
 ): Promise<Candidate[]> {
   const found: Candidate[] = [];

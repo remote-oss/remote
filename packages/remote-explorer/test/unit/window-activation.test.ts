@@ -483,22 +483,26 @@ describe('the activation of a window (card explorer-03c)', () => {
     deepStrictEqual([outcomes, scenario.events], [[undefined, undefined], []]);
   });
 
-  it('F-5102.7.E7: without the companion neither hand-over runs', async () => {
+  it('F-5102.7.E7: without the companion the add hand-over does not run, and the configuration one is asked and ends there', async () => {
     const scenario = await activated({companionPresent: false});
     const lookAlike = {kind: 'sshGroup'};
     await commandOf(scenario, commands.configureSsh.id)?.(lookAlike);
     await commandOf(scenario, commands.remoteExplorerAdd.id)?.(lookAlike);
-    deepStrictEqual(scenario.handed, []);
+    deepStrictEqual(scenario.handed, [[OPEN_CONFIG, []]]);
   });
 
-  it('F-5102.AC-15: an argument that is not the SSH group row runs neither hand-over', async () => {
+  it('F-5102.AC-15, F-5002.AC-17: an argument that is not the SSH group row runs no add hand-over, and the configuration hand-over runs for each', async () => {
     const scenario = await activated({});
     const {host} = await treeOf(scenario);
-    for (const argument of [undefined, 'x', {}, host]) {
+    const others = [undefined, 'x', {}, host];
+    for (const argument of others) {
       await commandOf(scenario, commands.configureSsh.id)?.(argument);
       await commandOf(scenario, commands.remoteExplorerAdd.id)?.(argument);
     }
-    deepStrictEqual(scenario.handed, []);
+    deepStrictEqual(
+      scenario.handed,
+      others.map(() => [OPEN_CONFIG, []]),
+    );
   });
 
   it('F-5902.AC-30: setActiveFolders is served and does nothing with any outcome', async () => {

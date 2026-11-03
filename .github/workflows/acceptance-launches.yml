@@ -1,0 +1,94 @@
+# The VSCodium acceptance launches a pull request's change selects (main's push selection), as one part on one
+# self-hosted X64 runner. Called by ci.yml's pull request job, which runs at most six of them in 60 minutes; with `full`
+# (the acceptance-full label, ci.yml or acceptance-full.yml) it runs the whole selection in 180 minutes. A larger
+# selection without `full` runs nothing and gets a notice naming its launches. The run's steps are those of ci.yml's
+# VSCodium job.
+name: acceptance-launches
+
+on:
+  workflow_call:
+    inputs:
+      full:
+        description: Whether the pull request carries the acceptance-full label
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    # a git diff and the launch table only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      launches: ${{ steps.select.outputs.launches }}
+      minutes: ${{ steps.select.outputs.minutes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: select
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          FULL: ${{ inputs.full }}
+        run: |
+          plan=$(node tools/acceptance-select.ts --base "$BASE" --head "$HEAD" --pull-request $([ "$FULL" = true ] && echo --full))
+          echo "plan: $plan"
+          notice=$(printf '%s' "$plan" | jq -r '.notice // empty')
+          if [ -n "$notice" ]; then
+            echo "::notice title=VSCodium launches::$notice"
+            printf '%s\n' "**VSCodium launches:** $notice" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "launches=$(printf '%s' "$plan" | jq -r '.launches')" >> "$GITHUB_OUTPUT"
+          echo "minutes=$(printf '%s' "$plan" | jq -r '.minutes')" >> "$GITHUB_OUTPUT"
+
+  run:
+    name: acceptance (vscodium, ${{ needs.select.outputs.launches }})
+    needs: select
+    if: needs.select.outputs.launches != ''
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
+    timeout-minutes: ${{ fromJSON(needs.select.outputs.minutes) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm acceptance:clean
+      - run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      # rootless Podman for the containers-podman launch, as ci.yml's VSCodium job sets it up
+      - if: contains(needs.select.outputs.launches, 'containers-podman')
+        run: |
+          command -v podman >/dev/null || sudo dnf install -y -q podman
+          sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
+          grep -q "^$(id -un):" /etc/subuid || sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
+          podman --version
+          if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}' 2>&1); then
+            printf '%s\n' "$out"
+            printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
+            rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
+          fi
+          podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
+      - run: |
+          if command -v xvfb-run >/dev/null; then
+            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+          else
+            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+          fi
+        env:
+          LAUNCHES: ${{ needs.select.outputs.launches }}
+      - if: always()
+        run: pnpm acceptance:clean

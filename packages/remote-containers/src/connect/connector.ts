@@ -27,6 +27,8 @@ import type {CliBridge} from '../cli/cli-bridge.ts';
 import {
   type ConfigurationResult,
   type CliEvent,
+  type CliFailure,
+  cliDescriptionOf,
   cliFailureText,
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
@@ -87,6 +89,7 @@ import {
   cancelled,
   configurationInvalid,
   containerGone,
+  commandFailed,
   containerSetupFailed,
   disallowedFeature,
   featureResolutionFailed,
@@ -186,10 +189,12 @@ export interface ContainerConnector extends Connector {
 
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
-  /** Whether a folder exists on this machine. */
-  folderExists(folder: string): Promise<boolean>;
+  /** Whether a file or a folder exists on this machine. */
+  pathExists(place: string): Promise<boolean>;
   /** The program a read before the trust answer is given (see `noEngineProgramOf`). */
   noEngineProgram: string;
+  /** The client's platform, as `process.platform` names it. */
+  clientPlatform: string;
   /** The configuration files of a folder, in the order of the picker. */
   discoverConfigurations(
     folder: string,
@@ -491,7 +496,7 @@ export function containerConnectorOf(
   /** The reconnection attempts of core that this connector, one per window session, has answered (S286). */
   let reconnectionAttempts = 0;
   /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
-  const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
+  const reads = new Map<string, Promise<ConfigurationResult | CliFailure>>();
 
   /** Gives back the connection the window holds, and stops hearing its relay. */
   function releaseHeld(): void {
@@ -864,14 +869,14 @@ export function containerConnectorOf(
 
   /**
    * The workspace folder of `payload`'s configuration, read without a container by the first that asks, a canonical
-   * request or the connect's start. It runs no repository code. A failed read is dropped, so the next request reads
-   * again.
+   * request or the connect's start. It runs no repository code. A failed read gives its failure and is dropped, so
+   * the next request reads again.
    */
   function readOf(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<ConfigurationResult | undefined> {
+  ): Promise<ConfigurationResult | CliFailure> {
     const kept = reads.get(payload);
     if (kept !== undefined) {
       return kept;
@@ -890,7 +895,6 @@ export function containerConnectorOf(
           logger.warn(
             `the configuration of ${folder.hostPath} could not be read: ${cliFailureText(result)}`,
           );
-          return undefined;
         }
         return result;
       });
@@ -898,12 +902,12 @@ export function containerConnectorOf(
     return reading;
   }
 
-  /** The read of `payload`, or nothing once the canonical request has waited its longest. */
+  /** The read of `payload` or its failure, or nothing once the canonical request has waited its longest. */
   function readWithinCap(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<ConfigurationResult | undefined> {
+  ): Promise<ConfigurationResult | CliFailure | undefined> {
     return new Promise(resolve => {
       const stop = dependencies.preflight.setTimer(
         CANONICAL_READ_MILLISECONDS,
@@ -929,7 +933,7 @@ export function containerConnectorOf(
     if (target.kind === 'folder') {
       return target;
     }
-    if (!(await dependencies.folderExists(target.hostPath))) {
+    if (!(await dependencies.pathExists(target.hostPath))) {
       logger.info(`the folder ${target.hostPath} doesn't exist`);
       return undefined;
     }
@@ -972,7 +976,9 @@ export function containerConnectorOf(
       connection === undefined
         ? await readWithinCap(payload, decoded)
         : undefined;
-    const root = connection?.remoteWorkspaceFolder ?? read?.workspaceFolder;
+    const root =
+      connection?.remoteWorkspaceFolder ??
+      (read?.kind === 'configuration' ? read.workspaceFolder : undefined);
     const local =
       root === undefined ? undefined : mappedPath(root, decoded.hostPath, path);
     if (local !== undefined) {
@@ -1045,7 +1051,7 @@ export function containerConnectorOf(
     const cancellation = controller.signal;
     failedContainer = undefined;
     attemptIdentity = undefined;
-    if (!(await dependencies.folderExists(folder.hostPath))) {
+    if (!(await dependencies.pathExists(folder.hostPath))) {
       logger.info(`the folder ${folder.hostPath} doesn't exist`);
       return containerSetupFailed();
     }
@@ -1056,7 +1062,8 @@ export function containerConnectorOf(
     if (trustedAtStart) {
       registerWithShutdown(folder, tools);
     }
-    const read = await readWithinCap(payload, folder, tools);
+    const reading = await readWithinCap(payload, folder, tools);
+    const read = reading?.kind === 'configuration' ? reading : undefined;
     if (!(await trustedFolder(folder, cancellation, trustedAtStart))) {
       return trustDeclined();
     }
@@ -1073,6 +1080,17 @@ export function containerConnectorOf(
     );
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
+    }
+    // A read that failed with the engine answering is the CLI's own failure, unless its configuration is gone; one
+    // that ran out of time is not.
+    if (
+      reading !== undefined &&
+      reading.kind !== 'configuration' &&
+      reading.kind !== 'cancelled'
+    ) {
+      return (await dependencies.pathExists(configFile))
+        ? commandFailed(cliDescriptionOf(reading))
+        : containerSetupFailed();
     }
     if (read !== undefined && !sourceTypesValid(read.configuration)) {
       // The next attempt reads the file again, so a fix the user saves is seen by Retry.
@@ -1095,6 +1113,7 @@ export function containerConnectorOf(
         dockerPath,
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
+        windowsClient: dependencies.clientPlatform === 'win32',
         workspaceMountConsistency: workspaceMountConsistencyOf(
           settings.workspaceMountConsistency,
           settings.legacyWorkspaceMountConsistency,

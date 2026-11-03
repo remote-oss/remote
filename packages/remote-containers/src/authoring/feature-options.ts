@@ -186,16 +186,21 @@ async function keepsDefaults(
 
 /**
  * Asks for the options of `chosen`, in the order given. `configure` is how Select Features was confirmed: with Finish
- * nothing is asked. The entries start from the schema's defaults, never from an earlier answer.
+ * nothing is asked. The entries start from the schema's defaults, never from an earlier answer. The choice between the
+ * defaults and the options is asked when a Feature declares an option, or, with `alwaysAsk`, whenever a Feature is chosen.
  */
 export async function askFeatureOptions(
   chosen: readonly ChosenFeature[],
   configure: boolean,
   quick: QuickInputPorts,
   cancellation: AbortSignal,
+  alwaysAsk = false,
 ): Promise<FeatureOptionsAnswer> {
   const bare = chosen.map(each => ({id: each.choice.id, options: {}}));
-  if (!configure || !chosen.some(each => declaresOptions(each.feature))) {
+  const asks = alwaysAsk
+    ? chosen.length > 0
+    : chosen.some(each => declaresOptions(each.feature));
+  if (!configure || !asks) {
     return {kind: 'chosen', features: bare, shown: false};
   }
   if (await keepsDefaults(quick, cancellation)) {

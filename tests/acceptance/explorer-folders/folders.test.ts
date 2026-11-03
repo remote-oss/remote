@@ -153,14 +153,9 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         '-c',
         `printf '%s' '{"folders":[{"path":"."}]}' > ${file}`,
       );
-      // A workspace window is named when its agent starts, before the workspace's folders are known.
-      name = await nextEmptyWindow(() =>
-        inWindow(
-          'local',
-          'acceptance.agent.openWindow',
-          `vscode-remote://ssh-remote+${HOST_A}${file}`,
-        ),
-      );
+      // A remote workspace window has no folders when its agent starts, so it is named after the workspace file's folder.
+      name = 'c102-w1';
+      await openAddress(`vscode-remote://ssh-remote+${HOST_A}${file}`, name);
       await connectedTo(name, HOST_A);
       await waitFor(
         `the history of ${HOST_A} to hold ${file}`,

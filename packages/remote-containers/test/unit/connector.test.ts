@@ -13,6 +13,7 @@ import {
 import {
   FIXTURE_STORAGE,
   FOLDER,
+  containerReadsFail,
   inputOf,
   PAYLOAD,
   READY,
@@ -282,9 +283,43 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(scene.prepared.length, 1);
   });
 
-  it("F-0301 7.E3: a configuration read that fails isn't checked, and the connect goes on", async () => {
+  it('F-0410 AC-21, F-0301 7.E3: a read before the start that fails ends the connect with S420 and the CLI’s description, and nothing is prepared', async () => {
     const scene = sceneOf();
     scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        'reason' in result ? result.reason : undefined,
+        'kind' in result ? result.kind : undefined,
+        scene.prepared.length,
+      ],
+      [{id: 'S420', values: ['x']}, 'containerSetupFailed', 0],
+    );
+  });
+
+  it('F-0410 AC-21: a read that fails with no message from the CLI fills S420 with what the log says', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'noResult', status: 1};
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual('reason' in result ? result.reason : undefined, {
+      id: 'S420',
+      values: ['noResult'],
+    });
+  });
+
+  it('F-0410 AC-27: a read that failed because the configuration is gone gives S034, not S420', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    scene.configurationExists = false;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual('reason' in result ? result.reason : undefined, {
+      id: 'S034',
+    });
+  });
+
+  it('F-0410 AC-21: a read before the start that was cancelled is no command failure', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'cancelled'};
     await connected(scene);
     deepStrictEqual(scene.prepared.length, 1);
   });
@@ -1190,7 +1225,10 @@ describe('the container connector: the connect (card containers-08)', () => {
   it("F-0504 BR-2 with F-0505: a failed identity read keeps the setting's ids", async () => {
     const scene = sceneOf();
     scene.defaultExtensions = ['c.d'];
-    scene.configuration = {kind: 'malformedResult', field: 'configuration'};
+    containerReadsFail(scene, {
+      kind: 'malformedResult',
+      field: 'configuration',
+    });
     await connected(scene);
     deepStrictEqual(
       scene.serverRequests.map(request => request.defaultExtensions),
@@ -1266,7 +1304,7 @@ describe('the container connector: the connect (card containers-08)', () => {
 
   it('F-0504 BR-2: a configuration that cannot be read does not fail the connect: one warning, no name', async () => {
     const scene = sceneOf();
-    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    containerReadsFail(scene, {kind: 'configurationFailed', message: 'x'});
     const result = await connected(scene);
     deepStrictEqual(
       [
@@ -1279,10 +1317,7 @@ describe('the container connector: the connect (card containers-08)', () => {
       [
         41000,
         undefined,
-        [
-          'the configuration of /work/proj could not be read: configurationFailed: x',
-          "the configuration's name could not be read: configurationFailed: x",
-        ],
+        ["the configuration's name could not be read: configurationFailed: x"],
       ],
     );
   });
@@ -1290,7 +1325,7 @@ describe('the container connector: the connect (card containers-08)', () => {
   it('#1367: a configuration read that fails with no message from the CLI says so in the warning', async () => {
     const scene = sceneOf();
     scene.configuration = {kind: 'configurationFailed', message: ''};
-    await connected(scene);
+    await scene.connector.connect(inputOf(PAYLOAD));
     deepStrictEqual(
       scene.sink.lines
         .filter(line => line.level === 'warn')
@@ -2613,7 +2648,7 @@ describe('the container connector: the remote environment (card containers-45)',
 
   it('F-0416 BR-11: a configuration that could not be read gives the default mode and an empty remoteEnv', async () => {
     const scene = sceneOf();
-    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    containerReadsFail(scene, {kind: 'configurationFailed', message: 'x'});
     const result = await connected(scene);
     deepStrictEqual(
       [result.extensionHostEnv, scene.probeScripts.length],
@@ -2674,7 +2709,7 @@ describe('the container connector: the declared ports (card containers-72)', () 
   it('F-1101 AC-1: a configuration that cannot be read declares no ports, and a connector that never connected holds none', async () => {
     const scene = sceneOf();
     const before = scene.connector.heldPorts();
-    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    containerReadsFail(scene, {kind: 'configurationFailed', message: 'x'});
     await connected(scene);
     deepStrictEqual(
       [before, scene.connector.heldPorts()],
@@ -2739,7 +2774,7 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
 
   it('F-1101 BR-14: a configuration that cannot be read hands core none', async () => {
     const scene = sceneOf();
-    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    containerReadsFail(scene, {kind: 'configurationFailed', message: 'x'});
     deepStrictEqual((await connected(scene)).environmentTunnels, []);
   });
 });

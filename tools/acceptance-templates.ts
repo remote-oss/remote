@@ -308,6 +308,52 @@ export function featureMetadataText(text: string, registry: string): string {
   return text.replaceAll(REGISTRY_TOKEN, registry);
 }
 
+/** The versions the run's Feature with two majors is published at, one major each, in this order. */
+const MAJOR_VERSIONS = ['1.0.0', '2.0.0'] as const;
+
+/**
+ * Publishes the run's Feature with two majors once for each of `MAJOR_VERSIONS`, from a copy of its folder in `work`: the
+ * registry then serves its major 1 and its major 2 in the namespace of the run's own Features. Its folder is outside the
+ * one the run's index lists, so no pick shows it.
+ */
+function publishMajors(
+  command: CommandRunner,
+  bundledCli: string,
+  fixtures: string,
+  work: string,
+  registry: string,
+): void {
+  const sources = path.join(work, 'features-majors', 'src');
+  cpSync(path.join(fixtures, 'custom-features', 'majors'), sources, {
+    recursive: true,
+  });
+  const metadataFile = path.join(
+    sources,
+    'lab-majors',
+    'devcontainer-feature.json',
+  );
+  const metadata = JSON.parse(
+    featureMetadataText(readFileSync(metadataFile, 'utf8'), registry),
+  ) as Record<string, unknown>;
+  for (const version of MAJOR_VERSIONS) {
+    writeFileSync(
+      metadataFile,
+      `${JSON.stringify({...metadata, version}, undefined, 2)}\n`,
+    );
+    checked(
+      command,
+      process.execPath,
+      publishArguments(
+        bundledCli,
+        'features',
+        sources,
+        registry,
+        CUSTOM_FEATURES_NAMESPACE,
+      ),
+    );
+  }
+}
+
 /**
  * Prepares the run's templates: the layer of each of `templates` from the cache under `root` (fetched by `fetchLayer` when it is
  * missing) unpacked, the run's own templates and Features copied with the run's `mini` and its template without metadata naming `devContainerImage`, all published
@@ -443,6 +489,7 @@ export async function prepareRunTemplates(
       CUSTOM_FEATURES_NAMESPACE,
     ),
   );
+  publishMajors(command, bundledCli, fixtures, work, registry);
   const served = servedTemplatesFolder(runFolder);
   mkdirSync(served, {recursive: true});
   function metadata(file: string): CustomMetadata {

@@ -142,6 +142,26 @@ export function readConfigurationArguments(
   ];
 }
 
+/**
+ * Asks which Features of the configuration are behind. The CLI reads the registries and needs no container engine, so
+ * there is no Docker program in the arguments; the result is one JSON line on stdout.
+ */
+export function outdatedArguments(target: CliTarget): string[] {
+  return [
+    'outdated',
+    '--workspace-folder',
+    target.workspaceFolder,
+    '--config',
+    target.configFile,
+    '--output-format',
+    'json',
+    '--log-level',
+    target.logLevel,
+    '--log-format',
+    'json',
+  ];
+}
+
 /** What `templates apply` is asked to do: the template, its options, the Features to add and the paths to leave out. */
 export interface TemplateRequest {
   /** The scratch folder the template is applied into. */

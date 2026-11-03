@@ -70,6 +70,11 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.configureContainerFeatures",
+        "title": "%commands.Configurecontainerfeatures.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.rebuildContainer",
         "title": "%commands.Rebuildcontainer.title%",
         "category": "Dev Containers",
@@ -205,6 +210,10 @@
         {
           "command": "remote-containers.createDevContainerFile",
           "when": "remoteName =~ /^(dev-container)?$/ && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.configureContainerFeatures",
+          "when": "remoteName =~ /^(dev-container|wsl|ssh-remote|tunnel)?$/ && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -427,6 +436,11 @@
           "command": "remote-containers.createDevContainerFile",
           "group": "remote_30_dev-container_2_actions@4",
           "when": "workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.configureContainerFeatures",
+          "group": "remote_30_dev-container_2_actions@4",
+          "when": "remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
