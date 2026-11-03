@@ -17,6 +17,7 @@ import {
   copyFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
@@ -414,13 +415,25 @@ function zipOf(folder: string, archive: string): void {
   );
 }
 
-/** A server archive whose single top folder holds the launcher, as the server builds are packed. */
-function serverArchive(host: PowershellHost, launcher: string): string {
+/** The time of the archive's product.json, which an untouched file keeps. */
+const OLD_TIME = new Date('2001-02-03T04:05:06Z');
+
+/** A server archive whose single top folder holds the launcher and a `product.json` (none with `null`), as the server builds are packed. */
+function serverArchive(
+  host: PowershellHost,
+  launcher: string,
+  product: string | null = `{"commit": "${parametersFor().commit}"}\n`,
+): string {
   const source = path.join(host.root, 'source');
   mkdirSync(path.join(source, 'server-top', path.dirname(launcher)), {
     recursive: true,
   });
   writeFileSync(path.join(source, 'server-top', launcher), 'launcher');
+  if (product !== null) {
+    const file = path.join(source, 'server-top', 'product.json');
+    writeFileSync(file, product);
+    utimesSync(file, OLD_TIME, OLD_TIME);
+  }
   const archive = path.join(host.root, 'server.zip');
   zipOf(source, archive);
   return archive;
@@ -493,6 +506,123 @@ function serving(
 
 describe('the PowerShell install, run under pwsh', function () {
   this.timeout(60000);
+
+  /** The commit of an earlier release's server, 40 lowercase hex digits. */
+  const EARLIER = '1234567890abcdef1234567890abcdef12345678';
+
+  for (const [name, make] of [
+    [
+      'pretty-printed',
+      (commit: string) =>
+        `{\r\n  "nameShort": "Server",\r\n  "commit": "${commit}",\r\n  "date": "2026-01-01"\r\n}\r\n`,
+    ],
+    [
+      'minified',
+      (commit: string) =>
+        `{"nameShort":"Server","commit":"${commit}","date":"2026-01-01"}`,
+    ],
+  ] as const) {
+    it(`F-3902 AC-16: a ${name} product.json whose commit differs comes out with only the 40 characters changed, both facts are reported and no temporary file is left`, () => {
+      const host = powershellHost();
+      const parameters = installFrom(
+        serverArchive(host, 'bin/launcher', make(EARLIER)),
+      );
+      const outcome = factsOf(runOn(host, single('install'), parameters), [
+        'server.identityFrom',
+        'server.identityTo',
+      ]);
+      const folder = installFolder(host, parameters);
+      deepStrictEqual(
+        [
+          outcome,
+          readFileSync(path.join(folder, 'product.json'), 'utf8'),
+          readdirSync(folder).filter(each => each.includes('.identity.')),
+        ],
+        [
+          {
+            status: 'Ok',
+            'server.identityFrom': EARLIER,
+            'server.identityTo': parameters.commit,
+          },
+          make(parameters.commit),
+          [],
+        ],
+      );
+    });
+  }
+
+  it('F-3902 AC-16: a product.json that already names the client’s commit is left as it is, with no identity fact', () => {
+    const host = powershellHost();
+    const parameters = installFrom(serverArchive(host, 'bin/launcher'));
+    const outcome = factsOf(runOn(host, single('install'), parameters), [
+      'server.identityFrom',
+      'server.identityTo',
+    ]);
+    deepStrictEqual(
+      [
+        outcome,
+        readFileSync(
+          path.join(installFolder(host, parameters), 'product.json'),
+          'utf8',
+        ),
+        statSync(
+          path.join(installFolder(host, parameters), 'product.json'),
+        ).mtime.getFullYear(),
+      ],
+      [
+        {
+          status: 'Ok',
+          'server.identityFrom': undefined,
+          'server.identityTo': undefined,
+        },
+        `{"commit": "${parameters.commit}"}\n`,
+        2001,
+      ],
+    );
+  });
+
+  for (const [name, product] of [
+    ['is absent', null],
+    ['has no commit member', '{"nameShort": "Server"}\n'],
+    [
+      'holds a commit that is not 40 lowercase hex digits',
+      '{"commit": "abc123"}\n',
+    ],
+  ] as const) {
+    it(`F-3902 AC-16: a server whose product.json ${name} is UnpackFailed`, () => {
+      const host = powershellHost();
+      const parameters = installFrom(
+        serverArchive(host, 'bin/launcher', product),
+      );
+      deepStrictEqual(factsOf(runOn(host, single('install'), parameters), []), {
+        status: 'UnpackFailed',
+      });
+    });
+  }
+
+  it('F-3902 AC-16: a move that is refused is UnpackFailed and leaves no temporary file', () => {
+    const host = powershellHost();
+    const parameters = installFrom(
+      serverArchive(host, 'bin/launcher', `{"commit": "${EARLIER}"}\n`),
+    );
+    // Moving onto product.json fails, as it does when the folder cannot be written; every other move goes through.
+    const refusal =
+      "function Move-Item { param($LiteralPath, $Destination, $Force, $ErrorAction) if ($Destination -like '*product.json') { throw 'denied' }; Microsoft.PowerShell.Management\\Move-Item -LiteralPath $LiteralPath -Destination $Destination -Force:$Force }";
+    const outcome = factsOf(
+      runOn(host, single('install'), parameters, WINDOWS_VARIABLES, refusal),
+      [],
+    );
+    const folder = installFolder(host, parameters);
+    deepStrictEqual(
+      [
+        outcome,
+        existsSync(folder)
+          ? readdirSync(folder).filter(each => each.includes('.identity.'))
+          : [],
+      ],
+      [{status: 'UnpackFailed'}, []],
+    );
+  });
 
   it('F-2403: the archive is unpacked into the data folder, its top folder lifted', () => {
     const host = powershellHost();

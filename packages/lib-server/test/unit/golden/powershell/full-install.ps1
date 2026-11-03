@@ -229,6 +229,32 @@ function Expand-ServerArchive([string]$Archive, [string]$Target) {
   Write-StepProgress 'unpack' 100
   return (Move-ArchiveTop $Stage $Target)
 }
+function Update-Identity([string]$Folder) {
+  $File = [System.IO.Path]::Combine($Folder, 'product.json')
+  if (-not (Test-Path -LiteralPath $File -PathType Leaf)) {
+    return $false
+  }
+  $Text = [System.IO.File]::ReadAllText($File)
+  $Found = [regex]::Match($Text, '"commit"\s*:\s*"([0-9a-f]{40})"')
+  if (-not $Found.Success) {
+    return $false
+  }
+  $Old = $Found.Groups[1].Value
+  if ($Old -ceq $COMMIT) {
+    return $true
+  }
+  $Temp = $File + '.identity.' + $PID
+  try {
+    [System.IO.File]::WriteAllText($Temp, $Text.Substring(0, $Found.Groups[1].Index) + $COMMIT + $Text.Substring($Found.Groups[1].Index + 40), (New-Object System.Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $Temp -Destination $File -Force -ErrorAction Stop
+  } catch {
+    Remove-Item -LiteralPath $Temp -Force -ErrorAction SilentlyContinue
+    return $false
+  }
+  Add-Fact 'server.identityFrom' $Old
+  Add-Fact 'server.identityTo' $COMMIT
+  return $true
+}
 function Exit-Step([string]$Status) {
   Exit-Lock
   Complete-Step $Status

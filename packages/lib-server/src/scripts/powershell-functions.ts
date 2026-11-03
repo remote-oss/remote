@@ -237,6 +237,40 @@ const UNPACK_FUNCTIONS: readonly string[] = [
 ];
 
 /**
+ * Makes the unpacked server's `product.json` name the client's commit, as the POSIX script does: only the first
+ * `"commit"` value is replaced, through a temporary file moved into place. An equal commit touches nothing; a file
+ * with no commit of 40 lowercase hex digits is a failure. No ACL is set: the file is no secret.
+ */
+const IDENTITY_FUNCTIONS: readonly string[] = [
+  'function Update-Identity([string]$Folder) {',
+  "  $File = [System.IO.Path]::Combine($Folder, 'product.json')",
+  '  if (-not (Test-Path -LiteralPath $File -PathType Leaf)) {',
+  '    return $false',
+  '  }',
+  '  $Text = [System.IO.File]::ReadAllText($File)',
+  `  $Found = [regex]::Match($Text, '"commit"\\s*:\\s*"([0-9a-f]{40})"')`,
+  '  if (-not $Found.Success) {',
+  '    return $false',
+  '  }',
+  '  $Old = $Found.Groups[1].Value',
+  '  if ($Old -ceq $COMMIT) {',
+  '    return $true',
+  '  }',
+  "  $Temp = $File + '.identity.' + $PID",
+  '  try {',
+  '    [System.IO.File]::WriteAllText($Temp, $Text.Substring(0, $Found.Groups[1].Index) + $COMMIT + $Text.Substring($Found.Groups[1].Index + 40), (New-Object System.Text.UTF8Encoding $false))',
+  '    Move-Item -LiteralPath $Temp -Destination $File -Force -ErrorAction Stop',
+  '  } catch {',
+  '    Remove-Item -LiteralPath $Temp -Force -ErrorAction SilentlyContinue',
+  '    return $false',
+  '  }',
+  "  Add-Fact 'server.identityFrom' $Old",
+  "  Add-Fact 'server.identityTo' $COMMIT",
+  '  return $true',
+  '}',
+];
+
+/**
  * The server a PID file records, when it still runs: the file holds the process id and its start time in ticks, and a
  * process whose start lies more than a second away is a recycled id. The second allows for platforms that compute the
  * start from the boot time. No WMI or CIM query is made, which a standard user may be refused.
@@ -447,7 +481,7 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   busybox: [],
   fetch: FETCH_FUNCTIONS,
   unpack: UNPACK_FUNCTIONS,
-  identity: [],
+  identity: IDENTITY_FUNCTIONS,
   leave: LEAVE_FUNCTIONS,
   process: PROCESS_FUNCTIONS,
   secretToken: SECRET_TOKEN_FUNCTIONS,
