@@ -10,29 +10,10 @@ import type {IdRecord} from '../../src/attach/find.ts';
 import type {AttachedCliTarget} from '../../src/cli/cli-arguments.ts';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
 import type {SetUpResult, CliFailure} from '../../src/cli/cli-lines.ts';
-import type {
-  EngineHost,
-  EngineRunOutcome,
-} from '../../src/engine/engine-host.ts';
+import type {EngineHost} from '../../src/engine/engine-host.ts';
+import {exits, inspectedJson} from './attach.fixture.ts';
 
 const TARGET = {containerName: '/web'};
-
-function inspectedJson(state: string): string {
-  return JSON.stringify([
-    {
-      // eslint-disable-next-line id-length -- the engine's own member is named Id
-      Id: 'a1',
-      Name: '/web',
-      Created: '2026-11-03T10:00:00Z',
-      Config: {Image: 'alpine:latest'},
-      State: {Status: state},
-    },
-  ]);
-}
-
-function exits(status: number, stdout = ''): EngineRunOutcome {
-  return {kind: 'ran', status, stdout, stderr: ''};
-}
 
 /** The step over an engine whose container is in `state` (none: unknown), a set-up that gives `setUp`, and an Alpine answer. */
 function sceneOf(options: {
@@ -54,7 +35,7 @@ function sceneOf(options: {
         return Promise.resolve(
           options.state === undefined
             ? exits(1)
-            : exits(0, inspectedJson(options.state)),
+            : exits(0, inspectedJson('web', 'a1', options.state)),
         );
       }
       if (command.includes('grep')) {

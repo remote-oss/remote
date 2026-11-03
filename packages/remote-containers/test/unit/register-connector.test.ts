@@ -102,6 +102,8 @@ async function registered(
     heldConnection: () => undefined,
     announceShutdown: () => undefined,
     leaveShutdown: () => Promise.resolve(),
+    attachedContainer: () => undefined,
+    startAttachedContainer: () => Promise.resolve(false),
     failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,
     attemptIdentity: () => options.attemptIdentity,

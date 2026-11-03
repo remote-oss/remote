@@ -259,3 +259,11 @@ export function attachedNotRunning(
 export function attachFailed(): Failed {
   return failure('attachFailed', {}, {id: 'S033'});
 }
+
+/** The profile did not accept the attach warning; the window goes back to a local one, and nothing is shown. */
+export function attachWarningRefused(): Failed {
+  return {
+    ...failure('attachWarningRefused', {silent: true}),
+    userAlreadyNotified: true,
+  };
+}

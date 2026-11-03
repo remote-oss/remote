@@ -28,7 +28,7 @@ export interface AttachedStepPorts {
   bridge: CliBridge;
   record: IdRecord;
   /** The attach configuration file that applies to the container; none when there is none. */
-  configFileOf(container: ListedContainer): Promise<string | undefined>;
+  configFileOf: (container: ListedContainer) => Promise<string | undefined>;
   /** The CLI target without the container and the file, which the step adds. */
   cliTarget: Omit<AttachedCliTarget, 'containerId' | 'configFile'>;
   engineCoordinates: PinnedEngine;

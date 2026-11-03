@@ -56,6 +56,13 @@ const GUARD_MILLISECONDS = 30_000;
  */
 const TAIL_IDLE_MILLISECONDS = 50;
 
+/** What reads a CLI run's result line, its exit status and the last error line it logged. */
+type ResultReader<Result> = (
+  result: string | undefined,
+  status: number | null,
+  lastError: string | undefined,
+) => Result;
+
 /** What the components call. */
 export interface CliBridge {
   up(
@@ -182,23 +189,12 @@ export function cliBridgeOf(
     cliArguments: string[],
     environment: Readonly<Record<string, string>> | undefined,
     secrets: readonly Secret[],
-    read: (
-      result: string | undefined,
-      status: number | null,
-      lastError: string | undefined,
-    ) => Result,
+    read: ResultReader<Result>,
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
   ): Promise<Result | CliFailure> {
-    const own = new AbortController();
-    function forward(): void {
-      own.abort();
-    }
-    if (cancellation.aborted) {
-      forward();
-    }
-    cancellation.addEventListener('abort', forward, {once: true});
+    const {own, release} = linkedAbort(cancellation);
     let lastError: string | undefined;
     let refusal: DaemonRefusal | undefined;
     const rawHold = rawHoldOf();
@@ -258,7 +254,7 @@ export function cliBridgeOf(
     } finally {
       clearTimeout(guard);
       clearTimeout(idle);
-      cancellation.removeEventListener('abort', forward);
+      release();
     }
   }
 
@@ -266,11 +262,7 @@ export function cliBridgeOf(
   async function drive<Result extends {kind: string}>(
     target: CliTarget,
     argumentsOf: (prepared: CliTarget) => string[],
-    read: (
-      result: string | undefined,
-      status: number | null,
-      lastError: string | undefined,
-    ) => Result,
+    read: ResultReader<Result>,
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,

@@ -21,9 +21,12 @@ import {
   type DevContainerFolder,
   decodedFolderOf,
 } from '../authority/payload.ts';
+import {attachedSuffixOf} from '../attach/label.ts';
+import {attachedTargetOf} from '../attach/payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
 import type {Forwarder} from '../ports/forwarder.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
+import {attachRecoveryPresenterOf} from '../surfaces/attach-recovery.ts';
 import {
   type RecoveryPorts,
   recoveryPresenterOf,
@@ -231,6 +234,105 @@ export async function registerContainerResolver(
       disposed = true;
       label?.dispose();
       logCommand.dispose();
+      if (registration.kind === 'registered') {
+        registration.resolver.dispose();
+      }
+    },
+  };
+}
+
+/** What the attached family's registration needs beyond the container family's. */
+export interface AttachedRegistrationPorts {
+  /** Reopens the picker of running containers in this window. */
+  chooseContainer(): PromiseLike<unknown>;
+}
+
+/**
+ * Registers the resolver of the `attached-container` authority: the same connector, the attach family's presenter, and
+ * the window's label, which a failure that leaves the window disconnected sets from the container it found.
+ */
+export async function registerAttachedResolver(
+  host: ConnectorRegistrationHost,
+  connector: ContainerConnector,
+  served: ConnectorServed,
+  attached: AttachedRegistrationPorts,
+): Promise<{registration: Registration['kind']; dispose(): void}> {
+  const {translate} = host;
+  let handle:
+    Extract<Registration, {kind: 'registered'}>['resolver'] | undefined;
+  let label: {dispose(): void} | undefined;
+  /** The label of the disconnected window: the container the attempt found, with the engine the payload pins. */
+  function registerDisconnectedLabel(): void {
+    const decoded = handle?.currentConnection()?.decodedTarget;
+    const target =
+      decoded !== undefined && 'payload' in decoded.target
+        ? attachedTargetOf(decoded.target.payload)
+        : undefined;
+    if (
+      decoded === undefined ||
+      target === undefined ||
+      'malformed' in target
+    ) {
+      return;
+    }
+    const found = connector.attachedContainer();
+    label?.dispose();
+    label = registerAuthorityLabel(
+      host.labels,
+      decoded,
+      attachedSuffixOf(
+        found === undefined
+          ? undefined
+          : {image: found.image, name: found.name},
+        target,
+        translate,
+      ),
+    );
+  }
+  const presenter = attachRecoveryPresenterOf(
+    {
+      showError: (message, detail, buttons) =>
+        host.presenter.showError(message, detail, buttons),
+      pick: (placeholder, labels) => host.presenter.pick(placeholder, labels),
+      startContainer: () => connector.startAttachedContainer(),
+      chooseContainer: () => attached.chooseContainer(),
+      closeRemote: () => host.presenter.closeRemote(),
+      reloadWindow: () => host.presenter.reloadWindow(),
+      openRecent: () => host.presenter.openRecent(),
+      openExternal: address => host.presenter.openExternal(address),
+      later: task => {
+        host.presenter.later(task);
+      },
+      disconnected: registerDisconnectedLabel,
+      logger: served.logger,
+    },
+    translate,
+  );
+  const registration = await registerResolver(
+    host.resolverEditor,
+    {
+      family: 'attached-container',
+      connector,
+      presenter,
+      cancellable: false,
+      determinateStages: true,
+      allowsTrust: true,
+      titleOf: phase => phaseTitleOf(phase, translate),
+      startTitle: () => startTitleOf(translate),
+      progressDelayMilliseconds: PROGRESS_DELAY_MILLISECONDS,
+    },
+    {
+      guard: () => Promise.resolve('serving'),
+      resolversGranted: () => Promise.resolve(served.resolversGranted),
+    },
+  );
+  if (registration.kind === 'registered') {
+    handle = registration.resolver;
+  }
+  return {
+    registration: registration.kind,
+    dispose: () => {
+      label?.dispose();
       if (registration.kind === 'registered') {
         registration.resolver.dispose();
       }

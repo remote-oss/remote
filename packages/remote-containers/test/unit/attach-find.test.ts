@@ -10,27 +10,10 @@ import type {
   EngineHost,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
+import {exits, inspectedJson} from './attach.fixture.ts';
 
 const NEVER = new AbortController().signal;
 const PAYLOAD = '7b7d';
-
-/** `docker inspect`'s JSON for a container. */
-function inspectedJson(name: string, containerId: string, state = 'running') {
-  return JSON.stringify([
-    {
-      // eslint-disable-next-line id-length -- the engine's own member is named Id
-      Id: containerId,
-      Name: `/${name}`,
-      Created: '2026-11-03T10:00:00Z',
-      Config: {Image: 'alpine:latest'},
-      State: {Status: state},
-    },
-  ]);
-}
-
-function exits(status: number, stdout = ''): EngineRunOutcome {
-  return {kind: 'ran', status, stdout, stderr: ''};
-}
 
 /** An engine that answers each command by the first of `answers` whose key its arguments start with. */
 function engineOf(answers: Record<string, EngineRunOutcome>): {

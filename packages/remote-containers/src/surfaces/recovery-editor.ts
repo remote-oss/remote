@@ -3,7 +3,8 @@
  * behind the ports the presenter takes. The editor's module is handed in, so nothing here imports it.
  */
 
-import type {ErrorButton, RecoveryPorts} from './recovery-presenter.ts';
+import type {ErrorButton} from './choose.ts';
+import type {RecoveryPorts} from './recovery-presenter.ts';
 
 /** The parts of the editor's API the adapters use; the `vscode` namespace has them. */
 export interface RecoveryEditor<Address> {

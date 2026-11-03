@@ -9,6 +9,7 @@ import type {Logger} from 'lib-log';
 import type {DevContainerFolder, SerializedUri} from '../authority/payload.ts';
 import type {FailedContainer} from '../connect/failures.ts';
 import type {Translate} from './engine-dialogs.ts';
+import {chosenButton, type ErrorButton, pickedItem} from './choose.ts';
 import {failureDialogOf, quickPickOf} from './failure-dialog.ts';
 import {reasonText} from './failure-strings.ts';
 
@@ -35,12 +36,6 @@ const SERVER_SOURCE_BUTTONS = {
 
 /** The setting whose address a missing server source asks the user to set. */
 const DOWNLOAD_SETTING = 'remote.serverDownloadBaseUrl';
-
-/** One button of the modal error: its label, and whether Escape chooses it. */
-export interface ErrorButton {
-  title: string;
-  isCloseAffordance?: boolean;
-}
 
 /** What the presenter shows and opens. */
 export interface RecoveryPorts {
@@ -142,11 +137,7 @@ export function recoveryPresenterOf(
       translate,
       volumeWindow(),
     );
-    const chosen = await ports.pick(
-      pick.placeholder,
-      pick.items.map(item => item.label),
-    );
-    const item = pick.items.find(each => each.label === chosen);
+    const item = await pickedItem(ports, pick);
     if (item?.action === 'reload') {
       await ports.reloadWindow();
     } else if (item?.action === 'rebuild') {
@@ -191,16 +182,13 @@ export function recoveryPresenterOf(
         );
       }
       const dialog = failureDialogOf(failed, folder, translate, volumeWindow());
-      const chosen = await ports.showError(
+      // Escape chooses the close affordance, More Actions..., which the editor gives back as the choice.
+      const button = await chosenButton(
+        ports,
         dialog.message,
         dialog.detail,
-        dialog.buttons.map(button => ({
-          title: button.label,
-          ...(button.action === 'moreActions' ? {isCloseAffordance: true} : {}),
-        })),
+        dialog.buttons,
       );
-      // Escape chooses the close affordance, More Actions..., which the editor gives back as the choice.
-      const button = dialog.buttons.find(each => each.label === chosen);
       if (button?.action === 'retry') {
         await keepPausedRetry();
         return 'reload';
