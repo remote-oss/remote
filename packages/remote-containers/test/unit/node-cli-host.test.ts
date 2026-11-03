@@ -467,6 +467,21 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
       .BUILDKIT_PROGRESS;
   }
 
+  it('F-0413 BR-4: a run’s own environment is added to the editor’s for its process, and wins over it', async () => {
+    const fake = fakeSystem();
+    const running = nodeCliHost(
+      PATHS,
+      {COMPOSE_PROJECT_NAME: 'editor', KEPT: 'yes'},
+      fake.ports,
+    ).run([], () => undefined, new AbortController().signal, undefined, {
+      COMPOSE_PROJECT_NAME: 'proj',
+    });
+    fake.exit(0);
+    await running;
+    const {env} = fake.spawns[0]?.options as {env: Record<string, string>};
+    deepStrictEqual([env.COMPOSE_PROJECT_NAME, env.KEPT], ['proj', 'yes']);
+  });
+
   it('F-0412 AC-11: the spawn asks BuildKit for plain progress, so the log holds one line per step', async () => {
     deepStrictEqual(await spawnedProgress({}), 'plain');
   });

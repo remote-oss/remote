@@ -93,6 +93,7 @@ import {
 } from './identifiers.generated.ts';
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
+import {composeResolverOf} from './compose/resolver.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -1232,6 +1233,14 @@ export async function activate(
           logger,
           presenter,
           clock: Date.now,
+          userDataFolder: path.join(context.globalStorageUri.fsPath, 'data'),
+          compose: composeResolverOf({
+            runCompose: (argv, options) =>
+              engine.run(['compose', ...argv], {kind: 'none'}, options),
+            readText: file => readFile(file, 'utf8'),
+            environment: process.env,
+            logger: logger.child('compose'),
+          }),
         }),
       lifecyclePresenter: lifecyclePresenterOf(
         terminalPortOf(),

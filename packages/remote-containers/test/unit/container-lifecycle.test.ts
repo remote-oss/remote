@@ -3,6 +3,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
+import type {ComposeResolution} from '../../src/compose/resolver.ts';
 import type {StdinOf} from '../../src/cli/cli-host.ts';
 import type {CliTarget, UpOptions} from '../../src/cli/cli-arguments.ts';
 import type {
@@ -1869,6 +1870,148 @@ describe('containerLifecycleOf', () => {
       [
         {rows: 30, columns: 100},
         {rows: 30, columns: 100},
+      ],
+    );
+  });
+
+  /** One preparation of `lifecycle` with the standard request, ending at `signal`. */
+  function prepareOf(
+    lifecycle: ReturnType<typeof containerLifecycleOf>,
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<ContainerOutcome> {
+    return lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      signal,
+    );
+  }
+
+  /** A lifecycle whose compose step gives `resolution`, over a fresh bridge; gives the bridge, the engine's commands and the log. */
+  function composeLifecycle(
+    resolution: ComposeResolution,
+    bridge: FakeBridge = fakeBridge(),
+    cancelling?: AbortController,
+  ): {
+    bridge: FakeBridge;
+    engine: ReturnType<typeof scriptedEngine>;
+    lines: () => string[];
+    lifecycle: ReturnType<typeof containerLifecycleOf>;
+  } {
+    const sink = new MemorySink();
+    const engine = scriptedEngine(EMPTY_LISTING);
+    return {
+      bridge,
+      engine,
+      lines: () => sink.lines.map(line => line.message),
+      lifecycle: containerLifecycleOf({
+        engine,
+        cli: bridge,
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        presenter: recordingPresenter().presenter,
+        clock: () => 0,
+        userDataFolder: '/storage/data',
+        compose: () => {
+          cancelling?.abort();
+          return Promise.resolve(resolution);
+        },
+      }),
+    };
+  }
+
+  /** The Compose resolution of a project named `projectName`. */
+  function composeReady(projectName: string): ComposeResolution {
+    return {
+      kind: 'ready',
+      projectName,
+      service: 'app',
+      scope: ['app', 'db'],
+      model: {
+        resolvedName: undefined,
+        declaredName: undefined,
+        services: new Map(),
+      },
+    };
+  }
+
+  it('F-0413 AC-8: the CLI runs with the project name in its environment and the data folder, for up and for the background commands', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle} = composeLifecycle(composeReady('proj'), bridge);
+    const outcome = await prepareOf(lifecycle);
+    await settle();
+    deepStrictEqual(
+      [
+        outcome.kind,
+        bridge.ups[0]?.target.environment,
+        bridge.ups[0]?.target.userDataFolder,
+        bridge.runs[0]?.target.environment,
+      ],
+      [
+        'ready',
+        {COMPOSE_PROJECT_NAME: 'proj'},
+        '/storage/data',
+        {COMPOSE_PROJECT_NAME: 'proj'},
+      ],
+    );
+  });
+
+  it('F-0413 AC-51: a configuration that is no Compose one gets the data folder and no environment', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle} = composeLifecycle({kind: 'none'}, bridge);
+    await prepareOf(lifecycle);
+    deepStrictEqual(
+      [bridge.ups[0]?.target.environment, bridge.ups[0]?.target.userDataFolder],
+      [undefined, '/storage/data'],
+    );
+  });
+
+  it('F-0413 AC-57: a Compose configuration that fails to resolve fails the preparation before the engine or the CLI is touched', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle, engine} = composeLifecycle(
+      {kind: 'failed', detail: 'the project name "X" is not valid'},
+      bridge,
+    );
+    const outcome = await prepareOf(lifecycle);
+    deepStrictEqual(
+      [outcome, engine.commands, bridge.ups.length],
+      [
+        {kind: 'discoveryFailed', detail: 'the project name "X" is not valid'},
+        [],
+        0,
+      ],
+    );
+  });
+
+  it('F-0413 AC-57: a connect cancelled while the Compose configuration is read ends cancelled, without the engine', async () => {
+    const cancelling = new AbortController();
+    const {lifecycle, engine} = composeLifecycle(
+      composeReady('proj'),
+      fakeBridge(),
+      cancelling,
+    );
+    const outcome = await prepareOf(lifecycle, cancelling.signal);
+    deepStrictEqual([outcome, engine.commands], [{kind: 'cancelled'}, []]);
+  });
+
+  it('F-0413 BR-4: a project name the CLI reports that differs from the computed one is one warn line, and the same name none', async () => {
+    const differing = fakeBridge();
+    differing.upResult = {...UP, composeProjectName: 'other'};
+    const same = fakeBridge();
+    same.upResult = {...UP, composeProjectName: 'proj'};
+    const first = composeLifecycle(composeReady('proj'), differing);
+    const second = composeLifecycle(composeReady('proj'), same);
+    for (const each of [first, second]) {
+      await prepareOf(each.lifecycle);
+    }
+    deepStrictEqual(
+      [first, second].map(each =>
+        each.lines().filter(line => line.includes('Compose project')),
+      ),
+      [
+        [
+          'the dev container CLI used the Compose project other where proj was computed',
+        ],
+        [],
       ],
     );
   });
