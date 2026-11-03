@@ -211,4 +211,22 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
     );
     await closeWindow(left);
   });
+
+  it('F-0701 AC-14 (c151-reuse-part): the same URL again reuses its volume and its dev container: nothing is cloned or built again', async () => {
+    const volumesBefore = await clonedVolumes(REPOSITORY);
+    const volume = String(volumesBefore[0]?.split(' ')[0]);
+    const containersBefore = await containersWith(
+      `vsch.local.repository.volume=${volume}`,
+    );
+    await startClone(REPOSITORY);
+    await connectedToContainer(FOLDER, 600_000);
+    deepStrictEqual(
+      [
+        await clonedVolumes(REPOSITORY),
+        await containersWith(`vsch.local.repository.volume=${volume}`),
+      ],
+      [volumesBefore, containersBefore],
+    );
+    await closeWindow(FOLDER);
+  });
 });
