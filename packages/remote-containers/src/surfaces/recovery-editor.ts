@@ -61,6 +61,8 @@ export function recoveryPortsOf<Address>(
       ),
     reloadWindow: () =>
       editor.commands.executeCommand('workbench.action.reloadWindow'),
+    closeRemote: () =>
+      editor.commands.executeCommand('workbench.action.remote.close'),
     openRecent: () =>
       editor.commands.executeCommand('workbench.action.openRecent'),
     openExternal: address => editor.env.openExternal(editor.Uri.parse(address)),

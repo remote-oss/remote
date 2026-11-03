@@ -55,7 +55,7 @@ function linesOf(scene: Scene): string[] {
 }
 
 describe('the connector of a clone in a volume (card containers-151)', () => {
-  it('F-0701 5.0, ADR-0009: a typed source clones in the bootstrap, reads on the host CLI, connects trusted, and removes the bootstrap', async () => {
+  it('F-0701 5.0, ADR-0009: a typed source clones in the bootstrap, reads on the host CLI, connects trusted, registers its volume with the shutdown helper, and removes the bootstrap', async () => {
     const scene = volumeScene();
     const connected = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
     await new Promise(setImmediate);
@@ -91,7 +91,10 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         ]),
         background: stage?.targetOf(upTarget).workspaceFolder,
         removed: linesOf(scene).includes('rm --force -- boot1'),
-        shutdown: scene.shutdownSent,
+        shutdown: JSON.stringify(scene.shutdownSent).replace(
+          /r-[0-9a-f]{64}/g,
+          'VOLUME',
+        ),
       },
       {
         trusted: true,
@@ -122,7 +125,20 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         ],
         background: '/tmp/stand-in',
         removed: true,
-        shutdown: [],
+        shutdown: JSON.stringify([
+          {
+            type: 'register',
+            connectionId: 'connection-1',
+            identity: {volumeName: 'VOLUME', folder: 'r'},
+            engine: {dockerPath: 'docker', environment: {}},
+          },
+          {
+            type: 'container',
+            connectionId: 'connection-1',
+            containerId: 'c1c1c1c1c1c1c1c1',
+            action: 'stop',
+          },
+        ]),
       },
     );
   });

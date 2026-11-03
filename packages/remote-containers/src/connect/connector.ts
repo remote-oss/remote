@@ -60,7 +60,10 @@ import {
   executableOf,
 } from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
-import type {EngineCoordinates} from '../shutdown/protocol.ts';
+import type {
+  ContainerIdentity,
+  EngineCoordinates,
+} from '../shutdown/protocol.ts';
 import {
   metadataArguments,
   recordedMetadataOf,
@@ -824,6 +827,17 @@ export function containerConnectorOf(
     folder: DevContainerFolder,
     tools: Pick<Tools, 'configFile' | 'dockerPath'>,
   ): string {
+    return registerConnection(
+      {hostPath: folder.hostPath, configFile: tools.configFile},
+      engineCoordinatesOf(folder, tools),
+    );
+  }
+
+  /** Tells the shutdown helper about this window's connection to the container of `identity`, once. */
+  function registerConnection(
+    identity: ContainerIdentity,
+    engine: EngineCoordinates,
+  ): string {
     if (shutdownConnection !== undefined) {
       return shutdownConnection;
     }
@@ -832,8 +846,8 @@ export function containerConnectorOf(
     void dependencies.shutdown.send({
       type: 'register',
       connectionId,
-      identity: {hostPath: folder.hostPath, configFile: tools.configFile},
-      engine: engineCoordinatesOf(folder, tools),
+      identity,
+      engine,
     });
     return connectionId;
   }
@@ -1589,6 +1603,10 @@ export function containerConnectorOf(
         : failureOf(resolution.outcome, []);
     }
     const pass = hostPassOf(resolution.request, resolution.configText);
+    const connectionId = registerConnection(
+      {volumeName: resolution.volumeName, folder: target.folder},
+      {dockerPath: dockerFile, environment},
+    );
     const connected = await connectPrepared(
       {
         payload,
@@ -1599,7 +1617,7 @@ export function containerConnectorOf(
         settings,
         pinned: target,
         shutdownAction: undefined,
-        connectionId: undefined,
+        connectionId,
         hostPath: '',
         configFile: resolution.request.configFile,
         trusted: !target.inspectVolume,

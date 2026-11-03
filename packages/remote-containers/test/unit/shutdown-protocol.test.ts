@@ -94,6 +94,7 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
         readShutdownRequest({type: 'leave', connectionId: ''}),
         readShutdownRequest({type: 'stop', connectionId: 'c1'}),
         readShutdownRequest({...register, identity: {hostPath: '/a'}}),
+        readShutdownRequest({...register, identity: {volumeName: 'v'}}),
         readShutdownRequest({...register, identity: 'x'}),
         readShutdownRequest({...register, engine: {environment: {}}}),
         readShutdownRequest({...register, engine: 'x'}),
@@ -123,8 +124,9 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
         'the message has no connectionId',
         'the message has no connectionId',
         'the message type is unknown',
-        'register needs the identity with a hostPath and a configFile',
-        'register needs the identity with a hostPath and a configFile',
+        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
+        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
+        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
         'register needs the engine with a dockerPath and an environment of text',
         'register needs the engine with a dockerPath and an environment of text',
         'register needs the engine with a dockerPath and an environment of text',
@@ -132,6 +134,26 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
         'container needs a containerId and an action of stop or none',
         'container needs a containerId and an action of stop or none',
       ],
+    );
+  });
+
+  it('brief-volumes §7 (card containers-151): a register for a clone in a volume names the volume and the folder', () => {
+    deepStrictEqual(
+      readShutdownRequest({
+        type: 'register',
+        connectionId: 'c1',
+        identity: {volumeName: 'r-1', folder: 'r'},
+        engine: {dockerPath: 'docker'},
+      }),
+      {
+        kind: 'request',
+        request: {
+          type: 'register',
+          connectionId: 'c1',
+          identity: {volumeName: 'r-1', folder: 'r'},
+          engine: {dockerPath: 'docker', environment: {}},
+        },
+      },
     );
   });
 });
