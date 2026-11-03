@@ -17,6 +17,11 @@ import type {
 import type {EngineHost} from '../engine/engine-host.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
 import {
+  mountTargetOf,
+  reservedMount,
+  serviceVolumeTargetOf,
+} from './reserved-mounts.ts';
+import {
   composeDiscoveryArguments,
   decide,
   decideCompose,
@@ -32,6 +37,8 @@ import {
 /** The name of the shared cache volume. */
 const VOLUME_NAME = 'vscode';
 const VOLUME_MOUNT = `type=volume,source=${VOLUME_NAME},target=/vscode`;
+/** The mount in a Compose project, where it refers to the shared volume instead of one of the project. */
+const EXTERNAL_VOLUME_MOUNT = `${VOLUME_MOUNT},external=true`;
 const IDENTIFIER_LENGTH = 12;
 
 /** The stages of a connection that the container takes part in. */
@@ -54,6 +61,8 @@ export interface ContainerRequest {
   mountGitWorktreeCommonDir: boolean;
   /** The Feature settings: the default Features and the lockfile. */
   features: FeatureSettings;
+  /** The `mounts` of the configuration, as the CLI read them; none when it has none. */
+  mounts: readonly unknown[];
   /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
   pausedRetry: (containerId: string) => Promise<boolean>;
 }
@@ -69,6 +78,7 @@ export type ContainerOutcome =
       created: boolean;
     }
   | {kind: 'unusable'; containerId: string; status: string}
+  | {kind: 'reservedMount'; property: string; target: string}
   | (({kind: 'discoveryFailed'; detail: string} | CliFailure) & {
       /** The container the engine holds after the failure, for the failure's pick; absent when it holds none. */
       foundContainerId?: string;
@@ -518,6 +528,22 @@ export function containerLifecycleOf(dependencies: {
     if (composeResolution.kind === 'failed') {
       return {kind: 'discoveryFailed', detail: composeResolution.detail};
     }
+    const reserved =
+      request.cacheVolume && composeResolution.kind === 'ready'
+        ? reservedMount([
+            {property: 'mounts', targets: request.mounts.map(mountTargetOf)},
+            {
+              property: `services.${composeResolution.service}.volumes`,
+              targets: (
+                composeResolution.model.services.get(composeResolution.service)
+                  ?.volumes ?? []
+              ).map(serviceVolumeTargetOf),
+            },
+          ])
+        : undefined;
+    if (reserved !== undefined) {
+      return {kind: 'reservedMount', ...reserved};
+    }
     const discovery = await discoverWithRetry(
       engine,
       queriesOf(request, composeResolution),
@@ -587,7 +613,13 @@ export function containerLifecycleOf(dependencies: {
       mountWorkspaceGitRoot: true,
       mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
       features: request.features,
-      mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
+      mounts: !request.cacheVolume
+        ? []
+        : [
+            composeResolution.kind === 'ready'
+              ? EXTERNAL_VOLUME_MOUNT
+              : VOLUME_MOUNT,
+          ],
       logLevel: request.logLevel,
       ...(userDataFolder === undefined ? {} : {userDataFolder}),
       ...(composeResolution.kind === 'ready'
