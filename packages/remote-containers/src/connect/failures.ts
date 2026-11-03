@@ -219,6 +219,14 @@ export function cancelled(): Failed {
   return failure('cancelled', {silent: true});
 }
 
+/** The profile refused the clone's trust confirmation; the window goes back to a local one, and nothing is shown. */
+export function cloneConsentRefused(): Failed {
+  return {
+    ...failure('cloneConsentRefused', {silent: true}),
+    userAlreadyNotified: true,
+  };
+}
+
 /** The container is stopped, missing or restarted; the editor is told nothing. */
 export function containerGone(): Failed {
   return failure('containerGone', {silent: true});

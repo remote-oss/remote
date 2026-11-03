@@ -111,7 +111,9 @@ import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
 import {
   CLONE_TRUST_KEY,
   CLONE_TRUST_PAGE,
+  cloneConsented,
   cloneInUniqueVolume,
+  type CloneTrustPorts,
 } from './volumes/clone-command.ts';
 import {
   clearTypedSource,
@@ -631,6 +633,32 @@ export async function activate(
       ...(volume === undefined ? [] : [volume.rewrite]),
     );
   }
+  /** The clone's trust confirmation over the editor: the profile's record, its modal, and our page about it. */
+  function cloneTrustPorts(): CloneTrustPorts {
+    return {
+      accepted: () => context.globalState.get(CLONE_TRUST_KEY) === true,
+      confirm: async () => {
+        const learnMore = cloneText('learnMore', translate);
+        const gotIt = cloneText('gotIt', translate);
+        const answer = await vscode.window.showWarningMessage(
+          cloneText('S075', translate),
+          {modal: true, detail: cloneText('S252', translate)},
+          learnMore,
+          gotIt,
+        );
+        if (answer === gotIt) {
+          return 'gotIt';
+        }
+        return answer === learnMore ? 'learnMore' : 'cancel';
+      },
+      remember: async () => {
+        await context.globalState.update(CLONE_TRUST_KEY, true);
+      },
+      learnMore: () => {
+        void vscode.env.openExternal(vscode.Uri.parse(CLONE_TRUST_PAGE));
+      },
+    };
+  }
   /** Offers to reopen the window's folder in its container, over what the window holds now. */
   function offerReopenFor(
     logger: Logger,
@@ -774,32 +802,7 @@ export async function activate(
             engine = await windowPinnedEngine();
             await cloneInUniqueVolume(
               {
-                trust: {
-                  accepted: () =>
-                    context.globalState.get(CLONE_TRUST_KEY) === true,
-                  confirm: async () => {
-                    const learnMore = cloneText('learnMore', translate);
-                    const gotIt = cloneText('gotIt', translate);
-                    const answer = await vscode.window.showWarningMessage(
-                      cloneText('S075', translate),
-                      {modal: true, detail: cloneText('S252', translate)},
-                      learnMore,
-                      gotIt,
-                    );
-                    if (answer === gotIt) {
-                      return 'gotIt';
-                    }
-                    return answer === learnMore ? 'learnMore' : 'cancel';
-                  },
-                  remember: async () => {
-                    await context.globalState.update(CLONE_TRUST_KEY, true);
-                  },
-                  learnMore: () => {
-                    void vscode.env.openExternal(
-                      vscode.Uri.parse(CLONE_TRUST_PAGE),
-                    );
-                  },
-                },
+                trust: cloneTrustPorts(),
                 engineReady: async () =>
                   (await firstCheck(
                     served.preflight,
@@ -1699,6 +1702,18 @@ export async function activate(
             folder,
             dispose: () => rm(folder, {recursive: true, force: true}),
           };
+        },
+        consent: async () => {
+          const given = await cloneConsented(cloneTrustPorts());
+          if (!given) {
+            // The resolve ends silently first; the window then goes back to a local one.
+            setTimeout(() => {
+              void vscode.commands.executeCommand(
+                'workbench.action.remote.close',
+              );
+            }, 0);
+          }
+          return given;
         },
         showShallow: repository => {
           void vscode.window.showWarningMessage(

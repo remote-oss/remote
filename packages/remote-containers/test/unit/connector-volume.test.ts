@@ -99,6 +99,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
       {
         trusted: true,
         calls: [
+          'consent',
           'standIn',
           'typed 7b227265',
           'buildContext',
@@ -159,6 +160,37 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     deepStrictEqual(
       results.map(result => 'trusted' in result && result.trusted),
       [true, false],
+    );
+  });
+
+  it('F-0106 BR-13 (reading-1973-resolve-consent): a refused confirmation ends the resolve silently before any engine call; an Inspect Volume window never asks', async () => {
+    const refused = volumeScene();
+    refused.consentGiven = false;
+    const failed = await refused.connector.connect(inputOf(VOLUME_PAYLOAD));
+    const inspected = volumeScene();
+    inspected.consentGiven = false;
+    await inspected.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: 'https://github.com/o/r',
+          volumeName: '__UNIQUE__',
+          folder: 'r',
+          cloneInfo: {urlToClone: 'https://github.com/o/r'},
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      [
+        'kind' in failed && failed.kind,
+        'silent' in failed && failed.silent,
+        'userAlreadyNotified' in failed && failed.userAlreadyNotified,
+        refused.engineCalls.length,
+        refused.volumeCalls,
+        inspected.volumeCalls.includes('consent'),
+      ],
+      ['cloneConsentRefused', true, true, 0, ['consent'], false],
     );
   });
 
@@ -227,7 +259,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         unnamed.volumeCalls,
         unchecked.volumeCalls,
       ],
-      [['engineCheckFailed', 'engineCheckFailed'], [], []],
+      [['engineCheckFailed', 'engineCheckFailed'], ['consent'], ['consent']],
     );
   });
 

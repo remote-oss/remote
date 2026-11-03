@@ -4,6 +4,8 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
+  hexOf,
+  inWindow,
   openEmptyWindows,
   startInWindow,
   waitFor,
@@ -33,6 +35,15 @@ const NO_BRANCH = `${REPOSITORY}/tree/no-such-branch-c151`;
 /** The text of the clone warning, which shows once in the profile. */
 const CLONE_WARNING =
   'Cloning a repository in a Dev Container may execute arbitrary code.';
+
+/** The URI of a window of the repository's clone, as a link or a recent entry of another profile opens it. */
+const CLONE_URI = `vscode-remote://dev-container+${hexOf({
+  repositoryPath: REPOSITORY,
+  volumeName: '__UNIQUE__',
+  folder: FOLDER,
+  cloneInfo: {urlToClone: REPOSITORY},
+  inspectVolume: false,
+})}/workspaces/${FOLDER}`;
 
 /** The lines `docker` prints for `argv`, without empty ones. */
 async function dockerLines(...argv: string[]): Promise<string[]> {
@@ -133,6 +144,56 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
   after(async () => {
     await removeClone(REPOSITORY);
     await removeClone(NO_BRANCH);
+  });
+
+  it('F-0106 AC-17 (c171-crafted-part): a clone window opened from a link, in a profile that never gave the warning, asks it before any Docker object; Cancel leaves an empty local window with nothing cloned', async () => {
+    const known = openEmptyWindows();
+    await inWindow('local', 'acceptance.agent.openWindow', CLONE_URI);
+    const dialog = await waitForDialog(FOLDER, 120_000);
+    const volumesWhileAsked = await clonedVolumes(REPOSITORY);
+    await answerDialog(FOLDER, 'Cancel');
+    let left = '';
+    await waitFor(
+      'an empty local window',
+      () => {
+        left = openEmptyWindows().find(each => !known.includes(each)) ?? '';
+        return left !== '';
+      },
+      60_000,
+    );
+    deepStrictEqual(
+      {
+        warning: dialog.message,
+        volumesWhileAsked,
+        volumes: await clonedVolumes(REPOSITORY),
+        bootstraps: (await bootstrapContainers()).length,
+        remoteName: (await windowState(left)).remoteName,
+      },
+      {
+        warning: CLONE_WARNING,
+        volumesWhileAsked: [],
+        volumes: [],
+        bootstraps: 0,
+        remoteName: null,
+      },
+    );
+    await closeWindow(left);
+  });
+
+  it('F-0106 AC-11 (c171-given-part): Got It on that warning clones the repository and connects the window', async () => {
+    await inWindow('local', 'acceptance.agent.openWindow', CLONE_URI);
+    await waitForDialog(FOLDER, 120_000);
+    await answerDialog(FOLDER, 'Got It');
+    await connectedToContainer(FOLDER, 900_000);
+    deepStrictEqual(
+      [
+        (await clonedVolumes(REPOSITORY)).length,
+        (await windowState(FOLDER)).remoteName,
+      ],
+      [1, 'dev-container'],
+    );
+    await closeWindow(FOLDER);
+    await removeClone(REPOSITORY);
   });
 
   it('F-0701 AC-6, AC-7 (c151-clone-url-part): a typed URL clones into a new unique volume through a bootstrap, connects the reloaded window, and the bootstrap is gone within 20 s', async () => {

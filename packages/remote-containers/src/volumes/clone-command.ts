@@ -17,17 +17,20 @@ import {
 /** The user's answer to the trust confirmation. */
 export type CloneTrustAnswer = 'gotIt' | 'cancel' | 'learnMore';
 
+/** The clone's trust confirmation: what the profile accepted, the dialog, its record, and our page about it. */
+export interface CloneTrustPorts {
+  /** Whether the confirmation was accepted in this profile already. */
+  accepted(): boolean;
+  /** Shows the confirmation; Escape is `cancel`. */
+  confirm(): Promise<CloneTrustAnswer>;
+  remember(): Promise<void>;
+  /** Opens our page about cloning what you trust. */
+  learnMore(): void;
+}
+
 /** What the command needs of the editor and the engine. */
 export interface CloneCommandPorts {
-  trust: {
-    /** Whether the confirmation was accepted in this profile already. */
-    accepted(): boolean;
-    /** Shows the confirmation; Escape is `cancel`. */
-    confirm(): Promise<CloneTrustAnswer>;
-    remember(): Promise<void>;
-    /** Opens our page about cloning what you trust. */
-    learnMore(): void;
-  };
+  trust: CloneTrustPorts;
   /** The engine check, which shows its own dialog when the engine isn't ready. */
   engineReady(): Promise<boolean>;
   /** The source the user gives: the text typed, or nothing when the pick was dismissed. */
@@ -85,18 +88,18 @@ function volumeWindowUriOf(target: DevContainerVolume): string {
 }
 
 /** Whether the confirmation lets the clone go on, asking it the first time in the profile. */
-async function trusted(ports: CloneCommandPorts): Promise<boolean> {
-  if (ports.trust.accepted()) {
+export async function cloneConsented(trust: CloneTrustPorts): Promise<boolean> {
+  if (trust.accepted()) {
     return true;
   }
-  const answer = await ports.trust.confirm();
+  const answer = await trust.confirm();
   if (answer === 'learnMore') {
-    ports.trust.learnMore();
+    trust.learnMore();
   }
   if (answer !== 'gotIt') {
     return false;
   }
-  await ports.trust.remember();
+  await trust.remember();
   return true;
 }
 
@@ -105,7 +108,7 @@ export async function cloneInUniqueVolume(
   ports: CloneCommandPorts,
   cancellation: AbortSignal,
 ): Promise<void> {
-  if (!(await trusted(ports)) || !(await ports.engineReady())) {
+  if (!(await cloneConsented(ports.trust)) || !(await ports.engineReady())) {
     return;
   }
   const typed = await ports.pickSource();
