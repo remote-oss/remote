@@ -21,6 +21,8 @@ export interface ListedContainer {
   finishedAt: number | undefined;
   /** `Config.Labels`; empty for none. */
   labels: Readonly<Record<string, string>>;
+  /** The bind mounts, as host folder and container folder, in the engine's order. */
+  binds: ReadonlyArray<{source: string; destination: string}>;
 }
 
 /** `docker ps -a -q --no-trunc`: every container's id. */
@@ -63,6 +65,18 @@ export function labelsOf(value: unknown): Record<string, string> {
   );
 }
 
+/** The bind mounts of `docker inspect`'s `Mounts`; those that lack a source or a destination are left out. */
+function bindsOf(value: unknown): Array<{source: string; destination: string}> {
+  return (Array.isArray(value) ? (value as unknown[]) : []).flatMap(each => {
+    const mount = recordOf(each);
+    return mount?.Type === 'bind' &&
+      typeof mount.Source === 'string' &&
+      typeof mount.Destination === 'string'
+      ? [{source: mount.Source, destination: mount.Destination}]
+      : [];
+  });
+}
+
 /** The container one element of the array describes, or none when the element lacks what the view needs. */
 function containerOf(element: unknown): ListedContainer | undefined {
   const inspected = recordOf(element);
@@ -87,6 +101,7 @@ function containerOf(element: unknown): ListedContainer | undefined {
     startedAt: timeOf(state.StartedAt),
     finishedAt: timeOf(state.FinishedAt),
     labels: labelsOf(config.Labels),
+    binds: bindsOf(inspected.Mounts),
   };
 }
 

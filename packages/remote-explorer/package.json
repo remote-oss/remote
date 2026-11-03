@@ -76,6 +76,19 @@
         "icon": "$(remove)"
       },
       {
+        "command": "remote-explorer.connectToWslUsingDistro",
+        "title": "%commands.connectToWslUsingDistro.title%"
+      },
+      {
+        "command": "remote-explorer.connectToWslUsingDistroInNewWindow",
+        "title": "%commands.connectToWslUsingDistroInNewWindow.title%"
+      },
+      {
+        "command": "remote-explorer.unregisterTunnel",
+        "title": "%commands.unregisterTunnel.title%",
+        "icon": "$(remove)"
+      },
+      {
         "command": "remote-explorer.configureSsh",
         "title": "%commands.configureSsh.title%",
         "icon": "$(gear)"
@@ -123,6 +136,18 @@
         },
         {
           "command": "remote-explorer.deleteFolderHistoryItem",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.connectToWslUsingDistro",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.connectToWslUsingDistroInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.unregisterTunnel",
           "when": "false"
         },
         {

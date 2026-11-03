@@ -325,6 +325,28 @@ describe('the registration of the container connector (card containers-08)', () 
     );
   });
 
+  it('F-0106 BR-13 (card containers-151): a connection the connector calls trusted reaches core trusted, and a folder’s does not', async () => {
+    const seen = await registered({
+      answers: [{...CONNECTED, trusted: true}, CONNECTED],
+    });
+    const results = [
+      await seen.recording
+        .registered()
+        ?.resolve(AUTHORITY, {resolveAttempt: 1}),
+      await seen.recording
+        .registered()
+        ?.resolve(AUTHORITY, {resolveAttempt: 2}),
+    ];
+    deepStrictEqual(
+      results.map(result =>
+        typeof result === 'object' && 'isTrusted' in result
+          ? result.isTrusted
+          : 'absent',
+      ),
+      [true, 'absent'],
+    );
+  });
+
   it('contracts §3.2: the resolver of dev-container is registered when the editor grants the proposal', async () => {
     const seen = await registered();
     deepStrictEqual(

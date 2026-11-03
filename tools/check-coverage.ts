@@ -57,6 +57,9 @@ const FILE_TAGS: readonly string[] = [...TAGS, 'open'];
 /** The tags whose line must say why, `open` saying which rows decide it. */
 const REASON_TAGS: readonly string[] = ['core', 'deferred', 'open'];
 
+/** The reason prefixes that name a host, the only deferral the no-deferrals rule allows. */
+const HOST_REASONS = ['host: windows', 'host: macOS'] as const;
+
 /** The set whose missing file makes the check unreadable; the others' missing files are skipped. */
 const READABLE_SET = 'slice1';
 
@@ -301,23 +304,24 @@ function linesOf(file: string, text: string, problems: string[]): Line[] {
   return lines;
 }
 
-/** Checks the tags of a set's lines against their reasons, the set's deferred reasons included. */
+/** Checks the tags of a set's lines against their reasons, a deferred one naming a host. */
 function reasonProblems(
   scope: CoverageScope,
   lines: readonly Line[],
   problems: string[],
 ): void {
-  const deferredReasons = scope.deferredReasons;
   for (const line of lines) {
     const needs = REASON_TAGS.includes(line.tagName);
-    const withinSet = deferredReasons?.includes(line.reason) ?? true;
     if (needs && line.reason === '') {
       problems.push(
         `${place(scope.file, line.number)}: ${line.id} needs a reason`,
       );
-    } else if (line.tagName === 'deferred' && !withinSet) {
+    } else if (
+      line.tagName === 'deferred' &&
+      !HOST_REASONS.some(prefix => line.reason.startsWith(prefix))
+    ) {
       problems.push(
-        `${place(scope.file, line.number)}: ${line.id} gives the reason "${line.reason}", which isn't one of the set's`,
+        `${place(scope.file, line.number)}: ${line.id} is deferred for "${line.reason}", but only a host (host: windows or host: macOS) defers a line`,
       );
     } else if (!needs && line.reason !== '') {
       problems.push(

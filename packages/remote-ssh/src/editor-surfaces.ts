@@ -178,10 +178,11 @@ export function editorSurfacesOf(
     applyTerminalEnvironment: context.applyTerminalEnvironment,
     tunnels: context.tunnels,
     defaultReadEvents: context.defaultReadEvents,
-    pickPlatform: async (alias, cancellation) => {
+    pickPlatform: async (alias, variant, cancellation) => {
       const picked = await pickRemotePlatform(
         adapters.platformPick,
         alias,
+        variant,
         cancellation,
       );
       return picked === 'cancelled' ? undefined : picked;

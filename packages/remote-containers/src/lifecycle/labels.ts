@@ -11,6 +11,8 @@ const SERVICE_LABEL = 'com.docker.compose.service';
 const LEGACY_FOLDER_LABEL = 'vsch.local.folder';
 const LEGACY_QUALITY_LABEL = 'vsch.quality';
 const LEGACY_REPOSITORY_LABEL = 'vsch.local.repository';
+const VOLUME_LABEL = 'vsch.local.repository.volume';
+const VOLUME_FOLDER_LABEL = 'vsch.local.repository.folder';
 
 /** What discovery knows of one container. */
 export interface ContainerFacts {
@@ -37,6 +39,13 @@ export function localFolderOf(
   labels: Readonly<Record<string, string>>,
 ): string | undefined {
   return labels[FOLDER_LABEL] ?? labels[LEGACY_FOLDER_LABEL];
+}
+
+/** Whether the container belongs to a Docker Compose project. */
+export function isComposeContainer(
+  labels: Readonly<Record<string, string>>,
+): boolean {
+  return labels[PROJECT_LABEL] !== undefined;
 }
 
 /** The configuration file a container was made from, when it carries the label that names one. */
@@ -189,6 +198,57 @@ export function decide(
   return decisionAbout(
     newestOf(tier),
     fromLegacy ? legacyIdLabels(folder) : idLabels(folder, configFile),
+  );
+}
+
+/** What names the dev container of a clone in a volume: the repository, the volume, the folder in it, the configuration. */
+export interface VolumeIdentity {
+  repositoryPath: string;
+  volumeName: string;
+  folder: string;
+  /** The configuration file's path in the dev container's volume. */
+  configFile: string;
+}
+
+/** The labels that find the dev container of a clone in a volume, in the order the CLI is given them. */
+export function volumeIdLabels(identity: VolumeIdentity): string[] {
+  return [
+    `${LEGACY_REPOSITORY_LABEL}=${identity.repositoryPath}`,
+    `${VOLUME_LABEL}=${identity.volumeName}`,
+    `${VOLUME_FOLDER_LABEL}=${identity.folder}`,
+    `${CONFIG_LABEL}=${identity.configFile}`,
+  ];
+}
+
+/** The arguments of the engine query that lists the ids of every container carrying all of `labels`. */
+export function labelsDiscoveryArguments(labels: readonly string[]): string[] {
+  return [
+    'ps',
+    '-a',
+    '-q',
+    '--no-trunc',
+    ...labels.flatMap(label => ['--filter', `label=${label}`]),
+  ];
+}
+
+/** The choice among the containers that carry every one of `labels`: the newest, used with the same labels. */
+export function decideByLabels(
+  labels: readonly string[],
+  containers: readonly ContainerFacts[],
+): Decision {
+  const pairs = labels.map((label): [string, string] => {
+    const equals = label.indexOf('=');
+    return [label.slice(0, equals), label.slice(equals + 1)];
+  });
+  return decisionAbout(
+    newestOf(
+      containers.filter(
+        container =>
+          container.status !== 'removing' &&
+          pairs.every(([key, value]) => container.labels[key] === value),
+      ),
+    ),
+    [...labels],
   );
 }
 

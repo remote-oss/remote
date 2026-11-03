@@ -54,6 +54,7 @@
   "Max wait time exhausted": "Max wait time exhausted",
   "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.": "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.",
   "Select the platform of the remote host \"{0}\"": "Select the platform of the remote host \"{0}\"",
+  "Error connecting, please select the platform of the remote host: \"{0}\"": "Error connecting, please select the platform of the remote host: \"{0}\"",
   "SSH host name cannot begin with {0}": "SSH host name cannot begin with {0}",
   "SSH host name cannot include the character {0}": "SSH host name cannot include the character {0}",
   "SSH user name cannot begin with {0}": "SSH user name cannot begin with {0}",
@@ -138,5 +139,6 @@
   "Status": "Status",
   "Message": "Message",
   "Mitigations": "Mitigations",
-  "Resources": "Resources"
+  "Resources": "Resources",
+  "TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.": "TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed."
 }

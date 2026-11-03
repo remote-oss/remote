@@ -12,10 +12,12 @@ import {
 } from '../../src/authority/payload.ts';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
+import type {BackgroundStage} from '../../src/lifecycle/container-lifecycle.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import {
   type ContainerConnector,
   type ContainerConnectorDependencies,
+  type VolumeConnectDependencies,
   containerConnectorOf,
   noEngineProgramOf,
 } from '../../src/connect/connector.ts';
@@ -156,6 +158,8 @@ export interface Scene {
   readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
+  /** What `docker inspect` prints of the container's published ports; `fails` for an engine that does not answer. */
+  published: string;
   sink: MemorySink;
   /** The outcome of `prepare`; a function to hold it. */
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
@@ -209,6 +213,14 @@ export interface Scene {
   setupAgains: number;
   /** How many reads of the configuration had run, and how many engine calls had been made, when trust was read. */
   atTrust: {reads: number; engineCalls: number} | undefined;
+  /** An answer of the engine for a call of a clone's bootstrap, before the scene's others; none to fall through. */
+  bootstrapAnswer: (argv: readonly string[]) => EngineRunOutcome | undefined;
+  /** What the connect asked of the volume dependencies, in order. */
+  volumeCalls: string[];
+  /** Whether the volume dependencies say the payload's source was typed. */
+  typedSource: boolean;
+  /** The background stages the lifecycles were made with, in order. */
+  backgroundStages: Array<BackgroundStage | undefined>;
 }
 
 /** What a probe that worked prints: noise, the markers and two variables. */
@@ -245,9 +257,64 @@ function silentDialogs() {
   };
 }
 
+/** Volume dependencies over the scene's bridge that record what they are asked. */
+function volumeDependenciesOf(
+  scene: Scene,
+  bridge: CliBridge,
+): VolumeConnectDependencies {
+  return {
+    bootstrapSettings: () => ({
+      image: '',
+      pull: false,
+      socketPath: '/var/run/docker.sock',
+    }),
+    buildContext: () => {
+      scene.volumeCalls.push('buildContext');
+      return Promise.resolve({
+        folder: '/ctx',
+        dispose: () => Promise.resolve(),
+      });
+    },
+    typed: payload => {
+      scene.volumeCalls.push(`typed ${payload.slice(0, 8)}`);
+      return scene.typedSource;
+    },
+    clearTyped: () => {
+      scene.volumeCalls.push('clearTyped');
+      return Promise.resolve();
+    },
+    bootstrapBridge: (bootstrap, workspace, environment, engine) => {
+      scene.volumeCalls.push(
+        `bootstrapBridge ${bootstrap} ${workspace.workspaceFolder} ${engine.dockerPath}`,
+      );
+      return bridge;
+    },
+    hostBridge: (configText, workspace) => {
+      scene.volumeCalls.push(
+        `hostBridge ${configText} ${workspace.workspaceMount}`,
+      );
+      return bridge;
+    },
+    standIn: () => {
+      scene.volumeCalls.push('standIn');
+      return Promise.resolve({
+        folder: '/tmp/stand-in',
+        dispose: () => {
+          scene.volumeCalls.push('standIn disposed');
+          return Promise.resolve();
+        },
+      });
+    },
+    showShallow: repository => {
+      scene.volumeCalls.push(`showShallow ${repository}`);
+    },
+  };
+}
+
 /** The connector over fakes, and the knobs that steer them. */
 export function sceneOf(
   overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
+  options: {volumes?: boolean} = {},
 ): Scene {
   const sink = new MemorySink();
   const scene: Scene = {
@@ -273,6 +340,7 @@ export function sceneOf(
     shutdownSent: [],
     readsAtShutdown: [],
     metadata: '',
+    published: 'null',
     sink,
     outcome: READY,
     steps: [],
@@ -314,6 +382,10 @@ export function sceneOf(
     atTrust: undefined,
     timerDelays: [],
     timers: [],
+    bootstrapAnswer: () => undefined,
+    volumeCalls: [],
+    typedSource: true,
+    backgroundStages: [],
     ...overrides,
   };
   const kills = fakeEngine(
@@ -330,6 +402,10 @@ export function sceneOf(
     }),
   );
   function runAnswer(argv: readonly string[]): EngineRunOutcome {
+    const bootstrapAnswer = scene.bootstrapAnswer(argv);
+    if (bootstrapAnswer !== undefined) {
+      return bootstrapAnswer;
+    }
     if (argv[0] === 'version') {
       return {
         kind: 'ran',
@@ -347,6 +423,22 @@ export function sceneOf(
             stderr: 'Error: No such container',
           }
         : {kind: 'ran', status: 0, stdout: `${scene.metadata}\n`, stderr: ''};
+    }
+    if (
+      argv[0] === 'inspect' &&
+      argv[4] === '{{json .NetworkSettings.Ports}}'
+    ) {
+      if (scene.published === 'unreachable') {
+        return {kind: 'failed', detail: 'spawn docker ENOENT'};
+      }
+      return scene.published === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: `${scene.published}\n`, stderr: ''};
     }
     const {answer} = scene.inspect;
     if (answer === 'unreachable') {
@@ -468,7 +560,13 @@ export function sceneOf(
       scene.cliEnvironments.push(environment);
       return bridge;
     },
-    lifecycleFor: () => lifecycle,
+    lifecycleFor: (lifecycleEngine, lifecycleBridge, presenter, stage) => {
+      scene.backgroundStages.push(stage);
+      return lifecycle;
+    },
+    ...(options.volumes === true
+      ? {volumes: volumeDependenciesOf(scene, bridge)}
+      : {}),
     lifecyclePresenter: {
       output: () => undefined,
       backgroundStarted: () => undefined,

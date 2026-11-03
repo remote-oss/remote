@@ -6,6 +6,7 @@
  * that uses its connection are allowed so; every other question is refused.
  */
 
+import {nodeEndpointPort} from '../endpoint/node-endpoint.ts';
 import type {EndpointPort} from '../endpoint/protocol.ts';
 import {readAskReply} from './messages.ts';
 
@@ -86,4 +87,23 @@ export async function runAskpassProgram(
       ? allowed(askpass)
       : EXIT_REFUSED;
   }
+}
+
+/** The parts of the running process the askpass program's entry point uses. */
+export interface AskpassProcess {
+  argv: readonly string[];
+  env: Readonly<Record<string, string | undefined>>;
+  platform: string;
+  stdout: {write(text: string): unknown};
+  exitCode?: number | string | null | undefined;
+}
+
+/** The askpass program's entry point: asks with the process's own arguments and environment, and sets its exit status. */
+export async function runAskpassMain(current: AskpassProcess): Promise<void> {
+  current.exitCode = await runAskpassProgram({
+    programArguments: current.argv.slice(2),
+    environment: current.env,
+    port: nodeEndpointPort(current.platform),
+    output: current.stdout.write.bind(current.stdout),
+  });
 }

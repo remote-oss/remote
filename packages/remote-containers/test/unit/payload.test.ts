@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import path from 'node:path';
 import {type DecodedTarget, encodeAuthority} from 'lib-authority';
 import {
   type DevContainerFolder,
@@ -40,6 +41,15 @@ function hexOf(text: string): string {
 /** The text a payload holds. */
 function textOf(payload: string): string {
   return Buffer.from(payload, 'hex').toString('utf8');
+}
+
+/** A dev-container authority over the payload. */
+function containerAuthority(payload: string): string {
+  return encodeAuthority({
+    family: 'dev-container',
+    target: {payload},
+    rawHostString: payload,
+  });
 }
 
 describe('the dev-container payload', () => {
@@ -255,17 +265,8 @@ describe('the folder of a window’s decoded target (card containers-11)', () =>
 });
 
 describe('the origin a window reopens at, from its own authority (card containers-135)', () => {
-  /** A dev-container authority over the payload. */
-  function containerAuthority(payload: string): string {
-    return encodeAuthority({
-      family: 'dev-container',
-      target: {payload},
-      rawHostString: payload,
-    });
-  }
-
   it('F-0406 BR-13: a window with no authority names no origin', () => {
-    deepStrictEqual(windowOriginOf(undefined), undefined);
+    deepStrictEqual(windowOriginOf(undefined, 'linux'), undefined);
   });
 
   it('F-0406 BR-13: an authority that is not a dev container names no origin', () => {
@@ -277,6 +278,7 @@ describe('the origin a window reopens at, from its own authority (card container
             target: {kind: 'plain', text: 'u@h'},
             rawHostString: 'u@h',
           }),
+          'linux',
         ),
         windowOriginOf(
           encodeAuthority({
@@ -284,6 +286,7 @@ describe('the origin a window reopens at, from its own authority (card container
             target: {payload: '7b7d'},
             rawHostString: '7b7d',
           }),
+          'linux',
         ),
       ],
       [undefined, undefined],
@@ -291,12 +294,15 @@ describe('the origin a window reopens at, from its own authority (card container
   });
 
   it('F-0406 BR-13: a payload that is not a hex names no origin', () => {
-    deepStrictEqual(windowOriginOf(containerAuthority('zz')), undefined);
+    deepStrictEqual(
+      windowOriginOf(containerAuthority('zz'), 'linux'),
+      undefined,
+    );
   });
 
   it('F-0406 BR-13: a legacy payload names its host folder', () => {
     deepStrictEqual(
-      windowOriginOf(containerAuthority(hexOf('/home/user/project'))),
+      windowOriginOf(containerAuthority(hexOf('/home/user/project')), 'linux'),
       {kind: 'local', folder: '/home/user/project'},
     );
   });
@@ -307,6 +313,7 @@ describe('the origin a window reopens at, from its own authority (card container
         containerAuthority(
           devContainerPayloadOf({...FOLDER, context: 'desktop-linux'}),
         ),
+        'linux',
       ),
       {kind: 'local', folder: '/home/u/p'},
     );
@@ -314,8 +321,132 @@ describe('the origin a window reopens at, from its own authority (card container
 
   it('F-0406 BR-13: a folder payload whose configuration is not on this machine names no origin', () => {
     deepStrictEqual(
-      windowOriginOf(containerAuthority(devContainerPayloadOf(SSH_FOLDER))),
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(SSH_FOLDER)),
+        'linux',
+      ),
       undefined,
+    );
+  });
+});
+
+describe('the workspace file of a workspace window, at its origin (card containers-139)', () => {
+  /** A host folder on a Windows client. */
+  const WIN_FOLDER: DevContainerFolder = {
+    kind: 'folder',
+    hostPath: 'C:\\Users\\u\\proj',
+    localDocker: false,
+    configFile: {$mid: 1, path: CONFIG_PATH, scheme: 'file'},
+  };
+
+  it('F-0406 BR-11: a workspace file under the mount maps to the host folder', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        'linux',
+        '/workspaces/p/proj.code-workspace',
+      ),
+      {
+        kind: 'local',
+        folder: '/home/u/p',
+        workspaceFile: path.join('/home/u/p', 'proj.code-workspace'),
+      },
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file in a subfolder of the mount keeps its subfolder', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        'linux',
+        '/workspaces/p/sub/w.code-workspace',
+      ),
+      {
+        kind: 'local',
+        folder: '/home/u/p',
+        workspaceFile: path.join('/home/u/p', 'sub/w.code-workspace'),
+      },
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file outside the mount names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        'linux',
+        '/srv/other.code-workspace',
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file that escapes its mount with a `..` segment names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        'linux',
+        '/workspaces/p/../../etc/x.code-workspace',
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file in a sibling folder of the mount names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        'linux',
+        '/workspaces/p2/other.code-workspace',
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-11: on win32 a workspace file under the mount maps over the host folder', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(WIN_FOLDER)),
+        'win32',
+        '/workspaces/proj/w.code-workspace',
+      ),
+      {
+        kind: 'local',
+        folder: WIN_FOLDER.hostPath,
+        workspaceFile: 'C:\\Users\\u\\proj\\w.code-workspace',
+      },
+    );
+  });
+
+  it('F-0406 BR-11: on win32 a workspace file that escapes its mount with a `..` segment names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(WIN_FOLDER)),
+        'win32',
+        '/workspaces/proj/../../etc/x.code-workspace',
+      ),
+      {kind: 'local', folder: WIN_FOLDER.hostPath},
+    );
+  });
+
+  it('F-0406 BR-11: on win32 a workspace file in a sibling folder of the mount names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(WIN_FOLDER)),
+        'win32',
+        '/workspaces/proj2/other.code-workspace',
+      ),
+      {kind: 'local', folder: WIN_FOLDER.hostPath},
+    );
+  });
+
+  it('F-0406 BR-11: no workspace file names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        'linux',
+        undefined,
+      ),
+      {kind: 'local', folder: '/home/u/p'},
     );
   });
 });

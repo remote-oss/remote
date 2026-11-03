@@ -30,6 +30,7 @@ function container(changes: Partial<ListedContainer> = {}): ListedContainer {
     startedAt: FIXED_NOW - 5 * MINUTE,
     finishedAt: undefined,
     labels: {},
+    binds: [],
     ...changes,
   };
 }
@@ -746,5 +747,97 @@ describe('the targets model (card containers-29)', () => {
         ['details', 'inspect', 'log'],
       ],
     );
+  });
+});
+
+describe('a Docker Compose dev container in the view (card containers-146)', () => {
+  const COMPOSE_LABELS = {
+    ...DEV_LABELS,
+    'com.docker.compose.project': 'proj_devcontainer',
+  };
+  const BINDS = [{source: '/home/u/proj', destination: '/workspaces/proj'}];
+
+  it('F-0901 AC-37: the row is labelled with the folder, keeps one child for the folder it opens, and offers the container actions only', () => {
+    const compose = container({
+      id: 'cmp',
+      name: 'proj_devcontainer-app-1',
+      labels: COMPOSE_LABELS,
+      binds: BINDS,
+    });
+    const entry = rowOf(compose, {withConfiguration: new Set(['cmp'])});
+    deepStrictEqual(
+      [entry.label, entry.description, entry.viewItem, entry.children],
+      [
+        'proj',
+        'proj_devcontainer-app-1',
+        'container dev running configuration stop remove details inspect log',
+        [
+          {
+            id: 'cmp/folder',
+            containerId: 'cmp',
+            label: 'proj',
+            description: '/workspaces/proj',
+            tooltip: 'proj',
+            icon: 'folder',
+            viewItem: 'folder openFolder',
+            children: [],
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-0901 AC-37: from the window that holds it the parent has no folder token, and the child is the active folder with the close action and no open', () => {
+    const compose = container({
+      id: 'cmp',
+      labels: COMPOSE_LABELS,
+      binds: BINDS,
+    });
+    const entry = rowOf(compose, {
+      window: {
+        folderOpen: true,
+        connection: {...CONNECTION, containerId: 'cmp'},
+      },
+      withConfiguration: new Set(['cmp']),
+    });
+    deepStrictEqual(
+      [
+        entry.viewItem,
+        entry.children[0]?.viewItem,
+        entry.children[0]?.tooltip,
+        entry.children[0]?.icon,
+      ],
+      [
+        'container dev running own configuration details inspect log',
+        'folder own activeFolder',
+        'Active Folder proj',
+        'folderActive',
+      ],
+    );
+  });
+
+  it('F-0901 AC-37: a Compose container with no mount of its folder, and a container that is no Compose one, have no child', () => {
+    deepStrictEqual(
+      [
+        rowOf(container({labels: COMPOSE_LABELS})).children,
+        rowOf(container({labels: DEV_LABELS, binds: BINDS})).children,
+        rowOf(
+          container({
+            labels: {'com.docker.compose.project': 'p'},
+            binds: BINDS,
+          }),
+        ).children,
+      ],
+      [[], [], []],
+    );
+  });
+
+  it('F-0901 AC-37: a child that cannot be opened because its configuration is gone has no open token', () => {
+    const compose = container({
+      id: 'cmp',
+      labels: COMPOSE_LABELS,
+      binds: BINDS,
+    });
+    deepStrictEqual(rowOf(compose).children[0]?.viewItem, 'folder');
   });
 });

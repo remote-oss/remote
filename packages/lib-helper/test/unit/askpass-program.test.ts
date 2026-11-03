@@ -11,6 +11,7 @@ import {
   DEFAULT_FIRST_MESSAGE_MILLISECONDS,
   ENDPOINT_VARIABLE,
   NONCE_VARIABLE,
+  runAskpassMain,
   runAskpassProgram,
 } from '../../src/index.ts';
 
@@ -189,6 +190,31 @@ describe('askpass program', () => {
 
   it('exits 2 without a question', async () => {
     deepStrictEqual(await runProgram([]), 2);
+  });
+});
+
+describe('the askpass program’s entry point', () => {
+  it('a process with no endpoint in its environment exits as misused, and prints nothing', async () => {
+    const written: string[] = [];
+    const current: {
+      argv: string[];
+      env: Record<string, string>;
+      platform: string;
+      stdout: {write(text: string): boolean};
+      exitCode?: number | string | null;
+    } = {
+      argv: ['node', 'askpass.js', 'password: '],
+      env: {},
+      platform: process.platform,
+      stdout: {
+        write: text => {
+          written.push(text);
+          return true;
+        },
+      },
+    };
+    await runAskpassMain(current);
+    deepStrictEqual([current.exitCode, written], [2, []]);
   });
 });
 

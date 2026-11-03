@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {existsSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -7,13 +7,19 @@ import {
   agentEnvironment,
   agentSocketPath,
   changedKeyHostsFile,
+  checkProtected,
   controlFolderOf,
+  EMPTY_AGENT_VARIABLE,
   SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
   PASSPHRASE_KEY_COMMENT,
+  loosenKey,
   type RunKeys,
+  sshConfigPath,
   startRunAgent,
+  WINDOWS_AGENT_PIPE,
+  writeAskpass,
 } from './acceptance-keys.ts';
 import {type CommandRunner, runCommand} from './command-runner.ts';
 
@@ -41,6 +47,19 @@ function recording(
 ): ReturnType<CommandRunner> {
   commandLines.push([program, ...programArguments].join(' '));
   return runCommand(program, programArguments);
+}
+
+/** A command runner that keeps each command line in `commands` and whose every command succeeds, printing nothing. */
+function succeedingInto(commands: string[]): CommandRunner {
+  return (program, programArguments) => {
+    commands.push([program, ...programArguments].join(' '));
+    return {status: 0, stdout: '', stderr: ''};
+  };
+}
+
+/** A command runner whose every command exits with `status` and prints nothing. */
+function exitingWith(status: number): CommandRunner {
+  return () => ({status, stdout: '', stderr: ''});
 }
 
 describe('makeRunKeys', function () {
@@ -270,6 +289,200 @@ describe('the run agent', function () {
     const folder = controlFolderOf(`/${'d'.repeat(SOCKET_PATH_LIMIT)}`);
     rmSync(folder, {recursive: true, force: true});
     strictEqual(folder.startsWith('/tmp/control-'), true);
+  });
+
+  it("tooling-118: on Windows the agent is the service's pipe, and no short folder is made", () => {
+    strictEqual(
+      agentSocketPath(
+        `C:\\${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+        () => {
+          throw new Error('a short folder was made');
+        },
+        'win32',
+      ),
+      '\\\\.\\pipe\\openssh-ssh-agent',
+    );
+  });
+
+  it("tooling-118: on Windows the control folder is the run's folder, however deep", () => {
+    strictEqual(
+      controlFolderOf(
+        `C:\\${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+        () => {
+          throw new Error('a short folder was made');
+        },
+        'win32',
+      ),
+      `C:\\${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+    );
+  });
+
+  it("tooling-118: ssh_config's paths have forward slashes on Windows and stay as they are elsewhere", () => {
+    deepStrictEqual(
+      [
+        sshConfigPath('C:\\Users\\runner\\run\\id_ed25519', 'win32'),
+        sshConfigPath(WINDOWS_AGENT_PIPE, 'win32'),
+        sshConfigPath('/tmp/run/id_ed25519', 'win32'),
+        sshConfigPath('/tmp/run/a\\b', 'linux'),
+        sshConfigPath('/tmp/run/a\\b', 'darwin'),
+      ],
+      [
+        'C:/Users/runner/run/id_ed25519',
+        '//./pipe/openssh-ssh-agent',
+        '/tmp/run/id_ed25519',
+        '/tmp/run/a\\b',
+        '/tmp/run/a\\b',
+      ],
+    );
+  });
+
+  it("tooling-118: on Windows in CI the run empties the service's agent at its start and at its end, and starts no agent", async () => {
+    const commands: string[] = [];
+    const agent = startRunAgent(
+      WINDOWS_AGENT_PIPE,
+      'win32',
+      succeedingInto(commands),
+      {GITHUB_ACTIONS: 'true'},
+    );
+    const atStart = [...commands];
+    await agent.stop();
+    deepStrictEqual(
+      [atStart, commands],
+      [['ssh-add -D'], ['ssh-add -D', 'ssh-add -D']],
+    );
+  });
+
+  it('tooling-118: on Windows outside CI the opt-in lets the run empty the agent', () => {
+    const commands: string[] = [];
+    startRunAgent(WINDOWS_AGENT_PIPE, 'win32', succeedingInto(commands), {
+      [EMPTY_AGENT_VARIABLE]: '1',
+    });
+    deepStrictEqual(commands, ['ssh-add -D']);
+  });
+
+  it('tooling-118: on Windows outside CI without the opt-in the run stops before any ssh-add, naming the opt-in', () => {
+    const commands: string[] = [];
+    let message = '';
+    try {
+      startRunAgent(WINDOWS_AGENT_PIPE, 'win32', succeedingInto(commands), {
+        GITHUB_ACTIONS: 'false',
+        [EMPTY_AGENT_VARIABLE]: 'yes',
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    deepStrictEqual(
+      [message, commands],
+      [
+        "the run would empty this user's ssh-agent service (ssh-add -D) at its start and end; outside CI it does so only with REMOTE_OSS_ACCEPTANCE_EMPTY_AGENT=1",
+        [],
+      ],
+    );
+  });
+
+  it('tooling-118: on Windows an agent service that is not running stops the run, naming ssh-add', () => {
+    throws(
+      () =>
+        startRunAgent(
+          WINDOWS_AGENT_PIPE,
+          'win32',
+          () => ({
+            status: 2,
+            stdout: '',
+            stderr: 'Error connecting to agent: No such file or directory\n',
+          }),
+          {GITHUB_ACTIONS: 'true'},
+        ),
+      {
+        message:
+          'ssh-add -D failed (2): Error connecting to agent: No such file or directory',
+      },
+    );
+  });
+
+  it("tooling-118: a loosened key is readable by anyone, mode 0644 elsewhere and Everyone's read on Windows, and ssh-keygen refuses it", () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'loose-key-'));
+    const file = path.join(folder, 'id_loose');
+    const commands: string[] = [];
+    try {
+      runCommand('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', file]);
+      loosenKey(runCommand, file, 'linux');
+      loosenKey(
+        (program, programArguments) => {
+          commands.push([program, ...programArguments].join(' '));
+          return {
+            status: program === 'ssh-keygen' ? 255 : 0,
+            stdout: '',
+            stderr: '',
+          };
+        },
+        'C:\\run\\id_loose',
+        'win32',
+      );
+      deepStrictEqual(
+        [statSync(file).mode & 0o777, commands],
+        [
+          0o644,
+          [
+            'icacls C:\\run\\id_loose /grant *S-1-1-0:R',
+            'ssh-keygen -y -f C:\\run\\id_loose',
+          ],
+        ],
+      );
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
+  });
+
+  it('tooling-118: a loosened key that ssh-keygen still reads stops the run', () => {
+    throws(
+      () => {
+        loosenKey(exitingWith(0), 'C:\\run\\id_loose', 'win32');
+      },
+      {
+        message:
+          'ssh-keygen still reads C:\\run\\id_loose once anyone may read it: OpenSSH would not refuse it',
+      },
+    );
+  });
+
+  it('tooling-118: the askpass is a shell script elsewhere and a batch file on Windows, each printing the passphrase file', () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'askpass-'));
+    try {
+      const script = writeAskpass(folder, '/run/passphrase', 'linux');
+      const batch = writeAskpass(folder, 'C:\\run\\passphrase', 'win32');
+      deepStrictEqual(
+        [
+          path.basename(script),
+          readFileSync(script, 'utf8'),
+          statSync(script).mode & 0o777,
+          path.basename(batch),
+          readFileSync(batch, 'utf8'),
+        ],
+        [
+          'askpass-passphrase',
+          "#!/bin/sh\ncat '/run/passphrase'\n",
+          0o700,
+          'askpass-passphrase.cmd',
+          '@type "C:\\run\\passphrase"\r\n',
+        ],
+      );
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
+  });
+
+  it('tooling-118: a key that opens with an empty passphrase stops the run, and one that needs its passphrase passes', () => {
+    checkProtected(exitingWith(1), '/run/id_passphrase');
+    throws(
+      () => {
+        checkProtected(exitingWith(0), '/run/id_passphrase');
+      },
+      {
+        message:
+          "ssh-keygen wrote /run/id_passphrase without the run's passphrase: it did not use the askpass",
+      },
+    );
   });
 
   it('tooling-29: the agent sees no variable through which it could ask', () => {

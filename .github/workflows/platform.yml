@@ -42,6 +42,9 @@ jobs:
       LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
       WSL_UTF8: '1'
     steps:
+      # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
+      # LF line ends: a CRLF shell script would end the host's entrypoint at once
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -67,10 +70,29 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
           "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+      # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
+      - name: Docker's buildx plugin for the Windows CLI
+        run: |
+          $plugins = Join-Path $env:USERPROFILE '.docker\cli-plugins'
+          New-Item -ItemType Directory -Force $plugins | Out-Null
+          $exe = Join-Path $plugins 'docker-buildx.exe'
+          Invoke-WebRequest 'https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.windows-amd64.exe' -OutFile $exe
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26') { "docker-buildx.exe has sha256 $hash, not its pin"; exit 1 }
+          docker buildx version
       # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
       # to Node on that adapter only
       - name: The download host is reached from the WSL distro
         run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
+      # The image's OpenSSH for Windows, whose agent is a service on a named pipe (disabled until a job starts it); the
+      # run's keys go into it and the run takes them out again.
+      - name: The OpenSSH client and its agent service
+        run: |
+          Get-Command ssh, ssh-keygen, ssh-agent, ssh-add, env -All -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Source
+          ssh -V
+          Set-Service ssh-agent -StartupType Manual
+          Start-Service ssh-agent
+          Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
       - if: always()

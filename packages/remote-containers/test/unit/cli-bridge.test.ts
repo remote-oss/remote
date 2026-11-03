@@ -48,6 +48,7 @@ function setup(
     configText?: string;
     environment?: Record<string, string | undefined>;
     removeFails?: boolean;
+    rewrite?: (configText: string) => string | undefined;
   } = {},
 ) {
   const calls: string[][] = [];
@@ -88,6 +89,7 @@ function setup(
     overrides,
     options.environment ?? {},
     createLogger(sink, {minimumLevel: () => 'info'}),
+    ...(options.rewrite === undefined ? [] : [options.rewrite]),
   );
   return {bridge, calls, stdinOf, environments, written, removed, sink};
 }
@@ -116,6 +118,23 @@ describe('the CLI bridge (card containers-04)', () => {
     deepStrictEqual(
       [written, calls[0]?.includes('--override-config')],
       [[], false],
+    );
+  });
+
+  it('a bridge given its own rewrite writes the override that rewrite gives, and none when it gives none (card containers-151)', async () => {
+    const rewritten = setup(ending(UP_LINE), {
+      configText: '{"image": "alpine"}',
+      rewrite: text => `${text.slice(0, -1)}, "workspaceFolder": "/w"}`,
+    });
+    const untouched = setup(ending(UP_LINE), {
+      configText: '{"image": "alpine"}',
+      rewrite: () => undefined,
+    });
+    await rewritten.bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER);
+    await untouched.bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER);
+    deepStrictEqual(
+      [rewritten.written, untouched.written],
+      [['{"image": "alpine", "workspaceFolder": "/w"}'], []],
     );
   });
 

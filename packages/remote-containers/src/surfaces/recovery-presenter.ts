@@ -68,6 +68,8 @@ export interface RecoveryPorts {
   /** Reopens the folder on this machine, in this window. */
   openLocally(folder: string): PromiseLike<unknown>;
   reloadWindow(): PromiseLike<unknown>;
+  /** Closes the remote connection, leaving an empty local window, as core's own command does. */
+  closeRemote(): PromiseLike<unknown>;
   openRecent(): PromiseLike<unknown>;
   /** Leaves the retry for the paused container `containerId`, which the connect after the reload takes once. */
   storePausedRetry(containerId: string): PromiseLike<void>;
@@ -82,12 +84,16 @@ export interface RecoveryPorts {
   logger: Logger;
 }
 
-/** The presenter over `ports`; `target` and `failedContainer` are read each time something is shown. */
+/**
+ * The presenter over `ports`; `target`, `failedContainer` and whether the window is a clone in a volume are read each
+ * time something is shown.
+ */
 export function recoveryPresenterOf(
   ports: RecoveryPorts,
   target: () => DevContainerFolder | undefined,
   failedContainer: () => FailedContainer | undefined,
   translate: Translate,
+  volumeWindow: () => boolean,
 ): FailurePresenter {
   /** The log file of the attempt whose dialog shows now. */
   let attemptFile: string | undefined;
@@ -131,6 +137,7 @@ export function recoveryPresenterOf(
       failedContainer() !== undefined &&
         (folder === undefined || (await ports.fileExists(folder.configFile))),
       translate,
+      volumeWindow(),
     );
     const chosen = await ports.pick(
       pick.placeholder,
@@ -145,6 +152,8 @@ export function recoveryPresenterOf(
       await editLocally(item.folder);
     } else if (item?.action === 'openRecent') {
       await ports.openRecent();
+    } else if (item?.action === 'openRepository') {
+      ports.logger.info('Open Repository opens nothing further');
     } else if (item?.action === 'openDocumentation') {
       await ports.openExternal(CONTAINERS_DOCUMENTATION);
       await showQuickPick();
@@ -178,7 +187,7 @@ export function recoveryPresenterOf(
           `the log of the attempt could not be written: ${caught instanceof Error ? caught.message : String(caught)}`,
         );
       }
-      const dialog = failureDialogOf(failed, folder, translate);
+      const dialog = failureDialogOf(failed, folder, translate, volumeWindow());
       const chosen = await ports.showError(
         dialog.message,
         dialog.detail,
@@ -195,6 +204,8 @@ export function recoveryPresenterOf(
       }
       if (button?.action === 'editLocally') {
         await editLocally(button.folder);
+      } else if (button?.action === 'closeRemote') {
+        await ports.closeRemote();
       } else if (button?.action === 'learnMore') {
         await ports.openExternal(button.address ?? CONTAINERS_REQUIREMENTS);
         ports.disconnected();

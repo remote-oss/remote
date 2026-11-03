@@ -195,8 +195,10 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
 ## 6. F-0707 and F-0708
 
 - **F-0707 is dormant by spec** (BR-7). The two commands and two `continueEditSession` entries are declared exactly
-  (BR-1 to BR-4, palette `when: false`), with no `contribEditSessions` proposal requested, so core drops them (7.E2).
-  No probing for Remote Repositories. Rows assert the dormancy.
+  (BR-1 to BR-4, palette `when: false`). `contribEditSessions` stays declared with the other six (F-0101 BR-8), and
+  one grant covers them all (F-0101 BR-9). So the entries are read, as the reference's are, and their dormancy rests on
+  their `when` clauses (BR-3, BR-4). Corrected on #2040 (athena). No probing for Remote Repositories. Rows assert the
+  dormancy.
 - **F-0708, C15:**
   - the "I/O performance" row (S199, S425) under each bind mount in Details, only when the Windows-side Docker CLI
     runs the engine (BR-4), so it's mostly platform-01's lines;

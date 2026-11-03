@@ -6,12 +6,14 @@
  * nothing is shown.
  */
 
-import type {
-  ComposeMembership,
-  ContainerIdentity,
-  EngineCoordinates,
-  ShutdownReply,
-  ShutdownRequest,
+import {
+  type ComposeMembership,
+  type ContainerIdentity,
+  type EngineCoordinates,
+  identityFilters,
+  sameIdentity,
+  type ShutdownReply,
+  type ShutdownRequest,
 } from './protocol.ts';
 
 /** How long the check waits after a connection ends, in milliseconds: fixed, not a setting. */
@@ -75,16 +77,6 @@ interface Connection {
 const PROJECT_LABEL = 'com.docker.compose.project';
 const SERVICE_LABEL = 'com.docker.compose.service';
 
-/** Whether two connections are for the same folder and configuration. */
-function sameIdentity(
-  left: ContainerIdentity,
-  right: ContainerIdentity,
-): boolean {
-  return (
-    left.hostPath === right.hostPath && left.configFile === right.configFile
-  );
-}
-
 /** The engine a connection used, as one text: connections to the same engine give the same one. */
 function engineKeyOf(engine: EngineCoordinates): string {
   return JSON.stringify([
@@ -121,7 +113,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     return obligation;
   }
 
-  /** Whether another live connection holds the container: by its id, or by the folder and configuration it is for. */
+  /** Whether another live connection holds the container: by its id, or by the identity it is for. */
   function inUse(connection: Connection, containerId: string): boolean {
     return [...connections.values()].some(
       other =>
@@ -280,19 +272,15 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     skipped.set(memory, remembered);
   }
 
-  /** Looks for the running container of the connection's folder and configuration; looks again until it gives up. */
+  /** Looks for the running container of the connection's identity; looks again until it gives up. */
   async function lookUp(
     connection: Connection,
     attempt: number,
   ): Promise<void> {
-    const {hostPath, configFile} = connection.identity;
     const result = await ports.runDocker(connection.engine, [
       'ps',
       '-q',
-      '--filter',
-      `label=devcontainer.local_folder=${hostPath}`,
-      '--filter',
-      `label=devcontainer.config_file=${configFile}`,
+      ...identityFilters(connection.identity),
     ]);
     if (result.status !== 0) {
       ports.logLine(
@@ -309,7 +297,9 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       return;
     }
     if (attempt >= LOOKUP_ATTEMPTS) {
-      ports.logLine(`no running container for ${hostPath}; the lookup ends`);
+      ports.logLine(
+        `no running container for ${'hostPath' in connection.identity ? connection.identity.hostPath : `the volume ${connection.identity.volumeName}`}; the lookup ends`,
+      );
       return;
     }
     await later(CHECK_MILLISECONDS, () => lookUp(connection, attempt + 1));

@@ -56,8 +56,12 @@ import {
   runLaunches,
   runTestCli,
   standInEngines,
+  archiveKindOf,
+  releaseAssetUrlOf,
+  tarArgsOf,
   unpackArchive,
   USAGE,
+  VSCODIUM_PLATFORMS,
   VSCODIUM_RELEASE,
   vscodiumConfiguration,
   vscodiumConfigurations,
@@ -170,6 +174,10 @@ class FakeHarness implements HarnessDependencies {
           },
         ]),
       );
+    }
+    // A read-back is the run's check of a passphrase key or the loosened key, which OpenSSH refuses.
+    if (program === 'ssh-keygen' && programArguments[0] === '-y') {
+      return {status: 255, stdout: '', stderr: 'refused'};
     }
     if (program === 'ssh-keygen' || program === 'env') {
       const keyFile = programArguments.at(-1) ?? '';
@@ -624,6 +632,56 @@ describe('acceptance', () => {
         '  UserKnownHostsFile /run/known_hosts',
       ].join('\n'),
     );
+  });
+
+  it('tooling-118: on Windows every path of the ssh_config has forward slashes, and no alias has a ControlMaster', () => {
+    const config = harnessSshConfig(
+      49153,
+      'C:\\Users\\runner\\acceptance-1',
+      '\\\\.\\pipe\\openssh-ssh-agent',
+      ROUTED_ADDRESS,
+      'C:\\Users\\runner\\acceptance-1',
+      'win32',
+    );
+    const lines = config.split('\n');
+    deepStrictEqual(
+      [
+        lines.filter(line => line.includes('\\')),
+        lines.filter(line => /Control(Master|Path|Persist)/.test(line)),
+        lines.find(line => line.includes('IdentityFile')),
+        lines.find(
+          line =>
+            line.includes('changedkey') && line.includes('UserKnownHostsFile'),
+        ),
+        lines.find(line => line.includes('ForwardAgent')),
+      ],
+      [
+        [],
+        [],
+        '  IdentityFile C:/Users/runner/acceptance-1/id_ed25519',
+        '  UserKnownHostsFile C:/Users/runner/acceptance-1/known_hosts_changedkey',
+        '  ForwardAgent //./pipe/openssh-ssh-agent',
+      ],
+    );
+  });
+
+  it('tooling-118: elsewhere the ssh_config keeps its four ControlMaster aliases', () => {
+    const hosts = harnessSshConfig(
+      49153,
+      '/run',
+      '/run/agent.sock',
+      ROUTED_ADDRESS,
+      '/run',
+      'linux',
+    )
+      .split('\n')
+      .filter(line => line.startsWith('Host master'));
+    deepStrictEqual(hosts, [
+      'Host master',
+      'Host master-ask',
+      'Host master-yes',
+      'Host master-autoask',
+    ]);
   });
 
   it('coverage-13: Host 127.0.0.1 reaches the harness host by the address as typed', () => {
@@ -4160,11 +4218,76 @@ describe('acceptance', () => {
 
     it('#253 Q14: a platform with no pinned build throws', async () => {
       await rejects(
-        vscodiumExecutableOf(workspace.root, 'darwin', 'arm64', {
+        vscodiumExecutableOf(workspace.root, 'win32', 'arm64', {
           download: () => Promise.resolve(new Uint8Array()),
           unpack: () => undefined,
         }),
-        {message: 'no VSCodium build is pinned for darwin-arm64'},
+        {message: 'no VSCodium build is pinned for win32-arm64'},
+      );
+    });
+
+    it('platform-01: every pinned platform gives its asset URL and its executable path', async () => {
+      for (const [key, build] of Object.entries(VSCODIUM_PLATFORMS)) {
+        const dash = key.lastIndexOf('-');
+        const platform = key.slice(0, dash);
+        const architecture = key.slice(dash + 1);
+        const archive = new Uint8Array([1, 2, 3]);
+        let url = '';
+        let unpacks = 0;
+        const executable = await vscodiumExecutableOf(
+          workspace.root,
+          platform,
+          architecture,
+          {
+            download: target => {
+              url = target;
+              return Promise.resolve(archive);
+            },
+            unpack: () => {
+              unpacks += 1;
+            },
+          },
+          {[key]: createHash('sha256').update(archive).digest('hex')},
+        );
+        deepStrictEqual(
+          [executable, url, unpacks],
+          [
+            path.join(
+              workspace.root,
+              '.vscode-test',
+              `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
+              build.executable,
+            ),
+            releaseAssetUrlOf(build.asset),
+            1,
+          ],
+        );
+      }
+    });
+
+    it('platform-01: the archive kind comes from its first bytes', () => {
+      deepStrictEqual(
+        [
+          archiveKindOf(new Uint8Array([0x1f, 0x8b])),
+          archiveKindOf(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
+          archiveKindOf(new Uint8Array([0x50, 0x4b])),
+          archiveKindOf(new Uint8Array([0x1f])),
+          archiveKindOf(new Uint8Array([0x1f, 0x00])),
+        ],
+        ['tar.gz', 'zip', 'zip', 'zip', 'zip'],
+      );
+    });
+
+    it('platform-01: tar unpacks a zip with -xf and a gzipped tar with -xzf', () => {
+      deepStrictEqual(
+        [
+          tarArgsOf('zip', 'archive.zip', 'out'),
+          tarArgsOf('tar.gz', 'archive.tar.gz', 'out'),
+        ],
+        [
+          ['-xf', 'archive.zip', '-C', 'out'],
+          ['-xzf', 'archive.tar.gz', '-C', 'out'],
+        ],
       );
     });
 

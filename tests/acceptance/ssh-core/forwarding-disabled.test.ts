@@ -20,11 +20,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {closeAllButLocal, dismissals} from '../windows/maintenance.ts';
-import {
-  notifications,
-  outputPanelFocused,
-  statusItem,
-} from '../windows/renderer.ts';
+import {outputPanelFocused, statusItem} from '../windows/renderer.ts';
 import {hintRecords, type HintRecords} from '../windows/hint-store.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 
@@ -46,46 +42,43 @@ function forwardingEntries(since: string): HintRecords[number]['hints'] {
     .filter(hint => hint.status === 'AllowTcpForwardingDisabled');
 }
 
-/** How many hints of kind `error` the records that started at or after `since` hold, whatever their status. */
-function errorHints(since: string): number {
-  return hintRecords()
-    .filter(record => record.started >= since)
-    .flatMap(record => record.hints)
-    .filter(hint => hint.kind === 'error').length;
-}
-
 /** How many forwarding hints the records that started at or after `since` hold. */
 function forwardingHints(since: string): number {
   return forwardingEntries(since).length;
 }
 
-/** Opens window `name` on `alias` with the notice of a refusal answered by dismissing it. */
+/** The reason the dialog gives for a refused forward: S046 without its "ERROR: " lead. */
+const REFUSED_REASON = SETTING_TEXT.replace(/^ERROR: /u, '');
+
+/** Opens window `name` on `alias` with the notice of a refusal and the dialog and the pick after it dismissed. */
 async function opened(alias: string, name: string): Promise<void> {
   appendScript([
     {surface: 'notice', match: REFUSED, answer: 'dismiss', window: name},
+    ...dismissals(name),
   ]);
   await openWindow(alias, name);
 }
 
-/** What window `name` shows of its wait: the notice count, the dialog count, the terminals and the indicator. */
-async function waitingOf(
-  name: string,
-): Promise<[number, number, string[] | undefined, string, boolean]> {
+/** What window `name` shows of its failure: the notice count, the dialog count and the indicator. */
+async function failureOf(name: string): Promise<[number, number, string]> {
   return [
     recordLines('notice', name).length,
     recordLines('failureDialog', name).length,
-    await terminalsOf(name),
     (await statusItem(name, 'status.host')).text,
-    (await notifications(name)).some(text => text.includes('Waiting for port')),
   ];
 }
 
-/** Waits until window `name` shows the notice of the refusal; a wait that runs out says what the log of the connection held. */
-async function noticeOf(name: string): Promise<void> {
+/** The first failure dialog's text of window `name`. */
+function dialogText(name: string): string | undefined {
+  return recordLines('failureDialog', name)[0]?.question;
+}
+
+/** Waits until window `name` shows its failure dialog; a wait that runs out says what the log of the connection held. */
+async function dialogOf(name: string): Promise<void> {
   try {
     await waitFor(
-      'the notice',
-      () => recordLines('notice', name).length > 0,
+      'the failure dialog',
+      () => recordLines('failureDialog', name).length > 0,
       120_000,
     );
   } catch (error) {
@@ -95,6 +88,11 @@ async function noticeOf(name: string): Promise<void> {
       {cause: error},
     );
   }
+}
+
+/** The dialog the refusal of `noforward` gives, as the record has it. */
+function refusedDialog(alias: string): string {
+  return `Could not establish connection to "${alias}": ${REFUSED_REASON}`;
 }
 
 describe('F-2604: TCP forwarding disabled on the server', function () {
@@ -109,30 +107,28 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     );
   });
 
-  it('F-2604 AC-4, AC-6 (c85-wait): the refusal shows the notice with the waiting progress, no dialog and no terminal, and three minutes later the window still waits', async () => {
+  it('F-2604 AC-4, AC-6 (ruling-1985-forwarding-fails): the refusal shows the notice, and the connect then fails with F-2601’s dialog that names the refused forward, with no wait', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-wait';
       await opened('noforward', name);
-      await noticeOf(name);
-      const together = await waitingOf(name);
-      await new Promise(resolve => setTimeout(resolve, 180_000));
+      await dialogOf(name);
       deepStrictEqual(
-        [together, await waitingOf(name)],
+        [await failureOf(name), dialogText(name)],
         [
-          [1, 0, [], 'Opening Remote...', true],
-          [1, 0, [], 'Opening Remote...', true],
+          [1, 1, 'Disconnected from SSH: noforward'],
+          refusedDialog('noforward'),
         ],
       );
     });
   });
 
-  it('F-2604 AC-7 (c85-close): Close Remote Connection leaves an empty local window with the settings unchanged, and connecting again repeats the refusal with no analysis notice and no terminal', async () => {
+  it('F-2604 AC-7 (c85-close): Close Remote Connection after the failure leaves an empty local window with the settings unchanged, and connecting again repeats the refusal with the dialog and no analysis notice', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-close';
       await opened('noforward', name);
-      await noticeOf(name);
+      await dialogOf(name);
       const settings = readUserSettings();
       const empty = await nextEmptyWindow(() =>
         inWindow(name, 'workbench.action.remote.close'),
@@ -140,11 +136,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const emptyState = await windowState(empty);
       const again = 'c85-close-again';
       await opened('noforward', again);
-      await waitFor(
-        'the second notice',
-        () => recordLines('notice', again).length > 0,
-        120_000,
-      );
+      await dialogOf(again);
       deepStrictEqual(
         [
           [emptyState.remoteName, emptyState.folders],
@@ -152,9 +144,9 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           recordLines(undefined, again).filter(line =>
             line.question.includes('Analyzing'),
           ).length,
-          await terminalsOf(again),
+          dialogText(again),
         ],
-        [[null, []], settings, 0, []],
+        [[null, []], settings, 0, refusedDialog('noforward')],
       );
     });
   });
@@ -238,8 +230,8 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it("F-2604 AC-17 (c85-disturbed): a cut and restored network, or the end of the window's ssh, leaves the wait as it was, with no new notice, dialog or terminal", async () => {
-    const seen: Array<Awaited<ReturnType<typeof waitingOf>>> = [];
+  it("F-2604 AC-17 (c85-disturbed): a cut and restored network, or the end of the window's ssh, after the failure adds no notice or dialog", async () => {
+    const seen: Array<Awaited<ReturnType<typeof failureOf>>> = [];
     const ended: string[] = [];
     for (const disturbance of ['network', 'ssh']) {
       await closeAllButLocal();
@@ -247,7 +239,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         await userSettings({...PLATFORMS});
         const name = `c85-${disturbance}`;
         await opened('noforward', name);
-        await noticeOf(name);
+        await dialogOf(name);
         if (disturbance === 'network') {
           cutHostNetwork();
           try {
@@ -264,15 +256,15 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           }
         }
         await new Promise(resolve => setTimeout(resolve, 20_000));
-        seen.push(await waitingOf(name));
+        seen.push(await failureOf(name));
       });
     }
     deepStrictEqual(
-      [seen, ended.length > 0],
+      [seen.map(entry => entry.slice(0, 2)), ended.length > 0],
       [
         [
-          [1, 0, [], 'Opening Remote...', true],
-          [1, 0, [], 'Opening Remote...', true],
+          [1, 1],
+          [1, 1],
         ],
         true,
       ],
@@ -291,16 +283,16 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     ],
   };
 
-  it('F-2604 AC-1, AC-2, AC-3, AC-5, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored while the window still waits; Show log puts the Remote - SSH channel in front', async () => {
+  it('F-2604 AC-1, AC-2, AC-3, AC-5, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored when the dialog shows; Show log puts the Remote - SSH channel in front', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-line';
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('noforward', name);
-      await noticeOf(name);
+      await dialogOf(name);
       const stored = forwardingEntries(since);
-      await new Promise(resolve => setTimeout(resolve, 15_000));
+      await new Promise(resolve => setTimeout(resolve, 5_000));
       await inWindow(name, 'opensshremotes.showLog');
       await windowState(name);
       const logged = connectionLog().slice(mark);
@@ -314,9 +306,6 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
         {
           after: logged[first + 1] === SETTING_TEXT,
           lines: logged.filter(line => line.includes(SETTING_LINE)).length,
-          refusals:
-            logged.filter(line => line.includes('administratively prohibited'))
-              .length > 1,
           stored: stored.map(hint => [
             hint.kind,
             hint.status,
@@ -326,12 +315,11 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           documents: stored.map(hint => hint.resources?.length),
           channel,
           focused: await outputPanelFocused(name),
-          waiting: (await waitingOf(name))[4],
+          dialog: dialogText(name),
         },
         {
           after: true,
           lines: 1,
-          refusals: true,
           stored: [
             [
               FORWARDING_ENTRY.kind,
@@ -343,7 +331,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
           documents: [1],
           channel: 'Remote - SSH',
           focused: true,
-          waiting: true,
+          dialog: refusedDialog('noforward'),
         },
       );
     });
@@ -360,8 +348,8 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('noforward', name);
-      await noticeOf(name);
-      await new Promise(resolve => setTimeout(resolve, 10_000));
+      await dialogOf(name);
+      await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         [
           connectionLog()
@@ -375,78 +363,78 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it('F-2604 AC-9, AC-18 (c85-second): with the second ssh the window shows no failure dialog and keeps Opening Remote..., and the log holds the setting line', async () => {
+  it('F-2604 AC-9, AC-18 (ruling-1985-forwarding-fails): with the second ssh the window shows the failure dialog with the refused-forward reason, and the log holds the setting line', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, 'remote.SSH.useExecServer': false});
       const name = 'c85-second';
       const mark = connectionLog().length;
       await opened('noforward', name);
-      await noticeOf(name);
-      await new Promise(resolve => setTimeout(resolve, 10_000));
+      await dialogOf(name);
+      await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         [
-          recordLines('failureDialog', name).length,
-          (await statusItem(name, 'status.host')).text,
+          dialogText(name),
           connectionLog()
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
         ],
-        [0, 'Opening Remote...', 1],
+        [refusedDialog('noforward'), 1],
       );
     });
   });
 
-  it('F-2604 AC-20 (c85-key): a key whose authorized_keys line forbids port forwarding gives the setting line, the wait of AC-4 and the stored hint', async () => {
+  it('F-2604 AC-20 (c85-key): a key whose authorized_keys line forbids port forwarding gives the setting line, the dialog of AC-4 and the stored hint', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-key';
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('noforward-key', name);
-      await noticeOf(name);
-      await new Promise(resolve => setTimeout(resolve, 10_000));
+      await dialogOf(name);
+      await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         {
           lines: connectionLog()
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
-          waiting: await waitingOf(name),
+          dialog: dialogText(name),
           stored: forwardingHints(since),
         },
         {
           lines: 1,
-          waiting: [1, 0, [], 'Opening Remote...', true],
+          dialog: refusedDialog('noforward-key'),
           stored: 1,
         },
       );
     });
   });
 
-  it('F-2604 AC-19 (c85-changed): a host whose key changed, with every setting at its default, gives the wait of AC-4: no dialog, no port forwarding text, no setting line and no forwarding hint', async () => {
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a host whose key changed, with every setting at its default, fails the connect at once with S107’s reason and the MitmPortForwardingDisabled hint, and no server-side port forwarding text, setting line or hint', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-changed';
       const mark = connectionLog().length;
       const since = new Date().toISOString();
       await opened('changedkey', name);
-      await noticeOf(name);
-      await new Promise(resolve => setTimeout(resolve, 10_000));
+      await dialogOf(name);
+      await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         {
           lines: connectionLog()
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
-          waiting: await waitingOf(name),
-          stored: errorHints(since),
-          text: recordLines(undefined, name).filter(line =>
-            line.question.includes('Port forwarding is disabled'),
-          ).length,
+          dialog: dialogText(name),
+          stored: hintRecords()
+            .filter(record => record.started >= since)
+            .flatMap(record => record.hints)
+            .filter(hint => hint.kind === 'error')
+            .map(hint => hint.status),
         },
         {
           lines: 0,
-          waiting: [1, 0, [], 'Opening Remote...', true],
-          stored: 0,
-          text: 0,
+          dialog:
+            'Could not establish connection to "changedkey": Port forwarding is disabled.',
+          stored: ['MitmPortForwardingDisabled'],
         },
       );
     });
@@ -516,24 +504,28 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     );
   });
 
-  it('F-2604 AC-15 (c85-reload): after a reload with the local server running the window waits again and the log does not repeat the setting line', async () => {
+  it('F-2604 AC-15 (c85-reload): after a reload of the failed window with the local server running the refusal fails the connect again, and the log does not repeat the setting line', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-reload';
       await opened('noforward', name);
-      await noticeOf(name);
+      await dialogOf(name);
       const mark = connectionLog().length;
       await reloadWindow(name);
-      await new Promise(resolve => setTimeout(resolve, 20_000));
+      await waitFor(
+        'the second dialog',
+        () => recordLines('failureDialog', name).length > 1,
+        120_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         [
           connectionLog()
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
-          (await statusItem(name, 'status.host')).text,
-          (await waitingOf(name))[4],
+          recordLines('failureDialog', name).map(line => line.question),
         ],
-        [0, 'Opening Remote...', true],
+        [0, [refusedDialog('noforward'), refusedDialog('noforward')]],
       );
     });
   });

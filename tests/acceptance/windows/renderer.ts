@@ -924,6 +924,12 @@ export async function toggleRow(
   }
 }
 
+/** Which of the `count` rows that share a label a right click is made on: the `index`th in the view's order. */
+export interface RowPosition {
+  index: number;
+  count: number;
+}
+
 /**
  * The page's script for a right click on the row `rowLabel` of view `viewName`: it opens the context menu, leaves its
  * item elements in `items` and runs `after`, which gives the script's value; it gives the JavaScript `missing` when the
@@ -934,13 +940,15 @@ function rowMenuScript(
   rowLabel: string,
   missing: string,
   after: string,
+  position: RowPosition = {index: 0, count: 1},
 ): string {
   return `(async () => {
       const pane = ${paneExpression(viewName)};
       const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
-      if (rows.length !== 1) {
+      if (rows.length !== ${String(position.count)}) {
         return ${missing};
       }
+      rows.splice(0, rows.length, rows[${String(position.index)}]);
       const box = rows[0].getBoundingClientRect();
       rows[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -958,6 +966,7 @@ export async function rowContextMenu(
   name: string,
   viewName: string,
   rowLabel: string,
+  position?: RowPosition,
 ): Promise<string[]> {
   const menu = await evaluate<string[] | null>(
     name,
@@ -969,6 +978,7 @@ export async function rowContextMenu(
         (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
       }
       return items.map(label => label.textContent ?? '');`,
+      position,
     ),
   );
   if (menu === null) {
@@ -988,6 +998,7 @@ export async function rowMenuAction(
   viewName: string,
   rowLabel: string,
   itemLabel: string,
+  position?: RowPosition,
 ): Promise<void> {
   const outcome = await evaluate<string | null>(
     name,
@@ -1009,6 +1020,7 @@ export async function rowMenuAction(
         (item.closest('li') ?? item).dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, button: 0}));
       }
       return '';`,
+      position,
     ),
   );
   if (outcome !== '') {

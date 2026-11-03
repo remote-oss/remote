@@ -312,6 +312,8 @@ function portsOf(
       }),
       revealLoginTerminals: () => false,
       forwardRefused: () => undefined,
+      warnedForwardingDisabled: () => false,
+      prohibitedForwarding: () => false,
       settings: () => ({
         listenOnSocket: false,
         useLocalServer: true,

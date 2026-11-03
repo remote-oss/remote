@@ -1,5 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {dropsImage, overrideText} from '../../src/cli/override-pre-pass.ts';
+import {
+  dropsImage,
+  overrideText,
+  volumeOverrideText,
+} from '../../src/cli/override-pre-pass.ts';
 
 describe('the override pre-pass (card containers-04)', () => {
   it('F-0304 AC-66: a localEnv reference to an empty variable gets its default', () => {
@@ -179,5 +183,77 @@ describe('the override pre-pass (card containers-04)', () => {
       ],
       [true, true, false, false, false, false],
     );
+  });
+
+  describe('in a volume (card containers-151)', () => {
+    const workspace = {
+      workspaceMount: 'type=volume,source=r-1,target=/workspaces',
+      workspaceFolder: '/workspaces/r',
+    };
+
+    it('F-0701 BR-14, AC-53, AC-54: every reference is resolved from the editor, an unset one by its default or as empty, and the local folder is the volume’s', () => {
+      const result = volumeOverrideText(
+        '{"containerEnv": {"HOME_AT": "${localEnv:HOME}", "WITH_DEFAULT": "${localEnv:UNSET_VAR:fallback}", "EMPTY_AT": "${env:EMPTY:d}", "UNSET_AT": "${localEnv:UNSET_VAR}", "FOLDER_AT": "${localWorkspaceFolder}", "BASE_AT": "x-${localWorkspaceFolderBasename}"}}',
+        {HOME: '/home/u', EMPTY: ''},
+        workspace,
+      );
+      deepStrictEqual(
+        [JSON.parse(String(result?.text)), result?.ownWorkspace],
+        [
+          {
+            containerEnv: {
+              HOME_AT: '/home/u',
+              WITH_DEFAULT: 'fallback',
+              EMPTY_AT: 'd',
+              UNSET_AT: '',
+              FOLDER_AT: '/workspaces/r',
+              BASE_AT: 'x-r',
+            },
+            ...workspace,
+          },
+          false,
+        ],
+      );
+    });
+
+    it('F-0701 section 10, AC-35: the configuration’s own workspace is replaced and said, and comments stay', () => {
+      const result = volumeOverrideText(
+        '{\n  // kept\n  "workspaceFolder": "/workspace",\n  "image": "i"\n}',
+        {},
+        workspace,
+      );
+      deepStrictEqual(
+        [
+          result?.text.includes('// kept'),
+          JSON.parse(String(result?.text).replace('// kept', '')),
+          result?.ownWorkspace,
+        ],
+        [true, {image: 'i', ...workspace}, true],
+      );
+    });
+
+    it('an image beside a Dockerfile build is taken out here too', () => {
+      deepStrictEqual(
+        JSON.parse(
+          String(
+            volumeOverrideText(
+              '{"image": "i", "build": {"dockerfile": "Dockerfile"}}',
+              {},
+              workspace,
+            )?.text,
+          ),
+        ),
+        {build: {dockerfile: 'Dockerfile'}, ...workspace},
+      );
+    });
+
+    it('a text that does not parse, or parses to no object, gives nothing', () => {
+      deepStrictEqual(
+        ['{', '[1]', '3', 'null'].map(text =>
+          volumeOverrideText(text, {}, workspace),
+        ),
+        [undefined, undefined, undefined, undefined],
+      );
+    });
   });
 });

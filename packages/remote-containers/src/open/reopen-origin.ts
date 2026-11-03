@@ -43,9 +43,10 @@ export function reopenOriginHandlersOf(ports: ReopenOriginPorts): {
       if (origin === undefined || !ports.folderOpen()) {
         return;
       }
+      const workspaceFile = origin.workspaceFile;
       await openLocal(ports.opener, {
-        path: origin.folder,
-        pathKind: 'folder',
+        path: workspaceFile ?? origin.folder,
+        pathKind: workspaceFile === undefined ? 'folder' : 'workspace',
         target: 'current',
       });
     },

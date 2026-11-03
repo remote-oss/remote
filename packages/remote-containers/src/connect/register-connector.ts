@@ -30,6 +30,7 @@ import {
 } from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
+import {volumeTargetOf} from '../volumes/volume-payload.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import {knownName, recordKnownName} from './known-names.ts';
 import {type RecentLabelPorts, storeRecentLabel} from './recent-label.ts';
@@ -133,6 +134,14 @@ export async function registerContainerResolver(
     () => currentTarget(),
     () => connector.failedContainer(),
     translate,
+    () => {
+      const decoded = handle?.currentConnection()?.decodedTarget;
+      return (
+        decoded !== undefined &&
+        'payload' in decoded.target &&
+        volumeTargetOf(decoded.target.payload) !== undefined
+      );
+    },
   );
   const registration = await registerResolver(
     host.resolverEditor,
@@ -151,7 +160,7 @@ export async function registerContainerResolver(
       },
       cancellable: false,
       determinateStages: true,
-      allowsTrust: false,
+      allowsTrust: true,
       titleOf: phase => phaseTitleOf(phase, translate),
       startTitle: () => startTitleOf(translate),
       progressDelayMilliseconds: PROGRESS_DELAY_MILLISECONDS,

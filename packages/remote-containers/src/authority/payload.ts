@@ -3,6 +3,7 @@
  * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
+import path from 'node:path';
 import {type DecodedTarget, decodeAuthority} from 'lib-authority';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import {recordOf} from '../json-record.ts';
@@ -57,18 +58,26 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
   };
 }
 
-/** The payload of a target: its JSON text, members in a fixed order, as lowercase hex. */
-export function devContainerPayloadOf(target: DevContainerFolder): string {
-  const pinned = (
-    ['context', 'host', 'certPath', 'tlsVerify'] as const
-  ).flatMap((member): Array<[string, string]> => {
-    const value = target[member];
+/** The engine members a payload's `settings` may name, in their fixed order. */
+const ENGINE_MEMBERS = ['context', 'host', 'certPath', 'tlsVerify'] as const;
+
+/** A payload's `settings` member for an engine, or nothing when it is the default. */
+export function pinnedSettingsOf(
+  engine: PinnedEngine,
+): {settings: Record<string, string>} | Record<string, never> {
+  const pinned = ENGINE_MEMBERS.flatMap((member): Array<[string, string]> => {
+    const value = engine[member];
     return value === undefined ? [] : [[member, value]];
   });
+  return pinned.length === 0 ? {} : {settings: Object.fromEntries(pinned)};
+}
+
+/** The payload of a target: its JSON text, members in a fixed order, as lowercase hex. */
+export function devContainerPayloadOf(target: DevContainerFolder): string {
   const text = JSON.stringify({
     hostPath: target.hostPath,
     localDocker: target.localDocker,
-    ...(pinned.length === 0 ? {} : {settings: Object.fromEntries(pinned)}),
+    ...pinnedSettingsOf(target),
     configFile: target.configFile,
   });
   return Buffer.from(text, 'utf8').toString('hex');
@@ -101,7 +110,7 @@ function configFileOf(value: unknown): SerializedUri | undefined {
 }
 
 /** The engine of a payload: none, its members, or `false` for a `settings` member of the wrong shape. */
-function engineOf(settings: unknown): PinnedEngine | false {
+export function engineOf(settings: unknown): PinnedEngine | false {
   if (settings === undefined) {
     return {};
   }
@@ -110,7 +119,7 @@ function engineOf(settings: unknown): PinnedEngine | false {
     return false;
   }
   const engine: PinnedEngine = {};
-  for (const member of ['context', 'host', 'certPath', 'tlsVerify'] as const) {
+  for (const member of ENGINE_MEMBERS) {
     const value = record[member];
     if (value === undefined) {
       continue;
@@ -203,14 +212,51 @@ export interface ReopenOrigin {
   kind: 'local';
   /** The host folder the container was opened from. */
   folder: string;
+  /** The host file the window's workspace file maps to, when it lies under the folder's mount. */
+  workspaceFile?: string;
+}
+
+/** The host side of a path, read with the client platform's separators: `path.win32` on a win32 client, `path.posix` on every other. */
+function hostPathsOf(platform: string): typeof path.posix {
+  return platform === 'win32' ? path.win32 : path.posix;
 }
 
 /**
- * The origin a dev container window can be reopened at: the payload's host folder, whatever folder the window shows
- * now. None for a window that isn't a dev container, or whose payload names no folder on this machine.
+ * The host file a workspace file under the folder's mount maps to, or none: the container path stays posix, the host
+ * side takes the client platform's separators, and the containment test is case-insensitive on a win32 client.
+ */
+function workspaceFileOf(
+  hostPath: string,
+  platform: string,
+  workspaceFile: string | undefined,
+): string | undefined {
+  if (workspaceFile === undefined) {
+    return undefined;
+  }
+  const hostPaths = hostPathsOf(platform);
+  const normalized = path.posix.normalize(workspaceFile);
+  const mountTarget = `/workspaces/${hostPaths.basename(hostPath)}/`;
+  if (normalized.startsWith('..') || !normalized.startsWith(mountTarget)) {
+    return undefined;
+  }
+  const mapped = hostPaths.join(hostPath, normalized.slice(mountTarget.length));
+  const prefix = hostPath + hostPaths.sep;
+  const staysUnder =
+    platform === 'win32'
+      ? mapped.toLowerCase().startsWith(prefix.toLowerCase())
+      : mapped.startsWith(prefix);
+  return staysUnder ? mapped : undefined;
+}
+
+/**
+ * The origin a dev container window can be reopened at, on the client `platform`: the payload's host folder, whatever
+ * folder the window shows now, plus the host file the window's workspace file maps to when it lies under the folder's
+ * mount. None for a window that isn't a dev container, or whose payload names no folder on this machine.
  */
 export function windowOriginOf(
   authority: string | undefined,
+  platform: string,
+  workspaceFile?: string,
 ): ReopenOrigin | undefined {
   if (authority === undefined) {
     return undefined;
@@ -230,5 +276,7 @@ export function windowOriginOf(
   ) {
     return undefined;
   }
-  return {kind: 'local', folder: target.hostPath};
+  const origin: ReopenOrigin = {kind: 'local', folder: target.hostPath};
+  const file = workspaceFileOf(target.hostPath, platform, workspaceFile);
+  return file === undefined ? origin : {...origin, workspaceFile: file};
 }

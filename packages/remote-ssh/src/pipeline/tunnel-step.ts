@@ -21,9 +21,11 @@ import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
   type Classification,
-  CONNECTION_CLOSED_TEXT,
   connectWaitMilliseconds,
+  CLIENT_FORWARDING_DISABLED,
+  CONNECTION_CLOSED_TEXT,
   type FailureHint,
+  FORWARDING_PROHIBITED_HINT,
   type Forward,
   type Invocation,
   LineSplitter,
@@ -38,7 +40,12 @@ import {isAborted, portOf} from './connect.ts';
 import {clientRefusal, ofClassification} from './failure.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
 import {logSshLines} from './ssh-log.ts';
-import type {ConnectInput, ConnectSteps} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionLease,
+  ConnectSteps,
+  StepFailure,
+} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
 interface WindowEnvironment {
@@ -74,8 +81,10 @@ export interface TunnelStepDependencies {
   ): {onQuestion(text: string): void; dispose(): void};
   /** Tells the user, once for the window, that the host refuses the forwarding the SOCKS relay needs. */
   forwardRefused(): void;
-  /** `remote.SSH.useExecServer`: with it the second ssh's refused first forward is a failure. */
-  useExecServer(): boolean;
+  /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
+  warnedForwardingDisabled(): boolean;
+  /** Whether ssh has reported, in this connect, that the host's sshd prohibited a forward. */
+  prohibitedForwarding(): boolean;
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
   /** What decides the length of the connect wait, which also bounds a question of the tunnel login that nobody can see. */
@@ -92,6 +101,47 @@ const FORWARD_READY_MILLISECONDS = 10_000;
  * milliseconds (measured 10 ms on a local host), so the bound covers a slow link.
  */
 const FORWARD_REFUSAL_MILLISECONDS = 500;
+
+/** The failure of a host whose sshd forbids TCP forwarding: the dialog's reason, and the hint the terminal and the record show. */
+const FORWARDING_REFUSED: StepFailure = {
+  kind: 'forwardingDisabled',
+  reason: {id: 'forwardingRefused'},
+  hints: [FORWARDING_PROHIBITED_HINT],
+};
+
+/** The failure of a connection whose ssh disabled forwarding itself after a changed host key: its own reason and hint, never the server's. */
+const FORWARDING_DISABLED_BY_CLIENT: StepFailure = {
+  kind: 'forwardingDisabled',
+  ...(CLIENT_FORWARDING_DISABLED.reason === undefined
+    ? {}
+    : {reason: CLIENT_FORWARDING_DISABLED.reason}),
+  hints: CLIENT_FORWARDING_DISABLED.hints,
+};
+
+/** How long the host may take to say whether the server listens, once the second ssh's proving connection was closed. */
+const LISTEN_CHECK_MILLISECONDS = 5_000;
+
+/** The failure of a refused forward that nothing named: the connection closed, with no hint. */
+const FORWARD_CLOSED: StepFailure = {
+  kind: 'channelClosed',
+  reason: {text: CONNECTION_CLOSED_TEXT},
+};
+
+/**
+ * The failure of a refused forward: the changed host key's own when ssh warned of it, the server's when ssh reported
+ * the forward administratively prohibited, else the connection closed.
+ */
+function refusedFailure(dependencies: {
+  warnedForwardingDisabled(): boolean;
+  prohibitedForwarding(): boolean;
+}): StepFailure {
+  if (dependencies.warnedForwardingDisabled()) {
+    return FORWARDING_DISABLED_BY_CLIENT;
+  }
+  return dependencies.prohibitedForwarding()
+    ? FORWARDING_REFUSED
+    : FORWARD_CLOSED;
+}
 
 /** The reason of a tunnel whose port never accepted: "Error establishing tunnel (Max wait time exhausted)." */
 const MAX_WAIT_EXHAUSTED = {
@@ -182,7 +232,7 @@ async function openTerminalTunnel(
   path: 'secondSsh' | 'socket',
   given: Parameters<ConnectSteps['openTunnel']>,
 ): Promise<TunnelResult> {
-  const [input, , server, onWaiting, cancellation, onSettingUp] = given;
+  const [input, lease, server, onWaiting, cancellation, onSettingUp] = given;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
@@ -312,11 +362,9 @@ async function openTerminalTunnel(
       ...dependencies.limits,
       readyMilliseconds: FORWARD_READY_MILLISECONDS,
     },
-    // After a connect has worked the refusal stays a reconnection. On a first resolve, the socket path and the second
-    // ssh with the exec server fail on a refused forward; the second ssh without it reconnects, with the platform pick
-    // of each attempt.
-    ...(input.isReconnection ||
-    (path === 'secondSsh' && !dependencies.useExecServer())
+    // After a connect has worked the refusal stays a reconnection; on a first resolve a refused forward fails the
+    // connect at once, whatever the exec server setting is.
+    ...(input.isReconnection
       ? {}
       : {refusalMilliseconds: FORWARD_REFUSAL_MILLISECONDS}),
     stopSession: () => {
@@ -333,12 +381,13 @@ async function openTerminalTunnel(
     dependencies.logger.warn(
       'the host refused the forward of the tunnel: the port closed the connection that proved it accepting',
     );
+    // Over a socket the refusal is of stream-local forwarding, which the TCP setting does not name: the connection closed.
     return {
       kind: 'failed',
-      failure: {
-        kind: 'channelClosed',
-        reason: {text: CONNECTION_CLOSED_TEXT},
-      },
+      failure:
+        path === 'socket'
+          ? FORWARD_CLOSED
+          : await secondSshRefusal(dependencies, lease, server, cancellation),
     };
   }
   if (outcome.kind !== 'open') {
@@ -408,6 +457,39 @@ async function serverListens(
   return answer === undefined ? undefined : answer.endsWith('yes');
 }
 
+/**
+ * The failure of a second ssh whose proving connection was closed: the changed host key's own when ssh warned of it;
+ * else the server's, when the host says the server listens (so the sshd forbade the forward); else the connection
+ * closed, also when the check failed or ran out of time. The second ssh's terminal carries no line that names the cause.
+ */
+async function secondSshRefusal(
+  dependencies: TunnelStepDependencies,
+  lease: ConnectionLease,
+  server: StartedServer,
+  cancellation: AbortSignal,
+): Promise<StepFailure> {
+  if (dependencies.warnedForwardingDisabled()) {
+    return FORWARDING_DISABLED_BY_CLIENT;
+  }
+  const bound = new AbortController();
+  const timer = dependencies.scheduler.setTimer(
+    LISTEN_CHECK_MILLISECONDS,
+    () => {
+      bound.abort();
+    },
+  );
+  const listens = await serverListens(
+    lease.channel,
+    portOf(server),
+    AbortSignal.any([cancellation, bound.signal]),
+  ).catch(() => undefined);
+  timer();
+  dependencies.logger.info(
+    refusalLine('closedBeforeReply', listens, portOf(server)),
+  );
+  return listens === true ? FORWARDING_REFUSED : FORWARD_CLOSED;
+}
+
 /** The log line of the check that ended a refused-looking run, naming the fact that decided it. */
 function refusalLine(
   cause: 'closedBeforeReply' | 'unreachable',
@@ -446,8 +528,7 @@ export function openTunnelStep(
   async function openTunnel(
     ...given: Parameters<ConnectSteps['openTunnel']>
   ): Promise<TunnelResult> {
-    const [, lease, server, onWaiting, cancellation, onSettingUp, disarmBound] =
-      given;
+    const [, lease, server, onWaiting, cancellation, onSettingUp] = given;
     const path = tunnelPath();
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
@@ -489,18 +570,7 @@ export function openTunnelStep(
     stopNotices();
     if (outcome.kind === 'relayRefused') {
       dependencies.forwardRefused();
-      // The connect goes on waiting, with its progress, until the window is closed or reloaded: no dialog, no retry.
-      disarmBound?.();
-      await new Promise<void>(resolve => {
-        if (isAborted(cancellation)) {
-          resolve();
-        } else {
-          cancellation.addEventListener('abort', () => {
-            resolve();
-          });
-        }
-      });
-      return CANCELLED;
+      return {kind: 'failed', failure: refusedFailure(dependencies)};
     }
     if (outcome.kind !== 'open') {
       return NOT_OPENED;

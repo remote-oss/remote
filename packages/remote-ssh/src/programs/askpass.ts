@@ -3,18 +3,6 @@
  * question to the helper's askpass endpoint and prints the answer on standard output. It loads nothing of the editor.
  */
 
-import {nodeEndpointPort, runAskpassProgram} from 'lib-helper';
+import {runAskpassMain} from 'lib-helper';
 
-runAskpassProgram({
-  programArguments: process.argv.slice(2),
-  environment: process.env,
-  port: nodeEndpointPort(process.platform),
-  output: text => process.stdout.write(text),
-})
-  .then(status => {
-    process.exitCode = status;
-  })
-  .catch(() => {
-    // A program that cannot run refuses the question, which ssh takes as a cancelled prompt.
-    process.exitCode = 1;
-  });
+void runAskpassMain(process);

@@ -14,6 +14,7 @@ export function inertRecoveryPorts(
     keepEdit: () => Promise.resolve(),
     openLocally: () => Promise.resolve(),
     reloadWindow: () => Promise.resolve(),
+    closeRemote: () => Promise.resolve(),
     openRecent: () => Promise.resolve(),
     storePausedRetry: () => Promise.resolve(),
     rebuildContainer: () => Promise.resolve(),

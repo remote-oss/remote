@@ -6,6 +6,9 @@ import type {Translate} from './engine-dialogs.ts';
 import {filled} from './filled.ts';
 
 const OWN_TEMPLATES = {
+  errorPrefixed: 'Error: {0}',
+  historyNotFetched:
+    "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.",
   noServerSource:
     "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.",
   vscodeMountReserved: `'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.`,

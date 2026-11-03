@@ -10,11 +10,50 @@ export interface EngineCoordinates {
   environment: Readonly<Record<string, string>>;
 }
 
-/** What identifies a dev container before its id is known: the folder and configuration it is for. */
-export interface ContainerIdentity {
-  hostPath: string;
-  /** The configuration file's path on the host. */
-  configFile: string;
+/**
+ * What identifies a dev container before its id is known: the folder and configuration it is for, or, for a clone in a
+ * volume, the volume and the folder in it.
+ */
+export type ContainerIdentity =
+  | {
+      hostPath: string;
+      /** The configuration file's path on the host. */
+      configFile: string;
+    }
+  | {volumeName: string; folder: string};
+
+/** Whether two identities name the same dev container. */
+export function sameIdentity(
+  left: ContainerIdentity,
+  right: ContainerIdentity,
+): boolean {
+  if ('hostPath' in left) {
+    return (
+      'hostPath' in right &&
+      left.hostPath === right.hostPath &&
+      left.configFile === right.configFile
+    );
+  }
+  return (
+    'volumeName' in right &&
+    left.volumeName === right.volumeName &&
+    left.folder === right.folder
+  );
+}
+
+/** The `docker ps` filters that find the dev container of an identity by its labels. */
+export function identityFilters(identity: ContainerIdentity): string[] {
+  const labels =
+    'hostPath' in identity
+      ? [
+          `devcontainer.local_folder=${identity.hostPath}`,
+          `devcontainer.config_file=${identity.configFile}`,
+        ]
+      : [
+          `vsch.local.repository.volume=${identity.volumeName}`,
+          `vsch.local.repository.folder=${identity.folder}`,
+        ];
+  return labels.flatMap(label => ['--filter', `label=${label}`]);
 }
 
 /** The Compose project a connection started, and which of its services the connection's end stops. */
@@ -84,28 +123,41 @@ function environmentOf(
     : undefined;
 }
 
+/** The identity a member holds: a folder's, a volume's, or none. */
+function identityOf(value: unknown): ContainerIdentity | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const hostPath = textOf(value, 'hostPath');
+  const configFile = textOf(value, 'configFile');
+  if (hostPath !== undefined && configFile !== undefined) {
+    return {hostPath, configFile};
+  }
+  const volumeName = textOf(value, 'volumeName');
+  const folder = textOf(value, 'folder');
+  return volumeName !== undefined && folder !== undefined
+    ? {volumeName, folder}
+    : undefined;
+}
+
 /** The register request of `record`, or its problem. */
 function readRegister(
   record: Record<string, unknown>,
   connectionId: string,
 ): ReadRequest {
-  const {identity, engine} = record;
-  const hostPath = isRecord(identity)
-    ? textOf(identity, 'hostPath')
-    : undefined;
-  const configFile = isRecord(identity)
-    ? textOf(identity, 'configFile')
-    : undefined;
+  const {engine} = record;
+  const identity = identityOf(record.identity);
   const dockerPath = isRecord(engine)
     ? textOf(engine, 'dockerPath')
     : undefined;
   const environment = isRecord(engine)
     ? environmentOf(engine.environment)
     : undefined;
-  if (hostPath === undefined || configFile === undefined) {
+  if (identity === undefined) {
     return {
       kind: 'malformed',
-      problem: 'register needs the identity with a hostPath and a configFile',
+      problem:
+        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
     };
   }
   if (dockerPath === undefined || environment === undefined) {
@@ -120,7 +172,7 @@ function readRegister(
     request: {
       type: 'register',
       connectionId,
-      identity: {hostPath, configFile},
+      identity,
       engine: {dockerPath, environment},
     },
   };

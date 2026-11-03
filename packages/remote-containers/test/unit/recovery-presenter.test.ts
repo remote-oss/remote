@@ -7,6 +7,7 @@ import type {
   SerializedUri,
 } from '../../src/authority/payload.ts';
 import {
+  cloneFailed,
   containerSetupFailed,
   containerUnusable,
   disallowedFeature,
@@ -55,6 +56,8 @@ interface Script {
   logFails?: boolean;
   /** A rejection of the attempt's log write that is not an Error. */
   logRefusal?: string;
+  /** Whether the window is a clone in a volume. */
+  volume?: boolean;
 }
 
 /** A presenter over recording ports; `later` queues its tasks until `flush` runs them. */
@@ -119,6 +122,10 @@ function presenting(script: Script = {}) {
         calls.push('reloadWindow');
         return Promise.resolve();
       },
+      closeRemote: () => {
+        calls.push('closeRemote');
+        return Promise.resolve();
+      },
       openRecent: () => {
         calls.push('openRecent');
         return Promise.resolve();
@@ -155,6 +162,7 @@ function presenting(script: Script = {}) {
     () => ('target' in script ? script.target : TARGET),
     () => script.failed,
     template => template,
+    () => script.volume === true,
   );
   /** Runs what `later` queued, and waits for the quick pick that follows. */
   async function flush(): Promise<void> {
@@ -589,6 +597,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
       () => TARGET,
       () => undefined,
       template => template,
+      () => false,
     );
     let settled = false;
     const running = presenter.present(containerSetupFailed()).then(outcome => {
@@ -677,5 +686,48 @@ describe('the failure presenter C8 (card containers-11)', () => {
       sink.lines.map(line => `${line.level}: ${line.message}`),
       ['warn: the log of the attempt could not be written: quota'],
     );
+  });
+
+  describe('a clone in a volume (card containers-151)', () => {
+    it('F-0701 7.E2, AC-33: the dialog offers Close Remote in Edit Locally’s place, and Close Remote closes the remote', async () => {
+      const scene = await present(cloneFailed('fatal: no'), {
+        target: undefined,
+        volume: true,
+        errors: ['Close Remote'],
+      });
+      deepStrictEqual(
+        [scene.calls, scene.outcome],
+        [
+          [
+            'showError |Git clone failed. fatal: no|Retry,Close Remote,More Actions... (close)',
+            'closeRemote',
+          ],
+          'handled',
+        ],
+      );
+    });
+
+    it('F-0701 AC-12: More Actions... lists Open Repository, which opens nothing further', async () => {
+      const scene = await present(cloneFailed('fatal: no'), {
+        target: undefined,
+        volume: true,
+        errors: ['More Actions...'],
+        picks: ['Open Repository'],
+      });
+      await scene.flush();
+      deepStrictEqual(
+        [
+          scene.calls.slice(1),
+          scene.sink.lines.map(line => line.message).at(-1),
+        ],
+        [
+          [
+            'later',
+            'pick Pick an action to help resolve the problem.|Reload Window,Open Repository,Open Recent...,Open Documentation',
+          ],
+          'Open Repository opens nothing further',
+        ],
+      );
+    });
   });
 });

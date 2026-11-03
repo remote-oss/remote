@@ -67,6 +67,7 @@ import {
   serverDownloadProgress,
 } from './cli/server-download-progress.ts';
 import {announcePlatform} from './connect/platform-notice.ts';
+import type {PlatformPickVariant} from './connect/platform-picker.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
@@ -76,6 +77,7 @@ import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
   openingAttached,
+  type RefusalWatch,
   refusalWatchOf,
 } from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
@@ -141,6 +143,7 @@ export interface ConnectSurfaces {
   /** Asks the user for the host's platform; nothing when the pick closed without one. */
   pickPlatform: (
     alias: string,
+    variant: PlatformPickVariant,
     cancellation: AbortSignal,
   ) => Promise<RemotePlatform | undefined>;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`, in the user's settings. */
@@ -274,6 +277,7 @@ export function wiringPortsOf(
   surfaces: ConnectSurfaces,
   machine: ConnectMachine,
   logger: Logger,
+  refusal?: Pick<RefusalWatch, 'warned' | 'prohibited'>,
 ): WiringPorts {
   const {settings} = surfaces;
   let refusedTold = false;
@@ -482,6 +486,8 @@ export function wiringPortsOf(
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
       chooseLocalPort: chooseWindowPort,
+      warnedForwardingDisabled: () => refusal?.warned() ?? false,
+      prohibitedForwarding: () => refusal?.prohibited() ?? false,
       forwardRefused: () => {
         // The extension host is the window's, so a flag of this assembly is a flag of the window.
         if (refusedTold) {
@@ -537,6 +543,7 @@ export function connectAssemblyOf(
     {...surfaces, terminals: tracker},
     machine,
     watch.logger,
+    watch,
   );
   const connector = connectorFrom({
     stepsFor: onPhase => {

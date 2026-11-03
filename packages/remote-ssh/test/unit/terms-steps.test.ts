@@ -27,6 +27,8 @@ const SETTINGS: TermsSettings = {
 
 interface Calls {
   asked: string[];
+  /** The variant each question was asked with. */
+  variants: string[];
   written: Array<[string, RemotePlatform]>;
   announced: RemotePlatform[];
   /** The order of the announcements and the writes. */
@@ -37,13 +39,20 @@ function stepsFor(
   changes: Partial<TermsSettings>,
   answer?: RemotePlatform,
 ): {calls: Calls; steps: ReturnType<typeof createTermsSteps>} {
-  const calls: Calls = {asked: [], written: [], announced: [], order: []};
+  const calls: Calls = {
+    asked: [],
+    variants: [],
+    written: [],
+    announced: [],
+    order: [],
+  };
   return {
     calls,
     steps: createTermsSteps({
       settings: () => ({...SETTINGS, ...changes}),
-      pickPlatform: alias => {
+      pickPlatform: (alias, variant) => {
         calls.asked.push(alias);
+        calls.variants.push(variant);
         return Promise.resolve(answer);
       },
       announcePlatform: platform => {
@@ -151,5 +160,31 @@ describe('remembering the platform', () => {
     });
     await steps.rememberPlatform(INPUT, 'linux');
     deepStrictEqual(calls.announced, []);
+  });
+
+  it('F-2603 AC-19: the question of the platform before any setting says is asked with the ordinary variant', async () => {
+    const {calls, steps} = stepsFor(
+      {useLocalServer: false, useLocalServerSetting: false},
+      'linux',
+    );
+    await steps.decideTerms(INPUT, SIGNAL);
+    deepStrictEqual([calls.asked, calls.variants], [['devbox'], ['ask']]);
+  });
+
+  it('F-2603 AC-19: the question after a broken pipe is asked with its own variant for the alias, and writes nothing, for a chosen platform and for none', async () => {
+    const chosen = stepsFor({}, 'windows');
+    const none = stepsFor({});
+    deepStrictEqual(
+      [
+        await chosen.steps.pickAfterBrokenPipe(INPUT, SIGNAL),
+        await none.steps.pickAfterBrokenPipe(INPUT, SIGNAL),
+        chosen.calls.asked,
+        chosen.calls.variants,
+        chosen.calls.written,
+        chosen.calls.announced,
+        none.calls.written,
+      ],
+      ['windows', undefined, ['devbox'], ['brokenPipe'], [], [], []],
+    );
   });
 });
