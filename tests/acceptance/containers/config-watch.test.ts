@@ -36,6 +36,7 @@ import {
   noticesAfter,
   noticesWhen,
   rewriteConfiguration,
+  storedHashes,
 } from '../windows/config-watch-support.ts';
 import {storeRoot} from '../windows/authoring-support.ts';
 
@@ -561,22 +562,30 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
     }
   });
 
-  it('F-0303 AC-13 (c106-failed-rebuild): a rebuild that fails shows the setup error and advances nothing; after the fix and Retry the connected window shows no notification', async () => {
+  it('F-0303 AC-13 (reading-1893-failed-rebuild): a rebuild that fails shows the setup error and leaves the stored fingerprints as they were; after the fix and Retry the connected window shows no notification (the old container is removed before the build, F-0405 BR-17, so the repeat of the notification after a reconnect cannot happen)', async () => {
     const folder = dockerfileFolder('c106-failed-rebuild');
     const dockerfile = path.join(folder, '.devcontainer', 'Dockerfile');
     const name = await connectedWindow(folder);
     try {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const before = storedHashes(folder);
       rewriteConfiguration(folder, {containerEnv: {C106: 'broken'}});
       await noticesWhen(name, 1);
       appendFileSync(dockerfile, 'RUN false\n');
       await answerNotification(name, CHANGED_START, 'Rebuild');
       const dialog = await waitForDialog(name, 300_000);
+      const afterFailure = storedHashes(folder);
       writeFileSync(dockerfile, dockerfileText());
       await answerDialog(name, 'Retry');
       await connectedToContainer(name, 300_000);
       deepStrictEqual(
-        [dialog.buttons.includes('Retry'), await noticesAfter(name, 10)],
-        [true, []],
+        [
+          dialog.buttons.includes('Retry'),
+          before !== undefined && Object.keys(before).length === 2,
+          afterFailure,
+          await noticesAfter(name, 10),
+        ],
+        [true, true, before, []],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);

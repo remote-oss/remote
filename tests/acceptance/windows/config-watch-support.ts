@@ -4,7 +4,8 @@
  */
 
 import {execFile} from 'node:child_process';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {inWindow, reopenInContainer, variable, waitFor} from './harness.ts';
@@ -96,4 +97,50 @@ export async function dockerInLaunch(...parameters: string[]): Promise<string> {
     },
   });
   return stdout.trim();
+}
+
+/** The key under which the editor keeps the workspace state of our extension. */
+const STATE_KEY = 'remote-oss.remote-containers';
+
+/** The fingerprints the dev container window of `folder` has stored, as its workspace storage holds them; none when it holds none. */
+export function storedHashes(
+  folder: string,
+): Record<string, string> | undefined {
+  const root = path.join(
+    variable('HARNESS_USER_DATA'),
+    'User',
+    'workspaceStorage',
+  );
+  const needle = Buffer.from(path.basename(folder)).toString('hex');
+  for (const entry of readdirSync(root)) {
+    const marker = path.join(root, entry, 'workspace.json');
+    const database = path.join(root, entry, 'state.vscdb');
+    if (
+      !existsSync(marker) ||
+      !existsSync(database) ||
+      !readFileSync(marker, 'utf8').includes(`dev-container%2B`) ||
+      !readFileSync(marker, 'utf8').includes(needle)
+    ) {
+      continue;
+    }
+    const connection = new DatabaseSync(database, {readOnly: true});
+    try {
+      const row = connection
+        .prepare('SELECT value FROM ItemTable WHERE key = ?')
+        .get(STATE_KEY) as {value: string} | undefined;
+      const state =
+        row === undefined
+          ? undefined
+          : (JSON.parse(row.value) as Record<string, unknown>);
+      const stored = state?.[
+        'remote-oss.remote-containers.configurationWatch'
+      ] as
+        | {configurationState?: {contentHashes?: Record<string, string>}}
+        | undefined;
+      return stored?.configurationState?.contentHashes;
+    } finally {
+      connection.close();
+    }
+  }
+  return undefined;
 }
