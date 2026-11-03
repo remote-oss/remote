@@ -73,7 +73,8 @@ jobs:
       - name: Probe, the client address a container reaches (card tooling-116)
         continue-on-error: true
         run: |
-          $gw = (wsl -d Ubuntu-24.04 -u root -- sh -c "ip route show default | awk '{print `$3}'").Trim()
+          $route = (wsl -d Ubuntu-24.04 -u root -- ip -4 route show default) -join ' '
+          $gw = ($route.Trim() -split '\s+')[2]
           "distro default gateway (the Windows host as the distro sees it): $gw"
           Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | ForEach-Object { "windows adapter $($_.InterfaceAlias): $($_.IPAddress)" }
           New-NetFirewallRule -DisplayName 'tooling-116 probe' -Direction Inbound -Protocol TCP -LocalPort 47116 -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
@@ -84,6 +85,7 @@ jobs:
           "listening: $(Get-NetTCPConnection -LocalPort 47116 -State Listen -ErrorAction SilentlyContinue | ForEach-Object LocalAddress)"
           docker run --rm --add-host "downloads:$gw" alpine:3.22 wget -qO- -T 10 http://downloads:47116/probe.txt
           "container fetch exit=$LASTEXITCODE"
+          wsl -d Ubuntu-24.04 -u root -- sh -c "wget -qO- -T 10 http://${gw}:47116/probe.txt; echo distro fetch exit=`$?"
           Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
