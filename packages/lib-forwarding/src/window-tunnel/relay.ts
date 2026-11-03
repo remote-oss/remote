@@ -52,6 +52,8 @@ export interface RelayTunnelRequest {
   /** The port on this machine's loopback the window connects to. */
   localPort: number;
   limits: WaitLimits;
+  /** Told each line the relay logs: a dial that failed, and the tunnel's end. */
+  onLine?: (line: string) => void;
   /** Told once, when the first probe through the dialer did not work and the tunnel goes on waiting. */
   onWaiting?: () => void;
   /**
@@ -61,6 +63,16 @@ export interface RelayTunnelRequest {
   confirmRefusal?: (
     cause: 'closedBeforeReply' | 'unreachable',
   ) => Promise<boolean>;
+}
+
+/** What a line names of a target: its port, or that it is a socket. */
+function targetText(target: TunnelTarget): string {
+  return target.kind === 'port' ? `port ${String(target.port)}` : 'socket';
+}
+
+/** The reason a dial failed, as its error gives it. */
+function reasonOf(caught: unknown): string {
+  return caught instanceof Error ? caught.message : String(caught);
 }
 
 /**
@@ -76,6 +88,7 @@ function bridge(
   opening: Promise<Duplex>,
   track: (connection: Duplex) => void,
   heldBytesMaximum: number,
+  onDialFailed: (caught: unknown) => void,
 ): void {
   const held: Uint8Array[] = [];
   let host: Duplex | undefined;
@@ -131,7 +144,8 @@ function bridge(
         client.close();
       });
     },
-    () => {
+    (caught: unknown) => {
+      onDialFailed(caught);
       client.close();
     },
   );
@@ -146,6 +160,7 @@ export async function openRelayTunnel(
   request: RelayTunnelRequest,
 ): Promise<WindowTunnelOutcome> {
   const {dialer, target} = request;
+  const tell = request.onLine ?? (() => undefined);
   const active = new Set<Duplex>();
   function track(connection: Duplex): void {
     active.add(connection);
@@ -171,10 +186,18 @@ export async function openRelayTunnel(
           dialer.dial(target),
           track,
           request.limits.heldBytesMaximum,
+          caught => {
+            tell(
+              `a connection to the window port could not be opened to the host's ${targetText(target)}: ${reasonOf(caught)}`,
+            );
+          },
         );
       },
       detail => {
         ended = {detail};
+        tell(
+          `the window port ${String(request.localPort)} stopped listening by itself: ${detail}`,
+        );
         closeConnections();
         for (const listener of closedListeners.splice(0)) {
           listener(detail);
@@ -188,15 +211,25 @@ export async function openRelayTunnel(
     };
   }
   let closeRan = false;
-  function close(): void {
+  /** Closes the port and its connections, once, and says nothing of why. */
+  function shut(): boolean {
     if (closeRan) {
-      return;
+      return false;
     }
     closeRan = true;
     listening.close();
     closeConnections();
+    return true;
+  }
+  function close(): void {
+    if (shut()) {
+      tell(
+        `the window port ${String(request.localPort)} was closed by its owner`,
+      );
+    }
   }
   let waitingTold = false;
+  let lastProbeFailure = '';
   const failures = {
     closedInARow: 0,
     asked: false,
@@ -209,6 +242,11 @@ export async function openRelayTunnel(
       try {
         (await dialer.dial(target)).close();
       } catch (caught) {
+        const reason = reasonOf(caught);
+        if (reason !== lastProbeFailure) {
+          lastProbeFailure = reason;
+          tell(`a probe to the host's ${targetText(target)} failed: ${reason}`);
+        }
         if (
           caught instanceof RelayClosedBeforeReply ||
           caught instanceof RelayUnreachable
@@ -243,7 +281,12 @@ export async function openRelayTunnel(
     return {kind: 'listenFailed', detail: ended.detail};
   }
   if (!ready) {
-    close();
+    shut();
+    tell(
+      failures.confirmed
+        ? `the window port ${String(request.localPort)} was closed: the host refuses the forward`
+        : `the window port ${String(request.localPort)} was closed: no probe worked before the bound`,
+    );
     return failures.confirmed
       ? {kind: 'relayRefused', cause: failures.cause}
       : {kind: 'tunnelNotReady'};

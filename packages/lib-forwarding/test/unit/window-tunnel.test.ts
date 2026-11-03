@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {
+  type Dialer,
   openForwardedTunnel,
   openRelayTunnel,
   type RelayTunnelRequest,
+  type TunnelTarget,
   type WindowTunnelOutcome,
 } from '../../src/index.ts';
 import {
@@ -28,6 +30,7 @@ function relay(
   heldBytesMaximum: number = LIMITS.heldBytesMaximum,
   onWaiting?: () => void,
   confirmRefusal?: RelayTunnelRequest['confirmRefusal'],
+  onLine?: (line: string) => void,
 ): RelayFixture {
   const clock = new FakeClock();
   const dialer = new FakeDialer(dialScript);
@@ -41,6 +44,7 @@ function relay(
     limits: {...LIMITS, heldBytesMaximum},
     ...(onWaiting === undefined ? {} : {onWaiting}),
     ...(confirmRefusal === undefined ? {} : {confirmRefusal}),
+    ...(onLine === undefined ? {} : {onLine}),
   };
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
 }
@@ -290,6 +294,166 @@ describe('the window tunnel through the relay', () => {
       outcome.close();
     }
     deepStrictEqual(local.closedPorts, [50000]);
+  });
+});
+
+describe('what the window tunnel through the relay logs (card connect-131)', () => {
+  function logged(
+    dialScript: readonly DialAnswer[],
+    lines: string[],
+  ): RelayFixture {
+    return relay(
+      dialScript,
+      'work',
+      LIMITS.heldBytesMaximum,
+      undefined,
+      undefined,
+      line => {
+        lines.push(line);
+      },
+    );
+  }
+
+  it('says a failing probe once for a run of the same failure, with the port it asked for and the reason', async () => {
+    const lines: string[] = [];
+    const {open, clock} = logged(
+      ['closedBeforeReply', 'closedBeforeReply', 'work'],
+      lines,
+    );
+    const pending = open();
+    await advanced(clock, 500);
+    await advanced(clock, 500);
+    await pending;
+    deepStrictEqual(lines, [
+      "a probe to the host's port 4321 failed: the relay closed the connection before its reply",
+    ]);
+  });
+
+  it('says again when the failure changes', async () => {
+    const lines: string[] = [];
+    const {open, clock} = logged(
+      ['closedBeforeReply', 'unreachable', 'work'],
+      lines,
+    );
+    const pending = open();
+    await advanced(clock, 500);
+    await advanced(clock, 500);
+    await pending;
+    deepStrictEqual(lines, [
+      "a probe to the host's port 4321 failed: the relay closed the connection before its reply",
+      "a probe to the host's port 4321 failed: the relay cannot be reached: connection refused",
+    ]);
+  });
+
+  it('says a connection of the window that could not be opened to the host', async () => {
+    const lines: string[] = [];
+    const {open, local} = logged(['work', 'fail'], lines);
+    await open();
+    local.accept(50000);
+    await settled();
+    deepStrictEqual(lines, [
+      "a connection to the window port could not be opened to the host's port 4321: the dialer cannot reach the host",
+    ]);
+  });
+
+  it('says that the window port stopped listening by itself, with the reason', async () => {
+    const lines: string[] = [];
+    const {open, local} = logged(['work'], lines);
+    await open();
+    local.fail(50000, 'the socket was reset');
+    deepStrictEqual(lines, [
+      'the window port 50000 stopped listening by itself: the socket was reset',
+    ]);
+  });
+
+  it('says that the owner closed the window port, once', async () => {
+    const lines: string[] = [];
+    const {open} = logged(['work'], lines);
+    const outcome = await open();
+    if (outcome.kind === 'open') {
+      outcome.close();
+      outcome.close();
+    }
+    deepStrictEqual(lines, ['the window port 50000 was closed by its owner']);
+  });
+
+  it('says that the port was closed because no probe worked before the bound, and not that its owner closed it', async () => {
+    const lines: string[] = [];
+    const {open, clock} = logged(['fail'], lines);
+    const pending = open();
+    await advanced(clock, LIMITS.readyMilliseconds + 1000);
+    await pending;
+    deepStrictEqual(lines.slice(1), [
+      'the window port 50000 was closed: no probe worked before the bound',
+    ]);
+  });
+
+  it('says that the port was closed because the host refuses the forward, when the caller confirms it', async () => {
+    const lines: string[] = [];
+    const {open, clock} = relay(
+      ['closedBeforeReply'],
+      'work',
+      LIMITS.heldBytesMaximum,
+      undefined,
+      () => Promise.resolve(true),
+      line => {
+        lines.push(line);
+      },
+    );
+    const pending = open();
+    for (let round = 0; round < 20; round++) {
+      await advanced(clock, 500);
+    }
+    await pending;
+    deepStrictEqual(lines.slice(1), [
+      'the window port 50000 was closed: the host refuses the forward',
+    ]);
+  });
+
+  /** The first line the relay logs for a dialer that always fails, to a target. */
+  async function firstLineFor(
+    dialer: Dialer,
+    target: TunnelTarget,
+  ): Promise<string | undefined> {
+    const lines: string[] = [];
+    const clock = new FakeClock();
+    const outcome = openRelayTunnel({
+      dialer,
+      local: new FakeLocalPort(),
+      scheduler: clock.scheduler(),
+      target,
+      localPort: 50000,
+      limits: LIMITS,
+      onLine: line => {
+        lines.push(line);
+      },
+    });
+    await advanced(clock, LIMITS.readyMilliseconds + 1000);
+    await outcome;
+    return lines[0];
+  }
+
+  it('says a failure that is no error object by its text', async () => {
+    deepStrictEqual(
+      await firstLineFor(
+        {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a dialer that breaks its contract, on purpose
+          dial: () => Promise.reject('the dialer gave a bare text'),
+        },
+        {kind: 'port', port: 4321},
+      ),
+      "a probe to the host's port 4321 failed: the dialer gave a bare text",
+    );
+  });
+
+  it('says its socket target without a path', async () => {
+    deepStrictEqual(
+      await firstLineFor(new FakeDialer(['fail']), {
+        kind: 'socket',
+        path: '/run/user/1000/server.sock',
+      }),
+      "a probe to the host's socket failed: the dialer cannot reach the host",
+    );
   });
 });
 
