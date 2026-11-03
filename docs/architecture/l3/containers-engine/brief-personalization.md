@@ -69,6 +69,15 @@ relay exists "right after the requirements check … before any lifecycle comman
   - **What it does with a connection:** it opens a numbered stream over its stdio and pipes both ways.
   - **The framing** is ours (R-27): `open <stream> <kind>`, `data <stream> <length>`, `close <stream>`, in binary
     frames. Unit rows cover the codec.
+  - **Frames from the container are untrusted input** (dike on #2044). The host side enforces:
+    - a payload of at most 64 KiB per frame;
+    - at most 64 open streams per relay host;
+    - only the kinds C16 set up for this connection.
+
+    A frame over the cap, an unknown frame type or kind, or a malformed header ends the relay host (every stream
+    closed, one log line). A stream opened beyond the cap is closed at once, with one log line. Writes honour Node's
+    stream backpressure in both directions, so a slow host socket pauses the exec's stdout, not memory. There's a unit
+    row per cap and per malformed case.
 - **The host side:** C16 demultiplexes each stream by kind:
   - `ssh-agent` connects to the host agent: the UI process's `SSH_AUTH_SOCK`, or on Windows the agent pipe of ADR-0013;
   - `gpg` connects to the host's `agent-extra-socket`, with the Gpg4win/Cygwin socket handshake from the dev container
@@ -173,6 +182,22 @@ relay exists "right after the requirements check … before any lifecycle comman
   through C11, then the local User value, then the default (F-1002 BR-6, F-1006 §16, F-1007).
   `dev.containers.mountWaylandSocket` is `application` scope and read normally.
 - **A dev container's first connect** has no Machine file yet, so the local value applies.
+- **Ruling `(ruling-2044-machine-narrows)`** (dike on #2044): the container can write its own Machine file. So for the four
+  settings that send host data into the container, a Machine value can *narrow* the local User value (or the default,
+  when the user set none) and never widen it:
+  - `dev.containers.copyGitConfig` and `dev.containers.dockerCredentialHelper`: `false` from either place wins.
+    `true` needs the local value or default to be on.
+  - `dev.containers.gitCredentialHelperConfigLocation`: a local `none` wins. Otherwise the Machine value applies
+    (`system`, `global` or `none`).
+  - `dev.containers.githubCLILoginWithToken`: default `false`, so `true` counts only from the local User settings.
+    The Machine file can turn it off, not on.
+
+  The dotfiles settings choose only what's cloned into the container itself, with no host secret, so they're read as
+  specified.
+
+  The spec's Machine-first reading (F-1002 BR-6, F-1006 BR-7, §16) stays reference data for the widening direction
+  only. The rows carry the label, and release notes gain the Deviations entry. A user who enables `gh` login only in
+  Remote settings must also enable it in User settings, and the README says so.
 
 ## 6. Entry points and platforms
 
