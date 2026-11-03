@@ -3182,9 +3182,14 @@ export async function clearQuickPickInput(name: string): Promise<void> {
   await setQuickPickInput(name, '');
 }
 
-/** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
-export async function acceptQuickPick(name: string): Promise<void> {
+/** Presses Enter in window `name` wherever its page has the focus, as the keyboard does. */
+export async function pressEnter(name: string): Promise<void> {
   await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
+export function acceptQuickPick(name: string): Promise<void> {
+  return pressEnter(name);
 }
 
 /** One editor tab: its label, whether it is the active one, and whether it is a preview (shown in italics until kept). */
@@ -3682,6 +3687,38 @@ export async function pressControlAlt(
     nativeVirtualKeyCode: named?.keyCode ?? upper.charCodeAt(0),
     modifiers: ALT_AND_CONTROL,
   });
+}
+
+/** The modifier bit of Shift in the protocol's key events. */
+const SHIFT = 8;
+
+/** The protocol virtual key code of F10. */
+const F10_KEY_CODE = 121;
+
+/**
+ * The labels of the context menu that Shift+F10 opens on the row `rowLabel` of view `viewName` in window `name`, in
+ * order, once a click has put the focus on the row; none when it opens no menu. The menu is closed again.
+ */
+export async function rowContextMenuByKey(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string[]> {
+  await clickRowLabel(name, viewName, rowLabel);
+  await pressStroke(await pageOf(name), name, {
+    key: 'F10',
+    code: 'F10',
+    windowsVirtualKeyCode: F10_KEY_CODE,
+    nativeVirtualKeyCode: F10_KEY_CODE,
+    modifiers: SHIFT,
+  });
+  await new Promise(resolve => setTimeout(resolve, 1200));
+  const labels = await evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '')`,
+  );
+  await pressEscape(name);
+  return labels;
 }
 
 /** The label of the activity bar item that is checked in window `name`, the side bar in front; empty when none is. */

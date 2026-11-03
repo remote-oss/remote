@@ -119,7 +119,7 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
     }
   });
 
-  it('F-5102 AC-22 (editor-save): a host added in the opened editor and saved shows within 5 s with no Refresh; a change by another program shows after 15 s only through Refresh, additions and deletions both', async () => {
+  it('F-5101 AC-15, F-5102 AC-22 (editor-save): a host added in the opened editor and saved shows within 5 s with no Refresh; a change by another program shows after 15 s only through Refresh, additions and deletions both', async () => {
     const file = sshFile('config', ['Host user-one']);
     const window = await viewWindow('edit-save');
     try {
@@ -148,6 +148,32 @@ describe('the configuration file opened from the SSH group (card coverage-102, p
           ),
         ],
         [true, ['typed-one', 'user-one', ...systemHosts()], true],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5101 AC-15 (named-file): a host added and saved in the file that remote.SSH.configFile names, opened from the gear, shows within 5 s with no Refresh', async () => {
+    const file = sshFile('named-config', ['Host user-one']);
+    await userSettings({'remote.SSH.configFile': file});
+    const window = await viewWindow('edit-named');
+    try {
+      await waitFor(
+        `window ${window} to list user-one`,
+        async () => (await hostLabels(window)).includes('user-one'),
+        30_000,
+      );
+      const before = await hostLabels(window);
+      await openFromGear(window, file);
+      await typeAndSave(window, 'Host typed-named\n');
+      deepStrictEqual(
+        await listsWithin(
+          window,
+          ['typed-named', ...before],
+          EDITOR_SAVE_MILLISECONDS,
+        ),
+        true,
       );
     } finally {
       await closeWindow(window);
