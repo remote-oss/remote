@@ -31,6 +31,7 @@ import {
 } from '../windows/renderer.ts';
 import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 import {
+  closeOtherWindows,
   connectedWindow,
   removeContainersOf,
   stateOf,
@@ -114,6 +115,8 @@ async function openWith(
 
 describe('Reopen Folder Locally from a dev container window (card coverage-103, F-0406)', function () {
   this.timeout(900_000);
+
+  before(closeOtherWindows);
 
   it('F-0406 AC-1, AC-2, AC-3, AC-20, AC-22, F-0417 AC-54 (c103-reopen): the same window reloads on the origin folder with the default local indicator and the reopen notification back, offers Reopen in Container and the rebuild pair and none of the four commands, and the container is exited 0 about 11 s later', async () => {
     const connected = await connectedWindow('c103-reopen');
