@@ -111,6 +111,8 @@ Packages type it with a structural type of ours carrying only the members used, 
        user. The same script prints the checked path as our marker (ADR-0010), which the window then connects to.
      - **A check that fails:** no helper, no lease, one log line. The window still connects, and only its stop at close
        is lost.
+   - **Its lifetime** (proteus on #2067): the helper ends itself after its last lease has ended and its check and stop
+     have run, within a bound (R-79). It never outlives its work.
    - **The lease:** each dev container connection's lease is an `fs_connect` stream to that socket. When the window
      closes, the SSH connection ends, the RPC stream ends, and the CLI closes the socket (§2's facts). The helper sees
      EOF, and its 10 s check and stop run on the host (same registry code, same rules).
@@ -156,6 +158,9 @@ Packages type it with a structural type of ours carrying only the members used, 
 
 **Suggested cards**, in order:
 1. **lib-server:** the duplex framing, the methods, `execServerOf`, with unit rows over `testing/fake-cli.ts`.
+   - **Reconnect** (proteus on #2067): the card measures whether core calls `resolveExecServer` again after a lost
+     transport, or keeps the old `ExecServer`. If it keeps it, the adapter reconnects on first use within a bound;
+     otherwise the window can only reload. `contracts.md` §1 records which.
 2. **remote-ssh:** `resolveExecServer` in both cases (the SSH window's live connection; the nested window's own
    connection, held), and the direct-mode refusal. The acceptance row is an extension in an SSH window that spawns
    `echo` through `getRemoteExecServer`.
@@ -168,3 +173,6 @@ after are cut against §3.
 5. **The views, attach and reopen lines** of §4. Rows: theirs.
 
 Fixtures (proteus): the lab's SSH host gets Docker (shared with part A) and a CLI build for its platform.
+
+**On CI,** F-1302's acceptance rows need the CLI archives, so they wait for the user's `REMOTE_OSS_CLI_ARCHIVES_TOKEN`
+secret.
