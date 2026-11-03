@@ -79,6 +79,13 @@
       "card": "#2018",
       "slice": "containers release 1",
       "decision": "F-0302 BR-1 (2026-11-03): part A of the mirrored lookup; part B wires it into discovery"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/explorer/github-repository.ts",
+      "card": "#2035",
+      "slice": "containers release 2"
     }
   ]
 }
