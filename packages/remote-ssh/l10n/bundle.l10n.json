@@ -133,4 +133,10 @@
   "URL must include the scheme ({0} or {1})": "URL must include the scheme ({0} or {1})",
   "URL should not contain non-URL characters": "URL should not contain non-URL characters",
   "When first establishing a connection to the remote server, various resources must be installed from the internet. A program (either \"wget\" or \"curl\") is used to download these resources, but they are not installed on the remote server.  When this step fails, the extension attempts to use the local machine to download the resources and then upload them to the remote server.": "When first establishing a connection to the remote server, various resources must be installed from the internet. A program (either \"wget\" or \"curl\") is used to download these resources, but they are not installed on the remote server.  When this step fails, the extension attempts to use the local machine to download the resources and then upload them to the remote server."
+  "The following issues were detected in your most recent Remote - SSH session": "The following issues were detected in your most recent Remote - SSH session",
+  "See verbose information in the": "See verbose information in the",
+  "Status": "Status",
+  "Message": "Message",
+  "Mitigations": "Mitigations",
+  "Resources": "Resources"
 }

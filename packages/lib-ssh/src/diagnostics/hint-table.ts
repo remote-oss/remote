@@ -13,13 +13,21 @@ export interface HintTableRow {
   resources: readonly string[];
 }
 
-/** The column headers. */
-const HEADERS = {
+/** The text of the column headers. */
+export interface HintTableHeaders {
+  status: string;
+  message: string;
+  mitigations: string;
+  resources: string;
+}
+
+/** The column headers in English. */
+const HEADERS: HintTableHeaders = {
   status: 'Status',
   message: 'Message',
   mitigations: 'Mitigations',
   resources: 'Resources',
-} as const;
+};
 
 /** The bullet of a list item and the width it takes. */
 const BULLET = '• ';
@@ -161,6 +169,7 @@ function rowLines(
 export function hintTable(
   rows: readonly HintTableRow[],
   width: number,
+  headers: HintTableHeaders = HEADERS,
 ): string[] {
   const withLists = rows.some(
     entry => entry.mitigations.length > 0 || entry.resources.length > 0,
@@ -169,7 +178,7 @@ export function hintTable(
     ? (['status', 'message', 'mitigations', 'resources'] as const)
     : (['status', 'message'] as const);
   const statusWidth = Math.max(
-    HEADERS.status.length,
+    headers.status.length,
     ...rows.map(entry => entry.status.length),
   );
   const borders = names.length + 1;
@@ -193,7 +202,7 @@ export function hintTable(
     return names.map(name => lines[name]);
   });
   const columns: Column[] = names.map((name, position) => ({
-    header: HEADERS[name],
+    header: headers[name],
     centre: name === 'status',
     width: widthOf(name),
     cells: dataRows.map(cells => cells[position] ?? []),

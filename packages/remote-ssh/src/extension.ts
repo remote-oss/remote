@@ -30,6 +30,7 @@ import {
 } from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
 import {clientPlatformOf, environmentHints, listHosts} from 'lib-ssh';
+import {troubleshootingEditorOf} from './troubleshooting-editor.ts';
 import {
   descriptionsOf,
   type ManifestSettings,
@@ -448,6 +449,10 @@ async function registerConnectOf(
   adapters: EditorAdapters,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
+  const troubleshootingEditor = troubleshootingEditorOf(vscode, () => {
+    served.revealLog();
+  });
+  context.subscriptions.push(troubleshootingEditor.registerLinks());
   const descriptions = descriptionsOf(
     manifest.contributes?.configuration?.properties ?? {},
     JSON.parse(
@@ -477,6 +482,24 @@ async function registerConnectOf(
       noticeState: context.globalState,
       hintState: context.globalState,
       documentation: () => helpLinksOf(manifest).documentation,
+      troubleshooting: {
+        enabled: () =>
+          vscode.workspace
+            .getConfiguration('remote.SSH')
+            .get('experimental.enhancedSessionLogs', true),
+        createTerminal: troubleshootingEditor.createTerminal,
+        texts: () => ({
+          heading: ownText({id: 'S138', values: []}, translate),
+          leadIn: ownText({id: 'S125', values: []}, translate),
+          headers: {
+            status: ownText({id: 'S134', values: []}, translate),
+            message: ownText({id: 'S090', values: []}, translate),
+            mitigations: ownText({id: 'S091', values: []}, translate),
+            resources: ownText({id: 'S115', values: []}, translate),
+          },
+        }),
+        logger: served.logger,
+      },
       environmentHints: () =>
         environmentHints(
           sessionEnvironmentOf({
