@@ -56,7 +56,7 @@ function flat(rows: readonly DetailsRow[]): DetailsRow[] {
 
 describe('the Details tree (card containers-33)', () => {
   it('F-0903 AC-1: a bind-mounted dev container is titled with its folder and shows Attributes and Mounts', () => {
-    const tree = detailsTreeOf(BOUND, identity);
+    const tree = detailsTreeOf(BOUND, identity, false);
     deepStrictEqual(
       [tree.title, shapeOf(tree.sections)],
       [
@@ -95,7 +95,8 @@ describe('the Details tree (card containers-33)', () => {
       {},
     ].map(
       labels =>
-        detailsTreeOf({...BOUND, labels, image: 'img:1'}, identity).title,
+        detailsTreeOf({...BOUND, labels, image: 'img:1'}, identity, false)
+          .title,
     );
     deepStrictEqual(titles, ['x', 'legacy', 'name', 'img:1', 'img:1']);
   });
@@ -105,7 +106,7 @@ describe('the Details tree (card containers-33)', () => {
       {'devcontainer.local_folder': '/tmp/x'},
       {'devcontainer.config_file': '/tmp/y/devcontainer.json'},
     ].map(labels =>
-      flat(detailsTreeOf({...BOUND, labels}, identity).sections)
+      flat(detailsTreeOf({...BOUND, labels}, identity, false).sections)
         .filter(entry => entry.label === 'Configuration')
         .map(entry => entry.description),
     );
@@ -114,7 +115,7 @@ describe('the Details tree (card containers-33)', () => {
 
   it('F-0903 AC-33, §11: the Workspace origin row is first in Attributes, from the folder label, and a container without a folder label has no origin row; the Workspace text is an [adaptation] key of its own', () => {
     function attributes(labels: Record<string, string>): string[] {
-      return flat(detailsTreeOf({...BOUND, labels}, identity).sections)
+      return flat(detailsTreeOf({...BOUND, labels}, identity, false).sections)
         .filter(entry => entry.id.startsWith('attributes/'))
         .map(entry => `${entry.label}: ${entry.description}`);
     }
@@ -150,7 +151,7 @@ describe('the Details tree (card containers-33)', () => {
 
   it('F-0903 AC-10: F-0903 BR-9: a container with no mount has no Mounts section', () => {
     deepStrictEqual(
-      detailsTreeOf({...BOUND, mounts: []}, identity).sections.map(
+      detailsTreeOf({...BOUND, mounts: []}, identity, false).sections.map(
         section => section.label,
       ),
       ['Attributes'],
@@ -160,7 +161,7 @@ describe('the Details tree (card containers-33)', () => {
   it('F-0903 AC-36: the image is the reference the container was created with', () => {
     const image = `sha256:${'b'.repeat(64)}`;
     deepStrictEqual(
-      flat(detailsTreeOf({...BOUND, image}, identity).sections)
+      flat(detailsTreeOf({...BOUND, image}, identity, false).sections)
         .filter(entry => entry.label === 'Image')
         .map(entry => entry.description),
       [image],
@@ -168,7 +169,11 @@ describe('the Details tree (card containers-33)', () => {
   });
 
   it('F-0901 AC-55: a container created from the tag x:1 is titled x:1 in Details, with the image x:1', () => {
-    const tree = detailsTreeOf({...BOUND, labels: {}, image: 'x:1'}, identity);
+    const tree = detailsTreeOf(
+      {...BOUND, labels: {}, image: 'x:1'},
+      identity,
+      false,
+    );
     deepStrictEqual(
       [
         tree.title,
@@ -182,7 +187,7 @@ describe('the Details tree (card containers-33)', () => {
 
   it('F-0903 AC-14: no entry speaks of mount performance', () => {
     deepStrictEqual(
-      flat(detailsTreeOf(BOUND, identity).sections).filter(entry =>
+      flat(detailsTreeOf(BOUND, identity, false).sections).filter(entry =>
         /performance/i.test(entry.label),
       ),
       [],
@@ -190,7 +195,7 @@ describe('the Details tree (card containers-33)', () => {
   });
 
   it('F-0903 3.3: viewItem is image on the Image entry, volume on each Volume entry and devContainer on the Configuration entry, and nothing elsewhere', () => {
-    const items = flat(detailsTreeOf(BOUND, identity).sections)
+    const items = flat(detailsTreeOf(BOUND, identity, false).sections)
       .filter(entry => entry.viewItem !== undefined)
       .map(entry => [entry.label, entry.viewItem]);
     deepStrictEqual(items, [
@@ -212,6 +217,7 @@ describe('the Details tree (card containers-33)', () => {
         ],
       },
       identity,
+      false,
     ).sections[1];
     deepStrictEqual(
       mounts?.children.map(entry => [
@@ -228,10 +234,10 @@ describe('the Details tree (card containers-33)', () => {
   });
 
   it('F-0903 BR-13: the ids are the same for the same data and differ for different rows', () => {
-    const first = flat(detailsTreeOf(BOUND, identity).sections).map(
+    const first = flat(detailsTreeOf(BOUND, identity, false).sections).map(
       entry => entry.id,
     );
-    const second = flat(detailsTreeOf(BOUND, identity).sections).map(
+    const second = flat(detailsTreeOf(BOUND, identity, false).sections).map(
       entry => entry.id,
     );
     deepStrictEqual(
@@ -242,7 +248,7 @@ describe('the Details tree (card containers-33)', () => {
 
   it('F-0903: every text goes through the translation', () => {
     const labels = flat(
-      detailsTreeOf(BOUND, template => `<${template}>`).sections,
+      detailsTreeOf(BOUND, template => `<${template}>`, false).sections,
     ).map(entry => entry.label);
     deepStrictEqual(
       labels.every(label => label.startsWith('<') && label.endsWith('>')),
@@ -334,6 +340,50 @@ describe('the container of docker inspect (card containers-33)', () => {
         ]),
       )?.labels,
       {first: 'text'},
+    );
+  });
+
+  it('F-0708 BR-4, BR-5, AC-1: with the hint, each bind mount ends with the I/O performance row and the hover text of both halves, a volume mount has none, and without the hint no mount has one', () => {
+    const binds: ShownContainer = {
+      ...BOUND,
+      mounts: [
+        {type: 'bind', source: '/a', destination: '/x'},
+        {type: 'volume', name: 'named', destination: '/vscode'},
+        {type: 'bind', source: '/b', destination: '/y'},
+      ],
+    };
+    const hinted = flat(detailsTreeOf(binds, identity, true).sections).filter(
+      entry => entry.viewItem === 'mountPerformance',
+    );
+    const plain = flat(detailsTreeOf(binds, identity, false).sections).filter(
+      entry => entry.viewItem === 'mountPerformance',
+    );
+    const lastOfBind = detailsTreeOf(binds, identity, true)
+      .sections[1]?.children.filter(entry => entry.label === 'Bind mount')
+      .map(entry => entry.children.at(-1)?.label);
+    deepStrictEqual(
+      [
+        hinted.map(entry => [
+          entry.id,
+          entry.label,
+          entry.description,
+          entry.tooltip,
+          entry.children,
+        ]),
+        plain,
+        lastOfBind,
+      ],
+      [
+        ['mounts/bind-0', 'mounts/bind-1'].map(prefix => [
+          `${prefix}/performance`,
+          'I/O performance',
+          'reduced by bridging OSes',
+          'I/O performance reduced by bridging OSes',
+          [],
+        ]),
+        [],
+        ['I/O performance', 'I/O performance'],
+      ],
     );
   });
 });

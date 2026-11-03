@@ -144,6 +144,13 @@ const DETAILS_IMAGE_INSPECT = {
   when: 'view == detailsContainers && viewItem == image && !remote-containers:standingDown',
 };
 
+/** The inline information action of the hint row under a bind mount in the Details view. */
+const DETAILS_MOUNT_PERFORMANCE = {
+  command: 'remote-containers.openInformationAboutMountPerformance',
+  group: 'inline@1',
+  when: 'view == detailsContainers && viewItem == mountPerformance && !remote-containers:standingDown',
+};
+
 const TARGETS_TITLE_WHEN =
   'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
 
@@ -551,6 +558,7 @@ describe('the manifest', () => {
             ...REOPEN_ROW_ENTRIES,
             ...ROW_ACTION_ENTRIES,
             DETAILS_IMAGE_INSPECT,
+            DETAILS_MOUNT_PERFORMANCE,
           ],
           'statusBar/remoteIndicator': [
             {
@@ -1133,7 +1141,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [24, true, false],
+      [25, true, false],
     );
   });
 
@@ -1214,7 +1222,7 @@ describe('the manifest', () => {
   it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
-        VIEW_PARTS.menus['view/item/context']?.slice(2, -1),
+        VIEW_PARTS.menus['view/item/context']?.slice(2, -2),
         VIEW_PARTS.commands
           .map(entry => entry.command)
           .filter(command =>

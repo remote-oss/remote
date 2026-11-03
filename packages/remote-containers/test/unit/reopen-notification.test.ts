@@ -55,6 +55,10 @@ interface Scene {
   shown: Array<[string, readonly string[]]>;
   reopened: number;
   asked: string[];
+  /** The remote a folder can be cloned from, when the host offers a clone; none for a Linux host. */
+  cloning?: {remote: string | undefined};
+  cloned: string[];
+  remoteAsked: string[];
   sink: MemorySink;
 }
 
@@ -73,6 +77,8 @@ function sceneOf(): Scene {
     shown: [],
     reopened: 0,
     asked: [],
+    cloned: [],
+    remoteAsked: [],
     sink: new MemorySink(),
   };
 }
@@ -87,6 +93,20 @@ async function offered(
       window: scene.window,
       global: scene.global,
       workspace: scene.workspace,
+      ...(scene.cloning === undefined
+        ? {}
+        : {
+            cloning: {
+              remoteOf: folder => {
+                scene.remoteAsked.push(folder);
+                return Promise.resolve(scene.cloning?.remote);
+              },
+              start: remote => {
+                scene.cloned.push(remote);
+                return Promise.resolve();
+              },
+            },
+          }),
       configurationKind: folder => {
         scene.asked.push(folder);
         return Promise.resolve(scene.rootKinds[folder] ?? scene.configuration);
@@ -122,6 +142,53 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     const scene = sceneOf();
     await offered(scene);
     deepStrictEqual(scene.shown, [[S426, [REOPEN, SUPPRESS]]]);
+  });
+
+  it('F-0708 6.4: a Git folder with a remote on a host that is not Linux has the clone sentence and the Clone in Volume button, and the button starts the clone of that remote', async () => {
+    const scene = sceneOf();
+    scene.cloning = {remote: 'https://example.com/a/b.git'};
+    scene.answers = ['Clone in Volume'];
+    await offered(scene);
+    deepStrictEqual(
+      [scene.shown, scene.remoteAsked, scene.cloned, scene.reopened],
+      [
+        [
+          [
+            `${S426} Or: Clone repository in Docker volume for [better I/O performance](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md#mount-performance-and-container-volumes).`,
+            [REOPEN, 'Clone in Volume', SUPPRESS],
+          ],
+        ],
+        ['/w/p'],
+        ['https://example.com/a/b.git'],
+        0,
+      ],
+    );
+  });
+
+  it('F-0708 6.4: no remote, a Linux host, or a window with a workspace file shows the plain notification and asks for no remote where it must not', async () => {
+    const withoutRemote = sceneOf();
+    withoutRemote.cloning = {remote: undefined};
+    await offered(withoutRemote);
+    const linux = sceneOf();
+    await offered(linux);
+    const saved = sceneOf();
+    saved.window = {...saved.window, workspace: 'saved'};
+    saved.cloning = {remote: 'https://example.com/a/b.git'};
+    await offered(saved);
+    deepStrictEqual(
+      [
+        withoutRemote.shown,
+        linux.shown,
+        saved.shown.map(each => each[1]),
+        saved.remoteAsked,
+      ],
+      [
+        [[S426, [REOPEN, SUPPRESS]]],
+        [[S426, [REOPEN, SUPPRESS]]],
+        [[REOPEN, SUPPRESS]],
+        [],
+      ],
+    );
   });
 
   it('F-0302 AC-5: the user data variant shows S368 with the same buttons, without asking the folder for a configuration', async () => {

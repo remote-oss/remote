@@ -16,6 +16,14 @@ The server that powers a dev container window runs inside the container, so the 
 The extension checks this every time a window connects. When the container does not meet the requirements, the dialog
 shows the output of the check, and **Learn More** opens this section.
 
+## Mount performance and container volumes
+
+A folder that a dev container mounts from the machine the editor runs on is read and written across two systems, and on
+Windows and macOS hosts that bridge makes file access slower than inside the container. Keeping a repository in a Docker
+volume avoids the bridge, because the files then live in the engine's own storage. When a Windows-side Docker command
+runs the engine, the Details view marks each bind mount with an **I/O performance** row, and its information action opens
+this section.
+
 ## For maintainers
 
 | | |

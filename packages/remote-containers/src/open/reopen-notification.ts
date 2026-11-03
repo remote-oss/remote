@@ -7,7 +7,10 @@
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
-import {CONTAINERS_INTRODUCTION} from '../surfaces/recovery-presenter.ts';
+import {
+  CONTAINERS_INTRODUCTION,
+  MOUNT_PERFORMANCE_PAGE,
+} from '../surfaces/recovery-presenter.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 
 /** Our key in the global and the workspace storage; neither is synced. */
@@ -20,6 +23,10 @@ const REOPEN_TEMPLATES = {
   S427: '{0} Reopen workspace to develop in a container ([learn more]({2})).{1}',
   S186: 'Folder contains a Dev Container configuration file.',
   S405: 'Workspace contains a Dev Container configuration file.',
+  S073: 'Clone in Volume',
+  /** The sentence that offers the clone; the tail of the notification's first one, so it starts with a space. */
+  cloneOffer:
+    ' Or: Clone repository in Docker volume for [better I/O performance]({0}).',
   S368: 'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.',
   S293: 'Reopen in Container',
   S150: "Don't Show Again...",
@@ -47,6 +54,14 @@ export interface ReopenNotificationPorts {
   workspace: IntentMemento;
   /** Where the folder's configuration is: none, the folder's own, or a stored one (which wins when both exist). */
   configurationKind(folder: string): Promise<'none' | 'folder' | 'stored'>;
+  /**
+   * The clone in a volume that the notification offers a folder with a Git remote, on a host that is not Linux; none on
+   * a Linux host. It names the remote a folder can be cloned from, and starts the clone of that remote.
+   */
+  cloning?: {
+    remoteOf(folder: string): Promise<string | undefined>;
+    start(remote: string): PromiseLike<unknown>;
+  };
   show(
     message: string,
     buttons: readonly string[],
@@ -203,14 +218,29 @@ export async function offerReopen(
       : offer.plain
         ? REOPEN_TEMPLATES.S186
         : REOPEN_TEMPLATES.S368;
+  const [only] = roots;
+  const remote =
+    window.workspace === 'none' && only !== undefined
+      ? await ports.cloning?.remoteOf(only.fsPath)
+      : undefined;
+  const clone = translate(REOPEN_TEMPLATES.S073);
   const answer = await ports.show(
     filled(translate, wording.skeleton, [
       translate(first),
-      '',
+      remote === undefined
+        ? ''
+        : filled(translate, REOPEN_TEMPLATES.cloneOffer, [
+            MOUNT_PERFORMANCE_PAGE,
+          ]),
       CONTAINERS_INTRODUCTION,
     ]),
-    [reopen, suppress],
+    remote === undefined ? [reopen, suppress] : [reopen, clone, suppress],
   );
+  if (remote !== undefined && answer === clone) {
+    logger.info('the reopen notification: clone in a volume');
+    await ports.cloning?.start(remote);
+    return;
+  }
   if (answer === reopen) {
     logger.info('the reopen notification: reopen');
     await ports.reopen();

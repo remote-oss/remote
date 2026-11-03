@@ -185,6 +185,7 @@ function portsOf(scene: Scene): DetailsViewPorts {
         scene.disposed.push('held');
       };
     },
+    mountPerformanceHint: false,
     translate: template => template,
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
   };

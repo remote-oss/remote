@@ -104,6 +104,8 @@ interface TargetsEditor {
 /** Everything the view needs. */
 export interface TargetsViewPorts {
   editor: TargetsEditor;
+  /** Called once, after the first time the view's data has loaded. */
+  loaded(): void;
   /** The connection the window holds, from the connector. */
   held(): HeldConnection | undefined;
   /** `dev.containers.dockerPath` as the editor reports it now. */
@@ -315,6 +317,9 @@ export async function showTargets(
     }
     const replaced = current !== undefined;
     current = next;
+    if (!replaced) {
+      ports.loaded();
+    }
     await Promise.all(
       Object.entries(WELCOME_CONTEXT_KEYS).map(([welcome, key]) =>
         editor.setContext(key, next.welcome === welcome),

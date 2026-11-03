@@ -24,6 +24,9 @@ export const CONTAINERS_REQUIREMENTS =
 export const CONTAINERS_INTRODUCTION =
   'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
 
+/** The section of that page on mount performance and container volumes, which the information about mount performance opens. */
+export const MOUNT_PERFORMANCE_PAGE = `${CONTAINERS_INTRODUCTION}#mount-performance-and-container-volumes`;
+
 /** The labels of the buttons of the dialog for a window with no place to download the server from. */
 const SERVER_SOURCE_BUTTONS = {
   openSetting: 'Open Setting',

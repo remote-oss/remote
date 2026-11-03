@@ -147,6 +147,9 @@ import {
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {composeResolverOf} from './compose/resolver.ts';
+import {MOUNT_PERFORMANCE_PAGE} from './surfaces/recovery-presenter.ts';
+import {gitRemoteOf} from './open/git-remote.ts';
+
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -195,6 +198,9 @@ import {
 import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
 import {ensureTrusted} from './trust/trust-gate.ts';
 import {openOwnSettings} from './settings/settings-command.ts';
+
+/** The command that clones a repository in a volume, which the clone offer of the reopen notification starts once the package registers it. */
+const CLONE_IN_VOLUME_COMMAND = 'remote-containers.cloneInVolume';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -650,6 +656,27 @@ export async function activate(
         },
         global: context.globalState,
         workspace: context.workspaceState,
+        ...(process.platform === 'linux'
+          ? {}
+          : {
+              cloning: {
+                remoteOf: async folder =>
+                  (await vscode.commands.getCommands(true)).includes(
+                    CLONE_IN_VOLUME_COMMAND,
+                  )
+                    ? gitRemoteOf(
+                        await readFile(`${folder}/.git/config`, 'utf8').catch(
+                          () => '',
+                        ),
+                      )
+                    : undefined,
+                start: remote =>
+                  vscode.commands.executeCommand(
+                    CLONE_IN_VOLUME_COMMAND,
+                    remote,
+                  ),
+              },
+            }),
         configurationKind: async folder => {
           if (
             (await slotOf(storedLookup.root, folder, userDataStore)) !==
@@ -673,8 +700,11 @@ export async function activate(
       variant,
     );
   }
+  const {openInformationAboutMountPerformance, ...activationCommands} =
+    commands;
   const result = await activateContainers({
-    table: {commands, standDown},
+    table: {commands: activationCommands, standDown},
+    deferred: {openInformationAboutMountPerformance},
     standDownTexts: {
       warning: translate(STAND_DOWN_WARNING),
       button: translate(STAND_DOWN_BUTTON),
@@ -1511,6 +1541,13 @@ export async function activate(
             context.extension.id,
           ),
         },
+        openInformationAboutMountPerformance: {
+          execute: async () => {
+            await vscode.env.openExternal(
+              vscode.Uri.parse(MOUNT_PERFORMANCE_PAGE),
+            );
+          },
+        },
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
         },
@@ -2103,6 +2140,9 @@ export async function activate(
     });
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
+      loaded: () => {
+        result.registerDeferred();
+      },
       held: () => connector.heldConnection(),
       ...windowEngine,
       events: containerEvents,
@@ -2175,6 +2215,7 @@ export async function activate(
       cancellation: rowActionsStop.signal,
     });
     detailsView = showDetailsWhenRegistered({
+      mountPerformanceHint: process.platform === 'win32',
       editor: {
         ...explorerEditor,
         focus: () =>

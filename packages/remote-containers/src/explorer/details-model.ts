@@ -20,10 +20,12 @@ const DETAILS_TEMPLATES = {
   S045: 'Bind mount',
   S080: 'Configuration',
   S109: 'Destination',
+  S199: 'I/O performance',
   S202: 'Image',
   S228: 'Mounts',
   S229: 'Name',
   S330: 'Source',
+  S425: 'reduced by bridging OSes',
   S393: 'Volume',
   S396: 'Volume mount',
   /** An `[adaptation]` key: its string id is not given yet. */
@@ -53,6 +55,8 @@ export interface DetailsRow {
   label: string;
   description: string;
   viewItem: string | undefined;
+  /** The hover text; none leaves it to the editor. */
+  tooltip?: string;
   children: readonly DetailsRow[];
 }
 
@@ -149,11 +153,23 @@ function branch(
   return {id: rowId, label, description: '', viewItem: undefined, children};
 }
 
+/** The row under a bind mount that says bridging the host's and the container's systems costs I/O performance. */
+function performanceRow(rowId: string, translate: Translate): DetailsRow {
+  const label = textOf('S199', translate);
+  const description = textOf('S425', translate);
+  return {
+    ...leaf(`${rowId}/performance`, label, description),
+    viewItem: 'mountPerformance',
+    tooltip: `${label} ${description}`,
+  };
+}
+
 /** The row of one mount, `position` being its place among the mounts of its kind. */
 function mountRow(
   mount: ShownMount,
   position: number,
   translate: Translate,
+  hint: boolean,
 ): DetailsRow {
   const rowId = `mounts/${mount.type}-${String(position)}`;
   const destination = leaf(
@@ -172,6 +188,7 @@ function mountRow(
     : branch(rowId, textOf('S045', translate), [
         leaf(`${rowId}/source`, textOf('S330', translate), mount.source),
         destination,
+        ...(hint ? [performanceRow(rowId, translate)] : []),
       ]);
 }
 
@@ -179,6 +196,7 @@ function mountRow(
 export function detailsTreeOf(
   shown: ShownContainer,
   translate: Translate,
+  mountPerformanceHint: boolean,
 ): DetailsTree {
   const configuration = configFileOf(shown.labels);
   const workspace = localFolderOf(shown.labels);
@@ -213,7 +231,9 @@ export function detailsTreeOf(
   const mountRows = ['volume', 'bind'].flatMap(type =>
     shown.mounts
       .filter(mount => mount.type === type)
-      .map((mount, position) => mountRow(mount, position, translate)),
+      .map((mount, position) =>
+        mountRow(mount, position, translate, mountPerformanceHint),
+      ),
   );
   return {
     title: titleOf(shown),

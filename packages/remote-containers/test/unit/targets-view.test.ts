@@ -74,6 +74,8 @@ function inspectJson(containers: readonly FakeContainer[]): string {
 
 /** What a row steers, and what the fakes recorded. */
 interface Scene {
+  /** How many times the view said its data had loaded. */
+  loads: number;
   commands: string[];
   /** What the view asked the clock for, and how many of those waits were stopped. */
   timers: Array<{milliseconds: number; callback: () => void}>;
@@ -112,6 +114,7 @@ interface Scene {
 
 function sceneOf(): Scene {
   return {
+    loads: 0,
     commands: [`${views.targetsContainers}.focus`],
     timers: [],
     stopped: 0,
@@ -177,6 +180,9 @@ function engineOf(scene: Scene, name: string): EngineHost {
 
 function portsOf(scene: Scene): TargetsViewPorts {
   const ports: Omit<TargetsViewPorts, 'events'> = {
+    loaded: () => {
+      scene.loads += 1;
+    },
     editor: {
       commandIds: () =>
         scene.commandFailure === undefined
@@ -438,6 +444,19 @@ describe('the Dev Containers view (card containers-30)', () => {
       [scene.timers.length, scene.runs, scene.disposed],
       [0, ['setting ps', 'setting inspect'], ['visibility', 'view']],
     );
+  });
+
+  it('F-0708 BR-1: the view says its data has loaded once, after the first load, and not again on later loads', async () => {
+    const scene = sceneOf();
+    scene.containers = [containerOf(OTHER)];
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    const before = scene.loads;
+    await view.refresh();
+    const first = scene.loads;
+    await view.refresh();
+    view.dispose();
+    deepStrictEqual([before, first, scene.loads], [0, 1, 1]);
   });
 
   it('F-0906 7.E1: disposing after the view is shown disposes it, and a Refresh before it is shown does nothing', async () => {

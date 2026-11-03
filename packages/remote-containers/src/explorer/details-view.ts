@@ -64,6 +64,8 @@ export interface DetailsViewPorts {
   events: ContainerEventsSource;
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
+  /** Whether the engine runs from a Windows-side Docker CLI, which bridges two systems at a bind mount. */
+  mountPerformanceHint: boolean;
   translate: Translate;
   logger: Logger;
 }
@@ -91,7 +93,7 @@ export function detailsSpecOf(node: DetailsRow): TreeItemSpec {
     id: node.id,
     label: node.label,
     description: node.description === '' ? undefined : node.description,
-    tooltip: undefined,
+    tooltip: node.tooltip,
     contextValue: node.viewItem,
     expanded: node.children.length > 0,
     icon: undefined,
@@ -175,7 +177,9 @@ export async function showDetails(
       return;
     }
     const next =
-      shown === undefined ? undefined : detailsTreeOf(shown, ports.translate);
+      shown === undefined
+        ? undefined
+        : detailsTreeOf(shown, ports.translate, ports.mountPerformanceHint);
     const showing = held !== undefined || choice !== undefined;
     await editor.setContext(
       contextKeys.remoteContainersShowDetails.id,
