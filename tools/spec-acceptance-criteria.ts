@@ -160,8 +160,6 @@ export interface CoverageScope {
   file: string;
   features: readonly string[];
   repository: string;
-  /** The only reasons a `deferred` line may give; any reason when absent. */
-  deferredReasons?: readonly string[];
 }
 
 /** The folder the coverage files lie in. */
@@ -209,14 +207,6 @@ export const EXPLORER_SLICE_ONE_SCOPE: CoverageScope = {
   file: path.join(CATALOGUE_FOLDER, 'coverage-explorer-slice1.tsv'),
   features: EXPLORER_SLICE_ONE_FEATURES,
   repository: 'remote-explorer',
-  /** The only reasons a deferred line of the explorer file may give. */
-  deferredReasons: [
-    'explorer slice 1: increment 2',
-    'explorer slice 1: increment 3',
-    'D-55: no tunnel rows',
-    'F-2503 Q4: the Windows and macOS path form',
-    'D-60: Windows client',
-  ],
 };
 
 /** The coverage file of Remote Explorer's release 2. */

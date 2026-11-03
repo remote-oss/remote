@@ -50,9 +50,9 @@ F-2101.AC-18	unit
 F-2101.AC-19	acceptance	
 F-2101.AC-20	acceptance	
 F-2101.AC-21	unit	
-F-2101.AC-22	deferred	D-60: Windows client
-F-2101.AC-23	deferred	D-60: Windows client
-F-2101.AC-24	deferred	D-60: Windows client
+F-2101.AC-22	todo	
+F-2101.AC-23	todo	
+F-2101.AC-24	todo	
 F-2101.AC-25	acceptance	
 F-2101.AC-26	acceptance	
 F-2101.AC-27	unit	
@@ -183,22 +183,22 @@ F-2108.AC-16	unit
 F-2108.AC-17	unit	
 F-2108.AC-18	acceptance	
 F-2108.AC-19	acceptance	
-F-2108.AC-20	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2108.AC-20	todo	
 F-2108.AC-21	acceptance	
 F-2108.AC-22	acceptance	
 F-2108.AC-23	acceptance	
-F-2108.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2108.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2108.AC-24	todo	
+F-2108.AC-25	todo	
 F-2108.AC-26	acceptance	
-F-2108.AC-27	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2108.AC-28	deferred	D-60: Windows client
+F-2108.AC-27	todo	
+F-2108.AC-28	todo	
 F-2108.AC-29	acceptance	
 F-2108.AC-30	acceptance	
 F-2108.AC-31	unit	
 F-2108.AC-32	acceptance	
 F-2108.AC-33	unit	
 F-2108.AC-34	acceptance	
-F-2108.AC-35	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2108.AC-35	todo	
 F-2108.AC-36	acceptance	
 F-2108.AC-37	acceptance	
 F-2108.AC-38	acceptance	
@@ -228,7 +228,7 @@ F-2201.AC-19	acceptance
 F-2201.AC-20	unit	
 F-2201.AC-21	acceptance	
 F-2201.AC-22	acceptance	
-F-2201.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
+F-2201.AC-23	todo	
 F-2201.AC-24	unit	
 F-2201.AC-25	unit	
 F-2201.AC-26	acceptance	
@@ -237,7 +237,7 @@ F-2201.AC-28	acceptance
 F-2201.AC-29	acceptance	
 F-2201.AC-30	unit	
 F-2201.AC-31	acceptance	
-F-2201.AC-32	deferred	the New Remote half needs the Remotes view (explorer increment 2, 0.3)
+F-2201.AC-32	todo	
 F-2201.AC-33	acceptance	
 F-2201.AC-34	acceptance	
 F-2201.AC-35	acceptance	
@@ -271,10 +271,10 @@ F-2202.AC-16	unit
 F-2202.AC-17	unit	
 F-2202.AC-18	unit	
 F-2202.AC-19	unit	
-F-2202.AC-20	deferred	build order slice 1: the Remotes view is remote-explorer's
-F-2202.AC-21	deferred	build order slice 1: the Remotes view is remote-explorer's
+F-2202.AC-20	todo	
+F-2202.AC-21	todo	
 F-2202.AC-22	acceptance	
-F-2202.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
+F-2202.AC-23	todo	
 F-2202.AC-24	acceptance	
 F-2202.AC-25	unit	
 F-2202.AC-26	unit	
@@ -283,8 +283,8 @@ F-2202.AC-28	unit
 F-2202.AC-29	unit	
 F-2202.AC-30	unit	
 F-2202.AC-31	acceptance	
-F-2202.AC-32	deferred	build order slice 1: the Remotes view is remote-explorer's
-F-2202.AC-33	deferred	build order slice 1: the Remotes view is remote-explorer's
+F-2202.AC-32	todo	
+F-2202.AC-33	todo	
 F-2202.AC-34	unit	
 F-2204.AC-1	unit	
 F-2204.AC-2	unit	
@@ -315,7 +315,7 @@ F-2204.AC-26	acceptance
 F-2204.AC-27	acceptance	
 F-2204.AC-28	acceptance	
 F-2204.AC-29	acceptance	
-F-2204.AC-30	deferred	build order slice 1: the Remotes view is remote-explorer's
+F-2204.AC-30	todo	
 F-2204.AC-31	acceptance	
 F-2204.AC-32	unit	
 F-2204.AC-33	acceptance	
@@ -709,20 +709,20 @@ F-2401.AC-12	todo
 F-2401.AC-13	todo	
 F-2401.AC-14	core	core: the unsupported-OS dialog's Allow and Cancel outcomes and its banner
 F-2401.AC-15	todo	
-F-2401.AC-16	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2401.AC-17	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2401.AC-16	todo	
+F-2401.AC-17	todo	
 F-2401.AC-18	todo	
-F-2401.AC-19	deferred	build order slice 1: Linux hosts only
+F-2401.AC-19	todo	
 F-2401.AC-20	todo	
 F-2401.AC-21	todo	
 F-2403.AC-1	acceptance	
 F-2403.AC-2	acceptance	
-F-2403.AC-3	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
-F-2403.AC-4	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2403.AC-3	todo	
+F-2403.AC-4	todo	
 F-2403.AC-5	acceptance	
 F-2403.AC-6	acceptance	
 F-2403.AC-7	acceptance	
-F-2403.AC-8	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2403.AC-8	todo	
 F-2403.AC-9	acceptance	
 F-2403.AC-10	acceptance	
 F-2403.AC-11	acceptance	
@@ -733,14 +733,14 @@ F-2403.AC-15	acceptance
 F-2403.AC-16	todo	
 F-2403.AC-17	acceptance	
 F-2403.AC-18	unit	
-F-2403.AC-19	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2403.AC-19	todo	
 F-2403.AC-21	acceptance	
 F-2403.AC-22	acceptance	
 F-2403.AC-23	todo	
 F-2403.AC-24	todo	
-F-2403.AC-25	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2403.AC-25	todo	
 F-2403.AC-26	acceptance	
-F-2403.AC-27	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2403.AC-27	todo	
 F-2405.AC-1	acceptance	
 F-2405.AC-2	acceptance	
 F-2405.AC-3	acceptance	
@@ -748,7 +748,7 @@ F-2405.AC-4	acceptance
 F-2405.AC-5	acceptance	
 F-2405.AC-6	unit	
 F-2405.AC-7	acceptance	
-F-2405.AC-8	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2405.AC-8	todo	
 F-2405.AC-9	acceptance	
 F-2405.AC-10	unit	
 F-2405.AC-11	unit	
@@ -767,7 +767,7 @@ F-2405.AC-23	acceptance
 F-2405.AC-24	acceptance	
 F-2405.AC-25	acceptance	
 F-2405.AC-26	acceptance	
-F-2405.AC-27	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2405.AC-27	todo	
 F-2405.AC-28	acceptance	
 F-2405.AC-29	acceptance	
 F-2409.AC-1	todo	
@@ -820,7 +820,7 @@ F-2410.AC-17	acceptance
 F-2410.AC-18	acceptance	
 F-2410.AC-19	acceptance	
 F-2410.AC-20	acceptance	
-F-2410.AC-21	deferred	build order slice 1: Linux hosts only
+F-2410.AC-21	todo	
 F-2410.AC-22	acceptance	
 F-2410.AC-23	acceptance	
 F-2410.AC-24	acceptance	
@@ -928,7 +928,7 @@ F-2501.AC-22	acceptance
 F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
 F-2501.AC-24	acceptance	
 F-2501.AC-25	acceptance	
-F-2501.AC-26	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2501.AC-26	todo	
 F-2501.AC-27	acceptance	
 F-2501.AC-28	unit	
 F-2501.AC-29	acceptance	
@@ -936,7 +936,7 @@ F-2501.AC-30	core	core: the stored folder URI
 F-2501.AC-31	acceptance	
 F-2501.AC-32	acceptance	
 F-2501.AC-33	acceptance	
-F-2501.AC-34	deferred	chained ssh-remote authorities (F-2501 6.8) are not built in 0.2
+F-2501.AC-34	todo	
 F-2501.AC-35	acceptance	
 F-2501.AC-36	acceptance	
 F-2502.AC-1	unit	
@@ -1101,14 +1101,14 @@ F-2601.AC-22	todo
 F-2601.AC-23	todo	
 F-2601.AC-24	todo	
 F-2601.AC-25	acceptance	
-F-2601.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2601.AC-26	todo	
 F-2601.AC-27	core	core: core's workspace-trust modal over the pick
 F-2601.AC-28	todo	
 F-2601.AC-29	todo	
 F-2601.AC-30	acceptance	
 F-2601.AC-31	acceptance	
 F-2601.AC-32	core	core: the dialog's Enter on its focused button
-F-2601.AC-33	deferred	F-3907: the Copilot entry (F-2606) is not built
+F-2601.AC-33	todo	
 F-2601.AC-34	todo	
 F-2601.AC-35	todo	
 F-2601.AC-36	todo	
@@ -1120,17 +1120,17 @@ F-2604.AC-4	acceptance
 F-2604.AC-5	acceptance	
 F-2604.AC-6	acceptance	
 F-2604.AC-7	acceptance	
-F-2604.AC-8	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2604.AC-9	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2604.AC-8	todo	
+F-2604.AC-9	todo	
 F-2604.AC-10	acceptance	
 F-2604.AC-11	unit	
 F-2604.AC-12	acceptance	
 F-2604.AC-13	acceptance	
-F-2604.AC-14	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2604.AC-14	todo	
 F-2604.AC-15	acceptance	
 F-2604.AC-16	acceptance	
 F-2604.AC-17	acceptance	
-F-2604.AC-18	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2604.AC-18	todo	
 F-2604.AC-19	acceptance	
 F-2604.AC-20	acceptance	
 F-2604.AC-21	acceptance	
@@ -1214,11 +1214,11 @@ F-3902.AC-15	acceptance
 F-3902.AC-16	todo	
 F-3902.AC-17	acceptance	
 F-3902.AC-18	acceptance	
-F-3902.AC-19	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
-F-3902.AC-20	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
-F-3902.AC-21	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
-F-3902.AC-22	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
-F-3902.AC-23	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-3902.AC-19	todo	
+F-3902.AC-20	todo	
+F-3902.AC-21	todo	
+F-3902.AC-22	todo	
+F-3902.AC-23	todo	
 F-3902.AC-24	acceptance	
 F-3902.AC-25	acceptance	
 F-3902.AC-26	todo	

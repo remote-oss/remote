@@ -983,12 +983,12 @@ F-0605.AC-9	todo
 F-0605.AC-10	todo	
 F-0605.AC-11	todo	
 F-0605.AC-12	todo	
-F-0605.AC-13	todo	
-F-0605.AC-14	todo	
-F-0605.AC-15	todo	
-F-0605.AC-16	todo	
-F-0605.AC-17	todo	
-F-0605.AC-18	todo	
+F-0605.AC-13	deferred	host: macOS (the Apple container family needs an Apple-silicon Mac with Apple's container tool; the hosted arm64 Macs run no virtualization)
+F-0605.AC-14	deferred	host: macOS (the Apple container family needs an Apple-silicon Mac with Apple's container tool; the hosted arm64 Macs run no virtualization)
+F-0605.AC-15	deferred	host: macOS (the Apple container family needs an Apple-silicon Mac with Apple's container tool; the hosted arm64 Macs run no virtualization)
+F-0605.AC-16	deferred	host: macOS (the Apple container family needs an Apple-silicon Mac with Apple's container tool; the hosted arm64 Macs run no virtualization)
+F-0605.AC-17	deferred	host: macOS (the Apple container family needs an Apple-silicon Mac with Apple's container tool; the hosted arm64 Macs run no virtualization)
+F-0605.AC-18	deferred	host: macOS (the Apple container family needs an Apple-silicon Mac with Apple's container tool; the hosted arm64 Macs run no virtualization)
 F-0605.AC-19	todo	
 F-0701.AC-1	todo	
 F-0701.AC-2	todo	

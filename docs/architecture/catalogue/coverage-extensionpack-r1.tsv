@@ -51,7 +51,7 @@ F-9101.AC-3	core	core: the Marketplace row's count badge and Install button; our
 F-9101.AC-4	core	core: the details page's member cards of a pack not installed; ours is extensionPack, proved by F-9101 AC-1
 F-9101.AC-5	core	core: the gallery install of the pack and its members; ours is extensionPack and the members' own packs, proved by F-9101 AC-1 and F-9901 AC-3 (extensionPack)
 F-9101.AC-6	core	core: the silence of a gallery install; ours is a pack with no entry point, activation event or contribution, proved by F-9901 AC-4
-F-9101.AC-7	deferred	extension pack: after publication (post-publish check)
+F-9101.AC-7	todo	
 F-9101.AC-8	acceptance	
 F-9101.AC-9	core	core: which members a gallery install adds; ours is extensionPack, proved by F-9101 AC-1
 F-9101.AC-10	core	core: a disabled member kept by a gallery install; ours is extensionPack, proved by F-9101 AC-1
@@ -89,7 +89,7 @@ F-9901.AC-7	unit
 F-9901.AC-8	unit	
 F-9901.AC-9	core	core: the listing's publisher fields; ours is publisher, proved by F-9901 AC-9 (publisher) and F-9001 AC-6
 F-9901.AC-10	unit	
-F-9901.AC-11	deferred	extension pack: after publication (post-publish check)
+F-9901.AC-11	todo	
 F-9901.AC-12	todo	
 F-9901.AC-13	unit	
 F-9901.AC-14	unit	
@@ -97,5 +97,5 @@ F-9901.AC-15	unit
 F-9901.AC-16	unit	
 F-9901.AC-17	unit	
 F-9901.AC-18	unit	
-F-9901.AC-19	deferred	extension pack: after publication (post-publish check)
-F-9901.AC-20	deferred	extension pack: after publication (post-publish check)
+F-9901.AC-19	todo	
+F-9901.AC-20	todo	
