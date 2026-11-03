@@ -147,6 +147,7 @@ function labelsFromExplorer(): string[] {
     'explorer-no-proposals',
     'add-host',
     'explorer-standdown',
+    'explorer-stand-in',
     'trust',
     'trust-terminal',
     'web-ui',
@@ -279,7 +280,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the eight explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, x11-noxauth, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, terminal-login, passphrase-input, terminal-odd, passphrase-late, login-shells, preconnect, default-ports, no-proposals, the nine explorer launches, the two trust launches, the five containers launches, containers-podman, the ports cases in the order of theirs and the six genuine launches last, and containers-view last, because its rows empty the run’s daemon', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -428,6 +429,7 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['add-host', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-standdown', ['remote-oss.remote-explorer'], true, undefined],
+        ['explorer-stand-in', ['remote-oss.remote-explorer'], true, undefined],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
         ['web-ui', undefined, true, undefined],
@@ -757,7 +759,32 @@ describe('the launches of the VSCodium run', () => {
         'explorer-no-proposals',
         'add-host',
         'explorer-standdown',
+        'explorer-stand-in',
       ].map(label => [label, '<run>/companion-record.jsonl']),
+    );
+  });
+
+  it('tooling-121: the explorer-stand-in launch carries the code stand-in of Remote - SSH, names the mode file in the run, and draws core’s dialogs in the window; no other launch has a code stand-in', () => {
+    const launch = launchesOf(REPOSITORY_ROOT).find(
+      each => each.label === 'explorer-stand-in',
+    );
+    deepStrictEqual(
+      [
+        launch?.kind === 'plain' ? launch.codeStandIns : undefined,
+        launch?.environment?.REMOTE_OSS_ACCEPTANCE_STAND_IN_MODE,
+        launch?.settings?.['window.dialogStyle'],
+        launchesOf(REPOSITORY_ROOT)
+          .filter(
+            each => each.kind === 'plain' && each.codeStandIns !== undefined,
+          )
+          .map(each => each.label),
+      ],
+      [
+        ['remote-oss.remote-ssh'],
+        '<run>/stand-in-mode.json',
+        'custom',
+        ['explorer-stand-in'],
+      ],
     );
   });
 
@@ -1188,7 +1215,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings?.['window.title']),
-      Array.from({length: 8}, () => '[${rootName}]${remoteName}'),
+      Array.from({length: 9}, () => '[${rootName}]${remoteName}'),
     );
   });
 

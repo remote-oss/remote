@@ -64,6 +64,7 @@
         "explorer-folders/*.test.ts",
         "explorer-no-proposals/*.test.ts",
         "explorer-standdown/*.test.ts",
+        "explorer-stand-in/*.test.ts",
         "trust/*.test.ts",
         "trust-terminal/*.test.ts",
         "genuine/*.test.ts",

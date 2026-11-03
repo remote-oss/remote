@@ -80,47 +80,79 @@ interface ExtensionEntry {
 /** The version every stand-in has. */
 const STAND_IN_VERSION = '0.0.0';
 
+/** The folder of the code stand-ins' fixtures, below the repository's root. */
+const STAND_IN_FIXTURES = path.join(
+  'tests',
+  'acceptance',
+  'fixtures',
+  'stand-ins',
+);
+
 /**
- * Puts the stand-ins of a launch into its own extensions folder, after the run's installs: for each id, a folder with a
- * manifest only (no code, no contribution, nothing from the extension it stands for) and an entry in the folder's
- * `extensions.json`, copied from the first entry the editor's own install wrote, with the stand-in's identifier,
- * version and location. `engines` is the manifest's `engines.vscode`. The run's clean-up removes the run's folder, so
- * the stand-ins go with it.
+ * Puts the stand-ins of a launch into its own extensions folder, after the run's installs. A stand-in of `standIns` is a
+ * folder with a manifest only (no code, no contribution, nothing from the extension it stands for); one of
+ * `codeStandIns` is a copy of its fixture folder under `root`, which replaces an installed extension of the same id. Each
+ * has an entry in the folder's `extensions.json`, copied from the first entry the editor's own install wrote, with the
+ * stand-in's identifier, version and location. `engines` is the manifest's `engines.vscode`. The run's clean-up removes
+ * the run's folder, so the stand-ins go with it.
  */
 export function writeStandIns(
   runFolder: string,
   launch: Launch,
   engines: string,
+  root: string,
 ): void {
-  if (launch.kind !== 'plain' || launch.standIns === undefined) {
+  if (
+    launch.kind !== 'plain' ||
+    (launch.standIns === undefined && launch.codeStandIns === undefined)
+  ) {
     return;
   }
   const folder = extensionsFolderOf(runFolder, launch);
   const listFile = path.join(folder, 'extensions.json');
-  const entries = JSON.parse(
+  const installed = JSON.parse(
     readFileSync(listFile, 'utf8'),
   ) as ExtensionEntry[];
-  const template = entries[0];
+  const template = installed[0];
   if (template === undefined) {
     throw new Error(
       `${listFile} lists no extension to copy a stand-in's entry from`,
     );
   }
-  for (const extensionId of launch.standIns) {
+  const codeIds = launch.codeStandIns ?? [];
+  const entries = installed.filter(entry => {
+    const replaced = codeIds.includes(entry.identifier.id);
+    if (replaced) {
+      rmSync(path.join(folder, entry.relativeLocation), {
+        recursive: true,
+        force: true,
+      });
+    }
+    return !replaced;
+  });
+  for (const extensionId of [...(launch.standIns ?? []), ...codeIds]) {
     const [publisher = '', name = ''] = extensionId.split('.');
     const relativeLocation = `${extensionId}-${STAND_IN_VERSION}`;
     const location = path.join(folder, relativeLocation);
     mkdirSync(location, {recursive: true});
-    writeFileSync(
-      path.join(location, 'package.json'),
-      `${JSON.stringify(
-        {
+    const code = codeIds.includes(extensionId);
+    if (code) {
+      cpSync(path.join(root, STAND_IN_FIXTURES, extensionId), location, {
+        recursive: true,
+      });
+    }
+    const manifestFile = path.join(location, 'package.json');
+    const manifest = code
+      ? (JSON.parse(readFileSync(manifestFile, 'utf8')) as object)
+      : {
           publisher,
           name,
-          version: STAND_IN_VERSION,
-          engines: {vscode: engines},
           displayName: 'Acceptance stand-in (not the reference)',
-        },
+        };
+    writeFileSync(
+      manifestFile,
+      `${JSON.stringify(
+        {...manifest, version: STAND_IN_VERSION, engines: {vscode: engines}},
         null,
         2,
       )}\n`,

@@ -146,6 +146,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/explorer-folders/tsconfig.json',
   './tests/acceptance/explorer-no-proposals/tsconfig.json',
   './tests/acceptance/explorer-standdown/tsconfig.json',
+  './tests/acceptance/explorer-stand-in/tsconfig.json',
   './tests/acceptance/trust/tsconfig.json',
   './tests/acceptance/trust-terminal/tsconfig.json',
   './tests/acceptance/genuine/tsconfig.json',
@@ -450,6 +451,11 @@ export default defineConfig(
   {
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    // The stand-ins are plain CommonJS that the editor loads as they are, with no build step.
+    files: ['tests/acceptance/fixtures/stand-ins/**/*.cjs'],
+    rules: {'@typescript-eslint/no-require-imports': 'off'},
   },
   {
     files: ['packages/**/*.{ts,mts,cts,js,mjs,cjs}'],
