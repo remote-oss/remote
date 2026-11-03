@@ -56,7 +56,7 @@ export interface PromptSurfaceOptions {
 const MASKED_ANSWER = '***';
 
 /** The log line of a question shown to the user. */
-export function promptLine(text: string): string {
+function promptLine(text: string): string {
   return `prompt: ${text}`;
 }
 
