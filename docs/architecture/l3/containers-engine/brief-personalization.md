@@ -26,7 +26,9 @@ relay exists "right after the requirements check … before any lifecycle comman
    - **Dev containers:** C7 runs `up --skip-post-create`, which finds or creates the container and runs no lifecycle
      command. Wayland's `--mount` is decided here (§3.5).
    - **Attach:** C12 runs `set-up --skip-post-create`, which does the patches only.
-   - **Pinned against the bundled CLI:** that `initializeCommand` still runs on the host in `up`, before creation.
+   - **Pinned against the bundled CLI:**
+     - `--skip-post-create` skips `onCreateCommand` and `updateContentCommand` too, not only the post-create set;
+     - `initializeCommand` still runs on the host in `up`, before creation.
 2. **The server files:** lib-server's probe (the requirements check, S346), plan and transfer, under "Installing
    server" (S209).
 3. **Phase E**, the early personalization of §3: the relay host and the relays (F-1003, F-1004, F-1008's X11), the
@@ -37,8 +39,12 @@ relay exists "right after the requirements check … before any lifecycle comman
      configuration's `remoteEnv`. That gives F-1003 BR-13's `containerEnv` < relay < `remoteEnv` with no work of ours.
    - **Values:** they're socket paths, not secrets.
    - **Attach:** the run takes `--config <attach file>` as in `brief-attach.md`.
-5. **The server starts** with the relay variables in its environment. `Connected.extensionHostEnv` carries them too,
-   so terminals and tasks inherit them (F-1002 §16).
+   - **Failures and progress:** C8's classification (F-0410's dialogs, containers-149's S420) now applies to this run's
+     outcome, unchanged, where it applied to `up`'s. The lifecycle presenter (the "Configuring..." terminal, S085)
+     takes this run's JSON log stream.
+5. **The server starts.** The relay variables join `Connected.extensionHostEnv`, between the probed environment and
+   `remoteEnv` (`extensionHostEnvironmentOf` gains the middle argument). So the remote extension host, its terminals
+   and its tasks inherit them (F-1002 §16), and lib-server's start needs no new input.
 6. **Background run 1:** `run-user-commands … --stop-for-personalization`, with the dotfiles options (F-1007). The CLI
    runs `postCreateCommand`, then dotfiles, then stops (its order, measured in the bundled CLI).
 7. **Phase P**, the personalization of §4: the Git configuration copy (F-1001), the global Git credential step (F-1002),
@@ -73,6 +79,8 @@ relay exists "right after the requirements check … before any lifecycle comman
     first use (F-1003 7.E3, BR-5).
 - **Bounds** (R-79): a host connect is bounded at 10 s and then closes its stream. A stream with no traffic stays open,
   because agent sessions are long. The exec's end ends every stream.
+- **Stale sockets:** a connection's socket files stay in `/tmp` after it ends, as the reference's do (F-1003 5.0 step 3).
+  That's accepted, and no row asserts cleanup.
 - **Secrets** (R-26): payloads are never logged. The log names only the paths and the kind (F-1003 §9's "forwarded to
   local host" line).
 - **The bootstrap container** (`brief-volumes.md` §3) gets its own relay host on the bootstrap's `node`. It serves
@@ -103,9 +111,14 @@ relay exists "right after the requirements check … before any lifecycle comman
    - **Without the variable:** a process gets no answer (BR-11).
 4. **Docker credentials (F-1005):**
    - **When:** after step 3, with the setting on.
-   - **What:** the helper program `docker-credential-<our name>` in a per-connection folder put on the lifecycle and
-     server `PATH`, then the remote user's `~/.docker/config.json` gets its `credsStore`. It's always that file,
-     whatever `DOCKER_CONFIG` says (BR-20).
+   - **What:**
+     - **The helper:** `/usr/local/bin/docker-credential-dev-containers-<uuid>`, mode 755, written as root (POST-2,
+       5.0 step 5). Earlier connections' helpers stay, as the spec observes (6.x step 3).
+     - **The name:** it's the spec's visible file content, kept (D-14). No `PATH` is changed: `/usr/local/bin` is on
+       it already, and a `PATH` passed through `--remote-env` would replace the probed one.
+     - **The configuration:** the remote user's `~/.docker/config.json` gets the `credsStore`. It's always that file,
+       whatever `DOCKER_CONFIG` says (BR-20).
+     - **The program** is a shell wrapper around `node relay-ipc.js docker-credential <op>`.
    - **The checks:** the file is classified per BR-3, BR-4 and BR-12 first, and BR-15's `docker` check runs before
      the hooks.
    - **Answers:** they come from the host configuration's three sources (BR-1, BR-13). Later windows of the same
@@ -177,11 +190,11 @@ relay exists "right after the requirements check … before any lifecycle comman
 - **A host over SSH:** the relays still reach the *local* agent (F-1003 6.5), and the SSH host's Git configuration
   goes first (F-1002 BR-14). Group 16 builds them on C19.
 
-## 7. Ruling
+## 7. A decision on string ownership
 
-**`(ruling-NNNN-s200-owner)`, F-1008 Q-1, option (a):** STR:S200 is F-0810's string, the detail of its "not found"
-dialog. No flow of F-1008 shows it, and none of ours does either. This is the room's proposal, taken here for the clean
-side and sent to metis for the spec.
+**F-1008 Q-1, option (a):** STR:S200 is F-0810's string, the detail of its "not found" dialog. No flow of F-1008 shows it,
+and none of ours does. This isn't a deviation, so it has no label and no row. It's the room's proposal, taken for the
+clean side, and asked of metis on the spec repo's question batch so the spec says it too.
 
 ## 8. Contracts, components, the cut and the cards
 
@@ -203,8 +216,12 @@ side and sent to metis for the spec.
 | the SSH-host cases (F-1003 6.5, F-1002 BR-14) | group 16 |
 
 **Suggested cards** (daedalus), in order:
-1. **The connect order and the seed:** §1, C3's flags, F-1008's seed. It changes no feature yet. The whole containers
-   launch must pass on it, with the progress phases re-read: "Installing server" now comes before the hooks.
+1. **The connect order and the seed:** §1, C3's flags, F-1008's seed. It adds no feature, but it moves every family's
+   hooks.
+   - **The rows that must pass:** the whole containers launch, with the F-0410 failure rows, the lifecycle-terminal
+     rows (F-0408, F-0415) and the progress-phase rows re-read: "Installing server" now comes before the hooks, and
+     the hooks run under "Starting server".
+   - **Order:** it lands after #1973's E3, the shared connect tail, or is folded into it (with daedalus).
 2. **The relay host:** §2, with the codec's unit rows and one acceptance row over a loopback kind.
 3. **SSH agent and `known_hosts`:** §3.1, also in the bootstrap.
 4. **Git:** §3.3, §4.2, §4.3 (F-1001, F-1002), also in the bootstrap.
