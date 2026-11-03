@@ -113,7 +113,20 @@ import {
   CLONE_TRUST_PAGE,
   cloneInUniqueVolume,
 } from './volumes/clone-command.ts';
-import {storeTypedSource} from './volumes/typed-source.ts';
+import {
+  clearTypedSource,
+  storeTypedSource,
+  typedSourceRecorded,
+} from './volumes/typed-source.ts';
+import {bootstrapSettingsOf} from './volumes/bootstrap.ts';
+import {
+  bootstrapFilesOf,
+  bootstrapOverrideStoreOf,
+} from './volumes/bootstrap-files.ts';
+import {writeBuildContext} from './volumes/build-context.ts';
+import {volumeRewriteOf} from './volumes/volume-rewrite.ts';
+import {containerCliHost} from './cli/container-cli-host.ts';
+import {ownText} from './surfaces/own-strings.ts';
 import {cloneText} from './volumes/clone-strings.ts';
 import type {ClonePromptSurface} from './volumes/git-prompts.ts';
 import {runHostProgram} from './volumes/host-program.ts';
@@ -595,6 +608,10 @@ export async function activate(
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
+    volume?: {
+      configText: string;
+      rewrite: (configText: string) => string | undefined;
+    },
   ): CliBridge {
     return cliBridgeOf(
       nodeCliHost(
@@ -605,10 +622,13 @@ export async function activate(
         environment,
         systemCliPorts,
       ),
-      {readText: file => readFile(file, 'utf8')},
+      volume === undefined
+        ? {readText: file => readFile(file, 'utf8')}
+        : {readText: () => Promise.resolve(volume.configText)},
       overrideStoreOf(context.globalStorageUri.fsPath),
       environment,
       logger,
+      ...(volume === undefined ? [] : [volume.rewrite]),
     );
   }
   /** Offers to reopen the window's folder in its container, over what the window holds now. */
@@ -1615,7 +1635,78 @@ export async function activate(
       newConnectionId: randomUUID,
       engineFor: nodeEngineHost,
       cliFor: environment => bridgeFor(environment, logger),
-      lifecycleFor: (engine, bridge, presenter) =>
+      volumes: {
+        bootstrapSettings: () => {
+          const configuration = vscode.workspace.getConfiguration();
+          return bootstrapSettingsOf({
+            image: configuration.get(settings.bootstrapImage.id),
+            pull: configuration.get(settings.bootstrapImagePull.id),
+            socketPath: configuration.get(settings.dockerSocketPath.id),
+          });
+        },
+        buildContext: () => {
+          const cliFiles = cliPathsOf(
+            context.extensionPath,
+            vscode.env.appRoot,
+          );
+          return writeBuildContext(
+            {
+              dockerfile: path.join(
+                context.extensionPath,
+                'resources',
+                'volume-bootstrap',
+                'Dockerfile',
+              ),
+              cliFolder: path.dirname(cliFiles.entry),
+              preload: cliFiles.preload,
+            },
+            os.tmpdir(),
+          );
+        },
+        typed: payload =>
+          typedSourceRecorded(context.globalState, payload, Date.now()),
+        clearTyped: payload =>
+          clearTypedSource(context.globalState, payload, Date.now()),
+        bootstrapBridge: (bootstrap, workspace, environment, engine) => {
+          const steps = {
+            engine: engine.host,
+            options: {cancellation: new AbortController().signal},
+          };
+          return cliBridgeOf(
+            containerCliHost(
+              engine.dockerPath,
+              bootstrap,
+              environment,
+              systemCliPorts,
+            ),
+            bootstrapFilesOf(steps, bootstrap),
+            bootstrapOverrideStoreOf(steps, bootstrap),
+            environment,
+            logger,
+            volumeRewriteOf(environment, workspace, logger),
+          );
+        },
+        hostBridge: (configText, workspace, environment) =>
+          bridgeFor(environment, logger, {
+            configText,
+            rewrite: volumeRewriteOf(environment, workspace, logger),
+          }),
+        standIn: async () => {
+          const folder = await mkdtemp(
+            path.join(os.tmpdir(), 'vsc-volume-stand-in-'),
+          );
+          return {
+            folder,
+            dispose: () => rm(folder, {recursive: true, force: true}),
+          };
+        },
+        showShallow: repository => {
+          void vscode.window.showWarningMessage(
+            ownText('historyNotFetched', [repository], translate),
+          );
+        },
+      },
+      lifecycleFor: (engine, bridge, presenter, backgroundStage) =>
         containerLifecycleOf({
           engine,
           // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
@@ -1624,32 +1715,44 @@ export async function activate(
           presenter,
           clock: Date.now,
           userDataFolder: path.join(context.globalStorageUri.fsPath, 'data'),
-          compose: composeResolverOf({
-            route: (base, cancellation) =>
-              composeRouteOf(
-                {
-                  docker: engine,
-                  engineFor: nodeEngineHost,
-                  composePath: () =>
-                    vscode.workspace
-                      .getConfiguration()
-                      .get(settings.dockerComposePath.id),
-                  base: engineBaseOf({
-                    folder: base,
-                    trusted: vscode.workspace.isTrusted,
-                  }),
+          ...(backgroundStage === undefined
+            ? {
+                compose: composeResolverOf({
+                  route: (base, cancellation) =>
+                    composeRouteOf(
+                      {
+                        docker: engine,
+                        engineFor: nodeEngineHost,
+                        composePath: () =>
+                          vscode.workspace
+                            .getConfiguration()
+                            .get(settings.dockerComposePath.id),
+                        base: engineBaseOf({
+                          folder: base,
+                          trusted: vscode.workspace.isTrusted,
+                        }),
+                        logger: logger.child('compose'),
+                      },
+                      cancellation,
+                    ),
+                  runVia: (route, argv, options) =>
+                    route.kind === 'plugin'
+                      ? engine.run(
+                          ['compose', ...argv],
+                          {kind: 'none'},
+                          options,
+                        )
+                      : nodeEngineHost(route.file).run(
+                          argv,
+                          {kind: 'none'},
+                          options,
+                        ),
+                  readText: file => readFile(file, 'utf8'),
+                  environment: process.env,
                   logger: logger.child('compose'),
-                },
-                cancellation,
-              ),
-            runVia: (route, argv, options) =>
-              route.kind === 'plugin'
-                ? engine.run(['compose', ...argv], {kind: 'none'}, options)
-                : nodeEngineHost(route.file).run(argv, {kind: 'none'}, options),
-            readText: file => readFile(file, 'utf8'),
-            environment: process.env,
-            logger: logger.child('compose'),
-          }),
+                }),
+              }
+            : {backgroundStage}),
         }),
       lifecyclePresenter: lifecyclePresenterOf(
         terminalPortOf(),

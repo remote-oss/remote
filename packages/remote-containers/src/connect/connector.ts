@@ -212,11 +212,15 @@ export interface VolumeConnectDependencies {
   /** Whether our record says the source of `payload` was typed. */
   typed(payload: string): boolean;
   clearTyped(payload: string): Promise<void>;
-  /** The bridge whose CLI runs in the bootstrap container, the configuration rewritten for `workspace`. */
+  /**
+   * The bridge whose CLI runs in the bootstrap container, through `engine`'s program `dockerPath`, the configuration
+   * rewritten for `workspace`.
+   */
   bootstrapBridge(
     bootstrap: string,
     workspace: VolumeWorkspace,
     environment: Readonly<Record<string, string | undefined>>,
+    engine: {host: EngineHost; dockerPath: string},
   ): CliBridge;
   /** The bridge on the host for the runs after `up`, over the configuration's text rewritten for `workspace`. */
   hostBridge(
@@ -1547,6 +1551,10 @@ export function containerConnectorOf(
               bootstrap,
               request.workspace,
               cliEnvironment,
+              {
+                host: engine,
+                dockerPath: dockerFile,
+              },
             ),
             dependencies.lifecyclePresenter,
             {
