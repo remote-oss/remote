@@ -5,12 +5,12 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, mkdirSync, rmSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, rmSync} from 'node:fs';
 import path from 'node:path';
 import {bindKeys} from '../windows/explorer-folders.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {sshFolder, systemHosts} from '../windows/explorer-home.ts';
-import {hostLabels, listing} from '../windows/explorer-rows.ts';
+import {sshFile, sshFolder, systemHosts} from '../windows/explorer-home.ts';
+import {hostLabels, listing, VIEW} from '../windows/explorer-rows.ts';
 import {
   closeWindow,
   inWindow,
@@ -21,6 +21,8 @@ import {
   windowNames,
 } from '../windows/harness.ts';
 import {
+  actionTooltip,
+  clickRowLabel,
   dialogOf,
   paletteRows,
   pressControlAlt,
@@ -127,6 +129,55 @@ describe('the commands of the SSH group run by a keybinding (card coverage-102, 
     } finally {
       await closeWindow(shown);
       await closeWindow(never);
+    }
+  });
+
+  it('F-5102 AC-30 (tooltips): with a key bound to each command, the tooltips of the two inline buttons read the title and the bound key in brackets', async () => {
+    const window = await keyWindow('tooltips', 'shown');
+    try {
+      await listing(window, systemHosts());
+      deepStrictEqual(
+        [
+          await actionTooltip(window, VIEW, 'SSH', 'Open SSH Config File'),
+          await actionTooltip(window, VIEW, 'SSH', 'New Remote'),
+        ],
+        ['Open SSH Config File (Ctrl+Alt+J)', 'New Remote (Ctrl+Alt+K)'],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5102 AC-32 (wrong-row): with a host row focused, the keys of both commands, cancelled with Escape, write no file, open and close no window, leave nothing open and keep the window usable', async () => {
+    sshFile('config', ['Host user-one']);
+    const window = await keyWindow('wrong-row', 'shown');
+    try {
+      await listing(window, ['user-one', ...systemHosts()]);
+      await clickRowLabel(window, VIEW, 'user-one');
+      const before = JSON.stringify(
+        readFileSync(path.join(sshFolder(), 'config')),
+      );
+      const results: unknown[] = [await keysReach(window)];
+      await clickRowLabel(window, VIEW, 'user-one');
+      results.push(await afterKey(window, 'j'));
+      await clickRowLabel(window, VIEW, 'user-one');
+      results.push(await afterKey(window, 'k'));
+      deepStrictEqual(
+        [
+          results,
+          JSON.stringify(readFileSync(path.join(sshFolder(), 'config'))),
+        ],
+        [
+          [
+            true,
+            {...AFTER_ESCAPE, userFile: true},
+            {...AFTER_ESCAPE, userFile: true},
+          ],
+          before,
+        ],
+      );
+    } finally {
+      await closeWindow(window);
     }
   });
 });

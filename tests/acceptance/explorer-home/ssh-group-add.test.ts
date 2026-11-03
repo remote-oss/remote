@@ -22,12 +22,16 @@ import {
   restoreUserSettings,
   userSettings,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {
   answerDialog,
   answerInputBox,
   chooseQuickPickRow,
+  paletteRows,
+  editorTabs,
   rowAction,
+  rowMenuAction,
   viewRows,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -221,6 +225,69 @@ describe('"New Remote" completed through the companion (card coverage-102, part 
         [true, true, true],
       );
     } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5102 AC-36 (unparsable-file): New Remote into a file that does not parse leaves the file as it was, adds no row, opens and closes no window and keeps the window usable', async () => {
+    const file = sshFile('config', ['Host "never closed']);
+    const before = readFileSync(file, 'utf8');
+    const window = await viewWindow('add-unparsable');
+    try {
+      await groupShown(window);
+      const rows = await hostLabels(window);
+      const windows = windowNames();
+      await newRemote(window, 'ssh valid-one', file);
+      await new Promise(resolve => setTimeout(resolve, 4_000));
+      deepStrictEqual(
+        [
+          readFileSync(file, 'utf8'),
+          await hostLabels(window),
+          windowNames(),
+          (await paletteRows(window, 'Focus on Remotes')).length > 0,
+        ],
+        [before, rows, windows, true],
+      );
+    } finally {
+      await closeWindow(window);
+    }
+  });
+
+  it('F-5102 AC-15 (menu-outcomes): through the context-menu entries the file pick opens the chosen file as a tab, and a completed New Remote writes the file and shows its row first, as through the buttons', async () => {
+    const file = sshFile('config', ['Host alpha']);
+    const window = await viewWindow('add-menu');
+    try {
+      await listing(window, ['alpha', ...systemHosts()]);
+      await rowMenuAction(window, VIEW, GROUP, GEAR);
+      await pickShown(window);
+      await chooseQuickPickRow(window, file);
+      await waitFor(
+        `window ${window} to open the file`,
+        async () =>
+          (await editorTabs(window)).some(entry => entry.label === 'config'),
+        30_000,
+      );
+      await rowMenuAction(window, VIEW, GROUP, PLUS);
+      await pickShown(window);
+      await answerInputBox(window, 'ssh menuone');
+      await pickShown(window);
+      await chooseQuickPickRow(window, file);
+      await listedWithin(
+        window,
+        ['menuone', 'alpha', ...systemHosts()],
+        Date.now(),
+        10_000,
+      );
+      deepStrictEqual(
+        [
+          (await editorTabs(window)).filter(entry => entry.label === 'config')
+            .length,
+          readFileSync(file, 'utf8').includes('Host menuone'),
+        ],
+        [1, true],
+      );
+    } finally {
+      await startInWindow(window, 'workbench.action.closeAllEditors');
       await closeWindow(window);
     }
   });
