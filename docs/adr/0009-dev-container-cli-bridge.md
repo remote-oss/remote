@@ -39,6 +39,14 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
    the VSIX. C3 spawns it with the editor's own Node: `process.execPath` with `ELECTRON_RUN_AS_NODE=1` on the
    package's entry script, `shell: false`, through the `CliHost` port (containers contracts §4). No other code imports
    it.
+   - **The container CLI host is the one exception** (amended 2026-11-03 with #1973, brief-volumes §7). For a clone
+     in a volume, the CLI must run where the files are: inside the bootstrap container. There it runs on the
+     bootstrap image's Node (Alpine's `nodejs`, 20, as the CLI needs), through `docker exec --interactive` into the
+     bootstrap via C2's program. The image holds the same pinned CLI and our preload, copied from the VSIX at build.
+     - The run's variables pass by name (`--env NAME`), their values in the Docker client's environment, so no value
+       is on a command line. The editor's own environment doesn't go in: host values such as `PATH`, `TMPDIR` and
+       `NODE_OPTIONS` don't hold inside the container.
+     - An abort ends the Docker client. The CLI inside ends with the bootstrap, which the pipeline removes.
 2. **How we bend it, in this order, and only this way:**
    1. **the CLI's own inputs:** the flags it already has (`--mount-workspace-git-root=false`, `--id-label`,
       `--docker-path`, …) and the environment it's spawned with;
@@ -50,7 +58,11 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
    - deviations 1 and 7 are the pre-pass, the only ones that need it (7 removes the top-level `image` from the
      override; no flag of the CLI reaches it);
    - deviation 2 needs no mechanism, because the CLI already makes `${containerEnv}` empty in `initializeCommand`;
-   - deviation 3 is the spawn environment;
+   - deviation 3 is the spawn environment, and for a clone in a volume the pre-pass: it resolves every
+     `${localEnv:…}` and `${env:…}` from the editor's environment on the host, because the container CLI host
+     passes none (F-0701 BR-14; an unset variable gets its default, as F-0701 Q5 prefers). The same pre-pass sets
+     `workspaceMount` to the volume at `/workspaces` and `workspaceFolder` to `/workspaces/<folder>`. The
+     configuration's own values are ignored, with a log line (F-0701 section 10);
    - deviation 4 is post-processing;
    - deviation 5 is a flag;
    - deviation 6 waits for attach, which isn't in release 1.
@@ -64,7 +76,9 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
    recorded gate (D-87: F-0201, F-0409) and the acceptance gate green on the new version in the same PR, and a design
    check.
 5. **Secrets:** no secret reaches the CLI's argv. Values the CLI must see go through its environment or a mode-0600
-   override file in the extension's own storage, deleted after the run (R-26).
+   override file in the extension's own storage, deleted after the run (R-26). For the container CLI host, the
+   override file is mode 0600, owned by the container's root, in the bootstrap's `/tmp`. Its text goes in on stdin,
+   and it is deleted after the run and goes with the container.
 
 ## Options considered
 
