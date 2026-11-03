@@ -15,13 +15,18 @@ import {
   readUserSettings,
   reloadWindow,
   reopenInContainer,
+  startInWindow,
   restoreUserSettings,
   runLabelArguments,
   runScopedName,
   variable,
   waitFor,
 } from '../windows/harness.ts';
-import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+import {
+  openFolderWindow,
+  openWorkspaceWindow,
+  removeContainers,
+} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   dialogOf,
@@ -30,6 +35,7 @@ import {
   windowTitle,
 } from '../windows/renderer.ts';
 import {
+  DEAD,
   dockerWith,
   engineSettingsAre,
   secondEngine,
@@ -254,5 +260,69 @@ describe('the windows of a dev container opened through the engine settings (car
       await second.stop();
       rmSync(shared, {recursive: true, force: true});
     }
+  });
+
+  it('F-0205 AC-52 (c133-workspace): in a saved multi-root workspace the settings of the .code-workspace file choose the engine over a dead endpoint in the first folder’s own, and without them the first folder’s dead endpoint is not taken', async () => {
+    const socket = 'unix:///var/run/docker.sock';
+    const titles: string[] = [];
+    const dialogs: unknown[] = [];
+    for (const workspaceSettings of [
+      {'containers.environment': {DOCKER_HOST: socket}},
+      undefined,
+    ]) {
+      const label =
+        workspaceSettings === undefined ? 'c133-ws-ambient' : 'c133-ws-socket';
+      const root = path.join(variable('HARNESS_RUN_FOLDER'), label);
+      rmSync(root, {recursive: true, force: true});
+      // The window is named after its first folder, so each variant's has a name of its own.
+      const first = path.join(root, `${label}-a`);
+      mkdirSync(path.join(first, '.vscode'), {recursive: true});
+      mkdirSync(path.join(root, `${label}-b`), {recursive: true});
+      mkdirSync(path.join(root, '.devcontainer'), {recursive: true});
+      writeFileSync(
+        path.join(first, '.vscode', 'settings.json'),
+        JSON.stringify({'containers.environment': {DOCKER_HOST: DEAD}}),
+      );
+      writeFileSync(
+        path.join(root, '.devcontainer', 'devcontainer.json'),
+        JSON.stringify({
+          name: 'Workspace',
+          image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+          runArgs: runLabelArguments(),
+        }),
+      );
+      const file = path.join(root, 'c133.code-workspace');
+      writeFileSync(
+        file,
+        JSON.stringify({
+          folders: [{path: `${label}-a`}, {path: `${label}-b`}],
+          ...(workspaceSettings === undefined
+            ? {}
+            : {settings: workspaceSettings}),
+        }),
+      );
+      await engineSettingsAre(saved, {});
+      const window = await openWorkspaceWindow(file);
+      // In its container the window has no folders when its agent starts, so it is named after the workspace file's folder.
+      const remote = path.basename(root);
+      try {
+        await startInWindow(window, 'remote-containers.reopenInContainer');
+        await connectedToContainer(remote);
+        titles.push(await windowTitle(remote));
+        dialogs.push(await dialogOf(remote));
+      } finally {
+        await closeWindow(remote).catch(() => undefined);
+        await closeWindow(window).catch(() => undefined);
+        await removeContainers(root).catch(() => undefined);
+      }
+    }
+    deepStrictEqual(
+      [
+        titles[0]?.includes(` @ ${socket}]`),
+        titles[1]?.includes(' @ '),
+        dialogs,
+      ],
+      [true, false, [undefined, undefined]],
+    );
   });
 });

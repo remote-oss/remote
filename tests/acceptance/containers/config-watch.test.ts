@@ -622,4 +622,31 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
       await removeContainers(folder).catch(() => undefined);
     }
   });
+
+  it('F-0303 AC-20 (c106-delete-ignore): a deleted configuration recreated with the content an Ignore acknowledged shows nothing, and a different edit is told within the bound', async () => {
+    const folder = devContainerFolder('c106-delete-ignore', {
+      name: 'C106 Delete Ignore',
+    });
+    const name = await connectedWindow(folder);
+    const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+    try {
+      rewriteConfiguration(folder, {containerEnv: {C106: 'ignored'}});
+      await noticesWhen(name, 1);
+      await answerNotification(name, CHANGED_START, 'Ignore');
+      const ignored = readFileSync(file, 'utf8');
+      rmSync(file);
+      const deleted = await noticesAfter(name, 8);
+      writeFileSync(file, ignored);
+      const identical = await noticesAfter(name, 6);
+      rewriteConfiguration(folder, {containerEnv: {C106: 'different'}});
+      const different = await noticesWhen(name, 1);
+      deepStrictEqual(
+        [deleted, identical, different],
+        [[], [], [changed('devcontainer.json')]],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder).catch(() => undefined);
+    }
+  });
 });
