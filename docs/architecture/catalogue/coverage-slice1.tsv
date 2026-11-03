@@ -1136,20 +1136,20 @@ F-2604.AC-20	acceptance
 F-2604.AC-21	acceptance	
 F-2604.AC-22	acceptance	
 F-2605.AC-1	unit	
-F-2605.AC-2	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-3	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-2	acceptance	
+F-2605.AC-3	acceptance	
 F-2605.AC-4	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-5	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-6	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-7	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-7	acceptance	
 F-2605.AC-8	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-9	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-10	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-11	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-10	acceptance	
+F-2605.AC-11	acceptance	
 F-2605.AC-12	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-13	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-14	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-15	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-15	acceptance	
 F-2605.AC-16	acceptance	
 F-2605.AC-17	acceptance	
 F-2605.AC-18	unit	
@@ -1157,8 +1157,8 @@ F-2605.AC-20	acceptance
 F-2605.AC-21	acceptance	
 F-2605.AC-22	acceptance	
 F-2605.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
-F-2605.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-25	acceptance	
+F-2605.AC-26	acceptance	
 F-2605.AC-27	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2704.AC-1	acceptance	
 F-2704.AC-2	acceptance	

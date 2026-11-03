@@ -97,7 +97,7 @@ export function outputLogLinks(
 }
 
 /** A terminal the editor made. */
-export interface TroubleshootingTerminal {
+interface TroubleshootingTerminal {
   /** Shows the terminal in the panel; `preserveFocus` leaves the keyboard where it is. */
   show(preserveFocus: boolean): void;
   dispose(): void;
