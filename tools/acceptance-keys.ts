@@ -93,7 +93,41 @@ function publicKeyOf(file: string): string {
   return readFileSync(`${file}.pub`, 'utf8').trim();
 }
 
-/** Makes a key protected by the passphrase that `askpass` prints, which never reaches a command line. */
+/**
+ * Fails unless the key `file` needs a passphrase: when it opens with an empty one, `ssh-keygen` did not use the run's
+ * askpass and wrote the key unprotected.
+ */
+export function checkProtected(command: CommandRunner, file: string): void {
+  if (command('ssh-keygen', ['-y', '-P', '', '-f', file]).status === 0) {
+    throw new Error(
+      `ssh-keygen wrote ${file} without the run's passphrase: it did not use the askpass`,
+    );
+  }
+}
+
+/**
+ * Writes the script that prints the passphrase in `passphraseFile`, for `SSH_ASKPASS`, and gives its file: a shell
+ * script, or on Windows (`platform`) a batch file, which OpenSSH for Windows starts.
+ */
+export function writeAskpass(
+  runFolder: string,
+  passphraseFile: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === 'win32') {
+    const batch = path.join(runFolder, 'askpass-passphrase.cmd');
+    writeFileSync(batch, `@type "${passphraseFile}"\r\n`);
+    return batch;
+  }
+  const script = path.join(runFolder, 'askpass-passphrase');
+  writeFileSync(script, `#!/bin/sh\ncat '${passphraseFile}'\n`, {mode: 0o700});
+  return script;
+}
+
+/**
+ * Makes a key protected by the passphrase that `askpass` prints, which never reaches a command line, and checks that
+ * the key needs it.
+ */
 function protectedKey(
   command: CommandRunner,
   askpass: string,
@@ -113,6 +147,7 @@ function protectedKey(
     '-f',
     file,
   ]);
+  checkProtected(command, file);
 }
 
 /** Makes a key without a passphrase. */
@@ -158,10 +193,7 @@ export function makeRunKeys(
 ): RunKeys {
   const passphraseFile = path.join(runFolder, 'passphrase');
   writeFileSync(passphraseFile, newPassword(), {mode: 0o600});
-  const passphraseAskpass = path.join(runFolder, 'askpass-passphrase');
-  writeFileSync(passphraseAskpass, `#!/bin/sh\ncat '${passphraseFile}'\n`, {
-    mode: 0o700,
-  });
+  const passphraseAskpass = writeAskpass(runFolder, passphraseFile);
   const passphraseKey = path.join(runFolder, 'id_passphrase');
   protectedKey(
     command,
