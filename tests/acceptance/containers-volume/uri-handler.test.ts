@@ -7,9 +7,14 @@ import {deepStrictEqual} from 'node:assert';
 import {
   containersLog,
   containersLogSince,
-  openOwnLink,
+  openLink,
 } from '../windows/harness.ts';
-import {answerDialog, dialogOf, waitForDialog} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  dialogOf,
+  notifications,
+  waitForDialog,
+} from '../windows/renderer.ts';
 
 /** The extension's part of a link: its id as the link's authority. */
 const AUTHORITY = 'remote-oss.remote-containers';
@@ -28,7 +33,7 @@ const QUIET_MILLISECONDS = 5_000;
 
 /** Opens `<scheme>://<extension><rest>` from the local window and accepts the editor's question; gives the link's text. */
 async function openAccepted(rest: string): Promise<string> {
-  const text = await openOwnLink('local', `${AUTHORITY}${rest}`);
+  const text = await openLink('local', `{scheme}://${AUTHORITY}${rest}`);
   const asked = await waitForDialog('local');
   if (asked.message !== EDITOR_QUESTION) {
     throw new Error(`expected the editor's question, saw ${asked.message}`);
@@ -116,6 +121,77 @@ describe('the "Open in Dev Containers" link (card containers-154)', function () 
         details: `Cannot access the repository '${UNREACHABLE}'.`,
         buttons: ['OK'],
       },
+    );
+  });
+
+  it('F-0706 AC-9, AC-12 (c154-other-ids): a link to the reference’s id, or to an id no extension has, reaches no code of ours: core says the extension was not found', async () => {
+    await openAccepted(`/unknownAction?url=${encodeURIComponent(REPOSITORY)}`);
+    await dialogAfterQuiet();
+    const mark = containersLog().length;
+    const seen = [];
+    for (const extensionId of [
+      'ms-vscode-remote.remote-containers',
+      'nobody.no-such-extension',
+    ]) {
+      await openLink(
+        'local',
+        `{scheme}://${extensionId}/cloneInVolume?url=${encodeURIComponent(REPOSITORY)}`,
+      );
+      await new Promise(resolve => setTimeout(resolve, QUIET_MILLISECONDS));
+      seen.push({
+        dialog: await dialogOf('local'),
+        notice: (await notifications('local')).some(text =>
+          text.includes(
+            `'${extensionId}' cannot be installed because it was not found`,
+          ),
+        ),
+      });
+    }
+    deepStrictEqual(
+      {seen, logged: containersLogSince(mark)},
+      {
+        seen: [
+          {dialog: undefined, notice: true},
+          {dialog: undefined, notice: true},
+        ],
+        logged: [],
+      },
+    );
+  });
+
+  it('F-0706 AC-13 (c154-gallery): a link to a gallery extension that isn’t installed gets core’s install-and-open question first; Cancel leaves nothing of ours', async () => {
+    const mark = containersLog().length;
+    const text = await openLink(
+      'local',
+      `{scheme}://redhat.vscode-yaml/cloneInVolume?url=${encodeURIComponent(REPOSITORY)}`,
+    );
+    const asked = await waitForDialog('local', 60_000);
+    await answerDialog('local', 'Cancel');
+    deepStrictEqual(
+      {
+        message: asked.message,
+        details: asked.details,
+        buttons: asked.buttons,
+        logged: containersLogSince(mark),
+      },
+      {
+        message: "Would you like to install 'YAML' extension from 'Red Hat'?",
+        details: `This extension wants to open a URI:${text.replace(/=/g, '%3D')}`,
+        buttons: ['Cancel', 'Install Extension and Open URI'],
+        logged: [],
+      },
+    );
+  });
+
+  it('F-0706 AC-11 (c154-other-scheme): a link on a scheme that isn’t the editor’s reaches no code of ours: no question, no dialog, nothing logged', async () => {
+    const mark = containersLog().length;
+    await openLink(
+      'local',
+      `not-the-editor-scheme://${AUTHORITY}/cloneInVolume?url=${encodeURIComponent(REPOSITORY)}`,
+    );
+    deepStrictEqual(
+      {dialog: await dialogAfterQuiet(), logged: containersLogSince(mark)},
+      {dialog: undefined, logged: []},
     );
   });
 });

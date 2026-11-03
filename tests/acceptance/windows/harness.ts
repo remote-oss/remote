@@ -1454,12 +1454,12 @@ async function reported(
 }
 
 /**
- * Has window `name` open the link `rest` on the editor's own scheme, as a link a user clicks does (`<scheme>://rest`),
+ * Has window `name` open the link `text`, as a link a user clicks does, `{scheme}` standing for the editor's own scheme,
  * and gives the link's whole text once it is handed to the editor, without waiting for the editor's own confirmation.
  */
-export async function openOwnLink(name: string, rest: string): Promise<string> {
+export async function openLink(name: string, text: string): Promise<string> {
   const before = countOf(name, 'linkOpened');
-  await startInWindow(name, 'acceptance.agent.openOwnLink', rest);
+  await startInWindow(name, 'acceptance.agent.openLink', text);
   await waitUntil(
     `window ${name} to open its link`,
     () => countOf(name, 'linkOpened') > before,
