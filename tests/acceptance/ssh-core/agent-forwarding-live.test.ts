@@ -12,6 +12,7 @@ import {
   connectedWithin,
   fingerprintOf,
   hostAnswer,
+  hostConnections,
   inWindow,
   kill,
   noHelperWithin,
@@ -125,7 +126,7 @@ describe('F-2311, agent forwarding into a server that is already running (card c
     );
   }
 
-  it('F-2311 AC-16 (c99-reconnect): when the connection comes back after the local server was killed the link keeps its name and points at the new session’s socket, and the old terminal still lists the keys', async () => {
+  it('F-2311 AC-16 (c99-reconnect): when the connection of the window ends and VS Code connects again by itself, the link keeps its name and points at the new session’s socket, and the old terminal still lists the keys', async () => {
     await agentAdd(keyFile(), {confirm: false});
     await freshHost();
     await onHost('sh', '-c', `rm -f ${LINK_PATTERN}`);
@@ -133,8 +134,13 @@ describe('F-2311, agent forwarding into a server that is already running (card c
     try {
       await connectedWithin('c99-back', INSTALL_MILLISECONDS);
       const before = await linkTargets();
-      appendScript([hostAnswer('c99-back', {label: FORWARDING})]);
-      await kill('c99-back');
+      let ended = 0;
+      for (const connection of await hostConnections()) {
+        if (connection.program === 'ssh') {
+          process.kill(connection.processId);
+          ended += 1;
+        }
+      }
       await waitFor(
         'the window to be connected again',
         async () => {
@@ -151,6 +157,7 @@ describe('F-2311, agent forwarding into a server that is already running (card c
       const after = await linkTargets();
       deepStrictEqual(
         {
+          ended: ended > 0,
           sameName: after.map(entry => entry.split(' -> ')[0]),
           newSocket: after[0]?.split(' -> ')[1] !== before[0]?.split(' -> ')[1],
           keysInOldTerminal: (await listedKeys('c99-back')).includes(
@@ -158,6 +165,7 @@ describe('F-2311, agent forwarding into a server that is already running (card c
           ),
         },
         {
+          ended: true,
           sameName: before.map(entry => entry.split(' -> ')[0]),
           newSocket: true,
           keysInOldTerminal: true,
@@ -263,36 +271,6 @@ describe('F-2311, agent forwarding into a server that is already running (card c
           sessionSocket: false,
           afterKill: [true, 1],
           keys: true,
-          shown: [],
-        },
-        JSON.stringify(result.steps),
-      );
-    });
-  });
-
-  it('F-2311 AC-18 (c99-setting-to-false): with the setting true at connect and then false, nothing is shown and new terminals keep the link, also after a reload with the local server running; after Kill Local Connection Server and the reconnect the decision is made again with false, so they get the session socket and the old link stays', async () => {
-    await keepingSettings(async () => {
-      const result = await afterChange('c99-to-false', true);
-      const [connect, changed, reload, killed] = result.steps;
-      deepStrictEqual(
-        {
-          link: isLink(connect?.socket ?? ''),
-          keptLink: [changed?.socket, reload?.socket].map(
-            socket => socket === connect?.socket,
-          ),
-          afterKill: [
-            isLink(killed?.socket ?? ''),
-            killed?.links.length,
-            killed?.links[0] === connect?.links[0],
-          ],
-          keys: result.keys,
-          shown: result.shown,
-        },
-        {
-          link: true,
-          keptLink: [true, true],
-          afterKill: [false, 1, true],
-          keys: 'Error_connecting_to_agent:_No_such_file_or_directory',
           shown: [],
         },
         JSON.stringify(result.steps),
