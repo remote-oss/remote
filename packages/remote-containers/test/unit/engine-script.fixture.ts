@@ -36,3 +36,12 @@ export function scriptedEngine(
     options: {cancellation: new AbortController().signal},
   };
 }
+
+/** What a promise settled with: its value, or the message it rejected with. */
+export function settled<Value>(
+  promise: Promise<Value>,
+): Promise<Value | string> {
+  return promise.catch(
+    (error: unknown) => `rejected: ${(error as Error).message}`,
+  );
+}

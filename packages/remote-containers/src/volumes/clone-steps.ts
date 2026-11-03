@@ -73,7 +73,7 @@ function folderEmptyArguments(container: string, folder: string): string[] {
 }
 
 /** The first configuration file the folder holds, relative to it. */
-async function configurationIn(
+export async function configurationIn(
   ports: CloneStepPorts,
   container: string,
   folder: string,

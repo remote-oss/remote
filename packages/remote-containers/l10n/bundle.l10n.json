@@ -231,5 +231,7 @@
   "Select Configuration": "Select Configuration",
   "(Current)": "(Current)",
   "No other Dev Container configurations found in folder. Did you mean to open another folder in a container?": "No other Dev Container configurations found in folder. Did you mean to open another folder in a container?",
-  "Open Folder in Container...": "Open Folder in Container..."
+  "Open Folder in Container...": "Open Folder in Container...",
+  "You must select a container configuration since the repository does not contain a dev container configuration. Without a dev container configuration the container cannot be started.": "You must select a container configuration since the repository does not contain a dev container configuration. Without a dev container configuration the container cannot be started.",
+  "Select Configuration": "Select Configuration"
 }

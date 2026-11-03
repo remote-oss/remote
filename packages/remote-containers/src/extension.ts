@@ -132,6 +132,8 @@ import {
 } from './volumes/bootstrap-files.ts';
 import {writeBuildContext} from './volumes/build-context.ts';
 import {volumeRewriteOf} from './volumes/volume-rewrite.ts';
+import {bootstrapAuthoringFiles} from './volumes/bootstrap-authoring-files.ts';
+import {configurationAdded} from './volumes/volume-configuration.ts';
 import {containerCliHost} from './cli/container-cli-host.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import {cloneText} from './volumes/clone-strings.ts';
@@ -703,6 +705,12 @@ export async function activate(
       ...(volume === undefined ? [] : [volume.rewrite]),
     );
   }
+  /** Lets the resolve end silently first, then takes the window back to a local one. */
+  function closeRemoteAfterResolve(): void {
+    setTimeout(() => {
+      void vscode.commands.executeCommand('workbench.action.remote.close');
+    }, 0);
+  }
   /** The clone's trust confirmation over the editor: the profile's record, its modal, and our page about it. */
   function cloneTrustPorts(): CloneTrustPorts {
     return {
@@ -727,6 +735,129 @@ export async function activate(
       learnMore: () => {
         void vscode.env.openExternal(vscode.Uri.parse(CLONE_TRUST_PAGE));
       },
+    };
+  }
+  /** The wizard's ports over `authoringFiles`, with its log lines to `logger`. */
+  function wizardPortsOf(
+    logger: Logger,
+    authoringFiles: AuthoringFiles,
+  ): WizardPorts {
+    const bridge = bridgeFor(process.env, logger);
+    return {
+      catalogue: {
+        environment: process.env,
+        download: downloadTextOver((address, init) => fetch(address, init)),
+        setTimer: (milliseconds, callback) => {
+          const timer = setTimeout(callback, milliseconds);
+          return () => {
+            clearTimeout(timer);
+          };
+        },
+      },
+      dialogs: {
+        showModalError: message =>
+          vscode.window.showErrorMessage(message, {modal: true}),
+      },
+      pick: {
+        createQuickPick: () =>
+          vscode.window.createQuickPick<PickRow & vscode.QuickPickItem>(),
+        verifiedIcon: new vscode.ThemeIcon('verified'),
+        openFileIcon: new vscode.ThemeIcon('go-to-file'),
+        openExternal: address =>
+          vscode.env.openExternal(vscode.Uri.parse(address)),
+        templateMetadata: (templateId, cancellation) =>
+          bridge.templateMetadata(templateId, cancellation),
+        translate,
+      },
+      options: {
+        createQuickPick: () =>
+          vscode.window.createQuickPick<OptionRow & vscode.QuickPickItem>(),
+        backButton: vscode.QuickInputButtons.Back,
+        finishButton: {
+          iconPath: new vscode.ThemeIcon('check-all'),
+          tooltip: finishTooltip(translate),
+        },
+        verifiedIcon: new vscode.ThemeIcon('verified'),
+      },
+      write: (request, cancellation) =>
+        writeTemplate(
+          request,
+          {
+            applyTemplate: (applying, onLine, cancelling) =>
+              bridge.applyTemplate(applying, onLine, cancelling),
+            files: {
+              makeScratchFolder: async () => {
+                await mkdir(context.globalStorageUri.fsPath, {
+                  recursive: true,
+                });
+                return mkdtemp(
+                  path.join(context.globalStorageUri.fsPath, 'template-'),
+                );
+              },
+              ...authoringFiles,
+            },
+            dialogs: {
+              show: modalShown,
+              revealLog: () => {
+                logChannel?.show(true);
+              },
+            },
+            hasUnsavedChanges: file =>
+              vscode.workspace.textDocuments.some(
+                document =>
+                  document.isDirty &&
+                  document.uri.toString() === authoringUriOf(file).toString(),
+              ),
+            withProgress: (title, work) =>
+              Promise.resolve(
+                vscode.window.withProgress(
+                  {
+                    location: vscode.ProgressLocation.Notification,
+                    title,
+                    cancellable: false,
+                  },
+                  work,
+                ),
+              ),
+            logLine: line => {
+              logger.info(line);
+            },
+            translate,
+          },
+          cancellation,
+        ),
+      files: authoringFiles,
+      stored: {
+        files: authoringFiles,
+        show: modalShown,
+        translate,
+      },
+      slotFolder: slot =>
+        path.join(storeRootOf(context.globalStorageUri.fsPath), slot),
+      location: {
+        createQuickPick: () =>
+          vscode.window.createQuickPick<LocationRow & vscode.QuickPickItem>(),
+        storeRoot: storedLookup.root,
+        store: userDataStore,
+        home: storedLookup.home,
+        // The store is on this machine, and a window whose folder is in a container must not create it from there.
+        ...(vscode.env.remoteName === 'dev-container'
+          ? {
+              refuseStore: (folder: string) =>
+                vscode.FileSystemError.NoPermissions(
+                  `permission denied, mkdir '${folder}'`,
+                ),
+            }
+          : {}),
+      },
+      record: (line, level) => {
+        if (level === 'warn') {
+          logger.warn(line);
+        } else {
+          logger.info(line);
+        }
+      },
+      translate,
     };
   }
   /** Offers to reopen the window's folder in its container, over what the window holds now. */
@@ -1051,122 +1182,7 @@ export async function activate(
         ),
         containerFolder,
       );
-      const wizardPorts: WizardPorts = {
-        catalogue: {
-          environment: process.env,
-          download: downloadTextOver((address, init) => fetch(address, init)),
-          setTimer: (milliseconds, callback) => {
-            const timer = setTimeout(callback, milliseconds);
-            return () => {
-              clearTimeout(timer);
-            };
-          },
-        },
-        dialogs: {
-          showModalError: message =>
-            vscode.window.showErrorMessage(message, {modal: true}),
-        },
-        pick: {
-          createQuickPick: () =>
-            vscode.window.createQuickPick<PickRow & vscode.QuickPickItem>(),
-          verifiedIcon: new vscode.ThemeIcon('verified'),
-          openFileIcon: new vscode.ThemeIcon('go-to-file'),
-          openExternal: address =>
-            vscode.env.openExternal(vscode.Uri.parse(address)),
-          templateMetadata: (templateId, cancellation) =>
-            bridge.templateMetadata(templateId, cancellation),
-          translate,
-        },
-        options: {
-          createQuickPick: () =>
-            vscode.window.createQuickPick<OptionRow & vscode.QuickPickItem>(),
-          backButton: vscode.QuickInputButtons.Back,
-          finishButton: {
-            iconPath: new vscode.ThemeIcon('check-all'),
-            tooltip: finishTooltip(translate),
-          },
-          verifiedIcon: new vscode.ThemeIcon('verified'),
-        },
-        write: (request, cancellation) =>
-          writeTemplate(
-            request,
-            {
-              applyTemplate: (applying, onLine, cancelling) =>
-                bridge.applyTemplate(applying, onLine, cancelling),
-              files: {
-                makeScratchFolder: async () => {
-                  await mkdir(context.globalStorageUri.fsPath, {
-                    recursive: true,
-                  });
-                  return mkdtemp(
-                    path.join(context.globalStorageUri.fsPath, 'template-'),
-                  );
-                },
-                ...authoringFiles,
-              },
-              dialogs: {
-                show: modalShown,
-                revealLog: () => {
-                  logChannel?.show(true);
-                },
-              },
-              hasUnsavedChanges: file =>
-                vscode.workspace.textDocuments.some(
-                  document =>
-                    document.isDirty &&
-                    document.uri.toString() === authoringUriOf(file).toString(),
-                ),
-              withProgress: (title, work) =>
-                Promise.resolve(
-                  vscode.window.withProgress(
-                    {
-                      location: vscode.ProgressLocation.Notification,
-                      title,
-                      cancellable: false,
-                    },
-                    work,
-                  ),
-                ),
-              logLine: line => {
-                served.logger.info(line);
-              },
-              translate,
-            },
-            cancellation,
-          ),
-        files: authoringFiles,
-        stored: {
-          files: authoringFiles,
-          show: modalShown,
-          translate,
-        },
-        slotFolder: slot =>
-          path.join(storeRootOf(context.globalStorageUri.fsPath), slot),
-        location: {
-          createQuickPick: () =>
-            vscode.window.createQuickPick<LocationRow & vscode.QuickPickItem>(),
-          storeRoot: storedLookup.root,
-          store: userDataStore,
-          home: storedLookup.home,
-          // The store is on this machine, and a window whose folder is in a container must not create it from there.
-          ...(vscode.env.remoteName === 'dev-container'
-            ? {
-                refuseStore: (folder: string) =>
-                  vscode.FileSystemError.NoPermissions(
-                    `permission denied, mkdir '${folder}'`,
-                  ),
-              }
-            : {}),
-        },
-        record: (line, level) => {
-          if (level === 'warn') {
-            served.logger.warn(line);
-          } else {
-            served.logger.info(line);
-          }
-        },
-        translate,
-      };
+      const wizardPorts = wizardPortsOf(served.logger, authoringFiles);
       const wizardFor = wizardRunnerOf(wizardPorts);
       // An open command authors in the folder it opens: in a saved multi-root workspace, its file's folder.
       function windowRoots(): string[] {
@@ -1901,14 +1917,45 @@ export async function activate(
         consent: async () => {
           const given = await cloneConsented(cloneTrustPorts());
           if (!given) {
-            // The resolve ends silently first; the window then goes back to a local one.
-            setTimeout(() => {
-              void vscode.commands.executeCommand(
-                'workbench.action.remote.close',
-              );
-            }, 0);
+            closeRemoteAfterResolve();
           }
           return given;
+        },
+        addConfiguration: async (bootstrap, folder, engine) => {
+          const files = routedFiles(
+            hostFiles(),
+            bootstrapAuthoringFiles(
+              {
+                engine: engine.host,
+                options: {cancellation: new AbortController().signal},
+              },
+              bootstrap,
+            ),
+            folder,
+          );
+          const runWizard = wizardRunnerOf(
+            withoutLocation(wizardPortsOf(logger, files)),
+          );
+          const added = await configurationAdded({
+            runWizard: () => runWizard(folder, []),
+            mustSelect: async () => {
+              const select = cloneText('selectConfiguration', translate);
+              const answer = await vscode.window.showErrorMessage(
+                cloneText('S414', translate),
+                {modal: true},
+                {title: select},
+                {
+                  title: cloneText('cancel', translate),
+                  isCloseAffordance: true,
+                },
+              );
+              return answer?.title === select;
+            },
+          });
+          if (added === 'left') {
+            closeRemoteAfterResolve();
+          }
+          return added;
         },
         showShallow: repository => {
           void vscode.window.showWarningMessage(
