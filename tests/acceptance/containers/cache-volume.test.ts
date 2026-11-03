@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -14,6 +15,7 @@ import {promisify} from 'node:util';
 import {
   closeWindow,
   connectedToContainer,
+  containersLog,
   devContainerFolder,
   devContainersOf,
   editorProduct,
@@ -21,6 +23,7 @@ import {
   reloadingCommand,
   reopenInContainer,
   reopenStarted,
+  runLabelArguments,
   startInWindow,
   userScopeHolds,
   variable,
@@ -34,7 +37,9 @@ import {
 import {settingsText} from '../windows/maintenance.ts';
 import {
   answerDialog,
+  dialogOf,
   notifications,
+  problemsOf,
   statusBarText,
   waitForDialog,
   windowTitle,
@@ -162,6 +167,132 @@ async function installedCountOf(containerId: string): Promise<number> {
       `ls "$(cd; pwd)/${editorProduct().serverDataFolderName}/extensions" 2>/dev/null | grep -c . ; true`,
     ),
   );
+}
+
+/** A small extension with a package and a published checksum on Open VSX, and the folder name part its version gives. */
+const CACHED_EXTENSION = 'mechatroner.rainbow-csv';
+
+/** A second small extension, which no other row caches. */
+const OFFLINE_EXTENSION = 'oderwat.indent-rainbow';
+
+/** The shared cache's folder on the volume, named for the editor's application (containers contracts §5.2). */
+function sharedCacheFolder(): string {
+  return `/vscode/extensionsCache-${editorProduct().applicationName}`;
+}
+
+/** The folder of the container's own extension cache, for its remote user. */
+const OWN_CACHE_SHELL = '"$HOME/$SERVER_DATA/extensionsCache"';
+
+/** The files in the container's own extension cache, as `name -> link target or empty`. */
+async function ownEntriesOf(
+  containerId: string,
+): Promise<Record<string, string>> {
+  const listed = await docker(
+    'exec',
+    containerId,
+    'sh',
+    '-c',
+    `SERVER_DATA=${editorProduct().serverDataFolderName}; for file in ${OWN_CACHE_SHELL}/*; do [ -e "$file" ] || [ -L "$file" ] || continue; echo "$(basename "$file")|$(readlink "$file")"; done`,
+  );
+  return Object.fromEntries(
+    listed
+      .split('\n')
+      .filter(line => line !== '')
+      .map(line => line.split('|') as [string, string]),
+  );
+}
+
+/** The package files in the shared cache folder of the volume, as seen from container `containerId`. */
+async function sharedFilesOf(containerId: string): Promise<string[]> {
+  return (
+    await docker(
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `ls ${sharedCacheFolder()} 2>/dev/null || true`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '');
+}
+
+/** Whether `file` in the container is a regular file (not a link), and its size. */
+async function realFileSizeOf(
+  containerId: string,
+  file: string,
+): Promise<number | undefined> {
+  const printed = await docker(
+    'exec',
+    containerId,
+    'sh',
+    '-c',
+    `[ -f '${file}' ] && [ ! -L '${file}' ] && stat -c %s '${file}' || true`,
+  );
+  return printed === '' ? undefined : Number(printed);
+}
+
+/** The size the container's entry `file` resolves to, or nothing when the entry is not there. */
+async function resolvedSizeOfSafe(
+  containerId: string,
+  own: Record<string, string>,
+  file: string,
+): Promise<number | undefined> {
+  return file in own
+    ? resolvedSizeOf(
+        containerId,
+        `$HOME/${editorProduct().serverDataFolderName}/extensionsCache/${file}`,
+      )
+    : undefined;
+}
+
+/** The size the container's entry resolves to, following the link. */
+async function resolvedSizeOf(
+  containerId: string,
+  file: string,
+): Promise<number> {
+  return Number(
+    await docker('exec', containerId, 'sh', '-c', `stat -L -c %s "${file}"`),
+  );
+}
+
+/** Whether the extension `extensionId` is installed for the remote user of container `containerId`. */
+async function installedExtension(
+  containerId: string,
+  extensionId: string,
+): Promise<boolean> {
+  return (
+    (await docker(
+      'exec',
+      containerId,
+      'sh',
+      '-c',
+      `ls "$HOME/${editorProduct().serverDataFolderName}/extensions" 2>/dev/null | grep -ci '^${extensionId}-' || true`,
+    )) !== '0'
+  );
+}
+
+/** Removes the containers of the run's daemon that mount the vscode volume, whoever made them, and the volume, so that the next container finds none. */
+async function noVscodeVolume(): Promise<void> {
+  const holders = await docker(
+    'ps',
+    '--all',
+    '--quiet',
+    '--filter',
+    'volume=vscode',
+  );
+  if (holders !== '') {
+    await docker('rm', '--force', ...holders.split('\n'));
+  }
+  await docker('volume', 'rm', '--force', 'vscode');
+}
+
+/** A folder whose configuration installs the extension `extensionId`. */
+function extensionFolder(name: string, extensionId: string): string {
+  return devContainerFolder(name, {
+    name,
+    customizations: {vscode: {extensions: [extensionId]}},
+  });
 }
 
 /** Opens a window on `folder` and reopens it in its container; gives the window and the container's id. */
@@ -553,25 +684,90 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
     );
   });
 
-  it('F-0419 AC-35 (glibc-then-alpine): a Debian container and then an Alpine one, on a daemon with no vscode volume, mount the same vscode volume, and its server folder lists a glibc and an Alpine platform folder, each with one commit folder', async () => {
-    const holders = await docker(
-      'ps',
-      '--all',
-      '--quiet',
-      '--filter',
-      'volume=vscode',
-      '--filter',
-      `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
-    );
-    if (holders !== '') {
-      await docker('rm', '--force', ...holders.split('\n'));
+  it('F-0419 AC-4 (c105-fresh): an extension not in the shared cache is downloaded, a real file of the same size appears in the shared cache folder, the container’s own entry links to it, and the extension is installed', async () => {
+    await noVscodeVolume();
+    const folder = extensionFolder('c105-fresh', CACHED_EXTENSION);
+    try {
+      const {name, containerId} = await opened(folder);
+      const shared = await sharedFilesOf(containerId);
+      const own = await ownEntriesOf(containerId);
+      const file = shared.find(each => each.endsWith('.vsix')) ?? '';
+      const sharedPath = `${sharedCacheFolder()}/${file}`;
+      const sharedSize = await realFileSizeOf(containerId, sharedPath);
+      const installed = await installedExtension(containerId, CACHED_EXTENSION);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          file: file.startsWith(`${CACHED_EXTENSION}-`),
+          sharedIsReal: sharedSize !== undefined && sharedSize > 0,
+          own: Object.keys(own).includes(file) ? own[file] : own,
+          sameSize:
+            sharedSize !== undefined &&
+            sharedSize === (await resolvedSizeOfSafe(containerId, own, file)),
+          installed,
+        },
+        {
+          file: true,
+          sharedIsReal: true,
+          own: sharedPath,
+          sameSize: true,
+          installed: true,
+        },
+      );
+    } finally {
+      await removeContainers(folder);
     }
-    await docker('volume', 'rm', '--force', 'vscode');
+  });
+
+  it('F-0419 AC-5 (c105-shared): a second, unrelated container with the same extension takes it from the shared cache with no second download, and its entry links to the shared copy', async () => {
+    const first = extensionFolder('c105-shared-a', CACHED_EXTENSION);
+    const second = extensionFolder('c105-shared-b', CACHED_EXTENSION);
+    try {
+      const firstOpen = await opened(first);
+      const sharedFile =
+        (await sharedFilesOf(firstOpen.containerId)).find(each =>
+          each.endsWith('.vsix'),
+        ) ?? '';
+      await closeWindow(firstOpen.name);
+      const mark = containersLog().length;
+      const secondOpen = await opened(second);
+      const own = await ownEntriesOf(secondOpen.containerId);
+      const lines = containersLog().slice(mark);
+      await closeWindow(secondOpen.name);
+      deepStrictEqual(
+        {
+          link: own[sharedFile],
+          taken: lines.some(
+            line =>
+              line.includes(`the extension ${CACHED_EXTENSION}@`) &&
+              line.includes('is taken from the shared cache'),
+          ),
+          downloaded: lines.some(line => line.includes('downloaded')),
+        },
+        {
+          link: `${sharedCacheFolder()}/${sharedFile}`,
+          taken: true,
+          downloaded: false,
+        },
+        lines.join('\n'),
+      );
+    } finally {
+      await removeContainers(first);
+      await removeContainers(second);
+    }
+  });
+
+  it('F-0419 AC-35 (glibc-then-alpine): a Debian container and then an Alpine one, on a daemon with no vscode volume, mount the same vscode volume, its server folder lists a glibc and an Alpine platform folder, each with one commit folder, and the Alpine container’s entry for the extension the first cached is a link into the shared cache', async () => {
+    await noVscodeVolume();
     const glibc = devContainerFolder('c53v-glibc', {
       name: 'Volume Glibc',
       image: GLIBC_IMAGE,
+      customizations: {vscode: {extensions: [CACHED_EXTENSION]}},
     });
-    const alpine = devContainerFolder('c53v-alpine', {name: 'Volume Alpine'});
+    const alpine = devContainerFolder('c53v-alpine', {
+      name: 'Volume Alpine',
+      customizations: {vscode: {extensions: [CACHED_EXTENSION]}},
+    });
     try {
       const glibcOpen = await opened(glibc);
       const glibcMount = await vscodeMountOf(glibcOpen.containerId);
@@ -579,6 +775,7 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
       const alpineOpen = await opened(alpine);
       const alpineMount = await vscodeMountOf(alpineOpen.containerId);
       const link = await serverLinkOf(alpineOpen.containerId);
+      const alpineEntries = await ownEntriesOf(alpineOpen.containerId);
       const binFolder = link.replace(/\/[^/]*\/[^/]*$/, '');
       const platforms = (
         await docker('exec', alpineOpen.containerId, 'ls', binFolder)
@@ -606,6 +803,9 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
           mounts: [glibcMount, alpineMount],
           platforms,
           commits,
+          alpineEntries: Object.values(alpineEntries).map(target =>
+            target.startsWith(`${sharedCacheFolder()}/`),
+          ),
         },
         {
           mounts: [
@@ -614,11 +814,158 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
           ],
           platforms: [`alpine-${process.arch}`, `linux-${process.arch}`],
           commits: [1, 1],
+          alpineEntries: [true],
         },
       );
     } finally {
       await removeContainers(glibc);
       await removeContainers(alpine);
+    }
+  });
+
+  it('F-0419 AC-39 (c105-host-root): the server archive is in the client’s cache with either value of cacheVolume, and the extension packages are there only when cacheVolume is false', async () => {
+    const clientPackages = path.join(
+      tmpdir(),
+      'vscode-remote-containers',
+      'extensionsCache',
+    );
+    const archive = cachedArchiveOf(`alpine-${process.arch}`);
+    const seen: Array<{
+      cacheVolume: boolean;
+      archive: boolean;
+      packages: string[];
+    }> = [];
+    for (const cacheVolume of [false, true]) {
+      rmSync(clientPackages, {recursive: true, force: true});
+      rmSync(path.dirname(archive), {recursive: true, force: true});
+      await noVscodeVolume();
+      await setUserSetting('dev.containers.cacheVolume', cacheVolume);
+      const folder = extensionFolder('c105-host-root', CACHED_EXTENSION);
+      try {
+        const {name} = await opened(folder);
+        await closeWindow(name);
+        seen.push({
+          cacheVolume,
+          archive: existsSync(archive),
+          packages: existsSync(clientPackages)
+            ? readdirSync(clientPackages).filter(file => file.endsWith('.vsix'))
+            : [],
+        });
+      } finally {
+        await setUserSetting('dev.containers.cacheVolume', undefined);
+        await removeContainers(folder);
+      }
+    }
+    deepStrictEqual(
+      seen.map(each => [
+        each.cacheVolume,
+        each.archive,
+        each.packages.map(file => file.startsWith(`${CACHED_EXTENSION}-`)),
+      ]),
+      [
+        [false, true, [true]],
+        [true, true, []],
+      ],
+      JSON.stringify(seen),
+    );
+  });
+
+  it('F-0419 AC-42 (c105-reference-cache): a package of the same version in the reference’s folder is left alone, our file appears in the shared cache folder, and the container’s entry does not link into the reference’s folder', async () => {
+    await noVscodeVolume();
+    const first = extensionFolder('c105-ref-a', CACHED_EXTENSION);
+    const second = extensionFolder('c105-ref-b', CACHED_EXTENSION);
+    const reference = '/vscode/vscode-server/extensionsCache';
+    try {
+      const firstOpen = await opened(first);
+      const file =
+        (await sharedFilesOf(firstOpen.containerId)).find(each =>
+          each.endsWith('.vsix'),
+        ) ?? '';
+      const planted = await docker(
+        'exec',
+        '--user',
+        'root',
+        firstOpen.containerId,
+        'sh',
+        '-c',
+        `rm -f '${sharedCacheFolder()}/${file}'; mkdir -p ${reference}; echo planted-by-the-reference > '${reference}/${file}'; sha256sum '${reference}/${file}'; stat -c %Y '${reference}/${file}'`,
+      );
+      await closeWindow(firstOpen.name);
+      await removeContainers(first);
+      const secondOpen = await opened(second);
+      const own = await ownEntriesOf(secondOpen.containerId);
+      const after = await docker(
+        'exec',
+        '--user',
+        'root',
+        secondOpen.containerId,
+        'sh',
+        '-c',
+        `sha256sum '${reference}/${file}'; stat -c %Y '${reference}/${file}'`,
+      );
+      const ours = await realFileSizeOf(
+        secondOpen.containerId,
+        `${sharedCacheFolder()}/${file}`,
+      );
+      await closeWindow(secondOpen.name);
+      deepStrictEqual(
+        {
+          ourFile: ours !== undefined && ours > 100,
+          link: own[file],
+          referenceUnchanged: after === planted,
+        },
+        {
+          ourFile: true,
+          link: `${sharedCacheFolder()}/${file}`,
+          referenceUnchanged: true,
+        },
+      );
+    } finally {
+      await removeContainers(first);
+      await removeContainers(second);
+    }
+  });
+
+  it('F-0505 AC-21 (c105-offline): in a container with no network an extension not in the shared cache is installed within a few seconds, with no notification, dialog or Problems entry', async () => {
+    await noVscodeVolume();
+    const folder = devContainerFolder('c105-offline', {
+      name: 'Offline',
+      runArgs: [...runLabelArguments(), '--network', 'none'],
+      customizations: {vscode: {extensions: [OFFLINE_EXTENSION]}},
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      const connected = Date.now();
+      await waitFor(
+        'the extension to be installed',
+        () => installedExtension(containerId, OFFLINE_EXTENSION),
+        60_000,
+      ).catch(() => undefined);
+      const seconds = (Date.now() - connected) / 1000;
+      deepStrictEqual(
+        {
+          installed: await installedExtension(containerId, OFFLINE_EXTENSION),
+          fewSeconds: seconds <= 10,
+          notices: (await notifications(name)).filter(text =>
+            text.toLowerCase().includes('extension'),
+          ),
+          dialog: await dialogOf(name),
+          problems: await problemsOf(name),
+        },
+        {
+          installed: true,
+          fewSeconds: true,
+          notices: [],
+          dialog: undefined,
+          problems: [],
+        },
+        `${String(seconds)} s`,
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
     }
   });
 
