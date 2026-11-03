@@ -50,6 +50,11 @@ const STRINGS_TABLE = {
   'commands.connectToFolderInCurrentWindow.title':
     'Connect in Current Window...',
   'commands.deleteFolderHistoryItem.title': 'Remove from Recent List',
+  'commands.connectToWslUsingDistro.title':
+    'Connect using Distro in Current Window...',
+  'commands.connectToWslUsingDistroInNewWindow.title':
+    'Connect using Distro in New Window...',
+  'commands.unregisterTunnel.title': 'Unregister Tunnel',
   'configuration.title': 'Remote Explorer',
   'settings.foldersSortOrder.description':
     'Specifies the order in which to display folders under Remote targets in the Remote Explorer.',
@@ -213,14 +218,17 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the commands of the card are contributed with their title and icon, and every command has a title and an icon and no category or enablement', () => {
-    const required: Array<[string, string]> = [
+  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the commands of the card are contributed with their title and icon, and every command has a title and an icon (the two WSL ones have no icon) and no category or enablement', () => {
+    const required: Array<[string, string | undefined]> = [
       ['refresh', '$(refresh)'],
       ['connectToRemoteInNewWindow', '$(empty-window)'],
       ['connectToRemoteInCurrentWindow', '$(arrow-right)'],
       ['connectToFolderInNewWindow', '$(empty-window)'],
       ['connectToFolderInCurrentWindow', '$(arrow-right)'],
       ['deleteFolderHistoryItem', '$(remove)'],
+      ['connectToWslUsingDistro', undefined],
+      ['connectToWslUsingDistroInNewWindow', undefined],
+      ['unregisterTunnel', '$(remove)'],
       ['configureSsh', '$(gear)'],
       ['add', '$(plus)'],
     ];
@@ -245,7 +253,8 @@ describe('the manifest of the Remote Explorer package', () => {
           .filter(
             entry =>
               typeof entry.title !== 'string' ||
-              typeof entry.icon !== 'string' ||
+              (typeof entry.icon !== 'string' &&
+                !String(entry.command).includes('WslUsingDistro')) ||
               'category' in entry ||
               'enablement' in entry,
           )
@@ -269,6 +278,12 @@ describe('the manifest of the Remote Explorer package', () => {
         when: 'false',
       },
       {command: 'remote-explorer.deleteFolderHistoryItem', when: 'false'},
+      {command: 'remote-explorer.connectToWslUsingDistro', when: 'false'},
+      {
+        command: 'remote-explorer.connectToWslUsingDistroInNewWindow',
+        when: 'false',
+      },
+      {command: 'remote-explorer.unregisterTunnel', when: 'false'},
       {command: 'remote-explorer.configureSsh', when: 'false'},
       {command: 'remote-explorer.add', when: 'false'},
     ]);
