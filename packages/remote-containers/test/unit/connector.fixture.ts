@@ -314,6 +314,10 @@ function volumeDependenciesOf(
       scene.volumeCalls.push('consent');
       return Promise.resolve(scene.consentGiven);
     },
+    addConfiguration: (bootstrap, folder) => {
+      scene.volumeCalls.push(`addConfiguration ${bootstrap} ${folder}`);
+      return Promise.resolve('written');
+    },
   };
 }
 

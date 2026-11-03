@@ -4,7 +4,7 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {bootstrapAuthoringFiles} from '../../src/volumes/bootstrap-authoring-files.ts';
-import {exited} from './engine-script.fixture.ts';
+import {exited, settled} from './engine-script.fixture.ts';
 
 /** What the fake engine was asked: the script (or the argv's tail), its place, and the input. */
 interface Asked {
@@ -34,13 +34,6 @@ function filesOver(
     'boot1',
   );
   return {files, asked};
-}
-
-/** What a promise settled with: its value, or the message it rejected with. */
-function settled<Value>(promise: Promise<Value>): Promise<Value | string> {
-  return promise.catch(
-    (error: unknown) => `rejected: ${(error as Error).message}`,
-  );
 }
 
 describe('the authoring files of a clone in a volume (card containers-151)', () => {

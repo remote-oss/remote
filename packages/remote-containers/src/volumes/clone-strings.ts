@@ -1,6 +1,6 @@
 /**
- * @fileoverview The texts of Clone Repository in Container Volume, before the reload, by their string ids, and the text
- * one of them gives with its values.
+ * @fileoverview The texts of Clone Repository in Container Volume, by their string ids, and the text one of them gives
+ * with its values.
  */
 
 import type {Translate} from '../surfaces/engine-dialogs.ts';
@@ -12,10 +12,13 @@ const CLONE_TEMPLATES = {
   S072: 'Clone git repository from URL',
   S075: 'Cloning a repository in a Dev Container may execute arbitrary code.',
   S252: 'Only clone a repository in a Dev Container if you trust its authors.',
+  S414: 'You must select a container configuration since the repository does not contain a dev container configuration. Without a dev container configuration the container cannot be started.',
   gotIt: 'Got It',
   learnMore: 'Learn More',
   sourcePlaceholder: 'Provide repository URL or pick a repository source.',
   hostKeyContinue: 'Continue',
+  selectConfiguration: 'Select Configuration',
+  cancel: 'Cancel',
 } as const;
 
 /** The name of a text of the clone's command. */

@@ -8,7 +8,7 @@ import {
   bootstrapOverrideStoreOf,
 } from '../../src/volumes/bootstrap-files.ts';
 import type {EngineStepPorts} from '../../src/volumes/engine-step.ts';
-import {exited} from './engine-script.fixture.ts';
+import {exited, settled} from './engine-script.fixture.ts';
 
 /** An engine that answers every call with `outcome`, and records each call's arguments and input. */
 function recording(outcome: EngineRunOutcome): EngineStepPorts & {
@@ -26,13 +26,6 @@ function recording(outcome: EngineRunOutcome): EngineStepPorts & {
     },
     options: {cancellation: new AbortController().signal},
   };
-}
-
-/** What a promise settled with: its value, or the message it rejected with. */
-function settled<Value>(promise: Promise<Value>): Promise<Value | string> {
-  return promise.catch(
-    (error: unknown) => `rejected: ${(error as Error).message}`,
-  );
 }
 
 describe('the bridge’s files in the bootstrap container (card containers-151)', () => {

@@ -227,6 +227,11 @@ export function cloneConsentRefused(): Failed {
   };
 }
 
+/** The user left a clone with no configuration without choosing one; the window goes back to a local one, and nothing is shown. */
+export function volumeLeft(): Failed {
+  return {...failure('volumeLeft', {silent: true}), userAlreadyNotified: true};
+}
+
 /** The container is stopped, missing or restarted; the editor is told nothing. */
 export function containerGone(): Failed {
   return failure('containerGone', {silent: true});

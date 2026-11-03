@@ -202,6 +202,27 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
+  it('F-0701 6.1: a clone with no configuration asks for one through the bootstrap, then goes on', async () => {
+    let lookups = 0;
+    const scene = volumeScene(
+      plainPass(argv => {
+        if (!argv.includes('test')) {
+          return undefined;
+        }
+        lookups += 1;
+        return exited(lookups <= 2 ? 1 : 0);
+      }),
+    );
+    const connected = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual(
+      [
+        scene.volumeCalls.filter(call => call.startsWith('addConfiguration')),
+        'connectionToken' in connected,
+      ],
+      [['addConfiguration boot1 /workspaces/r'], true],
+    );
+  });
+
   it('F-0704 7.E2: a resolve that fails ends with its failure and disposes of the stand-in, with no lifecycle made', async () => {
     const scene = volumeScene(
       plainPass(argv => (argv.at(-1) === 'git' ? exited(1) : undefined)),

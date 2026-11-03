@@ -245,6 +245,15 @@ export interface VolumeConnectDependencies {
   consent(): Promise<boolean>;
   /** Shows that only the latest commits of `repository` were cloned. */
   showShallow(repository: string): void;
+  /**
+   * Has the user add a configuration to the clone in `folder` of the bootstrap container `bootstrap`, through `engine`'s
+   * program; when the user leaves, the window goes back to a local one.
+   */
+  addConfiguration(
+    bootstrap: string,
+    folder: string,
+    engine: {host: EngineHost; dockerPath: string},
+  ): Promise<'written' | 'left'>;
 }
 
 /** What the connector is made from. */
@@ -1618,6 +1627,11 @@ export function containerConnectorOf(
         buildContext: () => volumes.buildContext(),
         typed: typedPayload => volumes.typed(typedPayload),
         clearTyped: typedPayload => volumes.clearTyped(typedPayload),
+        addConfiguration: (bootstrap, folder) =>
+          volumes.addConfiguration(bootstrap, folder, {
+            host: engine,
+            dockerPath: dockerFile,
+          }),
         onCloning: () => {
           logger.info('Cloning Repository');
           phases.tell({name: 'cloningRepository'});
