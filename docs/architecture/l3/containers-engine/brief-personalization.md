@@ -113,7 +113,7 @@ relay exists "right after the requirements check … before any lifecycle comman
    - **When:** after step 3, with the setting on.
    - **What:**
      - **The helper:** `/usr/local/bin/docker-credential-dev-containers-<uuid>`, mode 755, written as root (POST-2,
-       5.0 step 5). Earlier connections' helpers stay, as the spec observes (6.x step 3).
+       5.0 step 5). Earlier connections' helpers stay, as the spec observes (6.2 step 3).
      - **The name:** it's the spec's visible file content, kept (D-14). No `PATH` is changed: `/usr/local/bin` is on
        it already, and a `PATH` passed through `--remote-env` would replace the probed one.
      - **The configuration:** the remote user's `~/.docker/config.json` gets the `credsStore`. It's always that file,
