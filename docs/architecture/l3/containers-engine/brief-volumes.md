@@ -51,6 +51,20 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
      imports follow.
    - **The program git runs:** remote-containers ships an askpass program of its own, `src/programs/askpass.ts` built
      to `dist/askpass.js`, as remote-ssh does.
+   - **The classifier is a parameter of the endpoint** (proteus on #1970). `askpass/endpoint.ts` imports lib-ssh's
+     `classifyPrompt` today, so the move takes it as an argument.
+     - ssh's classifier stays in lib-ssh.
+     - C13 passes its own, covering git's "Username for" and "Password for" prompts and ssh's host-key and passphrase
+       questions. If C13 reuses ssh's patterns for those, the pure classifier moves to lib-host too.
+     - S7's contract row changes with it.
+   - **git's input** (proteus on #1970), on the host and in the bootstrap alike:
+     - every git call takes the source as one argv element after `--`, never inside a shell string, with
+       `GIT_TERMINAL_PROMPT=0`;
+     - a source from F-0706's link (and F-0808's table) is limited to `https://`, `http://`, `ssh://`, scp-style
+       `user@host:path` and `git://`;
+     - `ext::`, `fd::` and `file://` from a link never reach git, and those calls pin `protocol.allow` to that list
+       (`-c protocol.allow=never` with the listed protocols allowed);
+     - a local path is accepted only when the user typed it into F-0701's input.
    - C13 spawns the check through C2-style spawning with `GIT_ASKPASS` and `SSH_ASKPASS` pointed at the relay, and
      `SSH_ASKPASS_REQUIRE=force`.
    - A failure is S052's info modal, with no reload and no Docker object (7.E1).
@@ -89,6 +103,8 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    runs the steps inside, which keeps the surface small.
    - **Reading the steps (ADR-0010):** each is read by its exit status and our own markers, never by git's text. S193
      quotes git's output as the dialog's detail, which is allowed, but nothing branches on it.
+   - **git's input** follows §2.3: the source after `--` as one argv element, `GIT_TERMINAL_PROMPT=0`, and the pinned
+     `protocol.allow` for a source that came from a link.
    - **The steps:**
      - a shallow clone at the ref into `/workspaces/<folder>`, with no submodules (F-0701 BR-13);
      - a non-empty folder is opened unchanged (F-0702 BR-9);
