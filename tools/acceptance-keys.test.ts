@@ -9,6 +9,7 @@ import {
   changedKeyHostsFile,
   checkProtected,
   controlFolderOf,
+  EMPTY_AGENT_VARIABLE,
   SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
@@ -46,6 +47,14 @@ function recording(
 ): ReturnType<CommandRunner> {
   commandLines.push([program, ...programArguments].join(' '));
   return runCommand(program, programArguments);
+}
+
+/** A command runner that keeps each command line in `commands` and whose every command succeeds, printing nothing. */
+function succeedingInto(commands: string[]): CommandRunner {
+  return (program, programArguments) => {
+    commands.push([program, ...programArguments].join(' '));
+    return {status: 0, stdout: '', stderr: ''};
+  };
 }
 
 /** A command runner whose every command exits with `status` and prints nothing. */
@@ -327,15 +336,13 @@ describe('the run agent', function () {
     );
   });
 
-  it("tooling-118: on Windows the run empties the service's agent at its start and at its end, and starts no agent", async () => {
+  it("tooling-118: on Windows in CI the run empties the service's agent at its start and at its end, and starts no agent", async () => {
     const commands: string[] = [];
     const agent = startRunAgent(
       WINDOWS_AGENT_PIPE,
       'win32',
-      (program, programArguments) => {
-        commands.push([program, ...programArguments].join(' '));
-        return {status: 0, stdout: '', stderr: ''};
-      },
+      succeedingInto(commands),
+      {GITHUB_ACTIONS: 'true'},
     );
     const atStart = [...commands];
     await agent.stop();
@@ -345,14 +352,47 @@ describe('the run agent', function () {
     );
   });
 
+  it('tooling-118: on Windows outside CI the opt-in lets the run empty the agent', () => {
+    const commands: string[] = [];
+    startRunAgent(WINDOWS_AGENT_PIPE, 'win32', succeedingInto(commands), {
+      [EMPTY_AGENT_VARIABLE]: '1',
+    });
+    deepStrictEqual(commands, ['ssh-add -D']);
+  });
+
+  it('tooling-118: on Windows outside CI without the opt-in the run stops before any ssh-add, naming the opt-in', () => {
+    const commands: string[] = [];
+    let message = '';
+    try {
+      startRunAgent(WINDOWS_AGENT_PIPE, 'win32', succeedingInto(commands), {
+        GITHUB_ACTIONS: 'false',
+        [EMPTY_AGENT_VARIABLE]: 'yes',
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    deepStrictEqual(
+      [message, commands],
+      [
+        "the run would empty this user's ssh-agent service (ssh-add -D) at its start and end; outside CI it does so only with REMOTE_OSS_ACCEPTANCE_EMPTY_AGENT=1",
+        [],
+      ],
+    );
+  });
+
   it('tooling-118: on Windows an agent service that is not running stops the run, naming ssh-add', () => {
     throws(
       () =>
-        startRunAgent(WINDOWS_AGENT_PIPE, 'win32', () => ({
-          status: 2,
-          stdout: '',
-          stderr: 'Error connecting to agent: No such file or directory\n',
-        })),
+        startRunAgent(
+          WINDOWS_AGENT_PIPE,
+          'win32',
+          () => ({
+            status: 2,
+            stdout: '',
+            stderr: 'Error connecting to agent: No such file or directory\n',
+          }),
+          {GITHUB_ACTIONS: 'true'},
+        ),
       {
         message:
           'ssh-add -D failed (2): Error connecting to agent: No such file or directory',

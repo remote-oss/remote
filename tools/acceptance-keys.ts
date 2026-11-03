@@ -299,17 +299,31 @@ export function agentEnvironment(
   );
 }
 
+/** The variable that lets a run outside CI empty the user's own Windows ssh-agent service. */
+export const EMPTY_AGENT_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_EMPTY_AGENT';
+
 /**
  * Starts the run's own ssh-agent in the foreground on `socket`, with no way to ask the user. On Windows (`platform`)
  * the agent is the system's service, which the job starts and which keeps its keys between runs: the run empties it
- * with `ssh-add -D` at its start and at its end.
+ * with `ssh-add -D` at its start and at its end. That service is also the user's own agent, so outside CI
+ * (`GITHUB_ACTIONS`) the run does so only with `REMOTE_OSS_ACCEPTANCE_EMPTY_AGENT=1`, and otherwise stops before any
+ * `ssh-add`.
  */
 export function startRunAgent(
   socket: string,
   platform: NodeJS.Platform = process.platform,
   command: CommandRunner = runCommand,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Started {
   if (platform === 'win32') {
+    if (
+      environment.GITHUB_ACTIONS !== 'true' &&
+      environment[EMPTY_AGENT_VARIABLE] !== '1'
+    ) {
+      throw new Error(
+        `the run would empty this user's ssh-agent service (ssh-add -D) at its start and end; outside CI it does so only with ${EMPTY_AGENT_VARIABLE}=1`,
+      );
+    }
     checked(command, 'ssh-add', ['-D']);
     return {
       stop: () => {
@@ -321,7 +335,7 @@ export function startRunAgent(
   return startDetached({
     file: 'ssh-agent',
     programArguments: ['-a', socket, '-D'],
-    environment: agentEnvironment(process.env),
+    environment: agentEnvironment(environment),
   });
 }
 
