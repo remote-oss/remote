@@ -48,6 +48,14 @@ describe('the volume payload (card containers-151)', () => {
     );
   });
 
+  it('a clone request without a ref reads back without one', () => {
+    const plain: DevContainerVolume = {
+      ...CLONE,
+      cloneInfo: {urlToClone: 'https://github.com/o/r'},
+    };
+    deepStrictEqual(volumeTargetOf(volumePayloadOf(plain)), plain);
+  });
+
   it('an explored volume carries no clone request', () => {
     const explored: DevContainerVolume = {
       kind: 'volume',

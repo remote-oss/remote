@@ -77,15 +77,15 @@ function githubParts(
   if (match === null) {
     return undefined;
   }
-  const repository = match[1] ?? '';
+  const repository = String(match[1]);
   const rest = (match[2] ?? '').replace(/\/+$/, '');
   const tree = /^\/tree\/(.+)$/.exec(rest);
   if (tree !== null) {
-    return {urlToClone: repository, ref: tree[1] ?? ''};
+    return {urlToClone: repository, ref: String(tree[1])};
   }
   const commit = /^\/commit\/([0-9a-f]{40})$/i.exec(rest);
   if (commit !== null) {
-    return {urlToClone: repository, ref: commit[1] ?? ''};
+    return {urlToClone: repository, ref: String(commit[1])};
   }
   const pull = /^\/pull\/([0-9]+)$/.exec(rest);
   if (pull !== null) {

@@ -88,6 +88,16 @@ describe('the repository a clone takes (card containers-151)', () => {
     );
   });
 
+  it('a typed source with no path segment has no repository name', () => {
+    deepStrictEqual(
+      [
+        accepted('/').repositoryName,
+        accepted('https://github.com/o/r/blob/x').urlToClone,
+      ],
+      ['', 'https://github.com/o/r/blob/x'],
+    );
+  });
+
   it('a source that git would run a program for, or read as an option, is refused from either origin', () => {
     const refusals = [
       'ext::sh -c touch% /tmp/pwned',
