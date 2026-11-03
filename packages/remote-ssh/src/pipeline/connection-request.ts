@@ -4,12 +4,11 @@
  * should have filled and did not is a defect, and throws.
  */
 
-import type {EndPolicy} from 'lib-helper';
+import {DEFAULT_FIRST_MESSAGE_MILLISECONDS, type EndPolicy} from 'lib-helper';
 import {
   type ClientPlatform,
   type ConnectionAcquireRequest,
   type ConnectWaitSettings,
-  DEFAULT_FIRST_MESSAGE_MILLISECONDS,
   type RunBase,
   connectionStart,
   sessionStartFor,

@@ -11,15 +11,12 @@ import {
   inheritedEnvironment,
   nodeEndpointPort,
   nodeFilePort,
+  nodeLauncherFiles,
   nodeTimer,
 } from 'lib-helper';
 import {helperLogLineOf} from '../diagnostics/helper-log.ts';
 import {helperLogFileOf} from '../surfaces/scripted-adapters.ts';
-import {
-  nodeLauncherFiles,
-  nodeProcessSpawner,
-  runConnectionHelper,
-} from 'lib-ssh';
+import {nodeProcessSpawner, runConnectionHelper} from 'lib-ssh';
 
 /** How long a connection to the helper may take to say hello, in milliseconds. */
 const HELLO_LIMIT_MILLISECONDS = 2000;

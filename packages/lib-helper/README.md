@@ -33,5 +33,5 @@ detached and exits, so the helper has no parent in the starter's tree.
 |---|---|
 | Maintainers | remote-oss |
 | Entry points | `lib-helper` (`src/index.ts`); `lib-helper/testing/*`: the in-memory file port, the in-process endpoint, the fake clock |
-| Allowed imports | `node:crypto`, `node:net` and `node:path`; `lib-log` once it lands (a `logLine` function until then); no extension, no `vscode` |
+| Allowed imports | `node:crypto`, `node:net`, `node:path`, `node:fs/promises` (the askpass launcher); `lib-host` (`posixQuote`, for the launcher); `lib-log` once it lands (a `logLine` function until then); no extension, no `vscode` |
 | Coverage exclusions | none |

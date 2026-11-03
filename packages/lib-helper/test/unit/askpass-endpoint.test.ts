@@ -63,7 +63,8 @@ describe('askpass endpoint', () => {
     closedPrompts = [];
     endpoint = new AskpassEndpoint({
       nonce: NONCE,
-      displayHost: 'h.invalid',
+      classify: text =>
+        text === FINGERPRINT_QUESTION ? 'fingerprintPick' : 'maskedInput',
       scheduler: clock.scheduler(),
       firstMessageMilliseconds: 5000,
       logLine: line => logged.push(line),

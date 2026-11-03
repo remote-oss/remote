@@ -1,26 +1,26 @@
 /**
- * @fileoverview The helper's askpass endpoint: `ssh` runs the askpass program once per question, the program
+ * @fileoverview The helper's askpass endpoint: the client (`ssh`, `git`) runs the askpass program once per question, the program
  * connects here with the askpass nonce, and the question stays open until a window answers it or `ssh` drops it. No
  * answer is stored or logged: it passes from the window's request to the program's connection and is gone.
  */
 
-import type {EndpointConnection, Scheduler} from 'lib-helper';
-import {PromptBook, type OpenPrompt} from '../connection-server/ownership.ts';
-import {classifyPrompt} from '../prompts/classify.ts';
+import type {EndpointConnection} from '../endpoint/protocol.ts';
+import type {Scheduler} from '../runtime/end-policy.ts';
 import {readAskRequest} from './messages.ts';
+import {PromptBook, type OpenPrompt} from './prompt-book.ts';
 
-/** What the endpoint needs to know and tell. */
-export interface AskpassHooks {
+/** What the endpoint needs to know and tell; `Surface` is the classifier's kind of question. */
+export interface AskpassHooks<Surface extends string = string> {
   /** The nonce the program must present; any other connection is closed. */
   nonce: string;
-  /** The host as the user named it, for the texts of the surfaces. */
-  displayHost: string;
+  /** The kind of question a prompt's text is, which decides how a window shows it. */
+  classify(text: string): Surface;
   scheduler: Scheduler;
   /** How long a connection may take to send its question before it is closed; no wait is unbounded. */
   firstMessageMilliseconds: number;
   logLine: (line: string) => void;
   /** A question opened. */
-  onPrompt(prompt: OpenPrompt): void;
+  onPrompt(prompt: OpenPrompt<Surface>): void;
   /** A question closed without an answer from a window. */
   onPromptClosed(promptId: number): void;
 }
@@ -35,15 +35,15 @@ interface Waiting {
 }
 
 /** The askpass side of one shared connection. */
-export class AskpassEndpoint {
-  private readonly hooks: AskpassHooks;
-  private readonly book = new PromptBook();
+export class AskpassEndpoint<Surface extends string = string> {
+  private readonly hooks: AskpassHooks<Surface>;
+  private readonly book = new PromptBook<Surface>();
   private readonly waiting = new Map<number, Waiting>();
   private readonly connections = new Set<EndpointConnection>();
   private runRefused = false;
 
   /** An endpoint with no question open. */
-  constructor(hooks: AskpassHooks) {
+  constructor(hooks: AskpassHooks<Surface>) {
     this.hooks = hooks;
   }
 
@@ -78,7 +78,7 @@ export class AskpassEndpoint {
         return;
       }
       const prompt = this.book.open(
-        classifyPrompt(request.text, this.hooks.displayHost).surface,
+        this.hooks.classify(request.text),
         request.text,
       );
       promptId = prompt.promptId;
@@ -94,7 +94,7 @@ export class AskpassEndpoint {
   }
 
   /** The questions still open, oldest first, for a window that joined late. */
-  pending(): OpenPrompt[] {
+  pending(): Array<OpenPrompt<Surface>> {
     return this.book.pending();
   }
 

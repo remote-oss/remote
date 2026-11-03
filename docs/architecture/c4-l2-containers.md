@@ -37,7 +37,7 @@ A library exists only when at least two packages need the same behaviour; everyt
 | `lib-ssh` | `ssh`/`scp` discovery and checks; argument building and spawning; the local connection server (one `ssh` per host string across windows); prompt relay and the hidden login terminal; the `ssh_config` model (files in effect, host list, `ssh -G`, Host-block writer); stderr classification into failure kinds and hints; the host-channel implementation over `ssh` | ssh; containers for its over-SSH hop (F-1302, placement open); ssh-edit does not use it | `lib-host`, `lib-identifiers`, `lib-log` |
 | `lib-server` | Host bootstrap (POSIX `sh` and PowerShell scripts shipped as text); server download (host-first, client fallback), install, locks, commit rewrite, licence gate (R-68, one rule pending K5), caches (R-58); server start, reuse, socket mode, kill, uninstall, lifetime; default extensions handed to a starting server | ssh, wsl, containers (install into a container, F-0503/F-0419/F-0505) | `lib-host`, `lib-product`, `lib-log` |
 | `lib-wsl` | The `wsl.exe` runner, distro inventory, path mapper and the WSL host-channel implementation (added 2026-10-06, area D dossier) | wsl; containers for Docker-in-WSL (F-0204, F-0207, F-1301) | `lib-host`, `lib-log` |
-| `lib-helper` | The detached-helper pattern: a client, a runtime with end policies as data (grace, delayed check with an action, idle), a registry per profile or per user with atomic claim and nonce (added 2026-10-06, area A draft, area C reviews) | lib-ssh (the local connection server), containers (the F-0417 watchdog) | `lib-log` |
+| `lib-helper` | The detached-helper pattern: a client, a runtime with end policies as data (grace, delayed check with an action, idle), a registry per profile or per user with atomic claim and nonce (added 2026-10-06, area A draft, area C reviews); and the askpass relay (endpoint, launcher, program, environment), whose question classifier is the caller's (moved from lib-ssh for group 13, 2026-11-03) | lib-ssh (the local connection server), containers (the F-0417 watchdog, and the askpass relay for git's prompts) | `lib-host`, `lib-log` |
 | `lib-forwarding` | The window tunnel to the server (local port range search, relay or socket); the resolver's tunnel factory; default and static forwards (`tunnels` proposal); port attributes | ssh, wsl, containers, server | `lib-log` |
 
 Not a library, by the two-consumer rule: the tunnel client (service calls through the shipped executable, sign-in
@@ -59,7 +59,7 @@ remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-pro
 lib-ssh -> lib-host, lib-helper, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
 lib-authority -> lib-identifiers, lib-standdown, lib-log       lib-companion -> lib-identifiers, lib-log
 lib-standdown -> lib-identifiers           lib-product -> (nothing)       lib-forwarding -> lib-log
-lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log       lib-helper -> lib-log
+lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log       lib-helper -> lib-host, lib-log
 ```
 
 No cycles; `lib-log`, `lib-identifiers`, `lib-host` and `lib-product` are the roots (neither identifiers nor stand-down logs anything under the specs: the warning and the R-46 line are UI, 2026-10-06). The lint of ADR-0002 enforces the edges once the packages exist.
