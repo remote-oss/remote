@@ -54,7 +54,7 @@ async function hostFolder(name: string, text?: string): Promise<string> {
 describe('Configure Container Features in a window on an SSH host (card containers-150, part E)', function () {
   this.timeout(600_000);
 
-  it('F-0807 AC-5 (c150-ssh-menu): the remote indicator’s menu of a window on an SSH host does not list Configure Container Features', async () => {
+  it('F-0807 AC-5 (c150-ssh-menu): the remote indicator’s menu of a window on an SSH host lists its own entries and does not list Configure Container Features', async () => {
     await hostFolder('c150-ssh-menu');
     await openWindow('harness', 'c150-ssh-menu');
     try {
@@ -69,8 +69,11 @@ describe('Configure Container Features in a window on an SSH host (card containe
       );
       await pressEscape('c150-ssh-menu');
       deepStrictEqual(
-        menu.some(label => label.includes('Configure Container Features')),
-        false,
+        [
+          menu.includes('Close Remote Connection'),
+          menu.some(label => label.includes('Configure Container Features')),
+        ],
+        [true, false],
       );
     } finally {
       await closeWindow('c150-ssh-menu').catch(() => undefined);
