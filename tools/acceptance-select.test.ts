@@ -9,6 +9,8 @@ import {type Launch, launchesOf} from './acceptance-launches.ts';
 import {
   launchesInput,
   partsOf,
+  PULL_REQUEST_LAUNCHES,
+  pullRequestPlan,
   selectLaunches,
   workflowParts,
 } from './acceptance-select.ts';
@@ -298,5 +300,92 @@ describe('acceptance-select', () => {
         [['containers-a', 'containers-b'], parts],
       );
     });
+  });
+});
+
+describe('acceptance-select: the plan of a pull request (card tooling-120)', () => {
+  /** Parts over the fixture table that leave `windows` out, as the genuine group is left out of the real one. */
+  const PARTS = [
+    'local,remote',
+    'explorer-one,trust-one',
+    'containers-one,containers-two,containers-three',
+  ];
+  /** A selection of `labels`, with no reasons. */
+  function selectionOf(...labels: string[]) {
+    return {labels, reasons: []};
+  }
+  /** `count` launches of a table of that many, all in one part. */
+  function wideTable(count: number): {launches: Launch[]; parts: string[]} {
+    const launches: Launch[] = [...Array(count).keys()].map(index => ({
+      label: `wide-${String(index)}`,
+      runner: 'runner',
+      suite: 'suite-local',
+    }));
+    return {launches, parts: [launches.map(launch => launch.label).join(',')]};
+  }
+
+  it('tooling-120: no selected launch runs nothing, with no notice', () => {
+    deepStrictEqual(pullRequestPlan(selectionOf(), LAUNCHES, PARTS, false), {
+      launches: '',
+      minutes: 60,
+    });
+  });
+
+  it('tooling-120: a launch in no part, as the genuine ones are, is left out', () => {
+    deepStrictEqual(
+      pullRequestPlan(selectionOf('windows', 'local'), LAUNCHES, PARTS, false),
+      {launches: 'local', minutes: 60},
+    );
+  });
+
+  it('tooling-120: up to the limit, every selected launch runs in 60 minutes', () => {
+    const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES);
+    deepStrictEqual(
+      pullRequestPlan(
+        selectionOf(...launches.map(launch => launch.label)),
+        launches,
+        parts,
+        false,
+      ),
+      {
+        launches: launches.map(launch => launch.label).join(','),
+        minutes: 60,
+      },
+    );
+  });
+
+  it('tooling-120: over the limit without the label, nothing runs and the notice names the launches', () => {
+    const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES + 1);
+    const labels = launches.map(launch => launch.label);
+    deepStrictEqual(
+      pullRequestPlan(selectionOf(...labels), launches, parts, false),
+      {
+        launches: '',
+        minutes: 60,
+        notice: `this change selects ${String(labels.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${labels.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
+      },
+    );
+  });
+
+  it('tooling-120: over the limit with the full label, the whole selection runs in 180 minutes', () => {
+    const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES + 1);
+    const labels = launches.map(launch => launch.label);
+    deepStrictEqual(
+      pullRequestPlan(selectionOf(...labels), launches, parts, true),
+      {launches: labels.join(','), minutes: 180},
+    );
+  });
+
+  it('tooling-120: a part the table cannot resolve stops the plan', () => {
+    throws(
+      () =>
+        pullRequestPlan(
+          selectionOf('local'),
+          LAUNCHES,
+          ['no-such-launch'],
+          false,
+        ),
+      /ci\.yml's part no-such-launch/,
+    );
   });
 });
