@@ -253,6 +253,7 @@ export function steps(
     validate: () => note('validate', {kind: 'done', value: undefined}),
     checkInstallFolder: () =>
       note('checkInstallFolder', {kind: 'done', value: undefined}),
+    checkProxy: () => note('checkProxy', {kind: 'done', value: undefined}),
     preconnect: () =>
       Promise.resolve(note('preconnect', {kind: 'done', value: undefined})),
     lookupBeforeConnection: () => true,

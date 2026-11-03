@@ -1930,6 +1930,61 @@ describe("the composition's CLI path", () => {
   });
 });
 
+describe("the proxy check inside the shared connection's acquire (card connect-141)", () => {
+  /** A parser that rejects a value with a leading space, as the editor's strict one does. */
+  function strictParse(text: string): void {
+    if (text.startsWith(' ')) {
+      throw new Error('[UriError]: Scheme contains illegal characters.');
+    }
+  }
+
+  it("F-2404 AC-14, BR-3: a window that starts the helper checks this host's proxy value first and is refused, with no lookup", async () => {
+    const {ports, seen} = portsOf({
+      connection: CONNECTED,
+      server: {httpProxy: {[ALIAS]: ' http://p:1', other: ' bad'}},
+      serverPorts: {parseUri: strictParse},
+    });
+    const opened = await stepsOf(ports).openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [
+        opened.kind === 'failed' ? opened.failure.kind : opened.kind,
+        seen.spawned.started.length,
+      ],
+      ['invalidSetting', 0],
+    );
+  });
+
+  it('reading-1939-joined-window, F-2404 AC-41: a window that joins a running helper neither checks nor applies the value', async () => {
+    const {ports} = portsOf({
+      connection: CONNECTED,
+      joins: true,
+      server: {httpProxy: ' http://p:1'},
+      serverPorts: {parseUri: strictParse},
+    });
+    const opened = await stepsOf(ports).openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(opened.kind, 'done');
+  });
+
+  it("F-2404 BR-3: in terminal mode the step reads this host's entry, not another host's", () => {
+    const {ports} = portsOf({
+      server: {httpProxy: {other: ' bad'}},
+      serverPorts: {parseUri: strictParse},
+    });
+    deepStrictEqual(stepsOf(ports).checkProxy(inputFor('dev')), {
+      kind: 'done',
+      value: undefined,
+    });
+  });
+});
+
 describe("the lookup inside the shared connection's acquire (card connect-57)", () => {
   it('F-2101 AC-14: a window that joins a running helper looks nothing up and waits under the setting alone', async () => {
     const {ports, seen} = portsOf({

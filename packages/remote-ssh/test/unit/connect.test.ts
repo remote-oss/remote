@@ -53,6 +53,7 @@ describe('the connect pipeline, when it works', () => {
       'checkInstallFolder',
       'preconnect',
       'decideTerms',
+      'checkProxy',
       'locateClient',
       'openConnection',
       'probe',
@@ -1869,8 +1870,41 @@ describe('the client lookup of a connect (card connect-57)', () => {
         recording.calls.indexOf('decideTerms'),
         recording.calls.indexOf('openConnection') + 1,
       ),
-      ['decideTerms', 'openConnection'],
+      ['decideTerms', 'checkProxy', 'openConnection'],
     );
+  });
+
+  it('F-2404 7.E1: in terminal mode a rejected proxy value fails the connect before the lookup', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => true,
+        checkProxy: () => ({
+          kind: 'failed',
+          failure: {kind: 'invalidSetting', reason: {text: 'rejected'}},
+        }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('locateClient'),
+        recording.calls.includes('openConnection'),
+      ],
+      ['invalidSetting', false, false],
+    );
+  });
+
+  it('F-2404 BR-3: in shared mode the connect leaves the proxy check to the start of a helper', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {lookupBeforeConnection: () => false}),
+      options,
+    );
+    deepStrictEqual(recording.calls.includes('checkProxy'), false);
   });
 
   it('contracts: a connection opened with no waits and no lookup is a defect, and the connect fails as unknown', async () => {

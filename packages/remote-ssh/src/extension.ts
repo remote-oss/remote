@@ -497,6 +497,9 @@ async function registerConnectOf(
       ),
       // The tunnel service is a proposed API the manifest enables; a window without it logs the failure of each forward.
       tunnels: vscode.workspace,
+      parseUri: text => {
+        vscode.Uri.parse(text, true);
+      },
       defaultReadEvents: {
         isTrusted: () => vscode.workspace.isTrusted,
         onTrustGranted: listener =>

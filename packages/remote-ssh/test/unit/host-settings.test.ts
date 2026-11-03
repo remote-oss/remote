@@ -187,8 +187,15 @@ describe('the proxy text that applies', () => {
     );
   });
 
-  it('converts an entry that is not text to text', () => {
-    deepStrictEqual(effectiveProxyText({devbox: 8080}, 'devbox'), '8080');
+  it('F-2404 7.E8: converts an entry that is not text to text as JavaScript does, an object to [object Object]', () => {
+    deepStrictEqual(
+      [
+        effectiveProxyText({devbox: 8080}, 'devbox'),
+        effectiveProxyText({'*': 8890}, 'devbox'),
+        effectiveProxyText({'*': {port: 1}}, 'devbox'),
+      ],
+      ['8080', '8890', '[object Object]'],
+    );
   });
 
   it('is nothing for a setting that is a number, a flag, a list or empty', () => {

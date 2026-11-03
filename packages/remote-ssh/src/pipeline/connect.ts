@@ -321,6 +321,10 @@ async function runSteps(
   }
   let waits: ConnectWaits | undefined;
   if (steps.lookupBeforeConnection()) {
+    const proxy = steps.checkProxy(input);
+    if (proxy.kind === 'failed') {
+      return failure(proxy.failure);
+    }
     const located = await steps.locateClient(input);
     if (located.kind === 'failed') {
       return failure(

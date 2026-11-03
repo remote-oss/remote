@@ -79,6 +79,7 @@ async function requestWith(
     {...SETTINGS, ...changes.settings},
     {...ENVIRONMENT, ...changes.environment},
     changes.locate ?? (() => Promise.resolve({kind: 'done', value: WAITS})),
+    () => ({kind: 'done', value: undefined}),
   );
   const prepared = await built.prepare();
   if (prepared.kind === 'refused') {
@@ -352,10 +353,38 @@ describe("the install connection's request in terminal mode (card connect-17)", 
         calls.push('locate');
         return Promise.resolve({kind: 'done', value: WAITS});
       },
+      () => {
+        calls.push('checkProxy');
+        return {kind: 'done', value: undefined};
+      },
     );
     const before = [...calls];
     await built.prepare();
-    deepStrictEqual([before, calls], [[], ['locate']]);
+    deepStrictEqual([before, calls], [[], ['checkProxy', 'locate']]);
+  });
+
+  it('F-2404 7.E1, BR-3: a rejected proxy value refuses the start before the lookup', async () => {
+    const failure = {
+      kind: 'invalidSetting' as const,
+      reason: {text: '[UriError]: Scheme is missing'},
+    };
+    let looked = false;
+    const built = connectionRequestOf(
+      INPUT,
+      TERMS,
+      STATE,
+      SETTINGS,
+      ENVIRONMENT,
+      () => {
+        looked = true;
+        return Promise.resolve({kind: 'done', value: WAITS});
+      },
+      () => ({kind: 'failed', failure}),
+    );
+    deepStrictEqual(
+      [await built.prepare(), looked],
+      [{kind: 'refused', refusal: failure}, false],
+    );
   });
 
   it('F-2101 7.E4: a lookup that fails refuses the start with its failure', async () => {
@@ -370,6 +399,7 @@ describe("the install connection's request in terminal mode (card connect-17)", 
       SETTINGS,
       ENVIRONMENT,
       () => Promise.resolve({kind: 'failed', failure}),
+      () => ({kind: 'done', value: undefined}),
     );
     deepStrictEqual(await built.prepare(), {kind: 'refused', refusal: failure});
   });

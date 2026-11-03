@@ -456,7 +456,7 @@ describe("the assembled ports' settings", () => {
     );
   });
 
-  it('F-2405 AC-20: a refused host download is kept as a hint of its status', () => {
+  it('F-2405 AC-20, F-2404 BR-12: a refused host download and a rejected proxy value are kept as hints of their status', () => {
     const {surfaces, machine, recorded} = assemblyInputs({});
     const kept: string[] = [];
     const ports = wiringPortsOf(
@@ -475,7 +475,12 @@ describe("the assembled ports' settings", () => {
     );
     ports.server.onHostDownloadRefused('downloadFailed');
     ports.server.onHostDownloadRefused('noDownloader');
-    deepStrictEqual(kept, ['ServerDownloadFailed', 'NoDownloaderAvailable']);
+    ports.server.onProxyRejected({value: 'p', error: 'e'});
+    deepStrictEqual(kept, [
+      'ServerDownloadFailed',
+      'NoDownloaderAvailable',
+      'InvalidProxyUrl',
+    ]);
   });
 
   it('connect-135: the end of a resolve step gives the failure’s hints to the recorder, and then ends the record', () => {

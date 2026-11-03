@@ -124,6 +124,8 @@ export interface SurfaceContext {
   tunnels: TunnelOpener;
   /** The editor's events that tell the default forwards' read that the window has its remote settings. */
   defaultReadEvents: DefaultReadEvents;
+  /** The editor's strict URI parser, which throws for a text that is no URI. */
+  parseUri: (text: string) => void;
 }
 
 /** The setting the platform is written to. */
@@ -186,6 +188,7 @@ export function editorSurfacesOf(
     },
     notice: adapters.notice,
     noticeState: context.noticeState,
+    parseUri: context.parseUri,
     hints: hintRecorderOf(context.hintState, {
       translate,
       documentation: context.documentation,

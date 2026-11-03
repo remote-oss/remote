@@ -100,6 +100,7 @@ function surfacesWith(
     environmentHints: () => [],
     logMark: () => 0,
     logText: () => '',
+    parseUri: () => undefined,
     help: {
       getHelp: {
         execute: () => {
