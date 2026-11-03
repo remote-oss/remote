@@ -15,6 +15,9 @@ describe('the host of an ssh endpoint (card containers-173, brief-remote-docker-
         'ssh://[fe80::1]',
         'ssh://user@[::1',
         'ssh://',
+        'ssh://-oProxyCommand=x/p@q',
+        'SSH://user@box:22',
+        'Ssh://-bad/x@y',
       ].map(sshHostOf),
       [
         'box',
@@ -27,13 +30,16 @@ describe('the host of an ssh endpoint (card containers-173, brief-remote-docker-
         '[fe80::1]',
         '[::1',
         '',
+        '-oProxyCommand=x',
+        'box',
+        '-bad',
       ],
     );
   });
 
   it('F-0205 7.E4: an endpoint that is not ssh has no host part', () => {
     deepStrictEqual(
-      ['unix:///var/run/docker.sock', 'tcp://box:2376', 'SSH://box', ''].map(
+      ['unix:///var/run/docker.sock', 'tcp://box:2376', 'sshx://box', ''].map(
         sshHostOf,
       ),
       [undefined, undefined, undefined, undefined],
@@ -49,6 +55,8 @@ describe('the host of an ssh endpoint (card containers-173, brief-remote-docker-
         'ssh://user@good-host',
         'ssh://user@[-x]',
         'tcp://-badhost',
+        'ssh://-oProxyCommand=x/p@q',
+        'SSH://-badhost',
         undefined,
       ].map(dashHostOf),
       [
@@ -58,6 +66,8 @@ describe('the host of an ssh endpoint (card containers-173, brief-remote-docker-
         undefined,
         undefined,
         undefined,
+        '-oProxyCommand=x',
+        '-badhost',
         undefined,
       ],
     );
