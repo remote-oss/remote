@@ -399,6 +399,13 @@ jobs:
           sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
           grep -q "^$(id -un):" /etc/subuid || sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
           podman --version
+          # a runner restarted since podman last ran keeps a run folder podman refuses ("boot ID differs from cached
+          # boot ID"): the two folders that error names are removed, and only for that error
+          if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}' 2>&1); then
+            printf '%s\n' "$out"
+            printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
+            rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
+          fi
           podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
       # the part's launches: a group selection, or the launches a dispatch names
       - run: |
