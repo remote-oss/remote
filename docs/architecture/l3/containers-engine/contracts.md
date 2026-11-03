@@ -48,7 +48,9 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    port (F-0502 BR-3); `openRelayTunnel` with C11's exec dialer and the target `{kind: 'port', port: <container
    port>}`. The log names both ports.
 6. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv: {}, environmentTunnels: [],
-   trusted: false}`. No tunnel factory and no tunnel features are given to core (brief ruling 1).
+   trusted}`. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
+   brief-volumes §3.8); the family registers with `allowsTrust: true`, so lib-authority passes it on. No tunnel factory
+   and no tunnel features are given to core (brief ruling 1).
 
 **Failures** (`Failed`): the dev-container family's kinds and their presentation are C8's (F-0410). A container that
 stopped or was removed while connected answers `silent: true` (F-0502's "plain NotAvailable, no dialog"), and every

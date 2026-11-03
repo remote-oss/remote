@@ -151,7 +151,7 @@ export async function registerContainerResolver(
       },
       cancellable: false,
       determinateStages: true,
-      allowsTrust: false,
+      allowsTrust: true,
       titleOf: phase => phaseTitleOf(phase, translate),
       startTitle: () => startTitleOf(translate),
       progressDelayMilliseconds: PROGRESS_DELAY_MILLISECONDS,
