@@ -3,11 +3,11 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {
   connectedToContainer,
-  openEmptyWindows,
   startInWindow,
   waitFor,
   windowState,
 } from '../windows/harness.ts';
+import {openMemoryWindow} from '../windows/folder-windows.ts';
 import {
   acceptQuickPick,
   answerDialog,
@@ -75,38 +75,22 @@ async function removeClone(repository: string): Promise<void> {
   }
 }
 
-/** Opens a new empty local window from `local`, and gives its name. */
-async function newEmptyWindow(): Promise<string> {
-  const known = openEmptyWindows();
-  await startInWindow('local', 'workbench.action.newWindow');
-  let name = '';
-  await waitFor(
-    'a new empty window',
-    () => {
-      name = openEmptyWindows().find(each => !known.includes(each)) ?? '';
-      return name !== '';
-    },
-    60_000,
-  );
-  return name;
-}
-
 describe('Clone Repository in Container Volume (card containers-151)', function () {
   this.timeout(1_200_000);
   before(() => removeClone(REPOSITORY));
 
   after(() => removeClone(REPOSITORY));
 
-  it('F-0701 AC-1, AC-6, AC-7 (c151-clone-url): a typed URL clones into a new unique volume through a bootstrap, connects the reloaded window, and the bootstrap is gone within 20 s', async () => {
-    const empty = await newEmptyWindow();
+  it('F-0701 AC-6, AC-7 (c151-clone-url): a typed URL clones into a new unique volume through a bootstrap, connects the reloaded window, and the bootstrap is gone within 20 s', async () => {
+    const local = await openMemoryWindow();
     await startInWindow(
-      empty,
+      local,
       'remote-containers.openRepositoryInUniqueVolume',
     );
-    await waitForDialog(empty);
-    await answerDialog(empty, 'Got It');
-    await typeInQuickPick(empty, REPOSITORY);
-    await acceptQuickPick(empty);
+    await waitForDialog(local);
+    await answerDialog(local, 'Got It');
+    await typeInQuickPick(local, REPOSITORY);
+    await acceptQuickPick(local);
     await connectedToContainer(FOLDER, 900_000);
     const connectedAt = Date.now();
     await waitFor(
