@@ -45,6 +45,25 @@ export interface BootstrapSettings {
   socketPath: string;
 }
 
+/** The socket the container binds when the setting gives none. */
+export const DEFAULT_SOCKET_PATH = '/var/run/docker.sock';
+
+/** The settings as they are read: a value of the wrong type, or an empty one, counts as unset. */
+export function bootstrapSettingsOf(read: {
+  image: unknown;
+  pull: unknown;
+  socketPath: unknown;
+}): BootstrapSettings {
+  const image = typeof read.image === 'string' ? read.image.trim() : '';
+  const socketPath =
+    typeof read.socketPath === 'string' ? read.socketPath.trim() : '';
+  return {
+    image,
+    pull: read.pull === true,
+    socketPath: socketPath === '' ? DEFAULT_SOCKET_PATH : socketPath,
+  };
+}
+
 /** The engine calls that make the image ready: build ours, or pull a custom one when its setting asks. */
 export function imageArgumentsOf(
   settings: BootstrapSettings,

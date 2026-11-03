@@ -5,6 +5,7 @@ import {
   type BootstrapTool,
   bootstrapRemoveArguments,
   bootstrapRunArguments,
+  bootstrapSettingsOf,
   imageArgumentsOf,
   toolCheckArguments,
   toolCheckLineOf,
@@ -125,5 +126,28 @@ describe('the bootstrap container (card containers-151)', () => {
 
   it('the container is removed by force, its id after `--`', () => {
     ok(bootstrapRemoveArguments('c1').join(' ') === 'rm --force -- c1');
+  });
+
+  it('F-0704 BR-14: the settings as read: unset, empty or mistyped values fall back, and set ones are trimmed', () => {
+    deepStrictEqual(
+      [
+        bootstrapSettingsOf({
+          image: undefined,
+          pull: 'yes',
+          socketPath: undefined,
+        }),
+        bootstrapSettingsOf({image: 3, pull: undefined, socketPath: '  '}),
+        bootstrapSettingsOf({
+          image: ' my/boot:1 ',
+          pull: true,
+          socketPath: ' /run/podman.sock ',
+        }),
+      ],
+      [
+        BUILT_IN,
+        BUILT_IN,
+        {image: 'my/boot:1', pull: true, socketPath: '/run/podman.sock'},
+      ],
+    );
   });
 });
