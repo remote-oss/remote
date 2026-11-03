@@ -17,23 +17,30 @@ export interface PushRecordPorts {
   now(): number;
 }
 
+/** The writer of the acceptance record that the variable `variable` names: one JSON line with the time and `fields`; none without a file. */
+export function lineWriterOf(
+  variable: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  ports: PushRecordPorts,
+): ((fields: Readonly<Record<string, unknown>>) => void) | undefined {
+  const file = environment[variable];
+  if (file === undefined || file === '') {
+    return undefined;
+  }
+  return fields => {
+    try {
+      ports.append(file, `${JSON.stringify({time: ports.now(), ...fields})}\n`);
+    } catch {
+      // The record is for the acceptance runs: a file that cannot be written must never stop what it records.
+    }
+  };
+}
+
 /** The recorder the environment asks for, or none when it names no file. */
 export function recorderOf(
   environment: Readonly<Record<string, string | undefined>>,
   ports: PushRecordPorts,
 ): PushRecorder | undefined {
-  const file = environment[COMPANION_RECORD_VARIABLE];
-  if (file === undefined || file === '') {
-    return undefined;
-  }
-  return (commandId, envelope) => {
-    try {
-      ports.append(
-        file,
-        `${JSON.stringify({time: ports.now(), commandId, envelope})}\n`,
-      );
-    } catch {
-      // The record is for the acceptance runs: a file that cannot be written must never stop the push it records.
-    }
-  };
+  const write = lineWriterOf(COMPANION_RECORD_VARIABLE, environment, ports);
+  return write && ((commandId, envelope) => write({commandId, envelope}));
 }

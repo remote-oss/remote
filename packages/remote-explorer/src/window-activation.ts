@@ -16,6 +16,7 @@ import {standDownHost} from 'lib-standdown';
 import type * as vscode from 'vscode';
 import {activateExplorer, silentHandlers} from './activation.ts';
 import {serveInbox} from './companion/inbox.ts';
+import {type CallRecorder, recordedBus} from './companion/call-record.ts';
 import type {PushRecorder} from './companion/push-record.ts';
 import {commands, standDown, views} from './identifiers.generated.ts';
 import {companionCallsOf} from './view/companion-calls.ts';
@@ -47,7 +48,8 @@ export type WindowEditor = TreeEditor &
 /**
  * Activates the explorer in this window: the stand-down guard, `setup`, then the commands. On `serving` the end of
  * the registration is added to `context.subscriptions`. `clientPlatform` is the platform the editor's client runs on;
- * `record`, when the entry has one, is told each push the inbox receives.
+ * `record`, when the entry has one, is told each push the inbox receives, and `recordCall` each command the
+ * protocol executes toward the companion.
  */
 export async function activateInWindow(
   editor: WindowEditor,
@@ -55,6 +57,7 @@ export async function activateInWindow(
   setup: () => PromiseLike<unknown>,
   clientPlatform: ClientPlatform,
   record?: PushRecorder,
+  recordCall?: CallRecorder,
 ): Promise<void> {
   let session: ViewSession | undefined = undefined;
   const result = await activateExplorer({
@@ -83,7 +86,7 @@ export async function activateInWindow(
   });
   const protocol = createProtocol({
     // eslint-disable-next-line id-length -- the protocol's option is named bus
-    bus: commandBus(editor),
+    bus: recordedBus(commandBus(editor), recordCall),
     timers: systemTimers,
   });
   context.subscriptions.push(

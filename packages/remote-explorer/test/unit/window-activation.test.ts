@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type * as vscode from 'vscode';
 import {SSH_COMPANION_ID} from 'lib-companion';
+import type {CallRecorder} from '../../src/companion/call-record.ts';
 import type {PushRecorder} from '../../src/companion/push-record.ts';
 import {commands} from '../../src/identifiers.generated.ts';
 import {
@@ -201,6 +202,7 @@ function contextOf(): Context {
 async function activated(
   options: EditorOptions,
   record?: PushRecorder,
+  recordCall?: CallRecorder,
 ): Promise<Fixture & {context: Context}> {
   const fixture = fixtureOf(options);
   const context = contextOf();
@@ -213,6 +215,7 @@ async function activated(
     },
     'linux',
     record,
+    recordCall,
   );
   return {...fixture, context};
 }
@@ -287,6 +290,15 @@ describe('the activation of a window (card explorer-03c)', () => {
       fixture.events.filter(event => event.startsWith('warning')),
       [],
     );
+  });
+
+  it('F-5902.AC-30: each command the protocol executes toward the companion is told to the call recorder, the first being the pull', async () => {
+    const calls: string[] = [];
+    await activated({}, undefined, commandId => {
+      calls.push(commandId);
+    });
+    await Promise.resolve();
+    deepStrictEqual(calls, [PULL, HISTORY, HOSTS]);
   });
 
   it('F-5101.BR-9: serving with the focus command shows the tree once and asks the pull, then the hosts, once', async () => {

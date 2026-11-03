@@ -11,7 +11,8 @@ import * as vscode from 'vscode';
 import {familySetupPortsOf, runSetup} from 'lib-authority';
 import {profileOf} from 'lib-product';
 import {clientPlatformOf} from 'lib-ssh';
-import {recorderOf} from './companion/push-record.ts';
+import {callRecorderOf} from './companion/call-record.ts';
+import {type PushRecordPorts, recorderOf} from './companion/push-record.ts';
 import {enabledApiProposals, views} from './identifiers.generated.ts';
 import {activateInWindow} from './window-activation.ts';
 
@@ -43,6 +44,14 @@ async function dataFolderName(): Promise<string> {
   ).dataFolderName;
 }
 
+/** What the acceptance records need of the host: a file to append to, and the clock. */
+const recordPorts: PushRecordPorts = {
+  append: (file, line) => {
+    appendFileSync(file, line);
+  },
+  now: Date.now,
+};
+
 /** Called by the editor when the extension activates. */
 export function activate(context: vscode.ExtensionContext): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
@@ -65,12 +74,9 @@ export function activate(context: vscode.ExtensionContext): Promise<void> {
         true,
       ),
     clientPlatformOf(process.platform),
-    // The acceptance runs name a file that records each push the inbox receives; no other run records anything.
-    recorderOf(process.env, {
-      append: (file, line) => {
-        appendFileSync(file, line);
-      },
-      now: Date.now,
-    }),
+    // The acceptance runs name files that record each push the inbox receives and each call made to the companion; no
+    // other run records anything.
+    recorderOf(process.env, recordPorts),
+    callRecorderOf(process.env, recordPorts),
   );
 }
