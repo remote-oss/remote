@@ -272,17 +272,50 @@ async function installedExtension(
   );
 }
 
-/** Removes the containers of the run's daemon that mount the vscode volume, whoever made them, and the volume, so that the next container finds none. */
-async function noVscodeVolume(): Promise<void> {
-  const holders = await docker(
+/** The containers that mount the vscode volume, each as its id, run label and the local folder of its configuration. */
+async function vscodeHolders(): Promise<
+  Array<{containerId: string; runLabel: string; localFolder: string}>
+> {
+  const listed = await docker(
     'ps',
     '--all',
-    '--quiet',
     '--filter',
     'volume=vscode',
+    '--format',
+    '{{.ID}}|{{.Label "remote-oss.acceptance.run"}}|{{.Label "devcontainer.local_folder"}}',
   );
-  if (holders !== '') {
-    await docker('rm', '--force', ...holders.split('\n'));
+  return listed
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => {
+      const [containerId = '', runLabel = '', localFolder = ''] =
+        line.split('|');
+      return {containerId, runLabel, localFolder};
+    });
+}
+
+/** Whether the holder was made by this run: it has the run's label, or was made for a folder of the run folder. */
+function ownedByRun(holder: {runLabel: string; localFolder: string}): boolean {
+  return (
+    holder.runLabel === variable('HARNESS_RUN_ID') ||
+    holder.localFolder.startsWith(variable('HARNESS_RUN_FOLDER'))
+  );
+}
+
+/**
+ * Removes the run's containers that mount the vscode volume, those with its run label and the unlabelled ones made for
+ * a folder of its run folder, and the volume, so that the next container finds none; it fails naming any other holder.
+ */
+async function noVscodeVolume(): Promise<void> {
+  const holders = await vscodeHolders();
+  const foreign = holders.filter(holder => !ownedByRun(holder));
+  if (foreign.length > 0) {
+    throw new Error(
+      `containers of another run hold the vscode volume: ${foreign.map(holder => holder.containerId).join(', ')}`,
+    );
+  }
+  if (holders.length > 0) {
+    await docker('rm', '--force', ...holders.map(holder => holder.containerId));
   }
   await docker('volume', 'rm', '--force', 'vscode');
 }
