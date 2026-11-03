@@ -14,6 +14,7 @@ import {
   emptyWindows,
   heldLines,
   inWindow,
+  isOpen,
   logins,
   nextEmptyName,
   nextEmptyWindow,
@@ -29,6 +30,7 @@ import {
   terminalsOf,
   userSettings,
   waitFor,
+  windowNames,
   windowEvents,
   windowState,
 } from './harness.ts';
@@ -117,6 +119,9 @@ function emptyConnectedWithin(
   );
 }
 
+/** The key under which the extension's global state keeps the records of the resolves (its session records). */
+const HINT_STORE_KEY = 'remote.ssh.hints';
+
 describe('New Window on Active Host (card coverage-42)', function () {
   this.timeout(600_000);
 
@@ -175,12 +180,32 @@ describe('New Window on Active Host (card coverage-42)', function () {
 
   it('F-2303 AC-20: the new window changes no setting and stores no global state but its session record', async () => {
     await new Promise(resolve => setTimeout(resolve, 5000));
+    const after = await extensionState();
+    function records(state: Record<string, unknown>): string[] {
+      const store = state[HINT_STORE_KEY] as
+        {records?: Array<{started: string}>} | undefined;
+      return (store?.records ?? []).map(each => each.started);
+    }
+    const before = records(stateBefore);
+    const now = records(after);
     deepStrictEqual(
-      [
-        settingsText() === settingsBefore,
-        changedKeys(stateBefore, await extensionState()),
-      ],
-      [true, []],
+      {
+        settings: settingsText() === settingsBefore,
+        newKeys: Object.keys(after).filter(key => !(key in stateBefore)),
+        changed: changedKeys(stateBefore, after),
+        // The store keeps the two newest records: the one the first window made stays, and one is added.
+        added: [
+          now.length,
+          before.length === 0 ? true : now.at(-2) === before.at(-1),
+          (now.at(-1) ?? '') > (before.at(-1) ?? ''),
+        ],
+      },
+      {
+        settings: true,
+        newKeys: [],
+        changed: [HINT_STORE_KEY],
+        added: [Math.min(2, before.length + 1), true, true],
+      },
     );
   });
 
@@ -457,33 +482,60 @@ describe('New Window on Active Host (card coverage-42)', function () {
         '-c',
         `mkdir -p /home/harness/w1 /home/harness/w2 && printf '%s' '{"folders":[{"path":"w1"},{"path":"w2"}]}' > /home/harness/active.code-workspace`,
       );
-      const workspace = await nextEmptyWindow(() =>
-        inWindow(
-          'local',
-          'acceptance.agent.openWindow',
-          'vscode-remote://ssh-remote+harness/home/harness/active.code-workspace',
-        ),
+      // A window of a workspace is named by its folders and not as an empty window, so it is found by its workspace file.
+      await inWindow(
+        'local',
+        'acceptance.agent.openWindow',
+        'vscode-remote://ssh-remote+harness/home/harness/active.code-workspace',
       );
+      let workspace = '';
       await waitFor(
-        `${workspace} to show its workspace`,
-        async () => (await windowState(workspace)).workspaceFile !== null,
+        'a new window to show the workspace',
+        async () => {
+          for (const each of windowNames().filter(isOpen)) {
+            const state = await windowState(each).catch(() => undefined);
+            if (state?.workspaceFile?.endsWith('/active.code-workspace')) {
+              workspace = each;
+              return true;
+            }
+          }
+          return false;
+        },
         60_000,
       );
-      await inWindow(workspace, 'acceptance.agent.openUntitled', 'typed text');
-      const name = await newWindowFrom(workspace);
-      await emptyConnectedWithin(name, 5000);
-      const created = await windowState(name);
-      const first = await windowState(workspace);
-      deepStrictEqual(
-        [
-          created.folders,
-          created.workspaceFile,
-          await dirtyDocumentsOf(name),
-          first.workspaceFile?.endsWith('/active.code-workspace'),
-          (await dirtyDocumentsOf(workspace)).length,
-        ],
-        [[], null, [], true, 1],
+      // A window that is still connecting opens no new window (F-2303 AC-18), so the command waits for the connection.
+      await waitFor(
+        `${workspace} to end its setting up`,
+        () =>
+          recordLines().some(
+            line =>
+              line.surface === 'progressEnd' &&
+              line.window === workspace &&
+              line.question.startsWith('Setting up SSH Host'),
+          ),
+        120_000,
       );
+      await inWindow(workspace, 'acceptance.agent.openUntitled', 'typed text');
+      try {
+        const name = await newWindowFrom(workspace);
+        await emptyConnectedWithin(name, 5000);
+        const created = await windowState(name);
+        const first = await windowState(workspace);
+        deepStrictEqual(
+          [
+            created.folders,
+            created.workspaceFile,
+            await dirtyDocumentsOf(name),
+            first.workspaceFile?.endsWith('/active.code-workspace'),
+            (await dirtyDocumentsOf(workspace)).length,
+          ],
+          [[], null, [], true, 1],
+        );
+      } finally {
+        // The window holds unsaved text, which the hot exit setting of this row keeps without asking; the hook that
+        // restores the setting runs before the windows are closed, so the window is closed here, while it applies.
+        await closeWindow(workspace).catch(() => undefined);
+      }
     });
 
     it('F-2303 AC-22: with the server listening on a socket the new window asks for the password itself', async () => {
