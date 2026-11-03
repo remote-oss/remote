@@ -139,40 +139,47 @@ describe('the ports of a Docker Compose dev container (card containers-146)', fu
     }
   });
 
-  for (const shared of [false, true]) {
-    const label = shared ? 'c146-auto-shared' : 'c146-auto';
-    it(`F-1102 AC-26 (${label}): a port listened on in the other service${shared ? ', which shares the attached service’s network,' : ''} is never auto-forwarded, while one the attached container’s own process listens on is`, async () => {
-      const [other, own] = [await freePort(), await freePort()];
-      const folder = composeFolder({
-        name: label,
-        place: 'devcontainer',
-        composeText: composeText(
-          label,
-          [],
-          shared ? ['    network_mode: "service:app"'] : [],
-        ),
-      });
-      const {name, project} = await openedCompose(folder);
-      try {
-        const dbContainer = await serviceContainerOf(project, 'db');
-        const stopOther = await listenIn(dbContainer, other);
-        const stopOwn = await listenInTerminal(
-          name,
-          await serviceContainerOf(project, 'app'),
-          own,
-        );
-        await showPorts(name);
-        await new Promise(resolve => setTimeout(resolve, 20_000));
-        const rows = await rowsWhen(name, shown => shown.length > 0);
-        await stopOwn();
-        await stopOther();
-        deepStrictEqual(
-          rows.map(each => [each.port, each.origin]),
-          [[String(own), 'Auto Forwarded']],
-        );
-      } finally {
-        await closeWindow(name).catch(() => undefined);
-      }
+  /** A window on a Compose project whose other service listens: only the attached container’s own listener gets a row. */
+  async function autoForwarded(
+    label: string,
+    otherService: readonly string[],
+  ): Promise<void> {
+    const [other, own] = [await freePort(), await freePort()];
+    const folder = composeFolder({
+      name: label,
+      place: 'devcontainer',
+      composeText: composeText(label, [], otherService),
     });
+    const {name, project} = await openedCompose(folder);
+    try {
+      const dbContainer = await serviceContainerOf(project, 'db');
+      const stopOther = await listenIn(dbContainer, other);
+      const stopOwn = await listenInTerminal(
+        name,
+        await serviceContainerOf(project, 'app'),
+        own,
+      );
+      await showPorts(name);
+      await new Promise(resolve => setTimeout(resolve, 20_000));
+      const rows = await rowsWhen(name, shown => shown.length > 0);
+      await stopOwn();
+      await stopOther();
+      deepStrictEqual(
+        rows.map(each => [each.port, each.origin]),
+        [[String(own), 'Auto Forwarded']],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+    }
   }
+
+  it('F-1102 AC-26 (c146-auto): a port listened on in the other service is never auto-forwarded, while one the attached container’s own process listens on is', async () => {
+    await autoForwarded('c146-auto', []);
+  });
+
+  it('F-1102 AC-26 (c146-auto-shared): a port listened on in the other service, which shares the attached service’s network, is never auto-forwarded, while one the attached container’s own process listens on is', async () => {
+    await autoForwarded('c146-auto-shared', [
+      '    network_mode: "service:app"',
+    ]);
+  });
 });
