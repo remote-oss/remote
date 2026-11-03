@@ -56,15 +56,15 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
       '-c',
       `cat ${remoteFile} 2>/dev/null; true`,
     );
-    await onHostAs(
-      'harness',
-      'sh',
-      '-c',
-      `mkdir -p /home/harness/.ssh && printf 'Host c102-remote-only\\n' >> ${remoteFile}`,
-    );
-    await inWindow('local', 'workbench.view.remote');
-    await openWindow(HOST, window);
     try {
+      await onHostAs(
+        'harness',
+        'sh',
+        '-c',
+        `mkdir -p /home/harness/.ssh && printf 'Host c102-remote-only\\n' >> ${remoteFile}`,
+      );
+      await inWindow('local', 'workbench.view.remote');
+      await openWindow(HOST, window);
       await connectedTo(window, HOST);
       await inWindow(window, 'workbench.view.remote');
       const local = await waitFor(
