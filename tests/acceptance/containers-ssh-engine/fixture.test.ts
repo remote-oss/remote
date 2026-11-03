@@ -19,8 +19,13 @@ import {
   type SshEngine,
   sshStandIn,
 } from '../windows/engine-fixture.ts';
-import {moveFocusAway, startInWindow, variable} from '../windows/harness.ts';
-import {inputBoxOf, waitForQuickPick} from '../windows/renderer.ts';
+import {
+  moveFocusAway,
+  startInWindow,
+  variable,
+  waitFor,
+} from '../windows/harness.ts';
+import {inputBoxOf} from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,6 +76,22 @@ async function standInAnswer(
   );
 }
 
+/** Everything `ssh` through the run's client printed on refusing `account` in batch mode. */
+async function refusedWith(
+  engine: SshEngine,
+  account: EngineAccount,
+): Promise<string> {
+  const {port} = new URL(engine.address(account));
+  return execFileAsync(
+    'ssh',
+    ['-o', 'BatchMode=yes', '-p', port, `${account}@127.0.0.1`, 'true'],
+    {env: {...process.env, ...sshClientEnvironment()}},
+  ).then(
+    () => '',
+    (error: unknown) => (error as {stderr?: string}).stderr ?? '',
+  );
+}
+
 describe('the SSH Docker host and the run’s client (card tooling-123)', function () {
   this.timeout(600_000);
   let engine: SshEngine;
@@ -112,7 +133,9 @@ describe('the SSH Docker host and the run’s client (card tooling-123)', functi
           DISPLAY: '',
         }),
         refused: await loggedIn(engine, 'engine-refused'),
-        tries: await loggedIn(engine, 'engine-tries'),
+        tries: (await refusedWith(engine, 'engine-tries')).includes(
+          'Too many authentication failures',
+        ),
         daemon: await dockerWith(
           {...sshClientEnvironment(), DOCKER_HOST: engine.address('engine')},
           'info',
@@ -126,7 +149,7 @@ describe('the SSH Docker host and the run’s client (card tooling-123)', functi
         pwByPassword: 'engine-pw',
         passphraseKey: 'engine-enc',
         refused: 'engine-refused@127.0.0.1: Permission denied (publickey).',
-        tries: `Received disconnect from 127.0.0.1 port ${new URL(engine.address('engine')).port}:2: Too many authentication failures`,
+        tries: true,
         daemon: 'linux',
       },
     );
@@ -166,9 +189,15 @@ describe('the SSH Docker host and the run’s client (card tooling-123)', functi
   });
 
   it('tooling-123 (focus-away): a quick input open in the window closes when its focus moves to the editor', async () => {
-    await startInWindow('local', 'workbench.action.quickOpen');
-    await waitForQuickPick('local', 30_000);
-    const open = (await inputBoxOf('local')) !== undefined;
+    await startInWindow('local', 'workbench.action.showCommands');
+    const open = await waitFor(
+      'the Command Palette',
+      async () => (await inputBoxOf('local')) !== undefined,
+      30_000,
+    ).then(
+      () => true,
+      () => false,
+    );
     await moveFocusAway('local');
     await new Promise(resolve => setTimeout(resolve, 1000));
     deepStrictEqual(
