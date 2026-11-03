@@ -97,6 +97,7 @@ describe('the numbers of the error statuses (card connect-135)', () => {
       SendDisconnectBrokenPipe: 6,
       ServerDownloadFailed: 7,
       NoDownloaderAvailable: 8,
+      InvalidProxyUrl: 9,
     });
   });
 
