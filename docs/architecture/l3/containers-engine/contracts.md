@@ -40,7 +40,8 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    §2: `compose/model.ts`, `project-name.ts`, `scope.ts`, `resolver.ts`); then find, reuse, start or create the container
    (F-0409, F-0412, F-0415), with the rebuild intent if the payload carries one (F-0405 BR-17). A model Compose rejects,
    or a project name Compose would not accept, ends the step as a setup failure (F-0410's generic dialog). The CLI is run
-   with `COMPOSE_PROJECT_NAME` in its environment and `--user-data-folder <global storage>/data`.
+   with `COMPOSE_PROJECT_NAME` in its environment and `--user-data-folder <global storage>/data`. Its `up` also gets
+   `BUILDX_BAKE_ENTITLEMENTS_FS=0`, unless the editor's environment sets that variable (brief-compose §3.3, #1915).
 4. lib-server: probe, plan, transfer and start over C11 with the remote-containers policy row (§5), the licence gate
    (R-68) and `installTree` from V9 when the `vscode` volume is mounted.
 5. The host listener: choose the local port with lib-forwarding's port search, preferring the server's container

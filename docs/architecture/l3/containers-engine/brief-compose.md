@@ -105,6 +105,13 @@ tagged `later (Compose)`. Decisions: D-105, ADR-0002 rule 8, ADR-0005, ADR-0009,
 3. **C3 passes** `--docker-compose-path <resolved program>` only on the second route. It always passes
    `--user-data-folder <global storage>/data`, so the override files land in `<global storage>/data/docker-compose/`
    (BR-6, AC-51).
+   - **The build entitlement** (ruled on #1915, register 7093d78): a Compose configuration's `up` gets
+     `BUILDX_BAKE_ENTITLEMENTS_FS=0` in the CLI's environment.
+     - **Why:** buildx refuses the CLI's generated features Dockerfile, which lies outside the service's build context.
+     - **The security reading:** the build runs only after workspace trust, and a trusted configuration can already
+       run host commands, so lifting the guard adds no capability.
+     - **Scope:** an image or Dockerfile build never gets it, and neither does anything else C3 or C2 spawns. A value
+       in the editor's own environment passes through unchanged.
 4. **`workspaceFolder` is required** (C4; F-0301 7.E6, F-0411 AC-17, AC-39). The CLI defaults it to `/`, so the check
    is ours, as "the validation the CLI lacks" (components §1).
    - **When:** a Compose configuration whose `workspaceFolder` is absent or `""`.
