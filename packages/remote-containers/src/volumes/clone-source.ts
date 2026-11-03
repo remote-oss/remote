@@ -27,6 +27,8 @@ export type SourceRefusal =
   | 'empty'
   /** It starts with `-`, or its host does, so git or ssh would read it as an option. */
   | 'option'
+  /** It holds a control character (a line break, a tab, NUL), which git's configuration and ssh read specially. */
+  | 'control'
   /** It names a transport git runs a program for (`ext::`, `fd::`), or, from a link, `file://`. */
   | 'protocol'
   /** From a link, it names neither an allowed protocol nor the scp-style `user@host:path`. */
@@ -37,6 +39,10 @@ const LINK_PROTOCOLS: readonly string[] = ['https', 'http', 'ssh', 'git'];
 
 /** A transport git hands to a helper program of its own, written `<name>::<address>`. */
 const HELPER_TRANSPORT = /^[A-Za-z][A-Za-z0-9+.-]*::/;
+
+/** A control character, the C0 set and DEL; whitespace around the input was removed before this is looked for. */
+// eslint-disable-next-line no-control-regex -- control characters are what this matches
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
 /** A URL's scheme. */
 const SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
@@ -101,6 +107,9 @@ function refusalOf(
 ): SourceRefusal | undefined {
   if (text === '') {
     return 'empty';
+  }
+  if (CONTROL_CHARACTER.test(text)) {
+    return 'control';
   }
   if (text.startsWith('-') || OPTION_HOST.test(text)) {
     return 'option';

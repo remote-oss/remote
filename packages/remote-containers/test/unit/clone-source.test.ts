@@ -131,6 +131,23 @@ describe('the repository a clone takes (card containers-151)', () => {
     ]);
   });
 
+  it('a source with a line break, a carriage return, a tab or NUL inside is refused from either origin', () => {
+    deepStrictEqual(
+      [
+        'https://h.invalid/r\n[core]',
+        'https://h.invalid/r\rx',
+        'https://h.invalid/a\tb',
+        'https://h.invalid/r\u0000x',
+      ].flatMap(input =>
+        (['typed', 'link'] as const).map(origin => {
+          const source = cloneSourceOf(input, origin);
+          return 'refused' in source ? source.refused : 'accepted';
+        }),
+      ),
+      Array.from({length: 8}, () => 'control'),
+    );
+  });
+
   it('from a link, file:// and a local path are refused, and the allowed protocols and forms pass', () => {
     deepStrictEqual(
       [
