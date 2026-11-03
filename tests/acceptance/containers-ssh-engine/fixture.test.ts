@@ -157,11 +157,17 @@ describe('the SSH Docker host and the run’s client (card tooling-123)', functi
 
   it('tooling-123 (host-key-modes): with the host key unknown the run’s client refuses the host, and known again it logs in', async () => {
     engine.trustHostKey(false);
-    const unknown = await loggedIn(engine, 'engine');
+    const unknown = [engine.hostKeyKnown(), await loggedIn(engine, 'engine')];
     engine.trustHostKey(true);
     deepStrictEqual(
-      {unknown, known: await loggedIn(engine, 'engine')},
-      {unknown: 'Host key verification failed.', known: 'engine'},
+      {
+        unknown,
+        known: [engine.hostKeyKnown(), await loggedIn(engine, 'engine')],
+      },
+      {
+        unknown: [false, 'Host key verification failed.'],
+        known: [true, 'engine'],
+      },
     );
   });
 

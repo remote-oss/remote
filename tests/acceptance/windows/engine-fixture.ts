@@ -239,7 +239,7 @@ function sshClientFolder(): string {
 }
 
 /** The folder that `containers-ssh-engine` puts first on its editor's `PATH`: an `ssh` that reads the run's own `ssh_config`. */
-export function sshWrapperFolder(): string {
+function sshWrapperFolder(): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), 'ssh-engine-bin');
 }
 
@@ -249,7 +249,7 @@ export function dockerOnlyFolder(): string {
 }
 
 /** The known hosts file the run's SSH client reads for the engine. */
-export function engineKnownHosts(): string {
+function engineKnownHosts(): string {
   return path.join(sshClientFolder(), 'known_hosts');
 }
 
@@ -357,6 +357,8 @@ export interface SshEngine {
   knownHostsLine: string;
   /** Makes the host's key known to the run's client, or unknown again. */
   trustHostKey(known: boolean): void;
+  /** Whether the run's known hosts file holds the host's key, as after a "yes" to ssh's question. */
+  hostKeyKnown(): boolean;
   /** The name of the container that runs the daemon and sshd. */
   container: string;
   stop(): Promise<void>;
@@ -461,6 +463,12 @@ export async function sshEngine(
         [...others, ...(known ? [knownHostsLine] : []), ''].join('\n'),
       );
     }
+    /** Whether the run's known hosts file holds the host's key. */
+    function hostKeyKnown(): boolean {
+      return readFileSync(engineKnownHosts(), 'utf8')
+        .split('\n')
+        .some(line => line.startsWith(`[127.0.0.1]:${port} `));
+    }
     trustHostKey(true);
     const client = {...sshClientEnvironment(), DOCKER_HOST: address('engine')};
     await waitFor(
@@ -481,6 +489,7 @@ export async function sshEngine(
       marker,
       knownHostsLine,
       trustHostKey,
+      hostKeyKnown,
       container: name,
       stop,
     };
