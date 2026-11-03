@@ -88,13 +88,43 @@ describe('the repository a clone takes (card containers-151)', () => {
     );
   });
 
-  it('a typed source with no path segment has no repository name', () => {
+  it('a GitHub URL that names no repository part past the owner is used as typed', () => {
+    deepStrictEqual(
+      accepted('https://github.com/o/r/blob/x').urlToClone,
+      'https://github.com/o/r/blob/x',
+    );
+  });
+
+  it('a source whose repository name is empty, . or .. is refused from either origin, since it would be the folder', () => {
     deepStrictEqual(
       [
-        accepted('/').repositoryName,
-        accepted('https://github.com/o/r/blob/x').urlToClone,
-      ],
-      ['', 'https://github.com/o/r/blob/x'],
+        'https://h.invalid/..',
+        'https://h.invalid/a/.',
+        'https://h.invalid/.git',
+        'git@h.invalid:/',
+        'https://h.invalid/',
+      ].flatMap(input =>
+        (['typed', 'link'] as const).map(origin => {
+          const source = cloneSourceOf(input, origin);
+          return 'refused' in source ? source.refused : 'accepted';
+        }),
+      ),
+      Array.from({length: 10}, () => 'folder'),
+    );
+  });
+
+  it('a GitHub ref that starts with - is refused as an option from either origin', () => {
+    deepStrictEqual(
+      [
+        'https://github.com/o/r/tree/-c',
+        'https://github.com/o/r/tree/--upload-pack=touch',
+      ].flatMap(input =>
+        (['typed', 'link'] as const).map(origin => {
+          const source = cloneSourceOf(input, origin);
+          return 'refused' in source ? source.refused : 'accepted';
+        }),
+      ),
+      ['option', 'option', 'option', 'option'],
     );
   });
 

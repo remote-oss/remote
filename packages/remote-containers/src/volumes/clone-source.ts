@@ -25,10 +25,12 @@ export interface CloneSource {
 export type SourceRefusal =
   /** Nothing is left once the whitespace around it is removed. */
   | 'empty'
-  /** It starts with `-`, or its host does, so git or ssh would read it as an option. */
+  /** It starts with `-`, or its host or its ref does, so git or ssh would read it as an option. */
   | 'option'
   /** It holds a control character (a line break, a tab, NUL), which git's configuration and ssh read specially. */
   | 'control'
+  /** Its repository name is empty, `.` or `..`, which can't be the folder under `/workspaces`. */
+  | 'folder'
   /** It names a transport git runs a program for (`ext::`, `fd::`), or, from a link, `file://`. */
   | 'protocol'
   /** From a link, it names neither an allowed protocol nor the scp-style `user@host:path`. */
@@ -68,9 +70,20 @@ export const LINK_PROTOCOL_ALLOW: readonly string[] = [
   'git',
 ];
 
-/** The last non-empty path segment of `text`, with a trailing `.git` dropped. */
+/** The path of a source: after a URL's scheme and host, after the scp form's colon, or the whole text otherwise. */
+function pathOf(text: string): string {
+  const url = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]*(.*)$/.exec(text);
+  if (url !== null) {
+    return String(url[1]);
+  }
+  return SCP_STYLE.test(text) ? text.slice(text.indexOf(':') + 1) : text;
+}
+
+/** The last non-empty segment of a source's path, with a trailing `.git` dropped. */
 function lastSegment(text: string): string {
-  const segments = text.split(/[/\\:]/).filter(segment => segment !== '');
+  const segments = pathOf(text)
+    .split(/[/\\]/)
+    .filter(segment => segment !== '');
   const last = segments.at(-1) ?? '';
   return last.endsWith('.git') ? last.slice(0, -'.git'.length) : last;
 }
@@ -149,6 +162,13 @@ export function cloneSourceOf(
     : trimmed;
   const github = githubParts(repositoryPath);
   const urlToClone = github?.urlToClone ?? repositoryPath;
+  const repositoryName = lastSegment(urlToClone);
+  if (['', '.', '..'].includes(repositoryName)) {
+    return {refused: 'folder'};
+  }
+  if (github?.ref?.startsWith('-') === true) {
+    return {refused: 'option'};
+  }
   return {
     repositoryPath,
     urlToClone,
@@ -156,6 +176,6 @@ export function cloneSourceOf(
     ...(github?.pullRequest === undefined
       ? {}
       : {pullRequest: github.pullRequest}),
-    repositoryName: lastSegment(urlToClone),
+    repositoryName,
   };
 }
