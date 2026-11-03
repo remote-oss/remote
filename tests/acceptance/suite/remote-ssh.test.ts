@@ -15,14 +15,14 @@ describe('Remote - SSH, activated in the editor', () => {
     );
   });
 
-  it('F-2002: Open Web UI is served once the connect is registered', async () => {
+  it('Open Web UI is served once the connect is registered (F-2002)', async () => {
     deepStrictEqual(
       (await commandsAfterActivation()).includes('opensshremotes.openWebUI'),
       true,
     );
   });
 
-  it('F-2203 AC-1, #397: Open SSH Configuration File is served', async () => {
+  it('F-2203.AC-1: Open SSH Configuration File is served (#397)', async () => {
     deepStrictEqual(
       (await commandsAfterActivation()).includes(
         'opensshremotes.openConfigFile',
@@ -31,7 +31,7 @@ describe('Remote - SSH, activated in the editor', () => {
     );
   });
 
-  it('F-2004: the help commands are served', async () => {
+  it('the help commands are served (F-2004)', async () => {
     deepStrictEqual(
       (await commandsAfterActivation()).includes('opensshremotes.getHelp'),
       true,

@@ -217,7 +217,7 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
     });
   });
 
-  it('F-2107 BR-1 (socket-mode-remote-command): in socket mode a host with RemoteCommand exec zsh -l connects while remote.SSH.enableRemoteCommand is on, and the .zshenv export reaches a task', async () => {
+  it('in socket mode a host with RemoteCommand exec zsh -l connects while remote.SSH.enableRemoteCommand is on, and the .zshenv export reaches a task (F-2107 BR-1, socket-mode-remote-command)', async () => {
     await withRemoteCommands({'rc-zsh': 'exec zsh -l'}, async () => {
       await freshServer('harness-bash');
       await setting('remote.SSH.enableRemoteCommand', true);

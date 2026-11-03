@@ -249,7 +249,31 @@ export const EXTENSIONPACK_RELEASE_TWO_SCOPE: CoverageScope = {
 };
 
 /** The features of Remote - SSH release 2. */
-export const SSH_RELEASE_TWO_FEATURES: readonly string[] = ['F-2702'];
+export const SSH_RELEASE_TWO_FEATURES: readonly string[] = [
+  'F-2002',
+  'F-2003',
+  'F-2004',
+  'F-2005',
+  'F-2006',
+  'F-2007',
+  'F-2008',
+  'F-2103',
+  'F-2105',
+  'F-2107',
+  'F-2109',
+  'F-2203',
+  'F-2205',
+  'F-2309',
+  'F-2310',
+  'F-2402',
+  'F-2404',
+  'F-2406',
+  'F-2407',
+  'F-2408',
+  'F-2413',
+  'F-2504',
+  'F-2702',
+];
 
 /** The coverage file of Remote - SSH release 2. */
 export const SSH_RELEASE_TWO_SCOPE: CoverageScope = {

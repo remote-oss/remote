@@ -58,7 +58,7 @@ describe('F-2408 the lock of the host', function () {
     return stepRun.kind === 'result' ? stepRun.block.status : stepRun.kind;
   }
 
-  it('F-2408: answers LockBusy while another window holds the install lock', async () => {
+  it('answers LockBusy while another window holds the install lock (F-2408)', async () => {
     const parameters = parametersFor();
     const release = holdLock(parameters);
     const stepRun = await installRun(parameters, step => step());
@@ -66,14 +66,14 @@ describe('F-2408 the lock of the host', function () {
     deepStrictEqual(statusOf(stepRun), 'LockBusy');
   });
 
-  it('F-2408: waits for the other window and then installs', async () => {
+  it('waits for the other window and then installs (F-2408)', async () => {
     const parameters = parametersFor();
     const release = holdLock(parameters);
     setTimeout(release, 500);
     deepStrictEqual(statusOf(await installRun(parameters)), 'Ok');
   });
 
-  it('F-2408: gives up after the attempts when the lock is never released', async () => {
+  it('gives up after the attempts when the lock is never released (F-2408)', async () => {
     const parameters = parametersFor();
     const release = holdLock(parameters);
     const stepRun = await installRun(parameters, lockLoop(3, 50));
@@ -81,7 +81,7 @@ describe('F-2408 the lock of the host', function () {
     deepStrictEqual(statusOf(stepRun), 'retriesExhausted');
   });
 
-  it('F-2408: two windows installing at once both succeed and install once', async () => {
+  it('two windows installing at once both succeed and install once (F-2408)', async () => {
     const parameters = parametersFor();
     const runs = await Promise.all([
       installRun(parameters),
@@ -99,7 +99,7 @@ describe('F-2408 the lock of the host', function () {
     );
   });
 
-  it('F-2408: releases the lock when the install ends', async () => {
+  it('releases the lock when the install ends (F-2408)', async () => {
     const parameters = parametersFor();
     await installRun(parameters);
     deepStrictEqual(
