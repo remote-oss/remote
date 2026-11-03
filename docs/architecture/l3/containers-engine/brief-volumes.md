@@ -47,6 +47,10 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    credential and host-key prompts become quick inputs.
    - **The askpass relay is one, shared.** lib-ssh's `askpass/` (endpoint, launcher, messages) moves to **lib-host**, as
      containers-02 moved `posixQuote`, so that remote-containers can use it without importing lib-ssh (components §3).
+     The move touches transport-and-server `contracts.md`'s S2 and S7 rows (the askpass environment), and remote-ssh's
+     imports follow.
+   - **The program git runs:** remote-containers ships an askpass program of its own, `src/programs/askpass.ts` built
+     to `dist/askpass.js`, as remote-ssh does.
    - C13 spawns the check through C2-style spawning with `GIT_ASKPASS` and `SSH_ASKPASS` pointed at the relay, and
      `SSH_ASKPASS_REQUIRE=force`.
    - A failure is S052's info modal, with no reload and no Docker object (7.E1).
@@ -70,8 +74,9 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - volume labels are fixed at creation (F-0702 BR-8).
 2. **The bootstrap container (F-0704),** built from **our own definition** (§16: don't copy the reference's).
    - **The image:**
-     - `FROM alpine:3.20` (Docker Hub's official image, no Microsoft registry), with `docker-cli`, `git`, `git-lfs`,
-       `openssh-client` and `nodejs` from Alpine's packages, and our pinned dev container CLI copied in;
+     - `FROM alpine:3.20` (Docker Hub's official image, no Microsoft registry), with `docker-cli`, `docker-cli-compose`,
+       `git`, `git-lfs`, `openssh-client` and `nodejs` from Alpine's packages, and our pinned dev container CLI copied
+       in;
      - tagged `vsc-volume-bootstrap:latest` and built from a temporary context on every pass (BR-1);
      - a custom `bootstrapImage` is used as is, refreshed when `bootstrapImagePull` says so (BR-2, BR-4).
    - **The container:**
@@ -80,7 +85,11 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
      - the five-tool PATH check, with S344 or S345 (BR-6 to BR-8);
      - Node.js is in our image, so BR-12's download path applies only to a custom image without it.
    - **The settings** are read at every start, Retry included (BR-14).
-3. **The clone, inside the bootstrap:**
+3. **The clone, inside the bootstrap.** C13 drives each step as its own `docker exec` through C2. No program of ours
+   runs the steps inside, which keeps the surface small.
+   - **Reading the steps (ADR-0010):** each is read by its exit status and our own markers, never by git's text. S193
+     quotes git's output as the dialog's detail, which is allowed, but nothing branches on it.
+   - **The steps:**
    - a shallow clone at the ref into `/workspaces/<folder>`, with no submodules (F-0701 BR-13);
    - a non-empty folder is opened unchanged (F-0702 BR-9);
    - the configuration is looked up (`.devcontainer/devcontainer.json`, then `.devcontainer.json`, BR-17), with a
@@ -88,13 +97,17 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - then full history and tags (BR-16). A failed deepening gives our own warning (7.E6), and the string joins the
      table under R-27.
    - **With no configuration,** C14's template picker runs on the cloned files (6.1, 6.8), and Escape gives S414.
-   - **F-0806's source** puts the applied template's files into the folder instead of a clone.
+   - **F-0806's source** copies the applied template's scratch folder into `/workspaces/<folder>` with `docker cp`
+     through C2, instead of a clone.
 4. **`up` runs inside the bootstrap,** where the files are (F-0704 step 10).
    - C3 gains a **container CLI host**: the same bridge, its process run by `docker exec` into the bootstrap through C2.
    - **Arguments:** `--workspace-folder /workspaces/<folder>`, the volume as the workspace mount at `/workspaces`, the
      `vscode` mount (brief-compose §7's rule), and the id labels F-0701 BR-3 names.
    - **The repository's own `workspaceMount` and `workspaceFolder`** are ignored, with one log line (§10).
-   - **Compose** configurations take brief-compose's path with the volume as the project's files.
+   - **Compose:** the files and the `.env` are inside the volume, not on the host. So for a volume workspace C7's Compose
+     steps (brief-compose §2: the `config` read, the raw `name:` check and the scope) run inside the bootstrap, through
+     the same container CLI host as `up`. That's why `docker-cli-compose` is in the image. F-0413 AC-12, 48, 52 and 62
+     take this path.
 5. **Reuse (F-0409, BR-3):**
    - a container matching the id labels is restarted, with no clone;
    - a left-over volume with no container gets a new container, and nothing is cloned again;
@@ -113,8 +126,9 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
 9. **Credentials:**
    - **What the bootstrap gets:** the `.gitconfig` copy, the GPG files and agent socket, and the SSH-agent relay
      (F-0704 step 6) are C16's, personalization (F-1001 to F-1004, plan group 15).
-   - **Until C16 lands:** public repositories clone, and the private-repository rows wait for group 15. The pre-check
-     on the host already has the user's own credentials.
+   - **Until C16 lands:** public repositories clone over https and `git://`. Private repositories, and every SSH URL
+     (`git@github.com:` needs a key inside the bootstrap even for a public repository), wait for group 15's agent and
+     credential relays. The pre-check on the host already has the user's own credentials.
 
 ## 4. The entry points' own parts
 
@@ -131,7 +145,8 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - Escape anywhere aborts silently (BR-6).
 3. **F-0703:**
    - the input box with its two shape checks (S213 live, S212 on Enter);
-   - the lookup through GitHub's public REST API, anonymous first, then core's `github` provider (§16, 7.E3);
+   - the lookup through GitHub's public REST API, anonymous first, then core's `github` provider (§16, 7.E3). The API is
+     the feature's subject, not a link of ours, so R-31 doesn't apply;
    - the fork or same-repository checkout (BR-4, BR-5);
    - the forced `GitHub.vscode-pull-request-github`, kept by F-1404 §6 and installed from the editor's gallery;
    - the PR-row command `checkoutPRInVolume` on the partner extension's view (6.7).
@@ -176,7 +191,13 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
 ## 7. Contracts, components, dependencies
 
 - **`contracts.md` §3:** the volume payload.
+- **The shutdown protocol** (`shutdown/protocol.ts`): `ContainerIdentity` gains a volume form, `volumeName` + `folder`,
+  matching the `vsch.local.*` and id labels. It serves the lookup by labels for a connection that ends before its
+  container is known, and F-0705 BR-7's stop, as brief-compose §6.1 added Compose's member.
 - **C3:** the container CLI host.
+  - **ADR-0009 is amended:** C3 spawns the CLI with the editor's own Node, *except* in the container CLI host, where
+    the CLI runs on the bootstrap image's Node (Alpine's `nodejs`, at least 20 as the CLI needs). The amendment goes
+    into ADR-0009's decision with this card.
 - **C2:** volume create, list and inspect, build, run, exec and remove for the bootstrap.
 - **The askpass relay:** lib-ssh → lib-host (remote-ssh's imports follow).
 - **`components.md`:** C13 joins the built components, with F-0701 to F-0708 and the volume halves of F-0806 and F-0808.
