@@ -3,6 +3,7 @@
  * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
+import path from 'node:path';
 import {type DecodedTarget, decodeAuthority} from 'lib-authority';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import {recordOf} from '../json-record.ts';
@@ -203,14 +204,32 @@ export interface ReopenOrigin {
   kind: 'local';
   /** The host folder the container was opened from. */
   folder: string;
+  /** The host file the window's workspace file maps to, when it lies under the folder's mount. */
+  workspaceFile?: string;
+}
+
+/** The host file a workspace file under the folder's mount maps to, or none. */
+function workspaceFileOf(
+  hostPath: string,
+  workspaceFile: string | undefined,
+): string | undefined {
+  if (workspaceFile === undefined) {
+    return undefined;
+  }
+  const mountTarget = `/workspaces/${path.posix.basename(hostPath)}/`;
+  return workspaceFile.startsWith(mountTarget)
+    ? path.join(hostPath, workspaceFile.slice(mountTarget.length))
+    : undefined;
 }
 
 /**
  * The origin a dev container window can be reopened at: the payload's host folder, whatever folder the window shows
- * now. None for a window that isn't a dev container, or whose payload names no folder on this machine.
+ * now, plus the host file the window's workspace file maps to when it lies under the folder's mount. None for a
+ * window that isn't a dev container, or whose payload names no folder on this machine.
  */
 export function windowOriginOf(
   authority: string | undefined,
+  workspaceFile?: string,
 ): ReopenOrigin | undefined {
   if (authority === undefined) {
     return undefined;
@@ -230,5 +249,7 @@ export function windowOriginOf(
   ) {
     return undefined;
   }
-  return {kind: 'local', folder: target.hostPath};
+  const origin: ReopenOrigin = {kind: 'local', folder: target.hostPath};
+  const file = workspaceFileOf(target.hostPath, workspaceFile);
+  return file === undefined ? origin : {...origin, workspaceFile: file};
 }

@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import path from 'node:path';
 import {type DecodedTarget, encodeAuthority} from 'lib-authority';
 import {
   type DevContainerFolder,
@@ -40,6 +41,15 @@ function hexOf(text: string): string {
 /** The text a payload holds. */
 function textOf(payload: string): string {
   return Buffer.from(payload, 'hex').toString('utf8');
+}
+
+/** A dev-container authority over the payload. */
+function containerAuthority(payload: string): string {
+  return encodeAuthority({
+    family: 'dev-container',
+    target: {payload},
+    rawHostString: payload,
+  });
 }
 
 describe('the dev-container payload', () => {
@@ -255,15 +265,6 @@ describe('the folder of a window’s decoded target (card containers-11)', () =>
 });
 
 describe('the origin a window reopens at, from its own authority (card containers-135)', () => {
-  /** A dev-container authority over the payload. */
-  function containerAuthority(payload: string): string {
-    return encodeAuthority({
-      family: 'dev-container',
-      target: {payload},
-      rawHostString: payload,
-    });
-  }
-
   it('F-0406 BR-13: a window with no authority names no origin', () => {
     deepStrictEqual(windowOriginOf(undefined), undefined);
   });
@@ -316,6 +317,56 @@ describe('the origin a window reopens at, from its own authority (card container
     deepStrictEqual(
       windowOriginOf(containerAuthority(devContainerPayloadOf(SSH_FOLDER))),
       undefined,
+    );
+  });
+});
+
+describe('the workspace file of a workspace window, at its origin (card containers-139)', () => {
+  it('F-0406 BR-11: a workspace file under the mount maps to the host folder', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        '/workspaces/p/proj.code-workspace',
+      ),
+      {
+        kind: 'local',
+        folder: '/home/u/p',
+        workspaceFile: path.join('/home/u/p', 'proj.code-workspace'),
+      },
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file in a subfolder of the mount keeps its subfolder', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        '/workspaces/p/sub/w.code-workspace',
+      ),
+      {
+        kind: 'local',
+        folder: '/home/u/p',
+        workspaceFile: path.join('/home/u/p', 'sub/w.code-workspace'),
+      },
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file outside the mount names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        '/srv/other.code-workspace',
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-11: no workspace file names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        undefined,
+      ),
+      {kind: 'local', folder: '/home/u/p'},
     );
   });
 });

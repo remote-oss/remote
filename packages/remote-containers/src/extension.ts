@@ -1095,7 +1095,10 @@ export async function activate(
         origin: () =>
           served.missing.includes('resolvers')
             ? undefined
-            : windowOriginOf(vscode.env.remoteAuthority),
+            : windowOriginOf(
+                vscode.env.remoteAuthority,
+                vscode.workspace.workspaceFile?.path,
+              ),
         folderOpen: () => (vscode.workspace.workspaceFolders ?? []).length > 0,
         opener: reopenPorts.opener,
         inform: text => {
