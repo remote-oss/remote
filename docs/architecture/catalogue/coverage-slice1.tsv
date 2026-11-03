@@ -717,12 +717,12 @@ F-2401.AC-20	todo
 F-2401.AC-21	todo	
 F-2403.AC-1	acceptance	
 F-2403.AC-2	acceptance	
-F-2403.AC-3	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
-F-2403.AC-4	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2403.AC-3	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-2403.AC-4	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2403.AC-5	acceptance	
 F-2403.AC-6	acceptance	
 F-2403.AC-7	acceptance	
-F-2403.AC-8	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2403.AC-8	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2403.AC-9	acceptance	
 F-2403.AC-10	acceptance	
 F-2403.AC-11	acceptance	
@@ -733,14 +733,14 @@ F-2403.AC-15	acceptance
 F-2403.AC-16	todo	
 F-2403.AC-17	acceptance	
 F-2403.AC-18	unit	
-F-2403.AC-19	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2403.AC-19	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2403.AC-21	acceptance	
 F-2403.AC-22	acceptance	
 F-2403.AC-23	todo	
 F-2403.AC-24	todo	
-F-2403.AC-25	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2403.AC-25	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2403.AC-26	acceptance	
-F-2403.AC-27	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2403.AC-27	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2405.AC-1	acceptance	
 F-2405.AC-2	acceptance	
 F-2405.AC-3	acceptance	
@@ -748,7 +748,7 @@ F-2405.AC-4	acceptance
 F-2405.AC-5	acceptance	
 F-2405.AC-6	unit	
 F-2405.AC-7	acceptance	
-F-2405.AC-8	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2405.AC-8	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2405.AC-9	acceptance	
 F-2405.AC-10	unit	
 F-2405.AC-11	unit	
@@ -767,7 +767,7 @@ F-2405.AC-23	acceptance
 F-2405.AC-24	acceptance	
 F-2405.AC-25	acceptance	
 F-2405.AC-26	acceptance	
-F-2405.AC-27	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2405.AC-27	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2405.AC-28	acceptance	
 F-2405.AC-29	acceptance	
 F-2409.AC-1	todo	
@@ -928,7 +928,7 @@ F-2501.AC-22	acceptance
 F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
 F-2501.AC-24	acceptance	
 F-2501.AC-25	acceptance	
-F-2501.AC-26	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2501.AC-26	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-2501.AC-27	acceptance	
 F-2501.AC-28	unit	
 F-2501.AC-29	acceptance	
@@ -1211,11 +1211,11 @@ F-3902.AC-15	acceptance
 F-3902.AC-16	todo	
 F-3902.AC-17	acceptance	
 F-3902.AC-18	acceptance	
-F-3902.AC-19	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
-F-3902.AC-20	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
-F-3902.AC-21	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
-F-3902.AC-22	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
-F-3902.AC-23	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-3902.AC-19	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-3902.AC-20	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-3902.AC-21	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-3902.AC-22	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
+F-3902.AC-23	deferred	CLI path rows wait for CI's CLI archives token (#1815, #1895)
 F-3902.AC-24	acceptance	
 F-3902.AC-25	acceptance	
 F-3902.AC-26	todo	

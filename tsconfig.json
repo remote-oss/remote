@@ -209,6 +209,9 @@
       "path": "tests/acceptance/ssh-no-proposals"
     },
     {
+      "path": "tests/acceptance/cli-path"
+    },
+    {
       "path": "tests/acceptance/containers"
     },
     {

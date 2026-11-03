@@ -150,6 +150,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/genuine-accept-a/tsconfig.json',
   './tests/acceptance/genuine-accept-b/tsconfig.json',
   './tests/acceptance/ssh-no-proposals/tsconfig.json',
+  './tests/acceptance/cli-path/tsconfig.json',
   './tests/acceptance/containers/tsconfig.json',
   './tests/acceptance/containers-standdown/tsconfig.json',
   './tests/acceptance/containers-no-proposals/tsconfig.json',

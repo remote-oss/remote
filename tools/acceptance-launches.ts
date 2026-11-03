@@ -100,6 +100,11 @@ export interface PlainLaunch extends LaunchCommon {
   /** The editor the launch starts: VS Code at the floor of ADR-0007 instead of the run's VSCodium. */
   client?: 'vscode';
   /**
+   * Whether the launch starts the run's CLI-source copy of VSCodium, whose `product.json` names a
+   * `cliDownloadUrlTemplate` on the download host (`tools/acceptance-cli-editor.ts`), instead of the run's VSCodium.
+   */
+  cliSource?: true;
+  /**
    * The base names of the suite's test files this launch runs, when it runs only some of them; every `*.test.ts` of the
    * suite when absent.
    */
@@ -979,6 +984,14 @@ export function launchesOf(root: string): Launch[] {
       kind: 'plain',
       suite: 'no-proposals',
       proposedApi: false,
+    },
+    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
+    {
+      label: 'cli-path',
+      kind: 'plain',
+      suite: 'cli-path',
+      cliSource: true,
+      namedOnly: true,
     },
     {...EXPLORER_LAUNCH, label: 'explorer', suite: 'explorer'},
     {
