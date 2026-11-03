@@ -121,7 +121,7 @@ describe('F-2401 the probe of a host', function () {
     );
   });
 
-  it('F-2407: finds no server installed on a fresh host, and where it would go', async () => {
+  it('finds no server installed on a fresh host, and where it would go (F-2407)', async () => {
     const {installed, installFolder, treeComplete} = await probed();
     deepStrictEqual(
       {installed, installFolder, treeComplete},
@@ -146,7 +146,7 @@ describe('F-2402 the prerequisites of a host', function () {
     host.stop();
   });
 
-  it('F-2402: refuses a host without tar and names the tool', async () => {
+  it('refuses a host without tar and names the tool (F-2402)', async () => {
     host.asRoot('rm', '/bin/tar');
     const outcome = await probe(
       host.channel,

@@ -63,7 +63,7 @@ describe('F-2105 the port forward over the shared connection to a host', functio
     });
   }
 
-  it('F-2105: bytes sent to the window port come back from the service on the host', async () => {
+  it('bytes sent to the window port come back from the service on the host (F-2105)', async () => {
     const tunnel = await tunnelTo(ECHO_PORT);
     if (tunnel.kind !== 'open') {
       throw new Error(`the tunnel did not open: ${tunnel.kind}`);
@@ -78,7 +78,7 @@ describe('F-2105 the port forward over the shared connection to a host', functio
     deepStrictEqual(received.toString(), text);
   });
 
-  it('F-2105: a payload larger than the buffers comes back whole and in order', async () => {
+  it('a payload larger than the buffers comes back whole and in order (F-2105)', async () => {
     const tunnel = await tunnelTo(ECHO_PORT);
     if (tunnel.kind !== 'open') {
       throw new Error(`the tunnel did not open: ${tunnel.kind}`);
@@ -95,7 +95,7 @@ describe('F-2105 the port forward over the shared connection to a host', functio
     deepStrictEqual(received.equals(payload), true);
   });
 
-  it('F-2105: a port on the host where nothing listens leaves the tunnel not ready', async () => {
+  it('a port on the host where nothing listens leaves the tunnel not ready (F-2105)', async () => {
     const tunnel = await tunnelTo(SILENT_PORT, {
       readyMilliseconds: 2000,
       retryMilliseconds: 100,

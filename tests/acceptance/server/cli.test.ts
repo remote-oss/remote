@@ -168,7 +168,7 @@ describe('V7a the CLI on a real host', function () {
       : -1;
   }
 
-  it('F-2103 POST-2: after installCli the host has the executable <data>/<applicationName>-<commit> and no cli-bin folder', async () => {
+  it('after installCli the host has the executable <data>/<applicationName>-<commit> and no cli-bin folder (F-2103 POST-2)', async () => {
     const outcome = await install();
     deepStrictEqual(
       [
@@ -186,7 +186,7 @@ describe('V7a the CLI on a real host', function () {
     );
   });
 
-  it('F-2103 BR-8: a second installCli reports the same path and makes no staging folder', async () => {
+  it('a second installCli reports the same path and makes no staging folder (F-2103 BR-8)', async () => {
     await install();
     host.onHost('rm', '-rf', `${dataFolderOf(parameters)}/cli-bin`);
     const again = await install();
@@ -476,7 +476,7 @@ describe('V7a the CLI on a real host', function () {
     await session.stop();
   });
 
-  it("F-2103 BR-8: after a CLI was stopped, a new CLI's serve finds the running server", async () => {
+  it("after a CLI was stopped, a new CLI's serve finds the running server (F-2103 BR-8)", async () => {
     await install();
     const session = await openSharedSession(host);
     const first = await servedBy(session);
@@ -511,7 +511,7 @@ describe('V7a the CLI on a real host', function () {
     deepStrictEqual([duringBoth, processes(isSupervisor).length], [1, 1]);
   });
 
-  it("F-2103 BR-8: two connects over one session are handed the host's one token, which the running server holds", async () => {
+  it("two connects over one session are handed the host's one token, which the running server holds (F-2103 BR-8)", async () => {
     await install();
     const session = await openSharedSession(host);
     const first = await servedBy(session);

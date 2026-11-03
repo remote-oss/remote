@@ -54,7 +54,7 @@ describe('ssh’s own lines in the log (card connect-66)', function () {
     await closeAllButLocal();
   });
 
-  it('F-2003 BR-8 (ssh-debug): at debug the log holds ssh’s lines without debug1, but the server host key’s', async () => {
+  it('at debug the log holds ssh’s lines without debug1, but the server host key’s (F-2003 BR-8, ssh-debug)', async () => {
     await userSettings({'remote.SSH.logLevel': 'debug'});
     const mark = connectionLog().length;
     await openConnected('sl1', INSTALL_MILLISECONDS);
@@ -73,7 +73,7 @@ describe('ssh’s own lines in the log (card connect-66)', function () {
     }
   });
 
-  it('F-2003 BR-9 point 1 (ssh-trace): at trace the log holds ssh’s debug1 lines too', async () => {
+  it('at trace the log holds ssh’s debug1 lines too (F-2003 BR-9 point 1, ssh-trace)', async () => {
     await userSettings({'remote.SSH.logLevel': 'trace'});
     const mark = connectionLog().length;
     await openConnected('sl2', INSTALL_MILLISECONDS);
@@ -93,7 +93,7 @@ describe('ssh’s own lines in the log (card connect-66)', function () {
   });
 
   for (const level of ['debug', 'trace']) {
-    it(`F-2003 AC-24 (ssh-refused-${level}): a refused connect logs ssh’s refusal line verbatim at ${level}`, async () => {
+    it(`F-2003.AC-24 (ssh-refused): a refused connect logs ssh’s refusal line verbatim at ${level}`, async () => {
       await userSettings({'remote.SSH.logLevel': level});
       const mark = connectionLog().length;
       const window = `sr-${level}`;

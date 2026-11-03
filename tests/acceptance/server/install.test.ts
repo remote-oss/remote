@@ -23,11 +23,11 @@ describe('F-2407 the install of the server', function () {
     host.stop();
   });
 
-  it('F-2407: installs the archive on the host', async () => {
+  it('installs the archive on the host (F-2407)', async () => {
     deepStrictEqual(await installStatus(host, parametersFor()), 'Ok');
   });
 
-  it('F-2407: unpacks it into the commit folder without its top folder', async () => {
+  it('unpacks it into the commit folder without its top folder (F-2407)', async () => {
     const parameters = parametersFor();
     await installStatus(host, parameters);
     deepStrictEqual(
@@ -36,7 +36,7 @@ describe('F-2407 the install of the server', function () {
     );
   });
 
-  it('F-2407: unpacks an archive packed without a wrapper folder, its entries starting with ./, keeping its folders', async () => {
+  it('unpacks an archive packed without a wrapper folder, its entries starting with ./, keeping its folders (F-2407)', async () => {
     const parameters = parametersFor({
       archivePath: hostArchiveOf('serving', 'rooted'),
     });
@@ -47,7 +47,7 @@ describe('F-2407 the install of the server', function () {
     );
   });
 
-  it('F-2407: leaves the launcher executable for the user', async () => {
+  it('leaves the launcher executable for the user (F-2407)', async () => {
     const parameters = parametersFor();
     await installStatus(host, parameters);
     deepStrictEqual(
@@ -62,13 +62,13 @@ describe('F-2407 the install of the server', function () {
     );
   });
 
-  it('F-2407: finds the server installed on a second install and succeeds', async () => {
+  it('finds the server installed on a second install and succeeds (F-2407)', async () => {
     const parameters = parametersFor();
     await installStatus(host, parameters);
     deepStrictEqual(await installStatus(host, parameters), 'Ok');
   });
 
-  it('F-2407: keeps the archive it was given unless told to remove it', async () => {
+  it('keeps the archive it was given unless told to remove it (F-2407)', async () => {
     await installStatus(host, parametersFor());
     deepStrictEqual(
       host.onHost('sh', '-c', `test -f '${HOST_ARCHIVE}' && echo kept`).trim(),
@@ -90,7 +90,7 @@ describe('F-2407 the install of the server', function () {
     );
   });
 
-  it('F-2407: reports an archive that cannot be unpacked', async () => {
+  it('reports an archive that cannot be unpacked (F-2407)', async () => {
     host.onHost('sh', '-c', 'echo not an archive > /tmp/broken.tar.gz');
     deepStrictEqual(
       await installStatus(

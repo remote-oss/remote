@@ -167,7 +167,7 @@ describe('the maintenance of the host server', function () {
         .sort();
     }
 
-    it('F-2413: keeps the newest five installs and removes the older ones', async () => {
+    it('keeps the newest five installs and removes the older ones (F-2413)', async () => {
       const parameters = parametersFor({commit: 'current'});
       const names = [0, 1, 2, 3, 4, 5, 6, 7].map(
         index => `0123456789abcdef0123456789abcdef0123456${String(index)}`,

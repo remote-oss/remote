@@ -48,7 +48,7 @@ describe('the resolve and its ports in the log (card connect-65)', function () {
     await closeAllButLocal();
   });
 
-  it('F-2003 BR-6 items 1, 9 and 10 (resolve-lines): on a fresh install the log names the resolve, then the remote side, then the ports', async () => {
+  it('on a fresh install the log names the resolve, then the remote side, then the ports (F-2003 BR-6 items 1, 9 and 10, resolve-lines)', async () => {
     await freshHost();
     const mark = connectionLog().length;
     await openConnected('rs1', INSTALL_MILLISECONDS);

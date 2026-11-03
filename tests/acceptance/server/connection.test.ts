@@ -106,7 +106,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2103: a reload within the grace joins the helper that runs, with no new login', async () => {
+    it('a reload within the grace joins the helper that runs, with no new login (F-2103)', async () => {
       const first = await connected();
       const loginsBefore = host.logins();
       first.connection.release();
