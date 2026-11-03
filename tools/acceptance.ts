@@ -1164,7 +1164,9 @@ async function prepare(
     stops.push(() => agent.stop());
   }
   const host = startHostContainer(command, root, runId, runFolder, [
-    ...(downloads === undefined ? [] : downloadHostArguments()),
+    ...(downloads === undefined
+      ? []
+      : downloadHostArguments(downloads.containerAddress)),
     ...(keys?.hostArguments ?? []),
   ]);
   started.push(host.container);
@@ -1195,7 +1197,9 @@ async function prepare(
       runId,
       runFolder,
       [
-        ...(downloads === undefined ? [] : downloadHostArguments()),
+        ...(downloads === undefined
+          ? []
+          : downloadHostArguments(downloads.containerAddress)),
         ...(keys?.hostArguments ?? []),
       ],
       base,

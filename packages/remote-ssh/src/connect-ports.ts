@@ -401,7 +401,10 @@ export function wiringPortsOf(
         logger,
       ),
     attachLogin: (login, alias) =>
-      attachPromptSurface(login, surfaces.prompts, {displayHost: alias}),
+      attachPromptSurface(login, surfaces.prompts, {
+        displayHost: alias,
+        logger,
+      }),
     trust: surfaces.defaultReadEvents,
     terminal: {
       terminals: surfaces.terminals,

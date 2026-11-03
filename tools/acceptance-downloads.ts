@@ -969,11 +969,16 @@ export function downloadVariables(
   };
 }
 
-/** The `docker run` arguments that give the harness host the download host's names at the bridge's gateway. */
-export function downloadHostArguments(): string[] {
+/**
+ * The `docker run` arguments that give the harness host the download host's names at `containerAddress`, the client as
+ * the engine's containers reach it (`clientReachOf`): Docker's `host-gateway` on Linux.
+ */
+export function downloadHostArguments(
+  containerAddress = 'host-gateway',
+): string[] {
   return DOWNLOAD_HOST_NAMES.flatMap(name => [
     '--add-host',
-    `${name}:host-gateway`,
+    `${name}:${containerAddress}`,
   ]);
 }
 
@@ -1010,16 +1015,84 @@ export function bridgeGateway(command: CommandRunner): string {
   ]).trim();
 }
 
+/** Where the download host listens on the client, and the address the engine's containers reach it at. */
+export interface ClientReach {
+  /** The client's addresses the download host listens on: the loopback and at most one other, never every interface. */
+  listen: string[];
+  /** The value `--add-host` gives the download host's names inside a container. */
+  containerAddress: string;
+}
+
+/** The harness host's own base image, by its digest, where the name lima gives the client is resolved. */
+const LIMA_LOOKUP_IMAGE =
+  'alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8';
+
+/** An IPv4 address, as a lookup or a route prints it. */
+const IPV4_ADDRESS = /^\d{1,3}(?:\.\d{1,3}){3}$/u;
+
+/**
+ * How the download host and the engine's containers reach each other on the client's `platform`.
+ * On Linux the engine runs on the client, so the host also listens on Docker's bridge gateway, which `host-gateway`
+ * names. With colima on macOS the engine is in a lima VM, which names the client `host.lima.internal` and forwards it to
+ * the client's loopback. With the engine in WSL2 on Windows, the distro's default route goes to the Windows side's WSL
+ * adapter, so the host also listens there.
+ */
+export function clientReachOf(
+  platform: NodeJS.Platform,
+  command: CommandRunner,
+): ClientReach {
+  if (platform === 'darwin') {
+    const lookup = checked(command, 'docker', [
+      'run',
+      '--rm',
+      LIMA_LOOKUP_IMAGE,
+      'getent',
+      'hosts',
+      'host.lima.internal',
+    ]);
+    const address = lookup.trim().split(/\s+/u)[0] ?? '';
+    if (!IPV4_ADDRESS.test(address)) {
+      throw new Error(
+        `the engine's containers do not resolve host.lima.internal to an address (got ${JSON.stringify(lookup.trim())})`,
+      );
+    }
+    return {listen: ['127.0.0.1'], containerAddress: address};
+  }
+  if (platform === 'win32') {
+    const route = checked(command, 'wsl.exe', [
+      '-e',
+      'ip',
+      '-4',
+      'route',
+      'show',
+      'default',
+    ]);
+    const gateway = /\bvia\s+(\S+)/u.exec(route)?.[1] ?? '';
+    if (!IPV4_ADDRESS.test(gateway)) {
+      throw new Error(
+        `the WSL distro has no IPv4 default route to the Windows host (got ${JSON.stringify(route.trim())})`,
+      );
+    }
+    return {listen: ['127.0.0.1', gateway], containerAddress: gateway};
+  }
+  return {
+    listen: ['127.0.0.1', bridgeGateway(command)],
+    containerAddress: 'host-gateway',
+  };
+}
+
 /** The download host of a run: the variables the launches get, and its end. */
 export interface RunDownloads {
   variables: Record<string, string>;
+  /** The address `downloadHostArguments` gives the containers of the run. */
+  containerAddress: string;
   stop(): Promise<void>;
 }
 
 /**
  * Starts the download host of a run in `runFolder`: the Alpine and glibc server archives for this machine's
- * architecture from the cache under `root`, the run's certificate, and the two ports on the loopback address and on
- * Docker's bridge gateway. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`; with
+ * architecture from the cache under `root`, the run's certificate, and the two ports on the client addresses
+ * `clientReachOf` gives for `clientPlatform`. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`; with
  * `cliSource`, the editor CLI's archives its pins name for those platforms, fetched with its own download and served under
  * `/cli/<platform>/`.
  */
@@ -1035,6 +1108,7 @@ export async function startRunDownloads(
     pins: Readonly<Record<string, PinnedCliArchive>>;
     download: Download;
   },
+  clientPlatform: NodeJS.Platform = process.platform,
 ): Promise<RunDownloads> {
   const platforms = servedPlatforms(architecture);
   const archiveFiles: Record<string, string> = {};
@@ -1086,8 +1160,9 @@ export async function startRunDownloads(
   writeFileSync(logFile, '');
   const tlsLogFile = path.join(runFolder, 'downloads-tls.log');
   writeFileSync(tlsLogFile, '');
+  const reach = clientReachOf(clientPlatform, command);
   const host = await startDownloadHost({
-    addresses: ['127.0.0.1', bridgeGateway(command)],
+    addresses: reach.listen,
     archiveFiles,
     earlierArchiveFiles,
     cliArchiveFiles,
@@ -1109,6 +1184,7 @@ export async function startRunDownloads(
         ? undefined
         : {platform: platforms[0], release: earlier},
     ),
+    containerAddress: reach.containerAddress,
     stop: () => host.stop(),
   };
 }

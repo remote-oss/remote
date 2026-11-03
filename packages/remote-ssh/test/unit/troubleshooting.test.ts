@@ -111,7 +111,7 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
     ]);
   });
 
-  it('F-2605.AC-26: no error hint gives the log a line that none was found, and opens no terminal (AC-10)', () => {
+  it('F-2605.AC-26, F-2605.AC-12: no error hint gives the log a line that none was found, and opens no terminal (AC-10); an attempt that ends at the bound has none either', () => {
     const {check, logged, terminals} = scene();
     check([ENVIRONMENT], true);
     deepStrictEqual([logged(), terminals.length], [[NO_HINTS_LINE], 0]);

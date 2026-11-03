@@ -1,10 +1,7 @@
 /**
- * @fileoverview Who owns the login of a shared connection, and which question is open. The first lease owns the
- * login; when the owner cancels, its lease closes or its login fails, the oldest lease that still waits takes
- * over. The first answer to a question closes it for everyone.
+ * @fileoverview Who owns the login of a shared connection. The first lease owns the login; when the owner cancels, its
+ * lease closes or its login fails, the oldest lease that still waits takes over.
  */
-
-import type {PromptSurface} from './messages.ts';
 
 /** The owner of the login among the live leases. */
 export class LoginOwnership {
@@ -67,60 +64,5 @@ export class LoginOwnership {
     if (next !== undefined) {
       this.onOwnerChanged(next);
     }
-  }
-}
-
-/** A question `ssh` asked and nobody has answered yet. */
-export interface OpenPrompt {
-  promptId: number;
-  surface: PromptSurface;
-  text: string;
-}
-
-/** The questions asked and not answered. The text of an answer passes through and is not kept. */
-export class PromptBook {
-  private readonly prompts = new Map<number, OpenPrompt>();
-  private lastPromptId = 0;
-
-  /** Records a new question and returns it with its number. */
-  open(surface: PromptSurface, text: string): OpenPrompt {
-    this.lastPromptId += 1;
-    const prompt = {promptId: this.lastPromptId, surface, text};
-    this.prompts.set(prompt.promptId, prompt);
-    return prompt;
-  }
-
-  /** The questions still open, oldest first. */
-  pending(): OpenPrompt[] {
-    return [...this.prompts.values()];
-  }
-
-  /**
-   * Takes the first answer to an open question: `deliver` receives its text and the question closes. False when the
-   * question is closed already or never existed, and then nothing is delivered. The question closes before the
-   * delivery, so an answer is lost when `deliver` throws and the user is asked again by the next question.
-   */
-  answer(
-    promptId: number,
-    text: string,
-    deliver: (text: string) => void,
-  ): boolean {
-    if (!this.prompts.delete(promptId)) {
-      return false;
-    }
-    deliver(text);
-    return true;
-  }
-
-  /** Closes one open question that nobody answered, for example because `ssh` dropped it; false when none is open. */
-  close(promptId: number): boolean {
-    return this.prompts.delete(promptId);
-  }
-
-  /** Closes every open question, for a login that ended; returns their numbers. */
-  closeAll(): number[] {
-    const closed = [...this.prompts.keys()];
-    this.prompts.clear();
-    return closed;
   }
 }

@@ -13,7 +13,9 @@ import type {
   RequestContext,
   Scheduler,
 } from 'lib-helper';
-import {AskpassEndpoint} from '../askpass/endpoint.ts';
+import {AskpassEndpoint} from 'lib-helper';
+import {classifyPrompt} from '../prompts/classify.ts';
+import type {PromptSurface} from './messages.ts';
 import type {Invocation} from '../arguments/invocation.ts';
 import {classify} from '../diagnostics/classify.ts';
 import {setupMarkerOf} from '../diagnostics/setup-report.ts';
@@ -71,7 +73,7 @@ type ConnectionState = 'idle' | 'connecting' | 'connected';
 export class ConnectionHandler implements MessageHandler {
   private readonly options: ConnectionHandlerOptions;
   private readonly ownership: LoginOwnership;
-  private readonly askpass: AskpassEndpoint;
+  private readonly askpass: AskpassEndpoint<PromptSurface>;
   private control!: HelperControl;
   private wait: ConnectWait | undefined;
   private runs: ShellRuns | undefined;
@@ -88,8 +90,10 @@ export class ConnectionHandler implements MessageHandler {
     this.ownership = new LoginOwnership(owner => {
       this.tell({type: 'ownerChanged', owner});
     });
+    const {displayHost, ...askpass} = options.askpass;
     this.askpass = new AskpassEndpoint({
-      ...options.askpass,
+      ...askpass,
+      classify: text => classifyPrompt(text, displayHost).surface,
       scheduler: options.scheduler,
       logLine: options.logLine,
       onPrompt: prompt => {

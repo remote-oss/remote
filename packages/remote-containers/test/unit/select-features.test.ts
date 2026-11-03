@@ -8,6 +8,7 @@ import {
 } from '../../src/authoring/select-features.ts';
 import {
   BACK_BUTTON,
+  finishWith,
   FINISH_BUTTON,
   type FakeOptionPicker,
   pressBack,
@@ -43,16 +44,6 @@ const FEATURES = [
   featureOf('Unowned', undefined, '10.1.0'),
   featureOf('Lookalike', 'devcontainers-community'),
 ];
-
-/** The step that checks `labels` and presses the title-bar Finish. */
-function finishWith(labels: readonly string[]): Step {
-  return picker => {
-    picker.selectedItems = picker.items.filter(each =>
-      labels.includes(each.label),
-    );
-    picker.trigger(FINISH_BUTTON);
-  };
-}
 
 /** The step that checks `labels` and presses OK. */
 function okWith(labels: readonly string[]): Step {

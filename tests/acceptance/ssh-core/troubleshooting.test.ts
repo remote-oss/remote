@@ -4,6 +4,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {writeFileSync} from 'node:fs';
 import {
   appendScript,
   closeWindow,
@@ -15,6 +16,7 @@ import {
   recordLines,
   restoreUserSettings,
   userSettings,
+  variable,
   waitFor,
 } from '../windows/harness.ts';
 import {hintRecords} from '../windows/hint-store.ts';
@@ -36,14 +38,55 @@ const CLEAR = 'opensshremotes.clearAllSessionHints';
 /** How long the terminal has, after the failure dialog, to be among the terminals: about a second, and a margin. */
 const TERMINAL_MILLISECONDS = 5_000;
 
-/** Opens window `name` on `nowhere`, whose name never resolves, and waits until its failure dialog was shown. */
-async function failed(name: string): Promise<void> {
-  appendScript(dismissals(name));
-  await openWindow('nowhere', name);
+/** Opens window `name` on `alias` and waits until its failure dialog was shown. */
+async function failedOn(alias: string, name: string): Promise<void> {
+  await openWindow(alias, name);
   await waitFor(
     `the failure dialog of ${name}`,
     () => recordLines('failureDialog', name).length > 0,
     INSTALL_MILLISECONDS,
+  );
+}
+
+/** Opens window `name` on `nowhere`, whose name never resolves, and waits until its failure dialog was shown. */
+async function failed(name: string): Promise<void> {
+  appendScript(dismissals(name));
+  await failedOn('nowhere', name);
+}
+
+/** Waits for the troubleshooting terminal of window `name`, and gives the lines of its table, whitespace as spaces. */
+async function tableOf(name: string): Promise<string[]> {
+  await waitFor(
+    'the troubleshooting terminal',
+    async () => (await troubleshootingTabs(name)).length > 0,
+    TERMINAL_MILLISECONDS,
+  );
+  return (await terminalText(name))
+    .replaceAll('\u00a0', ' ')
+    .split('\n')
+    .map(line => line.trimEnd())
+    .filter(line => /^[╔║╟╚]/u.test(line));
+}
+
+/** The cells of a table row, trimmed. */
+function cellsOf(line: string | undefined): string[] {
+  return (line ?? '')
+    .replace(/^║|║$/gu, '')
+    .split('│')
+    .map(cell => cell.trim());
+}
+
+/** The cells of the first data row of `table`, each with its wrapped lines joined by one space. */
+function firstRowOf(table: readonly string[]): string[] {
+  const end = table.findIndex(
+    (line, index) => index > 2 && /^[╟╚]/u.test(line),
+  );
+  const lines = table.slice(3, end).map(cellsOf);
+  return (lines[0] ?? []).map((unused, column) =>
+    lines
+      .map(cells => cells[column] ?? '')
+      .filter(cell => cell !== '')
+      .join(' '),
   );
 }
 
@@ -239,6 +282,108 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
         'remote.SSH.experimental.enhancedSessionLogs': undefined,
       });
       await closeWindow('c136-e').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-4 (c136-timeout): a host that does not answer gives the two-column table with the OfflineError row', async () => {
+    await userSettings({'remote.SSH.connectTimeout': 5});
+    appendScript(dismissals('c136-f'));
+    await failedOn('blackhole', 'c136-f');
+    try {
+      const table = await tableOf('c136-f');
+      deepStrictEqual(
+        [cellsOf(table[1]), firstRowOf(table)],
+        [
+          ['Status', 'Message'],
+          ['OfflineError', 'Error: OfflineError (The connection timed out)'],
+        ],
+      );
+    } finally {
+      await userSettings({'remote.SSH.connectTimeout': undefined});
+      await closeWindow('c136-f').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-6 (c136-password): three wrong passwords give the PermissionDenied row', async () => {
+    appendScript([
+      ...[1, 2, 3].map(() => ({
+        surface: 'maskedInput' as const,
+        match: 'password',
+        answer: {text: 'wrong-password'},
+        window: 'c136-g',
+      })),
+      ...dismissals('c136-g'),
+    ]);
+    await failedOn('password-retry', 'c136-g');
+    try {
+      const table = await tableOf('c136-g');
+      deepStrictEqual(
+        [cellsOf(table[1]), firstRowOf(table)],
+        [
+          ['Status', 'Message'],
+          [
+            'PermissionDenied',
+            'Error: PermissionDenied (Permission denied (password).)',
+          ],
+        ],
+      );
+    } finally {
+      await closeWindow('c136-g').catch(() => undefined);
+    }
+  });
+
+  /** Fails window `name` with the chat key `value` and gives whether its terminal has a Copilot line. */
+  async function copilotLine(name: string, value: boolean): Promise<boolean> {
+    await userSettings({'remote.SSH.experimental.chat': value});
+    await failed(name);
+    try {
+      await tableOf(name);
+      return /Copilot|Cmd\+click/u.test(await terminalText(name));
+    } finally {
+      await userSettings({'remote.SSH.experimental.chat': undefined});
+      await closeWindow(name).catch(() => undefined);
+    }
+  }
+
+  it('F-2605 AC-24 (c136-chat-true): with the chat key true the terminal has no Copilot line', async () => {
+    deepStrictEqual(await copilotLine('c136-chat-true', true), false);
+  });
+
+  it('F-2605 AC-24 (c136-chat-false): with the chat key false the terminal has no Copilot line', async () => {
+    deepStrictEqual(await copilotLine('c136-chat-false', false), false);
+  });
+
+  it('F-2605 AC-13 (c136-hostkey): cancelling the host-key question of a new host opens no terminal and records no error hint', async () => {
+    writeFileSync(`${variable('HARNESS_RUN_FOLDER')}/known_hosts_stranger`, '');
+    await inWindow('local', CLEAR);
+    appendScript([
+      {
+        surface: 'pick',
+        match: 'Are you sure',
+        answer: 'dismiss',
+        window: 'c136-h',
+      },
+      ...dismissals('c136-h'),
+    ] as const);
+    await failedOn('stranger', 'c136-h');
+    try {
+      await waitFor(
+        'the record of the attempt',
+        () => hintRecords().length > 0,
+        60_000,
+      );
+      deepStrictEqual(
+        [
+          recordLines('pick', 'c136-h').length,
+          await troubleshootingTabs('c136-h'),
+          hintRecords().flatMap(record =>
+            record.hints.filter(hint => hint.kind === 'error'),
+          ),
+        ],
+        [1, [], []],
+      );
+    } finally {
+      await closeWindow('c136-h').catch(() => undefined);
     }
   });
 });

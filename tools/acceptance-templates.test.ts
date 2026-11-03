@@ -640,6 +640,16 @@ describe('the run templates', () => {
                 CUSTOM_FEATURES_NAMESPACE,
               ),
             ],
+            ...[1, 2].map(() => [
+              process.execPath,
+              ...publishArguments(
+                bundledCli,
+                'features',
+                path.join(runFolder, 'templates', 'features-majors', 'src'),
+                'localhost:49200',
+                CUSTOM_FEATURES_NAMESPACE,
+              ),
+            ]),
           ],
           PUBLISHED_TEMPLATES,
           manifestWithoutMetadata(MANIFEST),
@@ -647,6 +657,76 @@ describe('the run templates', () => {
             name => `localhost:49200/${CUSTOM_NAMESPACE}/${name}`,
           ),
           CUSTOM_FEATURE_IDS.map(featureId => `localhost:49200/${featureId}`),
+        ],
+      );
+    });
+
+    it('tooling-119: lab-majors is published twice from a folder of its own, at 1.0.0 and then 2.0.0, and the run’s index does not list it', async () => {
+      const {root, runFolder, calls} = preparedRun();
+      const majors = path.join(
+        runFolder,
+        'templates',
+        'features-majors',
+        'src',
+        'lab-majors',
+        'devcontainer-feature.json',
+      );
+      const versions: string[] = [];
+      function command(
+        program: string,
+        parameters: readonly string[],
+      ): CommandResult {
+        calls.push([program, ...parameters]);
+        if (parameters.includes(path.dirname(path.dirname(majors)))) {
+          versions.push(
+            (JSON.parse(readFileSync(majors, 'utf8')) as {version: string})
+              .version,
+          );
+        }
+        return {
+          status: 0,
+          stdout: parameters.includes('fetch') ? MANIFEST : '',
+          stderr: '',
+        };
+      }
+      await prepareRunTemplates(
+        command,
+        root,
+        runFolder,
+        '127.0.0.1:49202',
+        counting().fetchLayer,
+        [],
+        'remote-oss-acceptance-devcontainer:run-1',
+      );
+      const index = JSON.parse(
+        readFileSync(
+          path.join(
+            servedTemplatesFolder(runFolder),
+            'devcontainer-index.json',
+          ),
+          'utf8',
+        ),
+      ) as {collections: Array<{features?: Array<{id: string}>}>};
+      deepStrictEqual(
+        [
+          versions,
+          index.collections
+            .flatMap(collection =>
+              (collection.features ?? []).map(feature => feature.id),
+            )
+            .filter(featureId => featureId.includes('lab-majors')),
+          JSON.parse(readFileSync(majors, 'utf8')),
+        ],
+        [
+          ['1.0.0', '2.0.0'],
+          [],
+          {
+            id: 'lab-majors',
+            version: '2.0.0',
+            name: 'Lab Majors',
+            description:
+              "The acceptance run's own Feature published at two majors.",
+          },
         ],
       );
     });

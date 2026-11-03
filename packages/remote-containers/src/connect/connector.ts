@@ -190,6 +190,8 @@ export interface ContainerConnectorDependencies {
   folderExists(folder: string): Promise<boolean>;
   /** The program a read before the trust answer is given (see `noEngineProgramOf`). */
   noEngineProgram: string;
+  /** The client's platform, as `process.platform` names it. */
+  clientPlatform: string;
   /** The configuration files of a folder, in the order of the picker. */
   discoverConfigurations(
     folder: string,
@@ -1095,6 +1097,7 @@ export function containerConnectorOf(
         dockerPath,
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
+        windowsClient: dependencies.clientPlatform === 'win32',
         workspaceMountConsistency: workspaceMountConsistencyOf(
           settings.workspaceMountConsistency,
           settings.legacyWorkspaceMountConsistency,
@@ -1110,6 +1113,10 @@ export function containerConnectorOf(
         mounts: Array.isArray(read?.configuration.mounts)
           ? read.configuration.mounts
           : [],
+        runArgs: Array.isArray(read?.configuration.runArgs)
+          ? read.configuration.runArgs
+          : [],
+        workspaceMount: read?.configuration.workspaceMount,
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}

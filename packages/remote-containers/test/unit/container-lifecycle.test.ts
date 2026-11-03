@@ -51,6 +51,9 @@ const REQUEST: ContainerRequest = {
   mountGitWorktreeCommonDir: false,
   features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
+  windowsClient: false,
+  runArgs: [],
+  workspaceMount: undefined,
   pausedRetry: () => Promise.resolve(false),
 };
 const UP: UpResult = {
@@ -222,6 +225,7 @@ function fakeBridge(): FakeBridge {
       return Promise.resolve(bridge.configuration);
     },
     applyTemplate: () => Promise.reject(new Error('never applied')),
+    outdated: () => Promise.reject(new Error('never read')),
     templateMetadata: () => Promise.reject(new Error('never read')),
   };
   return bridge;
@@ -2040,14 +2044,143 @@ describe('containerLifecycleOf', () => {
     deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);
   });
 
-  it('F-0419 AC-20: an image configuration is not checked here', async () => {
-    const bridge = fakeBridge();
+  /** What a prepare of an image configuration does with the cache volume on and the properties it is given. */
+  async function imageRun(
+    changes: Partial<ContainerRequest>,
+  ): Promise<{outcome: ContainerOutcome; ups: number; commands: unknown[]}> {
+    const scene = composeLifecycle({kind: 'none'});
     const outcome = await prepareOf(
-      composeLifecycle({kind: 'none'}, bridge).lifecycle,
+      scene.lifecycle,
       new AbortController().signal,
-      {...REQUEST, mounts: ['type=volume,source=d,target=/vscode']},
+      {...REQUEST, ...changes},
     );
-    deepStrictEqual([outcome.kind, bridge.ups.length], ['ready', 1]);
+    return {
+      outcome,
+      ups: scene.bridge.ups.length,
+      commands: scene.engine.commands,
+    };
+  }
+
+  it('F-0419 AC-14: a mounts entry at /vscode fails an image configuration naming mounts, before the engine or the CLI is asked for anything', async () => {
+    deepStrictEqual(
+      await imageRun({mounts: ['type=volume,source=d,target=/vscode/data']}),
+      {
+        outcome: {
+          kind: 'reservedMount',
+          property: 'mounts',
+          target: '/vscode/data',
+        },
+        ups: 0,
+        commands: [],
+      },
+    );
+  });
+
+  for (const runArgs of [
+    ['-v', 'data:/vscode/x'],
+    ['--volume=data:/vscode'],
+    ['--volume', '/vscode'],
+    ['--mount', 'type=bind,source=/s,target=/vscode'],
+    ['--mount=type=volume,source=d,dst=/vscode/y'],
+  ]) {
+    it(`F-0419 AC-23: runArgs ${JSON.stringify(runArgs)} fail an image configuration naming runArgs, before anything is asked`, async () => {
+      const run = await imageRun({runArgs});
+      deepStrictEqual(
+        [
+          run.outcome.kind,
+          'property' in run.outcome ? run.outcome.property : undefined,
+          run.ups,
+          run.commands,
+        ],
+        ['reservedMount', 'runArgs', 0, []],
+      );
+    });
+  }
+
+  it('F-0419 AC-23: a workspaceMount at /vscode fails an image configuration naming workspaceMount', async () => {
+    deepStrictEqual(
+      await imageRun({
+        workspaceMount: 'source=/work,target=/vscode,type=bind',
+      }),
+      {
+        outcome: {
+          kind: 'reservedMount',
+          property: 'workspaceMount',
+          target: '/vscode',
+        },
+        ups: 0,
+        commands: [],
+      },
+    );
+  });
+
+  it('F-0419 AC-14: the first reserved property is reported, in the order mounts, runArgs, workspaceMount', async () => {
+    const run = await imageRun({
+      mounts: ['type=volume,source=d,target=/data'],
+      runArgs: ['-v', 'data:/vscode'],
+      workspaceMount: 'source=/work,target=/vscode,type=bind',
+    });
+    deepStrictEqual(
+      'property' in run.outcome ? run.outcome.property : undefined,
+      'runArgs',
+    );
+  });
+
+  it('F-0419 AC-14: a volume named vscode mounted outside /vscode, /vscodex and options that name no target are no collision', async () => {
+    const run = await imageRun({
+      mounts: ['type=volume,source=vscode,target=/cache'],
+      runArgs: [
+        '-v',
+        'vscode:/cache',
+        '--mount',
+        'type=tmpfs',
+        '-v',
+        '/vscodex',
+        '--rm',
+        1,
+        '-v',
+      ],
+      workspaceMount: 'source=/work,target=/vscodex,type=bind',
+    });
+    deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);
+  });
+
+  it('F-0419 AC-23: a single letter before :/ is a volume name off Windows, which fails, and a drive on Windows, which is no collision', async () => {
+    const runArgs = ['-v', 'x:/vscode'];
+    const linux = await imageRun({runArgs, windowsClient: false});
+    const windows = await imageRun({runArgs, windowsClient: true});
+    deepStrictEqual(
+      [linux.outcome.kind, windows.outcome.kind],
+      ['reservedMount', 'ready'],
+    );
+  });
+
+  it('F-0419 7.E2: with cacheVolume off a reserved target of an image configuration is not checked', async () => {
+    const run = await imageRun({
+      cacheVolume: false,
+      mounts: ['type=volume,source=d,target=/vscode'],
+      runArgs: ['-v', 'data:/vscode'],
+      workspaceMount: 'source=/work,target=/vscode,type=bind',
+    });
+    deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);
+  });
+
+  it('F-0419 AC-22: a rebuild with a reserved target fails before the old container is removed or anything is created', async () => {
+    deepStrictEqual(
+      await imageRun({
+        rebuild: {buildNoCache: false},
+        mounts: ['type=volume,source=d,target=/vscode'],
+      }),
+      {
+        outcome: {
+          kind: 'reservedMount',
+          property: 'mounts',
+          target: '/vscode',
+        },
+        ups: 0,
+        commands: [],
+      },
+    );
   });
 
   /** The bridges of a Compose project and of an image configuration, each after its prepare. */

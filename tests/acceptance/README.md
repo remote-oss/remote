@@ -123,6 +123,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
 
+- `ssh-containers`: a plain launch with the renderer helpers, Dev Containers installed beside Remote - SSH, and the run's registry and templates; `ssh-containers/*.test.ts` opens windows on the SSH host and runs Dev Containers' commands in them, which edit a configuration where it lives (F-0807's rows). It is in the `containers` group.
+
 - `no-proposals`: the same without the proposed API.
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
@@ -635,8 +637,15 @@ The HTTPS certificate is the run's own, made in Node for `downloads` and `update
 host's BusyBox `wget` verifies certificates through `ssl_client`, so an HTTPS download from it fails unless
 `--no-check-certificate` is given (measured on the host's image).
 
-The harness host reaches it by `--add-host downloads:host-gateway` and `--add-host
-update.code.visualstudio.com:host-gateway`; the editor reaches it on `127.0.0.1`. The launches get
+The harness host reaches it by `--add-host downloads:<address>` and `--add-host
+update.code.visualstudio.com:<address>`, and the editor reaches it on `127.0.0.1`. `clientReachOf` gives the address and
+where the host listens, by the client's platform, and the host never listens on every interface:
+- **Linux:** `host-gateway`, with the host also listening on Docker's bridge gateway.
+- **macOS (colima):** the address lima gives `host.lima.internal`, looked up in a container; lima forwards it to the
+  client's loopback, so the host listens on `127.0.0.1` only.
+- **Windows (Docker in WSL2):** the distro's default gateway, the Windows side's WSL adapter, where the host also listens.
+
+The launches get
 `HARNESS_DOWNLOADS_HTTP`, `HARNESS_DOWNLOADS_HTTPS` and `HARNESS_DOWNLOADS_LICENSED` (the update service's name), the
 bases as the harness host sees them, `HARNESS_DOWNLOADS_LOCAL`, the editor's base, and `HARNESS_DOWNLOADS_LOG`, the
 request log, one line per request: time, method, path and user agent, and `HARNESS_DOWNLOADS_TLS_LOG`, the file

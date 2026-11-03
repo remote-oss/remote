@@ -1,0 +1,107 @@
+# The acceptance suite with a Windows and a macOS client, on GitHub's hosted runners. On a schedule and by dispatch only,
+# never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
+#
+# - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
+#   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
+#   image runs Windows containers only). VSCodium answers on its debugging port there.
+# - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
+#
+# Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
+# summary. The run folder holds keys, so it is never uploaded.
+name: platform
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+    inputs:
+      windows-launches:
+        description: The launches of the Windows job, joined by commas; none skips the job
+        type: string
+        default: containers-a,containers-b,containers-trust,local,remote
+      macos-launches:
+        description: The launches of the macOS job, joined by commas; none skips the job
+        type: string
+        default: containers-a,containers-b,containers-trust,local,remote
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    if: github.event_name == 'schedule' || inputs.windows-launches != 'none'
+    runs-on: windows-2025
+    timeout-minutes: 240
+    concurrency:
+      group: platform-windows-${{ github.ref }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+      WSL_UTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The Linux side, an Ubuntu distro in WSL2 with its own Docker engine
+        timeout-minutes: 30
+        run: |
+          wsl --install Ubuntu-24.04 --no-launch --web-download
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
+          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener on the distro's loopback only: the
+          # Docker API is unauthenticated and root there, and WSL2's localhost forwarding carries it to Windows' 127.0.0.1
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
+          # a wsl.exe that stays, so the distro and its engine outlive this step
+          Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
+          $up = $false
+          for ($i = 0; $i -lt 60 -and -not $up; $i++) {
+            Start-Sleep 2
+            docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
+            $up = $LASTEXITCODE -eq 0
+          }
+          if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
+          "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+      # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
+      # to Node on that adapter only
+      - name: The download host is reached from the WSL distro
+        run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
+      - name: The launches
+        run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+      - if: always()
+        run: pnpm acceptance:clean
+
+  macos:
+    if: github.event_name == 'schedule' || inputs.macos-launches != 'none'
+    runs-on: macos-15-intel
+    timeout-minutes: 240
+    concurrency:
+      group: platform-macos-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      LAUNCHES: ${{ inputs.macos-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Docker for linux/x86_64 through colima
+        timeout-minutes: 25
+        run: |
+          brew install colima docker docker-buildx >/dev/null
+          mkdir -p ~/.docker && printf '{"cliPluginsExtraDirs": ["%s/lib/docker/cli-plugins"]}\n' "$(brew --prefix)" > ~/.docker/config.json
+          colima start --cpu 3 --memory 8
+          docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          docker buildx version
+      - name: The launches
+        run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
+      - if: always()
+        run: pnpm acceptance:clean

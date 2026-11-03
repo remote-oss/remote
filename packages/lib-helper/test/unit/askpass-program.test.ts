@@ -213,7 +213,7 @@ describe('askpass over a socket', () => {
     const port = nodeEndpointPort(process.platform);
     const endpoint = new AskpassEndpoint({
       nonce: NONCE,
-      displayHost: 'h.invalid',
+      classify: () => 'maskedInput',
       scheduler: {setTimer: () => () => undefined},
       firstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
       logLine: () => undefined,

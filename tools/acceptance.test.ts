@@ -264,6 +264,7 @@ class FakeHarness implements HarnessDependencies {
         HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080',
         HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:8080',
       },
+      containerAddress: 'host-gateway',
       stop: () => {
         this.calls.push('downloads stopped');
         return Promise.resolve();
@@ -460,6 +461,7 @@ const LAUNCH_ORDER = [
   'agent-notmp',
   'default-ports',
   'ssh-core',
+  'ssh-containers',
   'no-proposals',
   'explorer',
   'explorer-alone',
@@ -1425,6 +1427,7 @@ describe('acceptance', () => {
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
             client: 'vscodium',
           },
+          containersOnly('ssh-containers'),
           ...[
             'explorer',
             'explorer-alone',

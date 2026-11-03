@@ -393,6 +393,8 @@ export function sceneOf(
     },
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
+    outdated: () =>
+      Promise.reject(new Error('the connector never checks versions')),
     templateMetadata: () =>
       Promise.reject(new Error('the connector never reads template metadata')),
   };
@@ -416,6 +418,7 @@ export function sceneOf(
   let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
     noEngineProgram: noEngineProgramOf(FIXTURE_STORAGE),
+    clientPlatform: 'linux',
     folderExists: () => Promise.resolve(scene.folderExists),
     discoverConfigurations: () => Promise.resolve(scene.candidates),
     shutdown: {

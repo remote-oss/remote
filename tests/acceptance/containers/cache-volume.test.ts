@@ -13,6 +13,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
+  activeEditorOf,
   closeWindow,
   connectedToContainer,
   containersLog,
@@ -28,6 +29,7 @@ import {
   userScopeHolds,
   variable,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {
   openFolderWindow,
@@ -480,104 +482,180 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
     }
   });
 
-  /** Opens `folder` and gives what the failed connect shows and leaves: its dialog, the folder's containers, and the volumes. */
-  async function collisionOutcome(
-    folder: string,
-    volumes: readonly string[],
-  ): Promise<{
-    dialog: string;
+  /** The names of the volumes of the daemon. */
+  async function volumeNames(): Promise<string[]> {
+    return (await docker('volume', 'ls', '-q'))
+      .split('\n')
+      .filter(line => line !== '');
+  }
+
+  /** The text the collision dialog gives for `property` mounting `target`. */
+  function reserved(property: string, target: string): string {
+    return `'${property}' mounts '${target}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.`;
+  }
+
+  /** What a failed collision attempt shows and leaves: the dialog, its buttons, and what exists on the daemon. */
+  interface Collision {
+    details: string;
+    buttons: string[];
     containers: string[];
-    retried: string;
-    containersAfterRetry: string[];
-    existing: Array<string | undefined>;
-  }> {
-    const name = await openFolderWindow(folder);
-    await startInWindow(name, 'remote-containers.reopenInContainer');
-    const shown = await waitForDialog(name, 300_000);
-    const containers = await devContainersOf(folder);
-    await answerDialog(name, 'Retry');
-    const again = await waitForDialog(name, 300_000);
-    const containersAfterRetry = await devContainersOf(folder);
-    await answerDialog(name, 'Cancel').catch(() => undefined);
-    const existing = await Promise.all(volumes.map(each => createdAtOf(each)));
-    await closeWindow(name);
+    volumes: string[];
+  }
+
+  /** Reads the dialog of window `name`, with the folder's containers and the daemon's volumes at that moment. */
+  async function collisionOf(name: string, folder: string): Promise<Collision> {
+    const dialog = await waitForDialog(name, 300_000);
     return {
-      dialog: shown.details,
-      containers,
-      retried: again.details,
-      containersAfterRetry,
-      existing,
+      details: dialog.details,
+      buttons: dialog.buttons,
+      containers: await devContainersOf(folder),
+      volumes: await volumeNames(),
     };
   }
 
-  it('F-0419 AC-14, AC-33 (c14): a mounts entry at /vscode makes the S034 dialog, no container, and Retry shows the same dialog again; both volumes are left on the host', async () => {
-    await docker('volume', 'rm', 'c53v-own').catch(() => undefined);
+  /** Removes the volumes the rows of the collision create, and the `vscode` volume. */
+  async function noCollisionVolumes(...own: string[]): Promise<void> {
+    await noVscodeVolume();
+    for (const volume of own) {
+      await docker('volume', 'rm', '--force', volume).catch(() => undefined);
+    }
+  }
+
+  it('F-0419 AC-14, AC-33 (c14): a mounts entry at /vscode fails before anything is created with a dialog naming /vscode and mounts, Retry gives it again, and a mount of the vscode volume at /cache connects with it at both targets', async () => {
+    await noCollisionVolumes('c53v-own');
     const folder = devContainerFolder('c53v-mounts', {
       name: 'Volume Mounts',
-      mounts: ['source=c53v-own,target=/vscode,type=volume'],
+      mounts: ['source=c53v-own,target=/vscode/data,type=volume'],
     });
+    const name = await openFolderWindow(folder);
     try {
-      const outcome = await collisionOutcome(folder, ['vscode', 'c53v-own']);
-      console.log(`c53v c14: ${JSON.stringify(outcome)}`);
+      await startInWindow(name, 'remote-containers.reopenInContainer');
+      const first = await collisionOf(name, folder);
+      await answerDialog(name, 'Retry');
+      const again = await collisionOf(name, folder);
+      await answerDialog(name, 'Edit devcontainer.json Locally');
+      await waitFor(
+        'the configuration file to be open in a local window',
+        async () =>
+          (await activeEditorOf(name).catch(() => null)) ===
+          path.join(folder, '.devcontainer', 'devcontainer.json'),
+        60_000,
+      );
+      const local = await windowState(name);
       deepStrictEqual(
         {
-          dialog: outcome.dialog,
-          containers: outcome.containers,
-          retried: outcome.retried,
-          containersAfterRetry: outcome.containersAfterRetry,
-          existing: outcome.existing.map(each => each !== undefined),
+          dialogs: [first.details, again.details],
+          offered: [first.buttons, again.buttons],
+          containers: [first.containers, again.containers],
+          volumes: [first.volumes, again.volumes].map(
+            names => names.includes('vscode') || names.includes('c53v-own'),
+          ),
+          remote: local.remoteName,
         },
         {
-          dialog: S034,
-          containers: [],
-          retried: S034,
-          containersAfterRetry: [],
-          existing: [true, true],
+          dialogs: [
+            reserved('mounts', '/vscode/data'),
+            reserved('mounts', '/vscode/data'),
+          ],
+          offered: [
+            ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+            ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          ],
+          containers: [[], []],
+          volumes: [false, false],
+          remote: null,
         },
       );
     } finally {
+      await closeWindow(name).catch(() => undefined);
       await removeContainers(folder);
-      await docker('volume', 'rm', 'c53v-own').catch(() => undefined);
+      await docker('volume', 'rm', '--force', 'c53v-own').catch(
+        () => undefined,
+      );
     }
   });
 
-  it('F-0419 AC-23 (c23): runArgs that mount a volume at /vscode, and a workspaceMount at /vscode, make the S034 dialog and no container, with the vscode volume left unattached', async () => {
-    await docker('volume', 'rm', 'c53v-run').catch(() => undefined);
-    const byRunArgs = devContainerFolder('c53v-runargs', {
-      name: 'Volume RunArgs',
-      runArgs: ['-v', 'c53v-run:/vscode'],
-    });
-    const byWorkspaceMount = devContainerFolder('c53v-wsmount', {
-      name: 'Volume WorkspaceMount',
-      workspaceMount: 'source=c53v-run,target=/vscode,type=volume',
+  it('F-0419 AC-14 (c14-cache): a mounts entry that names the vscode volume at /cache is no collision: the container connects with the volume at /vscode and at /cache', async () => {
+    await noVscodeVolume();
+    const folder = devContainerFolder('c53v-cache', {
+      name: 'Volume Cache',
+      mounts: ['source=vscode,target=/cache,type=volume'],
     });
     try {
-      const outcomes = [];
-      for (const folder of [byRunArgs, byWorkspaceMount]) {
-        const outcome = await collisionOutcome(folder, ['vscode']);
-        console.log(`c53v c23 ${folder}: ${JSON.stringify(outcome)}`);
-        outcomes.push([
-          outcome.dialog,
-          outcome.containers,
-          outcome.existing.map(each => each !== undefined),
-        ]);
-      }
-      console.log(`c53v c23: ${JSON.stringify(outcomes)}`);
-      deepStrictEqual(outcomes, [
-        [S034, [], [true]],
-        [S034, [], [true]],
-      ]);
+      const {name, containerId} = await opened(folder);
+      const mounts = (await mountsOf(containerId))
+        .filter(each => each.Name === 'vscode')
+        .map(each => each.Destination)
+        .sort();
+      await closeWindow(name);
+      deepStrictEqual(mounts, ['/cache', '/vscode']);
     } finally {
-      await removeContainers(byRunArgs);
-      await removeContainers(byWorkspaceMount);
-      await docker('volume', 'rm', 'c53v-run').catch(() => undefined);
+      await removeContainers(folder);
     }
   });
 
-  it('F-0419 AC-22 (c22): a mounts entry at /vscode added to an existing container’s configuration makes the S034 dialog on Rebuild, leaves no container, and the vscode volume stays unattached', async () => {
+  it('F-0419 AC-23 (c23): runArgs with -v (also attached), --volume= and --mount at /vscode, and a workspaceMount at /vscode, each fail before anything is created with a dialog naming the property', async () => {
+    await noCollisionVolumes('c53v-run');
+    const cases: Array<[string, string, Record<string, unknown>]> = [
+      ['runArgs', '/vscode', {runArgs: ['-v', 'c53v-run:/vscode']}],
+      ['runArgs', '/vscode/x', {runArgs: ['--volume=c53v-run:/vscode/x']}],
+      ['runArgs', '/vscode', {runArgs: ['-vc53v-run:/vscode']}],
+      [
+        'runArgs',
+        '/vscode',
+        {runArgs: ['--mount', 'type=volume,source=c53v-run,target=/vscode']},
+      ],
+      [
+        'workspaceMount',
+        '/vscode',
+        {workspaceMount: 'source=c53v-run,target=/vscode,type=volume'},
+      ],
+    ];
+    const seen: Array<[string, string[], boolean]> = [];
+    const folders: string[] = [];
+    try {
+      for (const [index, [, , configuration]] of cases.entries()) {
+        const folder = devContainerFolder(`c53v-run-${String(index)}`, {
+          name: 'Volume Run',
+          ...configuration,
+        });
+        folders.push(folder);
+        const name = await openFolderWindow(folder);
+        try {
+          await startInWindow(name, 'remote-containers.reopenInContainer');
+          const outcome = await collisionOf(name, folder);
+          seen.push([
+            outcome.details,
+            outcome.containers,
+            outcome.volumes.includes('vscode') ||
+              outcome.volumes.includes('c53v-run'),
+          ]);
+        } finally {
+          await answerDialog(name, 'Cancel').catch(() => undefined);
+          await closeWindow(name).catch(() => undefined);
+        }
+      }
+      deepStrictEqual(
+        seen,
+        cases.map(([property, target]) => [
+          reserved(property, target),
+          [],
+          false,
+        ]),
+      );
+    } finally {
+      for (const folder of folders) {
+        await removeContainers(folder);
+      }
+    }
+  });
+
+  it('F-0419 AC-22 (c22): a mounts entry at /vscode added to an existing container’s configuration fails the Rebuild with the dialog before the old container is removed, and nothing new is created', async () => {
+    await noCollisionVolumes('c53v-added');
     const folder = devContainerFolder('c53v-added', {name: 'Volume Added'});
     try {
       const {name, containerId} = await opened(folder);
+      const volumesBefore = await volumeNames();
       const file = path.join(folder, '.devcontainer', 'devcontainer.json');
       const configuration = JSON.parse(readFileSync(file, 'utf8')) as Record<
         string,
@@ -591,36 +669,98 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
         }),
       );
       await reloadingCommand(name, 'remote-containers.rebuildContainer');
-      const dialog = await waitForDialog(name, 300_000);
-      const containers = await devContainersOf(folder);
-      const holders = await docker(
-        'ps',
-        '--all',
-        '--quiet',
-        '--filter',
-        'volume=vscode',
-      );
+      const outcome = await collisionOf(name, folder);
       await answerDialog(name, 'Edit devcontainer.json Locally');
       await closeWindow(name);
       deepStrictEqual(
         {
-          dialog: dialog.details,
-          containers,
-          held: holders === '' ? [] : holders.split('\n'),
-          volume: (await createdAtOf('vscode')) !== undefined,
-          replaced: containerId !== '',
+          details: outcome.details,
+          containers: outcome.containers,
+          sameContainer: containerId !== '',
+          newVolumes: outcome.volumes.filter(
+            volume => !volumesBefore.includes(volume),
+          ),
         },
         {
-          dialog: S034,
-          containers: [],
-          held: [],
-          volume: true,
-          replaced: true,
+          details: reserved('mounts', '/vscode'),
+          containers: [containerId],
+          sameContainer: true,
+          newVolumes: [],
         },
       );
     } finally {
       await removeContainers(folder);
-      await docker('volume', 'rm', 'c53v-added').catch(() => undefined);
+      await docker('volume', 'rm', '--force', 'c53v-added').catch(
+        () => undefined,
+      );
+    }
+  });
+
+  it('containers-148 (c43): F-0419 7.E2, after the collision dialog, a mounts entry retargeted to /data connects with the vscode volume at /vscode', async () => {
+    await noCollisionVolumes('c53v-retarget');
+    const folder = devContainerFolder('c53v-retarget', {
+      name: 'Volume Retarget',
+      mounts: ['source=c53v-retarget,target=/vscode,type=volume'],
+    });
+    const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+    const first = await openFolderWindow(folder);
+    try {
+      await startInWindow(first, 'remote-containers.reopenInContainer');
+      const shown = await collisionOf(first, folder);
+      await answerDialog(first, 'Edit devcontainer.json Locally');
+      await waitFor(
+        'the configuration file to be open in a local window',
+        async () => (await activeEditorOf(first).catch(() => null)) === file,
+        60_000,
+      );
+      const configuration = JSON.parse(readFileSync(file, 'utf8')) as Record<
+        string,
+        unknown
+      >;
+      writeFileSync(
+        file,
+        JSON.stringify({
+          ...configuration,
+          mounts: ['source=c53v-retarget,target=/data,type=volume'],
+        }),
+      );
+      await reopenInContainer(first);
+      const [containerId = ''] = await devContainersOf(folder);
+      deepStrictEqual(
+        [shown.details, await vscodeMountOf(containerId)],
+        [reserved('mounts', '/vscode'), ['volume', 'vscode', true]],
+      );
+    } finally {
+      await closeWindow(first).catch(() => undefined);
+      await removeContainers(folder);
+      await docker('volume', 'rm', '--force', 'c53v-retarget').catch(
+        () => undefined,
+      );
+    }
+  });
+
+  it('containers-148 (c44): F-0419 7.E2, with cacheVolume false a mounts entry at /vscode is no collision: the window connects with the mount as written and no vscode volume exists', async () => {
+    await noCollisionVolumes('c53v-off');
+    await setUserSetting('dev.containers.cacheVolume', false);
+    const folder = devContainerFolder('c53v-off', {
+      name: 'Volume Off',
+      mounts: ['source=c53v-off,target=/vscode,type=volume'],
+    });
+    try {
+      const {name, containerId} = await opened(folder);
+      const mount = await vscodeMountOf(containerId);
+      const volumes = await volumeNames();
+      await closeWindow(name);
+      deepStrictEqual(
+        [mount?.[1], volumes.includes('vscode'), volumes.includes('c53v-off')],
+        ['c53v-off', false, true],
+      );
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
+      await docker('volume', 'rm', '--force', 'c53v-off').catch(
+        () => undefined,
+      );
     }
   });
 

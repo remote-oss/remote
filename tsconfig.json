@@ -152,6 +152,9 @@
       "path": "tests/acceptance/ssh-core"
     },
     {
+      "path": "tests/acceptance/ssh-containers"
+    },
+    {
       "path": "tests/acceptance/terminal-pick"
     },
     {
