@@ -7,12 +7,16 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {
+  contextEndpoint,
+  contextState,
   currentContext,
   type EngineDialogPort,
   firstCheck,
   type PreflightDependencies,
   secondCheck,
 } from '../../src/engine/preflight.ts';
+import {effectiveEngineKey} from '../../src/engine/engine-key.ts';
+import type {EngineSources} from '../../src/engine/effective-engine.ts';
 
 const NEVER_ABORTED = new AbortController().signal;
 
@@ -581,6 +585,186 @@ describe('the current context', () => {
         scene.lines,
       ],
       [undefined, ['warn: the Docker context could not be read: not found']],
+    );
+  });
+});
+
+describe('what the engine says of its contexts (card containers-142)', () => {
+  for (const [name, answer, expected] of [
+    [
+      'a named context',
+      finished(0, 'desktop-linux\n'),
+      {kind: 'context', name: 'desktop-linux'},
+    ],
+    ['an empty answer', finished(0, ''), {kind: 'context', name: ''}],
+    ['an exit of 125, as Podman answers', finished(125), {kind: 'noContexts'}],
+    ['a query that did not finish', finished(undefined), {kind: 'unreadable'}],
+    [
+      'a spawn that fails',
+      {kind: 'failed', detail: 'spawn dk ENOENT'},
+      {kind: 'unreadable'},
+    ],
+  ] as ReadonlyArray<[string, EngineRunOutcome, unknown]>) {
+    it(`F-0205 BR-17: ${name} gives ${JSON.stringify(expected)}`, async () => {
+      const scene = sceneOf({'context show': answer});
+      deepStrictEqual(
+        await contextState(scene.dependencies, undefined, NEVER_ABORTED),
+        expected,
+      );
+    });
+  }
+
+  it('F-0205 BR-17: a relative value with no base is unreadable', async () => {
+    const scene = sceneOf({}, {values: ['tools/dk']});
+    deepStrictEqual(
+      await contextState(scene.dependencies, undefined, NEVER_ABORTED),
+      {kind: 'unreadable'},
+    );
+  });
+
+  const INSPECT =
+    'context inspect default --format {{json .Endpoints.docker.Host}}';
+
+  for (const [name, answer, expected] of [
+    [
+      'a text endpoint',
+      finished(0, '"unix:///var/run/docker.sock"\n'),
+      'unix:///var/run/docker.sock',
+    ],
+    ['a null endpoint', finished(0, 'null\n'), undefined],
+    ['an answer that is no JSON', finished(0, 'oops'), undefined],
+    ['a failed query', finished(1), undefined],
+  ] as ReadonlyArray<[string, EngineRunOutcome, string | undefined]>) {
+    it(`F-0205 BR-17: ${name} gives ${String(expected)}, for the default context named by an empty text`, async () => {
+      const scene = sceneOf({[INSPECT]: answer});
+      deepStrictEqual(
+        await contextEndpoint(scene.dependencies, undefined, '', NEVER_ABORTED),
+        expected,
+      );
+    });
+  }
+
+  it('F-0205 BR-17: a named context is inspected by its name, and a relative value with no base gives nothing', async () => {
+    const scene = sceneOf({
+      'context inspect box --format {{json .Endpoints.docker.Host}}': finished(
+        0,
+        '"tcp://box:2376"',
+      ),
+    });
+    const relative = sceneOf({}, {values: ['tools/dk']});
+    deepStrictEqual(
+      [
+        await contextEndpoint(
+          scene.dependencies,
+          undefined,
+          'box',
+          NEVER_ABORTED,
+        ),
+        await contextEndpoint(
+          relative.dependencies,
+          undefined,
+          'box',
+          NEVER_ABORTED,
+        ),
+      ],
+      ['tcp://box:2376', undefined],
+    );
+  });
+});
+
+describe('the key of the effective engine (card containers-142)', () => {
+  const NO_SETTINGS: EngineSources = {
+    containersEnvironment: undefined,
+    dockerEnvironment: undefined,
+    dockerHost: undefined,
+    certPath: undefined,
+    tlsVerify: undefined,
+    processEnvironment: {},
+  };
+  const ENDPOINT =
+    'context inspect box --format {{json .Endpoints.docker.Host}}';
+
+  it('F-0205 BR-17: the current context and its endpoint make the key, so a switch changes it', async () => {
+    const first = sceneOf({
+      'context show': finished(0, 'box\n'),
+      [ENDPOINT]: finished(0, '"tcp://box:2376"'),
+    });
+    const second = sceneOf({
+      'context show': finished(0, 'default\n'),
+      'context inspect default --format {{json .Endpoints.docker.Host}}':
+        finished(0, '"unix:///var/run/docker.sock"'),
+    });
+    const keys = [
+      await effectiveEngineKey(
+        NO_SETTINGS,
+        first.dependencies,
+        undefined,
+        NEVER_ABORTED,
+      ),
+      await effectiveEngineKey(
+        NO_SETTINGS,
+        second.dependencies,
+        undefined,
+        NEVER_ABORTED,
+      ),
+    ];
+    deepStrictEqual(
+      [keys[0] !== keys[1], keys[1]?.includes('"context":"default"')],
+      [true, true],
+    );
+  });
+
+  it('F-0205 AC-39, BR-17: a host or a context from a setting names the engine alone, and no command runs', async () => {
+    const scene = sceneOf({});
+    deepStrictEqual(
+      [
+        await effectiveEngineKey(
+          {...NO_SETTINGS, dockerHost: 'tcp://far:2376'},
+          scene.dependencies,
+          undefined,
+          NEVER_ABORTED,
+        ),
+        await effectiveEngineKey(
+          {...NO_SETTINGS, processEnvironment: {DOCKER_CONTEXT: 'fixed'}},
+          scene.dependencies,
+          undefined,
+          NEVER_ABORTED,
+        ),
+        scene.argvs,
+      ],
+      ['{"DOCKER_HOST":"tcp://far:2376"}', '{"DOCKER_CONTEXT":"fixed"}', []],
+    );
+  });
+
+  it('F-0205 BR-17: an engine without contexts is noContexts, and one that cannot be read has no key', async () => {
+    const podman = sceneOf({'context show': finished(125)});
+    const broken = sceneOf({'context show': finished(undefined)});
+    const noEndpoint = sceneOf({
+      'context show': finished(0, 'box\n'),
+      [ENDPOINT]: finished(1),
+    });
+    deepStrictEqual(
+      [
+        await effectiveEngineKey(
+          NO_SETTINGS,
+          podman.dependencies,
+          undefined,
+          NEVER_ABORTED,
+        ),
+        await effectiveEngineKey(
+          NO_SETTINGS,
+          broken.dependencies,
+          undefined,
+          NEVER_ABORTED,
+        ),
+        await effectiveEngineKey(
+          NO_SETTINGS,
+          noEndpoint.dependencies,
+          undefined,
+          NEVER_ABORTED,
+        ),
+      ],
+      ['noContexts', undefined, undefined],
     );
   });
 });

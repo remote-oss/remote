@@ -101,6 +101,8 @@ interface Scene {
   docker: Record<string, FakeEngine>;
   pathListeners: Array<() => void>;
   pathSubscriptions: number;
+  engineListeners: Array<() => void>;
+  engineSubscriptions: number;
   /** Whether the workspace is trusted, and who waits for a grant of trust. */
   trusted: boolean;
   trustListeners: Array<() => void>;
@@ -133,6 +135,8 @@ function sceneOf(): Scene {
     docker: {},
     pathListeners: [],
     pathSubscriptions: 0,
+    engineListeners: [],
+    engineSubscriptions: 0,
     trusted: true,
     trustListeners: [],
     trustSubscriptions: 0,
@@ -224,6 +228,15 @@ function portsOf(scene: Scene): TargetsViewPorts {
         },
       };
     },
+    onEngineChange: listener => {
+      scene.engineListeners.push(listener);
+      scene.engineSubscriptions += 1;
+      return {
+        dispose: () => {
+          scene.engineSubscriptions -= 1;
+        },
+      };
+    },
     onDockerPathChange: listener => {
       scene.pathListeners.push(listener);
       scene.pathSubscriptions += 1;
@@ -250,6 +263,20 @@ function portsOf(scene: Scene): TargetsViewPorts {
       logger: ports.logger,
     }),
   };
+}
+
+/** A view of a dev container window, shown and read once, with the reads it made forgotten. */
+async function shownInDevContainer(
+  scene: Scene,
+): Promise<{provider: TargetsProvider}> {
+  scene.containers = [containerOf(OWN_ID)];
+  scene.held = connectionOf(scene, OWN_ID);
+  const {provider} = await shown(scene);
+  await provider.getChildren(undefined);
+  scene.visibility[0]?.(true);
+  await settled();
+  scene.runs.length = 0;
+  return {provider};
 }
 
 /** The view shown over the scene; it fails when the editor had no view to make. */
@@ -586,13 +613,7 @@ describe('the Dev Containers view (card containers-30)', () => {
 
   it('F-0901 6.21 step 4, AC-45: in a dev container window a dockerPath change changes nothing: no rebuild, the events process stays on the held engine, and a container created afterwards still appears', async () => {
     const scene = sceneOf();
-    scene.containers = [containerOf(OWN_ID)];
-    scene.held = connectionOf(scene, OWN_ID);
-    const {provider} = await shown(scene);
-    await provider.getChildren(undefined);
-    scene.visibility[0]?.(true);
-    await settled();
-    scene.runs.length = 0;
+    const {provider} = await shownInDevContainer(scene);
     scene.dockerPath = '/changed/docker';
     scene.pathListeners[0]?.();
     await settled();
@@ -698,6 +719,56 @@ describe('the Dev Containers view (card containers-30)', () => {
     const subscribed = scene.trustSubscriptions;
     view.dispose();
     deepStrictEqual([subscribed, scene.trustSubscriptions], [1, 0]);
+  });
+
+  it('F-0205 AC-39, BR-17: a shown view listens for a change of the engine once, a hidden one not at all, and the listening ends with the view', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    const beforeShown = scene.engineSubscriptions;
+    scene.visibility[0]?.(true);
+    scene.visibility[0]?.(true);
+    const whileShown = scene.engineSubscriptions;
+    scene.visibility[0]?.(false);
+    const whileHidden = scene.engineSubscriptions;
+    scene.visibility[0]?.(true);
+    const shownAgain = scene.engineSubscriptions;
+    view.dispose();
+    deepStrictEqual(
+      [
+        beforeShown,
+        whileShown,
+        whileHidden,
+        shownAgain,
+        scene.engineSubscriptions,
+      ],
+      [0, 1, 0, 1, 0],
+    );
+  });
+
+  it('F-0205 AC-39, BR-17: in a local window a change of the engine ends the events process, reads the containers again and restarts the events', async () => {
+    const scene = sceneOf();
+    await populatedAndVisible(scene);
+    scene.runs.length = 0;
+    scene.engineListeners[0]?.();
+    await settled();
+    deepStrictEqual(
+      [scene.runs, scene.docker.setting?.processes.map(each => each.killed)],
+      [
+        ['setting ps', 'setting inspect'],
+        [true, false],
+      ],
+    );
+  });
+
+  it('F-0205 BR-17, BR-19: in a dev container window a change of the engine changes nothing: no read and the events process stays', async () => {
+    const scene = sceneOf();
+    await shownInDevContainer(scene);
+    scene.engineListeners[0]?.();
+    await settled();
+    deepStrictEqual(
+      [scene.runs, scene.docker.held?.processes.map(each => each.killed)],
+      [[], [false]],
+    );
   });
 
   it('F-0901 6.21: the dockerPath subscription ends with the view', async () => {
