@@ -942,7 +942,7 @@ export async function activate(
                     .getConfiguration()
                     .get(settings.dockerComposePath.id),
               },
-              base,
+              engineBaseOf({folder: base, trusted: vscode.workspace.isTrusted}),
               cancellation,
             ),
           compare: collate,
@@ -1267,7 +1267,10 @@ export async function activate(
                     vscode.workspace
                       .getConfiguration()
                       .get(settings.dockerComposePath.id),
-                  base,
+                  base: engineBaseOf({
+                    folder: base,
+                    trusted: vscode.workspace.isTrusted,
+                  }),
                   logger: logger.child('compose'),
                 },
                 cancellation,

@@ -5,6 +5,7 @@ import type {
   EngineHost,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
+import {engineBaseOf} from '../../src/engine/executable.ts';
 import {
   type ComposeCheckDependencies,
   composeCheck,
@@ -199,6 +200,22 @@ describe('the check of Docker Compose before a reload (F-0201 BR-4, brief-compos
         {kind: 'standalone', file: '/opt/dc', dashAndUnderscore: true},
         {kind: 'standalone', file: '/opt/dc', dashAndUnderscore: true},
         ['/opt/dc version --short', '/opt/dc version --short'],
+      ],
+    );
+  });
+
+  it('F-0201 AC-55: in an untrusted window a relative program is not resolved, so it is missing and nothing runs', async () => {
+    const scene = sceneOf({plugin: ended(1), composePath: 'tools/dc'});
+    const route = await composeRoute(
+      scene.dependencies,
+      engineBaseOf({folder: '/work', trusted: false}),
+      NEVER,
+    );
+    deepStrictEqual(
+      [route, scene.commands],
+      [
+        {kind: 'missing', written: 'tools/dc', byDefault: false},
+        ['docker compose version'],
       ],
     );
   });
