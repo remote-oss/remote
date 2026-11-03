@@ -1106,6 +1106,134 @@ export async function panelShown(name: string): Promise<boolean> {
   );
 }
 
+/**
+ * Whether a line holding `text` in a visible text editor of window `name`'s page carries the `Unnecessary` marker's
+ * decorations, as the editor renders them, waiting for the mark when the editor is still laying the line out: the mark
+ * the settings editor puts on a settings file's line when the key is not one it registers.
+ */
+export async function lineMarkedUnnecessary(
+  name: string,
+  text: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<boolean> {
+  return settled(
+    () => `a line holding ${text} marked unnecessary in window ${name}`,
+    async () =>
+      (await evaluate<boolean>(
+        name,
+        `(() => {
+          const editors = [...document.querySelectorAll('.monaco-editor')].filter(editor => !editor.closest('.settings-header') && editor.offsetParent !== null);
+          for (const editor of editors) {
+            for (const line of editor.querySelectorAll('.view-line')) {
+              if ((line.textContent ?? '').includes(${JSON.stringify(text)}) && line.querySelector('.squiggly-inline-unnecessary') !== null) {
+                return true;
+              }
+            }
+          }
+          return false;
+        })()`,
+      ))
+        ? true
+        : undefined,
+    milliseconds,
+  );
+}
+
+/**
+ * The rows the chat input's picker offers in window `name` after `text` is typed into the chat input, which must be
+ * shown already, as "Chat: Open Chat (Ask)" leaves it shown: the picker's items, none while the picker is hidden, and
+ * nothing at all when the chat input itself is not shown. The typed text is verified in the input before the picker
+ * is read, so a read is never made against an empty guess.
+ */
+export async function chatInputRows(
+  name: string,
+  text: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<string[]> {
+  async function inputShown(): Promise<boolean> {
+    return await evaluate<boolean>(
+      name,
+      `(() => {
+        const input = document.querySelector('.chat-input-container');
+        return input !== null && input.offsetParent !== null;
+      })()`,
+    );
+  }
+  try {
+    await settled(
+      () => `the chat input of window ${name}`,
+      async () => ((await inputShown()) ? true : undefined),
+      milliseconds,
+    );
+  } catch {
+    return [];
+  }
+  const address = await pageOf(name);
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      const input =
+        document.querySelector('.chat-input-container .chat-editor-container') ??
+        document.querySelector('.chat-input-container');
+      const box = input?.getBoundingClientRect();
+      return box === undefined
+        ? null
+        : {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    return [];
+  }
+  await dispatchInput(
+    address,
+    name,
+    ['mousePressed', 'mouseReleased'].map(type => ({
+      method: 'Input.dispatchMouseEvent',
+      params: {type, ...point, button: 'left', clickCount: 1},
+    })),
+  );
+  await typeInFocus(name, text);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const inInput = await evaluate<string>(
+    name,
+    `(() => {
+      const container = document.querySelector('.chat-input-container');
+      if (container === null) {
+        return '';
+      }
+      const lines = [...container.querySelectorAll('.view-line')]
+        .map(line => line.textContent ?? '')
+        .join('');
+      if (lines !== '') {
+        return lines;
+      }
+      return [...container.querySelectorAll('textarea, input')]
+        .map(field => field.value ?? '')
+        .join('');
+    })()`,
+  );
+  if (!inInput.includes(text)) {
+    throw new Error(
+      `window ${name}: ${JSON.stringify(text)} is not in the chat input (it held ${JSON.stringify(inInput)})`,
+    );
+  }
+  return evaluate<string[]>(
+    name,
+    `(() => {
+      const host = document.querySelector('.agent-host-chat-input-picker-host');
+      if (
+        host === null ||
+        host.classList.contains('agent-host-chat-input-picker-host-hidden')
+      ) {
+        return [];
+      }
+      return [...host.querySelectorAll('.chat-input-picker-item')]
+        .map(item => (item.textContent ?? '').trim())
+        .filter(line => line !== '');
+    })()`,
+  );
+}
+
 /** The terminals the Terminal panel of window `name` lists in its tabs, in order; none while the panel is not shown. */
 export async function terminalTabsOf(name: string): Promise<string[]> {
   return evaluate<string[]>(

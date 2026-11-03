@@ -42,6 +42,7 @@ export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-2601',
   'F-2604',
   'F-2605',
+  'F-2606',
   'F-2704',
   'F-3901',
   'F-3902',

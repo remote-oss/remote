@@ -1,8 +1,9 @@
 /**
  * @fileoverview public-surface: the CI check that no file a user can read carries wording of the process (ADR-0008,
- * decision 5). It reads each package's README, changelog, manifest, string tables, localisation bundles, grammars and
- * language configuration, and the user documentation under docs/<extension>/. Source comments are checked by the
- * `comments/public-surface` lint rule with the same term list.
+ * decision 5), and that no source of remote-ssh or lib-ssh uses a chat or language-model API (the no-chat rule). It reads each
+ * package's README, changelog, manifest, string tables, localisation bundles, grammars and language configuration, and
+ * the user documentation under docs/<extension>/. Source comments are checked by the `comments/public-surface` lint
+ * rule with the same term list.
  *
  *     node tools/public-surface.ts
  */
@@ -85,6 +86,75 @@ function surfaceFiles(root: string): string[] {
 /** An address on the short-link service of another vendor, which no shipped text may send a user to. */
 const REFERENCE_ADDRESS = /https?:\/\/aka\.ms\/[^\s)"'<>]*/g;
 
+/** The packages the no-chat rule keeps free of chat and language-model APIs. */
+const NO_CHAT_PACKAGES = ['remote-ssh', 'lib-ssh'];
+
+/** A form of chat or language-model API in source text, by its name and the pattern that finds it. */
+const CHAT_SOURCE_FORMS = [
+  {name: 'vscode.chat', pattern: /\bvscode\.chat\b/g},
+  {name: 'vscode.lm', pattern: /\bvscode\.lm\b/g},
+  {
+    name: 'chat.createChatParticipant',
+    pattern: /\bchat\.createChatParticipant\b/g,
+  },
+  {name: 'lm.selectChatModels', pattern: /\blm\.selectChatModels\b/g},
+];
+
+/** A dependency name that is a chat or prompt library. */
+const CHAT_DEPENDENCIES = new Set([
+  '@vscode/prompt-tsx',
+  '@vscode/chat-extension-utils',
+  'openai',
+  '@azure/openai',
+  '@anthropic-ai/sdk',
+  'ai',
+  'langchain',
+]);
+
+/** The dependency scopes whose libraries are all chat or language-model. */
+const CHAT_DEPENDENCY_SCOPES = ['@langchain/', '@ai-sdk/'];
+
+/**
+ * One finding per form of chat or language-model use in the source under `packages/remote-ssh` and `packages/lib-ssh`,
+ * and per banned dependency in their manifests (the no-chat rule).
+ */
+export function chatUsages(root: string): string[] {
+  const problems: string[] = [];
+  for (const folder of NO_CHAT_PACKAGES) {
+    for (const file of filesBelow(path.join(root, 'packages', folder, 'src'))) {
+      const relative = path.relative(root, file);
+      const text = readFileSync(file, 'utf8');
+      for (const form of CHAT_SOURCE_FORMS) {
+        for (const match of text.matchAll(form.pattern)) {
+          problems.push(
+            `${relative}:${String(lineOf(text, match.index))}: '${form.name}' (F-3907: no chat or language-model use)`,
+          );
+        }
+      }
+    }
+    const manifest = path.join(root, 'packages', folder, 'package.json');
+    if (existsSync(manifest)) {
+      const text = readFileSync(manifest, 'utf8');
+      const dependencies =
+        (JSON.parse(text) as {dependencies?: Record<string, string>})
+          .dependencies ?? {};
+      for (const name of Object.keys(dependencies).sort()) {
+        const banned =
+          CHAT_DEPENDENCIES.has(name) ||
+          CHAT_DEPENDENCY_SCOPES.some(scope => name.startsWith(scope));
+        if (banned) {
+          const line =
+            text.split('\n').findIndex(each => each.includes(`"${name}":`)) + 1;
+          problems.push(
+            `${path.relative(root, manifest)}:${String(line)}: '${name}' (F-3907: no chat or language-model use)`,
+          );
+        }
+      }
+    }
+  }
+  return problems;
+}
+
 /** The line of the character at `index` in `text`. */
 function lineOf(text: string, index: number): number {
   return text.slice(0, index).split('\n').length;
@@ -106,6 +176,7 @@ export function checkPublicSurface(root: string): string[] {
       );
     }
   }
+  problems.push(...chatUsages(root));
   return problems;
 }
 
