@@ -64,6 +64,16 @@ export function cliFailureText(failure: CliFailure): string {
     : `${failure.kind}: ${failure.message}`;
 }
 
+/** The CLI's own account of a failure, for the user: its description, else its message, else what the log says. */
+export function cliDescriptionOf(failure: CliFailure): string {
+  if ('description' in failure && failure.description !== '') {
+    return failure.description;
+  }
+  return 'message' in failure && failure.message !== ''
+    ? failure.message
+    : cliFailureText(failure);
+}
+
 /** What `up` gives. */
 export type UpResult =
   | {

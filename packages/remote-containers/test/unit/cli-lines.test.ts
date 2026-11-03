@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   type CliEvent,
+  cliDescriptionOf,
   daemonRefusalOf,
   parseLogLine,
   readConfigurationResult,
@@ -465,6 +466,37 @@ describe('the daemon refusal (card containers-11)', () => {
         '',
       ].map(daemonRefusalOf),
       [undefined, undefined, undefined, undefined],
+    );
+  });
+});
+
+describe('the CLI’s own account of a failure (card containers-149)', () => {
+  it('F-0410 AC-21: the description comes first, then the message, then the log’s text', () => {
+    deepStrictEqual(
+      [
+        cliDescriptionOf({
+          kind: 'setupFailed',
+          message: 'm',
+          description: 'd',
+          containerId: undefined,
+        }),
+        cliDescriptionOf({
+          kind: 'setupFailed',
+          message: 'm',
+          description: '',
+          containerId: undefined,
+        }),
+        cliDescriptionOf({kind: 'configurationFailed', message: 'x'}),
+        cliDescriptionOf({kind: 'configurationFailed', message: ''}),
+        cliDescriptionOf({kind: 'noResult', status: 1}),
+      ],
+      [
+        'd',
+        'm',
+        'x',
+        'configurationFailed, with no reason from the CLI',
+        'noResult',
+      ],
     );
   });
 });

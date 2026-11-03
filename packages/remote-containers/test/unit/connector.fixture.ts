@@ -60,6 +60,26 @@ export const FOLDER: DevContainerFolder = {
   },
 };
 
+/**
+ * Makes the reads that name a container answer `failure`, while the read before the container starts keeps the
+ * scene's answer: a connect that goes on past a failed read after the start.
+ */
+export function containerReadsFail(
+  scene: Scene,
+  failure: Exclude<
+    Awaited<ReturnType<CliBridge['readConfiguration']>>,
+    {kind: 'configuration'}
+  >,
+): void {
+  const before = scene.configuration;
+  scene.configuration = () => {
+    if (scene.configurationReads.at(-1)?.containerId !== undefined) {
+      return Promise.resolve(failure);
+    }
+    return typeof before === 'function' ? before() : Promise.resolve(before);
+  };
+}
+
 /** The input of a resolve of `payload`. */
 export function inputOf(
   payload: string,
@@ -101,6 +121,8 @@ interface EngineCall {
 export interface Scene {
   /** Whether the folder the payload names exists on the machine. */
   folderExists: boolean;
+  /** Whether the configuration file exists on this machine. */
+  configurationExists: boolean;
   /** The configuration files discovery finds in a folder, in the picker's order. */
   candidates: Array<{file: string}>;
   connector: ContainerConnector;
@@ -231,6 +253,7 @@ export function sceneOf(
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
     folderExists: true,
+    configurationExists: true,
     candidates: [],
     attemptsBegun: 0,
     engineCalls: [],
@@ -419,7 +442,12 @@ export function sceneOf(
   const dependencies: ContainerConnectorDependencies = {
     noEngineProgram: noEngineProgramOf(FIXTURE_STORAGE),
     clientPlatform: 'linux',
-    folderExists: () => Promise.resolve(scene.folderExists),
+    pathExists: place =>
+      Promise.resolve(
+        place.endsWith('.json')
+          ? scene.configurationExists
+          : scene.folderExists,
+      ),
     discoverConfigurations: () => Promise.resolve(scene.candidates),
     shutdown: {
       send: request => {
