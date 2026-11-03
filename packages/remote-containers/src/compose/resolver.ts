@@ -20,6 +20,12 @@ import {projectNameOf} from './project-name.ts';
 import {projectSourcesOf} from './project-sources.ts';
 import {composeScopeOf} from './scope.ts';
 
+/**
+ * BuildKit's file system entitlement, which refuses the Dockerfile the CLI writes outside a service's build context. The
+ * build of a trusted configuration may read it; a value the user set stays.
+ */
+const ENTITLEMENT_VARIABLE = 'BUILDX_BAKE_ENTITLEMENTS_FS';
+
 /** A Compose that can be run. */
 type UsableRoute = Extract<ComposeRoute, {kind: 'plugin' | 'standalone'}>;
 
@@ -58,6 +64,8 @@ export type ComposeResolution =
       model: ComposeModel;
       /** The program of the second route, which the CLI is told with `--docker-compose-path`; none on the plugin. */
       composeFile: string | undefined;
+      /** Variables added to the environment of the CLI's `up` only: the build of a service reads a file the CLI writes. */
+      upEnvironment: Readonly<Record<string, string>>;
     }
   | {kind: 'failed'; detail: string};
 
@@ -136,6 +144,10 @@ export function composeResolverOf(
       }),
       model: read.model,
       composeFile: route.kind === 'standalone' ? route.file : undefined,
+      upEnvironment:
+        ports.environment[ENTITLEMENT_VARIABLE] === undefined
+          ? {[ENTITLEMENT_VARIABLE]: '0'}
+          : {},
     };
   };
 }

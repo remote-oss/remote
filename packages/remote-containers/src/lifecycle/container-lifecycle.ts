@@ -17,7 +17,9 @@ import type {
 import type {EngineHost} from '../engine/engine-host.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
 import {
+  composeDiscoveryArguments,
   decide,
+  decideCompose,
   discoveryArguments,
   idLabels,
   isLegacy,
@@ -157,17 +159,19 @@ function vanishedIn(stderr: string): boolean {
     .some(line => VANISHED_LINES.some(form => line.startsWith(form)));
 }
 
-/** Lists the containers made for a folder and reads their facts. */
+/** The queries that list the containers made for a folder: the current labels, then the legacy ones. */
+function folderQueries(folder: string): string[][] {
+  return [discoveryArguments(folder), legacyDiscoveryArguments(folder)];
+}
+
+/** Lists the containers the queries find and reads their facts. */
 async function discover(
   engine: EngineHost,
-  folder: string,
+  queries: readonly string[][],
   cancellation: AbortSignal,
 ): Promise<Discovery> {
   const identifiers: string[] = [];
-  for (const query of [
-    discoveryArguments(folder),
-    legacyDiscoveryArguments(folder),
-  ]) {
+  for (const query of queries) {
     const listed = await askEngine(engine, query, cancellation);
     if (isAborted(cancellation)) {
       return {kind: 'cancelled'};
@@ -208,14 +212,14 @@ async function discover(
 /** Discovery, run a second time when a container vanished between the list and its inspection. */
 async function discoverWithRetry(
   engine: EngineHost,
-  folder: string,
+  queries: readonly string[][],
   cancellation: AbortSignal,
 ): Promise<Exclude<Discovery, {kind: 'vanished'}>> {
-  const first = await discover(engine, folder, cancellation);
+  const first = await discover(engine, queries, cancellation);
   if (first.kind !== 'vanished') {
     return first;
   }
-  const second = await discover(engine, folder, cancellation);
+  const second = await discover(engine, queries, cancellation);
   return second.kind === 'vanished'
     ? {
         kind: 'discoveryFailed',
@@ -363,24 +367,93 @@ export function containerLifecycleOf(dependencies: {
       });
   }
 
+  /** The queries that find the container of a connection: the primary service's of a Compose project, else the folder's. */
+  function queriesOf(
+    request: ContainerRequest,
+    resolution: ComposeResolution,
+  ): string[][] {
+    return resolution.kind === 'ready'
+      ? [composeDiscoveryArguments(resolution.projectName, resolution.service)]
+      : folderQueries(request.folder);
+  }
+
+  /** The choice among the containers found: by the Compose labels for a Compose project, else by the folder's. */
+  function decisionOf(
+    request: ContainerRequest,
+    resolution: ComposeResolution,
+    containers: readonly ContainerFacts[],
+  ): Decision {
+    return resolution.kind === 'ready'
+      ? decideCompose(request.folder, request.configFile, containers)
+      : decide(request.folder, request.configFile, containers);
+  }
+
   /** The container the engine holds for the folder after a failed `up`, found again: one the connect kept, or made. */
   async function containerAfterFailure(
     request: ContainerRequest,
+    resolution: ComposeResolution,
     cancellation: AbortSignal,
   ): Promise<string | undefined> {
     if (isAborted(cancellation)) {
       return undefined;
     }
-    const found = await discoverWithRetry(engine, request.folder, cancellation);
+    const found = await discoverWithRetry(
+      engine,
+      queriesOf(request, resolution),
+      cancellation,
+    );
     if (found.kind !== 'found') {
       return undefined;
     }
-    const remaining = decide(
-      request.folder,
-      request.configFile,
-      found.containers,
-    );
+    const remaining = decisionOf(request, resolution, found.containers);
     return remaining.kind === 'create' ? undefined : remaining.containerId;
+  }
+
+  /**
+   * Removes every container of the services in a Compose project's scope, a rebuild's first step; a container of
+   * another service of the project, or of another project, stays. Nothing but the failure is told when one fails.
+   */
+  async function removeScope(
+    resolution: Extract<ComposeResolution, {kind: 'ready'}>,
+    cancellation: AbortSignal,
+  ): Promise<
+    {kind: 'cancelled'} | {kind: 'discoveryFailed'; detail: string} | undefined
+  > {
+    for (const service of resolution.scope) {
+      const listed = await askEngine(
+        engine,
+        composeDiscoveryArguments(resolution.projectName, service),
+        cancellation,
+      );
+      if (isAborted(cancellation)) {
+        return {kind: 'cancelled'};
+      }
+      if (listed.kind === 'failed') {
+        return {kind: 'discoveryFailed', detail: listed.detail};
+      }
+      for (const containerId of listed.stdout
+        .split('\n')
+        .filter(line => line !== '')) {
+        const removed = await askEngine(
+          engine,
+          ['rm', '--force', containerId],
+          cancellation,
+        );
+        if (isAborted(cancellation)) {
+          return {kind: 'cancelled'};
+        }
+        if (removed.kind === 'failed') {
+          return {
+            kind: 'discoveryFailed',
+            detail: `the container ${containerId.slice(0, IDENTIFIER_LENGTH)} of the service ${service} couldn't be removed: ${removed.detail}`,
+          };
+        }
+        logger.info(
+          `rebuilding: removed the container ${containerId.slice(0, IDENTIFIER_LENGTH)} of the service ${service}`,
+        );
+      }
+    }
+    return undefined;
   }
 
   /** Stops the paused container the user asked to retry; the decision then is to use it as an exited one. */
@@ -445,14 +518,22 @@ export function containerLifecycleOf(dependencies: {
     if (composeResolution.kind === 'failed') {
       return {kind: 'discoveryFailed', detail: composeResolution.detail};
     }
-    const discovery = await discoverWithRetry(engine, folder, cancellation);
+    const discovery = await discoverWithRetry(
+      engine,
+      queriesOf(request, composeResolution),
+      cancellation,
+    );
     if (discovery.kind === 'cancelled') {
       return {kind: 'cancelled'};
     }
     if (discovery.kind !== 'found') {
       return discovery;
     }
-    const decided = decide(folder, configFile, discovery.containers);
+    const decided = decisionOf(
+      request,
+      composeResolution,
+      discovery.containers,
+    );
     const paused =
       request.rebuild === undefined &&
       decided.kind === 'unusable' &&
@@ -521,13 +602,16 @@ export function containerLifecycleOf(dependencies: {
     // (it only finds the labels it's given), and its check of the disallowed Features runs before its remove. It does so
     // only once the configuration is read and names a container source: without one the CLI's `up` fails before it removes
     // anything, and the existing container stays
-    const removing = rebuilding
-      ? await removableContainers(
-          discovery.containers,
-          {...target, idLabels: []},
-          cancellation,
-        )
-      : undefined;
+    // a Compose project's rebuild removes the containers of its whole scope instead, by the project's labels
+    const composeRebuild = rebuilding && composeResolution.kind === 'ready';
+    const removing =
+      rebuilding && !composeRebuild
+        ? await removableContainers(
+            discovery.containers,
+            {...target, idLabels: []},
+            cancellation,
+          )
+        : undefined;
     if (removing === 'cancelled') {
       return {kind: 'cancelled'};
     }
@@ -558,7 +642,13 @@ export function containerLifecycleOf(dependencies: {
         );
       }
     }
-    if (rebuilding) {
+    if (composeResolution.kind === 'ready' && rebuilding) {
+      const removedScope = await removeScope(composeResolution, cancellation);
+      if (removedScope !== undefined) {
+        return removedScope;
+      }
+    }
+    if (rebuilding && !composeRebuild) {
       logger.info(
         `rebuilding: the dev container CLI removes ${discovery.containers.map(container => container.id.slice(0, IDENTIFIER_LENGTH)).join(', ') || 'no container'} first`,
       );
@@ -587,9 +677,20 @@ export function containerLifecycleOf(dependencies: {
       }
     }
     const upResult = await bridge.up(
-      {...target, terminalSize: presenter.terminalSize()},
       {
-        removeExistingContainer: rebuilding,
+        ...target,
+        terminalSize: presenter.terminalSize(),
+        ...(composeResolution.kind === 'ready'
+          ? {
+              environment: {
+                ...target.environment,
+                ...composeResolution.upEnvironment,
+              },
+            }
+          : {}),
+      },
+      {
+        removeExistingContainer: rebuilding && !composeRebuild,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
         workspaceMountConsistency: request.workspaceMountConsistency,
       },
@@ -607,6 +708,7 @@ export function containerLifecycleOf(dependencies: {
       }
       const foundContainerId = await containerAfterFailure(
         request,
+        composeResolution,
         cancellation,
       );
       return foundContainerId === undefined

@@ -210,4 +210,18 @@ describe('what a connect knows of a Compose configuration (F-0413, brief-compose
       [{kind: 'failed', detail: 'Docker Compose cannot be run: /opt/dc'}, 0],
     ]);
   });
+
+  it('F-0413 AC-17: a Compose project gets the build entitlement variable for its up, and a value the user set is left alone', async () => {
+    const plain = await resolve({configuration: COMPOSE_CONFIGURATION});
+    const userSet = await resolve({
+      configuration: COMPOSE_CONFIGURATION,
+      environment: {BUILDX_BAKE_ENTITLEMENTS_FS: '1'},
+    });
+    deepStrictEqual(
+      [plain.resolution, userSet.resolution].map(each =>
+        each.kind === 'ready' ? each.upEnvironment : each,
+      ),
+      [{BUILDX_BAKE_ENTITLEMENTS_FS: '0'}, {}],
+    );
+  });
 });

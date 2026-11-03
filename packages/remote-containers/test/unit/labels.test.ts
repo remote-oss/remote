@@ -1,8 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   type ContainerFacts,
+  composeDiscoveryArguments,
   createdKey,
   decide,
+  decideCompose,
   devContainerFolderOf,
   discoveryArguments,
   idLabels,
@@ -379,6 +381,65 @@ describe('how a folder is labelled and its container chosen', () => {
         configFileOf({'devcontainer.local_folder': '/w/new'}),
       ],
       ['/w/new', '/w/old', undefined, '/w/c.json', undefined],
+    );
+  });
+});
+
+describe('the lookup of a Compose project’s container (F-0413 6.6, 6.9)', () => {
+  it('F-0413 AC-10: the engine query lists the containers of one service of the project by the Compose labels', () => {
+    deepStrictEqual(composeDiscoveryArguments('proj', 'app'), [
+      'ps',
+      '-a',
+      '-q',
+      '--no-trunc',
+      '--filter',
+      'label=com.docker.compose.project=proj',
+      '--filter',
+      'label=com.docker.compose.service=app',
+    ]);
+  });
+
+  it('F-0413 AC-44: the newest container of the service wins whatever its folder labels, and a running, exited or created one is used with the folder’s id labels', () => {
+    const decisions = ['running', 'exited', 'created'].map(status =>
+      decideCompose(FOLDER, CONFIG, [
+        container('old', 'running', '2026-10-14T03:00:00Z'),
+        {
+          id: 'new',
+          created: '2026-10-14T04:00:00Z',
+          status,
+          labels: {'com.docker.compose.service': 'app'},
+        },
+      ]),
+    );
+    deepStrictEqual(
+      decisions,
+      ['running', 'exited', 'created'].map(status => ({
+        kind: 'use',
+        containerId: 'new',
+        status,
+        idLabels: idLabels(FOLDER, CONFIG),
+      })),
+    );
+  });
+
+  it('F-0413 AC-46: no container, or only one that is being removed, is a create', () => {
+    deepStrictEqual(
+      [
+        decideCompose(FOLDER, CONFIG, []),
+        decideCompose(FOLDER, CONFIG, [
+          container('gone', 'removing', '2026-10-14T03:00:00Z'),
+        ]),
+      ],
+      [{kind: 'create'}, {kind: 'create'}],
+    );
+  });
+
+  it('F-0409 AC-27: a paused container is unusable', () => {
+    deepStrictEqual(
+      decideCompose(FOLDER, CONFIG, [
+        container('p', 'paused', '2026-10-14T03:00:00Z'),
+      ]),
+      {kind: 'unusable', containerId: 'p', status: 'paused'},
     );
   });
 });
