@@ -15,7 +15,7 @@ import {
   openedCompose,
   removeComposeContainers,
   runningServicesOf,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 /** The generic dialog of a setup that fails (F-0410's). */
 const GENERIC_DIALOG = 'An error occurred setting up the container.';

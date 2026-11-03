@@ -124,6 +124,12 @@ export async function removeContainersOf(
 /** The seconds after a close in which a container that the close stops is read to have stopped, with a margin of 3 s. */
 const STOP_WINDOW = {from: 10, until: 15} as const;
 
+/**
+ * The seconds after a close in which a Compose container that the close kills is read to have stopped: 11 to 17 after
+ * the close itself, and the reading starts up to two seconds after it, once the window is gone.
+ */
+export const COMPOSE_STOP_WINDOW = {from: 9, until: 17} as const;
+
 /** Whether every state read was running. */
 export function stayedRunning(outcome: Outcome): boolean {
   return outcome.states.every(
