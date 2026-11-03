@@ -1313,15 +1313,36 @@ export async function closeWindow(
 ): Promise<void> {
   const before = countOf(name, 'deactivated');
   const extensionHost = liveProcessIdOf(name);
-  send(name, 'workbench.action.closeWindow', []);
-  await waitUntil(
-    () =>
-      `window ${name} to deactivate${extensionHost === undefined ? '' : `: its extension host ${String(extensionHost)} is still running`}`,
-    () =>
-      countOf(name, 'deactivated') > before ||
-      (extensionHost !== undefined && processIsGone(extensionHost)),
-    milliseconds,
-  );
+  const commandId = send(name, 'workbench.action.closeWindow', []);
+  try {
+    await waitUntil(
+      () =>
+        `window ${name} to deactivate${extensionHost === undefined ? '' : `: its extension host ${String(extensionHost)} is still running`}`,
+      () =>
+        countOf(name, 'deactivated') > before ||
+        (extensionHost !== undefined && processIsGone(extensionHost)),
+      milliseconds,
+    );
+  } finally {
+    withdrawUnaccepted(name, commandId);
+  }
+}
+
+/**
+ * Takes back the command `commandId` of window `name` when no start of the window accepted it: the window it was meant
+ * for has gone, and a window that later starts under the same name must not run it.
+ */
+function withdrawUnaccepted(name: string, commandId: string): void {
+  if (
+    !windowEvents(name).some(
+      each => each.id === commandId && each.event === 'accepted',
+    )
+  ) {
+    appendFileSync(
+      agentFile(name, 'commands'),
+      `${JSON.stringify({id: commandId, withdrawn: true})}\n`,
+    );
+  }
 }
 
 /** The process id of window `name`'s live extension host, or undefined when it has none. */
