@@ -219,6 +219,8 @@ export interface Scene {
   volumeCalls: string[];
   /** Whether the volume dependencies say the payload's source was typed. */
   typedSource: boolean;
+  /** Whether the profile gives the clone's trust confirmation. */
+  consentGiven: boolean;
   /** The background stages the lifecycles were made with, in order. */
   backgroundStages: Array<BackgroundStage | undefined>;
 }
@@ -308,6 +310,10 @@ function volumeDependenciesOf(
     showShallow: repository => {
       scene.volumeCalls.push(`showShallow ${repository}`);
     },
+    consent: () => {
+      scene.volumeCalls.push('consent');
+      return Promise.resolve(scene.consentGiven);
+    },
   };
 }
 
@@ -385,6 +391,7 @@ export function sceneOf(
     bootstrapAnswer: () => undefined,
     volumeCalls: [],
     typedSource: true,
+    consentGiven: true,
     backgroundStages: [],
     ...overrides,
   };

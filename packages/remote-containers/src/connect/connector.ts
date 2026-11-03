@@ -107,6 +107,7 @@ import {
 } from './remote-environment.ts';
 import {
   cancelled,
+  cloneConsentRefused,
   configurationInvalid,
   containerGone,
   commandFailed,
@@ -237,6 +238,11 @@ export interface VolumeConnectDependencies {
   ): CliBridge;
   /** A fresh, empty folder on the host that the CLI is given as its workspace folder there. */
   standIn(): Promise<{folder: string; dispose(): Promise<void>}>;
+  /**
+   * The clone's trust confirmation of the profile: given already, or asked now; when refused, the window goes back to
+   * a local one.
+   */
+  consent(): Promise<boolean>;
   /** Shows that only the latest commits of `repository` were cloned. */
   showShallow(repository: string): void;
 }
@@ -1534,6 +1540,10 @@ export function containerConnectorOf(
     const cancellation = controller.signal;
     failedContainer = undefined;
     attemptIdentity = undefined;
+    if (!target.inspectVolume && !(await volumes.consent())) {
+      logger.info("the clone's trust confirmation was refused");
+      return cloneConsentRefused();
+    }
     const settings = dependencies.settings();
     const executable = executableOf(settings.dockerPath, undefined);
     if (executable.kind !== 'spawn') {
