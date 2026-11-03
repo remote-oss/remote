@@ -148,7 +148,7 @@ import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {composeResolverOf} from './compose/resolver.ts';
 import {MOUNT_PERFORMANCE_PAGE} from './surfaces/recovery-presenter.ts';
-import {gitRemoteOf} from './open/git-remote.ts';
+import {cloneableRemoteOf} from './open/git-remote.ts';
 
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
@@ -199,9 +199,6 @@ import {
 import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
 import {ensureTrusted} from './trust/trust-gate.ts';
 import {openOwnSettings} from './settings/settings-command.ts';
-
-/** The command that clones a repository in a volume, which the clone offer of the reopen notification starts once the package registers it. */
-const CLONE_IN_VOLUME_COMMAND = 'remote-containers.cloneInVolume';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -662,18 +659,14 @@ export async function activate(
           : {
               cloning: {
                 remoteOf: async folder =>
-                  (await vscode.commands.getCommands(true)).includes(
-                    CLONE_IN_VOLUME_COMMAND,
-                  )
-                    ? gitRemoteOf(
-                        await readFile(`${folder}/.git/config`, 'utf8').catch(
-                          () => '',
-                        ),
-                      )
-                    : undefined,
+                  cloneableRemoteOf(
+                    await readFile(`${folder}/.git/config`, 'utf8').catch(
+                      () => '',
+                    ),
+                  ),
                 start: remote =>
                   vscode.commands.executeCommand(
-                    CLONE_IN_VOLUME_COMMAND,
+                    commands.openRepositoryInUniqueVolume.id,
                     remote,
                   ),
               },
@@ -801,7 +794,7 @@ export async function activate(
       function cloneCommand(): CommandHandler {
         let engine: PinnedEngine = {};
         return {
-          execute: async () => {
+          execute: async argument => {
             engine = await windowPinnedEngine();
             await cloneInUniqueVolume(
               {
@@ -841,10 +834,10 @@ export async function activate(
                     new AbortController().signal,
                   )) === 'proceed',
                 pickSource: () => pickCloneSource(),
-                precheck: (source, cancellation) =>
+                precheck: (source, origin, cancellation) =>
                   precheck(
                     source,
-                    'typed',
+                    origin,
                     {
                       openRelay: () => openCloneRelay(),
                       runGit: (gitArguments, environment, signal) =>
@@ -883,6 +876,7 @@ export async function activate(
                 logger: served.logger,
               },
               new AbortController().signal,
+              typeof argument === 'string' ? argument : undefined,
             );
           },
         };

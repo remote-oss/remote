@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {gitRemoteOf} from '../../src/open/git-remote.ts';
+import {cloneableRemoteOf, gitRemoteOf} from '../../src/open/git-remote.ts';
 
 describe('the remote of a Git repository (card containers-156)', () => {
   it('F-0708 6.4: the url of origin wins over another remote, and a repository with another remote only gives its first', () => {
@@ -36,6 +36,25 @@ describe('the remote of a Git repository (card containers-156)', () => {
         '[remote "origin"]\n\turl = https://example.com/1.git\n\turl = https://example.com/2.git\n',
       ),
       'https://example.com/1.git',
+    );
+  });
+
+  it('F-0708 6.4: the remote is offered only when a clone in a volume accepts it as a link, and a local path or a file address is not', () => {
+    deepStrictEqual(
+      [
+        '[remote "origin"]\n\turl = https://example.com/a/b.git\n',
+        '[remote "origin"]\n\turl = git@example.com:a/b.git\n',
+        '[remote "origin"]\n\turl = /srv/git/b.git\n',
+        '[remote "origin"]\n\turl = file:///srv/git/b.git\n',
+        '[core]\n',
+      ].map(cloneableRemoteOf),
+      [
+        'https://example.com/a/b.git',
+        'git@example.com:a/b.git',
+        undefined,
+        undefined,
+        undefined,
+      ],
     );
   });
 });

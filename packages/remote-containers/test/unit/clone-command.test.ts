@@ -20,7 +20,10 @@ interface Answers {
 }
 
 /** Runs the command over ports that answer as `changes` says, and gives what it did, in order. */
-async function runWith(changes: Partial<Answers> = {}): Promise<string[]> {
+async function runWith(
+  changes: Partial<Answers> = {},
+  link?: string,
+): Promise<string[]> {
   const answers: Answers = {
     accepted: true,
     trust: 'gotIt',
@@ -54,8 +57,8 @@ async function runWith(changes: Partial<Answers> = {}): Promise<string[]> {
       calls.push('pick');
       return Promise.resolve(answers.typed);
     },
-    precheck: source => {
-      calls.push(`precheck ${source.urlToClone}`);
+    precheck: (source, origin) => {
+      calls.push(`precheck ${source.urlToClone} ${origin}`);
       return Promise.resolve(answers.precheck);
     },
     cannotAccess: repository => {
@@ -79,7 +82,7 @@ async function runWith(changes: Partial<Answers> = {}): Promise<string[]> {
     },
     logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
   };
-  await cloneInUniqueVolume(ports, new AbortController().signal);
+  await cloneInUniqueVolume(ports, new AbortController().signal, link);
   return calls;
 }
 
@@ -88,7 +91,7 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith(), [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
       `typed ${JSON.stringify({
         kind: 'volume',
         repositoryPath: 'https://github.com/o/r/tree/main',
@@ -140,7 +143,7 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith({typed: ' o/r ', precheck: 'unreachable'}), [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
       'cannotAccess https://github.com/o/r',
     ]);
   });
@@ -157,7 +160,7 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith({precheck: 'cancelled'}), [
       'engine',
       'pick',
-      'precheck https://github.com/o/r',
+      'precheck https://github.com/o/r typed',
     ]);
   });
 
@@ -166,5 +169,30 @@ describe('Clone Repository in Container Volume, up to the reload (card container
       await runWith({currentRepository: 'https://github.com/o/r/tree/main'}),
       ['engine', 'pick'],
     );
+  });
+
+  it('F-0708 6.4: a link skips the pick and the record of a typed source, is checked as a link, and reloads into the same kind of payload', async () => {
+    const calls = await runWith({}, 'https://github.com/o/r.git');
+    deepStrictEqual(
+      [
+        calls.slice(0, 2),
+        calls.some(call => call.startsWith('typed ')),
+        calls.some(call => call === 'pick'),
+        calls.at(-1)?.startsWith('reload r '),
+      ],
+      [
+        ['engine', 'precheck https://github.com/o/r.git link'],
+        false,
+        false,
+        true,
+      ],
+    );
+  });
+
+  it('F-0708 6.4: a link that the clone refuses ends with the repository named and nothing checked', async () => {
+    deepStrictEqual(await runWith({}, '/home/u/repo'), [
+      'engine',
+      'cannotAccess /home/u/repo',
+    ]);
   });
 });

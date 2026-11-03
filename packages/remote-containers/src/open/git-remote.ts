@@ -2,6 +2,8 @@
  * @fileoverview The remote a Git repository can be cloned from, read from the text of its `config` file.
  */
 
+import {cloneSourceOf} from '../volumes/clone-source.ts';
+
 const REMOTE_SECTION = /^\[remote "([^"]*)"\]\s*$/;
 const URL_LINE = /^url\s*=\s*(\S.*?)\s*$/;
 
@@ -23,4 +25,12 @@ export function gitRemoteOf(configText: string): string | undefined {
     }
   }
   return urls.get('origin') ?? [...urls.values()][0];
+}
+
+/** The remote of the repository whose `config` is `configText`, when a clone in a volume accepts it as a link. */
+export function cloneableRemoteOf(configText: string): string | undefined {
+  const remote = gitRemoteOf(configText);
+  return remote === undefined || 'refused' in cloneSourceOf(remote, 'link')
+    ? undefined
+    : remote;
 }

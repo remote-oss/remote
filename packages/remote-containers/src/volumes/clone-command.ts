@@ -6,7 +6,11 @@
 
 import type {Logger} from 'lib-log';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
-import {cloneSourceOf, type CloneSource} from './clone-source.ts';
+import {
+  type CloneOrigin,
+  cloneSourceOf,
+  type CloneSource,
+} from './clone-source.ts';
 import type {PrecheckOutcome} from './precheck.ts';
 import {
   type DevContainerVolume,
@@ -34,6 +38,7 @@ export interface CloneCommandPorts {
   pickSource(): Promise<string | undefined>;
   precheck(
     source: CloneSource,
+    origin: CloneOrigin,
     cancellation: AbortSignal,
   ): Promise<PrecheckOutcome>;
   /** The modal error that names the repository that can't be read. */
@@ -100,29 +105,35 @@ async function trusted(ports: CloneCommandPorts): Promise<boolean> {
   return true;
 }
 
-/** Runs the command once, up to the reload; every way it ends before then leaves the window as it was. */
+/**
+ * Runs the command once, up to the reload; every way it ends before then leaves the window as it was. A `link` is a
+ * source the extension was handed, such as the remote of a repository: it is read as a link, not as the user's own
+ * input, and nothing is asked for it.
+ */
 export async function cloneInUniqueVolume(
   ports: CloneCommandPorts,
   cancellation: AbortSignal,
+  link?: string,
 ): Promise<void> {
   if (!(await trusted(ports)) || !(await ports.engineReady())) {
     return;
   }
-  const typed = await ports.pickSource();
-  if (typed === undefined) {
+  const origin: CloneOrigin = link === undefined ? 'typed' : 'link';
+  const given = link ?? (await ports.pickSource());
+  if (given === undefined) {
     return;
   }
-  const source = cloneSourceOf(typed, 'typed');
+  const source = cloneSourceOf(given, origin);
   if ('refused' in source) {
     ports.logger.info(`the source was refused: ${source.refused}`);
-    await ports.cannotAccess(typed.trim());
+    await ports.cannotAccess(given.trim());
     return;
   }
   if (ports.currentRepository() === source.repositoryPath) {
     ports.logger.info('the window is the clone of this repository already');
     return;
   }
-  const checked = await ports.precheck(source, cancellation);
+  const checked = await ports.precheck(source, origin, cancellation);
   if (checked === 'cancelled') {
     return;
   }
@@ -131,6 +142,8 @@ export async function cloneInUniqueVolume(
     return;
   }
   const target = uniqueVolumeTargetOf(source, ports.engine());
-  await ports.recordTyped(volumePayloadOf(target));
+  if (origin === 'typed') {
+    await ports.recordTyped(volumePayloadOf(target));
+  }
   await ports.reload(volumeWindowUriOf(target));
 }
