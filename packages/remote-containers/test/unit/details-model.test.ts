@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   detailsTreeOf,
+  mountPerformanceHintApplies,
   type DetailsRow,
   type ShownContainer,
   shownContainerOf,
@@ -384,6 +385,25 @@ describe('the container of docker inspect (card containers-33)', () => {
         [],
         ['I/O performance', 'I/O performance'],
       ],
+    );
+  });
+
+  it('F-0708 BR-4: the hint applies on a Windows host whose own Docker CLI runs the engine, and not on another host, with the WSL setting on, or in a WSL window', () => {
+    const windows = {
+      platform: 'win32',
+      executeInWSL: false,
+      remoteName: undefined,
+    };
+    deepStrictEqual(
+      [
+        windows,
+        {...windows, platform: 'linux'},
+        {...windows, platform: 'darwin'},
+        {...windows, executeInWSL: true},
+        {...windows, remoteName: 'wsl'},
+        {...windows, remoteName: 'dev-container'},
+      ].map(mountPerformanceHintApplies),
+      [true, false, false, false, false, true],
     );
   });
 });

@@ -44,7 +44,7 @@ describe('the information about mount performance (card containers-156)', functi
 
   before(() => rememberPage('local'));
 
-  it('F-0708 AC-4, AC-6, AC-7, AC-8 (c156-command): in a window before the Dev Containers view has loaded the command is missing and core says so; once the view has loaded it is registered and opens the one page with no other effect', async () => {
+  it('F-0708 AC-3, AC-4, AC-6, AC-7, AC-8 (c156-command): in a window before the Dev Containers view has loaded the command is missing and core says so; once the view has loaded it is registered and opens the one page with no other effect', async () => {
     const opens = recordBrowserOpens();
     const window = await nextEmptyWindow(() =>
       inWindow('local', 'workbench.action.newWindow'),

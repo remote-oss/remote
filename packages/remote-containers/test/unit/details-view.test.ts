@@ -39,6 +39,8 @@ const CONTAINER = 'a1a1a1a1a1a1';
 
 /** What a row steers, and what the fakes recorded. */
 interface Scene {
+  /** Whether the I/O performance hint applies. */
+  hint: boolean;
   commands: string[];
   held: HeldConnection | undefined;
   /** What `docker inspect` answers; a function when a row holds the answer. */
@@ -63,6 +65,7 @@ interface Scene {
 
 function sceneOf(): Scene {
   return {
+    hint: false,
     commands: [`${views.detailsContainers}.focus`],
     held: undefined,
     answer: () => ({kind: 'ran', status: 0, stdout: RECORDED, stderr: ''}),
@@ -185,7 +188,7 @@ function portsOf(scene: Scene): DetailsViewPorts {
         scene.disposed.push('held');
       };
     },
-    mountPerformanceHint: false,
+    mountPerformanceHint: () => scene.hint,
     translate: template => template,
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
   };

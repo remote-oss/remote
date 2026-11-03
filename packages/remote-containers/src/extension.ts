@@ -173,6 +173,7 @@ import {
   type DetailsView,
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
+import {mountPerformanceHintApplies} from './explorer/details-model.ts';
 import {containerLogOf} from './explorer/container-log.ts';
 import {inspectOf} from './explorer/inspect.ts';
 import {
@@ -2215,7 +2216,15 @@ export async function activate(
       cancellation: rowActionsStop.signal,
     });
     detailsView = showDetailsWhenRegistered({
-      mountPerformanceHint: process.platform === 'win32',
+      mountPerformanceHint: () =>
+        mountPerformanceHintApplies({
+          platform: process.platform,
+          executeInWSL:
+            vscode.workspace
+              .getConfiguration('dev.containers')
+              .get('executeInWSL') === true,
+          remoteName: vscode.env.remoteName,
+        }),
       editor: {
         ...explorerEditor,
         focus: () =>

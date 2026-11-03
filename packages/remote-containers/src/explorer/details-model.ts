@@ -153,6 +153,24 @@ function branch(
   return {id: rowId, label, description: '', viewItem: undefined, children};
 }
 
+/** What decides whether the engine's Docker commands are run by a Windows-side Docker CLI. */
+export interface HintSituation {
+  platform: string;
+  /** The `dev.containers.executeInWSL` setting. */
+  executeInWSL: boolean;
+  /** The window's remote name; none in a local window. */
+  remoteName: string | undefined;
+}
+
+/** Whether the I/O performance hint applies: the engine runs from a Windows host's own Docker CLI, not inside WSL. */
+export function mountPerformanceHintApplies(situation: HintSituation): boolean {
+  return (
+    situation.platform === 'win32' &&
+    !situation.executeInWSL &&
+    situation.remoteName !== 'wsl'
+  );
+}
+
 /** The row under a bind mount that says bridging the host's and the container's systems costs I/O performance. */
 function performanceRow(rowId: string, translate: Translate): DetailsRow {
   const label = textOf('S199', translate);

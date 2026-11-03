@@ -65,7 +65,7 @@ export interface DetailsViewPorts {
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
   /** Whether the engine runs from a Windows-side Docker CLI, which bridges two systems at a bind mount. */
-  mountPerformanceHint: boolean;
+  mountPerformanceHint(): boolean;
   translate: Translate;
   logger: Logger;
 }
@@ -179,7 +179,7 @@ export async function showDetails(
     const next =
       shown === undefined
         ? undefined
-        : detailsTreeOf(shown, ports.translate, ports.mountPerformanceHint);
+        : detailsTreeOf(shown, ports.translate, ports.mountPerformanceHint());
     const showing = held !== undefined || choice !== undefined;
     await editor.setContext(
       contextKeys.remoteContainersShowDetails.id,
