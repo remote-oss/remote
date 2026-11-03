@@ -24,8 +24,11 @@ const CONFIGURATION_PATH = /(^|\/)\.?devcontainer\.json$/;
 
 /** What the continuation needs: the wizard and the two things it shows afterwards. */
 export interface ContinuationPorts {
-  /** The wizard for a folder. */
-  wizard(folder: string): Promise<WizardOutcome>;
+  /**
+   * The wizard for a folder; `roots` are the listed roots of a saved multi-root workspace whose file `folder` holds,
+   * and none for a single folder.
+   */
+  wizard(folder: string, roots: readonly string[]): Promise<WizardOutcome>;
   /** Opens the file in a preview editor tab. */
   openPreview(file: string): PromiseLike<unknown>;
   /**
@@ -36,12 +39,39 @@ export interface ContinuationPorts {
   logger: Logger;
 }
 
+/** A folder of the window, as the editor gives it. */
+interface WindowFolder {
+  scheme: string;
+  fsPath: string;
+  path: string;
+}
+
+/**
+ * The listed roots of a saved multi-root workspace, as local paths, and the folder its file is in; nothing for a
+ * single folder or an untitled workspace.
+ */
+export function savedWorkspaceOf(
+  folders: readonly WindowFolder[],
+  workspaceFile: {scheme: string; fsPath: string} | undefined,
+): {folder: string; roots: string[]} | undefined {
+  return workspaceFile?.scheme === 'file' && folders.length > 1
+    ? {
+        folder: path.dirname(workspaceFile.fsPath),
+        roots: folders
+          .filter(each => each.scheme === 'file')
+          .map(each => each.fsPath),
+      }
+    : undefined;
+}
+
 /** What the command needs of its surroundings. */
 export interface CreateFilePorts extends ContinuationPorts {
   window: {
-    folders(): ReadonlyArray<{scheme: string; fsPath: string; path: string}>;
+    folders(): readonly WindowFolder[];
     /** The kind of remote the window is connected to; none for a local window. */
     remoteName(): string | undefined;
+    /** The window's workspace file; none for a window of one folder opened as such. */
+    workspaceFile(): {scheme: string; fsPath: string} | undefined;
   };
   /** A modal with the buttons; gives the one chosen, or nothing for Cancel. */
   showModal(
@@ -60,8 +90,9 @@ export interface CreateFilePorts extends ContinuationPorts {
 export async function addConfiguration(
   ports: ContinuationPorts,
   folder: string,
+  roots: readonly string[],
 ): Promise<WizardOutcome> {
-  const outcome = await ports.wizard(folder);
+  const outcome = await ports.wizard(folder, roots);
   ports.logger.info(`${TITLE} ended: ${outcome.kind}`);
   if (outcome.kind === 'openStored') {
     await ports.openPreview(outcome.file);
@@ -104,11 +135,17 @@ export function createDevContainerFile(
             ports.window.remoteName() === 'dev-container'
           ? only.path
           : undefined;
+    // A saved multi-root workspace gets its configuration beside the workspace file; an untitled one gets none.
+    const saved = savedWorkspaceOf(folders, ports.window.workspaceFile());
+    if (saved !== undefined) {
+      await addConfiguration(ports, saved.folder, saved.roots);
+      return;
+    }
     if (folders.length !== 1 || folder === undefined) {
       ports.logger.info(`${TITLE} does nothing in this window`);
       return;
     }
-    await addConfiguration(ports, folder);
+    await addConfiguration(ports, folder, []);
   }
 
   return async () => {

@@ -356,6 +356,7 @@ function stagesWithoutFeatures(scene: Scene): ReturnType<typeof stagesOf> {
     ...scene.ports,
     title: 'T',
     facts: {rootEntries: [], files: [], truncated: false},
+    roots: [],
   } satisfies StagePorts);
 }
 
@@ -661,6 +662,7 @@ describe('the wizard (card containers-80)', () => {
         ...scene.ports,
         title: 'T',
         facts: {rootEntries: [], files: [], truncated: false},
+        roots: [],
       } satisfies StagePorts,
     );
     return stages.find(stage => stage.name === 'selectFeatures');
@@ -908,6 +910,7 @@ describe('the wizard (card containers-80)', () => {
         location: locationOf(scene),
         title: 'T',
         facts: {rootEntries: [], files: [], truncated: false},
+        roots: [],
       } satisfies StagePorts,
     );
     deepStrictEqual(
@@ -1193,7 +1196,7 @@ describe('the wizard (card containers-80)', () => {
 
   it('F-0801 AC-1: the runner the commands use titles the pick S024 and writes into the folder it is given', async () => {
     const scene = sceneOf();
-    const result = wizardRunnerOf(scene.ports)('/work/ws');
+    const result = wizardRunnerOf(scene.ports)('/work/ws', []);
     await new Promise(resolve => setTimeout(resolve, 0));
     const [picker] = scene.pickers;
     picker?.accept('Alpine');
