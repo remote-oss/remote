@@ -173,6 +173,12 @@ tagged `later (Compose)`. Decisions: D-105, ADR-0002 rule 8, ADR-0005, ADR-0009,
    - a connection connected to it, attach windows included;
    - a live dev-container connection of the same project and engine whose scope names its service.
 
+   **The primary rule** (`reading-1912-primary-in-use`, athena on #2053, F-0417 AC-15):
+   - when another live connection is *connected to* the closing scope's primary container (an attach window, or a
+     window on that container; a scope that merely names the service doesn't count), the close kills nothing of its
+     scope and remembers the scope's services as skipped;
+   - F-0417 BR-7 says the opposite, and that question is with metis (remote-containers#133).
+
    Being `"none"` doesn't stop a connection from counting (AC-18). A window that lost its connection, or shows a
    failure, doesn't count (AC-52), while its own obligation waits until it ends (BR-8).
 3. **The helper remembers skipped services by project and service name** (not by id), keyed by the engine
