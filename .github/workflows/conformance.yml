@@ -164,17 +164,17 @@ jobs:
         run: |
           display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
           # bin/conformance copies the suite's fixture definitions into the work folder only on a runner's first run, and the
-          # work folder is kept: a later suite's new or changed definitions are copied over here, and the runner's own
-          # catalogue of built fixtures stays, so verify rebuilds exactly the fixtures whose definition changed
+          # work folder is kept between jobs. A local catalogue built from an earlier suite's definitions then holds that
+          # suite's local builds, and the pin guard refuses a rebuild for the new definition. The local fixtures are kept
+          # for one published catalogue: when the suite's CATALOG.json differs from the one they were built for, they are
+          # removed, and bin/conformance starts them again from this suite's definitions. A case's pin resolves through
+          # the published catalogue (ENCODE_REFERENCE_CATALOG) to the local build with the same definition.
           fixtures="$CONFORMANCE_WORK/fixtures"
-          mkdir -p "$fixtures"
-          if [ -f "$fixtures/CATALOG.json" ]; then
-            cp "$fixtures/CATALOG.json" "$RUNNER_TEMP/local-catalog.json"
-          else
-            echo '{"version": 1, "fixtures": []}' > "$RUNNER_TEMP/local-catalog.json"
+          published=$(sha256sum "$CONFORMANCE_SUITE/fixtures/CATALOG.json" | cut -c1-64)
+          if [ "$(cat "$fixtures/.published-catalog" 2>/dev/null)" != "$published" ]; then
+            echo "the local fixtures were built for another published catalogue: starting them again for $published"
+            rm -rf "$fixtures"
           fi
-          cp -r "$CONFORMANCE_SUITE/fixtures/." "$fixtures/"
-          mv "$RUNNER_TEMP/local-catalog.json" "$fixtures/CATALOG.json"
           # the environment bin/conformance gives fixture.py, for its verify (bin/conformance runs only build and run)
           verified() {
             ( cd tests/conformance/runner/encode && ENCODE_ROOT="$CONFORMANCE_WORK" ENCODE_TESTS="$CONFORMANCE_SUITE/suite" ENCODE_FIXTURES="$CONFORMANCE_WORK/fixtures" \
@@ -185,14 +185,19 @@ jobs:
           }
           conformance=tests/conformance/runner/bin/conformance
           verified encode-registry || $conformance build mirror --pull
-          verified base || $conformance build engine/base
-          verified pilot-states || $conformance build engine/pilot-states
-          verified fresh-public || display $conformance build editor/fresh-public
-          for git in "$CONFORMANCE_SUITE"/fixtures/git/*/; do
-            [ -d "$git" ] || continue
-            name=$(basename "$git")
-            verified "$name" || $conformance build "git/$name"
+          # every engine, editor and git fixture this suite defines, and no other
+          for kind in engine editor git; do
+            for definition in "$CONFORMANCE_SUITE"/fixtures/"$kind"/*/fixture.yaml; do
+              [ -f "$definition" ] || continue
+              name=$(basename "$(dirname "$definition")")
+              if [ "$kind" = editor ]; then
+                verified "$name" || display $conformance build "$kind/$name"
+              else
+                verified "$name" || $conformance build "$kind/$name"
+              fi
+            done
           done
+          echo "$published" > "$fixtures/.published-catalog"
         env:
           CONFORMANCE_SUITE: ${{ github.workspace }}/suite/tests/conformance
       - name: Replay this shard's cases
