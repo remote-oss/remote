@@ -333,7 +333,7 @@ describe('configurations outside the repository (card containers-161, F-0302)', 
     }
   });
 
-  it('F-0302 AC-3, AC-13, AC-36, AC-44, AC-45 (c161-notice): the window of a repository with a mirrored file shows the notification with the repository’s wording, also beside its own file, for a portless ssh remote and for a subfolder; a root written with ~, ${env:HOME} or ${userHome} matches nothing and a trailing slash still matches', async () => {
+  it('F-0302 AC-3, AC-13, AC-36, AC-44 (c161-notice): the window of a repository with a mirrored file shows the notification with the repository’s wording, also beside its own file, for a portless ssh remote and for a subfolder; a root written with ~, ${env:HOME} or ${userHome} matches nothing and a trailing slash still matches', async () => {
     const name = 'c161-notice';
     const root = freshFolder(`${name}-root`);
     const home = os.homedir();

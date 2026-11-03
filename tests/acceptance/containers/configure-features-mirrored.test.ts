@@ -188,7 +188,7 @@ describe('Configure Container Features on a configuration outside the repository
     }
   });
 
-  it('F-0302 AC-14, AC-42, AC-43, AC-44 (c161-spellings): each spelling of a remote maps to exactly its folder under the root: the file there is the one written, with no pick, and no decoy folder is a candidate', async () => {
+  it('F-0302 AC-14, AC-44 (c161-spellings): each spelling of a remote maps to exactly its folder under the root: the file there is the one written, with no pick, and no decoy folder is a candidate', async () => {
     const name = 'c161-spellings';
     const spellings: Array<{url: string; exact: string; decoys: string[]}> = [
       {
