@@ -1,0 +1,26 @@
+# The whole VSCodium selection of a pull request whose change selects more than six launches, run at its head when the
+# acceptance-full label is added. It runs only when the coordinator's account (by its user id) adds it, and only on a
+# pull request from this repository: a fork's pull request never runs on the self-hosted runners. The run counts for
+# that head only; a later push runs ci.yml's job, which runs the whole selection while the label stays on.
+name: acceptance-full
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  full:
+    if: >-
+      github.event.label.name == 'acceptance-full' && github.event.sender.id == 340711528 &&
+      github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    # ci.yml's group: this run waits for ci.yml's run of the pull request and never cancels it (a cancelled job fails
+    # ci.yml's gate), and a newer push cancels this run
+    concurrency:
+      group: acceptance-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/acceptance-launches.yml
+    with:
+      full: true

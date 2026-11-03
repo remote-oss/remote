@@ -140,6 +140,57 @@ export function partsOf(
   return needed;
 }
 
+/** The most launches a pull request's own acceptance job runs; a larger selection needs a dispatch or the full label. */
+export const PULL_REQUEST_LAUNCHES = 6;
+
+/** What a pull request's acceptance job does for its selection. */
+export interface PullRequestPlan {
+  /** The launches it runs, joined by commas; empty when it runs none. */
+  launches: string;
+  /** Its time limit: 60 minutes, or 180 for a whole selection under the full label. */
+  minutes: number;
+  /** A notice for the pull request when the selection is over the limit and the label is absent. */
+  notice?: string;
+}
+
+/**
+ * The plan of a pull request's acceptance job: the selected launches that are in a part of the VSCodium job (the
+ * genuine group has its own job), all of them when there are at most `PULL_REQUEST_LAUNCHES` or the pull request carries
+ * the full label, and none otherwise, with a notice naming them.
+ */
+export function pullRequestPlan(
+  selection: Selection,
+  launches: readonly Launch[],
+  parts: readonly string[],
+  full: boolean,
+): PullRequestPlan {
+  const inParts = new Set<string>();
+  for (const part of parts) {
+    const inPart = chosenLaunches(launches, part.split(','));
+    if (typeof inPart === 'string') {
+      throw new Error(`ci.yml's part ${part}: ${inPart}`);
+    }
+    for (const launch of inPart) {
+      inParts.add(launch.label);
+    }
+  }
+  const chosen = selection.labels.filter(label => inParts.has(label));
+  if (chosen.length === 0) {
+    return {launches: '', minutes: 60};
+  }
+  if (chosen.length <= PULL_REQUEST_LAUNCHES) {
+    return {launches: chosen.join(','), minutes: 60};
+  }
+  if (full) {
+    return {launches: chosen.join(','), minutes: 180};
+  }
+  return {
+    launches: '',
+    minutes: 60,
+    notice: `this change selects ${String(chosen.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${chosen.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
+  };
+}
+
 /** The files a change touches: `git diff --name-only <base>...<head>`, from the merge base. */
 function changedFiles(base: string, head: string): string[] {
   return execFileSync(
@@ -152,15 +203,21 @@ function changedFiles(base: string, head: string): string[] {
 }
 
 const SELECT_USAGE =
-  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--parts]';
+  'usage: node tools/acceptance-select.ts --base <sha> --head <sha> [--parts | --pull-request [--full]]';
 
 if (isMainModule(import.meta.url)) {
   const commandArguments = process.argv.slice(2);
   const base = commandArguments[commandArguments.indexOf('--base') + 1];
   const head = commandArguments[commandArguments.indexOf('--head') + 1];
   const byParts = commandArguments.includes('--parts');
+  const forPullRequest = commandArguments.includes('--pull-request');
+  const full = commandArguments.includes('--full');
+  const expected =
+    4 + (byParts ? 1 : 0) + (forPullRequest ? 1 : 0) + (full ? 1 : 0);
   if (
-    commandArguments.length !== (byParts ? 5 : 4) ||
+    commandArguments.length !== expected ||
+    (byParts && forPullRequest) ||
+    (full && !forPullRequest) ||
     !commandArguments.includes('--base') ||
     !commandArguments.includes('--head') ||
     base === undefined ||
@@ -174,21 +231,22 @@ if (isMainModule(import.meta.url)) {
     for (const line of selection.reasons) {
       console.error(`selected ${line}`);
     }
-    console.log(
-      byParts
-        ? JSON.stringify(
-            partsOf(
-              selection,
-              launches,
-              workflowParts(
-                readFileSync(
-                  path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
-                  'utf8',
-                ),
-              ),
-            ),
-          )
-        : launchesInput(selection, launches),
+    const parts = workflowParts(
+      readFileSync(
+        path.join(REPOSITORY_ROOT, '.github', 'workflows', 'ci.yml'),
+        'utf8',
+      ),
     );
+    if (forPullRequest) {
+      console.log(
+        JSON.stringify(pullRequestPlan(selection, launches, parts, full)),
+      );
+    } else {
+      console.log(
+        byParts
+          ? JSON.stringify(partsOf(selection, launches, parts))
+          : launchesInput(selection, launches),
+      );
+    }
   }
 }
