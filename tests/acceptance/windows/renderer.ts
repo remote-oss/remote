@@ -3970,3 +3970,11 @@ export async function terminalTabWarnings(name: string): Promise<number> {
     `document.querySelectorAll('.single-terminal-tab .codicon-warning, .terminal-tabs-entry .codicon-warning').length`,
   );
 }
+
+/** The accessible labels of the terminal tabs of window `name` that carry a warning icon: each names the terminal and core's reason for the mark. */
+export async function markedTerminalTabs(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.single-terminal-tab, .terminal-tabs-entry')].filter(tab => tab.querySelector('.codicon-warning') !== null).map(tab => tab.getAttribute('aria-label') ?? tab.getAttribute('title') ?? (tab.textContent ?? '').trim())`,
+  );
+}

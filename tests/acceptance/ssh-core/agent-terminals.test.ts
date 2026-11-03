@@ -25,7 +25,7 @@ import {
   printedAfter,
   windowWithTerminal,
 } from '../windows/terminal-support.ts';
-import {terminalTabWarnings} from '../windows/renderer.ts';
+import {markedTerminalTabs, terminalTabWarnings} from '../windows/renderer.ts';
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 
 /** The alias that forwards the run's agent. */
@@ -80,7 +80,7 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
           marked: await terminalTabWarnings('c99-new-shell'),
         },
         {links: 2, now: second, marked: 0},
-        first,
+        `first link ${first}; marked tabs: ${JSON.stringify(await markedTerminalTabs('c99-new-shell'))}`,
       );
     } finally {
       await closeWindow('c99-new-shell').catch(() => undefined);
@@ -109,6 +109,7 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
       ).catch(() => undefined);
       const links = await linkPaths();
       const second = links.find(link => link !== first) ?? '';
+      const marks = await markedTerminalTabs('c99-reattached');
       const before = await printedAfter(
         'c99-reattached',
         'OLD',
@@ -136,6 +137,7 @@ describe('F-2311, the terminals of a window that comes back (card coverage-99)',
           after: second,
           keys: true,
         },
+        `marked tabs after the reload: ${JSON.stringify(marks)}`,
       );
     } finally {
       await closeWindow('c99-reattached').catch(() => undefined);
