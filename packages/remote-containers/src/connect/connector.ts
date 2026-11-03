@@ -1456,6 +1456,7 @@ export function containerConnectorOf(
       ),
       mounts: [],
       runArgs: [],
+      windowsClient: dependencies.clientPlatform === 'win32',
       workspaceMount: undefined,
       pausedRetry: takenPausedRetry,
       ...(rebuild === undefined ? {} : {rebuild}),
