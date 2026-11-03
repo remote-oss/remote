@@ -37,9 +37,13 @@ module="${XDG_DATA_HOME:-$HOME/.local/share}/powershell/Modules/PSScriptAnalyzer
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# Downloads $1 into $2 and stops unless its sha256 is $3.
+# Downloads $1 into $2 and stops unless its sha256 is $3. A refused or failed request (a 403 or 5xx from the release
+# host) is tried again, five times in all, and the URL is named when every try fails.
 fetch() {
-  curl -fsSL --retry 3 -o "$2" "$1"
+  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$2" "$1" || {
+    echo "install-pwsh: $1 could not be downloaded" >&2
+    exit 1
+  }
   echo "$3  $2" | sha256sum --check --quiet - || {
     echo "install-pwsh: $1 does not match its pinned sha256" >&2
     exit 1
