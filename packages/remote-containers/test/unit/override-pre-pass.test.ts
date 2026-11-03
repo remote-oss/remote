@@ -191,9 +191,9 @@ describe('the override pre-pass (card containers-04)', () => {
       workspaceFolder: '/workspaces/r',
     };
 
-    it('F-0701 BR-14, AC-53, AC-54: every reference is resolved from the editor, an unset one by its default or as empty', () => {
+    it('F-0701 BR-14, AC-53, AC-54: every reference is resolved from the editor, an unset one by its default or as empty, and the local folder is the volume’s', () => {
       const result = volumeOverrideText(
-        '{"containerEnv": {"HOME_AT": "${localEnv:HOME}", "WITH_DEFAULT": "${localEnv:UNSET_VAR:fallback}", "EMPTY_AT": "${env:EMPTY:d}", "UNSET_AT": "${localEnv:UNSET_VAR}", "FOLDER_AT": "${localWorkspaceFolder}"}}',
+        '{"containerEnv": {"HOME_AT": "${localEnv:HOME}", "WITH_DEFAULT": "${localEnv:UNSET_VAR:fallback}", "EMPTY_AT": "${env:EMPTY:d}", "UNSET_AT": "${localEnv:UNSET_VAR}", "FOLDER_AT": "${localWorkspaceFolder}", "BASE_AT": "x-${localWorkspaceFolderBasename}"}}',
         {HOME: '/home/u', EMPTY: ''},
         workspace,
       );
@@ -206,7 +206,8 @@ describe('the override pre-pass (card containers-04)', () => {
               WITH_DEFAULT: 'fallback',
               EMPTY_AT: 'd',
               UNSET_AT: '',
-              FOLDER_AT: '${localWorkspaceFolder}',
+              FOLDER_AT: '/workspaces/r',
+              BASE_AT: 'x-r',
             },
             ...workspace,
           },

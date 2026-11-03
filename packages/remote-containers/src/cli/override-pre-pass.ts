@@ -140,8 +140,9 @@ export interface VolumeWorkspace {
 
 /**
  * The configuration text of a clone in a volume, for a CLI that runs in the bootstrap container and so can't see the
- * editor's environment: every variable reference resolved from that environment, the `image` beside a Dockerfile build
- * taken out, and the workspace set to the volume's. `ownWorkspace` says whether the configuration named its own, which
+ * editor's environment: every variable reference resolved from that environment, the local workspace folder and its
+ * basename resolved to the folder in the volume, the `image` beside a Dockerfile build taken out, and the workspace set
+ * to the volume's. `ownWorkspace` says whether the configuration named its own, which
  * is ignored. Nothing when the text does not parse to an object.
  */
 export function volumeOverrideText(
@@ -157,8 +158,13 @@ export function volumeOverrideText(
   ) {
     return undefined;
   }
+  const basename = workspace.workspaceFolder.slice(
+    workspace.workspaceFolder.lastIndexOf('/') + 1,
+  );
   let text = rewrittenText(configText, configuration, value =>
-    resolved(value, editorEnvironment),
+    resolved(value, editorEnvironment)
+      .replaceAll('${localWorkspaceFolderBasename}', basename)
+      .replaceAll('${localWorkspaceFolder}', workspace.workspaceFolder),
   );
   for (const [key, value] of Object.entries(workspace)) {
     text = applyEdits(text, modify(text, [key], value, {}));
