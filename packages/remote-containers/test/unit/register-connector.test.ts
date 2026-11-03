@@ -339,7 +339,7 @@ describe('the registration of the container connector (card containers-08)', () 
     ];
     deepStrictEqual(
       results.map(result =>
-        typeof result === 'object' && result !== null && 'isTrusted' in result
+        typeof result === 'object' && 'isTrusted' in result
           ? result.isTrusted
           : 'absent',
       ),
