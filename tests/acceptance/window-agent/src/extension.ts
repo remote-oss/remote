@@ -595,6 +595,16 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
+    // Adding a folder to a single-folder window makes it an untitled multi-root workspace.
+    vscode.commands.registerCommand(
+      'acceptance.agent.addFolder',
+      (folder: string) =>
+        vscode.workspace.updateWorkspaceFolders(
+          vscode.workspace.workspaceFolders?.length ?? 0,
+          0,
+          {uri: vscode.Uri.file(folder)},
+        ),
+    ),
     vscode.commands.registerCommand(
       'acceptance.agent.environment',
       (variableName: string) => {
