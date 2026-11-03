@@ -80,7 +80,7 @@ describe('the dialogs of an attach that failed (card containers-163, part A)', (
 
 /** The ports with the choices to give in order, and what the presenter did. */
 function sceneOf(options: {
-  dialog?: string;
+  dialog?: string | undefined;
   picks?: Array<string | undefined>;
 }) {
   const done: string[] = [];
