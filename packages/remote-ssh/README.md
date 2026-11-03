@@ -47,6 +47,7 @@ The status numbers only grow: a new status takes the next unused number, and no 
 | `SendDisconnectBrokenPipe` | 6 |
 | `ServerDownloadFailed` | 7 |
 | `NoDownloaderAvailable` | 8 |
+| `InvalidProxyUrl` | 9 |
 
 ## For maintainers
 

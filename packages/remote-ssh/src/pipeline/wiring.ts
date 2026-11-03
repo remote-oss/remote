@@ -372,6 +372,7 @@ export function stepsOf(
         connectionSettings(),
         ports.requestEnvironment,
         () => locateClient(input),
+        () => serverSteps(input).checkProxy(input),
       ),
     adoptRunFacts: runFacts => {
       state.programs ??= {
@@ -469,6 +470,7 @@ export function stepsOf(
     checkStartSettings: input => serverSteps(input).checkStartSettings(input),
     validate: input => serverSteps(input).validate(input),
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
+    checkProxy: input => serverSteps(input).checkProxy(input),
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
       ports: ports.preconnect,

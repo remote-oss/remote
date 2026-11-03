@@ -129,6 +129,11 @@ export interface ConnectSteps {
   validate(input: ConnectInput): StepResult<undefined>;
   /** The install folder setting, checked before anything runs. */
   checkInstallFolder(input: ConnectInput): StepResult<undefined>;
+  /**
+   * The proxy settings, checked as URIs only when the connect sets up its own connection: a connect that joins a
+   * running one neither checks nor applies them.
+   */
+  checkProxy(input: ConnectInput): StepResult<undefined>;
   /** The pre-connection script, when one is set; the pipeline calls it on the first attempt only. */
   preconnect(
     input: ConnectInput,

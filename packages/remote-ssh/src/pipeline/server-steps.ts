@@ -60,6 +60,7 @@ import {
   serverNamesOf,
 } from './parameters.ts';
 import type {ConnectSteps} from './steps.ts';
+import {proxyProblem, type ProxyProblem} from './proxy-check.ts';
 
 /** What the server steps of one connect are made from. */
 export interface ServerStepDependencies {
@@ -76,6 +77,10 @@ export interface ServerStepDependencies {
    * entry as written. It does not wait for the user.
    */
   rejectBindHost: (alias: string, configured: string) => void;
+  /** The editor's strict URI parser, which throws for a text that is no URI. */
+  parseUri: (text: string) => void;
+  /** Keeps the hint of a proxy value the parser rejected, for the troubleshooting view. */
+  onProxyRejected: (problem: ProxyProblem) => void;
   /** The user name on the host, from the effective ssh config; read when a step needs it, once the lookup has run. */
   remoteUser: () => string;
   /** Whether this connect's server listens on a socket; the tunnel step's path decides it, once per connect. */
@@ -116,6 +121,7 @@ type ServerStepNames =
   | 'checkStartSettings'
   | 'validate'
   | 'checkInstallFolder'
+  | 'checkProxy'
   | 'probe'
   | 'plan'
   | 'gate'
@@ -294,6 +300,21 @@ export function createServerSteps(
             },
           }
         : {kind: 'done', value: undefined},
+    checkProxy: () => {
+      const problem = proxyProblem(settings, dependencies.parseUri);
+      if (problem === undefined) {
+        return {kind: 'done', value: undefined};
+      }
+      dependencies.onProxyRejected(problem);
+      return {
+        kind: 'failed',
+        failure: {
+          kind: 'invalidSetting',
+          reason: {text: problem.error},
+          logDetail: `the proxy value '${problem.value}' is no URI: ${problem.error}`,
+        },
+      };
+    },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
     maintain: (input, lease, action, cancellation) =>

@@ -154,7 +154,9 @@ export function effectiveProxyText(setting: unknown, alias: string): string {
   if (chosen === undefined) {
     return '';
   }
-  return typeof chosen === 'string' ? chosen : JSON.stringify(chosen);
+  // An entry of another type reads as JavaScript's own text of it, an object as `[object Object]`.
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- that default text is the value
+  return typeof chosen === 'string' ? chosen : String(chosen);
 }
 
 /** The seconds of reconnection grace: a number of 1 or more, else 0, which passes no option. */

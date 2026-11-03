@@ -821,6 +821,59 @@ describe('the server steps: validate and the names', () => {
     });
   });
 
+  it('F-2404 7.E1: checkProxy fails a value the parser rejects, as an invalid setting with the parser message, and keeps its hint', () => {
+    const rejected: unknown[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({httpProxy: ' http://proxy:1'}),
+        parseUri: text => {
+          if (text.startsWith(' ')) {
+            throw new Error('[UriError]: Scheme contains illegal characters.');
+          }
+        },
+        onProxyRejected: problem => {
+          rejected.push(problem);
+        },
+      }),
+    );
+    deepStrictEqual(
+      [steps.checkProxy(INPUT), rejected],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            reason: {text: '[UriError]: Scheme contains illegal characters.'},
+            logDetail:
+              "the proxy value ' http://proxy:1' is no URI: [UriError]: Scheme contains illegal characters.",
+          },
+        },
+        [
+          {
+            value: ' http://proxy:1',
+            error: '[UriError]: Scheme contains illegal characters.',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-2404 6.3: checkProxy passes values the parser accepts and keeps no hint', () => {
+    const rejected: unknown[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({httpProxy: 'proxy:3128'}),
+        onProxyRejected: problem => {
+          rejected.push(problem);
+        },
+      }),
+    );
+    deepStrictEqual(
+      [steps.checkProxy(INPUT), rejected],
+      [{kind: 'done', value: undefined}, []],
+    );
+  });
+
   it('F-2409 7.E1: checkStartSettings shows the notice for a refused bind host and goes on', () => {
     const rejected: Array<[string, string]> = [];
     const steps = createServerSteps(

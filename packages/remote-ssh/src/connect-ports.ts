@@ -71,6 +71,7 @@ import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
+import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
   openingAttached,
   refusalWatchOf,
@@ -159,6 +160,8 @@ export interface ConnectSurfaces {
   revealLog: () => void;
   /** Tells the user that the host's bind host entry is not valid; does not wait for the user. */
   rejectBindHost: (alias: string, configured: string) => void;
+  /** The editor's strict URI parser, which throws for a text that is no URI. */
+  parseUri: (text: string) => void;
   /** The editor's terminals that make the agent link after the editor's own checks. */
   linkTerminals: LinkTerminals;
   /** Makes these the only variables the window's terminals get from the extension. */
@@ -431,6 +434,10 @@ export function wiringPortsOf(
       newTemporaryToken: machine.newTemporaryToken,
       discardDeadlineMilliseconds: DISCARD_DEADLINE_MILLISECONDS,
       rejectBindHost: surfaces.rejectBindHost,
+      parseUri: surfaces.parseUri,
+      onProxyRejected: problem => {
+        surfaces.hints.record(invalidProxyHint(problem, surfaces.translate));
+      },
       logger,
     },
     cliPath: {
