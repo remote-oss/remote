@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import * as vscode from 'vscode';
 import {
   launchScript,
   recordAfterDialog,
@@ -25,6 +26,10 @@ interface FailureCase {
   logIncludes?: string;
   /** Whether the download host must have seen no request while the case ran. */
   noDownloadRequests?: boolean;
+  /** Whether the notification centre must hold nothing after the dialog: no notice was recorded. */
+  noNotice?: boolean;
+  /** A setting whose value in the user settings must still be the one the case's launch gave it (none when it gave none). */
+  settingUnchanged?: string;
 }
 
 /** The failing connects, bundled from the file the harness reads to launch them. */
@@ -96,6 +101,25 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
       strictEqual(
         connectionLog().some(line => line.includes(wanted)),
         true,
+      );
+    });
+  }
+
+  if (failure?.noNotice === true) {
+    it(`${failure.cite}: no notification was shown`, () => {
+      deepStrictEqual(
+        lines.filter(line => line.surface === 'notice'),
+        [],
+      );
+    });
+  }
+
+  if (failure?.settingUnchanged !== undefined) {
+    const setting = failure.settingUnchanged;
+    it(`${failure.cite}: ${setting} is as the launch gave it`, () => {
+      strictEqual(
+        vscode.workspace.getConfiguration().inspect(setting)?.globalValue,
+        failure.settings?.[setting],
       );
     });
   }

@@ -136,7 +136,7 @@
     {
       "label": "platform-escape",
       "alias": "harness",
-      "cite": "F-2601 AC-7, F-2304 AC-13",
+      "cite": "F-2601 AC-7, F-2304 AC-13, F-2701 AC-19",
       "settings": {
         "remote.SSH.useLocalServer": false
       },
@@ -157,7 +157,9 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"harness\": Connecting was canceled."
+      "dialog": "Could not establish connection to \"harness\": Connecting was canceled.",
+      "noNotice": true,
+      "settingUnchanged": "remote.SSH.remotePlatform"
     },
     {
       "label": "port-range-busy",
