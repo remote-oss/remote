@@ -183,6 +183,7 @@ export async function commandBeforeReload(
   folder: string,
   dockerPath: string,
   configFile?: string,
+  switching?: ConfigurationRequest['switching'],
 ): ReturnType<typeof beforeReload> {
   const result = await beforeReload(
     {
@@ -204,6 +205,7 @@ export async function commandBeforeReload(
         ports.settings.lockfile(),
       ),
       ...(configFile === undefined ? {} : {configFile}),
+      ...(switching === undefined ? {} : {switching}),
     },
   );
   if (result.choice.kind !== 'chosen') {

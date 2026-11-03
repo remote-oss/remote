@@ -8,6 +8,7 @@
   "commands.Reopeninssh.title": "Reopen Folder in SSH",
   "commands.Reopenintunnel.title": "Reopen Folder in Tunnel",
   "commands.Openfolder.title": "Open Folder in Container...",
+  "commands.switchContainer.title": "Switch Container",
   "commands.Createdevcontainerfile.title": "Add Dev Container Configuration Files...",
   "commands.Configurecontainerfeatures.title": "Configure Container Features...",
   "commands.Rebuildcontainer.title": "Rebuild Container",

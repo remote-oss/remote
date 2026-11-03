@@ -7,6 +7,7 @@
 
 import {
   type LabelFormatterHost,
+  type LastResolve,
   enablePortsViewWhenConnected,
   type PortsViewHost,
   type Registration,
@@ -84,7 +85,12 @@ export async function registerContainerResolver(
   host: ConnectorRegistrationHost,
   connector: ContainerConnector,
   served: ConnectorServed,
-): Promise<{registration: Registration['kind']; dispose(): void}> {
+): Promise<{
+  registration: Registration['kind'];
+  /** How this window's last settled resolve ended; none before the first. */
+  lastResolve(): LastResolve;
+  dispose(): void;
+}> {
   const {translate} = host;
   let handle:
     Extract<Registration, {kind: 'registered'}>['resolver'] | undefined;
@@ -227,6 +233,7 @@ export async function registerContainerResolver(
   }
   return {
     registration: registration.kind,
+    lastResolve: () => handle?.lastResolve() ?? 'none',
     dispose: () => {
       disposed = true;
       label?.dispose();

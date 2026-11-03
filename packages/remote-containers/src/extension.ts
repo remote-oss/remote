@@ -19,6 +19,7 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
+  type LastResolve,
   openRemote,
   PORTS_VIEW_KEY,
   registerAuthorityLabel,
@@ -176,6 +177,7 @@ import {
   resetReopenNotification,
 } from './open/reopen-notification.ts';
 import {openFolderInContainer} from './open/open-folder.ts';
+import {switchContainer} from './open/switch-container.ts';
 import {
   SHUTDOWN_CLIENT_WAITS,
   shutdownHelperRequest,
@@ -634,6 +636,10 @@ export async function activate(
   let logChannel: RevealableChannel | undefined;
   /** The lines of the connect attempt that is running or has failed, which a failure dialog writes to a file. */
   const attemptLog = createAttemptLog();
+  /** How this window's last settled resolve ended; the resolver gives it once it is registered. */
+  const resolved: {lastResolve: () => LastResolve} = {
+    lastResolve: () => 'none',
+  };
   /** Tells the shutdown helper that this window leaves its container; the connector gives it once it exists. */
   const windowShutdown = {leave: (): Promise<void> => Promise.resolve()};
   const channelPort = containersChannelPortFor(
@@ -1407,6 +1413,23 @@ export async function activate(
             : {scheme: picked.scheme, fsPath: picked.fsPath};
         },
       });
+      const switchContainerHandler = switchContainer({
+        ...reopenPorts,
+        window: {
+          ...reopenPorts.window,
+          remoteAuthority: () => vscode.env.remoteAuthority,
+          isTrusted: () => vscode.workspace.isTrusted,
+        },
+        lastResolve: () => resolved.lastResolve(),
+        askToOpenFolder: async (detail, button) =>
+          (await vscode.window.showInformationMessage(
+            '',
+            {modal: true, detail},
+            button,
+          )) === button,
+        openFolder: () => openFolder(),
+        reopen: () => reopenHandler()(),
+      });
       const reopenOrigin = reopenOriginHandlersOf({
         origin: () =>
           served.missing.includes('resolvers')
@@ -1566,6 +1589,7 @@ export async function activate(
         reopenInWSL: {execute: reopenOrigin.reopenInWSL},
         reopenInTunnel: {execute: reopenOrigin.reopenInTunnel},
         openFolder: {execute: openFolder},
+        switchContainer: {execute: switchContainerHandler},
         configureContainerFeatures: {
           execute: async () => {
             await configureFeatures();
@@ -2158,6 +2182,7 @@ export async function activate(
         logger,
       },
     );
+    resolved.lastResolve = () => registered.lastResolve();
     const configWatch =
       registered.registration === 'registered'
         ? configWatchOf({
