@@ -8,6 +8,7 @@ import {filled} from './filled.ts';
 const OWN_TEMPLATES = {
   noServerSource:
     "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.",
+  vscodeMountReserved: `'{0}' mounts '{1}': '/vscode' and the paths below it are reserved for the cache volume while dev.containers.cacheVolume is true.`,
 } as const;
 
 /** The text of the string of our own named `name`, filled with `texts`; throws for a name the table lacks. */

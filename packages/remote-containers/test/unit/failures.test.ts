@@ -7,6 +7,7 @@ import {
   containerSetupFailed,
   containerUnusable,
   disallowedFeature,
+  vscodeMountReserved,
   engineCheckFailed,
   malformedAuthority,
   noServerSource,
@@ -150,6 +151,17 @@ describe('the failures of the container connector (card containers-08)', () => {
         [[], []],
         [[], []],
         [[], []],
+      ],
+    );
+  });
+
+  it('F-0419 AC-20: a reserved mount is a setup failure whose detail is the own string with the property and the target', () => {
+    const failed = vscodeMountReserved('mounts', '/vscode');
+    deepStrictEqual(
+      [failed.kind, failed.reason],
+      [
+        'containerSetupFailed',
+        {id: 'vscodeMountReserved', values: ['mounts', '/vscode']},
       ],
     );
   });

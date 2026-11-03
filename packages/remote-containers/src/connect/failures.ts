@@ -72,6 +72,18 @@ export function containerSetupFailed(refusal?: DaemonRefusal): Failed {
   );
 }
 
+/** A mount of the configuration targets `/vscode` or below while the cache volume is on; `property` names where it is written. */
+export function vscodeMountReserved(property: string, target: string): Failed {
+  return failure(
+    'containerSetupFailed',
+    {},
+    {
+      id: 'vscodeMountReserved',
+      values: [property, target],
+    },
+  );
+}
+
 /** The string of the detail of each way a Feature's key fails to resolve. */
 const FEATURE_REASONS: Record<FeatureFailure, FailureReason> = {
   empty: {id: 'S163'},

@@ -90,6 +90,7 @@ import {
   containerSetupFailed,
   disallowedFeature,
   featureResolutionFailed,
+  vscodeMountReserved,
   containerUnusable,
   engineCheckFailed,
   type FailedContainer,
@@ -619,6 +620,9 @@ export function containerConnectorOf(
       };
       return containerUnusable(outcome.status);
     }
+    if (outcome.kind === 'reservedMount') {
+      return vscodeMountReserved(outcome.property, outcome.target);
+    }
     if (outcome.foundContainerId !== undefined) {
       failedContainer = {
         containerId: outcome.foundContainerId,
@@ -1103,6 +1107,9 @@ export function containerConnectorOf(
           settings.lockfile,
           read?.configuration.features,
         ),
+        mounts: Array.isArray(read?.configuration.mounts)
+          ? read.configuration.mounts
+          : [],
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}
