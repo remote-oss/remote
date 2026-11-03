@@ -752,6 +752,9 @@ export async function openWindow(
 ): Promise<void> {
   const home = `/home/${user}/${folder}`;
   await onHostAs(user, 'mkdir', '-p', home);
+  // A window may log in as another account than the folder's owner (the password aliases), and writes its probe here:
+  // the folder must be writable by any account whatever umask `docker exec` runs with.
+  await onHostAs(user, 'chmod', '0777', home);
   await inWindow(
     'local',
     'acceptance.agent.openWindow',
