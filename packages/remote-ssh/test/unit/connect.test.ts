@@ -987,7 +987,7 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
-  it('F-2603 AC-19 (f): a cancel while the platform is being asked ends the connect with no second try', async () => {
+  it('F-2603 AC-19 (f): a cancel while the platform is being asked, which leaves the pick unanswered, ends the connect as cancelled and not as the broken pipe, with no second try', async () => {
     const {recording, options} = setup();
     const controller = new AbortController();
     const outcome = brokenPipeSteps(recording, [{kind: 'brokenPipe'}], 'linux');
@@ -997,7 +997,7 @@ describe('the connect pipeline, when a step fails', () => {
         ...outcome.steps,
         pickAfterBrokenPipe: () => {
           controller.abort();
-          return Promise.resolve('linux');
+          return Promise.resolve(undefined);
         },
       },
       {...options, cancellation: controller.signal},

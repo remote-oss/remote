@@ -400,12 +400,12 @@ async function runSteps(
     held.lease?.release();
     held.lease = undefined;
     const picked = await steps.pickAfterBrokenPipe(input, cancellation);
-    if (picked === undefined) {
-      return failure(attempt.failed);
-    }
     const stopped = cancelled();
     if (stopped !== undefined) {
       return stopped;
+    }
+    if (picked === undefined) {
+      return failure(attempt.failed);
     }
     attempt = await connectAndProbe({...terms.value, platform: picked});
   }
