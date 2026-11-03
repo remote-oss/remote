@@ -80,10 +80,9 @@ async function refreshed(): Promise<void> {
 describe('the recent folders under a host (card coverage-102, part 1)', function () {
   this.timeout(600_000);
 
-  before(async () => {
-    await rememberPage('local');
-    deepStrictEqual(await historyOf(), {}, 'the launch starts with no history');
-  });
+  // The history of a run outlives a row, and other files of the launch visit folders of their own: each row counts only
+  // the entries that start with its own prefix.
+  before(() => rememberPage('local'));
 
   it('F-2503 AC-3, AC-4, AC-8 (order-and-hosts): a folder opened on a host is the first child of its row, a folder opened again moves to the top with no duplicate, and each host row lists only its own', async () => {
     const first = `${HOME}/c102-a1`;
