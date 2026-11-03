@@ -57,5 +57,6 @@
   "commands.Openrepositoryinuniquevolume.title": "Clone Repository in Container Volume...",
   "setting.DockerSocketPath.description": "Docker socket path. Used, e.g., when connecting to a Dev Container with the devcontainer.json in a Docker Volume.",
   "setting.BootstrapImage.description": "Docker image to use as the bootstrap container for cloning repositories into Docker volumes, and for inspect and recovery containers. When set, this image is used directly instead of building from the built-in Dockerfile. The image must include the Docker and Git CLIs, and optionally SSH, Git LFS and Node.js. When Node.js is not installed, it will be added from a VS Code Server download matching the architecture.",
-  "setting.BootstrapImagePull.description": "Automatically pull the bootstrap image before starting the bootstrap container. Only applies when a custom bootstrap image is configured."
+  "setting.BootstrapImagePull.description": "Automatically pull the bootstrap image before starting the bootstrap container. Only applies when a custom bootstrap image is configured.",
+  "commands.openInformationAboutMountPerformance.title": "Clone repository in Docker volume for better I/O performance."
 }

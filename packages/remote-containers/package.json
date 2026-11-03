@@ -200,6 +200,12 @@
         "command": "remote-containers.openRepositoryInUniqueVolume",
         "title": "%commands.Openrepositoryinuniquevolume.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openInformationAboutMountPerformance",
+        "title": "%commands.openInformationAboutMountPerformance.title%",
+        "category": "Dev Containers",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -299,6 +305,10 @@
         {
           "command": "remote-containers.openRepositoryInUniqueVolume",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openInformationAboutMountPerformance",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -408,6 +418,11 @@
           "command": "remote-containers.inspectDockerResource",
           "group": "1_container@5",
           "when": "view == detailsContainers && viewItem == image && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openInformationAboutMountPerformance",
+          "group": "inline@1",
+          "when": "view == detailsContainers && viewItem == mountPerformance && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [

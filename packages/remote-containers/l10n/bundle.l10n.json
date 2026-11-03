@@ -216,5 +216,9 @@
   "The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.": "The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.",
   "Cloning Repository": "Cloning Repository",
   "Close Remote": "Close Remote",
-  "Open Repository": "Open Repository"
+  "Open Repository": "Open Repository",
+  "I/O performance": "I/O performance",
+  "reduced by bridging OSes": "reduced by bridging OSes",
+  "Clone in Volume": "Clone in Volume",
+  " Or: Clone repository in Docker volume for [better I/O performance]({0}).": " Or: Clone repository in Docker volume for [better I/O performance]({0})."
 }

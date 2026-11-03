@@ -60,8 +60,12 @@ interface ServedWindow {
 /** Everything activation needs from its surroundings. */
 export interface ContainersActivationInputs<
   Commands extends Readonly<Record<string, CommandEntry>>,
+  Deferred extends Readonly<Record<string, CommandEntry>>,
 > {
+  /** The package's identifier table without its deferred commands. */
   table: ContainersTable<Commands>;
+  /** The commands that are not registered at activation, but by `registerDeferred` once the window asks for them. */
+  deferred: Deferred;
   /** The coexistence warning and its button, in the user's language. */
   standDownTexts: {warning: string; button: string};
   standDown: StandDownHost;
@@ -78,9 +82,9 @@ export interface ContainersActivationInputs<
   /** The ports of the proposed-API setup, made once the log is open; `logFailure` writes to it. */
   gate(logFailure: (message: string) => void): SetupPorts;
   /** The handler of every command of the table, made once the window serves. */
-  handlers(served: ServedWindow): {
-    readonly [Name in keyof Commands]: CommandHandler;
-  };
+  handlers(
+    served: ServedWindow,
+  ): Readonly<Record<keyof Commands | keyof Deferred, CommandHandler>>;
 }
 
 /** How activation ended: the package stands down, or it serves with the end of what it opened. */
@@ -90,6 +94,8 @@ export type ContainersActivation =
       kind: 'serving';
       served: ServedWindow;
       setup: SetupRun['interaction'];
+      /** Registers the deferred command, the first time it is called; later calls register nothing. */
+      registerDeferred(): void;
       dispose(): void;
     };
 
@@ -103,7 +109,10 @@ const CHANNEL_NAME = 'Dev Containers';
  */
 export async function activateContainers<
   Commands extends Readonly<Record<string, CommandEntry>>,
->(inputs: ContainersActivationInputs<Commands>): Promise<ContainersActivation> {
+  Deferred extends Readonly<Record<string, CommandEntry>>,
+>(
+  inputs: ContainersActivationInputs<Commands, Deferred>,
+): Promise<ContainersActivation> {
   const {table, banner} = inputs;
   const outcome = await standDownIfPresent(inputs.standDown, {
     ...inputs.standDownTexts,
@@ -147,18 +156,30 @@ export async function activateContainers<
       trust: inputs.trust,
       setupAgain: () => runSetup(ports, false),
     };
-    const registration = registerCommands(
-      inputs.commands,
-      outcome,
-      table.commands,
-      inputs.handlers(served),
-    );
+    const handlers = inputs.handlers(served);
+    const registrations = [
+      registerCommands(inputs.commands, outcome, table.commands, handlers),
+    ];
     return {
       kind: 'serving',
       served,
       setup: setup.interaction,
+      registerDeferred: () => {
+        if (registrations.length === 1) {
+          registrations.push(
+            registerCommands(
+              inputs.commands,
+              outcome,
+              inputs.deferred,
+              handlers,
+            ),
+          );
+        }
+      },
       dispose: () => {
-        registration.dispose();
+        registrations.forEach(registration => {
+          registration.dispose();
+        });
         sink.dispose();
       },
     };

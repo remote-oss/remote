@@ -147,6 +147,9 @@ import {
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {composeResolverOf} from './compose/resolver.ts';
+import {MOUNT_PERFORMANCE_PAGE} from './surfaces/recovery-presenter.ts';
+import {cloneableRemoteOf} from './open/git-remote.ts';
+
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -170,6 +173,7 @@ import {
   type DetailsView,
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
+import {mountPerformanceHintApplies} from './explorer/details-model.ts';
 import {containerLogOf} from './explorer/container-log.ts';
 import {inspectOf} from './explorer/inspect.ts';
 import {
@@ -650,6 +654,23 @@ export async function activate(
         },
         global: context.globalState,
         workspace: context.workspaceState,
+        ...(process.platform === 'linux'
+          ? {}
+          : {
+              cloning: {
+                remoteOf: async folder =>
+                  cloneableRemoteOf(
+                    await readFile(`${folder}/.git/config`, 'utf8').catch(
+                      () => '',
+                    ),
+                  ),
+                start: remote =>
+                  vscode.commands.executeCommand(
+                    commands.openRepositoryInUniqueVolume.id,
+                    remote,
+                  ),
+              },
+            }),
         configurationKind: async folder => {
           if (
             (await slotOf(storedLookup.root, folder, userDataStore)) !==
@@ -673,8 +694,11 @@ export async function activate(
       variant,
     );
   }
+  const {openInformationAboutMountPerformance, ...activationCommands} =
+    commands;
   const result = await activateContainers({
-    table: {commands, standDown},
+    table: {commands: activationCommands, standDown},
+    deferred: {openInformationAboutMountPerformance},
     standDownTexts: {
       warning: translate(STAND_DOWN_WARNING),
       button: translate(STAND_DOWN_BUTTON),
@@ -770,7 +794,7 @@ export async function activate(
       function cloneCommand(): CommandHandler {
         let engine: PinnedEngine = {};
         return {
-          execute: async () => {
+          execute: async argument => {
             engine = await windowPinnedEngine();
             await cloneInUniqueVolume(
               {
@@ -810,10 +834,10 @@ export async function activate(
                     new AbortController().signal,
                   )) === 'proceed',
                 pickSource: () => pickCloneSource(),
-                precheck: (source, cancellation) =>
+                precheck: (source, origin, cancellation) =>
                   precheck(
                     source,
-                    'typed',
+                    origin,
                     {
                       openRelay: () => openCloneRelay(),
                       runGit: (gitArguments, environment, signal) =>
@@ -852,6 +876,7 @@ export async function activate(
                 logger: served.logger,
               },
               new AbortController().signal,
+              typeof argument === 'string' ? argument : undefined,
             );
           },
         };
@@ -1511,6 +1536,13 @@ export async function activate(
             context.extension.id,
           ),
         },
+        openInformationAboutMountPerformance: {
+          execute: async () => {
+            await vscode.env.openExternal(
+              vscode.Uri.parse(MOUNT_PERFORMANCE_PAGE),
+            );
+          },
+        },
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
         },
@@ -2103,6 +2135,9 @@ export async function activate(
     });
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
+      loaded: () => {
+        result.registerDeferred();
+      },
       held: () => connector.heldConnection(),
       ...windowEngine,
       events: containerEvents,
@@ -2175,6 +2210,15 @@ export async function activate(
       cancellation: rowActionsStop.signal,
     });
     detailsView = showDetailsWhenRegistered({
+      mountPerformanceHint: () =>
+        mountPerformanceHintApplies({
+          platform: process.platform,
+          executeInWSL:
+            vscode.workspace
+              .getConfiguration('dev.containers')
+              .get('executeInWSL') === true,
+          remoteName: vscode.env.remoteName,
+        }),
       editor: {
         ...explorerEditor,
         focus: () =>
