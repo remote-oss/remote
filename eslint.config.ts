@@ -97,6 +97,9 @@ const IMPOSED_PROPERTY_KEYS = [
   // the editor matches them against (it reads a detected process cmdline as-is).
   'lk',
   'cat',
+  // The volume payload of a dev-container authority: the `ref` of its clone request, a member name kept verbatim so an
+  // earlier session's Open Recent entry still reads.
+  'ref',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an
