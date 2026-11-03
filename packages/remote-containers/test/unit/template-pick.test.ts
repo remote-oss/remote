@@ -88,6 +88,7 @@ function started(
       folder,
       catalogue,
       storedSlot,
+      reuse: true,
     },
     scene.ports,
     signal,
@@ -251,6 +252,7 @@ describe('the flat template pick (card containers-79)', () => {
         folder: NO_FILES,
         catalogue: CATALOGUE,
         storedSlot: undefined,
+        reuse: true,
       },
       scene.ports,
       new AbortController().signal,
@@ -461,6 +463,32 @@ describe('the chooser that offers an existing Dockerfile (card containers-79)', 
           'Learn More',
         ],
       ],
+    );
+  });
+
+  it('F-0801 6.8 step 2: without reuse, as in a multi-root workspace, the same folder goes straight to the template list', () => {
+    const scene = sceneOf();
+    void pickTemplate(
+      {
+        title: 'T',
+        folder: WITH_DOCKERFILES,
+        catalogue: WITH_EXISTING,
+        storedSlot: undefined,
+        reuse: false,
+      },
+      scene.ports,
+      new AbortController().signal,
+    );
+    const [picker] = scene.pickers;
+    deepStrictEqual(
+      [
+        picker?.placeholder ===
+          'How would you like to create your container configuration?',
+        labels(picker ?? new FakePicker()).some(label =>
+          label.startsWith('From '),
+        ),
+      ],
+      [false, false],
     );
   });
 

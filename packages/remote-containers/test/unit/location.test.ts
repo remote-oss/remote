@@ -20,6 +20,8 @@ interface Scene {
   root: RootEntry[];
   inside: RootEntry[];
   markers: Record<string, string>;
+  /** The listed roots of a multi-root workspace, each with the entries its folder lists. */
+  roots: Record<string, RootEntry[]>;
 }
 
 /** Runs the stage over `scene`; `answer` plays the user on the picker, or hides it for Escape. */
@@ -52,7 +54,15 @@ async function asked(
       title: 'Add Dev Container Configuration Files',
       folder: FOLDER,
       facts: {rootEntries: scene.root ?? [], files: [], truncated: false},
-      files: {list: () => Promise.resolve(scene.inside ?? [])},
+      files: {
+        list: folder =>
+          Promise.resolve(
+            folder === `${FOLDER}/.devcontainer`
+              ? (scene.inside ?? [])
+              : (scene.roots?.[folder] ?? []),
+          ),
+      },
+      roots: Object.keys(scene.roots ?? {}),
       translate: template => template,
     },
     cancellation,
@@ -153,6 +163,24 @@ describe('the location stage of the wizard (card containers-91)', () => {
     deepStrictEqual(
       seen,
       cases.map(([, expected]) => expected),
+    );
+  });
+
+  it('F-0801 6.8 step 3: in a multi-root workspace the configuration beside its file marks the row, and a root with one of its own hides the mark', async () => {
+    const own: RootEntry[] = [{name: '.devcontainer.json', kind: 'file'}];
+    async function rows(scene: Partial<Scene>): Promise<string | undefined> {
+      const {picker} = await asked(scene, each => {
+        each.hide();
+      });
+      return picker.items[0]?.description;
+    }
+    deepStrictEqual(
+      [
+        await rows({root: own, roots: {'/home/a/one': [], '/home/a/two': []}}),
+        await rows({root: own, roots: {'/home/a/one': own, '/home/a/two': []}}),
+        await rows({roots: {'/home/a/one': own}}),
+      ],
+      [EXISTS, undefined, undefined],
     );
   });
 

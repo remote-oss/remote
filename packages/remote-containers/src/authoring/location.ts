@@ -54,6 +54,8 @@ export interface LocationRequest {
   folder: string;
   facts: FolderFacts;
   files: WalkFiles;
+  /** The listed roots of a saved multi-root workspace; a configuration of one of them hides the folder's own. */
+  roots: readonly string[];
   translate: Translate;
 }
 
@@ -65,19 +67,39 @@ function isFileNamed(entry: RootEntry, name: string): boolean {
   return entry.name === name && entry.kind === 'file';
 }
 
-/** Whether the folder holds a configuration file of its own: a subfolder's does not count. */
-async function hasOwnConfiguration(request: LocationRequest): Promise<boolean> {
-  if (
-    request.facts.rootEntries.some(entry =>
-      isFileNamed(entry, ROOT_CONFIGURATION),
-    )
-  ) {
+/** Whether `folder`, whose root holds `entries`, has a configuration file of its own: a subfolder's does not count. */
+async function holdsConfiguration(
+  files: WalkFiles,
+  folder: string,
+  entries: readonly RootEntry[],
+): Promise<boolean> {
+  if (entries.some(entry => isFileNamed(entry, ROOT_CONFIGURATION))) {
     return true;
   }
-  const inside = await request.files.list(
-    `${request.folder}/${CONFIGURATION_FOLDER}`,
-  );
+  const inside = await files.list(`${folder}/${CONFIGURATION_FOLDER}`);
   return inside.some(entry => isFileNamed(entry, FOLDER_CONFIGURATION));
+}
+
+/**
+ * Whether the configuration place of the request already holds one: the folder's own, unless a listed root of the
+ * multi-root workspace has one of its own, which hides it.
+ */
+async function hasOwnConfiguration(request: LocationRequest): Promise<boolean> {
+  if (
+    !(await holdsConfiguration(
+      request.files,
+      request.folder,
+      request.facts.rootEntries,
+    ))
+  ) {
+    return false;
+  }
+  const rooted = await Promise.all(
+    request.roots.map(async root =>
+      holdsConfiguration(request.files, root, await request.files.list(root)),
+    ),
+  );
+  return !rooted.includes(true);
 }
 
 /** Asks where the configuration goes; for the store, the folder's own slot, or a new one. */

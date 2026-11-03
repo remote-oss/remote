@@ -129,6 +129,8 @@ export interface TemplatePickRequest {
   catalogue: readonly CatalogueTemplate[];
   /** The folder's slot in the user data folder when the pick may offer to copy its configuration into the workspace. */
   storedSlot: StoredSlot | undefined;
+  /** Whether the pick may offer the folder's own Dockerfile and Compose files first: in a single-folder window only. */
+  reuse: boolean;
 }
 
 function text(
@@ -401,7 +403,7 @@ export function pickTemplate(
   ports: TemplatePickPorts,
   cancellation: AbortSignal,
 ): Promise<TemplateChoice> {
-  const entries = reuseEntries(request.folder);
+  const entries = request.reuse ? reuseEntries(request.folder) : [];
   return entries.length === 0 && request.storedSlot === undefined
     ? templatePick(request, ports, cancellation)
     : chooserPick(entries, request, ports, cancellation);
