@@ -18,6 +18,7 @@ import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {openTunnelStep} from '../../src/pipeline/tunnel-step.ts';
 import type {StartedServer} from 'lib-server';
+import type {ConnectionLease} from '../../src/pipeline/steps.ts';
 import {emptyRecording, INPUT, leaseOf, STARTED} from './pipeline.fixture.ts';
 
 const SECOND_SSH: TunnelSettings = {
@@ -72,6 +73,8 @@ function stepWith(
     reconnection?: boolean;
     /** Whether ssh warned, in this connect, that it disabled forwarding itself after a changed host key. */
     warned?: boolean;
+    /** What the host says of the server's port when asked: it listens, it does not, the check fails or it never answers. */
+    listening?: 'yes' | 'no' | 'fails' | 'hangs';
     /** `remote.SSH.useExecServer`: on unless the row says otherwise, as by default. */
   } = {},
 ) {
@@ -128,6 +131,7 @@ function stepWith(
     },
     revealLoginTerminals: () => options.reveal ?? false,
     warnedForwardingDisabled: () => options.warned ?? false,
+    prohibitedForwarding: () => false,
     forwardRefused: () => undefined,
     connectWait: () =>
       options.connectWait ?? {
@@ -137,7 +141,34 @@ function stepWith(
       },
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
-  const lease = leaseOf(emptyRecording());
+  const base = leaseOf(emptyRecording());
+  const asked: string[] = [];
+  const lease = {
+    ...base,
+    channel: {
+      runScript: (
+        request: {script: string; cancellation: AbortSignal},
+        onLine: (line: string) => void,
+      ) => {
+        asked.push('listening');
+        if (options.listening === 'hangs') {
+          return new Promise(resolve => {
+            request.cancellation.addEventListener('abort', () => {
+              resolve({kind: 'failed' as const, failure: {kind: 'cancelled'}});
+            });
+          });
+        }
+        if (options.listening === 'fails') {
+          return Promise.resolve({
+            kind: 'failed' as const,
+            failure: {kind: 'spawnFailed' as const, detail: 'no shell'},
+          });
+        }
+        onLine(`remote-oss-listening=${options.listening ?? 'no'}`);
+        return Promise.resolve({kind: 'exited' as const, status: 0});
+      },
+    } as unknown as ConnectionLease['channel'],
+  };
   function opened() {
     const [terminal] = terminals.opened;
     if (terminal === undefined) {
@@ -170,6 +201,7 @@ function stepWith(
     questions,
     logins,
     disposals,
+    asked,
     waits: () => waits,
     portsChosen: () => portsChosen,
     recorded,
@@ -616,7 +648,7 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
   }
 
   it('connect-109, F-2604 AC-6: the second ssh fails the same refusal at once, whatever the exec server setting is', async () => {
-    const {pending} = await refusedFirstForward({}, 0);
+    const {pending} = await refusedFirstForward({listening: 'yes'}, 0);
     deepStrictEqual(await pending, {
       kind: 'failed',
       failure: {
@@ -625,6 +657,30 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
         hints: [FORWARDING_PROHIBITED_HINT],
       },
     });
+  });
+
+  it('F-2104 AC-48 (ruling-1985-forwarding-fails): on the second ssh a closed proving connection with no server listening is the connection closed, with no hint', async () => {
+    const {pending} = await refusedFirstForward({listening: 'no'}, 0);
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {kind: 'channelClosed', reason: {text: 'Connection closed.'}},
+    });
+  });
+
+  it('F-2104 AC-48 (ruling-1985-forwarding-fails): a check that fails, or that never answers within its bound, is the connection closed too, and the check is asked once', async () => {
+    const seen = [];
+    for (const listening of ['fails', 'hangs'] as const) {
+      const {pending, context} = await refusedFirstForward({listening}, 6000);
+      const result = await pending;
+      seen.push([
+        result.kind === 'failed' ? result.failure.reason : result.kind,
+        context.asked.length,
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [{text: 'Connection closed.'}, 1],
+      [{text: 'Connection closed.'}, 1],
+    ]);
   });
 
   it('F-2604 AC-19 (ruling-1985-forwarding-fails): on the second ssh the changed host key’s warning gives S107 and its own hint', async () => {

@@ -40,7 +40,12 @@ import {isAborted, portOf} from './connect.ts';
 import {clientRefusal, ofClassification} from './failure.ts';
 import {busyRangeReason, type PortChoice} from './port-choice.ts';
 import {logSshLines} from './ssh-log.ts';
-import type {ConnectInput, ConnectSteps, StepFailure} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionLease,
+  ConnectSteps,
+  StepFailure,
+} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
 interface WindowEnvironment {
@@ -78,6 +83,8 @@ export interface TunnelStepDependencies {
   forwardRefused(): void;
   /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
   warnedForwardingDisabled(): boolean;
+  /** Whether ssh has reported, in this connect, that the host's sshd prohibited a forward. */
+  prohibitedForwarding(): boolean;
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
   /** What decides the length of the connect wait, which also bounds a question of the tunnel login that nobody can see. */
@@ -111,13 +118,29 @@ const FORWARDING_DISABLED_BY_CLIENT: StepFailure = {
   hints: CLIENT_FORWARDING_DISABLED.hints,
 };
 
-/** The failure of a refused forward: the changed host key's own when ssh warned of it, else the server's. */
+/** How long the host may take to say whether the server listens, once the second ssh's proving connection was closed. */
+const LISTEN_CHECK_MILLISECONDS = 5_000;
+
+/** The failure of a refused forward that nothing named: the connection closed, with no hint. */
+const FORWARD_CLOSED: StepFailure = {
+  kind: 'channelClosed',
+  reason: {text: CONNECTION_CLOSED_TEXT},
+};
+
+/**
+ * The failure of a refused forward: the changed host key's own when ssh warned of it, the server's when ssh reported
+ * the forward administratively prohibited, else the connection closed.
+ */
 function refusedFailure(dependencies: {
   warnedForwardingDisabled(): boolean;
+  prohibitedForwarding(): boolean;
 }): StepFailure {
-  return dependencies.warnedForwardingDisabled()
-    ? FORWARDING_DISABLED_BY_CLIENT
-    : FORWARDING_REFUSED;
+  if (dependencies.warnedForwardingDisabled()) {
+    return FORWARDING_DISABLED_BY_CLIENT;
+  }
+  return dependencies.prohibitedForwarding()
+    ? FORWARDING_REFUSED
+    : FORWARD_CLOSED;
 }
 
 /** The reason of a tunnel whose port never accepted: "Error establishing tunnel (Max wait time exhausted)." */
@@ -209,7 +232,7 @@ async function openTerminalTunnel(
   path: 'secondSsh' | 'socket',
   given: Parameters<ConnectSteps['openTunnel']>,
 ): Promise<TunnelResult> {
-  const [input, , server, onWaiting, cancellation, onSettingUp] = given;
+  const [input, lease, server, onWaiting, cancellation, onSettingUp] = given;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
@@ -363,8 +386,8 @@ async function openTerminalTunnel(
       kind: 'failed',
       failure:
         path === 'socket'
-          ? {kind: 'channelClosed', reason: {text: CONNECTION_CLOSED_TEXT}}
-          : refusedFailure(dependencies),
+          ? FORWARD_CLOSED
+          : await secondSshRefusal(dependencies, lease, server, cancellation),
     };
   }
   if (outcome.kind !== 'open') {
@@ -432,6 +455,39 @@ async function serverListens(
   }
   const answer = lines.find(line => line.startsWith('remote-oss-listening='));
   return answer === undefined ? undefined : answer.endsWith('yes');
+}
+
+/**
+ * The failure of a second ssh whose proving connection was closed: the changed host key's own when ssh warned of it;
+ * else the server's, when the host says the server listens (so the sshd forbade the forward); else the connection
+ * closed, also when the check failed or ran out of time. The second ssh's terminal carries no line that names the cause.
+ */
+async function secondSshRefusal(
+  dependencies: TunnelStepDependencies,
+  lease: ConnectionLease,
+  server: StartedServer,
+  cancellation: AbortSignal,
+): Promise<StepFailure> {
+  if (dependencies.warnedForwardingDisabled()) {
+    return FORWARDING_DISABLED_BY_CLIENT;
+  }
+  const bound = new AbortController();
+  const timer = dependencies.scheduler.setTimer(
+    LISTEN_CHECK_MILLISECONDS,
+    () => {
+      bound.abort();
+    },
+  );
+  const listens = await serverListens(
+    lease.channel,
+    portOf(server),
+    AbortSignal.any([cancellation, bound.signal]),
+  ).catch(() => undefined);
+  timer();
+  dependencies.logger.info(
+    refusalLine('closedBeforeReply', listens, portOf(server)),
+  );
+  return listens === true ? FORWARDING_REFUSED : FORWARD_CLOSED;
 }
 
 /** The log line of the check that ended a refused-looking run, naming the fact that decided it. */

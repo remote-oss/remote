@@ -133,6 +133,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     athena on #1794).
     Rows: (ruling-1794-log-redaction)
 
+- **A host that refuses TCP forwarding fails the connection with a dialog instead of waiting forever.** The reference
+  shows a notification and then waits at "Waiting for port forwarding to be ready" until the window is closed; we
+  fail the connection as soon as the refusal is recognised, with "TCP port forwarding appears to be disabled on the
+  remote host…" as the reason and the troubleshooting table's AllowTcpForwardingDisabled row and its mitigations.
+  When the refusal comes from the local ssh after a changed host key was accepted, the reason is "Port forwarding is
+  disabled" in every mode. Every wait in the family is bounded (R-79).
+  - Rows: `ruling-1985-forwarding-fails`.
+  - F-2604 BR-5, AC-6 and AC-19, and F-2304 AC-20, describe the reference's wait; ruled on remote#1985 (F-2604 Q3).
+
 ## Known issues
 
 - **In a new Remote - SSH window, Terminal: Select Default Profile, Debug: Select and Start Debugging and Tasks: Run Task show empty lists, or nothing, until a terminal has been opened in the window.**

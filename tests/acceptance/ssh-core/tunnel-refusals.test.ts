@@ -297,6 +297,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     };
     const reason =
       'TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.';
+    // ClearAllForwardings makes ssh open no channel at all, so no line names an administratively prohibited forward: the connection closed.
     deepStrictEqual(seen, [
       {
         ...expected,
@@ -305,7 +306,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
       {
         ...expected,
         dialogs: [
-          `Could not establish connection to "fwd-clearall": ${reason}`,
+          'Could not establish connection to "fwd-clearall": Connection closed.',
         ],
       },
     ]);
@@ -591,7 +592,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     });
   });
 
-  it('F-2104 AC-48 (ruling-1985-forwarding-fails): a bind host that is not the loopback of the host leaves the window unconnected on the SOCKS path and on the second ssh, with the dialog and the server listening on that address', async () => {
+  it('F-2104 AC-48 (ruling-1985-forwarding-fails): a bind host that is not the loopback of the host leaves the window unconnected on the SOCKS path and on the second ssh, with the connection-closed dialog and the server listening on that address', async () => {
     const address = variable('HARNESS_ROUTED_ADDRESS');
     const seen: Array<[string, string | undefined, boolean]> = [];
     for (const settings of [{}, SECOND_SSH]) {
@@ -611,12 +612,12 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         ]);
       });
     }
-    // Both paths fail the connect at once on the refused forward (ruling-1985-forwarding-fails), with the TCP setting's reason.
-    const refused =
-      'Could not establish connection to "harness": TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.';
+    // Both paths fail the connect at once (ruling-1985-forwarding-fails); nothing at the bind address is a connect failed, not a prohibited forward, so the reason is the connection closed.
+    const closed =
+      'Could not establish connection to "harness": Connection closed.';
     deepStrictEqual(seen, [
-      ['Disconnected from SSH: harness', refused, true],
-      ['Disconnected from SSH: harness', refused, true],
+      ['Disconnected from SSH: harness', closed, true],
+      ['Disconnected from SSH: harness', closed, true],
     ]);
   });
 

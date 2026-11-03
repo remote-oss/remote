@@ -63,6 +63,8 @@ function stepWith(
     onSettingUp?: () => void;
     /** Whether ssh warned, in this connect, that it disabled forwarding itself after a changed host key. */
     warned?: boolean;
+    /** Whether ssh reported, in this connect, that the host's sshd prohibited a forward. */
+    prohibited?: boolean;
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
@@ -102,6 +104,7 @@ function stepWith(
     chooseLocalPort: () => Promise.resolve(choice),
     environment: () => ENVIRONMENT,
     warnedForwardingDisabled: () => options.warned ?? false,
+    prohibitedForwarding: () => options.prohibited ?? false,
     forwardRefused: () => {
       refused.push(1);
     },
@@ -166,6 +169,7 @@ describe('the step that opens the window tunnel', () => {
   it('F-2604 AC-6 (ruling-1985-forwarding-fails): a relay that closes every probe before its reply tells the window once and fails the connect as a refused forward, with the reason and the hint, before the bound', async () => {
     const {open, clock, refused} = stepWith({
       dialScript: ['closedBeforeReply'],
+      prohibited: true,
       limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
     });
     const pending = open();
@@ -186,12 +190,17 @@ describe('the step that opens the window tunnel', () => {
     );
   });
 
-  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a refused relay with the changed host key’s warning fails with S107 and its own hint, and without it with the server’s reason and hint', async () => {
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a refused relay fails with S107 and its own hint when ssh warned of a changed host key, with the server’s reason and hint when ssh reported the forward administratively prohibited, and with the connection closed otherwise', async () => {
     const results = [];
-    for (const warned of [true, false]) {
+    for (const [warned, prohibited] of [
+      [true, false],
+      [false, true],
+      [false, false],
+    ] as const) {
       const {open, clock} = stepWith({
         dialScript: ['closedBeforeReply'],
         warned,
+        prohibited,
         limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
       });
       const pending = open();
@@ -206,6 +215,7 @@ describe('the step that opens the window tunnel', () => {
     deepStrictEqual(results, [
       [{id: 'S107'}, 'MitmPortForwardingDisabled'],
       [{id: 'forwardingRefused'}, 'AllowTcpForwardingDisabled'],
+      [{text: 'Connection closed.'}, undefined],
     ]);
   });
 

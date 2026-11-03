@@ -23,6 +23,8 @@ export interface RefusalWatch {
   logger: Logger & Required<SshLogger>;
   /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
   warned(): boolean;
+  /** Whether ssh has reported, in this connect, that the host's sshd prohibited a forward (an administratively prohibited open failure). */
+  prohibited(): boolean;
   /** Starts a connect: the next refusal is recorded again, and logged only when the connect has started the login. */
   begin(): void;
   /** The connect's connection is open: whether this connect started its login. A connect that joined one logs no setting line. */
@@ -38,7 +40,12 @@ export function refusalWatchOf(
   port: RefusalPort,
   translate: Translate,
 ): RefusalWatch {
-  const state = {recorded: false, logged: false, warned: false};
+  const state = {
+    recorded: false,
+    logged: false,
+    warned: false,
+    prohibited: false,
+  };
   function noticed(line: string): void {
     if (warnsForwardingDisabled(line)) {
       state.warned = true;
@@ -50,6 +57,7 @@ export function refusalWatchOf(
     if (found.kind !== 'forwardingDisabled') {
       return;
     }
+    state.prohibited = true;
     if (!state.logged) {
       state.logged = true;
       for (const logLine of found.logLines) {
@@ -88,8 +96,10 @@ export function refusalWatchOf(
   return {
     logger: watching,
     warned: () => state.warned,
+    prohibited: () => state.prohibited,
     begin: () => {
       state.warned = false;
+      state.prohibited = false;
       state.recorded = false;
       // Until the connection is open and says it started the login, a refusal line relayed to this window is another connect's.
       state.logged = true;
