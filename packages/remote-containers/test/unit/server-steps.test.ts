@@ -31,6 +31,7 @@ import {
   type ServerStepDependencies,
   transferredDetail,
 } from '../../src/connect/server-steps.ts';
+import {CACHE_SCRIPT} from '../../src/connect/extension-cache.ts';
 import {VOLUME_FOLDERS_SCRIPT} from '../../src/connect/volume-folders.ts';
 
 const PROFILE: ProductProfile = {
@@ -236,6 +237,8 @@ function dependenciesOf(
     clock?: Clock;
     /** Whether an archive of an earlier connect is in the client's cache. */
     cached?: boolean;
+    /** What the extension gallery answers every query with. */
+    galleryAnswer?: unknown;
   } = {},
 ): ServerStepDependencies {
   const downloads = [...(options.downloads ?? [])];
@@ -292,6 +295,8 @@ function dependenciesOf(
     files,
     clock: options.clock ?? new FakeClock(),
     newTemporaryToken: () => 'token',
+    queryGallery: () => Promise.resolve(options.galleryAnswer),
+    readText: () => Promise.resolve(undefined),
     logger: createLogger(seen.sink, {minimumLevel: () => 'info'}),
     translate: template => template,
   };
@@ -381,6 +386,30 @@ function treesOf(channel: RecordingChannel): string[] {
   });
 }
 
+/** A gallery's answer offering acme.tool 1.2.0 for every platform. */
+const ACME_TOOL_ANSWER = {
+  results: [
+    {
+      extensions: [
+        {
+          versions: [
+            {
+              version: '1.2.0',
+              targetPlatform: 'universal',
+              files: [
+                {
+                  assetType: 'Microsoft.VisualStudio.Services.VSIXPackage',
+                  source: 'https://gallery.invalid/acme.tool-1.2.0.vsix',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 describe('the server steps of a connect (card containers-08)', () => {
   it('transport contracts 5.0: every script of a connect sets umask 022 (F-0419 AC-37)', async () => {
     const channel = channelOf();
@@ -431,6 +460,93 @@ describe('the server steps of a connect (card containers-08)', () => {
         start.includes("'--install-extension' 'a.b'"),
       ],
       [true, true],
+    );
+  });
+
+  /** The steps for acme.tool with a gallery and a volume, whose container side answers `cached`. */
+  async function galleryRun(cached: 'yes' | 'no'): Promise<{
+    channel: RecordingChannel;
+    result: ServerResult;
+  }> {
+    const channel = channelOf({
+      volume: true,
+      extra: [
+        answer(
+          script => script === CACHE_SCRIPT,
+          blockOf('Ok', `server.cached=${cached}`),
+        ),
+      ],
+    });
+    const {result} = await runSteps(channel, {
+      volume: true,
+      defaultExtensions: ['acme.tool'],
+      profile: {...PROFILE, gallery: {serviceUrl: 'https://gallery.invalid'}},
+      galleryAnswer: ACME_TOOL_ANSWER,
+    });
+    return {channel, result};
+  }
+
+  it('F-0419 AC-17: with a gallery, a package no cache holds reaches the start as its id, and the result carries the background step', async () => {
+    const {channel, result} = await galleryRun('no');
+    const ended = new AbortController();
+    ended.abort();
+    await (result.kind === 'started' ? result.afterReady : undefined)?.(
+      ended.signal,
+    );
+    deepStrictEqual(
+      [
+        (scriptsOf(channel).find(isStart) ?? '').includes(
+          "'--install-extension' 'acme.tool'",
+        ),
+        result.kind === 'started' && result.afterReady !== undefined,
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-0419 AC-5: with a gallery, a cached package leaves no background step', async () => {
+    const {result} = await galleryRun('yes');
+    deepStrictEqual(
+      result.kind === 'started' ? result.afterReady : 'not started',
+      undefined,
+    );
+  });
+
+  it('F-0419 AC-5: with a gallery, a package the shared cache holds reaches the start as the file to install', async () => {
+    const channel = channelOf({
+      volume: true,
+      extra: [
+        answer(
+          script => script === CACHE_SCRIPT,
+          blockOf('Ok', 'server.cached=yes'),
+        ),
+      ],
+    });
+    await runSteps(channel, {
+      volume: true,
+      defaultExtensions: ['acme.tool'],
+      profile: {...PROFILE, gallery: {serviceUrl: 'https://gallery.invalid'}},
+      galleryAnswer: ACME_TOOL_ANSWER,
+    });
+    deepStrictEqual(
+      (scriptsOf(channel).find(isStart) ?? '').includes(
+        "'--install-extension' '/home/node/.fixture-server/extensionsCache/acme.tool-1.2.0.vsix'",
+      ),
+      true,
+    );
+  });
+
+  it('F-0419: with a gallery and no volume, an extension the gallery offers nothing of reaches the start as its id', async () => {
+    const channel = channelOf();
+    await runSteps(channel, {
+      defaultExtensions: ['acme.tool'],
+      profile: {...PROFILE, gallery: {serviceUrl: 'https://gallery.invalid'}},
+    });
+    deepStrictEqual(
+      (scriptsOf(channel).find(isStart) ?? '').includes(
+        "'--install-extension' 'acme.tool'",
+      ),
+      true,
     );
   });
 
@@ -1520,6 +1636,7 @@ describe("the server steps with the volume's root step (card containers-25)", ()
           SHARED_FOLDER_1: '/vscode/fixture-server',
           SHARED_FOLDER_2: '/vscode/fixture-server/bin',
           SHARED_FOLDER_3: '/vscode/fixture-server/bin/linux-x64',
+          SHARED_FOLDER_4: '/vscode/extensionsCache-fixture',
         },
       ],
     );

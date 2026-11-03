@@ -28,6 +28,7 @@ import {
   FRESH_RESOLVE_WAIT_MILLISECONDS,
   type Sleeper,
   downloadWithRetry,
+  privateAssetDownload,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -244,10 +245,19 @@ class FakeHarness implements HarnessDependencies {
   /** Whether each start of the download host was asked for the earlier release's archives. */
   readonly earlierAsked: boolean[] = [];
 
+  /** Whether each start of the download host was asked for the CLI archives. */
+  readonly cliAsked: boolean[] = [];
+
   readonly startDownloads = (
-    ...asked: [root?: string, runFolder?: string, earlier?: boolean]
+    ...asked: [
+      root?: string,
+      runFolder?: string,
+      earlier?: boolean,
+      cli?: boolean,
+    ]
   ): Promise<RunDownloads> => {
     this.earlierAsked.push(asked[2] ?? false);
+    this.cliAsked.push(asked[3] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -313,6 +323,15 @@ class FakeHarness implements HarnessDependencies {
   readonly vscodiumExecutable = (): Promise<string> => {
     this.calls.push('vscodium executable');
     return Promise.resolve('codium-insiders');
+  };
+
+  readonly cliEditor = (
+    executable: string,
+    runFolder: string,
+    template: string,
+  ): string => {
+    this.calls.push(`cli editor of ${executable}: ${template}`);
+    return path.join(runFolder, 'cli-editor', executable);
   };
 
   readonly vscodeExecutable = (version: string): Promise<string> => {
@@ -438,6 +457,7 @@ const LAUNCH_ORDER = [
   'preconnect',
   'config-files',
   'secrets',
+  'agent-notmp',
   'default-ports',
   'ssh-core',
   'no-proposals',
@@ -1794,7 +1814,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-99, D-104: a launch whose server comes from the publisher is refused outside the genuine CI job, Actions, its job id and the version all named, and a run without one is never refused', () => {
+    it('tooling-99, D-106: a launch whose server comes from the publisher is refused unless it names the genuine version, on any machine and in any job, and a run without one is never refused', () => {
       const publisher: Launch = {
         label: 'publisher-probe',
         kind: 'plain',
@@ -1803,36 +1823,31 @@ describe('acceptance', () => {
         publisherDownloads: true,
       };
       const plain: Launch = {label: 'local', runner: 'runner', suite: 'suite'};
+      const named = {HARNESS_GENUINE_VERSION: '1.125.0'};
       const genuineJob = {
         GITHUB_ACTIONS: 'true',
         GITHUB_JOB: 'acceptance-genuine',
-        HARNESS_GENUINE_VERSION: '1.125.0',
       };
       const refused =
-        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB acceptance-genuine and HARNESS_GENUINE_VERSION set";
+        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence names the genuine version it runs (D-106): set HARNESS_GENUINE_VERSION";
       deepStrictEqual(
         [
-          publisherDownloadsRefusal([plain, publisher], genuineJob),
-          publisherDownloadsRefusal([plain, publisher], {}),
-          publisherDownloadsRefusal([publisher], {
-            HARNESS_GENUINE_VERSION: '1.125.0',
-          }),
-          publisherDownloadsRefusal([publisher], {
-            CI: 'true',
+          publisherDownloadsRefusal([plain, publisher], {
             ...genuineJob,
-            GITHUB_ACTIONS: 'false',
+            ...named,
           }),
+          publisherDownloadsRefusal([plain, publisher], named),
           publisherDownloadsRefusal([publisher], {
             ...genuineJob,
             GITHUB_JOB: 'acceptance-vscodium',
+            ...named,
           }),
-          publisherDownloadsRefusal([publisher], {
-            ...genuineJob,
-            HARNESS_GENUINE_VERSION: '',
-          }),
+          publisherDownloadsRefusal([plain, publisher], {}),
+          publisherDownloadsRefusal([publisher], genuineJob),
+          publisherDownloadsRefusal([publisher], {HARNESS_GENUINE_VERSION: ''}),
           publisherDownloadsRefusal([plain], {}),
         ],
-        [undefined, refused, refused, refused, refused, refused, undefined],
+        [undefined, undefined, undefined, refused, refused, refused, undefined],
       );
     });
 
@@ -3202,6 +3217,29 @@ describe('acceptance', () => {
       );
     });
 
+    it('tooling-111: only a run that chooses cli-path asks for the CLI archives and makes the CLI-source editor, whose template is on the download host', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      const plainRun = harness.calls.filter(call =>
+        call.startsWith('cli editor'),
+      );
+      harness.calls.length = 0;
+      await runAcceptance(workspace.root, harness, 'vscodium', ['cli-path']);
+      deepStrictEqual(
+        [
+          harness.cliAsked,
+          plainRun,
+          harness.calls.filter(call => call.startsWith('cli editor')),
+        ],
+        [
+          [false, true],
+          [],
+          [
+            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+          ],
+        ],
+      );
+    });
+
     it("containers-09, tooling-76: the VSCodium run sweeps other runs' stale containers, then builds the run's dev container image, and passes its tag", async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       const sweep = harness.calls.indexOf(
@@ -3567,9 +3605,12 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets launch and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000, 3000]);
+      deepStrictEqual(
+        harness.sleeps,
+        [3000, 5000, 3000, 3000, 3000, 3000, 3000],
+      );
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -4142,6 +4183,105 @@ describe('acceptance', () => {
       );
     });
 
+    /** How a private asset download with `token` over `fetcher` ends: its failure's message, or `resolved`. */
+    function assetFailureOf(
+      token: string | undefined,
+      fetcher: typeof fetch,
+    ): Promise<string> {
+      return privateAssetDownload(
+        'https://api.example.invalid/assets/41',
+        token,
+        fetcher,
+        () => Promise.resolve(),
+      ).then(
+        () => 'resolved',
+        (caught: unknown) =>
+          caught instanceof Error ? caught.message : String(caught),
+      );
+    }
+
+    it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
+      const asked: unknown[] = [];
+      const bytes = await privateAssetDownload(
+        'https://api.example.invalid/assets/41',
+        'secret',
+        (address, init) => {
+          asked.push([
+            address instanceof Request ? address.url : address.toString(),
+            init?.headers,
+            init?.redirect,
+          ]);
+          return Promise.resolve(
+            init === undefined
+              ? new Response(new Uint8Array([9]))
+              : new Response(null, {
+                  status: 302,
+                  headers: {location: 'https://signed.example.invalid/x'},
+                }),
+          );
+        },
+        () => Promise.resolve(),
+      );
+      deepStrictEqual(
+        [bytes, asked],
+        [
+          new Uint8Array([9]),
+          [
+            [
+              'https://api.example.invalid/assets/41',
+              {
+                Authorization: 'Bearer secret',
+                Accept: 'application/octet-stream',
+              },
+              'manual',
+            ],
+            ['https://signed.example.invalid/x', undefined, undefined],
+          ],
+        ],
+      );
+    });
+
+    it('tooling-111: an asset served without a redirect is taken as it is', async () => {
+      deepStrictEqual(
+        await privateAssetDownload(
+          'https://api.example.invalid/assets/41',
+          'secret',
+          () => Promise.resolve(new Response(new Uint8Array([4]))),
+          () => Promise.resolve(),
+        ),
+        new Uint8Array([4]),
+      );
+    });
+
+    it('tooling-111: an asset the token may not read throws after its one retry, and a redirect with no address is an error', async () => {
+      const outcomes = await Promise.all(
+        [
+          new Response(null, {status: 404}),
+          new Response(null, {status: 302}),
+        ].map(answer =>
+          assetFailureOf('secret', () => Promise.resolve(answer.clone())),
+        ),
+      );
+      deepStrictEqual(outcomes, [
+        'https://api.example.invalid/assets/41: 404',
+        'https://api.example.invalid/assets/41: 302',
+      ]);
+    });
+
+    it('tooling-111: with no token the download fails at once and names the variable', async () => {
+      const outcomes = await Promise.all(
+        [undefined, ''].map(token =>
+          assetFailureOf(token, () =>
+            Promise.reject(new Error('no fetch expected')),
+          ),
+        ),
+      );
+      deepStrictEqual(outcomes, [
+        'https://api.example.invalid/assets/41: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read remote-oss/cli-archives',
+        'https://api.example.invalid/assets/41: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read remote-oss/cli-archives',
+      ]);
+    });
+
     it('#253 Q14: an archive is unpacked into the folder and its own file removed', () => {
       workspace.write('source/codium-insiders', 'binary');
       const archive = path.join(workspace.root, 'source.tar.gz');
@@ -4307,20 +4447,40 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-51: the executable of a launch is VS Code’s for a launch of that client and VSCodium’s for any other', () => {
+    it('tooling-51, tooling-111: the executable of a launch is VS Code’s for a launch of that client, the CLI-source copy’s for cli-path and VSCodium’s for any other', () => {
       const variables: Partial<HarnessVariables> = {
         HARNESS_VSCODE_EXECUTABLE: '/vscode/code',
         HARNESS_VSCODIUM_EXECUTABLE: '/vscodium/codium',
+        HARNESS_CLI_EDITOR_EXECUTABLE: '/run/cli-editor/codium',
       };
       const launches = launchesOf(REPOSITORY_ROOT);
       deepStrictEqual(
-        ['genuine', 'windows', 'local'].map(label =>
+        ['genuine', 'cli-path', 'windows', 'local'].map(label =>
           editorExecutableOf(
             variables as HarnessVariables,
             launchLabelled(launches, label),
           ),
         ),
-        ['/vscode/code', '/vscodium/codium', '/vscodium/codium'],
+        [
+          '/vscode/code',
+          '/run/cli-editor/codium',
+          '/vscodium/codium',
+          '/vscodium/codium',
+        ],
+      );
+    });
+
+    it('tooling-51, tooling-111: a launch whose editor the run did not make gets no executable', () => {
+      const none: Partial<HarnessVariables> = {};
+      const launches = launchesOf(REPOSITORY_ROOT);
+      deepStrictEqual(
+        ['genuine', 'cli-path', 'local'].map(label =>
+          editorExecutableOf(
+            none as HarnessVariables,
+            launchLabelled(launches, label),
+          ),
+        ),
+        ['', '', ''],
       );
     });
 

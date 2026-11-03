@@ -86,6 +86,44 @@ export const EARLIER_SERVER_ARCHIVE: ServerRelease = {
   },
 };
 
+/** One pinned archive of the editor CLI: its release asset in the CLI archives' repository, and its sha256. */
+export interface PinnedCliArchive {
+  assetId: number;
+  sha256: string;
+}
+
+/** The private repository whose release assets are the CLI archives; only a token that may read it fetches them. */
+export const CLI_ARCHIVES_REPOSITORY = 'remote-oss/cli-archives';
+
+/** The API address a CLI archive's release asset is downloaded from. */
+function cliAssetAddress(assetId: number): string {
+  return `https://api.github.com/repos/${CLI_ARCHIVES_REPOSITORY}/releases/assets/${String(assetId)}`;
+}
+
+/**
+ * The editor CLI archives the run serves under `/cli/<platform>/`, by platform: release `cli-1.140.06829-insider-1` of
+ * the CLI archives' repository, builds of the CLI patch that honour the server download template (ADR-0006's facts).
+ * Each digest is the one the release lists, measured against the downloaded bytes.
+ */
+export const CLI_ARCHIVES: Readonly<Record<string, PinnedCliArchive>> = {
+  'alpine-arm64': {
+    assetId: 703590706,
+    sha256: 'c82c562e6412bade8a39a2d28b8ad6fdba6ada6a24dae0c53998127799316297',
+  },
+  'alpine-x64': {
+    assetId: 703590711,
+    sha256: 'f4d8e275c2c84cde9c93464e94970f8f6653c2d68c358e0b7a6944a7e34910d8',
+  },
+  'linux-arm64': {
+    assetId: 703590712,
+    sha256: '145be3e968465c3941178665193d304938fb6248cfe5c9e5be089365b52d2517',
+  },
+  'linux-x64': {
+    assetId: 703590713,
+    sha256: '004f3b46b222dbcb57d4f967e8ae377a52670f5fa6fd2cf9b8402f48d28f5ef3',
+  },
+};
+
 /** The update service's name, which the download host answers for under the run's own certificate. */
 export const UPDATE_SERVICE_NAME = 'update.code.visualstudio.com';
 
@@ -159,6 +197,32 @@ export function requestedPlatform(url: string): string | undefined {
 export type Download = (address: string) => Promise<Uint8Array>;
 
 /**
+ * The pinned file `file`: kept when its bytes match `expected`, else downloaded from `address`, checked and written.
+ * Throws `mismatch` when the download does not match either.
+ */
+async function pinnedFileOf(
+  file: string,
+  address: string,
+  expected: string,
+  transfer: {
+    download: Download;
+    writeFile: (file: string, bytes: Uint8Array) => void;
+  },
+  mismatch: string,
+): Promise<string> {
+  if (existsSync(file) && sha256Of(readFileSync(file)) === expected) {
+    return file;
+  }
+  const bytes = await transfer.download(address);
+  if (sha256Of(bytes) !== expected) {
+    throw new Error(mismatch);
+  }
+  mkdirSync(path.dirname(file), {recursive: true});
+  transfer.writeFile(file, bytes);
+  return file;
+}
+
+/**
  * The server archive for `platform` in `cacheFolder`, downloaded from `release` (the pinned one unless another is
  * given) when it is missing or does not match its checksum. Throws when the download does not match either.
  */
@@ -174,19 +238,41 @@ export async function serverArchiveOf(
   if (expected === undefined) {
     throw new Error(`no server archive is pinned for ${platform}`);
   }
-  const file = path.join(cacheFolder, serverArchiveName(platform, release));
-  if (existsSync(file) && sha256Of(readFileSync(file)) === expected) {
-    return file;
-  }
-  const archive = await download(
+  return pinnedFileOf(
+    path.join(cacheFolder, serverArchiveName(platform, release)),
     `https://github.com/${release.repository}/releases/download/${release.tagName}/${serverArchiveName(platform, release)}`,
+    expected,
+    {download, writeFile},
+    'the server archive download does not match its checksum',
   );
-  if (sha256Of(archive) !== expected) {
-    throw new Error('the server archive download does not match its checksum');
-  }
-  mkdirSync(cacheFolder, {recursive: true});
-  writeFile(file, archive);
-  return file;
+}
+
+/** The file name of the editor CLI's archive for a platform, in the cache and under `/cli/<platform>/`. */
+export function cliArchiveName(platform: string): string {
+  return `cli-${platform}.tar.gz`;
+}
+
+/**
+ * The editor CLI archive for `platform` in `cacheFolder`, downloaded from its pin when it is missing or does not match;
+ * none when no archive is pinned for the platform. Throws when the download does not match its checksum.
+ */
+export async function cliArchiveOf(
+  cacheFolder: string,
+  platform: string,
+  download: Download,
+  writeFile: (file: string, bytes: Uint8Array) => void,
+  pins: Readonly<Record<string, PinnedCliArchive>> = CLI_ARCHIVES,
+): Promise<string | undefined> {
+  const pinned = pins[platform];
+  return pinned === undefined
+    ? undefined
+    : pinnedFileOf(
+        path.join(cacheFolder, cliArchiveName(platform)),
+        cliAssetAddress(pinned.assetId),
+        pinned.sha256,
+        {download, writeFile},
+        'the CLI archive download does not match its checksum',
+      );
 }
 
 /** The archive files of the extension's client cache: `<server>-<platform>[-<quality>].tar.gz`, the platform captured. */
@@ -377,6 +463,8 @@ export interface DownloadHostOptions {
   archiveFiles: Readonly<Record<string, string>>;
   /** The archives of the earlier release by platform, served under `/earlier/<platform>/`; none when no launch asks. */
   earlierArchiveFiles?: Readonly<Record<string, string>>;
+  /** The editor CLI's archives by platform, served under `/cli/<platform>/`; none when no launch asks or none is pinned. */
+  cliArchiveFiles?: Readonly<Record<string, string>>;
   defaultPlatform: string;
   certificateFile: string;
   keyFile: string;
@@ -510,17 +598,15 @@ function archiveFileOf(
 }
 
 /**
- * The archive an `/earlier/` request gets: the earlier release's archive of the platform the path names, and none for
- * a platform it has no archive of, or when the run fetched none.
+ * The archive of `files` for the platform a request's path names (`/earlier/` and `/cli/`), and none for a platform it
+ * has no archive of, or when the run fetched none.
  */
-function earlierArchiveFileOf(
+function namedArchiveOf(
   url: string,
-  options: Pick<DownloadHostOptions, 'earlierArchiveFiles'>,
+  files: Readonly<Record<string, string>> | undefined,
 ): string | undefined {
   const platform = requestedPlatform(url);
-  return platform === undefined
-    ? undefined
-    : options.earlierArchiveFiles?.[platform];
+  return platform === undefined ? undefined : files?.[platform];
 }
 
 /**
@@ -612,6 +698,7 @@ function answer(
     DownloadHostOptions,
     | 'archiveFiles'
     | 'earlierArchiveFiles'
+    | 'cliArchiveFiles'
     | 'defaultPlatform'
     | 'templatesFolder'
     | 'controlFolder'
@@ -653,7 +740,15 @@ function answer(
       answerArchive(
         request,
         response,
-        earlierArchiveFileOf(String(request.url), options),
+        namedArchiveOf(String(request.url), options.earlierArchiveFiles),
+        held,
+      );
+      return;
+    case 'cli':
+      answerArchive(
+        request,
+        response,
+        namedArchiveOf(String(request.url), options.cliArchiveFiles),
         held,
       );
       return;
@@ -924,7 +1019,9 @@ export interface RunDownloads {
 /**
  * Starts the download host of a run in `runFolder`: the Alpine and glibc server archives for this machine's
  * architecture from the cache under `root`, the run's certificate, and the two ports on the loopback address and on
- * Docker's bridge gateway. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`.
+ * Docker's bridge gateway. With `earlier`, the archives of that release too, served under `/earlier/<platform>/`; with
+ * `cliSource`, the editor CLI's archives its pins name for those platforms, fetched with its own download and served under
+ * `/cli/<platform>/`.
  */
 export async function startRunDownloads(
   command: CommandRunner,
@@ -934,10 +1031,15 @@ export async function startRunDownloads(
   architecture: string = process.arch,
   checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
   earlier?: ServerRelease,
+  cliSource?: {
+    pins: Readonly<Record<string, PinnedCliArchive>>;
+    download: Download;
+  },
 ): Promise<RunDownloads> {
   const platforms = servedPlatforms(architecture);
   const archiveFiles: Record<string, string> = {};
   const earlierArchiveFiles: Record<string, string> = {};
+  const cliArchiveFiles: Record<string, string> = {};
   for (const platform of platforms) {
     archiveFiles[platform] = await serverArchiveOf(
       path.join(root, '.vscode-test', 'downloads'),
@@ -955,6 +1057,19 @@ export async function startRunDownloads(
         earlier.sha256,
         earlier,
       );
+    }
+    const cliFile =
+      cliSource === undefined
+        ? undefined
+        : await cliArchiveOf(
+            path.join(root, '.vscode-test', 'downloads'),
+            platform,
+            cliSource.download,
+            writeFileSync,
+            cliSource.pins,
+          );
+    if (cliFile !== undefined) {
+      cliArchiveFiles[platform] = cliFile;
     }
   }
   for (const file of removeStaleClientArchives(
@@ -975,6 +1090,7 @@ export async function startRunDownloads(
     addresses: ['127.0.0.1', bridgeGateway(command)],
     archiveFiles,
     earlierArchiveFiles,
+    cliArchiveFiles,
     defaultPlatform: platforms[0],
     ...certificate,
     logFile,

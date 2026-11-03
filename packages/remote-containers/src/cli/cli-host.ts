@@ -32,12 +32,14 @@ export interface CliHost {
    * Runs the CLI with `cliArguments`. An abort ends the CLI and its children, and the run then ends with status
    * null. `result` is the first line of stdout, when there was one. `onStdin`, when given, gets the writer for the
    * CLI's stdin and the run's input presentation once the host knows it: `echoed` when the preload loaded
-   * `node-pty` (its marker says so), `plain` when it didn't or no marker came.
+   * `node-pty` (its marker says so), `plain` when it didn't or no marker came. `environment` is added to the
+   * editor's environment for this run's process only.
    */
   run(
     cliArguments: readonly string[],
     onLine: (line: CliLine) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    environment?: Readonly<Record<string, string>>,
   ): Promise<CliRun>;
 }

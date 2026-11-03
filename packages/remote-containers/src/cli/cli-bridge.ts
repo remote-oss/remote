@@ -232,6 +232,7 @@ export function cliBridgeOf(
           },
           own.signal,
           onStdin,
+          prepared.environment,
         );
         rawHold.releaseAll().forEach(deliver);
         if (finished.kind === 'spawnFailed') {

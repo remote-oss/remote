@@ -1873,6 +1873,24 @@ describe('the container connector: cancelling (card containers-08)', () => {
     deepStrictEqual(heard, ['held', 'none']);
   });
 
+  it('F-0303 §9, card containers-141: the held connection names the configuration file it was made for, and says whether the connect created the container', async () => {
+    const created = sceneOf();
+    await connected(created);
+    const found = sceneOf();
+    found.outcome = {...READY, created: false};
+    await connected(found);
+    deepStrictEqual(
+      [created, found].map(scene => {
+        const held = scene.connector.heldConnection();
+        return [held?.configFile, held?.created];
+      }),
+      [
+        ['/work/proj/.devcontainer/devcontainer.json', true],
+        ['/work/proj/.devcontainer/devcontainer.json', false],
+      ],
+    );
+  });
+
   it('F-0901 6.21 step 4, card containers-30: the held connection names the container, its folders and the engine the connect used, and it is nothing before the connect and after a cancel', async () => {
     const scene = sceneOf();
     const before = scene.connector.heldConnection();
@@ -2636,5 +2654,47 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
     const scene = sceneOf();
     scene.configuration = {kind: 'configurationFailed', message: 'x'};
     deepStrictEqual((await connected(scene)).environmentTunnels, []);
+  });
+});
+
+describe('the container connector: the extensions cache after the start (#1810)', () => {
+  it('F-0419 AC-17: the started server’s background step runs once the connection is held, and its lifetime ends when the connection is given back', async () => {
+    const scene = sceneOf();
+    const lifetimes: AbortSignal[] = [];
+    scene.server = {
+      ...(STARTED_SERVER as Extract<ServerResult, {kind: 'started'}>),
+      afterReady: lifetime => {
+        lifetimes.push(lifetime);
+        return Promise.resolve();
+      },
+    };
+    await connected(scene);
+    const whileHeld = lifetimes.map(lifetime => lifetime.aborted);
+    scene.connector.cancel();
+    deepStrictEqual(
+      [whileHeld, lifetimes.map(lifetime => lifetime.aborted)],
+      [[false], [true]],
+    );
+  });
+
+  it('F-0419: a background step that fails is one log line, and the connection stays', async () => {
+    const scene = sceneOf();
+    scene.server = {
+      ...(STARTED_SERVER as Extract<ServerResult, {kind: 'started'}>),
+      afterReady: () => Promise.reject(new Error('disk full')),
+    };
+    await connected(scene);
+    await tick();
+    deepStrictEqual(
+      [
+        scene.connector.heldConnection() === undefined,
+        scene.sink.lines
+          .map(({message}) => message)
+          .filter(message =>
+            message.startsWith('the extensions cache stopped'),
+          ),
+      ],
+      [false, ['the extensions cache stopped: disk full']],
+    );
   });
 });

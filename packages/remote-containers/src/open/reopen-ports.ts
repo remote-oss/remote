@@ -9,6 +9,7 @@ import type {SerializedUri} from '../authority/payload.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {ProblematicPorts} from '../features/problematic-check.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
+import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
@@ -16,12 +17,15 @@ import type {PinnedEngine} from '../engine/effective-engine.ts';
 import type {AuthoringPort} from './author-first.ts';
 import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
+import type {WorkspaceFolderPorts} from './workspace-folders.ts';
 
 /** What the command reads of the window it runs in, at each call. */
 interface WindowPort {
   /** The name of the remote the window is on; none for a local window. */
   remoteName(): string | undefined;
   folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
+  /** The workspace file the window shows: a `file` one for a saved workspace, an `untitled` one for an unsaved one; none for a folder. */
+  workspaceFile(): {scheme: string; fsPath: string} | undefined;
   /** The editor's URI for a local file, as the payload writes it. */
   serializedFile(file: string): SerializedUri;
 }
@@ -39,7 +43,7 @@ interface EnginePort {
 }
 
 /** Everything the command needs. */
-export interface ReopenPorts extends AuthoringPort {
+export interface ReopenPorts extends AuthoringPort, WorkspaceFolderPorts {
   /** The guard of the open path, which holds the command back while a proposal it needs is missing. */
   gate: OpenGatePorts;
   window: WindowPort;
@@ -61,6 +65,9 @@ export interface ReopenPorts extends AuthoringPort {
   engine: EnginePort;
   /** The dialogs of the first check. */
   dialogs: EngineDialogPort;
+  /** Tells the user, in a modal information dialog with the detail `text` and one OK button, that the command cannot go on. */
+  informModal(text: string): PromiseLike<unknown>;
+  translate: Translate;
   /** The progress that shows while the checks before the reload take long. */
   progress: PreReloadProgressPorts;
   /** The time now, in milliseconds. */

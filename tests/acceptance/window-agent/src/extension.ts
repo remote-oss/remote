@@ -51,7 +51,13 @@ function agentFolderOf(): string | undefined {
  * process id never carries the name of the window that ran in it before.
  */
 function activationName(agentFolder: string): string {
-  const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  // A remote workspace window has no folders yet when its extensions activate, so its workspace file's own folder names it.
+  const workspaceFile = vscode.workspace.workspaceFile;
+  const folder =
+    vscode.workspace.workspaceFolders?.[0]?.uri ??
+    (workspaceFile?.scheme === 'untitled'
+      ? undefined
+      : workspaceFile && vscode.Uri.joinPath(workspaceFile, '..'));
   const first = folder?.scheme === MEMORY_SCHEME ? MEMORY_SCHEME : folder?.path;
   const name =
     first === undefined
@@ -241,6 +247,24 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.commands.executeCommand('vscode.openFolder', address, {
           forceNewWindow: true,
         });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openHere',
+      (inPath: string, forceNewWindow?: boolean) => {
+        const fresh = forceNewWindow === true;
+        // The same remote as this window, on `inPath` there: File > Open Folder... typed with a path of the remote.
+        void vscode.commands.executeCommand(
+          'vscode.openFolder',
+          vscode.Uri.from({
+            scheme: 'vscode-remote',
+            // The authority of this window's own folder: the remote the window is on.
+            authority:
+              vscode.workspace.workspaceFolders?.[0]?.uri.authority ?? '',
+            path: inPath,
+          }),
+          {forceNewWindow: fresh, forceReuseWindow: !fresh},
+        );
       },
     ),
     vscode.commands.registerCommand(
@@ -570,6 +594,16 @@ export function activate(context: vscode.ExtensionContext): void {
           new TextEncoder().encode(text),
         );
       },
+    ),
+    // Adding a folder to a single-folder window makes it an untitled multi-root workspace.
+    vscode.commands.registerCommand(
+      'acceptance.agent.addFolder',
+      (folder: string) =>
+        vscode.workspace.updateWorkspaceFolders(
+          vscode.workspace.workspaceFolders?.length ?? 0,
+          0,
+          {uri: vscode.Uri.file(folder)},
+        ),
     ),
     vscode.commands.registerCommand(
       'acceptance.agent.environment',

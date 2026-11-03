@@ -3,8 +3,8 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {appendFileSync, readFileSync} from 'node:fs';
-import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
+import {appendFileSync, readFileSync, watch} from 'node:fs';
+import {mkdir, mkdtemp, readdir, readFile, stat} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -77,9 +77,12 @@ import {
   withAmbientContext,
   withEnvironment,
 } from './engine/effective-engine.ts';
+import {configWatchOf} from './config-watch/config-watch.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
+import {effectiveEngineKey} from './engine/engine-key.ts';
+import {engineWatchOf} from './engine/engine-watch.ts';
 import {
   commands,
   contextKeys,
@@ -90,6 +93,7 @@ import {
 } from './identifiers.generated.ts';
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
+import {composeResolverOf} from './compose/resolver.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -569,7 +573,12 @@ export async function activate(
       {
         window: {
           remote: vscode.env.remoteName !== undefined,
-          workspaceFile: vscode.workspace.workspaceFile !== undefined,
+          workspace:
+            vscode.workspace.workspaceFile === undefined
+              ? 'none'
+              : vscode.workspace.workspaceFile.scheme === 'file'
+                ? 'saved'
+                : 'untitled',
           folders: windowFolders(),
         },
         global: context.globalState,
@@ -846,8 +855,41 @@ export async function activate(
         window: {
           remoteName: () => vscode.env.remoteName,
           folders: windowFolders,
+          workspaceFile: () => {
+            const file = vscode.workspace.workspaceFile;
+            return file === undefined
+              ? undefined
+              : {scheme: file.scheme, fsPath: file.fsPath};
+          },
           serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
         },
+        informModal: text =>
+          vscode.window.showInformationMessage('', {
+            modal: true,
+            detail: text,
+          }),
+        readWorkspaceFile: async file => {
+          try {
+            return {kind: 'text', text: await readFile(file, 'utf8')};
+          } catch (caught) {
+            return {
+              kind: 'unreadable',
+              message:
+                caught instanceof Error ? caught.message : String(caught),
+            };
+          }
+        },
+        confirmModal: async text => {
+          const proceed = translate('Continue');
+          return (
+            (await vscode.window.showInformationMessage(
+              '',
+              {modal: true, detail: text},
+              proceed,
+            )) === proceed
+          );
+        },
+        translate,
         ensureTrusted: commandTitle =>
           ensureTrusted(served.trust, {
             translate,
@@ -1191,6 +1233,14 @@ export async function activate(
           logger,
           presenter,
           clock: Date.now,
+          userDataFolder: path.join(context.globalStorageUri.fsPath, 'data'),
+          compose: composeResolverOf({
+            runCompose: (argv, options) =>
+              engine.run(['compose', ...argv], {kind: 'none'}, options),
+            readText: file => readFile(file, 'utf8'),
+            environment: process.env,
+            logger: logger.child('compose'),
+          }),
         }),
       lifecyclePresenter: lifecyclePresenterOf(
         terminalPortOf(),
@@ -1290,6 +1340,30 @@ export async function activate(
             clock,
             newTemporaryToken: () =>
               `${String(process.pid)}-${String(clock.now())}`,
+            // The editor's fetch, so that its proxy settings apply as for the server's download.
+            queryGallery: async (address, query, cancellation) => {
+              try {
+                const response = await fetch(address, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json;api-version=3.0-preview.1',
+                  },
+                  body: JSON.stringify(query),
+                  signal: cancellation,
+                });
+                return response.ok ? await response.json() : undefined;
+              } catch {
+                return undefined;
+              }
+            },
+            readText: async file => {
+              try {
+                return await readFile(file, 'utf8');
+              } catch {
+                return undefined;
+              }
+            },
             logger,
             translate,
           },
@@ -1388,6 +1462,69 @@ export async function activate(
         logger,
       },
     );
+    const configWatch =
+      registered.registration === 'registered'
+        ? configWatchOf({
+            readFile: file =>
+              readFile(file).then(
+                bytes => new Uint8Array(bytes),
+                () => undefined,
+              ),
+            watchFolder: (folder, listener, failed) => {
+              try {
+                const watcher = watch(folder, (kind, name) => {
+                  listener(name ?? undefined);
+                });
+                watcher.on('error', () => {
+                  watcher.close();
+                  failed();
+                });
+                return {
+                  dispose: () => {
+                    watcher.close();
+                  },
+                };
+              } catch {
+                return undefined;
+              }
+            },
+            setTimer: (callback, milliseconds) => {
+              const timer = setTimeout(callback, milliseconds);
+              return () => {
+                clearTimeout(timer);
+              };
+            },
+            state: context.workspaceState,
+            show: (message, buttons) =>
+              vscode.window.showInformationMessage(message, ...buttons),
+            rebuild: () =>
+              vscode.commands.executeCommand(commands.rebuildContainer.id),
+            translate,
+            logger,
+          })
+        : undefined;
+    if (configWatch !== undefined) {
+      const stopListening = connector.onHeldChanged(() => {
+        const held = connector.heldConnection();
+        if (held === undefined) {
+          configWatch.pause();
+          return;
+        }
+        configWatch.activate(held).catch((caught: unknown) => {
+          logger.warn(
+            `the configuration watch failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+          );
+        });
+      });
+      context.subscriptions.push(
+        {dispose: stopListening},
+        {
+          dispose: () => {
+            configWatch.dispose();
+          },
+        },
+      );
+    }
     const explorerEditor = {
       commandIds: () => vscode.commands.getCommands(true),
       setContext: (key: string, value: boolean) =>
@@ -1411,6 +1548,42 @@ export async function activate(
         served.preflight.setTimer(milliseconds, callback),
       logger,
     });
+    const engineWatch = engineWatchOf({
+      configFolder: () =>
+        process.env.DOCKER_CONFIG ?? path.join(os.homedir(), '.docker'),
+      watchFolder: (folder, recursive, listener) => {
+        try {
+          const watcher = watch(folder, {recursive}, (kind, name) => {
+            listener(name ?? undefined);
+          });
+          watcher.on('error', () => {
+            watcher.close();
+          });
+          return {
+            dispose: () => {
+              watcher.close();
+            },
+          };
+        } catch {
+          return undefined;
+        }
+      },
+      signature: file =>
+        stat(file).then(
+          found => `${String(found.size)}:${String(found.mtimeMs)}`,
+          () => 'missing',
+        ),
+      engineKey: () =>
+        effectiveEngineKey(
+          engineSources(),
+          served.preflight,
+          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          new AbortController().signal,
+        ),
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
+      logger,
+    });
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
       held: () => connector.heldConnection(),
@@ -1424,6 +1597,7 @@ export async function activate(
       now: Date.now,
       setTimer: (milliseconds, callback) =>
         served.preflight.setTimer(milliseconds, callback),
+      onEngineChange: listener => engineWatch.onEngineChange(listener),
       onDockerPathChange: listener =>
         vscode.workspace.onDidChangeConfiguration(event => {
           if (event.affectsConfiguration(settings.dockerPath.id)) {

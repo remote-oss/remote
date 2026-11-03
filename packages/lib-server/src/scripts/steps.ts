@@ -249,6 +249,7 @@ export const STEP_OUTCOMES: Readonly<
       {key: 'server.installLink', only: POSIX_ONLY},
       {key: 'server.prerequisitesHelper', only: POSIX_ONLY},
       {key: 'server.prerequisites.<line>', only: POSIX_ONLY},
+      {key: 'host.note', only: POWERSHELL_ONLY},
     ],
   },
   installExtensions: {
@@ -264,6 +265,7 @@ export const STEP_OUTCOMES: Readonly<
       'cli.connectionToken',
       'cli.tokenMissing',
       'cli.tokenInvalid',
+      {key: 'cli.parent', only: POWERSHELL_ONLY},
     ],
   },
   stopCli: {statuses: ['Ok'], facts: ['cli.stopped']},
@@ -300,9 +302,10 @@ export type FunctionRole =
   | 'identity'
   | 'leave'
   | 'process'
+  | 'secretToken'
   | 'serverTree'
   | 'stop'
-  | 'cliPort'
+  | 'cliStart'
   | 'folderKind'
   | 'tree';
 
@@ -325,7 +328,7 @@ const STEP_ROLES: Readonly<
   prepare: ['common'],
   unpack: ['common', 'unpack', 'identity'],
   activate: ['common'],
-  start: ['common', 'environment', 'lock', 'process', 'leave'],
+  start: ['common', 'environment', 'lock', 'process', 'secretToken', 'leave'],
   installExtensions: ['common', 'environment'],
   installCli: [
     'common',
@@ -336,7 +339,7 @@ const STEP_ROLES: Readonly<
     'unpack',
     'leave',
   ],
-  startCli: ['common', 'cliPort'],
+  startCli: ['common', 'cliStart', 'secretToken'],
   stopCli: ['common'],
   kill: ['common', 'process', 'serverTree', 'stop'],
   uninstall: ['common', 'process', 'serverTree', 'stop'],

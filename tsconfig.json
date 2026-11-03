@@ -140,6 +140,9 @@
       "path": "tests/acceptance/secrets"
     },
     {
+      "path": "tests/acceptance/agent-notmp"
+    },
+    {
       "path": "tests/acceptance/no-proposals"
     },
     {
@@ -204,6 +207,9 @@
     },
     {
       "path": "tests/acceptance/ssh-no-proposals"
+    },
+    {
+      "path": "tests/acceptance/cli-path"
     },
     {
       "path": "tests/acceptance/containers"

@@ -65,6 +65,23 @@ function Get-FailureMessage($Failure) {
   }
   return $Exception.Message
 }
+function New-Secret {
+  $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  $Bytes = New-Object byte[] 32
+  $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $Generator.GetBytes($Bytes)
+  $Generator.Dispose()
+  return -join ($Bytes | ForEach-Object { $Characters[$_ % 62] })
+}
+function Start-Program([hashtable]$Launch) {
+  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
+    $Launch.WindowStyle = 'Hidden'
+  }
+  return Start-Process @Launch
+}
+function ConvertTo-WindowsArgument([string]$Value) {
+  return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }

@@ -82,6 +82,7 @@ export function nodeCliHost(
       onLine: (line: CliLine) => void,
       cancellation: AbortSignal,
       onStdin?: StdinOf,
+      environment?: Readonly<Record<string, string>>,
     ): Promise<CliRun> => {
       const spawned = await ports.spawn(
         paths.node,
@@ -93,6 +94,7 @@ export function nodeCliHost(
           env: {
             BUILDKIT_PROGRESS: 'plain',
             ...editorEnvironment,
+            ...environment,
             ELECTRON_RUN_AS_NODE: '1',
             REMOTE_OSS_EDITOR_MODULES: paths.editorModules,
           },

@@ -1,6 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   decodeConfiguration,
+  dockerfileOf,
+  dockerfileValueOf,
   hasContainerSource,
   namesContainerSource,
   labelOf,
@@ -168,6 +170,33 @@ describe('the text of a configuration (card containers-13)', () => {
         undefined,
       ].map(namesContainerSource),
       Array<boolean>(15).fill(false),
+    );
+  });
+
+  it('F-0303 BR-2: the Dockerfile value is build.dockerfile when build is an object with a string one, else a string dockerFile', () => {
+    deepStrictEqual(
+      [
+        {build: {dockerfile: 'A'}, dockerFile: 'B'},
+        {build: {dockerfile: 5}, dockerFile: 'B'},
+        {build: [], dockerFile: 'B'},
+        {build: 'x', dockerFile: 'B'},
+        {dockerFile: 'B'},
+        {dockerFile: 5},
+        {image: 'x'},
+      ].map(each => dockerfileValueOf(each)),
+      ['A', 'B', 'B', 'B', 'B', undefined, undefined],
+    );
+  });
+
+  it('F-0303 BR-2: the absolute Dockerfile is read against the configuration’s folder, and a variable names none', () => {
+    deepStrictEqual(
+      [
+        {build: {dockerfile: '../D'}},
+        {dockerFile: 'D'},
+        {build: {dockerfile: '${localWorkspaceFolder}/D'}},
+        {image: 'x'},
+      ].map(each => dockerfileOf(each, '/w/.devcontainer/devcontainer.json')),
+      ['/w/D', '/w/.devcontainer/D', undefined, undefined],
     );
   });
 });

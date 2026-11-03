@@ -3,6 +3,7 @@
  * names, the wizard's command started without waiting for it, and the waits on its screen and its files.
  */
 
+import {execFile} from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -12,6 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {promisify} from 'node:util';
 import {openFolderWindow} from './folder-windows.ts';
 import {
   closeWindow,
@@ -153,7 +155,27 @@ export async function takeFeatureScreen(
   }
 }
 
-/** Runs `body` over a window with the files, and closes the window after. */
+const execFileAsync = promisify(execFile);
+
+/**
+ * Removes the containers made for `folder`. The configuration a wizard writes carries no label of the run, so the
+ * run's own clean-up does not find them, and one left behind holds the `vscode` volume.
+ */
+async function removeContainersAt(folder: string): Promise<void> {
+  const {stdout} = await execFileAsync('docker', [
+    'ps',
+    '--all',
+    '--quiet',
+    '--filter',
+    `label=devcontainer.local_folder=${folder}`,
+  ]);
+  const found = stdout.split('\n').filter(line => line !== '');
+  if (found.length > 0) {
+    await execFileAsync('docker', ['rm', '--force', ...found]);
+  }
+}
+
+/** Runs `body` over a window with the files, closes the window after, and removes the containers made for its folder. */
 export async function withWindow(
   name: string,
   contents: Readonly<Record<string, string>>,
@@ -164,6 +186,7 @@ export async function withWindow(
     await body(window, folder);
   } finally {
     await closeWindow(window).catch(() => undefined);
+    await removeContainersAt(folder).catch(() => undefined);
   }
 }
 

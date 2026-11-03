@@ -100,6 +100,11 @@ export interface PlainLaunch extends LaunchCommon {
   /** The editor the launch starts: VS Code at the floor of ADR-0007 instead of the run's VSCodium. */
   client?: 'vscode';
   /**
+   * Whether the launch starts the run's CLI-source copy of VSCodium, whose `product.json` names a
+   * `cliDownloadUrlTemplate` on the download host (`tools/acceptance-cli-editor.ts`), instead of the run's VSCodium.
+   */
+  cliSource?: true;
+  /**
    * The base names of the suite's test files this launch runs, when it runs only some of them; every `*.test.ts` of the
    * suite when absent.
    */
@@ -311,6 +316,9 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
+const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
+
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-container.test.ts',
@@ -326,6 +334,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-where.test.ts',
   'authoring.test.ts',
   'cache-volume.test.ts',
+  'compose-names.test.ts',
   'configuration-errors.test.ts',
   'configuration-open.test.ts',
   'configuration-picker.test.ts',
@@ -348,6 +357,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'lifecycle-more.test.ts',
   'lifecycle-order.test.ts',
   'mount-settings.test.ts',
+  'multi-root.test.ts',
   'open-folder-dialog.test.ts',
   'open-folder-failure.test.ts',
   'open-folder-virtual.test.ts',
@@ -951,6 +961,14 @@ export function launchesOf(root: string): Launch[] {
       hostSetup: [{command: SECRETS_ACCOUNTS_RESET}],
     },
     {
+      // The account that may not create agent links in /tmp, on the Ubuntu 26.04 host; each attempt starts with its ACL entry.
+      ...RENDERER_LAUNCH,
+      label: 'agent-notmp',
+      suite: 'agent-notmp',
+      hostBase: 'ubuntu-26.04',
+      hostSetup: [{command: AGENT_NOTMP_ACL}],
+    },
+    {
       ...RENDERER_LAUNCH,
       label: 'default-ports',
       suite: 'default-ports',
@@ -969,6 +987,14 @@ export function launchesOf(root: string): Launch[] {
       suite: 'no-proposals',
       proposedApi: false,
     },
+    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
+    {
+      label: 'cli-path',
+      kind: 'plain',
+      suite: 'cli-path',
+      cliSource: true,
+      namedOnly: true,
+    },
     {...EXPLORER_LAUNCH, label: 'explorer', suite: 'explorer'},
     {
       ...EXPLORER_LAUNCH,
@@ -986,7 +1012,14 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
-      environment: {...EXPLORER_LAUNCH.environment, HOME: '<run>/home'},
+      // Core's dialogs are drawn in the window, where the renderer helpers read them.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/home',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
     },
     {
       ...EXPLORER_LAUNCH,
@@ -1039,7 +1072,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
-        'remote.SSH.remotePlatform': {harness: 'linux'},
+        'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
     {

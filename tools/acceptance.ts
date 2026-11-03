@@ -47,12 +47,15 @@ import {
 import {build} from 'esbuild';
 import {
   downloadHostArguments,
+  CLI_ARCHIVES,
+  CLI_ARCHIVES_REPOSITORY,
   EARLIER_SERVER_ARCHIVE,
   type RunDownloads,
   startRunDownloads,
   UPDATE_SERVICE_NAME,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
+import {CLI_TEMPLATE_PATH, cliSourceEditorOf} from './acceptance-cli-editor.ts';
 import {
   acceptanceRunId,
   buildDevContainerImage,
@@ -229,6 +232,8 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_LOG: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
+  /** The CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`), only when a chosen launch starts it. */
+  HARNESS_CLI_EDITOR_EXECUTABLE?: string;
   /** The version of the editor the tests run on: the recorded version, or the job's for a genuine launch. */
   HARNESS_EDITOR_VERSION: string;
   /** The VS Code executable of the genuine version, only when a chosen launch starts it. */
@@ -263,6 +268,15 @@ export interface HarnessDependencies {
   editorCli: () => Promise<string>;
   /** The VSCodium executable at the pinned release, downloading and unpacking it when it is missing. */
   vscodiumExecutable: () => Promise<string>;
+  /**
+   * Makes the run's CLI-source copy of the VSCodium at `executable` in `runFolder`, its `product.json` naming
+   * `template`, and gives the copy's executable.
+   */
+  cliEditor: (
+    executable: string,
+    runFolder: string,
+    template: string,
+  ) => string;
   /** The VS Code executable of `version`, downloading the editor when it is missing. */
   vscodeExecutable: (version: string) => Promise<string>;
   /**
@@ -289,11 +303,15 @@ export interface HarnessDependencies {
     launch: Launch,
   ) => Promise<AttemptResult>;
   /** Starts the run's download host in the run's folder; the VSCodium run only. */
-  /** Starts the download host; `earlier` says whether a launch of the run asks for the earlier release's archives. */
+  /**
+   * Starts the download host; `earlier` says whether a launch of the run asks for the earlier release's archives, and
+   * `cliArchives` whether one starts the CLI-source editor, which needs the pinned CLI archives.
+   */
   startDownloads: (
     root: string,
     runFolder: string,
     earlier: boolean,
+    cliArchives: boolean,
   ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
@@ -1132,6 +1150,7 @@ async function prepare(
           root,
           runFolder,
           chosen.some(launch => launch.earlierServerArchive === true),
+          chosen.some(startsCliEditor),
         )
       : undefined;
   if (downloads !== undefined) {
@@ -1199,6 +1218,16 @@ async function prepare(
   await dependencies.bundleSuite(root);
   const vscodium =
     editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
+  const cliEditor =
+    vscodium === undefined ||
+    downloads === undefined ||
+    !chosen.some(startsCliEditor)
+      ? undefined
+      : dependencies.cliEditor(
+          vscodium,
+          runFolder,
+          `${downloads.variables.HARNESS_DOWNLOADS_HTTP ?? ''}${CLI_TEMPLATE_PATH}`,
+        );
   const vsixFiles = packagedExtensions(root);
   if (
     editor === 'vscodium' &&
@@ -1327,6 +1356,9 @@ async function prepare(
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
+    ...(cliEditor === undefined
+      ? {}
+      : {HARNESS_CLI_EDITOR_EXECUTABLE: cliEditor}),
     HARNESS_EDITOR_VERSION: EDITOR_VERSION,
     ...(vscode === undefined
       ? {}
@@ -1783,8 +1815,8 @@ export const GENUINE_JOB = 'acceptance-genuine';
 
 /**
  * Why the run refuses its launches, when one of them takes its server from the editor's publisher or accepts its
- * licence outside the genuine job: the run takes such a launch only under Actions, in that job, with the version named.
- * Anyone can set the three variables, so this guards against an accident, not against intent.
+ * licence without naming the genuine version it runs: such a launch runs wherever the version is named, on any machine
+ * or job. Anyone can set the variable, so this guards against an accident, not against intent.
  */
 export function publisherDownloadsRefusal(
   launches: readonly Launch[],
@@ -1794,14 +1826,9 @@ export function publisherDownloadsRefusal(
   const labels = launches
     .filter(launch => launch.publisherDownloads === true)
     .map(launch => launch.label);
-  const genuineJob =
-    environment.GITHUB_ACTIONS === 'true' &&
-    environment.GITHUB_JOB === GENUINE_JOB &&
-    named !== undefined &&
-    named !== '';
-  return labels.length === 0 || genuineJob
+  return labels.length === 0 || (named !== undefined && named !== '')
     ? undefined
-    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB ${GENUINE_JOB} and HARNESS_GENUINE_VERSION set`;
+    : `${labels.join(', ')}: a launch that takes the server from the editor's publisher or accepts its licence names the genuine version it runs (D-106): set HARNESS_GENUINE_VERSION`;
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
@@ -2320,14 +2347,25 @@ export function runTestCli(
   );
 }
 
-/** The executable a plain launch starts: VS Code for a launch that names it as its client, the run's VSCodium otherwise. */
+/** Whether a launch starts the run's CLI-source copy of VSCodium. */
+function startsCliEditor(launch: Launch): boolean {
+  return launch.kind === 'plain' && launch.cliSource === true;
+}
+
+/**
+ * The executable a plain launch starts: VS Code for a launch that names it as its client, the CLI-source copy for a
+ * launch that asks for it, the run's VSCodium otherwise.
+ */
 export function editorExecutableOf(
   variables: HarnessVariables,
   launch: Launch,
 ): string {
+  if (launch.kind === 'plain' && launch.client === 'vscode') {
+    return variables.HARNESS_VSCODE_EXECUTABLE ?? '';
+  }
   return (
-    (launch.kind === 'plain' && launch.client === 'vscode'
-      ? variables.HARNESS_VSCODE_EXECUTABLE
+    (startsCliEditor(launch)
+      ? variables.HARNESS_CLI_EDITOR_EXECUTABLE
       : variables.HARNESS_VSCODIUM_EXECUTABLE) ?? ''
   );
 }
@@ -2493,6 +2531,49 @@ export async function downloadWithRetry(
   );
 }
 
+/** The statuses of a redirect, which a release asset answers with its signed address. */
+const REDIRECTS: readonly number[] = [301, 302, 303, 307, 308];
+
+/**
+ * Downloads a private release asset from its API `address` with `token`, with one retry. The API answers with a
+ * redirect to a signed address, which is fetched without the token. With no token, the download fails and names the
+ * variable that holds it.
+ */
+export async function privateAssetDownload(
+  address: string,
+  token: string | undefined,
+  fetcher: typeof fetch = fetch,
+  pause: Sleeper = delay,
+): Promise<Uint8Array> {
+  if (token === undefined || token === '') {
+    throw new Error(
+      `${address}: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read ${CLI_ARCHIVES_REPOSITORY}`,
+    );
+  }
+  return withOneRetry(
+    async () => {
+      const answer = await fetcher(address, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/octet-stream',
+        },
+        redirect: 'manual',
+      });
+      const signed = answer.headers.get('location');
+      const response =
+        REDIRECTS.includes(answer.status) && signed !== null
+          ? await fetcher(signed)
+          : answer;
+      if (!response.ok) {
+        throw new Error(`${address}: ${String(response.status)}`);
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    pause,
+    console.log.bind(console),
+  );
+}
+
 /** Unpacks a gzipped tar archive into `folder`. */
 export function unpackArchive(archive: Uint8Array, folder: string): void {
   mkdirSync(folder, {recursive: true});
@@ -2530,6 +2611,7 @@ if (isMainModule(import.meta.url)) {
           process.arch,
           {download: downloadWithRetry, unpack: unpackArchive},
         ),
+        cliEditor: cliSourceEditorOf.bind(undefined, runCommand),
         runTests: runTestCli,
         windowAgentVsix: packageWindowAgent,
         languagePackVsix: packageLanguagePack,
@@ -2546,7 +2628,7 @@ if (isMainModule(import.meta.url)) {
             undefined,
             devContainerImage,
           ),
-        startDownloads: (root, runFolder, earlier) =>
+        startDownloads: (root, runFolder, earlier, cliArchives) =>
           startRunDownloads(
             runCommand,
             downloadWithRetry,
@@ -2555,6 +2637,16 @@ if (isMainModule(import.meta.url)) {
             undefined,
             undefined,
             earlier ? EARLIER_SERVER_ARCHIVE : undefined,
+            cliArchives
+              ? {
+                  pins: CLI_ARCHIVES,
+                  download: address =>
+                    privateAssetDownload(
+                      address,
+                      process.env.REMOTE_OSS_CLI_ARCHIVES_TOKEN,
+                    ),
+                }
+              : undefined,
           ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(

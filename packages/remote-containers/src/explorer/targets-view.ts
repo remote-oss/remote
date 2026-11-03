@@ -117,6 +117,8 @@ export interface TargetsViewPorts {
   now(): number;
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
+  /** Calls the listener when the effective engine changes; the watch behind it runs only while there is a listener. */
+  onEngineChange(listener: () => void): {dispose(): void};
   /** Calls the listener when `dev.containers.dockerPath` changes. */
   onDockerPathChange(listener: () => void): {dispose(): void};
   /** Calls the listener when the window's workspace is granted trust. */
@@ -354,13 +356,18 @@ export async function showTargets(
     });
   }
 
+  let engineChange: {dispose(): void} | undefined;
   const visibility = treeView.onDidChangeVisibility(isVisible => {
     visible = isVisible;
     if (isVisible) {
       events.start();
       rebuildLogged();
+      // A switch of the Docker context is followed only while the view is shown.
+      engineChange ??= ports.onEngineChange(engineMayHaveChanged);
     } else {
       events.stop();
+      engineChange?.dispose();
+      engineChange = undefined;
     }
   });
   /** The window may have another engine now: the events start again and the tree is read again, unless it holds one. */
@@ -388,6 +395,7 @@ export async function showTargets(
       }
       stopping.abort();
       events.stop();
+      engineChange?.dispose();
       dockerPath.dispose();
       trustGranted.dispose();
       visibility.dispose();

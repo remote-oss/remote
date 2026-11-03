@@ -59,6 +59,12 @@ import {
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {PREVIEW_TEMPLATES, previewNoteOf} from './preview-note.ts';
+import {
+  cacheInBackground,
+  planExtensions,
+  type ExtensionCachePorts,
+  GALLERY_QUERY_MILLISECONDS,
+} from './extension-cache.ts';
 import {prepareVolumeFolders} from './volume-folders.ts';
 
 /** How long the server may take to report its port, in seconds. */
@@ -90,6 +96,10 @@ export interface ServerStepDependencies {
   files: ClientFilePort;
   clock: Clock;
   newTemporaryToken: () => string;
+  /** Posts a query to the product's extension gallery and gives the answer's JSON, or undefined when it gave none. */
+  queryGallery: ExtensionCachePorts['queryGallery'];
+  /** The text of a client file, or undefined when it can't be read. */
+  readText: ExtensionCachePorts['readText'];
   logger: Logger;
   translate: Translate;
 }
@@ -126,6 +136,11 @@ export interface StartedContainerServer {
   /** The installed server's own `node`. */
   nodePath: string;
   relayPath: string;
+  /**
+   * The step that caches, for the next container, the extensions no cache held yet; the connector runs it once it
+   * holds the connection, with a signal that ends with the connection. None when there is nothing to cache.
+   */
+  afterReady?: (lifetime: AbortSignal) => Promise<void>;
 }
 
 /** How the steps ended. */
@@ -615,6 +630,34 @@ export async function runServerSteps(
     }
     freshlyDownloaded = transferred.fromCache !== true;
   }
+  const serviceUrl = profile.gallery?.serviceUrl;
+  const cachePorts = {
+    queryGallery: dependencies.queryGallery,
+    download: dependencies.download,
+    files: dependencies.files,
+    readText: dependencies.readText,
+    channel,
+    newTemporaryToken: dependencies.newTemporaryToken,
+    logger,
+  };
+  const cacheRequest = {
+    extensions: request.defaultExtensions,
+    serviceUrl: typeof serviceUrl === 'string' ? serviceUrl : '',
+    target: platformName,
+    productVersion: profile.version,
+    sharedFolder: request.volumeMounted
+      ? cacheFolders(profile, profile.commit, platformName, true)
+          .extensionsCache
+      : undefined,
+    clientFolder: `${cacheRootOf(dependencies)}/extensionsCache`,
+    ownFolder: `${dataFolder}/extensionsCache`,
+    queryMilliseconds: GALLERY_QUERY_MILLISECONDS,
+  };
+  const extensionPlan =
+    request.defaultExtensions.length === 0 || typeof serviceUrl !== 'string'
+      ? {installs: [...request.defaultExtensions], pending: []}
+      : await planExtensions(cachePorts, {...cacheRequest, cancellation});
+  const defaultExtensions = extensionPlan.installs;
   const started = await startOrReuse(
     channel,
     parametersOf(dependencies, request, installTree, ''),
@@ -623,7 +666,7 @@ export async function runServerSteps(
       portRange: request.devPort,
       licenceAccepted: licence.acceptanceFlag,
       graceSeconds: 0,
-      defaultExtensions: request.defaultExtensions,
+      defaultExtensions,
       fileWatcherPollingMilliseconds: 0,
       readySeconds: READY_SECONDS,
       socketMode: false,
@@ -693,5 +736,16 @@ export async function runServerSteps(
     reused: server.reused,
     nodePath: `${nodeFolder}/node`,
     relayPath: relayScriptPath(dataFolder),
+    ...(extensionPlan.pending.length === 0
+      ? {}
+      : {
+          afterReady: (lifetime: AbortSignal) =>
+            cacheInBackground(
+              cachePorts,
+              cacheRequest,
+              extensionPlan.pending,
+              lifetime,
+            ),
+        }),
   };
 }

@@ -110,6 +110,7 @@ import type {
   StartedContainerServer,
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
+import {reasonOf} from './extension-cache.ts';
 import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 import {
   appPortOf,
@@ -143,6 +144,10 @@ export interface HeldConnection {
   remoteWorkspaceFolder: string;
   /** The engine the connection was made with, whatever `dev.containers.dockerPath` says now. */
   engine: EngineHost;
+  /** The local path of the configuration file the connection was made for. */
+  configFile: string;
+  /** Whether this connection created the container: a first build, a rebuild, or a build after it was removed. */
+  created: boolean;
 }
 
 /** The connector, with the identity the window's label reads. */
@@ -309,11 +314,17 @@ interface Held {
   containerId: string;
   startedAt: string;
   engine: EngineHost;
+  /** The local path of the configuration file the connection was made for. */
+  configFile: string;
+  /** Whether the connect that made the connection created the container. */
+  created: boolean;
   channel: HostChannel;
   server: StartedContainerServer;
   relay: OpenRelay;
   identity: WindowIdentity;
   connected: Connected;
+  /** Ends when the connection is given back: what runs for the connection, the extensions cache's background step, stops then. */
+  lifetime: AbortController;
   /** The ports the merged configuration declared when the connection was made; a reconnect keeps them. */
   ports: DeclaredPorts;
 }
@@ -470,6 +481,7 @@ export function containerConnectorOf(
     const current = held;
     held = undefined;
     if (current !== undefined) {
+      current.lifetime.abort();
       current.relay.close();
       heldChanges.tell();
     }
@@ -1213,11 +1225,14 @@ export function containerConnectorOf(
           ? ''
           : started.startedAt,
       engine,
+      configFile: folder.configFile.fsPath ?? folder.configFile.path,
+      created: prepared.created,
       channel,
       server,
       relay,
       identity: {name, context: engineLabelOf(folder)},
       connected,
+      lifetime: new AbortController(),
       ports: {
         forwardPorts: merged?.forwardPorts,
         portsAttributes: merged?.portsAttributes,
@@ -1228,6 +1243,9 @@ export function containerConnectorOf(
     owner.connection = connection;
     failedContainer = undefined;
     heldChanges.tell();
+    server.afterReady?.(connection.lifetime.signal).catch((caught: unknown) => {
+      logger.info(`the extensions cache stopped: ${reasonOf(caught)}`);
+    });
     relay.onClosed(() => {
       if (held === connection) {
         lost.tell();
@@ -1305,6 +1323,8 @@ export function containerConnectorOf(
             hostPath: held.hostPath,
             remoteWorkspaceFolder: held.remoteWorkspaceFolder,
             engine: held.engine,
+            configFile: held.configFile,
+            created: held.created,
           },
     announceShutdown: authority => {
       const decoded =

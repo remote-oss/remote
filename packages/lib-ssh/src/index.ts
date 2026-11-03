@@ -112,6 +112,8 @@ export {LineSplitter} from './process/line-splitter.ts';
 export {type LocalFiles, nodeLocalFiles} from './process/node-files.ts';
 export {
   planScript,
+  POWERSHELL_COMMAND_LIMIT,
+  powershellPlan,
   preludeProgram,
   type ScriptPlan,
 } from './process/remote-program.ts';
