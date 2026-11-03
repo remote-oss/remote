@@ -4174,7 +4174,9 @@ describe('acceptance', () => {
 
     it('platform-01: every pinned platform gives its asset URL and its executable path', async () => {
       for (const [key, build] of Object.entries(VSCODIUM_PLATFORMS)) {
-        const [platform, architecture] = key.split('-');
+        const dash = key.lastIndexOf('-');
+        const platform = key.slice(0, dash);
+        const architecture = key.slice(dash + 1);
         const archive = new Uint8Array([1, 2, 3]);
         let url = '';
         let unpacks = 0;
