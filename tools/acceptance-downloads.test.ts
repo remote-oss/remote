@@ -24,6 +24,7 @@ import path from 'node:path';
 import {
   bridgeGateway,
   BROKEN_INDEX_TEXT,
+  clientReachOf,
   CLI_ARCHIVES,
   cliArchiveName,
   cliArchiveOf,
@@ -1383,6 +1384,135 @@ describe('the download host in the run', () => {
       '--add-host',
       'update.code.visualstudio.com:host-gateway',
     ]);
+  });
+
+  it('tooling-116: a container address other than host-gateway names the download host there', () => {
+    deepStrictEqual(downloadHostArguments('192.168.5.2'), [
+      '--add-host',
+      'downloads:192.168.5.2',
+      '--add-host',
+      'update.code.visualstudio.com:192.168.5.2',
+    ]);
+  });
+
+  /** A command runner that answers each program from `answers` and records what it was asked. */
+  function answering(
+    answers: Readonly<Record<string, CommandResult>>,
+    asked: string[][],
+  ): (program: string, programArguments: readonly string[]) => CommandResult {
+    return (program, programArguments) => {
+      asked.push([program, ...programArguments]);
+      return answers[program] ?? {status: 1, stdout: '', stderr: 'unexpected'};
+    };
+  }
+
+  it('tooling-116: on Linux the download host listens on the loopback and the bridge gateway, reached as host-gateway', () => {
+    const asked: string[][] = [];
+    deepStrictEqual(
+      [
+        clientReachOf(
+          'linux',
+          answering(
+            {docker: {status: 0, stdout: '172.17.0.1\n', stderr: ''}},
+            asked,
+          ),
+        ),
+        asked.map(each => each[0]),
+      ],
+      [
+        {listen: ['127.0.0.1', '172.17.0.1'], containerAddress: 'host-gateway'},
+        ['docker'],
+      ],
+    );
+  });
+
+  it('tooling-116: with colima on macOS it listens on the loopback only, reached at the address lima gives host.lima.internal', () => {
+    const asked: string[][] = [];
+    deepStrictEqual(
+      [
+        clientReachOf(
+          'darwin',
+          answering(
+            {
+              docker: {
+                status: 0,
+                stdout:
+                  '192.168.5.2       host.lima.internal  host.lima.internal\n',
+                stderr: '',
+              },
+            },
+            asked,
+          ),
+        ),
+        asked[0]?.slice(-3),
+      ],
+      [
+        {listen: ['127.0.0.1'], containerAddress: '192.168.5.2'},
+        ['getent', 'hosts', 'host.lima.internal'],
+      ],
+    );
+  });
+
+  it("tooling-116: with Docker in WSL2 it listens on the loopback and the distro's gateway, the Windows side's WSL adapter, reached there", () => {
+    const asked: string[][] = [];
+    deepStrictEqual(
+      [
+        clientReachOf(
+          'win32',
+          answering(
+            {
+              'wsl.exe': {
+                status: 0,
+                stdout: 'default via 172.29.32.1 dev eth0 proto kernel\n',
+                stderr: '',
+              },
+            },
+            asked,
+          ),
+        ),
+        asked,
+      ],
+      [
+        {
+          listen: ['127.0.0.1', '172.29.32.1'],
+          containerAddress: '172.29.32.1',
+        },
+        [['wsl.exe', '-e', 'ip', '-4', 'route', 'show', 'default']],
+      ],
+    );
+  });
+
+  /** The message `action` throws, or `undefined` when it returns. */
+  function thrownMessage(action: () => unknown): string | undefined {
+    try {
+      action();
+      return undefined;
+    } catch (caught) {
+      return caught instanceof Error ? caught.message : String(caught);
+    }
+  }
+
+  it('tooling-116: a lima lookup that names no address, and a distro with no default route, stop the run with what they printed', () => {
+    deepStrictEqual(
+      [
+        thrownMessage(() =>
+          clientReachOf(
+            'darwin',
+            answering({docker: {status: 0, stdout: '\n', stderr: ''}}, []),
+          ),
+        ),
+        thrownMessage(() =>
+          clientReachOf(
+            'win32',
+            answering({'wsl.exe': {status: 0, stdout: '', stderr: ''}}, []),
+          ),
+        ),
+      ],
+      [
+        'the engine\'s containers do not resolve host.lima.internal to an address (got "")',
+        'the WSL distro has no IPv4 default route to the Windows host (got "")',
+      ],
+    );
   });
 
   it("tooling-27: the bridge gateway is read from Docker's bridge network", () => {
