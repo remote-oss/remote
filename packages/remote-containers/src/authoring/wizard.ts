@@ -20,6 +20,7 @@ import {
   type WizardTarget,
 } from './wizard-stages.ts';
 import type {WriteOutcome} from './write.ts';
+import {withServiceKey} from './compose-service.ts';
 import {
   parseConfiguration,
   decodeConfiguration,
@@ -106,15 +107,56 @@ async function referToEntry(
       : undefined;
   if (named !== wanted) {
     const base = parsed === undefined ? '{}' : text;
-    const edited = applyEdits(
-      base,
-      modify(base, ['build', 'dockerfile'], wanted, {
-        formattingOptions: {insertSpaces: true, tabSize: 4},
-      }),
+    await ports.files.write(
+      file,
+      new TextEncoder().encode(edited(base, ['build', 'dockerfile'], wanted)),
     );
-    await ports.files.write(file, new TextEncoder().encode(edited));
     ports.record(`the configuration now refers to ${entry}`);
   }
+}
+
+/** The generated compose file beside the configuration, which the template names second. */
+const GENERATED_COMPOSE_FILE = '.devcontainer/docker-compose.yml';
+
+/** `text` with `value` at `keys`, in the configuration's own formatting. */
+function edited(text: string, keys: string[], value: unknown): string {
+  return applyEdits(
+    text,
+    modify(text, keys, value, {
+      formattingOptions: {insertSpaces: true, tabSize: 4},
+    }),
+  );
+}
+
+/**
+ * Makes the written configuration use the Compose-family entry the user picked: the entry first and
+ * the generated file second in `dockerComposeFile`, the service as `service`, and the same service as the key of the
+ * generated file's service.
+ */
+async function referToCompose(
+  folder: string,
+  entry: string,
+  service: string,
+  ports: WizardPorts,
+): Promise<void> {
+  const file = path.join(folder, CONFIGURATION_FILE);
+  const text = decodeConfiguration(await ports.files.read(file));
+  const base = parseConfiguration(text) === undefined ? '{}' : text;
+  const configuration = edited(
+    edited(base, ['dockerComposeFile'], [`../${entry}`, 'docker-compose.yml']),
+    ['service'],
+    service,
+  );
+  await ports.files.write(file, new TextEncoder().encode(configuration));
+  const composeFile = path.join(folder, GENERATED_COMPOSE_FILE);
+  const compose = decodeConfiguration(await ports.files.read(composeFile));
+  await ports.files.write(
+    composeFile,
+    new TextEncoder().encode(withServiceKey(compose, service)),
+  );
+  ports.record(
+    `the configuration now refers to ${entry}, service '${service}'`,
+  );
 }
 
 /** The outcome of the wizard from the write's. */
@@ -157,6 +199,7 @@ export async function runWizard(
       featureMode: 'defaults',
       omitPaths: [],
       metadataMissing: false,
+      composeService: '',
     },
     cancellation,
   );
@@ -188,7 +231,12 @@ export async function runWizard(
           }),
       ...(entry === undefined
         ? {}
-        : {adjust: scratch => referToEntry(scratch, entry, ports)}),
+        : {
+            adjust: scratch =>
+              state.reuseFamily === 'compose'
+                ? referToCompose(scratch, entry, state.composeService, ports)
+                : referToEntry(scratch, entry, ports),
+          }),
     },
     cancellation,
   );

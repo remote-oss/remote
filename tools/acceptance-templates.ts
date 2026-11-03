@@ -27,7 +27,7 @@ export interface MirroredTemplate {
   layerDigest: string;
 }
 
-/** The smallest templates the rows need, with the digests `ghcr.io` gave for their versions on 2026-10-20. */
+/** The smallest templates the rows need, with the digests `ghcr.io` gave for their versions on 2026-10-20 (and 2026-11-03 for docker-existing-docker-compose). */
 export const MIRRORED_TEMPLATES: readonly MirroredTemplate[] = [
   {
     name: 'alpine',
@@ -40,6 +40,12 @@ export const MIRRORED_TEMPLATES: readonly MirroredTemplate[] = [
     version: '1.3.2',
     layerDigest:
       'sha256:1413e22cf66b77dea458ceffed09306bd8540caa8256f49eb2d6c82e44f72bda',
+  },
+  {
+    name: 'docker-existing-docker-compose',
+    version: '1.2.3',
+    layerDigest:
+      'sha256:c1522506d80c24aa3f5e21445993efcf8e772adc12a928d3324ba676baa8879e',
   },
   {
     name: 'docker-in-docker',

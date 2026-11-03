@@ -1,6 +1,6 @@
 /**
  * @fileoverview The template pick of the wizard that adds a dev container configuration, over a quick pick the caller's
- * port makes: the chooser that offers an existing Dockerfile first, then the list of templates, flat or curated, with
+ * port makes: the chooser that offers an existing Dockerfile or Compose file first, then the list of templates, flat or curated, with
  * a custom template id in place of a listed one. The pick touches no file: what the caller read of the folder is given.
  */
 
@@ -37,8 +37,14 @@ const PICK_TEMPLATES = {
   S390: 'Use a base configuration from the container template registry',
 } as const;
 
-/** The template an entry of the chooser stands for, by the last part of its id. */
-const EXISTING_DOCKERFILE = 'docker-existing-dockerfile';
+/** The family of an entry the chooser offers to refer to: a Dockerfile, or a Compose file. */
+export type ReuseFamily = 'dockerfile' | 'compose';
+
+/** The template each family's entry stands for, by the last part of its id. */
+const EXISTING_TEMPLATE_IDS: Readonly<Record<ReuseFamily, string>> = {
+  dockerfile: 'docker-existing-dockerfile',
+  compose: 'docker-existing-docker-compose',
+};
 
 /** The number of slashes in a value from which it is a custom template id. */
 const CUSTOM_SLASHES = 2;
@@ -51,7 +57,12 @@ export type TemplateChoice =
       templateId: string;
       metadata?: Readonly<Record<string, unknown>>;
     }
-  | {kind: 'reuse'; template: CatalogueTemplate; entry: string}
+  | {
+      kind: 'reuse';
+      template: CatalogueTemplate;
+      entry: string;
+      family: ReuseFamily;
+    }
   /** Copy the stored configuration of the folder's slot into the workspace. */
   | {kind: 'copyStored'; slot: StoredSlot}
   /** The row's Open File button: show the slot's configuration and end the command. */
@@ -64,7 +75,7 @@ export type TemplateChoice =
 type RowAction =
   | {kind: 'template'; template: CatalogueTemplate}
   | {kind: 'custom'; value: string}
-  | {kind: 'reuse'; entry: string}
+  | {kind: 'reuse'; entry: string; family: ReuseFamily}
   | {kind: 'copyStored'; slot: StoredSlot}
   | {kind: 'chooseTemplate'}
   | {kind: 'showAll'}
@@ -137,16 +148,37 @@ function learnMoreRow(ports: TemplatePickPorts): PickRow {
   };
 }
 
-/** The Dockerfile-family entries of the folder's root, by character code: a file or a folder named so in any case. */
-function dockerfileEntries(folder: FolderFacts): string[] {
+/** The entries of the folder's root whose name says `test`, by character code: a file or a folder. */
+function entriesWhere(
+  folder: FolderFacts,
+  test: (name: string) => boolean,
+): string[] {
   return folder.rootEntries
-    .filter(
-      entry =>
-        entry.kind !== 'other' &&
-        entry.name.toLowerCase().includes('dockerfile'),
-    )
+    .filter(entry => entry.kind !== 'other' && test(entry.name.toLowerCase()))
     .map(entry => entry.name)
     .sort((left, right) => (left < right ? -1 : 1));
+}
+
+/**
+ * The entries the chooser offers to refer to: the Dockerfile family (a name holding `dockerfile`), then the Compose
+ * family (a name holding `compose` that ends in `.yml` or `.yaml`), each in any letter case and by character code. A
+ * name of both families is offered once in each.
+ */
+function reuseEntries(
+  folder: FolderFacts,
+): Array<{entry: string; family: ReuseFamily}> {
+  return [
+    ...entriesWhere(folder, name => name.includes('dockerfile')).map(entry => ({
+      entry,
+      family: 'dockerfile' as const,
+    })),
+    ...entriesWhere(
+      folder,
+      name =>
+        name.includes('compose') &&
+        (name.endsWith('.yml') || name.endsWith('.yaml')),
+    ).map(entry => ({entry, family: 'compose' as const})),
+  ];
 }
 
 /** The last part of a template's id. */
@@ -154,9 +186,9 @@ function lastPartOf(template: CatalogueTemplate): string {
   return template.id.slice(template.id.lastIndexOf('/') + 1);
 }
 
-/** The rows of the chooser that offers an existing Dockerfile, with the template pick first. */
+/** The rows of the chooser that offers an existing Dockerfile or Compose file, with the template pick first. */
 function chooserRows(
-  entries: readonly string[],
+  entries: ReadonlyArray<{entry: string; family: ReuseFamily}>,
   storedSlot: StoredSlot | undefined,
   ports: TemplatePickPorts,
 ): PickRow[] {
@@ -178,10 +210,10 @@ function chooserRows(
           } satisfies PickRow,
         ]
       : []),
-    ...entries.map((entry): PickRow => ({
+    ...entries.map(({entry, family}): PickRow => ({
       label: text(ports, 'S189', [entry]),
       detail: text(ports, 'S287', [entry]),
-      action: {kind: 'reuse', entry},
+      action: {kind: 'reuse', entry, family},
     })),
     learnMoreRow(ports),
   ];
@@ -303,9 +335,9 @@ function templatePick(
   );
 }
 
-/** The chooser that offers an existing Dockerfile, which goes on to the template pick when asked. */
+/** The chooser that offers an existing Dockerfile or Compose file, which goes on to the template pick when asked. */
 async function chooserPick(
-  entries: readonly string[],
+  entries: ReadonlyArray<{entry: string; family: ReuseFamily}>,
   request: TemplatePickRequest,
   ports: TemplatePickPorts,
   cancellation: AbortSignal,
@@ -337,17 +369,18 @@ async function chooserPick(
         } else if (chosen?.kind === 'copyStored') {
           finish({kind: 'copyStored', slot: chosen.slot});
         } else if (chosen?.kind === 'reuse') {
+          const {entry, family} = chosen;
+          const wanted = EXISTING_TEMPLATE_IDS[family];
           const existing = request.catalogue.find(
-            template => lastPartOf(template) === EXISTING_DOCKERFILE,
+            template => lastPartOf(template) === wanted,
           );
-          const {entry} = chosen;
           finish(
             existing === undefined
               ? {
                   kind: 'failed',
-                  cause: `the catalogue has no ${EXISTING_DOCKERFILE} template`,
+                  cause: `the catalogue has no ${wanted} template`,
                 }
-              : {kind: 'reuse', template: existing, entry},
+              : {kind: 'reuse', template: existing, entry, family},
           );
         }
       });
@@ -359,15 +392,16 @@ async function chooserPick(
 }
 
 /**
- * Asks which template the configuration starts from. A folder whose root holds a Dockerfile-family entry is asked
- * first whether to refer to it; the list of templates is flat, or curated when the folder holds a significant file.
+ * Asks which template the configuration starts from. A folder whose root holds a Dockerfile-family or Compose-family
+ * entry is asked first whether to refer to it; the list of templates is flat, or curated when the folder holds a
+ * significant file.
  */
 export function pickTemplate(
   request: TemplatePickRequest,
   ports: TemplatePickPorts,
   cancellation: AbortSignal,
 ): Promise<TemplateChoice> {
-  const entries = dockerfileEntries(request.folder);
+  const entries = reuseEntries(request.folder);
   return entries.length === 0 && request.storedSlot === undefined
     ? templatePick(request, ports, cancellation)
     : chooserPick(entries, request, ports, cancellation);

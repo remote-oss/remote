@@ -669,3 +669,154 @@ describe('the chooser that offers the stored configuration (card containers-92)'
     );
   });
 });
+
+describe('the chooser’s Compose-family entries (card containers-145)', () => {
+  const WITH_COMPOSE = [
+    ...CATALOGUE,
+    templateOf('docker-existing-dockerfile', 'Existing Dockerfile'),
+    templateOf('docker-existing-docker-compose', 'Existing Docker Compose'),
+  ];
+
+  /** A folder whose root holds `names`, each a file. */
+  function folderOf(...names: string[]): FolderFacts {
+    return {
+      rootEntries: names.map(name => ({name, kind: 'file' as const})),
+      files: [],
+      truncated: false,
+    };
+  }
+
+  it('F-0802 AC-36, F-0801 AC-32: the Compose family follows the Dockerfile family: a name holding compose and ending in .yml or .yaml, in any case, by character code, and a name of both families in each', () => {
+    const {picker} = started(
+      sceneOf(),
+      folderOf(
+        'docker-compose.override.yml',
+        'DOCKERFILE',
+        'compose.yml',
+        'COMPOSE.YAML',
+        'compose.json',
+        'Containerfile',
+        'dockerfile-compose.yml',
+      ),
+      WITH_COMPOSE,
+    );
+    deepStrictEqual(labels(picker), [
+      'From a predefined container configuration template...',
+      "From 'DOCKERFILE'",
+      "From 'dockerfile-compose.yml'",
+      "From 'COMPOSE.YAML'",
+      "From 'compose.yml'",
+      "From 'docker-compose.override.yml'",
+      "From 'dockerfile-compose.yml'",
+      'Learn More',
+    ]);
+  });
+
+  it('F-0802 AC-36: each of the criterion’s checks gives exactly its rows, and a root with neither family gets the template pick', () => {
+    function fromRows(folder: FolderFacts): string[] {
+      return labels(started(sceneOf(), folder, WITH_COMPOSE).picker).filter(
+        label => label.startsWith("From '"),
+      );
+    }
+    const folders: Array<FolderFacts['rootEntries']> = [
+      [{name: 'compose.yaml', kind: 'file'}],
+      [
+        {name: 'compose.yaml', kind: 'file'},
+        {name: 'dockerfile', kind: 'file'},
+      ],
+      [
+        'DOCKERFILE',
+        'Dockerfile-prod',
+        'Dockerfile.dev',
+        'app.dockerfile',
+        'dev.Dockerfile',
+      ].map(name => ({name, kind: 'file' as const})),
+      [
+        'compose.yml',
+        'docker-compose.override.yml',
+        'docker-compose.json',
+        'docker-compose.yml.bak',
+      ].map(name => ({name, kind: 'file' as const})),
+      [
+        'Dockerfile',
+        'Dockerfile.dev',
+        'compose.yaml',
+        'docker-compose.yml',
+      ].map(name => ({name, kind: 'file' as const})),
+      [
+        {name: 'Dockerfile', kind: 'folder'},
+        {name: 'docker-compose.yml', kind: 'folder'},
+      ],
+      [{name: 'dockerfile-compose.yml', kind: 'file'}],
+    ];
+    const seen = folders.map(entries =>
+      fromRows({rootEntries: entries, files: [], truncated: false}),
+    );
+    const containerfile = started(
+      sceneOf(),
+      {
+        rootEntries: [{name: 'Containerfile', kind: 'file'}],
+        files: ['docker/Dockerfile'],
+        truncated: false,
+      },
+      WITH_COMPOSE,
+    ).picker.placeholder;
+    deepStrictEqual(
+      [...seen, containerfile],
+      [
+        ["From 'compose.yaml'"],
+        ["From 'dockerfile'", "From 'compose.yaml'"],
+        [
+          "From 'DOCKERFILE'",
+          "From 'Dockerfile-prod'",
+          "From 'Dockerfile.dev'",
+          "From 'app.dockerfile'",
+          "From 'dev.Dockerfile'",
+        ],
+        ["From 'compose.yml'", "From 'docker-compose.override.yml'"],
+        [
+          "From 'Dockerfile'",
+          "From 'Dockerfile.dev'",
+          "From 'compose.yaml'",
+          "From 'docker-compose.yml'",
+        ],
+        ["From 'Dockerfile'", "From 'docker-compose.yml'"],
+        ["From 'dockerfile-compose.yml'", "From 'dockerfile-compose.yml'"],
+        'Select a container configuration template or enter a custom template id',
+      ],
+    );
+  });
+
+  it('F-0801 AC-11: a Compose row gives the existing-Compose template, the entry and its family', async () => {
+    const {picker, result} = started(
+      sceneOf(),
+      folderOf('docker-compose.yml'),
+      WITH_COMPOSE,
+    );
+    picker.accept("From 'docker-compose.yml'");
+    const choice = await result;
+    deepStrictEqual(
+      choice.kind === 'reuse'
+        ? [choice.template.id, choice.entry, choice.family]
+        : choice,
+      [
+        `${PREFIX}docker-existing-docker-compose`,
+        'docker-compose.yml',
+        'compose',
+      ],
+    );
+  });
+
+  it('F-0801 AC-11: a Compose row with no existing-Compose template in the catalogue fails the pick with the cause', async () => {
+    const {picker, result} = started(
+      sceneOf(),
+      folderOf('compose.yaml'),
+      CATALOGUE,
+    );
+    picker.accept("From 'compose.yaml'");
+    deepStrictEqual(await result, {
+      kind: 'failed',
+      cause: 'the catalogue has no docker-existing-docker-compose template',
+    });
+  });
+});
