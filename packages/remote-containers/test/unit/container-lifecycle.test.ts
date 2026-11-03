@@ -28,6 +28,7 @@ import {
   type LifecyclePresenter,
 } from '../../src/lifecycle/container-lifecycle.ts';
 import {
+  composeDiscoveryArguments,
   discoveryArguments,
   idLabels,
   legacyDiscoveryArguments,
@@ -66,6 +67,9 @@ const CONFIGURED: ConfigurationResult = {
   mergedConfiguration: undefined,
 };
 const LISTING = discoveryArguments(FOLDER).join(' ');
+/** The lookups of the services `app` and `db` of the Compose project `proj`. */
+const APP_LOOKUP = composeDiscoveryArguments('proj', 'app').join(' ');
+const DB_LOOKUP = composeDiscoveryArguments('proj', 'db').join(' ');
 const LEGACY_LISTING = legacyDiscoveryArguments(FOLDER).join(' ');
 
 /** The `inspect` output of the containers, each `[id, status]`, with the volume mounted when `mounted`. */
@@ -1881,9 +1885,10 @@ describe('containerLifecycleOf', () => {
   function prepareOf(
     lifecycle: ReturnType<typeof containerLifecycleOf>,
     signal: AbortSignal = new AbortController().signal,
+    request: ContainerRequest = REQUEST,
   ): Promise<ContainerOutcome> {
     return lifecycle.prepare(
-      REQUEST,
+      request,
       () => undefined,
       () => undefined,
       signal,
@@ -1895,6 +1900,10 @@ describe('containerLifecycleOf', () => {
     resolution: ComposeResolution,
     bridge: FakeBridge = fakeBridge(),
     cancelling?: AbortController,
+    script: Record<string, EngineRunOutcome[]> = {
+      ...EMPTY_LISTING,
+      [APP_LOOKUP]: [ran('')],
+    },
   ): {
     bridge: FakeBridge;
     engine: ReturnType<typeof scriptedEngine>;
@@ -1902,7 +1911,7 @@ describe('containerLifecycleOf', () => {
     lifecycle: ReturnType<typeof containerLifecycleOf>;
   } {
     const sink = new MemorySink();
-    const engine = scriptedEngine(EMPTY_LISTING);
+    const engine = scriptedEngine(script);
     return {
       bridge,
       engine,
@@ -2034,5 +2043,204 @@ describe('containerLifecycleOf', () => {
         [],
       ],
     );
+  });
+
+  /** A script whose lookup of `app` finds `OLD` in `status`, and whose lookup of `db` finds the `NEW` container. */
+  function composeScript(status: string): Record<string, EngineRunOutcome[]> {
+    return {
+      [APP_LOOKUP]: [ran(`${OLD}\n`)],
+      [DB_LOOKUP]: [ran(`${NEW}\n`)],
+      [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
+      'volume create vscode': [ran('vscode')],
+      [`rm --force ${OLD}`]: [ran(OLD)],
+      [`rm --force ${NEW}`]: [ran(NEW)],
+    };
+  }
+
+  it('F-0413 AC-10, AC-44: the container of a Compose project is found by its project and service labels, not the folder’s, and the CLI is asked to attach with nothing removed', async () => {
+    const bridge = fakeBridge();
+    bridge.upResult = {...UP, containerId: OLD};
+    const {lifecycle, engine} = composeLifecycle(
+      composeReady('proj'),
+      bridge,
+      undefined,
+      composeScript('running'),
+    );
+    const outcome = await prepareOf(lifecycle);
+    deepStrictEqual(
+      [
+        engine.commands.slice(0, 2),
+        outcome.kind === 'ready' ? outcome.created : outcome,
+        bridge.ups[0]?.options.removeExistingContainer,
+      ],
+      [[APP_LOOKUP, `inspect --type container ${OLD}`], false, false],
+    );
+  });
+
+  it('F-0413 AC-46, AC-55: a Compose project whose primary container is gone is created, and an exited or created one goes to the CLI too', async () => {
+    const results = [];
+    for (const status of ['exited', 'created']) {
+      const bridge = fakeBridge();
+      const {lifecycle} = composeLifecycle(
+        composeReady('proj'),
+        bridge,
+        undefined,
+        composeScript(status),
+      );
+      results.push([(await prepareOf(lifecycle)).kind, bridge.ups.length]);
+    }
+    const missing = fakeBridge();
+    const created = await prepareOf(
+      composeLifecycle(composeReady('proj'), missing).lifecycle,
+    );
+    results.push([
+      created.kind === 'ready' ? created.created : created,
+      missing.ups.length,
+    ]);
+    deepStrictEqual(results, [
+      ['ready', 1],
+      ['ready', 1],
+      [true, 1],
+    ]);
+  });
+
+  it('F-0409 AC-27 (Compose): a paused primary container is unusable with no CLI call, and the other service’s container is not looked up', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle, engine} = composeLifecycle(
+      composeReady('proj'),
+      bridge,
+      undefined,
+      composeScript('paused'),
+    );
+    deepStrictEqual(
+      [
+        await prepareOf(lifecycle),
+        bridge.ups.length,
+        engine.commands.includes(DB_LOOKUP),
+      ],
+      [{kind: 'unusable', containerId: OLD, status: 'paused'}, 0, false],
+    );
+  });
+
+  it('F-0405 AC-21 (Compose): a rebuild removes the containers of every service in the scope before the CLI builds, which is not asked to remove, and builds without cache when told', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle, engine, lines} = composeLifecycle(
+      composeReady('proj'),
+      bridge,
+      undefined,
+      composeScript('running'),
+    );
+    await prepareOf(lifecycle, undefined, {
+      ...REQUEST,
+      rebuild: {buildNoCache: true},
+    });
+    deepStrictEqual(
+      [
+        engine.commands.filter(command => command.startsWith('rm ')),
+        engine.commands.indexOf(`rm --force ${NEW}`) <
+          engine.commands.indexOf('volume create vscode'),
+        bridge.ups[0]?.options,
+        lines().filter(line => line.startsWith('rebuilding')).length,
+      ],
+      [
+        [`rm --force ${OLD}`, `rm --force ${NEW}`],
+        true,
+        {
+          removeExistingContainer: false,
+          buildNoCache: true,
+          workspaceMountConsistency: 'cached',
+        },
+        2,
+      ],
+    );
+  });
+
+  it('F-0405 AC-21 (Compose): a rebuild whose listing or removal fails ends with the reason before the CLI is called, and one cancelled meanwhile is cancelled', async () => {
+    const results = [];
+    const listing = composeScript('running');
+    listing[DB_LOOKUP] = [exited('Cannot connect to the Docker daemon')];
+    const removal = composeScript('running');
+    removal[`rm --force ${OLD}`] = [
+      exited('removal of the container is already in progress'),
+    ];
+    for (const script of [listing, removal]) {
+      const bridge = fakeBridge();
+      const {lifecycle} = composeLifecycle(
+        composeReady('proj'),
+        bridge,
+        undefined,
+        script,
+      );
+      results.push([
+        await prepareOf(lifecycle, undefined, {
+          ...REQUEST,
+          rebuild: {buildNoCache: false},
+        }),
+        bridge.ups.length,
+      ]);
+    }
+    for (const stopAt of [
+      `ps -a -q --no-trunc --filter label=com.docker.compose.project=proj --filter label=com.docker.compose.service=db`,
+      `rm --force ${OLD}`,
+    ]) {
+      const cancelling = new AbortController();
+      const bridge = fakeBridge();
+      const engine = scriptedEngine(composeScript('running'), {
+        controller: cancelling,
+        on: stopAt,
+      });
+      const lifecycle = containerLifecycleOf({
+        engine,
+        cli: bridge,
+        logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+        presenter: recordingPresenter().presenter,
+        clock: () => 0,
+        compose: () => Promise.resolve(composeReady('proj')),
+      });
+      results.push([
+        await prepareOf(lifecycle, cancelling.signal, {
+          ...REQUEST,
+          rebuild: {buildNoCache: false},
+        }),
+        bridge.ups.length,
+      ]);
+    }
+    deepStrictEqual(results, [
+      [
+        {
+          kind: 'discoveryFailed',
+          detail: 'Cannot connect to the Docker daemon',
+        },
+        0,
+      ],
+      [
+        {
+          kind: 'discoveryFailed',
+          detail: `the container ${OLD.slice(0, 12)} of the service app couldn't be removed: removal of the container is already in progress`,
+        },
+        0,
+      ],
+      [{kind: 'cancelled'}, 0],
+      [{kind: 'cancelled'}, 0],
+    ]);
+  });
+
+  it('F-0409 AC-34 (Compose): a failure of up names the container the Compose lookup finds afterwards', async () => {
+    const bridge = fakeBridge();
+    bridge.upResult = {kind: 'malformedResult', field: 'containerId'};
+    const {lifecycle} = composeLifecycle(
+      composeReady('proj'),
+      bridge,
+      undefined,
+      {
+        ...composeScript('running'),
+        [APP_LOOKUP]: [ran(''), ran(`${OLD}\n`)],
+      },
+    );
+    deepStrictEqual(await prepareOf(lifecycle), {
+      kind: 'malformedResult',
+      field: 'containerId',
+      foundContainerId: OLD,
+    });
   });
 });

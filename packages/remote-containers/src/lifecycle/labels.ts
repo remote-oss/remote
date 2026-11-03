@@ -6,6 +6,8 @@
 
 const FOLDER_LABEL = 'devcontainer.local_folder';
 const CONFIG_LABEL = 'devcontainer.config_file';
+const PROJECT_LABEL = 'com.docker.compose.project';
+const SERVICE_LABEL = 'com.docker.compose.service';
 const LEGACY_FOLDER_LABEL = 'vsch.local.folder';
 const LEGACY_QUALITY_LABEL = 'vsch.quality';
 const LEGACY_REPOSITORY_LABEL = 'vsch.local.repository';
@@ -136,6 +138,29 @@ function newestOf(
   );
 }
 
+/** What to do with the container chosen, or with none: use one that can be started, leave one that cannot, else create. */
+function decisionAbout(
+  chosen: ContainerFacts | undefined,
+  useLabels: string[],
+): Decision {
+  if (chosen === undefined) {
+    return {kind: 'create'};
+  }
+  if (
+    chosen.status === 'running' ||
+    chosen.status === 'exited' ||
+    chosen.status === 'created'
+  ) {
+    return {
+      kind: 'use',
+      containerId: chosen.id,
+      status: chosen.status,
+      idLabels: useLabels,
+    };
+  }
+  return {kind: 'unusable', containerId: chosen.id, status: chosen.status};
+}
+
 /**
  * Decides from labels alone. Legacy-labelled containers come first, then those labelled with both, then those
  * labelled with the folder only; within a tier the newest wins, whatever its status.
@@ -161,23 +186,40 @@ export function decide(
   const tier =
     legacy.length > 0 ? legacy : exact.length > 0 ? exact : candidates;
   const fromLegacy = tier === legacy;
-  const chosen = newestOf(tier);
-  if (chosen === undefined) {
-    return {kind: 'create'};
-  }
-  if (
-    chosen.status === 'running' ||
-    chosen.status === 'exited' ||
-    chosen.status === 'created'
-  ) {
-    return {
-      kind: 'use',
-      containerId: chosen.id,
-      status: chosen.status,
-      idLabels: fromLegacy
-        ? legacyIdLabels(folder)
-        : idLabels(folder, configFile),
-    };
-  }
-  return {kind: 'unusable', containerId: chosen.id, status: chosen.status};
+  return decisionAbout(
+    newestOf(tier),
+    fromLegacy ? legacyIdLabels(folder) : idLabels(folder, configFile),
+  );
+}
+
+/** The arguments of the engine query that lists the ids of the containers of one service of a Compose project. */
+export function composeDiscoveryArguments(
+  project: string,
+  service: string,
+): string[] {
+  return [
+    'ps',
+    '-a',
+    '-q',
+    '--no-trunc',
+    '--filter',
+    `label=${PROJECT_LABEL}=${project}`,
+    '--filter',
+    `label=${SERVICE_LABEL}=${service}`,
+  ];
+}
+
+/**
+ * Decides for the primary service of a Compose project from the containers found by the project and service labels,
+ * whatever folder labels they carry: the newest one wins, whatever its status.
+ */
+export function decideCompose(
+  folder: string,
+  configFile: string,
+  containers: readonly ContainerFacts[],
+): Decision {
+  return decisionAbout(
+    newestOf(containers.filter(container => container.status !== 'removing')),
+    idLabels(folder, configFile),
+  );
 }
