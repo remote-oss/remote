@@ -3667,8 +3667,15 @@ interface ListAccess {
   focused: string;
 }
 
+/** What the walk needs of a list: the reading of its focused row, a key press, and the wait for the page to draw. */
+export interface ListWalkPorts {
+  read(): Promise<FocusedRow>;
+  press(key: ListKey): Promise<void>;
+  pause(): Promise<void>;
+}
+
 /** What the page says of a list's focused row. */
-interface FocusedRow {
+export interface FocusedRow {
   label: string;
   position: number;
   size: number;
@@ -3679,8 +3686,43 @@ interface FocusedRow {
 /**
  * The row at 1-based `position` among the siblings of `level` (any row, for a flat list), reached by the keyboard alone:
  * `Home`, `End`, the page keys and the arrows, reading only the focused row's label and its `aria-posinset` and
- * `aria-setsize`. Fails, naming the last row it reached, when the focus doesn't arrive within a bound of key presses.
+ * `aria-setsize`. `End` reaches the last row of the whole list, so the set must end the list. Fails, naming the last
+ * row it reached, when the focus doesn't arrive within a bound of key presses, set once when the focus first enters
+ * the set.
  */
+export async function walkToPosition(
+  ports: ListWalkPorts,
+  position: number,
+  level: number | undefined,
+): Promise<ListRowReading> {
+  // Until a row of the set is reached its size is unknown, and the walk may take only a few steps to reach it.
+  let size = 0;
+  let bound = LIST_ENTRY_PRESSES;
+  let last = '';
+  for (let presses = 0; presses <= bound; presses += 1) {
+    const reading = await ports.read();
+    const inSet = level === undefined || reading.level === level;
+    const current = inSet ? reading.position : 0;
+    last = `${JSON.stringify(reading.label)} at ${String(current)} of ${String(reading.size)}`;
+    if (inSet && current === position) {
+      return {label: reading.label, position: current, size: reading.size};
+    }
+    const page = Math.max(1, reading.rendered);
+    if (inSet && size === 0) {
+      size = reading.size;
+      bound = presses + Math.ceil(size / page) + 20;
+    }
+    await ports.press(
+      size === 0 ? 'ArrowDown' : nextListKey(current, position, size, page),
+    );
+    await ports.pause();
+  }
+  throw new Error(
+    `the list did not reach position ${String(position)}; the focus is on ${last}`,
+  );
+}
+
+/** The walk over the list that `access` reaches in window `name`. */
 async function rowAtPosition(
   name: string,
   access: ListAccess,
@@ -3689,33 +3731,22 @@ async function rowAtPosition(
 ): Promise<ListRowReading> {
   await evaluate<null>(name, `(() => { ${access.focus}; return null; })()`);
   const address = await pageOf(name);
-  // Until a row of the set is reached its size is unknown, and the walk may take only a few steps to reach it.
-  let size = 0;
-  let bound = LIST_ENTRY_PRESSES;
-  let last = '';
-  for (let presses = 0; presses <= bound; presses += 1) {
-    const reading = await evaluate<FocusedRow>(name, access.focused);
-    const inSet = level === undefined || reading.level === level;
-    const current = inSet ? reading.position : 0;
-    last = `${JSON.stringify(reading.label)} at ${String(current)} of ${String(reading.size)}`;
-    if (inSet && current === position) {
-      return {label: reading.label, position: current, size: reading.size};
-    }
-    const page = Math.max(1, reading.rendered);
-    if (inSet) {
-      size = reading.size;
-      bound = presses + Math.ceil(size / page) + 20;
-    }
-    await pressKey(
-      address,
-      name,
-      size === 0 ? 'ArrowDown' : nextListKey(current, position, size, page),
+  try {
+    return await walkToPosition(
+      {
+        read: () => evaluate<FocusedRow>(name, access.focused),
+        press: key => pressKey(address, name, key),
+        pause: () =>
+          new Promise(resolve => {
+            setTimeout(resolve, LIST_KEY_PAUSE);
+          }),
+      },
+      position,
+      level,
     );
-    await new Promise(resolve => setTimeout(resolve, LIST_KEY_PAUSE));
+  } catch (caught) {
+    throw new Error(`window ${name}: ${String(caught)}`, {cause: caught});
   }
-  throw new Error(
-    `window ${name}: the list did not reach position ${String(position)}; the focus is on ${last}`,
-  );
 }
 
 /** How many presses the walk may take to get its focus into the set of rows it looks for. */
@@ -3746,7 +3777,8 @@ function focusedRowExpression(listElement: string): string {
 
 /**
  * The row at 1-based `position` among the rows of tree level `level` (the hosts under the SSH group, by default) of
- * view `viewName` in window `name`, reached by the keyboard alone. Nothing is restored: the focus stays on the row.
+ * view `viewName` in window `name`, reached by the keyboard alone; the rows of that level must end the list, since `End`
+ * goes to the last row of the whole list. Nothing is restored: the focus stays on the row.
  */
 export function viewRowAt(
   name: string,
