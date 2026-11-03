@@ -151,6 +151,14 @@ describe('Clone Repository in Container Volume, up to the reload (card container
     deepStrictEqual(await runWith({engineReady: false}), ['engine']);
   });
 
+  it('F-0205 AC-2a: the first confirmation comes first, then the engine check, and a check that stops shows no source pick', async () => {
+    deepStrictEqual(await runWith({accepted: false, engineReady: false}), [
+      'trust',
+      'remember',
+      'engine',
+    ]);
+  });
+
   it('a dismissed pick ends the attempt', async () => {
     deepStrictEqual(await runWith({typed: undefined}), ['engine', 'pick']);
   });

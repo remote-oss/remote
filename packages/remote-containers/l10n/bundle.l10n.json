@@ -242,5 +242,9 @@
   "Select stopped dev containers to delete": "Select stopped dev containers to delete",
   "Select unused dev volumes to delete": "Select unused dev volumes to delete",
   "There are no stopped dev containers or unused dev volumes to delete.": "There are no stopped dev containers or unused dev volumes to delete.",
-  "There are no unused dev volumes to delete.": "There are no unused dev volumes to delete."
+  "There are no unused dev volumes to delete.": "There are no unused dev volumes to delete.",
+  "Cannot connect to Docker daemon using 'ssh'.": "Cannot connect to Docker daemon using 'ssh'.",
+  "Cannot connect to Docker daemon using 'ssh'. Make sure public/private keys are set up for connecting without keyboard interaction.": "Cannot connect to Docker daemon using 'ssh'. Make sure public/private keys are set up for connecting without keyboard interaction.",
+  "Hostname must not start with a dash: {0}": "Hostname must not start with a dash: {0}",
+  "Make sure public/private keys are set up for connecting without keyboard interaction.": "Make sure public/private keys are set up for connecting without keyboard interaction."
 }

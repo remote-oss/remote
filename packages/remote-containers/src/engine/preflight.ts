@@ -7,6 +7,7 @@ import type {Logger} from 'lib-log';
 import {
   BUTTON_LINKS,
   composeDialogOf,
+  dashHostDialogOf,
   dialogOf,
   type EngineButton,
   type EngineDialog,
@@ -21,6 +22,7 @@ import {
 import {type ComposeRoute, composeRouteOf} from './compose-route.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
+import {dashHostOf, sshHostOf} from './ssh-endpoint.ts';
 import {apiCheckSkipped} from './version-reply.ts';
 
 /** The log line of a first check whose version reply names no server API version. */
@@ -56,6 +58,11 @@ export interface PreflightDependencies {
   logger: Logger;
   /** The PATH of the extension host, for the line that names where a program was looked for. */
   searchPath(): string;
+  /** The address the Docker CLI will talk to now (`endpointInEffect`); a check that has none reads every endpoint as local. */
+  endpoint?(
+    base: string | undefined,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined>;
 }
 
 /** How the first check ended for its caller: the window may go on, or it must not. */
@@ -156,6 +163,17 @@ export async function firstCheck(
   cancellation: AbortSignal,
 ): Promise<FirstCheckResult> {
   const executable = executableOf(dependencies.dockerPath(), base);
+  const endpoint = await dependencies.endpoint?.(base, cancellation);
+  const dashHost = dashHostOf(endpoint);
+  if (dashHost !== undefined) {
+    dependencies.logger.warn(
+      `the Docker host over ssh starts with a dash: ${dashHost}`,
+    );
+    return shown(
+      dependencies,
+      dashHostDialogOf(dashHost, dependencies.translate),
+    );
+  }
   const queries: QueryResult[] = [];
   if (executable.kind === 'spawn') {
     const first = await query(
@@ -187,7 +205,11 @@ export async function firstCheck(
   ) {
     dependencies.logger.info(API_CHECK_SKIPPED);
   }
-  const outcome = firstCheckOutcomeOf(executable, queries);
+  const outcome = firstCheckOutcomeOf(
+    executable,
+    queries,
+    endpoint !== undefined && sshHostOf(endpoint) !== undefined,
+  );
   if (outcome === 'passed') {
     return 'proceed';
   }
