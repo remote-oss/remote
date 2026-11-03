@@ -66,6 +66,7 @@
   "Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.": "Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.",
   "Dev Containers": "Dev Containers",
   "Other Containers": "Other Containers",
+  "Active Folder {0}": "Active Folder {0}",
   "{0} ago": "{0} ago",
   "{0} days": "{0} days",
   "{0} day": "{0} day",

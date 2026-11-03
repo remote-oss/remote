@@ -140,10 +140,12 @@ import type {
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
 import {reasonOf} from './extension-cache.ts';
+import {isComposeConfiguration} from '../config/configuration-text.ts';
 import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 import {
   appPortOf,
   engineIsLocal,
+  publishedForwards,
   staticForwards,
 } from '../ports/static-forwards.ts';
 
@@ -177,6 +179,8 @@ export interface HeldConnection {
   configFile: string;
   /** Whether this connection created the container: a first build, a rebuild, or a build after it was removed. */
   created: boolean;
+  /** The Dockerfile the primary service of a Compose configuration builds from, absolute; none otherwise. */
+  serviceDockerfile?: string;
 }
 
 /** The connector, with the identity the window's label reads. */
@@ -393,6 +397,7 @@ interface Held {
   configFile: string;
   /** Whether the connect that made the connection created the container. */
   created: boolean;
+  serviceDockerfile: string | undefined;
   channel: HostChannel;
   server: StartedContainerServer;
   relay: OpenRelay;
@@ -442,6 +447,34 @@ async function inspectedState(
       : 'unreachable';
   } catch {
     return 'unreachable';
+  }
+}
+
+/** The ports the container publishes, as `docker inspect` holds them; none when they can't be read. */
+async function publishedPortsOf(
+  engine: EngineHost,
+  containerId: string,
+  cancellation: AbortSignal,
+): Promise<unknown> {
+  const outcome = await engine.run(
+    [
+      'inspect',
+      '--type',
+      'container',
+      '--format',
+      '{{json .NetworkSettings.Ports}}',
+      containerId,
+    ],
+    {kind: 'none'},
+    {cancellation},
+  );
+  if (outcome.kind !== 'ran' || outcome.status !== 0) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(outcome.stdout) as unknown;
+  } catch {
+    return undefined;
   }
 }
 
@@ -1383,6 +1416,23 @@ export function containerConnectorOf(
       relay.close();
       return cancelled();
     }
+    const local = engineIsLocal({
+      context: context.pinned.context,
+      dockerHost: context.pinned.host,
+    });
+    const tunnels =
+      configuration.kind === 'configuration' &&
+      isComposeConfiguration(configuration.configuration)
+        ? publishedForwards(
+            await publishedPortsOf(engine, prepared.containerId, cancellation),
+            local,
+          )
+        : staticForwards(
+            configuration.kind === 'configuration'
+              ? appPortOf(configuration.configuration)
+              : undefined,
+            local,
+          );
     const connected: Connected = {
       address: {host: '127.0.0.1', port: relay.hostPort},
       connectionToken: server.connectionToken,
@@ -1390,15 +1440,7 @@ export function containerConnectorOf(
         probed,
         remoteEnvironment.entries,
       ),
-      environmentTunnels: staticForwards(
-        configuration.kind === 'configuration'
-          ? appPortOf(configuration.configuration)
-          : undefined,
-        engineIsLocal({
-          context: context.pinned.context,
-          dockerHost: context.pinned.host,
-        }),
-      ),
+      environmentTunnels: tunnels,
       trusted: context.trusted,
     };
     held = {
@@ -1413,6 +1455,7 @@ export function containerConnectorOf(
       engine,
       configFile: context.configFile,
       created: prepared.created,
+      serviceDockerfile: prepared.serviceDockerfile,
       channel,
       server,
       relay,
@@ -1720,6 +1763,9 @@ export function containerConnectorOf(
             engine: held.engine,
             configFile: held.configFile,
             created: held.created,
+            ...(held.serviceDockerfile === undefined
+              ? {}
+              : {serviceDockerfile: held.serviceDockerfile}),
           },
     announceShutdown: authority => {
       const decoded =

@@ -158,6 +158,8 @@ export interface Scene {
   readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
+  /** What `docker inspect` prints of the container's published ports; `fails` for an engine that does not answer. */
+  published: string;
   sink: MemorySink;
   /** The outcome of `prepare`; a function to hold it. */
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
@@ -338,6 +340,7 @@ export function sceneOf(
     shutdownSent: [],
     readsAtShutdown: [],
     metadata: '',
+    published: 'null',
     sink,
     outcome: READY,
     steps: [],
@@ -420,6 +423,22 @@ export function sceneOf(
             stderr: 'Error: No such container',
           }
         : {kind: 'ran', status: 0, stdout: `${scene.metadata}\n`, stderr: ''};
+    }
+    if (
+      argv[0] === 'inspect' &&
+      argv[4] === '{{json .NetworkSettings.Ports}}'
+    ) {
+      if (scene.published === 'unreachable') {
+        return {kind: 'failed', detail: 'spawn docker ENOENT'};
+      }
+      return scene.published === 'fails'
+        ? {
+            kind: 'ran',
+            status: 1,
+            stdout: '',
+            stderr: 'Error: No such container',
+          }
+        : {kind: 'ran', status: 0, stdout: `${scene.published}\n`, stderr: ''};
     }
     const {answer} = scene.inspect;
     if (answer === 'unreachable') {

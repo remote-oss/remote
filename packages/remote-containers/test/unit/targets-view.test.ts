@@ -825,6 +825,18 @@ describe('the Dev Containers view (card containers-30)', () => {
     );
   });
 
+  it('F-0901 AC-37: the folder row of a Compose dev container has the codicon folder, and the package icon folder-active while it is the window’s own', () => {
+    deepStrictEqual(
+      (['folder', 'folderActive'] as const).map(
+        icon => specOf(rowOf({icon})).icon,
+      ),
+      [
+        {kind: 'theme', id: 'folder'},
+        {kind: 'resource', file: 'folder-active.svg'},
+      ],
+    );
+  });
+
   it('F-0906 AC-16, 7.E1: without the focus command no tree view is made and nothing is read', async () => {
     const scene = sceneOf();
     scene.commands = ['workbench.action.reloadWindow'];

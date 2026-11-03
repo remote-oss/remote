@@ -79,3 +79,36 @@ export function staticForwards(
   const entries = Array.isArray(appPort) ? appPort : [appPort];
   return entries.flatMap(entry => tunnelOf(entry) ?? []);
 }
+
+/** The key of a published port in `NetworkSettings.Ports`: the container's port and its protocol. */
+const PUBLISHED_KEY = /^(\d{1,5})\/tcp$/;
+
+/**
+ * The rows the editor shows as "Statically Forwarded" for the ports a container publishes, as `NetworkSettings.Ports`
+ * of `docker inspect` holds them: one for each container port and host port, in the order of the container ports.
+ * There are none for an engine that is not on this machine.
+ */
+export function publishedForwards(
+  published: unknown,
+  local: boolean,
+): StaticTunnel[] {
+  if (!local || typeof published !== 'object' || published === null) {
+    return [];
+  }
+  const tunnels = new Map<string, StaticTunnel>();
+  for (const [key, bindings] of Object.entries(published)) {
+    const container = Number(PUBLISHED_KEY.exec(key)?.[1]);
+    for (const binding of Array.isArray(bindings) ? bindings : []) {
+      const host = Number((binding as {HostPort?: unknown} | null)?.HostPort);
+      if (isPort(container) && isPort(host)) {
+        tunnels.set(`${String(container)}:${String(host)}`, {
+          remoteAddress: {host: '0.0.0.0', port: container},
+          localAddress: `[::1]:${String(host)}`,
+        });
+      }
+    }
+  }
+  return [...tunnels.values()].sort(
+    (left, right) => left.remoteAddress.port - right.remoteAddress.port,
+  );
+}

@@ -41,6 +41,13 @@ export function localFolderOf(
   return labels[FOLDER_LABEL] ?? labels[LEGACY_FOLDER_LABEL];
 }
 
+/** Whether the container belongs to a Docker Compose project. */
+export function isComposeContainer(
+  labels: Readonly<Record<string, string>>,
+): boolean {
+  return labels[PROJECT_LABEL] !== undefined;
+}
+
 /** The configuration file a container was made from, when it carries the label that names one. */
 export function configFileOf(
   labels: Readonly<Record<string, string>>,

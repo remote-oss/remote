@@ -88,6 +88,8 @@ export type ContainerOutcome =
       remoteWorkspaceFolder: string;
       volumeMounted: boolean;
       created: boolean;
+      /** The Dockerfile the primary service of a Compose project builds from, absolute; none otherwise. */
+      serviceDockerfile?: string;
     }
   | {kind: 'unusable'; containerId: string; status: string}
   | {kind: 'reservedMount'; property: string; target: string}
@@ -832,6 +834,10 @@ export function containerLifecycleOf(dependencies: {
       created: !discovery.containers.some(
         container => container.id === upResult.containerId,
       ),
+      ...(composeResolution.kind === 'ready' &&
+      composeResolution.serviceDockerfile !== undefined
+        ? {serviceDockerfile: composeResolution.serviceDockerfile}
+        : {}),
     };
   }
 

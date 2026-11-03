@@ -5,6 +5,7 @@
  * into it, secrets included .
  */
 
+import path from 'node:path';
 import type {Logger} from 'lib-log';
 import {parse} from 'yaml';
 import type {EngineOptions, EngineRunOutcome} from '../engine/engine-host.ts';
@@ -169,4 +170,27 @@ export async function composeModelOf(
       ),
     },
   };
+}
+
+/**
+ * The Dockerfile a service builds from, as an absolute path: the `dockerfile` against the build context, or `Dockerfile`
+ * in the context for the short form. A relative context is read against `base`. A service without `build`, or one the
+ * model lacks, builds from no file.
+ */
+export function serviceDockerfileOf(
+  model: ComposeModel,
+  service: string,
+  base: string,
+): string | undefined {
+  const {build} = model.services.get(service) ?? {};
+  if (build === undefined) {
+    return undefined;
+  }
+  return path.resolve(
+    base,
+    build.context,
+    build.dockerfile === undefined || build.dockerfile === ''
+      ? 'Dockerfile'
+      : build.dockerfile,
+  );
 }

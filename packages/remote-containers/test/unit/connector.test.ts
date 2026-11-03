@@ -2758,18 +2758,63 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
     deepStrictEqual((await connected(scene)).environmentTunnels, []);
   });
 
-  it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
+  const COMPOSE_CONFIGURATION = {
+    dockerComposeFile: 'compose.yml',
+    service: 'app',
+    appPort: [8080],
+  };
+
+  it('F-1101 AC-27: a Compose configuration hands core a row for each port the container publishes, its host port shown on the loopback', async () => {
     const scene = sceneOf();
-    scene.configuration = configurationWith({appPort: [8080]});
+    scene.configuration = configurationWith(COMPOSE_CONFIGURATION);
+    scene.published = JSON.stringify({
+      '80/tcp': [
+        {HostIp: '0.0.0.0', HostPort: '8081'},
+        {HostIp: '::', HostPort: '8081'},
+      ],
+      '9000/tcp': null,
+    });
+    deepStrictEqual((await connected(scene)).environmentTunnels, [
+      {
+        remoteAddress: {host: '0.0.0.0', port: 80},
+        localAddress: '[::1]:8081',
+      },
+    ]);
+  });
+
+  it('F-1101 AC-19, AC-27: a Compose configuration whose ports cannot be read hands core none, and the appPort is ignored', async () => {
+    const answers = ['fails', 'not json', 'unreachable'];
+    const handed: unknown[] = [];
+    for (const answer of answers) {
+      const scene = sceneOf();
+      scene.configuration = configurationWith(COMPOSE_CONFIGURATION);
+      scene.published = answer;
+      handed.push((await connected(scene)).environmentTunnels);
+    }
+    deepStrictEqual(handed, [[], [], []]);
+  });
+
+  /** The tunnels a connect over a remote engine hands core, for the configuration the scene holds. */
+  async function remoteEngineTunnels(scene: Scene): Promise<unknown> {
     const connection = await scene.connector.connect(
       inputOf(devContainerPayloadOf({...FOLDER, host: 'tcp://10.0.0.5:2375'})),
     );
-    deepStrictEqual(
-      'environmentTunnels' in connection
-        ? connection.environmentTunnels
-        : connection,
-      [],
-    );
+    return 'environmentTunnels' in connection
+      ? connection.environmentTunnels
+      : connection;
+  }
+
+  it('F-1101 AC-27: an engine that is not local hands core no row of a Compose container either', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith(COMPOSE_CONFIGURATION);
+    scene.published = '{"80/tcp":[{"HostIp":"0.0.0.0","HostPort":"8081"}]}';
+    deepStrictEqual(await remoteEngineTunnels(scene), []);
+  });
+
+  it('F-1101 BR-22, AC-23: an engine that is not local hands core none', async () => {
+    const scene = sceneOf();
+    scene.configuration = configurationWith({appPort: [8080]});
+    deepStrictEqual(await remoteEngineTunnels(scene), []);
   });
 
   it('F-1101 BR-14: a configuration that cannot be read hands core none', async () => {

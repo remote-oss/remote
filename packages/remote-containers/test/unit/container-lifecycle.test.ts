@@ -1945,6 +1945,7 @@ describe('containerLifecycleOf', () => {
       service: 'app',
       scope: ['app', 'db'],
       composeFile: undefined,
+      serviceDockerfile: undefined,
       upEnvironment: {BUILDX_BAKE_ENTITLEMENTS_FS: '0'},
       model: {
         resolvedName: undefined,

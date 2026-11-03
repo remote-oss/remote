@@ -53,6 +53,10 @@ function iconOf(icon: RowIcon): TreeIcon {
       return {kind: 'theme', id: 'vm-running'};
     case 'vm':
       return {kind: 'theme', id: 'vm'};
+    case 'folder':
+      return {kind: 'theme', id: 'folder'};
+    case 'folderActive':
+      return {kind: 'resource', file: 'folder-active.svg'};
     default:
       return {kind: 'theme', id: 'vm-outline'};
   }
