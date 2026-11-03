@@ -1,7 +1,7 @@
 /**
- * @fileoverview check-powershell: the syntax check of the PowerShell bootstrap script (ADR-0013 decision 5). Every
- * rendered step in lib-server's golden folder, which the golden rows keep equal to the renderer, is analysed by
- * PSScriptAnalyzer for Windows PowerShell 5.1 compatibility. It needs `pwsh` and the module (`tools/install-pwsh`).
+ * @fileoverview check-powershell: the syntax check of the PowerShell the editor sends to a host (ADR-0013 decision 5).
+ * Every rendered step in lib-server's golden folder and the reader in lib-ssh's, which the golden rows keep equal to
+ * their renderers, are analysed by PSScriptAnalyzer for Windows PowerShell 5.1 compatibility. It needs `pwsh` and the module (`tools/install-pwsh`).
  *
  *     node tools/check-powershell.ts
  */
@@ -11,15 +11,11 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {isMainModule, messageOf, REPOSITORY_ROOT} from './repository.ts';
 
-/** The folder of the rendered PowerShell steps, from the repository root. */
-export const GOLDEN_POWERSHELL_FOLDER = path.join(
-  'packages',
-  'lib-server',
-  'test',
-  'unit',
-  'golden',
-  'powershell',
-);
+/** The folders of the rendered PowerShell, from the repository root: lib-server's steps and lib-ssh's reader. */
+export const GOLDEN_POWERSHELL_FOLDERS: readonly string[] = [
+  path.join('packages', 'lib-server', 'test', 'unit', 'golden', 'powershell'),
+  path.join('packages', 'lib-ssh', 'test', 'unit', 'golden', 'powershell'),
+];
 
 /** The PSScriptAnalyzer version `tools/install-pwsh` pins, from its `PSSA_VERSION=` line; throws when there is none. */
 export function pinnedAnalyzerVersion(installScript: string): string {
@@ -31,14 +27,17 @@ export function pinnedAnalyzerVersion(installScript: string): string {
 }
 
 /**
- * The pwsh arguments that load the pinned PSScriptAnalyzer, analyse every script under `folder` for 5.1, and print the
- * findings as one JSON array.
+ * The pwsh arguments that load the pinned PSScriptAnalyzer, analyse every script under each of `folders` for 5.1, and
+ * print the findings as one JSON array.
  */
-export function analyzerArguments(folder: string, version: string): string[] {
+export function analyzerArguments(
+  folders: readonly string[],
+  version: string,
+): string[] {
   const command = [
     `Import-Module PSScriptAnalyzer -RequiredVersion '${version}'`,
     "$settings = @{IncludeRules = @('PSUseCompatibleSyntax'); Rules = @{PSUseCompatibleSyntax = @{Enable = $true; TargetVersions = @('5.1')}}}",
-    `$findings = @(Invoke-ScriptAnalyzer -Path '${folder.replaceAll("'", "''")}' -Recurse -Settings $settings)`,
+    `$findings = @(@(${folders.map(folder => `'${folder.replaceAll("'", "''")}'`).join(', ')}) | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings $settings })`,
     'ConvertTo-Json -Compress -InputObject @($findings | ForEach-Object { @{file = $_.ScriptName; line = $_.Line; message = $_.Message} })',
   ].join('; ');
   return ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command];
@@ -79,7 +78,9 @@ if (isMainModule(import.meta.url)) {
     const analysis = spawnSync(
       'pwsh',
       analyzerArguments(
-        path.join(REPOSITORY_ROOT, GOLDEN_POWERSHELL_FOLDER),
+        GOLDEN_POWERSHELL_FOLDERS.map(folder =>
+          path.join(REPOSITORY_ROOT, folder),
+        ),
         pinnedAnalyzerVersion(
           readFileSync(
             path.join(REPOSITORY_ROOT, 'tools', 'install-pwsh'),

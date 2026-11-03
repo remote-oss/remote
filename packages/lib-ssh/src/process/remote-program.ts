@@ -2,7 +2,8 @@
  * @fileoverview What an `ssh` run sends to the host to run a script: the remote command and the text that goes to
  * its standard input. A script without input travels on standard input of `sh -s`. A script with input travels as a
  * prelude ahead of its input on standard input, read by a fixed command whose one quoted word every login shell
- * parses alike.
+ * parses alike. A script for PowerShell travels the same way: its prelude and the script on standard input, read by
+ * a fixed reader that is the one encoded command on the command line.
  */
 
 import {
@@ -68,14 +69,8 @@ export function environmentPrefix(
 
 /** The text of a script, or why it cannot be run. The environment is not part of it. */
 export function scriptText(
-  request: Pick<ScriptRequest, 'script' | 'interpreter' | 'environment'>,
+  request: Pick<ScriptRequest, 'script' | 'environment'>,
 ): {kind: 'text'; text: string} | {kind: 'refused'; reason: string} {
-  if (request.interpreter !== 'posixShell') {
-    return {
-      kind: 'refused',
-      reason: `the ${request.interpreter} interpreter is not available over SSH yet`,
-    };
-  }
   const badName = badNameIn(request.environment);
   if (badName !== undefined) {
     return {
@@ -86,6 +81,71 @@ export function scriptText(
   return {kind: 'text', text: request.script};
 }
 
+/** The longest command Windows runs, in characters. */
+export const POWERSHELL_COMMAND_LIMIT = 8192;
+
+/** The PowerShell lines that set the added environment variables; their names are already checked. */
+function powershellEnvironmentLines(
+  environment: Readonly<Record<string, string>>,
+): string[] {
+  return Object.entries(environment).map(
+    ([name, value]) => `$env:${name} = '${value.replaceAll("'", "''")}'`,
+  );
+}
+
+/**
+ * The fixed text PowerShell runs: it reads exactly `byteCount` bytes of the raw standard input, which hold the
+ * prelude and the script, and runs them as a script block. It never reads through the console's buffered reader, so
+ * what follows those bytes is left for the script.
+ */
+export function powershellReader(byteCount: number): string {
+  const count = String(byteCount);
+  return [
+    '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
+    '$Stream = [Console]::OpenStandardInput()',
+    `$Bytes = New-Object byte[] ${count}`,
+    '$Read = 0',
+    `while ($Read -lt ${count}) { $Count = $Stream.Read($Bytes, $Read, ${count} - $Read); if ($Count -le 0) { break }; $Read += $Count }`,
+    '& ([ScriptBlock]::Create([System.Text.Encoding]::UTF8.GetString($Bytes, 0, $Read)))',
+  ].join('\n');
+}
+
+/**
+ * Plans the run of a PowerShell script: the environment as assignments ahead of the script on standard input, and a
+ * command of letters, digits and `+/=` that every DefaultShell parses alike. A command longer than `limit`
+ * characters is refused, as Windows would refuse it.
+ */
+export function powershellPlan(
+  request: Pick<ScriptRequest, 'script' | 'environment' | 'input'>,
+  limit: number = POWERSHELL_COMMAND_LIMIT,
+): ScriptPlan {
+  const script = scriptText(request);
+  if (script.kind === 'refused') {
+    return script;
+  }
+  const prelude = `${[...powershellEnvironmentLines(request.environment), script.text].join('\n')}\n`;
+  const reader = powershellReader(Buffer.byteLength(prelude, 'utf8'));
+  const remoteProgram = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(reader, 'utf16le').toString('base64')}`;
+  if (remoteProgram.length > limit) {
+    return {
+      kind: 'refused',
+      reason: `the PowerShell command is ${String(remoteProgram.length)} characters, and Windows runs one of at most ${String(limit)}`,
+    };
+  }
+  return {
+    kind: 'planned',
+    remoteProgram,
+    input:
+      request.input.kind === 'text'
+        ? {kind: 'text', text: prelude + request.input.text}
+        : {
+            kind: 'prefixedFile',
+            prefix: prelude,
+            localFile: request.input.localFile,
+          },
+  };
+}
+
 /** Plans the run of a script: the remote command and the standard input it needs. */
 export function planScript(
   request: Pick<
@@ -93,6 +153,9 @@ export function planScript(
     'script' | 'interpreter' | 'environment' | 'input'
   >,
 ): ScriptPlan {
+  if (request.interpreter === 'powershell') {
+    return powershellPlan(request);
+  }
   const script = scriptText(request);
   if (script.kind === 'refused') {
     return script;
