@@ -109,7 +109,7 @@ describe('"New Remote" completed through the companion (card coverage-102, part 
     rmSync(sshFolder(), {recursive: true, force: true});
   });
 
-  it('F-5102 AC-13, F-5902 AC-29 (first-child): (reading-1809-receiver-record) a host added before the first existing entry is the first child of the expanded SSH row within 2 seconds, with no Refresh and the others in order, after one host-list push within 1 s of the write', async () => {
+  it('F-5102 AC-13, F-2204 AC-30, F-5902 AC-29 (first-child): (reading-1809-receiver-record) a host added before the first existing entry is the first child of the expanded SSH row within 2 seconds, with no Refresh and the others in order, after one host-list push within 1 s of the write', async () => {
     sshFile('config', ['Host alpha', 'Host beta']);
     const window = await viewWindow('add-first');
     try {
