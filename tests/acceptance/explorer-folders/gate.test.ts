@@ -102,7 +102,7 @@ describe('the increment-2 gate: recent folders and workspaces (card coverage-102
     }
   });
 
-  it('Gate row 2 (sort-and-collapse): with the sort order alphabetical and Refresh the rows sort by code unit, and with collapseRecentFolders on a window that draws the view starts every host row collapsed', async () => {
+  it('Gate row 2 (sort-and-collapse): with the sort order alphabetical and Refresh the rows sort by code unit, and with collapseRecentFolders on a Refresh keeps a host row the user has expanded, and a window that draws the view starts every host row collapsed', async () => {
     const scope = `${HOME}/c102g2-`;
     const view = await viewWindow('c102g2-view');
     try {
@@ -125,6 +125,11 @@ describe('the increment-2 gate: recent folders and workspaces (card coverage-102
         scope,
       );
       await userSettings({[SORT_ORDER]: 'mru', [COLLAPSE]: true});
+      await titleAction(view, VIEW, 'Refresh');
+      await new Promise(resolve => setTimeout(resolve, 3_000));
+      const keptExpanded = ((await viewRows(view, VIEW)) ?? []).find(
+        entry => entry.level === 2 && entry.label === HOST,
+      )?.expanded;
       const second = await viewWindow('c102g2-second');
       try {
         await new Promise(resolve => setTimeout(resolve, 5_000));
@@ -133,10 +138,11 @@ describe('the increment-2 gate: recent folders and workspaces (card coverage-102
         );
         deepStrictEqual(
           [
+            keptExpanded,
             hosts.find(entry => entry.label === HOST)?.expanded,
             hosts.filter(entry => entry.expanded === true).length,
           ],
-          [false, 0],
+          [true, false, 0],
         );
       } finally {
         await closeIfOpen(second);
