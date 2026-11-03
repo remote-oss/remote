@@ -287,6 +287,8 @@ describe('the git calls of a clone (card containers-151)', () => {
       [
         'https://user:token@github.com/o/r',
         'https://token@example.com/o/r.git',
+        'https://user:pa@ss@host/o/r',
+        'https://host/o/r@main',
         'HTTP://u:p@host/x/r',
         'ssh://git@host/o/r',
         'git@host:o/r.git',
@@ -297,6 +299,8 @@ describe('the git calls of a clone (card containers-151)', () => {
       [
         ['https://github.com/o/r', 'https://github.com/o/r'],
         ['https://example.com/o/r.git', 'https://example.com/o/r.git'],
+        ['https://host/o/r', 'https://host/o/r'],
+        ['https://host/o/r@main', 'https://host/o/r@main'],
         ['HTTP://host/x/r', 'HTTP://host/x/r'],
         ['ssh://git@host/o/r', 'ssh://git@host/o/r'],
         ['git@host:o/r.git', 'git@host:o/r.git'],

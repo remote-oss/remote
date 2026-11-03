@@ -1602,7 +1602,7 @@ export function containerConnectorOf(
         connectionId: undefined,
         hostPath: '',
         configFile: resolution.request.configFile,
-        trusted: true,
+        trusted: !target.inspectVolume,
       },
       cancellation,
     );

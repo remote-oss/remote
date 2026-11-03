@@ -57,8 +57,11 @@ const OPTION_HOST = /^(?:[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:[^/@]*@)?|[^\s/@:]+@)-/;
 /** The scp-style form `user@host:path`, with no scheme and a path after the colon. */
 const SCP_STYLE = /^[^\s/@:]+@[^\s/:]+:[^\s]+$/;
 
-/** The user and password of an `http(s)` URL, which are kept out of everything the clone stores, labels or logs. */
-const WEB_USERINFO = /^(https?:\/\/)[^/?#@]*@/i;
+/**
+ * The user and password of an `http(s)` URL, up to the last `@` before the path, which are kept out of everything the
+ * clone stores, labels or logs.
+ */
+const WEB_USERINFO = /^(https?:\/\/)[^/?#]*@/i;
 
 /** A GitHub shorthand: exactly two non-empty segments, no scheme. */
 const SHORTHAND = /^[^\s/:]+\/[^\s/:]+$/;

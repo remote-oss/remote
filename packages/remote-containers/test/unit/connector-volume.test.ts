@@ -127,6 +127,25 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
+  it('F-0106 BR-13: a clone opens trusted, and an Inspect Volume window is not forced trusted', async () => {
+    const inspected = volumePayloadOf({
+      kind: 'volume',
+      repositoryPath: 'https://github.com/o/r',
+      volumeName: '__UNIQUE__',
+      folder: 'r',
+      cloneInfo: {urlToClone: 'https://github.com/o/r'},
+      inspectVolume: true,
+    });
+    const results = [
+      await volumeScene().connector.connect(inputOf(VOLUME_PAYLOAD)),
+      await volumeScene().connector.connect(inputOf(inspected)),
+    ];
+    deepStrictEqual(
+      results.map(result => 'trusted' in result && result.trusted),
+      [true, false],
+    );
+  });
+
   it('F-0704 7.E2: a resolve that fails ends with its failure and disposes of the stand-in, with no lifecycle made', async () => {
     const scene = volumeScene(
       plainPass(argv => (argv.at(-1) === 'git' ? exited(1) : undefined)),
