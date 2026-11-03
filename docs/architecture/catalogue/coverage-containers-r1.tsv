@@ -153,7 +153,7 @@ F-0205.AC-14d	acceptance
 F-0205.AC-15	acceptance	
 F-0205.AC-15a	deferred	containers release 1: later (remote engines)
 F-0205.AC-16	acceptance	
-F-0205.AC-17	acceptance	
+F-0205.AC-17	core	core: the Docker CLI keeps a context under the HOME it was made in (BR-2); the extension passes no HOME of its own
 F-0205.AC-18	deferred	containers release 1: later (remote engines)
 F-0205.AC-19	deferred	containers release 1: later (remote engines)
 F-0205.AC-20	deferred	containers release 1: later (remote engines)

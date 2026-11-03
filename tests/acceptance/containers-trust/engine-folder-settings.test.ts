@@ -77,7 +77,9 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       writeFileSync(program, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`);
       chmodSync(program, 0o755);
     }
-    const config = path.join(variable('HARNESS_RUN_FOLDER'), 'c133-config');
+    // C is the `.docker` folder of a home of its own, so that the HOME case points the CLI at it.
+    const home = path.join(variable('HARNESS_RUN_FOLDER'), 'c133-home');
+    const config = path.join(home, '.docker');
     mkdirSync(config, {recursive: true});
     const dead = runScopedName('c133deadctx');
     execFileSync(
@@ -91,6 +93,26 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       path.join(config, 'config.json'),
       JSON.stringify({currentContext: dead}),
     );
+    // The control: with that HOME the CLI finds the dead current context, so the HOME case could fail.
+    let controlFails = false;
+    try {
+      execFileSync('docker', ['ps', '-q'], {
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) =>
+                !['DOCKER_CONFIG', 'DOCKER_HOST', 'DOCKER_CONTEXT'].includes(
+                  name,
+                ),
+            ),
+          ),
+          HOME: home,
+        },
+        stdio: 'ignore',
+      });
+    } catch {
+      controlFails = true;
+    }
     const own = runScopedName('c133local');
     await dockerWith(
       {},
@@ -116,7 +138,7 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
     try {
       for (const environment of [
         {PATH: `${programs}:${process.env.PATH ?? ''}`},
-        {HOME: path.dirname(config)},
+        {HOME: home},
         {DOCKER_CONFIG: config},
       ]) {
         folderSettings(folder, {'containers.environment': environment});
@@ -140,8 +162,8 @@ describe('the engine settings of a folder in Restricted Mode (card containers-13
       await connectedToContainer(window);
       const title = await windowTitle(window);
       deepStrictEqual(
-        [seen, title.includes(' @ '), existsSync(marker)],
-        [[true, true, true, true], false, false],
+        [controlFails, seen, title.includes(' @ '), existsSync(marker)],
+        [true, [true, true, true, true], false, false],
       );
     } finally {
       await closeWindow(window).catch(() => undefined);

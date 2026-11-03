@@ -24,6 +24,7 @@ import {
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
+  dialogOf,
   statusItemText,
   waitForDialog,
   windowTitle,
@@ -190,6 +191,7 @@ describe('the windows of a dev container opened through the engine settings (car
       await reloadWindow(window);
       await connectedToContainer(window);
       const reloaded = await windowTitle(window);
+      const reloadDialog = await dialogOf(window);
       await inWindow(window, 'workbench.view.remote');
       const rows = await rowsWhen(window, listed =>
         listed.some(item => item.label.startsWith(marker)),
@@ -219,6 +221,7 @@ describe('the windows of a dev container opened through the engine settings (car
         {
           opened: opened.includes(` @ ${proxy.address}]`),
           reloaded: reloaded === opened,
+          reloadDialog,
           listsA: labels.some(each => each.startsWith(marker)),
           listsSecond: labels.some(each => each.startsWith(second.marker)),
           rebuiltOnA: rebuilt.length === 1 && rebuilt[0] !== firstContainers[0],
@@ -230,6 +233,7 @@ describe('the windows of a dev container opened through the engine settings (car
         {
           opened: true,
           reloaded: true,
+          reloadDialog: undefined,
           listsA: true,
           listsSecond: false,
           rebuiltOnA: true,

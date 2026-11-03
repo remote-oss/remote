@@ -1,13 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {promisify} from 'node:util';
 import {dockerWrapper} from '../windows/dev-containers-view.ts';
 import {
   readUserSettings,
   restoreUserSettings,
-  runScopedName,
   variable,
   waitFor,
 } from '../windows/harness.ts';
@@ -22,8 +19,6 @@ import {
   secondEngine,
   showsNoEngine,
 } from '../windows/engine-fixture.ts';
-
-const execFileAsync = promisify(execFile);
 
 /** What the engine at `engine` holds, as the lists of its containers, images, volumes and networks. */
 async function stateOf(engine: SecondEngine): Promise<string[]> {
@@ -48,25 +43,6 @@ function callsTo(file: string): number {
   return readFileSync(file, 'utf8')
     .split('\n')
     .filter(each => each === 'ps').length;
-}
-
-/** The environment of this process with `home` as its HOME and no Docker configuration folder of its own. */
-function environmentWithHome(home: string): NodeJS.ProcessEnv {
-  return Object.fromEntries(
-    Object.entries({...process.env, HOME: home}).filter(
-      ([name]) => name !== 'DOCKER_CONFIG',
-    ),
-  );
-}
-
-/** The names of the Docker contexts that a `docker` with HOME `home` lists. */
-async function contextNames(home: string): Promise<string[]> {
-  const {stdout} = await execFileAsync(
-    'docker',
-    ['context', 'ls', '--format', '{{.Name}}'],
-    {env: environmentWithHome(home)},
-  );
-  return stdout.trim().split('\n');
 }
 
 describe('the checks of the Dev Containers view against the engine it uses (card containers-133)', function () {
@@ -124,26 +100,5 @@ describe('the checks of the Dev Containers view against the engine it uses (card
     } finally {
       await setUserSetting('dev.containers.dockerPath', undefined);
     }
-  });
-
-  it('F-0205 AC-17 (c133-home): a Docker context created under one HOME is not listed by a process with another HOME', async () => {
-    const context = runScopedName('c133home');
-    const homes = ['home-a', 'home-b'].map(each => {
-      const folder = path.join(variable('HARNESS_RUN_FOLDER'), `c133-${each}`);
-      mkdirSync(folder, {recursive: true});
-      return folder;
-    });
-    await execFileAsync(
-      'docker',
-      ['context', 'create', context, '--docker', `host=${DEAD}`],
-      {env: environmentWithHome(homes[0] ?? '')},
-    );
-    deepStrictEqual(
-      [
-        (await contextNames(homes[0] ?? '')).includes(context),
-        (await contextNames(homes[1] ?? '')).includes(context),
-      ],
-      [true, false],
-    );
   });
 });
