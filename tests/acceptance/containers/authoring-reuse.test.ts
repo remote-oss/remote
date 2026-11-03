@@ -140,7 +140,7 @@ describe('the wizard on the folder’s own Dockerfile and Compose files (card co
     );
   });
 
-  it('F-0801 AC-7, 6.8 steps 1 and 2 (c145b-multi-root): a saved multi-root workspace whose roots hold a Dockerfile goes from the two-row location pick straight to the template list', async () => {
+  it('F-0801 AC-7, AC-13 (c145b-multi-root): 6.8 steps 1 and 2, a saved multi-root workspace whose roots hold a Dockerfile goes from the two-row location pick straight to the template list', async () => {
     const file = workspaceWith('c145b-multi-root', {
       first: {Dockerfile: 'FROM alpine\n'},
       second: {Dockerfile: 'FROM alpine\n'},
@@ -174,7 +174,7 @@ describe('the wizard on the folder’s own Dockerfile and Compose files (card co
     }
   });
 
-  it('F-0801 6.8 step 3 (c145b-multi-root-exists): a configuration beside the workspace file marks the workspace row, and a root with its own configuration hides the mark', async () => {
+  it('F-0801 AC-13 (c145b-multi-root-exists): 6.8 step 3, a configuration beside the workspace file marks the workspace row, and a root with its own configuration hides the mark', async () => {
     const configuration = JSON.stringify({image: 'alpine'});
     const beside = workspaceWith(
       'c145b-beside',
