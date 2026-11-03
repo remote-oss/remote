@@ -129,6 +129,7 @@ import {
   cloneFromLink,
   cloneInUniqueVolume,
   type CloneTrustPorts,
+  volumeWindowUriOf,
 } from './volumes/clone-command.ts';
 import {
   clearTypedSource,
@@ -153,6 +154,7 @@ import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
 import {sourceRowsOf} from './volumes/source-pick.ts';
 import {githubOfferOf, pickGithubRepository} from './volumes/github-source.ts';
+import {recoveryTargetOf} from './volumes/recovery-container.ts';
 import {volumeTargetOf} from './volumes/volume-payload.ts';
 import {
   type AttachPicker,
@@ -2497,6 +2499,25 @@ export async function activate(
             storePausedRetry(context.globalState, containerId, Date.now()),
           rebuildContainer: () =>
             vscode.commands.executeCommand(commands.rebuildContainer.id),
+          openRecoveryContainer: async () => {
+            const authority = vscode.env.remoteAuthority ?? '';
+            const volume = authority.startsWith('dev-container+')
+              ? volumeTargetOf(authority.slice('dev-container+'.length))
+              : undefined;
+            const recovery =
+              volume === undefined
+                ? undefined
+                : recoveryTargetOf(volume, 'typed');
+            if (recovery === undefined) {
+              logger.info('the window is no clone in a volume to recover');
+              return;
+            }
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(volumeWindowUriOf(recovery)),
+              {forceReuseWindow: true},
+            );
+          },
           logger,
         }),
         translate,

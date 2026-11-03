@@ -10,7 +10,10 @@ import {failureText, reasonText} from './failure-strings.ts';
 
 /** One button of the dialog and what choosing it does; Edit Locally names the folder it goes back to. */
 type FailureButton =
-  | {label: string; action: 'retry' | 'moreActions' | 'closeRemote'}
+  | {
+      label: string;
+      action: 'retry' | 'moreActions' | 'closeRemote' | 'recovery';
+    }
   | {label: string; action: 'learnMore'; address?: string}
   | {label: string; action: 'editLocally'; folder: DevContainerFolder};
 
@@ -30,7 +33,8 @@ type PickItem =
         | 'rebuild'
         | 'openRecent'
         | 'openDocumentation'
-        | 'openRepository';
+        | 'openRepository'
+        | 'recovery';
     }
   | {label: string; action: 'editLocally'; folder: DevContainerFolder};
 
@@ -52,7 +56,7 @@ function editLabel(target: DevContainerFolder, translate: Translate): string {
 
 /**
  * The dialog of a failure, for the folder the window was opening (none when its authority names no folder); a clone in a
- * volume, which has no folder to go back to, offers Close Remote in Edit Locally's place.
+ * volume, which has no folder to go back to, offers Close Remote and the recovery container in Edit Locally's place.
  */
 export function failureDialogOf(
   failed: Failed,
@@ -62,7 +66,10 @@ export function failureDialogOf(
 ): FailureDialog {
   const requirements = failed.kind === 'requirementsNotMet';
   const closeRemote: FailureButton[] = volumeWindow
-    ? [{label: failureText('S076', [], translate), action: 'closeRemote'}]
+    ? [
+        {label: failureText('S076', [], translate), action: 'closeRemote'},
+        {label: failureText('S159', [], translate), action: 'recovery'},
+      ]
     : [];
   const edit: FailureButton[] =
     target === undefined
@@ -113,7 +120,8 @@ export function failureDialogOf(
 
 /**
  * The quick pick that More Actions... opens; it offers a rebuild when the failed connect found a container and its
- * configuration file is there, and Open Repository in Edit Locally's place for a clone in a volume.
+ * configuration file is there, and the recovery container and Open Repository in Edit Locally's place for a clone in a
+ * volume.
  */
 export function quickPickOf(
   target: DevContainerFolder | undefined,
@@ -122,7 +130,10 @@ export function quickPickOf(
   volumeWindow = false,
 ): QuickPick {
   const openRepository: PickItem[] = volumeWindow
-    ? [{label: failureText('S261', [], translate), action: 'openRepository'}]
+    ? [
+        {label: failureText('S159', [], translate), action: 'recovery'},
+        {label: failureText('S261', [], translate), action: 'openRepository'},
+      ]
     : [];
   const edit: PickItem[] =
     target === undefined
