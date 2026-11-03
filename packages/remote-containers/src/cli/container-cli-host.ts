@@ -4,7 +4,7 @@
  * so no value is on a command line, and the editor's own environment stays out of it.
  */
 
-import {BOOTSTRAP_CLI} from '../volumes/bootstrap.ts';
+import {BOOTSTRAP_CLI} from './cli-paths.ts';
 import type {CliHost} from './cli-host.ts';
 import {nodeCliHost} from './node-cli-host.ts';
 import type {NodeCliPorts} from './node-cli-ports.ts';

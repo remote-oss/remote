@@ -1,7 +1,6 @@
 import {deepStrictEqual, ok} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {
-  BOOTSTRAP_CLI,
   BOOTSTRAP_TOOLS,
   type BootstrapTool,
   bootstrapRemoveArguments,
@@ -12,6 +11,7 @@ import {
   toolCheckLineOf,
   toolCheckOutcomeOf,
 } from '../../src/volumes/bootstrap.ts';
+import {BOOTSTRAP_CLI} from '../../src/cli/cli-paths.ts';
 
 /** The tools found when `tools` are the ones missing. */
 function withoutTools(...tools: BootstrapTool[]): Set<BootstrapTool> {

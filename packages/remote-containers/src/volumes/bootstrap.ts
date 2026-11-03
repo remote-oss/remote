@@ -7,18 +7,6 @@
 /** The tag our built-in bootstrap image is built under. */
 export const BOOTSTRAP_TAG = 'vsc-volume-bootstrap:latest';
 
-/** Where the image keeps the dev container CLI the extension bundles, and the preload the CLI runs with. */
-export const BOOTSTRAP_CLI = {
-  entry: '/usr/local/share/remote-oss/devcontainers-cli/devcontainer.js',
-  preload: '/usr/local/share/remote-oss/cli-preload.js',
-} as const;
-
-/** The names in the build context of the CLI's folder and the preload, which the image's definition copies in. */
-export const CONTEXT_NAMES = {
-  cliFolder: 'devcontainers-cli',
-  preload: 'cli-preload.js',
-} as const;
-
 /** The tools the check looks for, in its fixed order. */
 export const BOOTSTRAP_TOOLS = [
   'docker',

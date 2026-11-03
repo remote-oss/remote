@@ -5,7 +5,7 @@
 
 import {copyFile, cp, mkdtemp, rm} from 'node:fs/promises';
 import path from 'node:path';
-import {CONTEXT_NAMES} from './bootstrap.ts';
+import {CONTEXT_NAMES} from '../cli/cli-paths.ts';
 import type {BuildContext} from './bootstrap-start.ts';
 
 /** The files of the installed extension the context is made of. */
