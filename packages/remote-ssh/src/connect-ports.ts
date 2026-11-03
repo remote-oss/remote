@@ -76,6 +76,7 @@ import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
   openingAttached,
+  type RefusalWatch,
   refusalWatchOf,
 } from './diagnostics/forwarding-refusal.ts';
 import {commands} from './identifiers.generated.ts';
@@ -274,8 +275,7 @@ export function wiringPortsOf(
   surfaces: ConnectSurfaces,
   machine: ConnectMachine,
   logger: Logger,
-  warnedForwardingDisabled: () => boolean = () => false,
-  prohibitedForwarding: () => boolean = () => false,
+  refusal?: Pick<RefusalWatch, 'warned' | 'prohibited'>,
 ): WiringPorts {
   const {settings} = surfaces;
   let refusedTold = false;
@@ -484,8 +484,8 @@ export function wiringPortsOf(
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
       chooseLocalPort: chooseWindowPort,
-      warnedForwardingDisabled,
-      prohibitedForwarding,
+      warnedForwardingDisabled: () => refusal?.warned() ?? false,
+      prohibitedForwarding: () => refusal?.prohibited() ?? false,
       forwardRefused: () => {
         // The extension host is the window's, so a flag of this assembly is a flag of the window.
         if (refusedTold) {
@@ -541,8 +541,7 @@ export function connectAssemblyOf(
     {...surfaces, terminals: tracker},
     machine,
     watch.logger,
-    () => watch.warned(),
-    () => watch.prohibited(),
+    watch,
   );
   const connector = connectorFrom({
     stepsFor: onPhase => {
