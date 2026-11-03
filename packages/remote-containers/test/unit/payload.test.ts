@@ -360,6 +360,26 @@ describe('the workspace file of a workspace window, at its origin (card containe
     );
   });
 
+  it('F-0406 BR-11: a workspace file that escapes its mount with a `..` segment names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        '/workspaces/p/../../etc/x.code-workspace',
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
+  it('F-0406 BR-11: a workspace file in a sibling folder of the mount names no file', () => {
+    deepStrictEqual(
+      windowOriginOf(
+        containerAuthority(devContainerPayloadOf(FOLDER)),
+        '/workspaces/p2/other.code-workspace',
+      ),
+      {kind: 'local', folder: '/home/u/p'},
+    );
+  });
+
   it('F-0406 BR-11: no workspace file names no file', () => {
     deepStrictEqual(
       windowOriginOf(

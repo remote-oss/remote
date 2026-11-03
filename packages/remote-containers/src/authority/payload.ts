@@ -216,10 +216,13 @@ function workspaceFileOf(
   if (workspaceFile === undefined) {
     return undefined;
   }
+  const normalized = path.posix.normalize(workspaceFile);
   const mountTarget = `/workspaces/${path.posix.basename(hostPath)}/`;
-  return workspaceFile.startsWith(mountTarget)
-    ? path.join(hostPath, workspaceFile.slice(mountTarget.length))
-    : undefined;
+  if (normalized.startsWith('..') || !normalized.startsWith(mountTarget)) {
+    return undefined;
+  }
+  const host = path.join(hostPath, normalized.slice(mountTarget.length));
+  return host.startsWith(hostPath + path.sep) ? host : undefined;
 }
 
 /**
