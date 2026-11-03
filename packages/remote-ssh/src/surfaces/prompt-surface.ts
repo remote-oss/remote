@@ -3,9 +3,12 @@
  * question `ssh` asks as the classifier chose (a pick for a host key, a masked input for everything else), and
  * answers through the lease. A question that another window answers first is taken down; a question the user
  * dismisses is refused through the lease, which refuses the rest of that ssh run by itself. While another window
- * holds the login it shows that it waits.
+ * holds the login it shows that it waits. Each question is logged with its whole text, and then with the answer
+ * masked (never the answer), or as dismissed, or as closed without an answer; the questions answered in the login
+ * terminal (the terminal mode) do not pass this surface and so have no such lines.
  */
 
+import type {Logger} from 'lib-log';
 import {classifyPrompt, type PromptSurface, type PromptText} from 'lib-ssh';
 import type {LoginLease} from '../pipeline/connection-step.ts';
 import {textOf} from './prompt-strings.ts';
@@ -45,7 +48,26 @@ export interface PromptEditor {
 export interface PromptSurfaceOptions {
   /** The host as the user named it, which the fingerprint question names. */
   displayHost: string;
+  /** The connect's logger, the one ssh's own lines go to. */
+  logger: Pick<Logger, 'info'>;
 }
+
+/** The mask logged for an answer: always three asterisks, whatever the answer was. */
+const MASKED_ANSWER = '***';
+
+/** The log line of a question shown to the user. */
+export function promptLine(text: string): string {
+  return `prompt: ${text}`;
+}
+
+/** The log line of a question the user answered; the answer is never in it. */
+export const ANSWERED_LINE = `prompt answered: ${MASKED_ANSWER}`;
+
+/** The log line of a question the user dismissed or the editor could not show. */
+export const DISMISSED_LINE = 'prompt dismissed';
+
+/** The log line of a question that closed with no answer from this window, as when ssh dropped it. */
+export const CLOSED_LINE = 'prompt closed unanswered';
 
 /** The surface once attached: ending it takes down what it shows and stops listening. */
 export interface AttachedPromptSurface {
@@ -113,6 +135,7 @@ export function attachPromptSurface(
   const open = new Map<number, AbortController>();
 
   function settle(promptId: number, answer: string | undefined): void {
+    options.logger.info(answer === undefined ? DISMISSED_LINE : ANSWERED_LINE);
     // A lease that has gone takes no answer; the connect then ends by itself.
     (answer === undefined
       ? lease.refuse(promptId)
@@ -123,6 +146,7 @@ export function attachPromptSurface(
   async function show(promptId: number, text: string): Promise<void> {
     const controller = new AbortController();
     open.set(promptId, controller);
+    options.logger.info(promptLine(text));
     const answer = await askQuestion(
       editor,
       text,
@@ -148,6 +172,9 @@ export function attachPromptSurface(
         void show(notice.promptId, notice.text);
         break;
       case 'promptClosed':
+        if (open.has(notice.promptId)) {
+          options.logger.info(CLOSED_LINE);
+        }
         open.get(notice.promptId)?.abort();
         open.delete(notice.promptId);
         break;
