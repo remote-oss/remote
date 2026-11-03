@@ -133,6 +133,11 @@ features (F-0804) and optional-files (F-0805) stages.
 - **C3** gains `outdated` on the bridge, log only.
 - **`components.md`:** F-0806, F-0807 and F-0808 join C14's features (F-0806's and F-0808's creation halves join C13
   with group 13).
+- **Trust and the engine program** (F-0201 AC-55, #1934): every engine program these flows run resolves
+  `dev.containers.dockerPath` through `engineBaseOf`, so a relative value names a file of the folder only in a trusted
+  window. That covers C2's engine check (F-0806's "+", and the name step's volume listing) and C3's `outdated` and
+  `templates apply`, whose `--docker-path` is the same program. F-0807 runs in Restricted Mode (BR-6), which makes
+  this binding there.
 - **No new runtime dependency.**
 
 ## 6. The cut and the cards
