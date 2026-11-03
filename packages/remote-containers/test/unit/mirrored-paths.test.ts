@@ -1,6 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import path from 'node:path';
 import {
+  loggableRelativeOf,
+  loggableUrlOf,
   mirroredFolderIn,
   mirroredPathsOf,
   remoteUrlsOf,
@@ -194,5 +196,39 @@ describe('the URLs of the remotes (card containers-161, F-0302 BR-1)', () => {
 
   it('F-0302 7.E1: nothing printed is no remote', () => {
     deepStrictEqual(remoteUrlsOf(''), []);
+  });
+
+  it('R-26: the log forms leave out the userinfo of an authority, to the last @, and nothing else', () => {
+    deepStrictEqual(
+      [
+        'https://oauth2:tok@gitlab.com/o/n.git',
+        'https://tok@github.com/o/a@b',
+        'https://u:p@ss@host:8443/o',
+        'git@github.com:o/n.git',
+        'ssh://git@host:2222/o/n',
+        'https://github.com/o/n',
+        '/srv/o@x/n',
+      ].map(loggableUrlOf),
+      [
+        'https://gitlab.com/o/n.git',
+        'https://github.com/o/a@b',
+        'https://host:8443/o',
+        'git@github.com:o/n.git',
+        'ssh://host:2222/o/n',
+        'https://github.com/o/n',
+        '/srv/o@x/n',
+      ],
+    );
+  });
+
+  it('R-26: a derived path loses the userinfo of its first segment and keeps an @ further on', () => {
+    deepStrictEqual(
+      [
+        'oauth2:tok@gitlab.com/o/n',
+        'tok@github.com/o/a@b',
+        'github.com/o/a@b',
+      ].map(loggableRelativeOf),
+      ['gitlab.com/o/n', 'github.com/o/a@b', 'github.com/o/a@b'],
+    );
   });
 });

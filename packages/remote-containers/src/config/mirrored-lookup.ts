@@ -7,7 +7,10 @@
 
 import type {Logger} from 'lib-log';
 import {type Candidate, discoverConfigurations} from './discovery.ts';
+import path from 'node:path';
 import {
+  loggableRelativeOf,
+  loggableUrlOf,
   mirroredFolderIn,
   mirroredPathsOf,
   remoteUrlsOf,
@@ -30,7 +33,8 @@ export interface MirroredLookupPorts {
 
 /**
  * The configurations that the remotes of `folder` map to under the roots, each once, in the order found: the roots in
- * the order of the setting, then the remotes in the order `git` printed them. The candidate paths checked go to the log.
+ * the order of the setting, then the remotes in the order `git` printed them. The candidate paths checked go to the log,
+ * with the userinfo of a remote's authority left out, since a remote may carry a credential there.
  */
 export async function mirroredCandidatesOf(
   ports: MirroredLookupPorts,
@@ -46,16 +50,22 @@ export async function mirroredCandidatesOf(
   for (const url of urls) {
     const [relative] = derive(url);
     if (relative === undefined) {
-      ports.logger.info(`the remote ${url} names no mirrored folder`);
+      ports.logger.info(
+        `the remote ${loggableUrlOf(url)} names no mirrored folder`,
+      );
       continue;
     }
     for (const root of roots) {
       const place = mirroredFolderIn(root, relative);
       if (place === undefined) {
-        ports.logger.info(`the mirrored folder of ${url} is not under ${root}`);
+        ports.logger.info(
+          `the mirrored folder of ${loggableUrlOf(url)} is not under ${root}`,
+        );
         continue;
       }
-      ports.logger.info(`looking for a configuration in ${place}`);
+      ports.logger.info(
+        `looking for a configuration in ${path.resolve(root, loggableRelativeOf(relative))}`,
+      );
       for (const candidate of await discoverConfigurations(
         place,
         ports,

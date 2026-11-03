@@ -24,7 +24,7 @@ function listOf(
 interface Scene {
   ports: MirroredLookupPorts;
   asked: string[];
-  lines: string[];
+  sink: MemorySink;
 }
 
 /** The lookup over a file system, with the remotes `printed`, the roots, and a folder that is trusted or not. */
@@ -40,7 +40,7 @@ function sceneOf(
   const sink = new MemorySink();
   return {
     asked,
-    lines: [],
+    sink,
     ports: {
       trusted: () => options.trusted ?? true,
       roots: () => options.roots ?? [],
@@ -174,6 +174,31 @@ describe('the lookup of a repository’s configuration (card containers-161, F-0
     deepStrictEqual(
       await mirroredCandidatesOf(scene.ports, '/w/p', () => ['../x']),
       [],
+    );
+  });
+
+  it('R-26: no log line holds the credential of a remote’s authority, whether it maps to a folder, escapes its root or names nothing', async () => {
+    const scene = sceneOf({
+      printed: [
+        'remote.a.url https://oauth2:s3cr3t-token@gitlab.com/o/n.git',
+        'remote.b.url https://s3cr3t-token@github.com/o/n',
+        'remote.c.url https://user:s3cr3t-token@host/../../etc',
+      ].join('\n'),
+      roots: [ROOT],
+    });
+    await mirroredCandidatesOf(scene.ports, '/w/p');
+    await mirroredCandidatesOf(scene.ports, '/w/p', () => [
+      't:s3cr3t-token@h/../x',
+    ]);
+    const logged = JSON.stringify(scene.sink.lines);
+    deepStrictEqual(
+      [
+        logged.includes('s3cr3t-token'),
+        logged.includes(path.join(ROOT, 'gitlab.com', 'o', 'n')),
+        logged.includes(path.join(ROOT, 'github.com', 'o', 'n')),
+        logged.includes('https://host/../../etc'),
+      ],
+      [false, true, true, true],
     );
   });
 });

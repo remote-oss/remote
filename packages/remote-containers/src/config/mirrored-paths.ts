@@ -112,3 +112,19 @@ export function remoteUrlsOf(printed: string): string[] {
   });
   return [...new Set(urls.filter(url => url !== ''))];
 }
+
+/** The userinfo of a URL's authority: everything between `//` and the last `@` before the path. */
+const AUTHORITY_USERINFO = /(\/\/)[^/?#]*@/u;
+
+/** The userinfo of the first segment of a derived path, where `https://` keeps the whole authority. */
+const SEGMENT_USERINFO = /^[^/]*@/u;
+
+/** A remote's URL for the log: the userinfo of its authority, where a credential may sit, taken out. */
+export function loggableUrlOf(url: string): string {
+  return url.replace(AUTHORITY_USERINFO, '$1');
+}
+
+/** A derived path for the log: the userinfo that `https://` keeps in its first segment taken out. */
+export function loggableRelativeOf(relative: string): string {
+  return relative.replace(SEGMENT_USERINFO, '');
+}
