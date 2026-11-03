@@ -34,6 +34,8 @@ export const FAILURE_TEMPLATES = {
   S289: 'Reload Window',
   S297: 'Retry',
   S339: "The 'docker' command was not found. Make sure Docker is installed.",
+  S344: 'The bootstrap container image does not include a Docker CLI. Please use an image that has the Docker CLI installed.',
+  S345: 'The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.',
   S346: 'The container does not meet all the requirements of the VS Code Server.',
   S357: 'The feature was not found either because it is no longer available or because of insufficient permissions to access it.',
   S359: "The hardware architecture '{0}' of the container is not supported.",

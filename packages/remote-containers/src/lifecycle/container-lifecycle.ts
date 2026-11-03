@@ -268,6 +268,15 @@ export function containerLifecycleOf(dependencies: {
   userDataFolder?: string;
   /** What a connect knows of a Compose configuration before the CLI runs; a configuration is no Compose one without it. */
   compose?: (request: ComposeResolveRequest) => Promise<ComposeResolution>;
+  /**
+   * Where the commands left for the background run, when not where `up` ran: the bridge, the target it is given in
+   * place of `up`'s, and what is done once the run has ended, however it ended.
+   */
+  backgroundStage?: {
+    cli: CliBridge;
+    targetOf(upTarget: CliTarget): CliTarget;
+    ended(): void;
+  };
 }): ContainerLifecycle {
   const {
     engine,
@@ -277,6 +286,7 @@ export function containerLifecycleOf(dependencies: {
     clock,
     compose,
     userDataFolder,
+    backgroundStage,
   } = dependencies;
   let background: AbortController | undefined;
   let stage: 'idle' | 'running' | 'ended' = 'idle';
@@ -366,9 +376,12 @@ export function containerLifecycleOf(dependencies: {
     background = own;
     stage = 'running';
     presenter.backgroundStarted();
-    void bridge
+    void (backgroundStage?.cli ?? bridge)
       .runUserCommands(
-        {...target, terminalSize: presenter.terminalSize()},
+        {
+          ...(backgroundStage?.targetOf(target) ?? target),
+          terminalSize: presenter.terminalSize(),
+        },
         containerId,
         onCliEvent,
         own.signal,
@@ -376,6 +389,7 @@ export function containerLifecycleOf(dependencies: {
         presenter.attachStdin,
       )
       .then(result => {
+        backgroundStage?.ended();
         if (background === own && !own.signal.aborted) {
           end();
         }

@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
 import {
+  bootstrapToolMissing,
   cancelled,
   checkoutFailed,
   cloneFailed,
@@ -196,11 +197,13 @@ describe('the failures of the container connector (card containers-08)', () => {
     );
   });
 
-  it('F-0701 7.E2, 7.E3 (card containers-151): a failed clone quotes git in S193, and a failed checkout wraps S176', () => {
+  it('F-0701 7.E2, 7.E3 (card containers-151): a failed clone quotes git in S193, a failed checkout wraps S176, and a missing tool is S344 or S345', () => {
     deepStrictEqual(
       [
         cloneFailed('fatal: Remote branch x not found in upstream origin'),
         checkoutFailed('https://github.com/o/r'),
+        bootstrapToolMissing('S344'),
+        bootstrapToolMissing('S345'),
       ].map(failed => [failed.kind, reasonText(failed.reason, english)]),
       [
         [
@@ -210,6 +213,14 @@ describe('the failures of the container connector (card containers-08)', () => {
         [
           'cloneFailed',
           'Git clone failed. Error: Failed to checkout the repository https://github.com/o/r.',
+        ],
+        [
+          'cloneFailed',
+          'The bootstrap container image does not include a Docker CLI. Please use an image that has the Docker CLI installed.',
+        ],
+        [
+          'cloneFailed',
+          'The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.',
         ],
       ],
     );

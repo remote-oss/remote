@@ -2577,4 +2577,45 @@ describe('the container of a clone in a volume (card containers-151)', () => {
       [false, NEW, VOLUME_LABELS],
     );
   });
+  it('F-0701, ADR-0009: the background run goes to its own bridge with its own target, and its end is told once', async () => {
+    const upBridge = fakeBridge();
+    const backgroundBridge = fakeBridge();
+    const ended: string[] = [];
+    const lifecycle = containerLifecycleOf({
+      engine: scriptedEngine({
+        ...EMPTY_LISTING,
+        [`inspect --type container ${NEW}`]: [
+          ran(inspected([[NEW, 'running']])),
+        ],
+      }),
+      cli: upBridge,
+      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+      presenter: recordingPresenter().presenter,
+      clock: () => 0,
+      backgroundStage: {
+        cli: backgroundBridge,
+        targetOf: target => ({...target, workspaceFolder: '/stand-in'}),
+        ended: () => ended.push('ended'),
+      },
+    });
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    deepStrictEqual(
+      [
+        upBridge.ups.length,
+        upBridge.runs.length,
+        backgroundBridge.runs.map(run => [
+          run.containerId,
+          run.target.workspaceFolder,
+        ]),
+        ended,
+      ],
+      [1, 0, [[NEW, '/stand-in']], ['ended']],
+    );
+  });
 });

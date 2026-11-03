@@ -77,6 +77,11 @@ export function cloneFailed(gitText: string): Failed {
   return failure('cloneFailed', {}, {id: 'S193', values: [gitText]});
 }
 
+/** The bootstrap container lacks a tool the clone needs: the Docker CLI (S344) or Git (S345). */
+export function bootstrapToolMissing(stringId: 'S344' | 'S345'): Failed {
+  return failure('cloneFailed', {}, {id: stringId});
+}
+
 /** The commit the source names could not be checked out after the clone of `repository`. */
 export function checkoutFailed(repository: string): Failed {
   return failure(
