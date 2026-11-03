@@ -6,17 +6,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, readdirSync, readFileSync} from 'node:fs';
-import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
-import {
-  inWindow,
-  reloadWindow,
-  userSettingsFile,
-  variable,
-  windowNames,
-} from '../windows/harness.ts';
-import {activations} from '../windows/folder-windows.ts';
+import {inWindow, reloadWindow} from '../windows/harness.ts';
 import {VIEW} from '../windows/explorer-rows.ts';
 import {
   bindKeys,
@@ -28,106 +18,23 @@ import {
   visit,
 } from '../windows/explorer-folders.ts';
 import {
+  COMMANDS,
+  CONTROL_COMMAND,
+  CONTROL_KEY,
+  FOLDERS,
+  HOST,
+  PALETTE_KEY,
+  press,
+  snapshotOf,
+  stateKeys,
+  usable,
+} from '../windows/explorer-commands.ts';
+import {
   clickRowLabel,
-  dialogOf,
-  editorTabs,
   notifications,
-  paletteRows,
   pressControlAlt,
-  pressEscape,
-  statusItem,
   titleAction,
-  windowTitle,
 } from '../windows/renderer.ts';
-
-const HOST = 'harness';
-
-/** The commands the rows press, other than the two sign-in commands, each with the key the rows bind to it. */
-const COMMANDS = [
-  ['a', 'add'],
-  ['b', 'configureSsh'],
-  ['c', 'refresh'],
-  ['d', 'connectToRemoteInNewWindow'],
-  ['e', 'connectToRemoteInCurrentWindow'],
-  ['f', 'connectToFolderInNewWindow'],
-  ['g', 'connectToWslUsingDistro'],
-  ['h', 'connectToWslUsingDistroInNewWindow'],
-  ['i', 'connectToFolderInCurrentWindow'],
-  ['j', 'deleteFolderHistoryItem'],
-  ['k', 'unregisterTunnel'],
-] as const;
-
-/** A key bound to a command that does change the window, the control of the rows' comparison. */
-const CONTROL_KEY = 'm';
-const CONTROL_COMMAND = 'workbench.action.files.newUntitledFile';
-
-/** The key that shows the Command Palette, which proves that the keys reach the window. */
-const PALETTE_KEY = 'l';
-
-/** The folders the history holds for the rows. */
-const FOLDERS = ['c5002-b', 'c5002-a'].map(name => `${HOME}/${name}`);
-
-/** The extension's identifier, which no state key of a command's invocation may equal (F-5901). */
-const EXTENSION_ID = 'remote-oss.remote-explorer';
-
-/** The state keys of the profile's global state database that equal the extension's identifier. */
-function stateKeys(): string[] {
-  const file = path.join(
-    variable('HARNESS_USER_DATA'),
-    'User/globalStorage/state.vscdb',
-  );
-  if (!existsSync(file)) {
-    return [];
-  }
-  const database = new DatabaseSync(file, {readOnly: true});
-  try {
-    return (
-      database
-        .prepare('SELECT key FROM ItemTable WHERE key = ?')
-        .all(EXTENSION_ID) as Array<{key: string}>
-    ).map(entry => entry.key);
-  } finally {
-    database.close();
-  }
-}
-
-/** Everything the rows compare before and after a key: the window, its text and files, and the history rows. */
-async function snapshotOf(window: string): Promise<unknown> {
-  return {
-    windows: windowNames().join(','),
-    title: await windowTitle(window),
-    indicator: (await statusItem(window, 'status.host')).text,
-    activated: activations(window),
-    dialog: await dialogOf(window),
-    tabs: (await editorTabs(window)).map(entry => entry.label),
-    sshConfig: readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8'),
-    settings: readFileSync(userSettingsFile(), 'utf8'),
-    sshFolder: existsSync(path.join(runHome(), '.ssh'))
-      ? readdirSync(path.join(runHome(), '.ssh')).sort()
-      : [],
-    folderRows: (await folderRowsOf(window, HOST))
-      .map(entry => entry.description)
-      .filter(description => description.startsWith(`${HOME}/c5002-`)),
-  };
-}
-
-/** The run's own home, where the user's SSH configuration is written. */
-function runHome(): string {
-  return path.join(variable('HARNESS_RUN_FOLDER'), 'home');
-}
-
-/** Presses `key` in `window`, waits, and closes with Escape what it opened. */
-async function press(window: string, key: string): Promise<void> {
-  await pressControlAlt(window, key);
-  await new Promise(resolve => setTimeout(resolve, 2_000));
-  await pressEscape(window);
-  await new Promise(resolve => setTimeout(resolve, 1_000));
-}
-
-/** Whether the Command Palette opens in `window`: it accepts input. */
-async function usable(window: string): Promise<boolean> {
-  return (await paletteRows(window, 'Focus on Remotes')).length > 0;
-}
 
 describe('the commands of the view out of their context (card coverage-102, part 3)', function () {
   this.timeout(900_000);
