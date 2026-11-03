@@ -356,6 +356,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'lifecycle-more.test.ts',
   'lifecycle-order.test.ts',
   'mount-settings.test.ts',
+  'multi-root.test.ts',
   'open-folder-dialog.test.ts',
   'open-folder-failure.test.ts',
   'open-folder-virtual.test.ts',

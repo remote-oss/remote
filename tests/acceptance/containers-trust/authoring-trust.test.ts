@@ -1,14 +1,29 @@
 import {deepStrictEqual} from 'node:assert';
-import {activations, setUserSetting} from '../windows/folder-windows.ts';
-import {isTrusted, waitFor, windowState} from '../windows/harness.ts';
+import {mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
+import {
+  activations,
+  openWorkspaceWindow,
+  setUserSetting,
+} from '../windows/folder-windows.ts';
+import {
+  closeWindow,
+  devContainerFolder,
+  isTrusted,
+  variable,
+  waitFor,
+  windowState,
+} from '../windows/harness.ts';
 import {
   answerDialog,
   dialogOf,
+  notificationCentre,
   quickPickFacts,
   waitForDialog,
 } from '../windows/renderer.ts';
 import {
   closeScreen,
+  rowsOf,
   screenOf,
   startCommand,
   withWindow,
@@ -106,5 +121,63 @@ describe('the template screen in Restricted Mode (card coverage-72)', function (
       await closeScreen(window);
       deepStrictEqual(seen, [false, true, true, null]);
     });
+  });
+
+  it('F-0106 AC-44 (c104-trust-workspace): in an untrusted multi-root workspace whose member folder has a configuration, Trust Workspace & Continue closes the dialog with no reload, the same window shows the location pick, and no connecting notification appears', async () => {
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'c104-trust');
+    rmSync(folder, {recursive: true, force: true});
+    mkdirSync(folder, {recursive: true});
+    devContainerFolder(path.join('c104-trust', 'c104-trust-a'), {name: 'A'});
+    mkdirSync(path.join(folder, 'c104-trust-b'));
+    const file = path.join(folder, 'c104-trust.code-workspace');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        folders: [{path: 'c104-trust-a'}, {path: 'c104-trust-b'}],
+      }),
+    );
+    const window = await openWorkspaceWindow(file);
+    try {
+      const activated = activations(window);
+      const before = await isTrusted(window);
+      await startCommand(window, REOPEN);
+      await waitForDialog(window, 60_000);
+      await answerDialog(window, 'Trust Workspace & Continue');
+      await waitFor(
+        'the location pick',
+        async () =>
+          (await quickPickFacts(window))?.placeholder === WHERE_PLACEHOLDER,
+        60_000,
+      );
+      const seen: unknown[] = [
+        before,
+        await isTrusted(window),
+        activations(window) === activated,
+        (await quickPickFacts(window))?.title,
+        (await rowsOf(window)).map(([label]) => label),
+      ];
+      // Opening the notification centre would close the pick, so it is read once the screen is closed.
+      await closeScreen(window);
+      seen.push(
+        (await notificationCentre(window)).filter(text =>
+          text.startsWith('Connecting to Dev Container'),
+        ),
+        await dialogOf(window),
+      );
+      deepStrictEqual(seen, [
+        false,
+        true,
+        true,
+        'Add Dev Container Configuration Files',
+        [
+          'Add configuration to workspace',
+          'Add configuration to user data folder',
+        ],
+        [],
+        undefined,
+      ]);
+    } finally {
+      await closeWindow(window).catch(() => undefined);
+    }
   });
 });
