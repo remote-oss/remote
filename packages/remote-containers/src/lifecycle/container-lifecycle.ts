@@ -15,6 +15,7 @@ import type {
   ComposeResolveRequest,
 } from '../compose/resolver.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
+import type {ComposeMembership} from '../shutdown/protocol.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
 import {
   type MountSource,
@@ -71,6 +72,8 @@ export interface ContainerRequest {
   runArgs: readonly unknown[];
   /** The `workspaceMount` of the configuration, as the CLI read it; none when it has none. */
   workspaceMount: unknown;
+  /** Told once the Compose project is identified, before any container is looked for or made; not called for an image. */
+  composeIdentified?: (membership: ComposeMembership) => void;
   /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
   pausedRetry: (containerId: string) => Promise<boolean>;
 }
@@ -565,6 +568,13 @@ export function containerLifecycleOf(dependencies: {
     }
     if (composeResolution.kind === 'failed') {
       return {kind: 'discoveryFailed', detail: composeResolution.detail};
+    }
+    if (composeResolution.kind === 'ready') {
+      request.composeIdentified?.({
+        project: composeResolution.projectName,
+        service: composeResolution.service,
+        scope: composeResolution.scope,
+      });
     }
     const reserved = request.cacheVolume
       ? reservedMount(mountSourcesOf(request, composeResolution))

@@ -17,6 +17,14 @@ export interface ContainerIdentity {
   configFile: string;
 }
 
+/** The Compose project a connection started, and which of its services the connection's end stops. */
+export interface ComposeMembership {
+  project: string;
+  /** The primary service. */
+  service: string;
+  scope: readonly string[];
+}
+
 /** What a window's connection tells the helper. */
 export type ShutdownRequest =
   | {
@@ -24,6 +32,11 @@ export type ShutdownRequest =
       connectionId: string;
       identity: ContainerIdentity;
       engine: EngineCoordinates;
+    }
+  | {
+      type: 'compose';
+      connectionId: string;
+      compose: ComposeMembership;
     }
   | {
       type: 'container';
@@ -113,6 +126,40 @@ function readRegister(
   };
 }
 
+/** The names a member lists, or undefined when it is not a list of non-empty text. */
+function namesOf(value: unknown): string[] | undefined {
+  return Array.isArray(value) &&
+    value.every(name => typeof name === 'string' && name !== '')
+    ? (value as string[])
+    : undefined;
+}
+
+/** The compose request of `record`, or its problem. */
+function readCompose(
+  record: Record<string, unknown>,
+  connectionId: string,
+): ReadRequest {
+  const member = isRecord(record.compose) ? record.compose : {};
+  const project = textOf(member, 'project');
+  const service = textOf(member, 'service');
+  const scope = namesOf(member.scope);
+  if (project === undefined || service === undefined || scope === undefined) {
+    return {
+      kind: 'malformed',
+      problem:
+        'compose needs a project, a service and a scope of service names',
+    };
+  }
+  return {
+    kind: 'request',
+    request: {
+      type: 'compose',
+      connectionId,
+      compose: {project, service, scope},
+    },
+  };
+}
+
 /** The container request of `record`, or its problem. */
 function readContainer(
   record: Record<string, unknown>,
@@ -144,6 +191,8 @@ export function readShutdownRequest(body: unknown): ReadRequest {
   switch (body.type) {
     case 'register':
       return readRegister(body, connectionId);
+    case 'compose':
+      return readCompose(body, connectionId);
     case 'container':
       return readContainer(body, connectionId);
     case 'leave':

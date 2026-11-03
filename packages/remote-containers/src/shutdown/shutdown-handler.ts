@@ -31,6 +31,9 @@ export function createShutdownHandler(
       if (request.type === 'register') {
         return Promise.resolve(registry.register(context.lease, request));
       }
+      if (request.type === 'compose') {
+        return Promise.resolve(registry.setCompose(request));
+      }
       if (request.type === 'container') {
         return Promise.resolve(registry.setContainer(request));
       }
