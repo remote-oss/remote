@@ -438,7 +438,7 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     }
   });
 
-  it('F-2503 AC-22, AC-27, AC-32 (other-windows): a folder another window opens is not in this view until Refresh and then is, and two windows that open folders a few seconds apart are both recorded', async () => {
+  it('F-2503 AC-22, AC-27, AC-32, F-5902 AC-10 (other-windows): a folder another window opens is not in this view until Refresh and then is, and two windows that open folders a few seconds apart are both recorded', async () => {
     const first = `${HOME}/c102-o1`;
     const second = `${HOME}/c102-o2`;
     const third = `${HOME}/c102-o3`;

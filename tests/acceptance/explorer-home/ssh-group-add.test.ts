@@ -17,6 +17,7 @@ import {
 import {hostLabels, listing, VIEW} from '../windows/explorer-rows.ts';
 import {
   closeWindow,
+  companionCalls,
   startInWindow,
   readUserSettings,
   restoreUserSettings,
@@ -39,6 +40,10 @@ import {
 const PLUS = 'New Remote';
 const GEAR = 'Open SSH Config File';
 const GROUP = 'SSH';
+
+/** The companion's push that tells the explorer the hosts changed, and how long after the host is written it has. */
+const HOSTS_CHANGED = 'remote-internal.sshHostsChanged';
+const PUSH_MILLISECONDS = 1_000;
 
 /** How long the group has, after the flow's file is chosen, to show the host without Refresh. */
 const SHOWN_WITHIN_MILLISECONDS = 2_000;
@@ -104,11 +109,12 @@ describe('"New Remote" completed through the companion (card coverage-102, part 
     rmSync(sshFolder(), {recursive: true, force: true});
   });
 
-  it('F-5102 AC-13 (first-child): a host added before the first existing entry is the first child of the expanded SSH row within 2 seconds, with no Refresh and the others in order', async () => {
+  it('F-5102 AC-13, F-5902 AC-29 (first-child): (reading-1809-receiver-record) a host added before the first existing entry is the first child of the expanded SSH row within 2 seconds, with no Refresh and the others in order, after one host-list push within 1 s of the write', async () => {
     sshFile('config', ['Host alpha', 'Host beta']);
     const window = await viewWindow('add-first');
     try {
       await listing(window, ['alpha', 'beta', ...systemHosts()]);
+      const pushed = companionCalls(HOSTS_CHANGED).length;
       const chosen = await newRemote(window, 'ssh newone', userFile());
       const took = await listedWithin(
         window,
@@ -116,13 +122,16 @@ describe('"New Remote" completed through the companion (card coverage-102, part 
         chosen,
         10_000,
       );
+      const pushes = companionCalls(HOSTS_CHANGED).slice(pushed);
       deepStrictEqual(
         [
           took <= SHOWN_WITHIN_MILLISECONDS,
           (await viewRows(window, VIEW))?.find(each => each.label === GROUP)
             ?.expanded,
+          pushes.length,
+          (pushes[0]?.time ?? Infinity) - chosen <= PUSH_MILLISECONDS,
         ],
-        [true, true],
+        [true, true, 1, true],
       );
     } finally {
       await closeWindow(window);
