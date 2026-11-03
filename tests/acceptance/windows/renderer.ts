@@ -3782,3 +3782,43 @@ export async function pressQuickPickOk(name: string): Promise<void> {
     })()`,
   );
 }
+
+/** What the Settings editor shows for one setting. */
+export interface SettingRow {
+  /** The lines of the row's text, in order: the title with its indicator, then the description. */
+  lines: string[];
+  /** The state of the checkbox of a boolean setting; undefined for another kind. */
+  checked: boolean | undefined;
+  /** The tab the list is on: `User`, `Remote`, `Workspace`. */
+  section: string;
+  /** How many settings the list shows. */
+  count: number;
+}
+
+/**
+ * The first setting the Settings editor of window `name` lists, once a search has put it there; undefined when the
+ * editor lists none.
+ */
+export async function settingRow(
+  name: string,
+): Promise<SettingRow | undefined> {
+  return (
+    (await evaluate<SettingRow | null>(
+      name,
+      `(() => {
+        const items = [...document.querySelectorAll('.settings-editor .setting-item-contents')];
+        const item = items[0];
+        if (item === undefined) {
+          return null;
+        }
+        const box = item.querySelector('[role="checkbox"]');
+        return {
+          lines: item.innerText.split('\\n').map(line => line.trim()).filter(line => line !== ''),
+          checked: box === null ? undefined : box.getAttribute('aria-checked') === 'true',
+          section: (document.querySelector('.settings-editor .settings-tabs-widget .action-label.checked')?.textContent ?? '').trim(),
+          count: items.length,
+        };
+      })()`,
+    )) ?? undefined
+  );
+}
