@@ -45,7 +45,7 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
     };
   }
 
-  it('coverage-31: the fakes are the fourteen of the table, each a file named ssh in a folder of its name', () => {
+  it('coverage-31: the fakes are the fifteen of the table, each a file named ssh in a folder of its name', () => {
     deepStrictEqual(
       FAKE_CLIENTS.map(client => client.folder),
       [
@@ -63,7 +63,24 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
         'vanishing',
         'copy-stalls',
         'bad-display',
+        'broken-pipe',
       ],
+    );
+  });
+
+  it('F-2603 AC-19: the broken-pipe client ends a connection with its line and 255, and answers a check and an option lookup like the others', () => {
+    const client = FAKE_CLIENTS.find(each => each.folder === 'broken-pipe');
+    const script =
+      client === undefined ? 'missing' : clientScript(client, '/log');
+    const tail = script.slice(script.indexOf('fi\n') + 3);
+    deepStrictEqual(
+      [
+        tail.startsWith(
+          "if [ \"$kind\" = connect ]; then\n  printf '%s\\n' 'send disconnect: Broken pipe' >&2\n  exit 255\nfi\n",
+        ),
+        script.includes('exec /usr/bin/ssh "$@"'),
+      ],
+      [true, true],
     );
   });
 

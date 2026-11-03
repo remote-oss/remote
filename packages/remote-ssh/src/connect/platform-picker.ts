@@ -27,10 +27,22 @@ export interface PlatformPickPort {
   ): Promise<RemotePlatform | undefined>;
 }
 
+/** Why the pick is asked: no setting names the platform, or `ssh` ended in a broken pipe during setup. */
+export type PlatformPickVariant = 'ask' | 'brokenPipe';
+
 /** The pick for a host: the placeholder naming it, and the platforms, whose labels are names and not translated. */
-export function platformPickOf(hostName: string): PlatformPick {
+export function platformPickOf(
+  hostName: string,
+  variant: PlatformPickVariant,
+): PlatformPick {
   return {
-    placeholder: {id: 'platformPickPlaceholder', values: [hostName]},
+    placeholder: {
+      id:
+        variant === 'ask'
+          ? 'platformPickPlaceholder'
+          : 'platformPickAfterBrokenPipe',
+      values: [hostName],
+    },
     active: 'linux',
     items: [
       {label: 'Linux', platform: 'linux'},
@@ -44,12 +56,14 @@ export function platformPickOf(hostName: string): PlatformPick {
 export async function pickRemotePlatform(
   port: PlatformPickPort,
   hostName: string,
+  variant: PlatformPickVariant,
   cancellation: AbortSignal,
 ): Promise<RemotePlatform | 'cancelled'> {
   if (cancellation.aborted) {
     return 'cancelled';
   }
   return (
-    (await port.pick(platformPickOf(hostName), cancellation)) ?? 'cancelled'
+    (await port.pick(platformPickOf(hostName, variant), cancellation)) ??
+    'cancelled'
   );
 }

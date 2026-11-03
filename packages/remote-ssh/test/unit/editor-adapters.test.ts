@@ -218,7 +218,7 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
     controller?: AbortController,
   ) {
     const result = platformPickPortOf(fake.editor, same).pick(
-      platformPickOf('box'),
+      platformPickOf('box', 'ask'),
       controller?.signal ?? NEVER,
     );
     const [pick] = fake.picks;
@@ -258,7 +258,7 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
   it('F-2206 AC-2: the item the pick names as active is the one focused', () => {
     const fake = fakeEditor(() => undefined);
     void platformPickPortOf(fake.editor, same).pick(
-      {...platformPickOf('box'), active: 'windows'},
+      {...platformPickOf('box', 'ask'), active: 'windows'},
       NEVER,
     );
     deepStrictEqual(
@@ -298,7 +298,7 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
     const controller = new AbortController();
     controller.abort();
     const result = platformPickPortOf(fake.editor, same).pick(
-      platformPickOf('box'),
+      platformPickOf('box', 'ask'),
       controller.signal,
     );
     deepStrictEqual([await result, fake.picks.length], [undefined, 0]);

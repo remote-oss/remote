@@ -10,7 +10,7 @@
 import type {Connected, Failed} from 'lib-authority';
 import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
-import type {StartedServer, TransferPhase} from 'lib-server';
+import type {ProbedHost, StartedServer, TransferPhase} from 'lib-server';
 import {
   CONNECT_WAIT_TIMEOUT,
   type FailureContext,
@@ -33,6 +33,7 @@ import {
 import type {
   ConnectInput,
   ConnectionLease,
+  ConnectionTerms,
   ConnectSteps,
   ConnectWaits,
   StepFailure,
@@ -157,7 +158,7 @@ export interface Connection {
 
 /** What a connect has made so far, to give back when it fails; the tunnel is last, and it is the window's to close. */
 interface Held {
-  lease?: ConnectionLease;
+  lease?: ConnectionLease | undefined;
 }
 
 /** The text of anything a step throws. */
@@ -331,46 +332,85 @@ async function runSteps(
     }
     waits = located.value;
   }
-  const connection = await steps.openConnection(
-    input,
-    terms.value,
-    cancellation,
-  );
-  if (connection.kind === 'failed') {
-    return failure(connection.failure);
-  }
-  const lease = connection.value;
-  held.lease = lease;
-  if (lease.storedRecord === undefined) {
-    // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
-    // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
-    options.onPhase({kind: 'opened'});
-  }
-  waits ??= lease.waits;
-  if (waits === undefined) {
-    throw new Error('the connection was opened with no waits and no lookup');
-  }
-  const dropped = cancelled();
-  if (dropped !== undefined) {
-    return dropped;
-  }
-  const probed = await bounded(
-    signal => steps.probe(input, lease, signal),
-    waits.probeMilliseconds,
-    cancellation,
-    () => undefined,
-  );
-  if ('interrupted' in probed) {
-    return failure(
-      probed.interrupted === 'cancelled'
-        ? {kind: 'cancelled'}
-        : CONNECT_WAIT_TIMEOUT,
+  /**
+   * Opens the connection and probes the host with `attemptTerms`: the step failure to return, a failed connect already
+   * given back, or the lease and the host.
+   */
+  async function connectAndProbe(
+    attemptTerms: ConnectionTerms,
+  ): Promise<
+    | {failed: StepFailure}
+    | {ended: Failed}
+    | {lease: ConnectionLease; host: ProbedHost; waits: ConnectWaits}
+  > {
+    const connection = await steps.openConnection(
+      input,
+      attemptTerms,
+      cancellation,
     );
+    if (connection.kind === 'failed') {
+      return {failed: connection.failure};
+    }
+    const opened = connection.value;
+    held.lease = opened;
+    if (opened.storedRecord === undefined) {
+      // Nothing stored and live to reuse (a first connect, a retry after a failure): the progress shows from here with
+      // the title alone. A reuse stays quiet, so that a reload of a connected window shows no progress.
+      options.onPhase({kind: 'opened'});
+    }
+    waits ??= opened.waits;
+    if (waits === undefined) {
+      throw new Error('the connection was opened with no waits and no lookup');
+    }
+    const dropped = cancelled();
+    if (dropped !== undefined) {
+      return {ended: dropped};
+    }
+    const probed = await bounded(
+      signal => steps.probe(input, opened, signal),
+      waits.probeMilliseconds,
+      cancellation,
+      () => undefined,
+    );
+    if ('interrupted' in probed) {
+      return {
+        ended: failure(
+          probed.interrupted === 'cancelled'
+            ? {kind: 'cancelled'}
+            : CONNECT_WAIT_TIMEOUT,
+        ),
+      };
+    }
+    if (probed.value.kind === 'failed') {
+      return {failed: ofProbe(probed.value.failure)};
+    }
+    return {lease: opened, host: probed.value.host, waits};
   }
-  if (probed.value.kind === 'failed') {
-    return failure(ofProbe(probed.value.failure));
+
+  let attempt = await connectAndProbe(terms.value);
+  if ('failed' in attempt && attempt.failed.kind === 'brokenPipe') {
+    // Ssh ended in its Linux broken pipe: the platform is asked before the failure is shown, once per connect, and the
+    // choice is tried at once and kept nowhere.
+    held.lease?.release();
+    held.lease = undefined;
+    const picked = await steps.pickAfterBrokenPipe(input, cancellation);
+    const stopped = cancelled();
+    if (stopped !== undefined) {
+      return stopped;
+    }
+    if (picked === undefined) {
+      return failure(attempt.failed);
+    }
+    attempt = await connectAndProbe({...terms.value, platform: picked});
   }
-  const {host} = probed.value;
+  if ('ended' in attempt) {
+    return attempt.ended;
+  }
+  if ('failed' in attempt) {
+    return failure(attempt.failed);
+  }
+  const {lease, host} = attempt;
+  const tunnelWaits = attempt.waits;
   options.logger.info(hostPlatformLine(host));
   const shellLine = loginShellLine(host);
   if (shellLine !== undefined) {
@@ -511,7 +551,7 @@ async function runSteps(
         },
       ),
     // A second `ssh` has bounds of its own and a login to wait for, which a limit sized for the relay would cut off.
-    steps.tunnelPath() === 'socks' ? waits.tunnelMilliseconds : undefined,
+    steps.tunnelPath() === 'socks' ? tunnelWaits.tunnelMilliseconds : undefined,
     {kind: 'timeout'},
     late => {
       late.close();

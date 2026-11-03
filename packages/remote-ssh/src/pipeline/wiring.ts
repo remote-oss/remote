@@ -475,6 +475,7 @@ export function stepsOf(
       prompting,
     }),
     decideTerms: terms.decideTerms,
+    pickAfterBrokenPipe: terms.pickAfterBrokenPipe,
     lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
     locateClient,
     holdLookupFailure: (failed, cancellation) => {

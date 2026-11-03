@@ -907,6 +907,125 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
+  /** A step set whose first connection runs fail with `failures` in turn and then work, and which records its questions. */
+  function brokenPipeSteps(
+    recording: Parameters<typeof steps>[0],
+    failures: Array<{kind: 'brokenPipe' | 'authentication'}>,
+    answer: 'linux' | 'windows' | undefined,
+  ): {steps: ReturnType<typeof steps>; platforms: string[]; asked: number[]} {
+    const platforms: string[] = [];
+    const asked: number[] = [];
+    const base = steps(recording, {
+      pickAfterBrokenPipe: () => {
+        asked.push(platforms.length);
+        return Promise.resolve(answer);
+      },
+    });
+    return {
+      platforms,
+      asked,
+      steps: {
+        ...base,
+        openConnection: async (input, terms, cancellation) => {
+          platforms.push(terms.platform);
+          const failure = failures[platforms.length - 1];
+          return failure === undefined
+            ? base.openConnection(input, terms, cancellation)
+            : {kind: 'failed', failure};
+        },
+      },
+    };
+  }
+
+  it('F-2603 AC-19 (a): a broken pipe from the connection asks the platform before any failure, tries it at once, and a second broken pipe is returned with no second question', async () => {
+    const {recording, options} = setup();
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'brokenPipe'}, {kind: 'brokenPipe'}],
+      'linux',
+    );
+    const result = await connect(INPUT, outcome.steps, options);
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        outcome.platforms,
+        outcome.asked,
+      ],
+      ['brokenPipe', ['unknown', 'linux'], [1]],
+    );
+  });
+
+  it('F-2603 AC-19 (c): no choice returns the first broken pipe and runs no ssh again', async () => {
+    const {recording, options} = setup();
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'brokenPipe'}],
+      undefined,
+    );
+    const result = await connect(INPUT, outcome.steps, options);
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        outcome.platforms,
+        outcome.asked,
+      ],
+      ['brokenPipe', ['unknown'], [1]],
+    );
+  });
+
+  it('F-2603 AC-19 (d): a choice and then a working outcome connects with the chosen platform', async () => {
+    const {recording, options} = setup();
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'brokenPipe'}],
+      'windows',
+    );
+    const result = await connect(INPUT, outcome.steps, options);
+    deepStrictEqual(
+      ['connected' in result, outcome.platforms, outcome.asked],
+      [true, ['unknown', 'windows'], [1]],
+    );
+  });
+
+  it('F-2603 AC-19 (f): a cancel while the platform is being asked, which leaves the pick unanswered, ends the connect as cancelled and not as the broken pipe, with no second try', async () => {
+    const {recording, options} = setup();
+    const controller = new AbortController();
+    const outcome = brokenPipeSteps(recording, [{kind: 'brokenPipe'}], 'linux');
+    const result = await connect(
+      INPUT,
+      {
+        ...outcome.steps,
+        pickAfterBrokenPipe: () => {
+          controller.abort();
+          return Promise.resolve(undefined);
+        },
+      },
+      {...options, cancellation: controller.signal},
+    );
+    deepStrictEqual(
+      ['kind' in result ? result.kind : result, outcome.platforms],
+      ['cancelled', ['unknown']],
+    );
+  });
+
+  it('F-2603 AC-19 (e): a failure of another kind asks nothing', async () => {
+    const {recording, options} = setup();
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'authentication'}],
+      'linux',
+    );
+    const result = await connect(INPUT, outcome.steps, options);
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        outcome.platforms,
+        outcome.asked,
+      ],
+      ['authentication', ['unknown'], []],
+    );
+  });
+
   it('a tunnel that does not open fails with the step failure and gives the lease back', async () => {
     const {recording, options} = setup();
     const result = await connect(

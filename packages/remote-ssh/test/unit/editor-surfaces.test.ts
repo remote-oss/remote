@@ -260,7 +260,7 @@ describe("the connect's surfaces over the editor", () => {
   it('F-2206 5.2 step 3: the picked platform is given', async () => {
     const {surfaces} = surfacesWith({platform: 'windows'});
     deepStrictEqual(
-      await surfaces.pickPlatform('dev', new AbortController().signal),
+      await surfaces.pickPlatform('dev', 'ask', new AbortController().signal),
       'windows',
     );
   });
@@ -268,7 +268,7 @@ describe("the connect's surfaces over the editor", () => {
   it('F-2206 AC-9: a closed pick gives no platform', async () => {
     const {surfaces} = surfacesWith();
     deepStrictEqual(
-      await surfaces.pickPlatform('dev', new AbortController().signal),
+      await surfaces.pickPlatform('dev', 'ask', new AbortController().signal),
       undefined,
     );
   });

@@ -1541,10 +1541,10 @@ describe('the client-search launches', () => {
     launch.label.startsWith('client-'),
   );
 
-  it('coverage-31: there are 22, one for each case of the cases file', () => {
+  it('coverage-31: there are 24, one for each case of the cases file', () => {
     deepStrictEqual(
       [searches.length, clientCases(REPOSITORY_ROOT).length],
-      [22, 22],
+      [24, 24],
     );
   });
 
@@ -1602,10 +1602,10 @@ describe('the client-search launches', () => {
     );
   });
 
-  it('coverage-11: every case cites a criterion of F-2101, or F-2410 AC-18 for the old client with the server on a socket', () => {
+  it('coverage-11: every case cites a criterion of F-2101, F-2410 AC-18 for the old client with the server on a socket, or F-2603 AC-19 for the broken pipe', () => {
     deepStrictEqual(
       clientCases(REPOSITORY_ROOT).filter(
-        each => !/^(F-2101 AC-\d+|F-2410 AC-18)$/.test(each.cite),
+        each => !/^(F-2101 AC-\d+|F-2410 AC-18|F-2603 AC-19)$/.test(each.cite),
       ),
       [],
     );

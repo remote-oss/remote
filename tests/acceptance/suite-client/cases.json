@@ -197,6 +197,57 @@
           "answer": "dismiss"
         }
       ]
+    },
+    {
+      "label": "client-broken-pipe-linux",
+      "cite": "F-2603 AC-19",
+      "setting": "<run>/clients/broken-pipe/ssh",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {"harness": "linux"}
+      },
+      "checked": ["broken-pipe/ssh"],
+      "used": "broken-pipe/ssh",
+      "connects": 2,
+      "dialog": "Could not establish connection to \"harness\".",
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "Error connecting, please select the platform of the remote host: \"harness\"",
+          "answer": "linux"
+        },
+        {"surface": "failureDialog", "match": "\"", "answer": "dismiss"},
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action",
+          "answer": "dismiss"
+        }
+      ]
+    },
+    {
+      "label": "client-broken-pipe-escape",
+      "cite": "F-2603 AC-19",
+      "setting": "<run>/clients/broken-pipe/ssh",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {"harness": "linux"}
+      },
+      "checked": ["broken-pipe/ssh"],
+      "used": "broken-pipe/ssh",
+      "dialog": "Could not establish connection to \"harness\".",
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "Error connecting, please select the platform of the remote host: \"harness\"",
+          "answer": "dismiss"
+        },
+        {"surface": "failureDialog", "match": "\"", "answer": "dismiss"},
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action",
+          "answer": "dismiss"
+        }
+      ]
     }
   ]
 }
