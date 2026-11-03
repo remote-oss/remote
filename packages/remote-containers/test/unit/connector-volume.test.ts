@@ -144,7 +144,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
-  it('F-0106 BR-13: a clone opens trusted, and an Inspect Volume window is not forced trusted', async () => {
+  it('F-0106 BR-13: a clone opens trusted, and a payload that explores a volume isn’t connected by a clone’s resolve at all', async () => {
     const inspected = volumePayloadOf({
       kind: 'volume',
       repositoryPath: 'https://github.com/o/r',
@@ -158,12 +158,14 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
       await volumeScene().connector.connect(inputOf(inspected)),
     ];
     deepStrictEqual(
-      results.map(result => 'trusted' in result && result.trusted),
-      [true, false],
+      results.map(result =>
+        'connectionToken' in result ? result.trusted : result.kind,
+      ),
+      [true, 'containerSetupFailed'],
     );
   });
 
-  it('F-0106 BR-13 (reading-1973-resolve-consent): a refused confirmation ends the resolve silently before any engine call; an Inspect Volume window never asks', async () => {
+  it('F-0106 BR-13 (reading-1973-resolve-consent): a refused confirmation ends the resolve silently before any engine call; a crafted Inspect Volume payload isn’t asked, and never creates a volume, clones or starts anything', async () => {
     const refused = volumeScene();
     refused.consentGiven = false;
     const failed = await refused.connector.connect(inputOf(VOLUME_PAYLOAD));
@@ -189,8 +191,14 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         refused.engineCalls.length,
         refused.volumeCalls,
         inspected.volumeCalls.includes('consent'),
+        linesOf(inspected).filter(
+          line =>
+            line.startsWith('volume create') ||
+            line.includes(' clone ') ||
+            line.startsWith('run '),
+        ),
       ],
-      ['cloneConsentRefused', true, true, 0, ['consent'], false],
+      ['cloneConsentRefused', true, true, 0, ['consent'], false, []],
     );
   });
 

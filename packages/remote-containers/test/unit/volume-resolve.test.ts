@@ -365,4 +365,26 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
       ['type=volume,source=data,target=/workspaces', true],
     );
   });
+
+  it('a payload that says it explores a volume is refused before any engine call, whether its volume is missing or empty, so it never clones', async () => {
+    const explored = {...TARGET, inspectVolume: true};
+    const [missing, empty] = await Promise.all([
+      sceneOf({target: explored}),
+      sceneOf({
+        target: explored,
+        script: short => (short === 'volume inspect' ? exited(0) : undefined),
+      }),
+    ]);
+    deepStrictEqual(
+      [missing, empty].map(scene => [
+        scene.calls,
+        scene.record,
+        reasonOf(scene.resolution),
+      ]),
+      [
+        [[], [], {id: 'S034'}],
+        [[], [], {id: 'S034'}],
+      ],
+    );
+  });
 });

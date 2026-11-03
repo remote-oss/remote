@@ -107,6 +107,12 @@ export async function resolveVolume(
   payload: string,
   target: DevContainerVolume,
 ): Promise<VolumeResolution> {
+  if (target.inspectVolume) {
+    ports.logger.info(
+      'an explored volume is never created, cloned into or set up by a clone’s resolve',
+    );
+    return {kind: 'failed', failure: containerSetupFailed()};
+  }
   const origin = ports.typed(payload) ? 'typed' : 'link';
   const source = cloneSourceOf(target.repositoryPath, origin);
   if ('refused' in source || !plainFolder(target.folder)) {
