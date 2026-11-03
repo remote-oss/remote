@@ -311,6 +311,9 @@ const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
 const SECRETS_ACCOUNTS_RESET =
   'printf "%s:%s\\n" harness-2fa "$HOST_PASSWORD" harness-expired "$HOST_PASSWORD" | chpasswd && chage -d 0 harness-expired';
 
+/** The host setup of the agent-notmp launch: the ACL entry that keeps harness-notmp from creating links in /tmp, put back. */
+const AGENT_NOTMP_ACL = 'setfacl -m u:harness-notmp:r-x /tmp';
+
 /** The first part of the containers suite's test files: about half its time, from the start of the alphabet. */
 const CONTAINERS_A_FILES: readonly string[] = [
   'authoring-container.test.ts',
@@ -951,6 +954,14 @@ export function launchesOf(root: string): Launch[] {
       hostSetup: [{command: SECRETS_ACCOUNTS_RESET}],
     },
     {
+      // The account that may not create agent links in /tmp, on the Ubuntu 26.04 host; each attempt starts with its ACL entry.
+      ...RENDERER_LAUNCH,
+      label: 'agent-notmp',
+      suite: 'agent-notmp',
+      hostBase: 'ubuntu-26.04',
+      hostSetup: [{command: AGENT_NOTMP_ACL}],
+    },
+    {
       ...RENDERER_LAUNCH,
       label: 'default-ports',
       suite: 'default-ports',
@@ -986,12 +997,26 @@ export function launchesOf(root: string): Launch[] {
       ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
-      environment: {...EXPLORER_LAUNCH.environment, HOME: '<run>/home'},
+      // Core's dialogs are drawn in the window, where the renderer helpers read them.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/home',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
     },
     {
       ...EXPLORER_LAUNCH,
       label: 'explorer-rows',
       suite: 'explorer-rows',
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-folders',
+      suite: 'explorer-folders',
+      // The confirmation of File: Clear Recently Opened... is drawn in the window, where the renderer helpers read it.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
     },
     {
       ...EXPLORER_LAUNCH,
@@ -1032,7 +1057,7 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...TRUST_LAUNCH.settings,
         'remote.SSH.useLocalServer': false,
-        'remote.SSH.remotePlatform': {harness: 'linux'},
+        'remote.SSH.remotePlatform': {harness: 'linux', agentfwd: 'linux'},
       },
     },
     {

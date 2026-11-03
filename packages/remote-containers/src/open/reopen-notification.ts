@@ -1,6 +1,6 @@
 /**
- * @fileoverview The notification a local window with one folder shows when the folder holds a dev container
- * configuration: reopen the folder in its container, or stop asking for this folder or for every folder. Whether it
+ * @fileoverview The notification a local window shows when its folder, or a root of its workspace, holds a dev container
+ * configuration: reopen it in its container, or stop asking for this folder or workspace, or for every one. Whether it
  * is suppressed is kept in the extension's own storage, as the time of the choice against the time of the last reset.
  */
 
@@ -17,19 +17,25 @@ export const REOPEN_NOTIFICATION_KEY =
 /** The English templates of the notification, by their string ids. */
 const REOPEN_TEMPLATES = {
   S426: '{0} Reopen folder to develop in a container ([learn more]({2})).{1}',
+  S427: '{0} Reopen workspace to develop in a container ([learn more]({2})).{1}',
   S186: 'Folder contains a Dev Container configuration file.',
+  S405: 'Workspace contains a Dev Container configuration file.',
   S368: 'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository.',
   S293: 'Reopen in Container',
   S150: "Don't Show Again...",
   S151: "Don't show again for the current folder or for any folder?",
+  S152: "Don't show again for the current workspace or for any workspace?",
   S035: 'Any Folder',
+  S036: 'Any Workspace',
   S101: 'Current Folder',
+  S102: 'Current Workspace',
 } as const;
 
 /** What a window is, as far as the notification cares. */
 interface NotificationWindow {
   remote: boolean;
-  workspaceFile: boolean;
+  /** Whether the window shows no workspace file, a saved `.code-workspace` file, or an unsaved multi-root workspace. */
+  workspace: 'none' | 'saved' | 'untitled';
   /** The workspace folders, in order. */
   folders: ReadonlyArray<{scheme: string; fsPath: string}>;
 }
@@ -103,21 +109,74 @@ async function store(
 /** Where the configuration the notification speaks of is: in the folder, or in the extension's store of user data. */
 export type NotificationVariant = 'folder' | 'userData';
 
+/** How a kind of window words its notification and its follow-up: the skeleton, the choices and the log words. */
+interface Wording {
+  skeleton: string;
+  scopeQuestion: string;
+  anyChoice: string;
+  currentChoice: string;
+  noun: 'folder' | 'workspace';
+}
+
+/** What the notification is for a window: shown or not, and the wording of the first sentence and of the rest. */
+interface Offer {
+  wording: Wording;
+  /** Whether the first sentence is the plain one, S186 or S405, and not the repository-configuration one, S368. */
+  plain: boolean;
+}
+
+/** The offer a window gets over the configuration kind of each of its roots, or none when nothing is to be shown. */
+function offerFor(
+  workspace: NotificationWindow['workspace'],
+  kinds: ReadonlyArray<'none' | 'folder' | 'stored'>,
+): Offer | undefined {
+  if (kinds.every(kind => kind === 'none')) {
+    return undefined;
+  }
+  const folderWording: Wording = {
+    skeleton: REOPEN_TEMPLATES.S426,
+    scopeQuestion: REOPEN_TEMPLATES.S151,
+    anyChoice: REOPEN_TEMPLATES.S035,
+    currentChoice: REOPEN_TEMPLATES.S101,
+    noun: 'folder',
+  };
+  if (workspace === 'none') {
+    return {wording: folderWording, plain: kinds[0] === 'folder'};
+  }
+  if (workspace === 'untitled') {
+    // An untitled workspace is worded as a folder, and its first sentence is always the repository-configuration one.
+    return {wording: folderWording, plain: false};
+  }
+  return {
+    wording: {
+      skeleton: REOPEN_TEMPLATES.S427,
+      scopeQuestion: REOPEN_TEMPLATES.S152,
+      anyChoice: REOPEN_TEMPLATES.S036,
+      currentChoice: REOPEN_TEMPLATES.S102,
+      noun: 'workspace',
+    },
+    plain: kinds.includes('folder'),
+  };
+}
+
 /**
- * Offers to reopen the window's folder in its container, once. The user data variant is for a configuration newly
- * written to the store, which the folder's own files do not show.
+ * Offers to reopen the window in its container, once: the folder of a window with one, or a saved or unsaved workspace
+ * when any of its roots has a configuration. The user data variant is for a configuration newly written to the store,
+ * which the folder's own files do not show, and is for a window with one folder only.
  */
 export async function offerReopen(
   ports: ReopenNotificationPorts,
   variant: NotificationVariant = 'folder',
 ): Promise<void> {
   const {window, translate, logger} = ports;
-  const [folder] = window.folders;
+  const roots = window.folders;
   if (
     window.remote ||
-    window.workspaceFile ||
-    window.folders.length !== 1 ||
-    folder?.scheme !== 'file' ||
+    roots.length === 0 ||
+    roots.some(root => root.scheme !== 'file') ||
+    (window.workspace === 'none' && roots.length !== 1) ||
+    (window.workspace === 'untitled' && roots.length < 2) ||
+    (variant === 'userData' && window.workspace !== 'none') ||
     isSuppressed(
       ports.global.get(REOPEN_NOTIFICATION_KEY),
       ports.workspace.get(REOPEN_NOTIFICATION_KEY),
@@ -125,20 +184,28 @@ export async function offerReopen(
   ) {
     return;
   }
-  const kind =
+  const kinds =
     variant === 'userData'
-      ? 'stored'
-      : await ports.configurationKind(folder.fsPath);
-  if (kind === 'none') {
+      ? ['stored' as const]
+      : await Promise.all(
+          roots.map(root => ports.configurationKind(root.fsPath)),
+        );
+  const offer = offerFor(window.workspace, kinds);
+  if (offer === undefined) {
     return;
   }
+  const {wording} = offer;
   const reopen = translate(REOPEN_TEMPLATES.S293);
   const suppress = translate(REOPEN_TEMPLATES.S150);
+  const first =
+    wording.noun === 'workspace' && offer.plain
+      ? REOPEN_TEMPLATES.S405
+      : offer.plain
+        ? REOPEN_TEMPLATES.S186
+        : REOPEN_TEMPLATES.S368;
   const answer = await ports.show(
-    filled(translate, REOPEN_TEMPLATES.S426, [
-      translate(
-        kind === 'folder' ? REOPEN_TEMPLATES.S186 : REOPEN_TEMPLATES.S368,
-      ),
+    filled(translate, wording.skeleton, [
+      translate(first),
       '',
       CONTAINERS_INTRODUCTION,
     ]),
@@ -152,17 +219,17 @@ export async function offerReopen(
   if (answer !== suppress) {
     return;
   }
-  const anyFolder = translate(REOPEN_TEMPLATES.S035);
-  const currentFolder = translate(REOPEN_TEMPLATES.S101);
-  const scope = await ports.show(translate(REOPEN_TEMPLATES.S151), [
-    anyFolder,
-    currentFolder,
+  const anyChoice = translate(wording.anyChoice);
+  const currentChoice = translate(wording.currentChoice);
+  const scope = await ports.show(translate(wording.scopeQuestion), [
+    anyChoice,
+    currentChoice,
   ]);
-  if (scope === anyFolder) {
-    logger.info('the reopen notification: suppressed for any folder');
+  if (scope === anyChoice) {
+    logger.info(`the reopen notification: suppressed for any ${wording.noun}`);
     await store(ports.global, 'suppressedAt', ports.now());
-  } else if (scope === currentFolder) {
-    logger.info('the reopen notification: suppressed for this folder');
+  } else if (scope === currentChoice) {
+    logger.info(`the reopen notification: suppressed for this ${wording.noun}`);
     await store(ports.workspace, 'suppressedAt', ports.now());
   }
 }

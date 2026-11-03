@@ -4,6 +4,7 @@
  * line feed, so the result block reads the same as the POSIX script's.
  */
 
+import {PROGRESS_PREFIX} from './progress-line.ts';
 import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 import type {FunctionRole} from './steps.ts';
 
@@ -40,6 +41,30 @@ const COMMON_FUNCTIONS: readonly string[] = [
   'function Test-Program([string]$Name) {',
   '  return $null -ne (Get-Command -Name $Name -CommandType Application -ErrorAction SilentlyContinue)',
   '}',
+  'function New-Folder([string]$Path) {',
+  '  [void][System.IO.Directory]::CreateDirectory($Path)',
+  '}',
+  'function Get-FailureMessage($Failure) {',
+  '  $Exception = $Failure.Exception',
+  '  if ($null -ne $Exception.InnerException) {',
+  '    $Exception = $Exception.InnerException',
+  '  }',
+  '  return $Exception.Message',
+  '}',
+  'function New-Secret {',
+  "  $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'",
+  '  $Bytes = New-Object byte[] 32',
+  '  $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()',
+  '  $Generator.GetBytes($Bytes)',
+  '  $Generator.Dispose()',
+  '  return -join ($Bytes | ForEach-Object { $Characters[$_ % 62] })',
+  '}',
+  'function Start-Program([hashtable]$Launch) {',
+  "  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {",
+  "    $Launch.WindowStyle = 'Hidden'",
+  '  }',
+  '  return Start-Process @Launch',
+  '}',
   'function Get-NowSeconds {',
   '  return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()',
   '}',
@@ -66,24 +91,369 @@ const COMMON_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/** The environment setup, dot-sourced when it exists, and the proxy variables the host's own environment does not set. */
+const ENVIRONMENT_FUNCTIONS: readonly string[] = [
+  'function Initialize-Environment {',
+  "  if ($ENVIRONMENT_SETUP -ne '' -and (Test-Path -LiteralPath $ENVIRONMENT_SETUP -PathType Leaf)) {",
+  '    . $ENVIRONMENT_SETUP',
+  '  }',
+  "  if ($PROXY_HTTP -ne '' -and -not $env:http_proxy) {",
+  '    $env:http_proxy = $PROXY_HTTP',
+  '  }',
+  "  if ($PROXY_HTTPS -ne '' -and -not $env:https_proxy) {",
+  '    $env:https_proxy = $PROXY_HTTPS',
+  '  }',
+  '}',
+];
+
 /**
- * The text of each function role in the PowerShell script. BusyBox doesn't exist on Windows, so its role is empty; the
- * other empty roles are filled as their steps are built.
+ * The install lock: the lock file opened with no sharing, held until the script releases it or ends. A second opener
+ * fails with a plain IOException (busy); any other failure, its subclasses included, is a write failure, reported
+ * with its message.
+ */
+const LOCK_FUNCTIONS: readonly string[] = [
+  '$LockStream = $null',
+  "$LockCandidate = ''",
+  "$LockError = ''",
+  'function Get-LockPath([string]$Commit) {',
+  "  if ($LOCK_IN_TEMPORARY -eq 'yes') {",
+  "    return [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), $LOCK_PREFIX + '.' + $Commit)",
+  '  }',
+  "  return [System.IO.Path]::Combine($DATA_DIR, 'bin', $Commit, $LOCK_PREFIX + '.' + $Commit)",
+  '}',
+  'function Enter-Lock([string]$Commit) {',
+  '  $script:LockCandidate = Get-LockPath $Commit',
+  "  $script:LockError = ''",
+  '  try {',
+  '    $script:LockStream = [System.IO.File]::Open($script:LockCandidate, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)',
+  '  } catch [System.IO.IOException] {',
+  '    if ($_.Exception.GetType() -eq [System.IO.IOException]) {',
+  '      return 1',
+  '    }',
+  '    $script:LockError = Get-FailureMessage $_',
+  '    return 2',
+  '  } catch {',
+  '    $script:LockError = Get-FailureMessage $_',
+  '    return 2',
+  '  }',
+  '  return 0',
+  '}',
+  'function Exit-Lock {',
+  '  if ($null -ne $script:LockStream) {',
+  '    $script:LockStream.Dispose()',
+  '    $script:LockStream = $null',
+  '    Remove-Item -LiteralPath $script:LockCandidate -Force -ErrorAction SilentlyContinue',
+  '  }',
+  '}',
+  'function Write-Failed([string]$Path, [string]$Message) {',
+  "  Add-Fact 'server.writeFailedPath' $Path",
+  "  Add-Fact 'server.writeFailedError' $Message",
+  "  Complete-Step 'CreateInstallDirFailed'",
+  '}',
+  'function Enter-LockOrComplete([string]$Commit) {',
+  '  $Taken = Enter-Lock $Commit',
+  '  if ($Taken -eq 1) {',
+  "    Add-Fact 'server.lockPath' $script:LockCandidate",
+  "    Complete-Step 'LockBusy'",
+  '  }',
+  '  if ($Taken -eq 2) {',
+  "    Add-Fact 'server.lockPath' $script:LockCandidate",
+  "    Add-Fact 'server.lockInTemporary' $LOCK_IN_TEMPORARY",
+  '    Write-Failed $script:LockCandidate $script:LockError',
+  '  }',
+  '}',
+];
+
+/** Downloads the archive, through the proxy the environment names; a 404 is reported as a fact. Returns 0 when it worked. */
+const FETCH_FUNCTIONS: readonly string[] = [
+  'function Save-Archive([string]$Address, [string]$Archive) {',
+  '  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12',
+  "  $Request = @{Uri = $Address; OutFile = $Archive; UseBasicParsing = $true; TimeoutSec = [int]$DOWNLOAD_SECONDS; ErrorAction = 'Stop'}",
+  "  if ($Address.StartsWith('https:') -and $env:https_proxy) {",
+  '    $Request.Proxy = $env:https_proxy',
+  "  } elseif ($Address.StartsWith('http:') -and $env:http_proxy) {",
+  '    $Request.Proxy = $env:http_proxy',
+  '  }',
+  '  try {',
+  '    Invoke-WebRequest @Request',
+  '    return 0',
+  '  } catch {',
+  '    $Response = $_.Exception.Response',
+  '    if ($null -ne $Response -and [int]$Response.StatusCode -eq 404) {',
+  "      Add-Fact 'server.downloadStatus' '404'",
+  '    }',
+  '    return 1',
+  '  }',
+  '}',
+];
+
+/**
+ * Unpacks the archive into a stage beside the target, a zip with .NET's own reader and a tar file with `tar.exe`, and
+ * moves its content into the target, lifting a single top folder. Returns whether anything was moved.
+ */
+const UNPACK_FUNCTIONS: readonly string[] = [
+  'function Write-StepProgress([string]$Phase, [int]$Percent) {',
+  `  Write-Line ('${PROGRESS_PREFIX} ' + $Phase + ' ' + $Percent)`,
+  '}',
+  'function Move-ArchiveTop([string]$Stage, [string]$Target) {',
+  '  $Entries = @(Get-ChildItem -LiteralPath $Stage -Force)',
+  '  $Source = $Stage',
+  '  if ($Entries.Count -eq 1 -and $Entries[0].PSIsContainer -and -not ($Entries[0].Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {',
+  '    $Source = $Entries[0].FullName',
+  '  }',
+  '  $Moved = $false',
+  '  foreach ($Entry in @(Get-ChildItem -LiteralPath $Source -Force)) {',
+  '    try {',
+  '      Move-Item -LiteralPath $Entry.FullName -Destination $Target -Force -ErrorAction Stop',
+  '    } catch {',
+  '      return $false',
+  '    }',
+  '    $Moved = $true',
+  '  }',
+  '  Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue',
+  '  return $Moved',
+  '}',
+  'function Expand-ServerArchive([string]$Archive, [string]$Target) {',
+  "  $Stage = $Target + '.stage.' + $PID",
+  '  Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue',
+  '  try {',
+  '    New-Folder $Stage',
+  '    New-Folder $Target',
+  "    Write-StepProgress 'unpack' 0",
+  "    if ($ARCHIVE_FORMAT -eq 'zip') {",
+  '      Add-Type -AssemblyName System.IO.Compression.FileSystem',
+  '      [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Stage)',
+  '    } else {',
+  '      & tar.exe -xzf $Archive -C $Stage',
+  '      if ($LASTEXITCODE -ne 0) {',
+  '        return $false',
+  '      }',
+  '    }',
+  '  } catch {',
+  '    return $false',
+  '  }',
+  "  Write-StepProgress 'unpack' 100",
+  '  return (Move-ArchiveTop $Stage $Target)',
+  '}',
+];
+
+/**
+ * The server a PID file records, when it still runs: the file holds the process id and its start time in ticks, and a
+ * process whose start lies more than a second away is a recycled id. The second allows for platforms that compute the
+ * start from the boot time. No WMI or CIM query is made, which a standard user may be refused.
+ */
+const PROCESS_FUNCTIONS: readonly string[] = [
+  'function Get-RecordedServer([string]$File) {',
+  '  try {',
+  "    $Fields = @((Get-Content -LiteralPath $File -TotalCount 1 -ErrorAction Stop) -split ' ')",
+  '    if ($Fields.Count -ne 2) {',
+  '      return $null',
+  '    }',
+  '    $Found = Get-Process -Id ([int]$Fields[0]) -ErrorAction Stop',
+  '    if ($Found.HasExited -or [Math]::Abs($Found.StartTime.Ticks - [long]$Fields[1]) -gt 10000000) {',
+  '      return $null',
+  '    }',
+  '    return $Found',
+  '  } catch {',
+  '    return $null',
+  '  }',
+  '}',
+];
+
+/** The rights of a file's allow entry that let a principal read or write the secret, or change who may. */
+const SECRET_RIGHTS = '0xD00C0007';
+
+/**
+ * The connection token's functions: a token is kept only when it is a regular file, not a reparse point, holding 1 to
+ * 128 characters of [0-9A-Za-z_-], whose allow entries that grant reading or writing go only to the user, SYSTEM and
+ * Administrators, compared by SID; otherwise it is rewritten with that ACL, set before the secret is written. The
+ * Windows-only parts are functions of their own.
+ */
+const SECRET_TOKEN_FUNCTIONS: readonly string[] = [
+  'function Get-CurrentUserSid {',
+  '  return [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value',
+  '}',
+  'function Get-TokenPrincipals {',
+  "  return @((Get-CurrentUserSid), 'S-1-5-18', 'S-1-5-32-544')",
+  '}',
+  'function Test-TokenAccess([string]$File) {',
+  '  $Allowed = Get-TokenPrincipals',
+  '  foreach ($Entry in @((Get-Acl -LiteralPath $File).Access)) {',
+  `    if ([string]$Entry.AccessControlType -ne 'Allow' -or ([long]$Entry.FileSystemRights -band ${SECRET_RIGHTS}) -eq 0) {`,
+  '      continue',
+  '    }',
+  '    if ($Allowed -notcontains $Entry.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) {',
+  '      return $false',
+  '    }',
+  '  }',
+  '  return $true',
+  '}',
+  'function Set-TokenAcl([string]$File) {',
+  '  $Security = New-Object System.Security.AccessControl.FileSecurity',
+  '  $Security.SetAccessRuleProtection($true, $false)',
+  '  foreach ($Principal in Get-TokenPrincipals) {',
+  "    $Security.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule((New-Object System.Security.Principal.SecurityIdentifier $Principal), 'FullControl', 'Allow')))",
+  '  }',
+  '  Set-Acl -LiteralPath $File -AclObject $Security',
+  '}',
+  'function Test-ConnectionToken([string]$File) {',
+  '  $Item = Get-Item -LiteralPath $File -Force -ErrorAction SilentlyContinue',
+  '  if ($null -eq $Item -or $Item.PSIsContainer -or ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {',
+  '    return $false',
+  '  }',
+  "  if ([System.IO.File]::ReadAllText($File) -cnotmatch '^[0-9A-Za-z_-]{1,128}$') {",
+  '    return $false',
+  '  }',
+  '  try {',
+  '    return (Test-TokenAccess $File)',
+  '  } catch {',
+  '    return $false',
+  '  }',
+  '}',
+  'function Write-ConnectionToken([string]$File) {',
+  "  $Part = $File + '.' + $PID",
+  "  [System.IO.File]::WriteAllText($Part, '')",
+  '  Set-TokenAcl $Part',
+  '  [System.IO.File]::WriteAllText($Part, (New-Secret))',
+  '  if (Test-Path -LiteralPath $File) {',
+  '    Remove-Item -LiteralPath $File -Force -ErrorAction Stop',
+  '  }',
+  '  Move-Item -LiteralPath $Part -Destination $File -ErrorAction Stop',
+  '}',
+];
+
+/**
+ * Ends every server of the data folder: each one a PID file records, and every process whose program lies under the
+ * folder's `bin` or `cli/servers`, with its process tree (`taskkill /T` where Windows has it). Only the user's own
+ * processes show a program path, so no other user's process is touched.
+ */
+const STOP_FUNCTIONS: readonly string[] = [
+  'function Stop-ServerTree([int]$ServerId) {',
+  "  if (Test-Program 'taskkill.exe') {",
+  '    & taskkill.exe /PID $ServerId /T /F *> $null',
+  '  } else {',
+  '    Stop-Process -Id $ServerId -Force -ErrorAction SilentlyContinue',
+  '  }',
+  '}',
+  'function Stop-Servers {',
+  "  foreach ($Recorded in @(Get-ChildItem -LiteralPath $DATA_DIR -Filter '.*.pid' -Force -File -ErrorAction SilentlyContinue)) {",
+  '    $ServerProcess = Get-RecordedServer $Recorded.FullName',
+  '    if ($null -ne $ServerProcess) {',
+  '      Stop-ServerTree $ServerProcess.Id',
+  '    }',
+  '  }',
+  '  $Separator = [System.IO.Path]::DirectorySeparatorChar',
+  "  $Prefixes = @(([System.IO.Path]::Combine($DATA_DIR, 'bin') + $Separator), ([System.IO.Path]::Combine($DATA_DIR, 'cli', 'servers') + $Separator))",
+  '  foreach ($Running in @(Get-Process -ErrorAction SilentlyContinue)) {',
+  '    $Program = [string]$Running.Path',
+  "    if ($Running.Id -eq $PID -or $Program -eq '') {",
+  '      continue',
+  '    }',
+  '    foreach ($Prefix in $Prefixes) {',
+  '      if ($Program.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {',
+  '        Stop-ServerTree $Running.Id',
+  '        break',
+  '      }',
+  '    }',
+  '  }',
+  '}',
+];
+
+/** The kind of a folder under `bin/`: a 40-character commit, a `<commit>-<suffix>` leftover, or something else. */
+const FOLDER_KIND_FUNCTIONS: readonly string[] = [
+  'function Get-FolderKind([string]$Name) {',
+  "  if ($Name -cmatch '^[0-9a-f]{40}$') {",
+  "    return 'commit'",
+  '  }',
+  "  if ($Name -cmatch '^[0-9a-f]{40}-') {",
+  "    return 'leftover'",
+  '  }',
+  "  return 'other'",
+  '}',
+  'function Remove-Install([string]$Name) {',
+  '  if ((Enter-Lock $Name) -ne 0) {',
+  '    return',
+  '  }',
+  "  Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, 'bin', $Name)) -Recurse -Force -ErrorAction SilentlyContinue",
+  "  foreach ($Suffix in @('log', 'pid', 'token', 'err.log', 'socket.log', 'socket.pid', 'socket.token')) {",
+  "    Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, '.' + $Name + '.' + $Suffix)) -Force -ErrorAction SilentlyContinue",
+  '  }',
+  '  Exit-Lock',
+  '}',
+];
+
+/**
+ * The CLI start's functions: its ready port in the log, and its parent process. The parent comes from a native query,
+ * and is none where the host refuses to compile it.
+ */
+const CLI_START_FUNCTIONS: readonly string[] = [
+  'function Get-CliReadyPort {',
+  "  $Found = Select-String -LiteralPath $CliLog -Pattern '^Listening on 127\\.0\\.0\\.1:([0-9]+)$' -ErrorAction SilentlyContinue | Select-Object -First 1",
+  '  if ($null -eq $Found) {',
+  "    return ''",
+  '  }',
+  '  return $Found.Matches[0].Groups[1].Value',
+  '}',
+  'function Get-ParentProcessId {',
+  '  try {',
+  "    Add-Type -ErrorAction Stop -TypeDefinition @'",
+  'using System;',
+  'using System.Runtime.InteropServices;',
+  'public static class RemoteOssParentProcess {',
+  '  [StructLayout(LayoutKind.Sequential)]',
+  '  private struct BasicInformation {',
+  '    public IntPtr ExitStatus;',
+  '    public IntPtr PebBaseAddress;',
+  '    public IntPtr AffinityMask;',
+  '    public IntPtr BasePriority;',
+  '    public IntPtr UniqueProcessId;',
+  '    public IntPtr InheritedFromUniqueProcessId;',
+  '  }',
+  '  [DllImport("ntdll.dll")]',
+  '  private static extern int NtQueryInformationProcess(IntPtr process, int informationClass, ref BasicInformation information, int length, out int returned);',
+  '  public static long Of(IntPtr process) {',
+  '    BasicInformation information = new BasicInformation();',
+  '    int returned;',
+  '    int status = NtQueryInformationProcess(process, 0, ref information, Marshal.SizeOf(information), out returned);',
+  '    return status == 0 ? information.InheritedFromUniqueProcessId.ToInt64() : 0;',
+  '  }',
+  '}',
+  "'@",
+  '    return [long][RemoteOssParentProcess]::Of((Get-Process -Id $PID).Handle)',
+  '  } catch {',
+  '    return 0',
+  '  }',
+  '}',
+];
+
+/** Ends the script with a status after releasing the lock it holds. */
+const LEAVE_FUNCTIONS: readonly string[] = [
+  'function Exit-Step([string]$Status) {',
+  '  Exit-Lock',
+  '  Complete-Step $Status',
+  '}',
+];
+
+/**
+ * The text of each function role in the PowerShell script. BusyBox doesn't exist on Windows, and the stop's path scan
+ * covers a server tree's processes, so those roles are empty; the other empty roles are filled as their steps are
+ * built.
  */
 export const POWERSHELL_FUNCTIONS: Readonly<
   Record<FunctionRole, readonly string[]>
 > = {
   common: COMMON_FUNCTIONS,
-  environment: [],
-  lock: [],
+  environment: ENVIRONMENT_FUNCTIONS,
+  lock: LOCK_FUNCTIONS,
   busybox: [],
-  fetch: [],
-  unpack: [],
-  leave: [],
-  process: [],
+  fetch: FETCH_FUNCTIONS,
+  unpack: UNPACK_FUNCTIONS,
+  leave: LEAVE_FUNCTIONS,
+  process: PROCESS_FUNCTIONS,
+  secretToken: SECRET_TOKEN_FUNCTIONS,
   serverTree: [],
-  stop: [],
-  cliPort: [],
-  folderKind: [],
+  stop: STOP_FUNCTIONS,
+  cliStart: CLI_START_FUNCTIONS,
+  folderKind: FOLDER_KIND_FUNCTIONS,
   tree: [],
 };

@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {appendFileSync, readFileSync} from 'node:fs';
+import {appendFileSync, readFileSync, watch} from 'node:fs';
 import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -77,6 +77,7 @@ import {
   withAmbientContext,
   withEnvironment,
 } from './engine/effective-engine.ts';
+import {configWatchOf} from './config-watch/config-watch.ts';
 import {executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
@@ -569,7 +570,12 @@ export async function activate(
       {
         window: {
           remote: vscode.env.remoteName !== undefined,
-          workspaceFile: vscode.workspace.workspaceFile !== undefined,
+          workspace:
+            vscode.workspace.workspaceFile === undefined
+              ? 'none'
+              : vscode.workspace.workspaceFile.scheme === 'file'
+                ? 'saved'
+                : 'untitled',
           folders: windowFolders(),
         },
         global: context.globalState,
@@ -846,8 +852,20 @@ export async function activate(
         window: {
           remoteName: () => vscode.env.remoteName,
           folders: windowFolders,
+          workspaceFile: () => {
+            const file = vscode.workspace.workspaceFile;
+            return file === undefined
+              ? undefined
+              : {scheme: file.scheme, fsPath: file.fsPath};
+          },
           serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
         },
+        informModal: text =>
+          vscode.window.showInformationMessage('', {
+            modal: true,
+            detail: text,
+          }),
+        translate,
         ensureTrusted: commandTitle =>
           ensureTrusted(served.trust, {
             translate,
@@ -1290,6 +1308,30 @@ export async function activate(
             clock,
             newTemporaryToken: () =>
               `${String(process.pid)}-${String(clock.now())}`,
+            // The editor's fetch, so that its proxy settings apply as for the server's download.
+            queryGallery: async (address, query, cancellation) => {
+              try {
+                const response = await fetch(address, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json;api-version=3.0-preview.1',
+                  },
+                  body: JSON.stringify(query),
+                  signal: cancellation,
+                });
+                return response.ok ? await response.json() : undefined;
+              } catch {
+                return undefined;
+              }
+            },
+            readText: async file => {
+              try {
+                return await readFile(file, 'utf8');
+              } catch {
+                return undefined;
+              }
+            },
             logger,
             translate,
           },
@@ -1388,6 +1430,69 @@ export async function activate(
         logger,
       },
     );
+    const configWatch =
+      registered.registration === 'registered'
+        ? configWatchOf({
+            readFile: file =>
+              readFile(file).then(
+                bytes => new Uint8Array(bytes),
+                () => undefined,
+              ),
+            watchFolder: (folder, listener, failed) => {
+              try {
+                const watcher = watch(folder, (kind, name) => {
+                  listener(name ?? undefined);
+                });
+                watcher.on('error', () => {
+                  watcher.close();
+                  failed();
+                });
+                return {
+                  dispose: () => {
+                    watcher.close();
+                  },
+                };
+              } catch {
+                return undefined;
+              }
+            },
+            setTimer: (callback, milliseconds) => {
+              const timer = setTimeout(callback, milliseconds);
+              return () => {
+                clearTimeout(timer);
+              };
+            },
+            state: context.workspaceState,
+            show: (message, buttons) =>
+              vscode.window.showInformationMessage(message, ...buttons),
+            rebuild: () =>
+              vscode.commands.executeCommand(commands.rebuildContainer.id),
+            translate,
+            logger,
+          })
+        : undefined;
+    if (configWatch !== undefined) {
+      const stopListening = connector.onHeldChanged(() => {
+        const held = connector.heldConnection();
+        if (held === undefined) {
+          configWatch.pause();
+          return;
+        }
+        configWatch.activate(held).catch((caught: unknown) => {
+          logger.warn(
+            `the configuration watch failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+          );
+        });
+      });
+      context.subscriptions.push(
+        {dispose: stopListening},
+        {
+          dispose: () => {
+            configWatch.dispose();
+          },
+        },
+      );
+    }
     const explorerEditor = {
       commandIds: () => vscode.commands.getCommands(true),
       setContext: (key: string, value: boolean) =>

@@ -55,6 +55,30 @@ function Complete-Step([string]$Status) {
 function Test-Program([string]$Name) {
   return $null -ne (Get-Command -Name $Name -CommandType Application -ErrorAction SilentlyContinue)
 }
+function New-Folder([string]$Path) {
+  [void][System.IO.Directory]::CreateDirectory($Path)
+}
+function Get-FailureMessage($Failure) {
+  $Exception = $Failure.Exception
+  if ($null -ne $Exception.InnerException) {
+    $Exception = $Exception.InnerException
+  }
+  return $Exception.Message
+}
+function New-Secret {
+  $Characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  $Bytes = New-Object byte[] 32
+  $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $Generator.GetBytes($Bytes)
+  $Generator.Dispose()
+  return -join ($Bytes | ForEach-Object { $Characters[$_ % 62] })
+}
+function Start-Program([hashtable]$Launch) {
+  if ([System.Environment]::OSVersion.Platform -eq 'Win32NT') {
+    $Launch.WindowStyle = 'Hidden'
+  }
+  return Start-Process @Launch
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }

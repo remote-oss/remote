@@ -444,10 +444,11 @@ export function startHostContainer(
 }
 
 /**
- * Removes the run's containers (by the run's label, forced) and its networks, ends an editor still on one of the run's
- * user-data folders, and removes its image tags and its dev containers' images; what is already gone is not an
- * error. A container or a network that still carries the run's label afterwards makes it throw, naming the ids, so a
- * failed removal fails the run instead of keeping the run's state on the shared machine.
+ * Removes the run's containers (by the run's label, forced), its networks and its named volumes (a Compose fixture
+ * labels each of its services, networks and volumes), ends an editor still on one of the run's user-data folders, and
+ * removes its image tags and its dev containers' images; what is already gone is not an error. A container, a network
+ * or a volume that still carries the run's label afterwards makes it throw, naming the ids, so a failed removal fails
+ * the run instead of keeping the run's state on the shared machine.
  */
 export function cleanRun(command: CommandRunner, runId: string): void {
   const filter = `label=${RUN_LABEL}=${runId}`;
@@ -479,6 +480,9 @@ export function cleanRun(command: CommandRunner, runId: string): void {
     ]),
   )) {
     checked(command, 'docker', ['network', 'rm', networkId]);
+  }
+  for (const volume of runVolumes(command, filter)) {
+    checked(command, 'docker', ['volume', 'rm', '--force', volume]);
   }
   // An editor that a killed job left holds one of the run's user-data folders, `user-data` or a plain launch's
   // `user-data-<label>`, under the folder named by the run's id; none running is no error.
@@ -514,6 +518,7 @@ export function cleanRun(command: CommandRunner, runId: string): void {
       filter,
     ]),
   );
+  const remainingVolumes = runVolumes(command, filter);
   const left = [
     ...(remaining.length > 0
       ? [`containers after the clean-up: ${remaining.join(', ')}`]
@@ -521,10 +526,20 @@ export function cleanRun(command: CommandRunner, runId: string): void {
     ...(remainingNetworks.length > 0
       ? [`networks after the clean-up: ${remainingNetworks.join(', ')}`]
       : []),
+    ...(remainingVolumes.length > 0
+      ? [`volumes after the clean-up: ${remainingVolumes.join(', ')}`]
+      : []),
   ];
   if (left.length > 0) {
     throw new Error(`the run ${runId} still owns ${left.join(' and ')}`);
   }
+}
+
+/** The names of the named volumes that carry the run's label (`filter`). */
+function runVolumes(command: CommandRunner, filter: string): string[] {
+  return idsOf(
+    checked(command, 'docker', ['volume', 'ls', '--quiet', '--filter', filter]),
+  );
 }
 
 /** The first Podman release the `containers-podman` launch runs on. */

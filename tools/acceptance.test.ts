@@ -438,6 +438,7 @@ const LAUNCH_ORDER = [
   'preconnect',
   'config-files',
   'secrets',
+  'agent-notmp',
   'default-ports',
   'ssh-core',
   'no-proposals',
@@ -446,6 +447,7 @@ const LAUNCH_ORDER = [
   'explorer-trust',
   'explorer-home',
   'explorer-rows',
+  'explorer-folders',
   'explorer-no-proposals',
   'add-host',
   'explorer-standdown',
@@ -1395,6 +1397,7 @@ describe('acceptance', () => {
             'explorer-trust',
             'explorer-home',
             'explorer-rows',
+            'explorer-folders',
             'explorer-no-proposals',
             'add-host',
             'explorer-standdown',
@@ -1792,7 +1795,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-99, D-104: a launch whose server comes from the publisher is refused outside the genuine CI job, Actions, its job id and the version all named, and a run without one is never refused', () => {
+    it('tooling-99, D-106: a launch whose server comes from the publisher is refused unless it names the genuine version, on any machine and in any job, and a run without one is never refused', () => {
       const publisher: Launch = {
         label: 'publisher-probe',
         kind: 'plain',
@@ -1801,36 +1804,31 @@ describe('acceptance', () => {
         publisherDownloads: true,
       };
       const plain: Launch = {label: 'local', runner: 'runner', suite: 'suite'};
+      const named = {HARNESS_GENUINE_VERSION: '1.125.0'};
       const genuineJob = {
         GITHUB_ACTIONS: 'true',
         GITHUB_JOB: 'acceptance-genuine',
-        HARNESS_GENUINE_VERSION: '1.125.0',
       };
       const refused =
-        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence runs only in the genuine CI job (D-104): GITHUB_ACTIONS true, GITHUB_JOB acceptance-genuine and HARNESS_GENUINE_VERSION set";
+        "publisher-probe: a launch that takes the server from the editor's publisher or accepts its licence names the genuine version it runs (D-106): set HARNESS_GENUINE_VERSION";
       deepStrictEqual(
         [
-          publisherDownloadsRefusal([plain, publisher], genuineJob),
-          publisherDownloadsRefusal([plain, publisher], {}),
-          publisherDownloadsRefusal([publisher], {
-            HARNESS_GENUINE_VERSION: '1.125.0',
-          }),
-          publisherDownloadsRefusal([publisher], {
-            CI: 'true',
+          publisherDownloadsRefusal([plain, publisher], {
             ...genuineJob,
-            GITHUB_ACTIONS: 'false',
+            ...named,
           }),
+          publisherDownloadsRefusal([plain, publisher], named),
           publisherDownloadsRefusal([publisher], {
             ...genuineJob,
             GITHUB_JOB: 'acceptance-vscodium',
+            ...named,
           }),
-          publisherDownloadsRefusal([publisher], {
-            ...genuineJob,
-            HARNESS_GENUINE_VERSION: '',
-          }),
+          publisherDownloadsRefusal([plain, publisher], {}),
+          publisherDownloadsRefusal([publisher], genuineJob),
+          publisherDownloadsRefusal([publisher], {HARNESS_GENUINE_VERSION: ''}),
           publisherDownloadsRefusal([plain], {}),
         ],
-        [undefined, refused, refused, refused, refused, refused, undefined],
+        [undefined, undefined, undefined, refused, refused, refused, undefined],
       );
     });
 
@@ -1890,10 +1888,11 @@ describe('acceptance', () => {
           'ssh -F',
           'bundle suite',
           `docker rm`,
-          // the clean-up of what the run's label holds: containers, networks, editors, images, then the check
+          // the clean-up of what the run's label holds: containers, networks, volumes, editors, images, then the check
           'docker ps',
           'docker ps',
           'docker network',
+          'docker volume',
           'pkill -f',
           'pkill -O',
           'docker image',
@@ -1903,6 +1902,7 @@ describe('acceptance', () => {
           'docker image',
           'docker ps',
           'docker network',
+          'docker volume',
         ],
       );
     });
@@ -3563,9 +3563,12 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets launch and each host-case launch, 5 s before a client-search launch', async () => {
+    it('coverage-11, tooling-34: the run waits for the helper of the launch before to end: the grace before the slow launch, the secrets and agent-notmp launches and each host-case launch, 5 s before a client-search launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [3000, 5000, 3000, 3000, 3000, 3000]);
+      deepStrictEqual(
+        harness.sleeps,
+        [3000, 5000, 3000, 3000, 3000, 3000, 3000],
+      );
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {

@@ -1,5 +1,5 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
-import {mkdtempSync, rmSync, statSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {createConnection, Socket} from 'node:net';
 import path from 'node:path';
@@ -35,6 +35,7 @@ describe('endpoint path', () => {
 
   it('names the socket rh- and 16 hex digits, showing nothing of the key', () => {
     const endpoint = endpointPath(
+      'linux',
       '/run',
       'ssh.connection',
       'user@host:22',
@@ -43,10 +44,28 @@ describe('endpoint path', () => {
     strictEqual(/^\/run\/rh-[0-9a-f]{16}\.sock$/.test(endpoint), true);
   });
 
+  it('names the Windows endpoint a pipe, with the same digest and no folder', () => {
+    const socket = endpointPath('linux', '/run', 'ssh', 'host', 'n1');
+    const pipe = endpointPath('win32', '/run', 'ssh', 'host', 'n1');
+    deepStrictEqual(
+      [/^\\\\\.\\pipe\\rh-[0-9a-f]{16}$/.test(pipe), pipe.slice(-16)],
+      [true, socket.slice(-21, -5)],
+    );
+  });
+
+  it('names a macOS endpoint as a socket file with forward slashes', () => {
+    strictEqual(
+      /^\/var\/t\/rh-[0-9a-f]{16}\.sock$/.test(
+        endpointPath('darwin', '/var/t', 'ssh', 'host', 'n1'),
+      ),
+      true,
+    );
+  });
+
   it('gives each nonce its own endpoint', () => {
     strictEqual(
-      endpointPath('/run', 'ssh', 'host', 'n1') ===
-        endpointPath('/run', 'ssh', 'host', 'n2'),
+      endpointPath('linux', '/run', 'ssh', 'host', 'n1') ===
+        endpointPath('linux', '/run', 'ssh', 'host', 'n2'),
       false,
     );
   });
@@ -219,13 +238,28 @@ describe('Node.js endpoint', () => {
     );
   });
 
-  it('refuses on Windows until the named pipe has been run there', async () => {
-    await rejects(
-      nodeEndpointPort('win32').listen('pipe', () => undefined),
-      {
-        message:
-          'helper endpoints on Windows (named pipes) are not available yet',
-      },
+  it('sets no owner-only mask for a Windows pipe', async function () {
+    const umask = Number.parseInt(
+      /^Umask:\s*([0-7]+)$/m.exec(
+        readFileSync('/proc/self/status', 'utf8'),
+      )?.[1] ?? '77',
+      8,
     );
+    if ((umask & 0o077) === 0o077) {
+      this.skip();
+    }
+    const folder = mkdtempSync(path.join(tmpdir(), 'endpoint-mask-'));
+    try {
+      const endpoint = path.join(folder, 'pipe.sock');
+      const server = await nodeEndpointPort('win32').listen(
+        endpoint,
+        () => undefined,
+      );
+      const groupAndOthers = statSync(endpoint).mode & 0o077;
+      await server.close();
+      deepStrictEqual(groupAndOthers !== 0, true);
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 });

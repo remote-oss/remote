@@ -452,9 +452,10 @@ export const POSIX_FUNCTIONS: Readonly<
   unpack: UNPACK_FUNCTIONS,
   leave: LEAVE_FUNCTIONS,
   process: PROCESS_FUNCTIONS,
+  secretToken: [],
   serverTree: SERVER_TREE_FUNCTIONS,
   stop: STOP_FUNCTIONS,
-  cliPort: CLI_FUNCTIONS,
+  cliStart: CLI_FUNCTIONS,
   folderKind: FOLDER_KIND_FUNCTIONS,
   tree: TREE_FUNCTIONS,
 };

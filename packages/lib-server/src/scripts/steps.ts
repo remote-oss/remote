@@ -4,7 +4,9 @@
  * interpreter's script renders these in its own language and ends in the same result block.
  */
 
+import type {Interpreter} from 'lib-host';
 import type {Cleanup, InstallUmask} from '../policy/record.ts';
+import type {ScriptStatus} from './result-block.ts';
 
 /** The steps of a single-script install. */
 export type ScriptStep =
@@ -123,6 +125,164 @@ export interface ScriptParameters {
   cli?: CliParameters;
 }
 
+/**
+ * A status or a fact key a step may end with; one only its interpreter's script reports names that interpreter. A
+ * fact key with a part that varies writes it as `<tool>`, `<n>` or `<line>`.
+ */
+export type StepOutcome<K extends string> = K | {key: K; only: Interpreter};
+
+/** The statuses and the fact keys one step may end with, over both scripts. */
+export interface StepOutcomes {
+  statuses: ReadonlyArray<StepOutcome<ScriptStatus>>;
+  facts: ReadonlyArray<StepOutcome<string>>;
+}
+
+const POSIX_ONLY = 'posixShell';
+const POWERSHELL_ONLY = 'powershell';
+
+/** What an install's lock reports when it is busy or cannot be written. */
+const LOCK_FACTS = [
+  'server.lockPath',
+  'server.lockInTemporary',
+  'server.writeFailedPath',
+  'server.writeFailedError',
+] as const;
+
+/** What an install of the server or the CLI reports: its lock, its download and its times. */
+const INSTALL_OUTCOMES: StepOutcomes = {
+  statuses: [
+    'Ok',
+    'LockBusy',
+    'CreateInstallDirFailed',
+    'ServerDownloadFailed',
+    'UnpackFailed',
+    {key: 'NoDownloaderAvailable', only: POSIX_ONLY},
+  ],
+  facts: [
+    ...LOCK_FACTS,
+    'server.downloadStatus',
+    'timing.download',
+    'timing.install',
+  ],
+};
+
+/**
+ * The statuses and fact keys each step may end with, over both scripts. A row holds every rendered script of either
+ * interpreter to its step's entry, so the two scripts cannot drift apart.
+ */
+export const STEP_OUTCOMES: Readonly<
+  Record<BootstrapRequest['step'], StepOutcomes>
+> = {
+  probe: {
+    statuses: ['Ok', 'UnsupportedPlatform', 'UnsupportedArch'],
+    facts: [
+      'host.tmp',
+      'host.home',
+      'host.os',
+      'host.arch',
+      'host.libc',
+      'host.kernel',
+      'host.release',
+      'host.tool.<tool>',
+      'host.wgetBusybox',
+      'host.shell',
+      'host.sshAuthSock',
+      'host.display',
+      'server.installDir',
+      'server.installed',
+      'server.treeComplete',
+    ],
+  },
+  install: {
+    statuses: [
+      ...INSTALL_OUTCOMES.statuses,
+      {key: 'ServerFailedToStart', only: POWERSHELL_ONLY},
+    ],
+    facts: [
+      ...INSTALL_OUTCOMES.facts,
+      'server.installDir',
+      {key: 'server.treeInstalled', only: POSIX_ONLY},
+      {key: 'server.installLink', only: POSIX_ONLY},
+      {key: 'host.note', only: POWERSHELL_ONLY},
+    ],
+  },
+  installCli: {
+    statuses: INSTALL_OUTCOMES.statuses,
+    facts: [...INSTALL_OUTCOMES.facts, 'cli.path'],
+  },
+  discard: {statuses: ['Ok'], facts: []},
+  prepare: {
+    statuses: ['Ok', 'CreateInstallDirFailed'],
+    facts: ['server.stagingDir'],
+  },
+  unpack: {statuses: ['Ok', 'UnpackFailed'], facts: []},
+  activate: {statuses: ['Ok', 'UnpackFailed'], facts: ['server.installDir']},
+  start: {
+    statuses: [
+      'Ok',
+      'LockBusy',
+      'CreateInstallDirFailed',
+      'ServerFailedToStart',
+      {key: 'LinuxPrereqs', only: POSIX_ONLY},
+    ],
+    facts: [
+      ...LOCK_FACTS,
+      'server.launching',
+      'server.port',
+      'server.pid',
+      'server.token',
+      'server.log',
+      'server.reused',
+      'server.failure',
+      'host.kernel',
+      'timing.start',
+      {key: 'server.socketPath', only: POSIX_ONLY},
+      {key: 'server.socketFolderFallback', only: POSIX_ONLY},
+      {key: 'server.installLink', only: POSIX_ONLY},
+      {key: 'server.prerequisitesHelper', only: POSIX_ONLY},
+      {key: 'server.prerequisites.<line>', only: POSIX_ONLY},
+      {key: 'host.note', only: POWERSHELL_ONLY},
+    ],
+  },
+  installExtensions: {
+    statuses: ['Ok', 'ServerFailedToStart'],
+    facts: ['server.extension.<n>.status', 'server.extension.<n>.message'],
+  },
+  startCli: {
+    statuses: ['Ok', 'ServerFailedToStart'],
+    facts: [
+      'cli.port',
+      'cli.pid',
+      'cli.log',
+      'cli.connectionToken',
+      'cli.tokenMissing',
+      'cli.tokenInvalid',
+      {key: 'cli.parent', only: POWERSHELL_ONLY},
+    ],
+  },
+  stopCli: {statuses: ['Ok'], facts: ['cli.stopped']},
+  kill: {statuses: ['Ok'], facts: []},
+  uninstall: {statuses: ['Ok'], facts: []},
+  cleanup: {
+    statuses: ['Ok', 'LockBusy', 'CreateInstallDirFailed'],
+    facts: [...LOCK_FACTS],
+  },
+};
+
+/** The statuses or fact keys of `outcomes` that the interpreter's script may report. */
+export function outcomesFor<K extends string>(
+  outcomes: ReadonlyArray<StepOutcome<K>>,
+  interpreter: Interpreter,
+): K[] {
+  return outcomes.flatMap(outcome =>
+    typeof outcome === 'string'
+      ? [outcome]
+      : outcome.only === interpreter
+        ? [outcome.key]
+        : [],
+  );
+}
+
 /** The roles of the helper functions a script defines; each interpreter's script has its own text for each role. */
 export type FunctionRole =
   | 'common'
@@ -133,9 +293,10 @@ export type FunctionRole =
   | 'unpack'
   | 'leave'
   | 'process'
+  | 'secretToken'
   | 'serverTree'
   | 'stop'
-  | 'cliPort'
+  | 'cliStart'
   | 'folderKind'
   | 'tree';
 
@@ -157,7 +318,7 @@ const STEP_ROLES: Readonly<
   prepare: ['common'],
   unpack: ['common', 'unpack'],
   activate: ['common'],
-  start: ['common', 'environment', 'lock', 'process', 'leave'],
+  start: ['common', 'environment', 'lock', 'process', 'secretToken', 'leave'],
   installExtensions: ['common', 'environment'],
   installCli: [
     'common',
@@ -168,7 +329,7 @@ const STEP_ROLES: Readonly<
     'unpack',
     'leave',
   ],
-  startCli: ['common', 'cliPort'],
+  startCli: ['common', 'cliStart', 'secretToken'],
   stopCli: ['common'],
   kill: ['common', 'process', 'serverTree', 'stop'],
   uninstall: ['common', 'process', 'serverTree', 'stop'],

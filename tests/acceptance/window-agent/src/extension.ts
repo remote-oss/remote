@@ -51,7 +51,13 @@ function agentFolderOf(): string | undefined {
  * process id never carries the name of the window that ran in it before.
  */
 function activationName(agentFolder: string): string {
-  const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  // A remote workspace window has no folders yet when its extensions activate, so its workspace file's own folder names it.
+  const workspaceFile = vscode.workspace.workspaceFile;
+  const folder =
+    vscode.workspace.workspaceFolders?.[0]?.uri ??
+    (workspaceFile?.scheme === 'untitled'
+      ? undefined
+      : workspaceFile && vscode.Uri.joinPath(workspaceFile, '..'));
   const first = folder?.scheme === MEMORY_SCHEME ? MEMORY_SCHEME : folder?.path;
   const name =
     first === undefined
@@ -241,6 +247,24 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.commands.executeCommand('vscode.openFolder', address, {
           forceNewWindow: true,
         });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openHere',
+      (inPath: string, forceNewWindow?: boolean) => {
+        const fresh = forceNewWindow === true;
+        // The same remote as this window, on `inPath` there: File > Open Folder... typed with a path of the remote.
+        void vscode.commands.executeCommand(
+          'vscode.openFolder',
+          vscode.Uri.from({
+            scheme: 'vscode-remote',
+            // The authority of this window's own folder: the remote the window is on.
+            authority:
+              vscode.workspace.workspaceFolders?.[0]?.uri.authority ?? '',
+            path: inPath,
+          }),
+          {forceNewWindow: fresh, forceReuseWindow: !fresh},
+        );
       },
     ),
     vscode.commands.registerCommand(
@@ -577,6 +601,34 @@ export function activate(context: vscode.ExtensionContext): void {
         report(agentFolder, name, {
           event: 'environment',
           value: process.env[variableName] ?? null,
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openUri',
+      async (address: string) => {
+        await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument(vscode.Uri.parse(address)),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.call',
+      async (commandId: string, ...parameters: unknown[]) => {
+        let value: unknown;
+        let message: string | undefined;
+        try {
+          value = await vscode.commands.executeCommand(
+            commandId,
+            ...parameters,
+          );
+        } catch (error) {
+          message = error instanceof Error ? error.message : String(error);
+        }
+        report(agentFolder, name, {
+          event: 'called',
+          value: value ?? null,
+          ...(message !== undefined && {message}),
         });
       },
     ),

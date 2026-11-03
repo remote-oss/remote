@@ -1,6 +1,7 @@
 /**
- * @fileoverview Where the askpass endpoint and its launcher live in the user's runtime folder: the socket as
- * `ra-<16 hex>.sock`, the launcher as `rh-askpass-<16 hex>` in a folder only the user can enter.
+ * @fileoverview Where the askpass endpoint and its launcher live: the socket as `ra-<16 hex>.sock` in the user's
+ * runtime folder, or on Windows the named pipe `\\.\pipe\ra-<16 hex>`, and the launcher as `rh-askpass-<16 hex>` in
+ * a folder of the runtime folder only the user can enter.
  */
 
 import {createHash} from 'node:crypto';
@@ -18,13 +19,17 @@ function digestOf(...parts: readonly string[]): string {
     .slice(0, NAME_DIGEST_LENGTH);
 }
 
-/** The askpass endpoint of one helper: 16 hex digits of a digest of its key and its askpass nonce. */
+/** The askpass endpoint of one helper, named by 16 hex digits of a digest of its key and its askpass nonce. */
 export function askpassEndpointPath(
+  platform: string,
   runtimeFolder: string,
   helperKey: string,
   nonce: string,
 ): string {
-  return path.join(runtimeFolder, `ra-${digestOf(helperKey, nonce)}.sock`);
+  const name = `ra-${digestOf(helperKey, nonce)}`;
+  return platform === 'win32'
+    ? `\\\\.\\pipe\\${name}`
+    : path.posix.join(runtimeFolder, `${name}.sock`);
 }
 
 /** The launcher for a script text: 16 hex digits of its digest, so that equal launchers are one file. */

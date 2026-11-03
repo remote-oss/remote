@@ -3,6 +3,17 @@ import type {ChannelPort} from './editor-port.ts';
 /** The variable whose value `1` switches the harness's adapters on. */
 const SWITCH = 'REMOTE_OSS_ACCEPTANCE';
 
+/** The file the variable `variableName` names, when the harness's switch is on and the variable names one. */
+export function acceptanceLogFileOf(
+  environment: Readonly<Record<string, string | undefined>>,
+  variableName: string,
+): string | undefined {
+  const logFile = environment[variableName];
+  return environment[SWITCH] === '1' && logFile !== undefined && logFile !== ''
+    ? logFile
+    : undefined;
+}
+
 /**
  * The channel port an extension opens its log over: the real one, whose every line the file named by `variableName`
  * also gets, when the harness's switch is on and the variable names a file; the real one itself in every other case.
@@ -14,8 +25,8 @@ export function acceptanceChannelPortFor(
   real: ChannelPort,
   append: (file: string, text: string) => void,
 ): ChannelPort {
-  const logFile = environment[variableName];
-  if (environment[SWITCH] !== '1' || logFile === undefined || logFile === '') {
+  const logFile = acceptanceLogFileOf(environment, variableName);
+  if (logFile === undefined) {
     return real;
   }
   return {

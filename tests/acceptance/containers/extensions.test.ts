@@ -1,8 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile} from 'node:child_process';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {promisify} from 'node:util';
 import {
   openFolderWindow,
   removeContainers,
@@ -13,19 +11,17 @@ import {
   connectedToContainer,
   devContainerFolder,
   devContainersOf,
-  editorProduct,
   inWindow,
   reloadingCommand,
   reopenInContainer,
   waitFor,
 } from '../windows/harness.ts';
+import {installedIn} from '../windows/container-extensions.ts';
 import {
   dialogOf,
   extensionStatusShown,
   notificationCentre,
 } from '../windows/renderer.ts';
-
-const execFileAsync = promisify(execFile);
 
 /** How long the install may take after the window is connected: the window does not wait for it (F-0505 BR-8). */
 const INSTALL_MILLISECONDS = 90_000;
@@ -48,22 +44,6 @@ const STABLE_YAML = '2.0.0';
 
 /** What the editor appends to the folder of an extension that is not built for a platform. */
 const UNIVERSAL = '-universal';
-
-/** The folders of the extensions installed in container `containerId` for the remote user; none while there is no folder. */
-async function installedIn(containerId: string): Promise<string[]> {
-  try {
-    const {stdout} = await execFileAsync('docker', [
-      'exec',
-      containerId,
-      'sh',
-      '-c',
-      `ls "$(cd; pwd)/${editorProduct().serverDataFolderName}/extensions"`,
-    ]);
-    return stdout.split('\n').filter(entry => entry !== '');
-  } catch {
-    return [];
-  }
-}
 
 describe('the configuration’s extensions in the container (card containers-16)', function () {
   this.timeout(600_000);

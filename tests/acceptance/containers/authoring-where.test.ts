@@ -20,7 +20,7 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
-import {openFolderWindow} from '../windows/folder-windows.ts';
+import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   answerFolderDialog,
@@ -62,6 +62,24 @@ async function containerStateOf(containerId: string): Promise<string> {
     );
   } catch {
     return 'gone';
+  }
+}
+
+/** Removes every container the engine holds for `folder`, including one made from a configuration the wizard wrote, which has no label of the run. */
+async function removeContainersLabelled(folder: string): Promise<void> {
+  const containerIds = (
+    await docker(
+      'ps',
+      '-a',
+      '-q',
+      '--filter',
+      `label=devcontainer.local_folder=${folder}`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '');
+  if (containerIds.length > 0) {
+    await docker('rm', '-f', ...containerIds);
   }
 }
 
@@ -135,6 +153,7 @@ async function directRebuild(command: string, label: string): Promise<void> {
     );
   } finally {
     await closeWindow(window).catch(() => undefined);
+    await removeContainers(folder);
   }
 }
 
@@ -217,6 +236,7 @@ async function noSourceRebuild(
     );
   } finally {
     await closeWindow(window).catch(() => undefined);
+    await removeContainers(folder);
   }
 }
 
@@ -364,6 +384,7 @@ describe('the commands that make a container from a folder with no configuration
         );
       } finally {
         await closeWindow('c101-target').catch(() => undefined);
+        await removeContainersLabelled(target);
       }
     });
   });
