@@ -131,6 +131,23 @@ function plainKey(command: CommandRunner, file: string, comment: string): void {
 }
 
 /**
+ * Lets anyone read the key file `file`, so that ssh refuses to use it: mode 0644, or on Windows (`platform`), whose
+ * OpenSSH reads the file's access list instead of a mode, read access for Everyone (by its SID, which no language of
+ * the system renames).
+ */
+export function loosenKey(
+  command: CommandRunner,
+  file: string,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  if (platform === 'win32') {
+    checked(command, 'icacls', [file, '/grant', '*S-1-1-0:R']);
+  } else {
+    chmodSync(file, 0o644);
+  }
+}
+
+/**
  * Makes the run's further keys in `runFolder`. The host is to accept the passphrase key and the second key (so also its
  * loose copy) for its key accounts, the no-forwarding key for them with `no-port-forwarding`, and the certificate for
  * `harness-cert`.
@@ -161,7 +178,7 @@ export function makeRunKeys(
   const looseKey = path.join(runFolder, 'id_loose');
   copyFileSync(secondKey, looseKey);
   copyFileSync(`${secondKey}.pub`, `${looseKey}.pub`);
-  chmodSync(looseKey, 0o644);
+  loosenKey(command, looseKey);
   const authority = path.join(runFolder, 'ca');
   plainKey(command, authority, 'acceptance-ca');
   const certifiedKey = path.join(runFolder, 'id_certified');
