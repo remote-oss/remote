@@ -20,6 +20,7 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {hintRecords} from '../windows/hint-store.ts';
+import {PLATFORMS} from '../windows/tunnel-support.ts';
 import {
   closeAllButLocal,
   dismissals,
@@ -384,6 +385,56 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       );
     } finally {
       await closeWindow('c136-h').catch(() => undefined);
+    }
+  });
+
+  it('F-2605 AC-5 (c136-noforward): a host whose sshd forbids TCP forwarding gives the four-column table with the AllowTcpForwardingDisabled row, its two mitigations and a documentation address', async () => {
+    await userSettings({...PLATFORMS});
+    appendScript([
+      {
+        surface: 'notice' as const,
+        match: 'Failed to set up',
+        answer: 'dismiss' as const,
+        window: 'c136-i',
+      },
+      ...dismissals('c136-i'),
+    ]);
+    await failedOn('noforward', 'c136-i');
+    try {
+      // The four-column table is taller than the panel; the maximized panel shows all of it.
+      await waitFor(
+        'the troubleshooting terminal',
+        async () => (await troubleshootingTabs('c136-i')).length > 0,
+        TERMINAL_MILLISECONDS,
+      );
+      await inWindow('c136-i', 'workbench.action.toggleMaximizedPanel');
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+      const table = await tableOf('c136-i');
+      const [status, message, mitigations, resources] = firstRowOf(table);
+      deepStrictEqual(
+        {
+          header: cellsOf(table[1]),
+          status,
+          message,
+          mitigations,
+          resources: [
+            resources?.startsWith('•'),
+            resources?.includes('https://'),
+          ],
+        },
+        {
+          header: ['Status', 'Message', 'Mitigations', 'Resources'],
+          status: 'AllowTcpForwardingDisabled',
+          message:
+            "The remote server's SSH configuration may have TCP forwarding disabled",
+          mitigations:
+            "• Add the setting 'AllowTcpForwarding yes' to the server's '/etc/ssh/sshd_config' (or similar) configuration file • Restart the SSH server on the remote machine to apply any changes to the configuration",
+          resources: [true, true],
+        },
+      );
+    } finally {
+      await userSettings({'remote.SSH.remotePlatform': undefined});
+      await closeWindow('c136-i').catch(() => undefined);
     }
   });
 });
