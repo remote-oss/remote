@@ -46,6 +46,12 @@ export const OWN_TEMPLATES = {
   S050: 'Enable {0} to allow VS Code to download the required resources via your local machine and then upload them to the remote server',
   S116: 'Restart the SSH server on the remote machine to apply any changes to the configuration',
   showLogLinkText: 'Show log',
+  S138: 'The following issues were detected in your most recent Remote - SSH session',
+  S125: 'See verbose information in the',
+  S134: 'Status',
+  S090: 'Message',
+  S091: 'Mitigations',
+  S115: 'Resources',
   socksForwardingFailedNotice:
     'Failed to set up dynamic port forwarding connection over SSH to the VS Code Server. ({0})',
   configFileNotAbsolute:

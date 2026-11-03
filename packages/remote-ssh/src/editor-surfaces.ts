@@ -52,6 +52,10 @@ import {
   hintRecorderOf,
   type HintRecorderState,
 } from './diagnostics/hint-recorder.ts';
+import {
+  troubleshootingOf,
+  type TroubleshootingPorts,
+} from './diagnostics/troubleshooting.ts';
 
 /** The editor's adapters of the connect's surfaces. */
 export interface EditorAdapters {
@@ -106,6 +110,8 @@ export interface SurfaceContext {
   noticeState: AcceptanceState;
   /** The extension's global state, where the hints of a connect are kept. */
   hintState: HintRecorderState;
+  /** The editor side of the check at a resolve step's end. */
+  troubleshooting: TroubleshootingPorts;
   /** The address of the documentation a hint points to. */
   documentation: () => string;
   /** The environment hints a new record starts with, read as the settings are now. */
@@ -197,6 +203,7 @@ export function editorSurfacesOf(
       logMark: context.logMark,
       logText: context.logText,
     }),
+    troubleshooting: troubleshootingOf(context.troubleshooting),
     licenceModal: licenceModalOf(
       adapters.licenceDialog,
       translate,

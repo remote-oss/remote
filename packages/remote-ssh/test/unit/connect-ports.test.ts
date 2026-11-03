@@ -468,6 +468,7 @@ describe("the assembled ports' settings", () => {
             kept.push(hint.status);
           },
           end: () => undefined,
+          errors: () => [],
         },
       },
       machine,
@@ -498,6 +499,12 @@ describe("the assembled ports' settings", () => {
           end: () => {
             events.push('end');
           },
+          errors: () => [],
+        },
+        troubleshooting: {
+          check: (hints, modal) => {
+            events.push(`check ${String(hints.length)} ${String(modal)}`);
+          },
         },
       },
       machine,
@@ -511,7 +518,13 @@ describe("the assembled ports' settings", () => {
       {status: 'OfflineError', message: 'm', mitigations: [], resources: []},
     ]);
     ended?.([]);
-    deepStrictEqual(events, ['record OfflineError', 'end', 'end']);
+    deepStrictEqual(events, [
+      'record OfflineError',
+      'end',
+      'check 0 true',
+      'end',
+      'check 0 true',
+    ]);
   });
 
   it('F-2403: remote.SSH.useExecServer is read as a switch', () => {

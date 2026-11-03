@@ -97,6 +97,21 @@ function surfacesWith(
     translate: template => template,
     hintState: {get: () => undefined, update: () => Promise.resolve()},
     documentation: () => 'https://docs.example/ssh',
+    troubleshooting: {
+      enabled: () => true,
+      createTerminal: () => ({show: () => undefined, dispose: () => undefined}),
+      texts: () => ({
+        heading: 'heading',
+        leadIn: 'lead',
+        headers: {
+          status: 'Status',
+          message: 'Message',
+          mitigations: 'Mitigations',
+          resources: 'Resources',
+        },
+      }),
+      logger: createLogger(new MemorySink(), {minimumLevel: () => 'debug'}),
+    },
     environmentHints: () => [],
     logMark: () => 0,
     logText: () => '',

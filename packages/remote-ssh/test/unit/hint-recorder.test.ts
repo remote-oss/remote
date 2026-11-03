@@ -359,4 +359,23 @@ describe('the hint recorder (card connect-119)', () => {
       [['from 4: the log\nlines'], ['from 11: the log\nlines']],
     );
   });
+
+  it('F-2605 BR-1: the error hints of the attempt are kept in order, each once, and a new resolve starts the list again', () => {
+    const {recorder} = recording([
+      '2026-11-02T00:00:00Z',
+      '2026-11-02T00:00:01Z',
+    ]);
+    recorder.begin();
+    recorder.record(HINT);
+    recorder.record(HINT);
+    recorder.record({...HINT, status: 'Other', message: 'Error: Other'});
+    const first = recorder
+      .errors()
+      .map(each => (each.kind === 'error' ? each.status : each.kind));
+    recorder.begin();
+    deepStrictEqual(
+      [first, recorder.errors()],
+      [['AllowTcpForwardingDisabled', 'Other'], []],
+    );
+  });
 });

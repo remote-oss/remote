@@ -4,6 +4,8 @@
  * Node; the extension passes the real surfaces and the machine, and a test passes fakes.
  */
 
+import {STEP_RULE} from './diagnostics/session-summary.ts';
+import type {Troubleshooting} from './diagnostics/troubleshooting.ts';
 import type {TunnelOpener} from './forwarding/default-forwards.ts';
 import {
   type DefaultReadEvents,
@@ -148,6 +150,8 @@ export interface ConnectSurfaces {
   noticeState: AcceptanceState;
   /** The recorder of the hints a connect leaves for the session. */
   hints: HintRecorder;
+  /** The check that runs when a resolve step ends: the summary in the log and the troubleshooting terminal. */
+  troubleshooting: Troubleshooting;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   /** The question before a pre-connection script runs, and the record of the scripts the user trusts. */
@@ -568,7 +572,10 @@ export function connectAssemblyOf(
       hints.forEach(hint => {
         surfaces.hints.record(hint);
       });
+      // The step's text ends with a rule: the log hint keeps it, and the summary of the check follows it.
+      watch.logger.info(STEP_RULE);
       surfaces.hints.end();
+      surfaces.troubleshooting.check(surfaces.hints.errors(), true);
     },
   });
   const {translate} = surfaces;

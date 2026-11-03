@@ -45,6 +45,8 @@ export interface HintRecorder {
   record(hint: FailureHint): void;
   /** The connect's resolve step has ended: its record gets the log hint, once. */
   end(): void;
+  /** The error hints recorded for the connect that is running or ran last, in the order they were recorded. */
+  errors(): SessionHint[];
 }
 
 /**
@@ -96,6 +98,7 @@ export function hintRecorderOf(
   let started = environment.now().toISOString();
   let begun = false;
   let logFrom = 0;
+  let attemptErrors: SessionHint[] = [];
   let open = false;
   let writing: PromiseLike<void> = Promise.resolve();
   /**
@@ -130,31 +133,31 @@ export function hintRecorderOf(
       started = environment.now().toISOString();
       begun = true;
       open = true;
+      attemptErrors = [];
       logFrom = environment.logMark();
       append(started, [...environment.environmentHints()], true);
     },
     record: hint => {
       const statusNumber = statusNumberOf(hint.status);
-      append(
-        started,
-        [
-          {
-            kind: 'error',
-            status: hint.status,
-            ...(statusNumber === undefined ? {} : {statusNumber}),
-            message: textOf(hint.message, environment.translate),
-            ...(hint.details === undefined
-              ? {}
-              : {details: reasonText(hint.details, environment.translate)}),
-            mitigations: hint.mitigations.map(each =>
-              textOf(each, environment.translate),
-            ),
-            resources: hint.resources.map(() => environment.documentation()),
-          },
-        ],
-        false,
-      );
+      const entry: SessionHint = {
+        kind: 'error',
+        status: hint.status,
+        ...(statusNumber === undefined ? {} : {statusNumber}),
+        message: textOf(hint.message, environment.translate),
+        ...(hint.details === undefined
+          ? {}
+          : {details: reasonText(hint.details, environment.translate)}),
+        mitigations: hint.mitigations.map(each =>
+          textOf(each, environment.translate),
+        ),
+        resources: hint.resources.map(() => environment.documentation()),
+      };
+      if (!attemptErrors.some(each => sameError(each, entry))) {
+        attemptErrors.push(entry);
+      }
+      append(started, [entry], false);
     },
+    errors: () => [...attemptErrors],
     end: () => {
       if (open) {
         open = false;
