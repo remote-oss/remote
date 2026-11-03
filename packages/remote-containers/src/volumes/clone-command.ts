@@ -1,7 +1,7 @@
 /**
  * @fileoverview Clone Repository in Container Volume, before the reload: the trust confirmation once per profile, the
- * engine check, the source the user gives, the access pre-check on the host, and the reload of the same window into
- * the volume payload. Nothing here creates a Docker object; the reloaded window's resolve does.
+ * engine check, the source the user gives, the access pre-check on the host, the record that the source was typed,
+ * and the reload of the same window into the volume payload. Nothing here creates a Docker object; the reloaded window's resolve does.
  */
 
 import type {Logger} from 'lib-log';
@@ -42,6 +42,8 @@ export interface CloneCommandPorts {
   currentRepository(): string | undefined;
   /** The engine the window is pinned to, which the payload carries. */
   engine(): PinnedEngine;
+  /** Records that the source of `payload` was typed, for the resolve after the reload. */
+  recordTyped(payload: string): Promise<void>;
   /** Reloads this window on `uri`; core asks to save an untitled workspace first, and its Cancel drops the clone. */
   reload(uri: string): Promise<void>;
   logger: Logger;
@@ -128,7 +130,7 @@ export async function cloneInUniqueVolume(
     await ports.cannotAccess(source.repositoryPath);
     return;
   }
-  await ports.reload(
-    volumeWindowUriOf(uniqueVolumeTargetOf(source, ports.engine())),
-  );
+  const target = uniqueVolumeTargetOf(source, ports.engine());
+  await ports.recordTyped(volumePayloadOf(target));
+  await ports.reload(volumeWindowUriOf(target));
 }

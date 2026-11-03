@@ -113,6 +113,7 @@ import {
   CLONE_TRUST_PAGE,
   cloneInUniqueVolume,
 } from './volumes/clone-command.ts';
+import {storeTypedSource} from './volumes/typed-source.ts';
 import {cloneText} from './volumes/clone-strings.ts';
 import type {ClonePromptSurface} from './volumes/git-prompts.ts';
 import {runHostProgram} from './volumes/host-program.ts';
@@ -819,6 +820,8 @@ export async function activate(
                     : undefined;
                 },
                 engine: () => engine,
+                recordTyped: payload =>
+                  storeTypedSource(context.globalState, payload, Date.now()),
                 reload: async uri => {
                   await vscode.commands.executeCommand(
                     'vscode.openFolder',

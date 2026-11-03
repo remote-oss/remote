@@ -64,6 +64,10 @@ async function runWith(changes: Partial<Answers> = {}): Promise<string[]> {
     },
     currentRepository: () => answers.currentRepository,
     engine: () => ({context: 'ctx1'}),
+    recordTyped: payload => {
+      calls.push(`typed ${JSON.stringify(volumeTargetOf(payload))}`);
+      return Promise.resolve();
+    },
     reload: uri => {
       const [authority, folder] = uri
         .slice('vscode-remote://dev-container+'.length)
@@ -80,11 +84,20 @@ async function runWith(changes: Partial<Answers> = {}): Promise<string[]> {
 }
 
 describe('Clone Repository in Container Volume, up to the reload (card containers-151)', () => {
-  it('F-0701 5.0, BR-12: a reachable source reloads the window into the unique volume’s payload, the engine pinned', async () => {
+  it('F-0701 5.0, BR-12: a reachable source is recorded as typed, then reloads the window into the unique volume’s payload, the engine pinned', async () => {
     deepStrictEqual(await runWith(), [
       'engine',
       'pick',
       'precheck https://github.com/o/r',
+      `typed ${JSON.stringify({
+        kind: 'volume',
+        repositoryPath: 'https://github.com/o/r/tree/main',
+        volumeName: '__UNIQUE__',
+        folder: 'r',
+        cloneInfo: {urlToClone: 'https://github.com/o/r', ref: 'main'},
+        inspectVolume: false,
+        context: 'ctx1',
+      })}`,
       `reload r ${JSON.stringify({
         kind: 'volume',
         repositoryPath: 'https://github.com/o/r/tree/main',
