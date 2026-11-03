@@ -351,9 +351,10 @@ jobs:
     if: >-
       github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
       !github.event.pull_request.draft
-    # a newer push to the pull request cancels the run of an older head, and the acceptance-full run of one
+    # a newer push to the pull request cancels the run of an older head, and the acceptance-full run of one; a run of
+    # another event, which skips this job, gets a group of its own (its run id), so it never meets another run's
     concurrency:
-      group: acceptance-pr-${{ github.event.pull_request.number }}
+      group: acceptance-pr-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: true
     uses: ./.github/workflows/acceptance-launches.yml
     with:

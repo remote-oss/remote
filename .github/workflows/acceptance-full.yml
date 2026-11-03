@@ -19,7 +19,7 @@ jobs:
     # ci.yml's group: this run waits for ci.yml's run of the pull request and never cancels it (a cancelled job fails
     # ci.yml's gate), and a newer push cancels this run
     concurrency:
-      group: acceptance-pr-${{ github.event.pull_request.number }}
+      group: acceptance-pr-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: false
     uses: ./.github/workflows/acceptance-launches.yml
     with:
