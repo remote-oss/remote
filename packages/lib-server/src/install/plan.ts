@@ -135,7 +135,7 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
   const lockPlace = `${dataFolder}/bin/${input.commit}`;
   const mode = modeOf(input);
   if (mode.kind === 'cli') {
-    const placement = placementOf(input.placement);
+    const placement = placementOf(input.placement, input.facts.operatingSystem);
     const cliName = requiredCliName(input);
     return {
       plan: {
@@ -169,7 +169,7 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
   if (input.source.kind === 'invalidOverride') {
     return {failure: {kind: 'invalidOverride', problem: input.source.problem}};
   }
-  const placement = placementOf(input.placement);
+  const placement = placementOf(input.placement, input.facts.operatingSystem);
   return {
     plan: {
       kind: 'download',
@@ -226,16 +226,26 @@ function expandHome(path: string, homeFolder: string): string {
   return path;
 }
 
-/** Where the download runs and whether it may fall back, from the placement. */
-function placementOf(placement: DownloadPlacement): {
+/**
+ * Where the download runs and whether it may fall back, from the placement. A Windows host does not take the local
+ * download, so `always` there is the default route: the host downloads, with the client as its fallback.
+ */
+function placementOf(
+  placement: DownloadPlacement,
+  operatingSystem: HostFacts['operatingSystem'],
+): {
   where: 'host' | 'client';
   clientFallback: boolean;
 } {
   if (placement.kind === 'hostFirst') {
-    if (placement.mode === 'always') {
+    const mode =
+      placement.mode === 'always' && operatingSystem === 'win32'
+        ? 'auto'
+        : placement.mode;
+    if (mode === 'always') {
       return {where: 'client', clientFallback: false};
     }
-    return {where: 'host', clientFallback: placement.mode === 'auto'};
+    return {where: 'host', clientFallback: mode === 'auto'};
   }
   if (placement.kind === 'clientFirstThenHost') {
     return {where: 'client', clientFallback: true};

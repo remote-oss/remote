@@ -254,6 +254,35 @@ describe('install planner (card server-04 table)', () => {
     );
   });
 
+  it('F-2701 AC-26: hostFirst always on a Windows host is the default route: where host, clientFallback true', () => {
+    const planned = asPlan(
+      plan(
+        input({
+          facts: {...facts, operatingSystem: 'win32'},
+          placement: {kind: 'hostFirst', mode: 'always'},
+          source: SOURCE,
+        }),
+      ),
+    ) as Plan & {kind: 'download'};
+    deepStrictEqual(
+      [planned.kind, planned.where, planned.clientFallback],
+      ['download', 'host', true],
+    );
+  });
+
+  it('F-2701 AC-26: hostFirst off on a Windows host stays on the host with no fallback', () => {
+    const planned = asPlan(
+      plan(
+        input({
+          facts: {...facts, operatingSystem: 'win32'},
+          placement: {kind: 'hostFirst', mode: 'off'},
+          source: SOURCE,
+        }),
+      ),
+    ) as Plan & {kind: 'download'};
+    deepStrictEqual([planned.where, planned.clientFallback], ['host', false]);
+  });
+
   it('hostFirst off -> where host, clientFallback false', () => {
     placementRow(
       {kind: 'hostFirst', mode: 'off'},
@@ -420,6 +449,18 @@ describe('install planner, the CLI mode (card cli-02 table)', () => {
       plan(cliInput({placement: {kind: 'hostFirst', mode: 'always'}})),
     ) as Plan & {kind: 'cli'};
     deepStrictEqual([planned.where, planned.clientFallback], ['client', false]);
+  });
+
+  it('F-2701 AC-26: the placement always on a Windows host plans the CLI download on the host, with the client as its fallback', () => {
+    const planned = asPlan(
+      plan(
+        cliInput({
+          facts: {...facts, operatingSystem: 'win32'},
+          placement: {kind: 'hostFirst', mode: 'always'},
+        }),
+      ),
+    ) as Plan & {kind: 'cli'};
+    deepStrictEqual([planned.where, planned.clientFallback], ['host', true]);
   });
 
   it('brief §2 row 2: a product without a CLI source gets a direct plan that notes why', () => {

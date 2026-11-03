@@ -1038,6 +1038,26 @@ describe('the PowerShell start, run under pwsh', function () {
     });
   });
 
+  for (const [name, body] of [
+    [
+      'exits at once with Access denied on its standard error',
+      'echo "Access denied" >&2\nexit 1',
+    ],
+    ['exits at once with no output', 'exit 1'],
+  ] as const) {
+    it(`F-2701 AC-24: a server that ${name} and says nothing ready fails the start within its bound, not after`, () => {
+      const host = powershellHost();
+      const parameters = quickStart();
+      standInServer(host, parameters, body);
+      const startedAt = Date.now();
+      const outcome = factsOf(startOn(host, parameters), []);
+      deepStrictEqual(
+        [outcome, Date.now() - startedAt < 20_000],
+        [{status: 'ServerFailedToStart'}, true],
+      );
+    });
+  }
+
   it('F-2409: a port range with no free port is named', () => {
     const host = powershellHost();
     const parameters = quickStart();
@@ -1361,6 +1381,19 @@ describe('the PowerShell kill and uninstall, run under pwsh', function () {
     } finally {
       process.kill(sleeper);
     }
+  });
+
+  it('F-2701 AC-22: Uninstall on a home with no data folder completes Ok and leaves the home as it was', () => {
+    const host = powershellHost();
+    // pwsh keeps a cache and a profile folder of its own in the home it runs in; they are not the script's.
+    const ownFolders = ['.cache', '.local'];
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('uninstall'), parametersFor()), []),
+        readdirSync(host.home).filter(each => !ownFolders.includes(each)),
+      ],
+      [{status: 'Ok'}, []],
+    );
   });
 
   it('F-2412: Uninstall ends the servers and removes the data folder', async () => {

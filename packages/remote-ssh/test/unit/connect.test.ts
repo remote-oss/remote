@@ -887,6 +887,25 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
+  it('F-2701 AC-24: a start that ends without a result block fails the connect as a closed channel, which F-2601 shows as its error dialog, and the tunnel is not opened', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        start: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'noResultBlock'}}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('openTunnel'),
+      ],
+      ['channelClosed', false],
+    );
+  });
+
   it('a tunnel that does not open fails with the step failure and gives the lease back', async () => {
     const {recording, options} = setup();
     const result = await connect(
