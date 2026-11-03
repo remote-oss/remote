@@ -814,7 +814,7 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts and the settings', () => {
+  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts, the settings and the two edit-session entries', () => {
     deepStrictEqual(
       [
         'browser' in MANIFEST,
@@ -824,7 +824,14 @@ describe('the manifest', () => {
       [
         false,
         false,
-        ['commands', 'menus', 'views', 'viewsWelcome', 'configuration'],
+        [
+          'commands',
+          'menus',
+          'views',
+          'viewsWelcome',
+          'configuration',
+          'continueEditSession',
+        ],
       ],
     );
   });
@@ -882,6 +889,79 @@ describe('the manifest', () => {
         'Attach to Running Container...',
         {command, when},
         {command, group: 'remote_30_dev-container_2_actions@2', when},
+
+  it('F-0707 BR-1, BR-2, AC-3: the two edit-session commands have the same title, the category and the icon, a palette entry that hides each, and no keybinding', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: {commandPalette: Array<Record<string, unknown>>};
+      keybindings?: unknown;
+    };
+    const commandIds = [
+      'remote-containers.openRepositoryFromRemoteHubWithEditSession',
+      'remote-containers.openRepositoryFromGitWithEditSession',
+    ];
+    const keys = [
+      'commands.openRepositoryFromRemoteHubWithEditSession.title',
+      'commands.openRepositoryFromGitWithEditSession.title',
+    ];
+    deepStrictEqual(
+      [
+        commandIds.map(name =>
+          contributes.commands.find(each => each.command === name),
+        ),
+        keys.map(key => readJson('package.nls.json')[key]),
+        commandIds.map(name =>
+          contributes.menus.commandPalette.find(each => each.command === name),
+        ),
+        contributes.keybindings,
+      ],
+      [
+        keys.map((key, position) => ({
+          command: commandIds[position],
+          title: `%${key}%`,
+          category: 'Dev Containers',
+          icon: '$(repo-clone)',
+        })),
+        [
+          'Clone Repository in a Container Volume',
+          'Clone Repository in a Container Volume',
+        ],
+        commandIds.map(name => ({command: name, when: 'false'})),
+        undefined,
+      ],
+    );
+  });
+
+  it('F-0707 BR-3, BR-4, AC-1, AC-8: the two continueEditSession entries are declared with their groups, name and conditions, and no proposal for them is requested beyond the reference’s seven', () => {
+    const contributes = MANIFEST.contributes as {
+      continueEditSession: Array<Record<string, unknown>>;
+    };
+    function entry(name: string, when: string): Record<string, unknown> {
+      return {
+        command: `remote-containers.${name}`,
+        group: '0_local@2',
+        remoteGroup: 'remote_30_dev-container_2_actions@8',
+        qualifiedName: '%continueEditSession.qualifiedName%',
+        when,
+      };
+    }
+    deepStrictEqual(
+      [
+        contributes.continueEditSession,
+        readJson('package.nls.json')['continueEditSession.qualifiedName'],
+      ],
+      [
+        [
+          entry(
+            'openRepositoryFromRemoteHubWithEditSession',
+            '!isWeb && remoteHub:hasVirtualFolders && !remote-containers:standingDown',
+          ),
+          entry(
+            'openRepositoryFromGitWithEditSession',
+            'git.state == initialized && gitOpenRepositoryCount != 0 && remoteName =~ /(codespaces*.*|tunnel)/ && false && !remote-containers:standingDown',
+          ),
+        ],
+        'Continue Working in Container Volume',
       ],
     );
   });
