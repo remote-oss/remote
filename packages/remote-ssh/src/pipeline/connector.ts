@@ -19,6 +19,7 @@ import {
   type PhaseEvent,
 } from './connect.ts';
 import {failedWith} from './failure.ts';
+import type {CancelSource} from 'lib-authority';
 import type {SshTarget} from 'lib-ssh';
 import {sshTargetOf} from './host-settings.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
@@ -149,6 +150,12 @@ function progressLine(
     : `Progress: ${event.kind}`;
 }
 
+/** How the log says what cancelled a connect. */
+const CANCEL_SOURCES: Readonly<Record<CancelSource, string>> = {
+  progress: "the user's Cancel on the progress notification",
+  dispose: "the window's resolver is disposed",
+};
+
 /** The connector of Remote - SSH over its pipeline. */
 export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   const phases = new Listeners<ConnectPhase>();
@@ -157,11 +164,14 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   let running: AbortController | undefined;
   let held: Held | undefined;
 
-  /** Gives back the connection the window holds, and stops hearing its transport. */
-  function releaseHeld(): void {
+  /** Gives back the connection the window holds, and stops hearing its transport; `reason` is the log's reason. */
+  function releaseHeld(reason: string): void {
     const current = held;
     held = undefined;
     if (current !== undefined) {
+      dependencies.options.logger.info(
+        `the held connection is given back: ${reason}`,
+      );
       current.stop();
       current.connection.release();
     }
@@ -169,7 +179,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
 
   return {
     async connect(hostInput): Promise<Connected | Failed> {
-      releaseHeld();
+      releaseHeld('a new connect starts');
       const input = pipelineInputOf(hostInput);
       if (input === undefined) {
         return NOT_SSH_TARGET;
@@ -241,10 +251,13 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         }
       }
     },
-    cancel() {
+    cancel(source) {
+      dependencies.options.logger.info(
+        `the connect is cancelled: ${source === undefined ? 'by its caller' : CANCEL_SOURCES[source]}`,
+      );
       running?.abort();
       running = undefined;
-      releaseHeld();
+      releaseHeld('the connect is cancelled');
     },
     revealDetails() {
       dependencies.revealLog();

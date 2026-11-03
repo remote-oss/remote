@@ -88,13 +88,31 @@ function bridge(
   opening: Promise<Duplex>,
   track: (connection: Duplex) => void,
   heldBytesMaximum: number,
-  onDialFailed: (caught: unknown) => void,
+  tell: (line: string) => void,
+  targetName: string,
 ): void {
   const held: Uint8Array[] = [];
   let host: Duplex | undefined;
   let heldBytes = 0;
   let overflowed = false;
   let clientGone = false;
+  let toHost = 0;
+  let toClient = 0;
+  let ended = false;
+  function endedBy(side: string): void {
+    if (!ended) {
+      ended = true;
+      tell(
+        `a window connection ended: the ${side} closed it, after ${String(toHost)} bytes to the host and ${String(toClient)} bytes to the client`,
+      );
+    }
+  }
+  function sendToHost(opened: Duplex, chunk: Uint8Array): void {
+    toHost += chunk.byteLength;
+    if (!opened.send(chunk)) {
+      client.pause();
+    }
+  }
   client.onData(chunk => {
     if (host === undefined) {
       if (overflowed) {
@@ -102,18 +120,30 @@ function bridge(
       }
       if (!(heldBytes + chunk.byteLength <= heldBytesMaximum)) {
         overflowed = true;
+        ended = true;
         held.length = 0;
+        tell(
+          'a window connection was closed: it sent more than the relay holds before the host side opened',
+        );
         client.close();
         return;
       }
       heldBytes += chunk.byteLength;
       held.push(chunk);
-    } else if (!host.send(chunk)) {
-      client.pause();
+    } else {
+      sendToHost(host, chunk);
     }
   });
   client.onClose(() => {
     clientGone = true;
+    if (host === undefined) {
+      if (!ended) {
+        ended = true;
+        tell('a window connection ended before the host side opened');
+      }
+    } else {
+      endedBy('client');
+    }
     host?.close();
   });
   opening.then(
@@ -122,12 +152,13 @@ function bridge(
         opened.close();
         return;
       }
+      tell(
+        `a connection to the window port was opened to the host's ${targetName}`,
+      );
       track(opened);
       host = opened;
       for (const chunk of held.splice(0)) {
-        if (!opened.send(chunk)) {
-          client.pause();
-        }
+        sendToHost(opened, chunk);
       }
       opened.onDrain(() => {
         client.resume();
@@ -136,16 +167,21 @@ function bridge(
         opened.resume();
       });
       opened.onData(chunk => {
+        toClient += chunk.byteLength;
         if (!client.send(chunk)) {
           opened.pause();
         }
       });
       opened.onClose(() => {
+        endedBy('host');
         client.close();
       });
     },
     (caught: unknown) => {
-      onDialFailed(caught);
+      ended = true;
+      tell(
+        `a connection to the window port could not be opened to the host's ${targetName}: ${reasonOf(caught)}`,
+      );
       client.close();
     },
   );
@@ -186,11 +222,8 @@ export async function openRelayTunnel(
           dialer.dial(target),
           track,
           request.limits.heldBytesMaximum,
-          caught => {
-            tell(
-              `a connection to the window port could not be opened to the host's ${targetText(target)}: ${reasonOf(caught)}`,
-            );
-          },
+          tell,
+          targetText(target),
         );
       },
       detail => {

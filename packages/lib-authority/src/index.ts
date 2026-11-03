@@ -92,6 +92,7 @@ export {
 export {
   type ConnectInput,
   type ConnectPhase,
+  type CancelSource,
   type Connector,
   type EditorResolver,
   type FailurePresenter,

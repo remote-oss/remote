@@ -61,11 +61,14 @@ export interface ConnectInput {
   windowWorkspace: string | undefined;
 }
 
+/** What ended a connect: the user's Cancel on the progress notification, or the window's resolver being disposed. */
+export type CancelSource = 'progress' | 'dispose';
+
 /** What an extension supplies: its own way to connect, and the events it reports on the way. */
 export interface Connector {
   connect(input: ConnectInput): Promise<Connected | Failed>;
   /** Ends prompts and processes. The host calls it only when the window is torn down, or on the user's Cancel. */
-  cancel(): void;
+  cancel(source?: CancelSource): void;
   /** Shows the detail of the connect, as the log. */
   revealDetails(): void;
   onPhase(listener: (phase: ConnectPhase) => void): () => void;
@@ -406,7 +409,7 @@ export async function registerResolver(
             title: options.startTitle(decoded),
             cancellable: options.cancellable,
             onCancel: () => {
-              connector.cancel();
+              connector.cancel('progress');
             },
             onDetails: () => {
               connector.revealDetails();
@@ -599,7 +602,7 @@ export async function registerResolver(
           stop();
         }
         registration.dispose();
-        connector.cancel();
+        connector.cancel('dispose');
       },
     },
   };

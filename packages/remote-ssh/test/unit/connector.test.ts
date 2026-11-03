@@ -40,8 +40,9 @@ function connectorFor(
   recording: Recording;
   revealed: string[];
   environments: Array<Readonly<Record<string, string>>>;
+  logged: () => string[];
 } {
-  const {recording, options} = setup();
+  const {recording, options, logSink} = setup();
   const revealed: string[] = [];
   const environments: Array<Readonly<Record<string, string>>> = [];
   return {
@@ -56,6 +57,7 @@ function connectorFor(
         environments.push(variables);
       },
     }),
+    logged: () => logSink.lines.map(line => line.message),
     recording,
     revealed,
     environments,
@@ -245,6 +247,46 @@ describe('the connector over the connect pipeline', () => {
     });
     await connector.connect(HOST_INPUT);
     deepStrictEqual(signal?.aborted, true);
+  });
+
+  it('connect-130b: a cancel names its source in the log, with the held connection it gives back', async () => {
+    const seen: string[][] = [];
+    for (const source of ['progress', 'dispose', undefined] as const) {
+      const {connector, logged} = connectorFor();
+      await connector.connect(HOST_INPUT);
+      connector.cancel(source);
+      seen.push(
+        logged().filter(
+          line =>
+            line.startsWith('the connect is cancelled') ||
+            line.startsWith('the held connection'),
+        ),
+      );
+    }
+    deepStrictEqual(seen, [
+      [
+        "the connect is cancelled: the user's Cancel on the progress notification",
+        'the held connection is given back: the connect is cancelled',
+      ],
+      [
+        "the connect is cancelled: the window's resolver is disposed",
+        'the held connection is given back: the connect is cancelled',
+      ],
+      [
+        'the connect is cancelled: by its caller',
+        'the held connection is given back: the connect is cancelled',
+      ],
+    ]);
+  });
+
+  it('connect-130b: a new connect says it gives back the connection the window held', async () => {
+    const {connector, logged} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(
+      logged().filter(line => line.startsWith('the held connection')),
+      ['the held connection is given back: a new connect starts'],
+    );
   });
 
   it('contracts §3.2: a cancel after a connect releases the connection once', async () => {

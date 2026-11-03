@@ -1,5 +1,6 @@
 import {deepStrictEqual, rejects} from 'node:assert';
 import {
+  type CancelSource,
   type Connected,
   type ConnectInput,
   type ConnectPhase,
@@ -56,6 +57,7 @@ class FakeConnector implements Connector {
   phases: ConnectPhase[] = [];
   inputs: ConnectInput[] = [];
   cancels = 0;
+  cancelSources: Array<CancelSource | undefined> = [];
   reveals = 0;
   during: (() => void) | undefined;
   hold: Promise<void> = Promise.resolve();
@@ -82,8 +84,9 @@ class FakeConnector implements Connector {
     return this.answer;
   }
 
-  cancel(): void {
+  cancel(source?: CancelSource): void {
     this.cancels += 1;
+    this.cancelSources.push(source);
   }
 
   revealDetails(): void {
@@ -551,7 +554,10 @@ describe('the resolver host: progress (F-2304)', () => {
     context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     context.editor.progressRuns[0]?.onCancel();
-    deepStrictEqual(context.connector.cancels, 1);
+    deepStrictEqual(
+      [context.connector.cancels, context.connector.cancelSources],
+      [1, ['progress']],
+    );
   });
 
   it('F-2304: the details link reveals the detail of the connect', async () => {
@@ -1327,7 +1333,10 @@ describe('the resolver host: teardown (F-2304.BR-8)', () => {
   it('F-2304.BR-8: disposing cancels the connector, once', async () => {
     const context = await setup();
     handleOf(context.registration).dispose();
-    deepStrictEqual(context.connector.cancels, 1);
+    deepStrictEqual(
+      [context.connector.cancels, context.connector.cancelSources],
+      [1, ['dispose']],
+    );
   });
 
   it('F-2304.BR-8: after disposing the transport events are not followed', async () => {
