@@ -55,9 +55,10 @@ The design is the **SSH questions** that `ssh` asks through the Docker CLI, and 
 - **An explicit command's failure** is classified by C2 from the Docker CLI's error output.
   - **"Permission denied"** in the SSH part gives STR:S056/STR:S225 with its buttons. Everything else gives F-0202's
     generic dialog.
-  - **The reading is ssh's own documented message,** as lib-ssh's classifier reads it (ADR-0010's documented forms).
-    lib-ssh's pure classifier is reused, not copied (ADR-0003). Part A gives remote-containers a dependency on lib-ssh
-    for that pure module, and `components.md` §3 says so.
+  - **The reading:** BR-5's own rule, one literal test of ssh's documented "Permission denied" message in the error's
+    SSH part (ADR-0010's documented forms), written in C2.
+  - **No lib-ssh:** remote-containers still doesn't import lib-ssh (`components.md` §3, `brief-volumes.md` §2.3). Its
+    classifier covers remote-ssh's many cases, and this needs one.
 - **The passive view** shows BR-20's welcome content for its rule's cases, and never a dialog.
 - **Nothing is remembered** of a failure (BR-8). The prompt book remembers answers, not failures (BR-14).
 
@@ -82,7 +83,7 @@ The design is the **SSH questions** that `ssh` asks through the Docker CLI, and 
 
 **Suggested cards** (daedalus):
 1. **The relay in C2:** §2, with unit rows for the environment, the book and the passive path.
-2. **The failures:** §3, with lib-ssh's classifier, and unit rows per error class.
+2. **The failures:** §3, BR-5's rule in C2, with unit rows for "Permission denied" and the other classes.
 3. **The fixture** (proteus): the SSH Docker host. Then the acceptance rows of §4 and F-0205's remote set.
 
 ## 6. Amendments carried by this PR (rulings of 2026-11-03)
