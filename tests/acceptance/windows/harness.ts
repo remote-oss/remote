@@ -1338,6 +1338,11 @@ export async function closeWindow(
   );
 }
 
+/** Moves window `name`'s focus to its editor group, away from an open quick input, as a click elsewhere in the window does. */
+export async function moveFocusAway(name: string): Promise<void> {
+  await inWindow(name, 'workbench.action.focusActiveEditorGroup');
+}
+
 /** The process id of window `name`'s live extension host, or undefined when it has none. */
 function liveProcessIdOf(name: string): number | undefined {
   try {

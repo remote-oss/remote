@@ -203,6 +203,9 @@ export async function secondEngine(
   return {...engine, marker, container: name, stop};
 }
 
+/** An SSH Docker host address nothing listens on: the discard port refuses connections. */
+export const SSH_DEAD = 'ssh://engine@127.0.0.1:9';
+
 /** The image of the SSH Docker host, built from `tests/acceptance/ssh-engine` on the pinned second engine image. */
 const SSH_ENGINE_IMAGE = 'remote-oss-acceptance-ssh-engine:1';
 
@@ -255,10 +258,50 @@ export function sshClientEnvironment(): Record<string, string> {
   return {PATH: `${sshWrapperFolder()}:${process.env.PATH ?? ''}`};
 }
 
-/** Where `program` is on this process's `PATH`, outside the run's own folders. */
+/** Where `program` is on this process's `PATH`, outside the run's own folders, so that it is never the run's wrapper. */
 async function realProgram(program: string): Promise<string> {
-  const {stdout} = await execFileAsync('sh', ['-c', `command -v ${program}`]);
+  const runFolder = variable('HARNESS_RUN_FOLDER');
+  const outside = (process.env.PATH ?? '')
+    .split(':')
+    .filter(entry => entry !== '' && !entry.startsWith(runFolder))
+    .join(':');
+  const {stdout} = await execFileAsync('sh', ['-c', `command -v ${program}`], {
+    env: {...process.env, PATH: outside},
+  });
   return stdout.trim();
+}
+
+/** The `ssh` wrapper's text: the real `ssh` with the run's own `ssh_config`. */
+async function wrapperText(): Promise<string> {
+  return `#!/bin/sh\nexec '${await realProgram('ssh')}' -F '${path.join(sshClientFolder(), 'ssh_config')}' "$@"\n`;
+}
+
+/**
+ * Puts an SSH stand-in in the wrapper's place until the returned function puts the wrapper back: it asks its askpass
+ * with an empty question and, on `password`, runs the real `ssh` as the wrapper does; on any other answer it fails as
+ * a refused password does, with status 255.
+ */
+export async function sshStandIn(
+  password: string,
+): Promise<() => Promise<void>> {
+  const wrapper = path.join(sshWrapperFolder(), 'ssh');
+  const real = (await wrapperText()).split('\n')[1] ?? '';
+  writeFileSync(
+    wrapper,
+    [
+      '#!/bin/sh',
+      'answer=$("$SSH_ASKPASS" "")',
+      `if [ "$answer" = '${password}' ]; then`,
+      `  ${real}`,
+      'fi',
+      "echo 'Permission denied (password).' >&2",
+      'exit 255',
+      '',
+    ].join('\n'),
+  );
+  return async () => {
+    writeFileSync(wrapper, await wrapperText());
+  };
 }
 
 /**
@@ -293,13 +336,9 @@ export async function writeSshClient(): Promise<void> {
       '',
     ].join('\n'),
   );
-  const realSsh = await realProgram('ssh');
   mkdirSync(sshWrapperFolder(), {recursive: true});
   const wrapper = path.join(sshWrapperFolder(), 'ssh');
-  writeFileSync(
-    wrapper,
-    `#!/bin/sh\nexec '${realSsh}' -F '${path.join(folder, 'ssh_config')}' "$@"\n`,
-  );
+  writeFileSync(wrapper, await wrapperText());
   chmodSync(wrapper, 0o755);
   mkdirSync(dockerOnlyFolder(), {recursive: true});
   symlinkSync(
