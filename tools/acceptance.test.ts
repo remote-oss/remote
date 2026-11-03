@@ -175,6 +175,10 @@ class FakeHarness implements HarnessDependencies {
         ]),
       );
     }
+    // A read-back is the run's check of a passphrase key or the loosened key, which OpenSSH refuses.
+    if (program === 'ssh-keygen' && programArguments[0] === '-y') {
+      return {status: 255, stdout: '', stderr: 'refused'};
+    }
     if (program === 'ssh-keygen' || program === 'env') {
       const keyFile = programArguments.at(-1) ?? '';
       this.runFolder = path.dirname(keyFile);
