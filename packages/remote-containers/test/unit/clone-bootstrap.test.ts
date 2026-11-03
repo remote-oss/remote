@@ -1,6 +1,7 @@
 import {deepStrictEqual, ok} from 'node:assert';
+import {readFileSync} from 'node:fs';
 import {
-  BOOTSTRAP_DOCKERFILE,
+  BOOTSTRAP_CLI,
   BOOTSTRAP_TOOLS,
   type BootstrapTool,
   bootstrapRemoveArguments,
@@ -20,18 +21,25 @@ function withoutTools(...tools: BootstrapTool[]): Set<BootstrapTool> {
 const BUILT_IN = {image: '', pull: false, socketPath: '/var/run/docker.sock'};
 
 describe('the bootstrap container (card containers-151)', () => {
-  it('F-0704 BR-1: our image is built on Alpine with the five tools, every pass, under our tag', () => {
+  it('F-0704 BR-1: our image is the package’s Alpine definition with the five tools and the CLI, built every pass under our tag', () => {
+    const lines = readFileSync(
+      new URL('../../resources/volume-bootstrap/Dockerfile', import.meta.url),
+      'utf8',
+    ).split('\n');
     deepStrictEqual(
       [
-        BOOTSTRAP_DOCKERFILE.split('\n')[0],
-        BOOTSTRAP_DOCKERFILE.includes(
-          'apk add --no-cache ca-certificates docker-cli docker-cli-compose git git-lfs nodejs openssh-client',
-        ),
+        lines[0],
+        lines[1],
+        lines.filter(line => line.startsWith('COPY ')),
         imageArgumentsOf(BUILT_IN, '/ctx'),
       ],
       [
         'FROM alpine:3.20',
-        true,
+        'RUN apk add --no-cache ca-certificates docker-cli docker-cli-compose git git-lfs nodejs openssh-client',
+        [
+          `COPY devcontainers-cli ${BOOTSTRAP_CLI.entry.slice(0, -'/devcontainer.js'.length)}`,
+          `COPY cli-preload.js ${BOOTSTRAP_CLI.preload}`,
+        ],
         {
           image: 'vsc-volume-bootstrap:latest',
           calls: [

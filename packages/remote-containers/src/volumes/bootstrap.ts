@@ -1,27 +1,23 @@
 /**
- * @fileoverview The bootstrap container a clone runs in: our own image definition on Alpine, the container that
- * mounts the volume and the engine's socket, and the check that the tools it needs are on its `PATH`. Every step is an
- * engine call read by its exit status.
+ * @fileoverview The bootstrap container a clone runs in: our own image on Alpine, whose definition is the package's
+ * `resources/volume-bootstrap/Dockerfile`, the container that mounts the volume and the engine's socket, and the check
+ * that the tools it needs are on its `PATH`. Every step is an engine call read by its exit status.
  */
 
 /** The tag our built-in bootstrap image is built under. */
 export const BOOTSTRAP_TAG = 'vsc-volume-bootstrap:latest';
 
-/** Where the image keeps the dev container CLI the extension bundles. */
-export const BOOTSTRAP_CLI_FOLDER =
-  '/usr/local/share/remote-oss/devcontainers-cli';
+/** Where the image keeps the dev container CLI the extension bundles, and the preload the CLI runs with. */
+export const BOOTSTRAP_CLI = {
+  entry: '/usr/local/share/remote-oss/devcontainers-cli/devcontainer.js',
+  preload: '/usr/local/share/remote-oss/cli-preload.js',
+} as const;
 
-/** The folder of the build context that holds the bundled CLI, beside the Dockerfile. */
-export const CONTEXT_CLI_FOLDER = 'devcontainers-cli';
-
-/** Our built-in image: Alpine's own packages for the five tools, and the bundled CLI. No other registry is used. */
-export const BOOTSTRAP_DOCKERFILE = [
-  'FROM alpine:3.20',
-  'RUN apk add --no-cache ca-certificates docker-cli docker-cli-compose git git-lfs nodejs openssh-client',
-  `COPY ${CONTEXT_CLI_FOLDER} ${BOOTSTRAP_CLI_FOLDER}`,
-  'ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt',
-  '',
-].join('\n');
+/** The names in the build context of the CLI's folder and the preload, which the image's definition copies in. */
+export const CONTEXT_NAMES = {
+  cliFolder: 'devcontainers-cli',
+  preload: 'cli-preload.js',
+} as const;
 
 /** The tools the check looks for, in its fixed order. */
 export const BOOTSTRAP_TOOLS = [
