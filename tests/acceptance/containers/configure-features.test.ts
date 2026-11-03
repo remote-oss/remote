@@ -318,7 +318,7 @@ describe('Configure Container Features: its file (card containers-150, part B)',
     }
   });
 
-  it('F-0807 AC-61 (c150-mixed-add): in a saved workspace with a virtual root and no configuration, Add Files... asks whether to go on with the problem of the workspace file, Cancel creates nothing and Continue goes to the where-to step', async () => {
+  it('F-0807 AC-61, AC-62 (ruling-1971-workspace-check): in a saved workspace with a virtual root and no configuration, Add Files... asks whether to go on with the problem of the workspace file, Cancel creates nothing and Continue goes to the where-to step', async () => {
     const folder = folderWith('c150-mixed-add', {'README.md': 'x\n'});
     const before = treeOf(folder);
     const file = workspaceFile('c150-mixed-add', [

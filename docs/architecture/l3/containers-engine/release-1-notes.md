@@ -65,6 +65,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-0503 AC-21 and AC-23 describe a `vscode-server-{platform}.tar.gz_{epoch-ms}` file per failed attempt and a
     `{commit}_{epoch-ms}` directory on the volume, both left behind (athena on #1591: `ruling-1591-no-partials`; spec
     question on remote-oss/remote-containers#34).
+
+- **Add Files..., Add Dev Container Configuration Files... and Open Container Configuration File name a virtual
+  folder in a saved workspace as the problem.** In a saved workspace whose first folder is not on the local file
+  system, the reference reads the workspace file through that folder and reports "Problems loading workspace file";
+  we report the folder, as Reopen in Container already does. The buttons and what they do are the same.
+  - Rows: `ruling-1971-workspace-check`.
+  - F-0807 AC-62 and F-0404 7.E10 describe the reference's text; ruled on remote-oss/remote#1971 (spec question on
+    remote-oss/remote-containers#132).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild
