@@ -3746,7 +3746,7 @@ export interface SettingRow {
   /** The state of the checkbox of a boolean setting; undefined for another kind. */
   checked: boolean | undefined;
   /** The tab the list is on: `User`, `Remote`, `Workspace`. */
-  tab: string;
+  section: string;
   /** How many settings the list shows. */
   count: number;
 }
@@ -3771,7 +3771,7 @@ export async function settingRow(
         return {
           lines: item.innerText.split('\\n').map(line => line.trim()).filter(line => line !== ''),
           checked: box === null ? undefined : box.getAttribute('aria-checked') === 'true',
-          tab: (document.querySelector('.settings-editor .settings-tabs-widget .action-label.checked')?.textContent ?? '').trim(),
+          section: (document.querySelector('.settings-editor .settings-tabs-widget .action-label.checked')?.textContent ?? '').trim(),
           count: items.length,
         };
       })()`,
