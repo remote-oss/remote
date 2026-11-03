@@ -273,6 +273,28 @@ async function discardCopy(
   }
 }
 
+/** Logs that the host rewrote the identity of the server it unpacked, when the install's block says it did. */
+function logIdentityRewrite(
+  stepRun: StepRun | RetriesExhausted,
+  parameters: ScriptParameters,
+  logger: Logger,
+): void {
+  if (stepRun.kind !== 'result') {
+    return;
+  }
+  const {identityFrom, identityTo} = stepRun.block.serverFacts;
+  if (identityFrom === undefined) {
+    return;
+  }
+  const source =
+    parameters.archivePath === ''
+      ? parameters.archiveUrl
+      : parameters.archivePath;
+  logger.info(
+    `The server from ${source} was built for commit ${identityFrom}; its identity now reads ${identityTo ?? ''}. Whether the two builds work together beyond the handshake is your risk.`,
+  );
+}
+
 /** Runs the install step with the archive where `delivery` says, and reads how it ended. */
 async function install(
   input: TransferInput,
@@ -302,6 +324,7 @@ async function install(
       ),
     input.cancellation,
   );
+  logIdentityRewrite(stepRun, parameters, dependencies.logger);
   return outcomeOf(stepRun, input.plan);
 }
 

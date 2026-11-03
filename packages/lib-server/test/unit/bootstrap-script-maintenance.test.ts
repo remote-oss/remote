@@ -124,15 +124,27 @@ describe('the POSIX bootstrap script', () => {
       const parameters = parametersFor();
       parameters.cleanup = {kind: 'keepNewest', count: 2};
       deepStrictEqual(
-        binAfter(['new1', 'new2', 'old3', 'old4', 'abc123'], parameters),
-        ['abc123', 'new1', 'new2'],
+        binAfter(
+          [
+            'new1',
+            'new2',
+            'old3',
+            'old4',
+            'abc1230000000000000000000000000000000000',
+          ],
+          parameters,
+        ),
+        ['abc1230000000000000000000000000000000000', 'new1', 'new2'],
       );
     });
 
     it('F-2413.BR-9: cleanup removes the log of an install it removes', () => {
       const parameters = parametersFor();
       parameters.cleanup = {kind: 'keepNewest', count: 1};
-      binAfter(['new1', 'old2', 'abc123'], parameters);
+      binAfter(
+        ['new1', 'old2', 'abc1230000000000000000000000000000000000'],
+        parameters,
+      );
       deepStrictEqual(
         existsSync(path.join(host.home, '.server-data', '.old2.log')),
         false,
@@ -147,7 +159,10 @@ describe('the POSIX bootstrap script', () => {
       for (const extension of ['log', 'pid', 'token']) {
         writeFileSync(path.join(dataFolder, `.old2.socket.${extension}`), '');
       }
-      binAfter(['new1', 'old2', 'abc123'], parameters);
+      binAfter(
+        ['new1', 'old2', 'abc1230000000000000000000000000000000000'],
+        parameters,
+      );
       deepStrictEqual(
         ['log', 'pid', 'token'].map(extension =>
           existsSync(path.join(dataFolder, `.old2.socket.${extension}`)),
@@ -160,8 +175,12 @@ describe('the POSIX bootstrap script', () => {
       const parameters = parametersFor();
       parameters.cleanup = {kind: 'keepNewest', count: 1};
       deepStrictEqual(
-        binAfter(['new1', 'old2', 'abc123'], parameters, 'old2'),
-        ['abc123', 'new1', 'old2'],
+        binAfter(
+          ['new1', 'old2', 'abc1230000000000000000000000000000000000'],
+          parameters,
+          'old2',
+        ),
+        ['abc1230000000000000000000000000000000000', 'new1', 'old2'],
       );
     });
 
@@ -173,10 +192,15 @@ describe('the POSIX bootstrap script', () => {
       parameters.cleanup = {kind: 'onlyCurrentRemoveLeftovers'};
       deepStrictEqual(
         binAfter(
-          [OTHER_COMMIT, `${FORTY}-1700000000`, 'notes', 'abc123'],
+          [
+            OTHER_COMMIT,
+            `${FORTY}-1700000000`,
+            'notes',
+            'abc1230000000000000000000000000000000000',
+          ],
           parameters,
         ),
-        ['abc123', 'notes'],
+        ['abc1230000000000000000000000000000000000', 'notes'],
       );
     });
 
@@ -185,10 +209,19 @@ describe('the POSIX bootstrap script', () => {
       parameters.cleanup = {kind: 'onlyCurrentKeepLeftovers'};
       deepStrictEqual(
         binAfter(
-          [OTHER_COMMIT, `${FORTY}-1700000000`, 'notes', 'abc123'],
+          [
+            OTHER_COMMIT,
+            `${FORTY}-1700000000`,
+            'notes',
+            'abc1230000000000000000000000000000000000',
+          ],
           parameters,
         ),
-        [`${FORTY}-1700000000`, 'abc123', 'notes'],
+        [
+          `${FORTY}-1700000000`,
+          'abc1230000000000000000000000000000000000',
+          'notes',
+        ],
       );
     });
 
@@ -227,7 +260,10 @@ describe('the POSIX bootstrap script', () => {
 
     it('R-86: nothing in the POSIX script names a bash feature', () => {
       const text = scriptFor(single('install'), 'posixShell', parametersFor());
-      deepStrictEqual(/\[\[|\bshopt\b|\bdeclare\b|\blocal\b/.test(text), false);
+      deepStrictEqual(
+        /\[\[(?!:[a-z]+:\])|\bshopt\b|\bdeclare\b|\blocal\b/.test(text),
+        false,
+      );
     });
   });
 });

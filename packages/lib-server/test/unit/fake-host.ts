@@ -186,7 +186,10 @@ function buildArchive(folder: string): string {
   const source = path.join(folder, 'source', 'server-1.0');
   mkdirSync(path.join(source, 'bin'), {recursive: true});
   writeExecutable(path.join(source, 'bin', 'launcher'), LAUNCHER);
-  writeFileSync(path.join(source, 'product.json'), '{}\n');
+  writeFileSync(
+    path.join(source, 'product.json'),
+    `{\n  "commit": "abc1230000000000000000000000000000000000"\n}\n`,
+  );
   mkdirSync(path.join(source, 'files'));
   for (let index = 0; index < 60; index++) {
     writeFileSync(path.join(source, 'files', `file-${String(index)}`), '');
@@ -253,7 +256,7 @@ export function parametersFor(): ScriptParameters {
     installRoot: '',
     dataFolderName: '.server-data',
     launcher: 'bin/launcher',
-    commit: 'abc123',
+    commit: 'abc1230000000000000000000000000000000000',
     archiveUrl: 'https://example.invalid/server.tar.gz',
     archivePath: '',
     removeArchive: false,
@@ -342,7 +345,12 @@ export function single(
 
 /** The install folder of the baseline parameters on a host. */
 export function installFolder(host: FakeHost): string {
-  return path.join(host.home, '.server-data', 'bin', 'abc123');
+  return path.join(
+    host.home,
+    '.server-data',
+    'bin',
+    'abc1230000000000000000000000000000000000',
+  );
 }
 
 /**

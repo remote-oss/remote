@@ -307,8 +307,19 @@ describe('the POSIX bootstrap script', () => {
     });
 
     for (const [root, folder] of [
-      ['~/srv', ['srv', '.server-data', 'bin', 'abc123']],
-      ['~', ['.server-data', 'bin', 'abc123']],
+      [
+        '~/srv',
+        [
+          'srv',
+          '.server-data',
+          'bin',
+          'abc1230000000000000000000000000000000000',
+        ],
+      ],
+      [
+        '~',
+        ['.server-data', 'bin', 'abc1230000000000000000000000000000000000'],
+      ],
     ] as const) {
       it(`F-2407 AC-7 (ruling-1277-tilde): the install root ${root} stands for the host's home folder`, () => {
         deepStrictEqual(
@@ -334,7 +345,11 @@ describe('the POSIX bootstrap script', () => {
           {...parametersFor(), installRoot: '/a/~/b'},
           ['server.installDir'],
         ),
-        {status: 'Ok', 'server.installDir': '/a/~/b/.server-data/bin/abc123'},
+        {
+          status: 'Ok',
+          'server.installDir':
+            '/a/~/b/.server-data/bin/abc1230000000000000000000000000000000000',
+        },
       );
     });
   });
@@ -597,7 +612,10 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       deepStrictEqual(
         existsSync(
-          path.join(installFolder(host), 'boot-lock.user.abc123.target'),
+          path.join(
+            installFolder(host),
+            'boot-lock.user.abc1230000000000000000000000000000000000.target',
+          ),
         ),
         false,
       );
@@ -623,7 +641,10 @@ describe('the POSIX bootstrap script', () => {
         serverFactsOf(host, single('install'), parameters, {
           environment: {STUB_FLOCK_BUSY: 'yes'},
         }).lockPath,
-        path.join(installFolder(host), 'boot-lock.user.abc123'),
+        path.join(
+          installFolder(host),
+          'boot-lock.user.abc1230000000000000000000000000000000000',
+        ),
       );
     });
 
@@ -899,7 +920,12 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, stepwise('prepare'), parametersFor());
       deepStrictEqual(
         existsSync(
-          path.join(host.home, '.server-data', 'bin', 'abc123-1700000000000'),
+          path.join(
+            host.home,
+            '.server-data',
+            'bin',
+            'abc1230000000000000000000000000000000000-1700000000000',
+          ),
         ),
         true,
       );
@@ -916,7 +942,7 @@ describe('the POSIX bootstrap script', () => {
             host.home,
             '.server-data',
             'bin',
-            'abc123-1700000000000',
+            'abc1230000000000000000000000000000000000-1700000000000',
             'bin',
             'launcher',
           ),
@@ -953,7 +979,12 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, stepwise('activate'), parametersFor());
       deepStrictEqual(
         existsSync(
-          path.join(host.home, '.server-data', 'bin', 'abc123-1700000000000'),
+          path.join(
+            host.home,
+            '.server-data',
+            'bin',
+            'abc1230000000000000000000000000000000000-1700000000000',
+          ),
         ),
         false,
       );

@@ -64,7 +64,7 @@ const LINUX_FACTS = [
   'host.wgetBusybox=yes',
   'host.sshAuthSock=/tmp/agent',
   'host.display=:0',
-  'server.installDir=/home/dev/.data/bin/abc123',
+  'server.installDir=/home/dev/.data/bin/abc1230000000000000000000000000000000000',
   'server.installed=yes',
 ];
 
@@ -307,7 +307,7 @@ describe('probe (V2)', () => {
       outcome.kind === 'probed'
         ? [outcome.host.installed, outcome.host.installFolder]
         : outcome.kind,
-      [true, '/home/dev/.data/bin/abc123'],
+      [true, '/home/dev/.data/bin/abc1230000000000000000000000000000000000'],
     );
   });
 

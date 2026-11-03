@@ -27,7 +27,8 @@ const REDIRECT: RedirectRule = {
 
 const NEVER_CANCELLED = new AbortController().signal;
 
-const CLI_PATH = '/home/user/.server-data/codium-insiders-abc123';
+const CLI_PATH =
+  '/home/user/.server-data/codium-insiders-abc1230000000000000000000000000000000000';
 
 const TOKEN = 'tok-xyz';
 
@@ -44,7 +45,7 @@ function baseParameters(): ReturnType<typeof parametersFor> & {
     ...parametersFor(),
     launcher: 'codium-insiders',
     ['cli']: {
-      name: 'codium-insiders-abc123',
+      name: 'codium-insiders-abc1230000000000000000000000000000000000',
       dataFolder: '/home/user/.server-data/cli',
     },
   };
@@ -287,7 +288,8 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
           where: 'host',
           clientFallback: false,
           dataFolder: '/home/user/.server-data',
-          lockPlace: '/home/user/.server-data/bin/abc123',
+          lockPlace:
+            '/home/user/.server-data/bin/abc1230000000000000000000000000000000000',
           notes: [],
           ...overrides,
         },

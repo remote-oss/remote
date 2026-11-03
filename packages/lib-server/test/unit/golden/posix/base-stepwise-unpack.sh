@@ -4,7 +4,7 @@ fi
 INSTALL_ROOT=''
 DATA_FOLDER='.server-data'
 LAUNCHER='bin/launcher'
-COMMIT='abc123'
+COMMIT='abc1230000000000000000000000000000000000'
 ARCHIVE_URL='https://example.invalid/server.tar.gz'
 ARCHIVE_PATH=''
 ARCHIVE_REMOVE='no'
@@ -131,9 +131,25 @@ unpack_move_top() {
   rm -rf "$1"
   [ "$MOVED" = 1 ]
 }
+rewrite_identity() {
+  IDENTITY_FILE=$1/product.json
+  [ -f "$IDENTITY_FILE" ] || return 1
+  IDENTITY_OLD=$(sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' "$IDENTITY_FILE" </dev/null | head -n 1)
+  [ -n "$IDENTITY_OLD" ] || return 1
+  [ "$IDENTITY_OLD" != "$COMMIT" ] || return 0
+  IDENTITY_TEMP=$IDENTITY_FILE.identity.$$
+  if sed 's/\("commit"[[:space:]]*:[[:space:]]*"\)'"$IDENTITY_OLD"'"/\1'"$COMMIT"'"/' "$IDENTITY_FILE" >"$IDENTITY_TEMP" && mv -f "$IDENTITY_TEMP" "$IDENTITY_FILE"; then
+    fact server.identityFrom "$IDENTITY_OLD"
+    fact server.identityTo "$COMMIT"
+    return 0
+  fi
+  rm -f "$IDENTITY_TEMP"
+  return 1
+}
 STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX
 cat >"$STAGING.archive" || finish UnpackFailed
 unpack_into "$STAGING.archive" "$STAGING" || UNPACK_FAILED=yes
 rm -f "$STAGING.archive"
 [ -z "${UNPACK_FAILED:-}" ] && [ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed
+rewrite_identity "$STAGING" || finish UnpackFailed
 finish Ok

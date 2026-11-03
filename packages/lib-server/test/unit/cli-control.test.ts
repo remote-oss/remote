@@ -19,7 +19,7 @@ const SERVE = {
 };
 
 const TEMPLATE_REASON =
-  'cannot expand ${release} for commit abc123 in the download url template';
+  'cannot expand ${release} for commit abc1230000000000000000000000000000000000 in the download url template';
 
 const TEMPLATE_ERROR = `WrappedError(WrappedError { message: "${TEMPLATE_REASON}", original: "https://example.invalid/server-\${release}.tar.gz" })`;
 

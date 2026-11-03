@@ -29,7 +29,7 @@ import {
 /** The name of the CLI parameters' property, which the card fixes and is shorter than the identifier floor. */
 const CLI_PROPERTY = 'cli';
 
-const CLI_NAME = 'codium-insiders-abc123';
+const CLI_NAME = 'codium-insiders-abc1230000000000000000000000000000000000';
 
 /** The CLI stand-in: it prints its ready line unless told to fail, records its environment, and stays up. */
 const STAND_IN_CLI = [
@@ -176,7 +176,15 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
               Number(block.cliFacts.pid) > 1,
               block.cliFacts.log,
             ],
-        ['Ok', '41234', true, path.join(dataFolder(host), '.cli.abc123.log')],
+        [
+          'Ok',
+          '41234',
+          true,
+          path.join(
+            dataFolder(host),
+            '.cli.abc1230000000000000000000000000000000000.log',
+          ),
+        ],
       );
     });
 
@@ -239,7 +247,14 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       deepStrictEqual(
         spawnSync(
           'stat',
-          ['-c', '%a', path.join(dataFolder(host), '.cli.abc123.log')],
+          [
+            '-c',
+            '%a',
+            path.join(
+              dataFolder(host),
+              '.cli.abc1230000000000000000000000000000000000.log',
+            ),
+          ],
           {encoding: 'utf8'},
         ).stdout.trim(),
         '600',
@@ -606,10 +621,26 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
         ...cliParameters(host),
         archivePath: cliArchive(host),
       };
-      const binFolder = path.join(dataFolder(host), 'bin', 'abc123');
+      const binFolder = path.join(
+        dataFolder(host),
+        'bin',
+        'abc1230000000000000000000000000000000000',
+      );
       mkdirSync(binFolder, {recursive: true});
-      writeFileSync(path.join(binFolder, 'boot-lock.user.abc123.target'), '');
-      writeFileSync(path.join(binFolder, 'boot-lock.user.abc123'), '');
+      writeFileSync(
+        path.join(
+          binFolder,
+          'boot-lock.user.abc1230000000000000000000000000000000000.target',
+        ),
+        '',
+      );
+      writeFileSync(
+        path.join(
+          binFolder,
+          'boot-lock.user.abc1230000000000000000000000000000000000',
+        ),
+        '',
+      );
       const block = installBlock(parameters);
       deepStrictEqual(block === 'none' ? block : block.status, 'LockBusy');
     });

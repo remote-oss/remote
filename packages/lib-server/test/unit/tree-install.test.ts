@@ -26,7 +26,7 @@ import {
 } from './fake-host.ts';
 
 /** The commit folder of the baseline parameters, and the epoch suffix of their staging siblings. */
-const COMMIT = 'abc123';
+const COMMIT = 'abc1230000000000000000000000000000000000';
 const SUFFIX = '1700000000000';
 
 /** The launcher the tree must hold for it to be complete. */

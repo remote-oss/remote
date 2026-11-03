@@ -447,6 +447,7 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   busybox: [],
   fetch: FETCH_FUNCTIONS,
   unpack: UNPACK_FUNCTIONS,
+  identity: [],
   leave: LEAVE_FUNCTIONS,
   process: PROCESS_FUNCTIONS,
   secretToken: SECRET_TOKEN_FUNCTIONS,

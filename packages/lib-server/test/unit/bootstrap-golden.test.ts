@@ -61,7 +61,7 @@ function fullParameters(): ScriptParameters {
       socketMode: true,
     },
     [CLI_PARAMETERS]: {
-      name: 'codium-abc123',
+      name: 'codium-abc1230000000000000000000000000000000000',
       dataFolder: '/home/u/.cli',
       stopProcessId: 4242,
     },

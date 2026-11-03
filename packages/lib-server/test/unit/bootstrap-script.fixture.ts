@@ -81,13 +81,16 @@ export function lockInTemporaryFolder(
 ): string {
   parameters.lock.inTemporaryFolder = true;
   parameters.lock.filePrefix = `boot-lock.${path.basename(path.dirname(host.home))}`;
-  return `/tmp/${parameters.lock.filePrefix}.abc123`;
+  return `/tmp/${parameters.lock.filePrefix}.abc1230000000000000000000000000000000000`;
 }
 
 /** Another window's link lock on the baseline install: both names exist. Returns the lock file's path. */
 export function holdLinkLock(host: FakeHost): string {
   mkdirSync(installFolder(host), {recursive: true});
-  const lock = path.join(installFolder(host), 'boot-lock.user.abc123');
+  const lock = path.join(
+    installFolder(host),
+    'boot-lock.user.abc1230000000000000000000000000000000000',
+  );
   writeFileSync(lock, '');
   writeFileSync(`${lock}.target`, '');
   return lock;
