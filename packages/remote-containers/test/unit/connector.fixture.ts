@@ -416,6 +416,7 @@ export function sceneOf(
   let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
     noEngineProgram: noEngineProgramOf(FIXTURE_STORAGE),
+    clientPlatform: 'linux',
     folderExists: () => Promise.resolve(scene.folderExists),
     discoverConfigurations: () => Promise.resolve(scene.candidates),
     shutdown: {

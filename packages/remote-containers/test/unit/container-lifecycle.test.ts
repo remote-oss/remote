@@ -51,6 +51,7 @@ const REQUEST: ContainerRequest = {
   mountGitWorktreeCommonDir: false,
   features: {defaultFeatures: {}, lockfile: true},
   mounts: [],
+  windowsClient: false,
   runArgs: [],
   workspaceMount: undefined,
   pausedRetry: () => Promise.resolve(false),
@@ -2141,6 +2142,16 @@ describe('containerLifecycleOf', () => {
       workspaceMount: 'source=/work,target=/vscodex,type=bind',
     });
     deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);
+  });
+
+  it('F-0419 AC-23: a single letter before :/ is a volume name off Windows, which fails, and a drive on Windows, which is no collision', async () => {
+    const runArgs = ['-v', 'x:/vscode'];
+    const linux = await imageRun({runArgs, windowsClient: false});
+    const windows = await imageRun({runArgs, windowsClient: true});
+    deepStrictEqual(
+      [linux.outcome.kind, windows.outcome.kind],
+      ['reservedMount', 'ready'],
+    );
   });
 
   it('F-0419 7.E2: with cacheVolume off a reserved target of an image configuration is not checked', async () => {

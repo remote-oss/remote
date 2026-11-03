@@ -1481,6 +1481,7 @@ export async function activate(
       discoverConfigurations: folder =>
         discoverConfigurations(folder, configFiles, collate),
       noEngineProgram: noEngineProgramOf(context.globalStorageUri.fsPath),
+      clientPlatform: process.platform,
       folderExists: async folder => {
         try {
           await vscode.workspace.fs.stat(vscode.Uri.file(folder));

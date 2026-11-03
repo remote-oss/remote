@@ -65,6 +65,8 @@ export interface ContainerRequest {
   features: FeatureSettings;
   /** The `mounts` of the configuration, as the CLI read them; none when it has none. */
   mounts: readonly unknown[];
+  /** Whether the client is Windows, where a drive letter's colon belongs to the source of a volume. */
+  windowsClient: boolean;
   /** The `runArgs` of the configuration, as the CLI read them; none when it has none. */
   runArgs: readonly unknown[];
   /** The `workspaceMount` of the configuration, as the CLI read it; none when it has none. */
@@ -521,7 +523,10 @@ export function containerLifecycleOf(dependencies: {
     if (composeResolution.kind !== 'ready') {
       return [
         {property: 'mounts', targets: request.mounts.map(mountTargetOf)},
-        {property: 'runArgs', targets: runArgsTargets(request.runArgs)},
+        {
+          property: 'runArgs',
+          targets: runArgsTargets(request.runArgs, request.windowsClient),
+        },
         {
           property: 'workspaceMount',
           targets: [mountTargetOf(request.workspaceMount)],
@@ -535,7 +540,7 @@ export function containerLifecycleOf(dependencies: {
         targets: (
           composeResolution.model.services.get(composeResolution.service)
             ?.volumes ?? []
-        ).map(serviceVolumeTargetOf),
+        ).map(entry => serviceVolumeTargetOf(entry, request.windowsClient)),
       },
     ];
   }
