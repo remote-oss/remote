@@ -76,6 +76,20 @@ function cellsOf(line: string | undefined): string[] {
     .map(cell => cell.trim());
 }
 
+/** The cells of the first data row of `table`, each with its wrapped lines joined by one space. */
+function firstRowOf(table: readonly string[]): string[] {
+  const end = table.findIndex(
+    (line, index) => index > 2 && /^[╟╚]/u.test(line),
+  );
+  const lines = table.slice(3, end).map(cellsOf);
+  return (lines[0] ?? []).map((unused, column) =>
+    lines
+      .map(cells => cells[column] ?? '')
+      .filter(cell => cell !== '')
+      .join(' '),
+  );
+}
+
 /** The terminals of window `name` that are the troubleshooting one. */
 async function troubleshootingTabs(name: string): Promise<string[]> {
   return (await terminalTabsOf(name)).filter(label => label.includes(NAME));
@@ -278,7 +292,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
     try {
       const table = await tableOf('c136-f');
       deepStrictEqual(
-        [cellsOf(table[1]), cellsOf(table[3])],
+        [cellsOf(table[1]), firstRowOf(table)],
         [
           ['Status', 'Message'],
           ['OfflineError', 'Error: OfflineError (The connection timed out)'],
@@ -304,7 +318,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
     try {
       const table = await tableOf('c136-g');
       deepStrictEqual(
-        [cellsOf(table[1]), cellsOf(table[3])],
+        [cellsOf(table[1]), firstRowOf(table)],
         [
           ['Status', 'Message'],
           [
@@ -318,23 +332,26 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
     }
   });
 
-  for (const value of [true, false]) {
-    it(`F-2605 AC-24 (c136-chat-${String(value)}): with the chat key ${String(value)} the terminal has no Copilot line`, async () => {
-      await userSettings({'remote.SSH.experimental.chat': value});
-      const name = `c136-chat-${String(value)}`;
-      await failed(name);
-      try {
-        await tableOf(name);
-        deepStrictEqual(
-          /Copilot|Cmd\+click/u.test(await terminalText(name)),
-          false,
-        );
-      } finally {
-        await userSettings({'remote.SSH.experimental.chat': undefined});
-        await closeWindow(name).catch(() => undefined);
-      }
-    });
+  /** Fails window `name` with the chat key `value` and gives whether its terminal has a Copilot line. */
+  async function copilotLine(name: string, value: boolean): Promise<boolean> {
+    await userSettings({'remote.SSH.experimental.chat': value});
+    await failed(name);
+    try {
+      await tableOf(name);
+      return /Copilot|Cmd\+click/u.test(await terminalText(name));
+    } finally {
+      await userSettings({'remote.SSH.experimental.chat': undefined});
+      await closeWindow(name).catch(() => undefined);
+    }
   }
+
+  it('F-2605 AC-24 (c136-chat-true): with the chat key true the terminal has no Copilot line', async () => {
+    deepStrictEqual(await copilotLine('c136-chat-true', true), false);
+  });
+
+  it('F-2605 AC-24 (c136-chat-false): with the chat key false the terminal has no Copilot line', async () => {
+    deepStrictEqual(await copilotLine('c136-chat-false', false), false);
+  });
 
   it('F-2605 AC-13 (c136-hostkey): cancelling the host-key question of a new host opens no terminal and records no error hint', async () => {
     writeFileSync(`${variable('HARNESS_RUN_FOLDER')}/known_hosts_stranger`, '');
