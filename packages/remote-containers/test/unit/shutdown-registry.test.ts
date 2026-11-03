@@ -335,27 +335,28 @@ describe('the shutdown registry (card containers-68)', () => {
 });
 
 /** A Compose project's containers as the engine holds them: `running` by service, and what `kill` removed. */
-function project(services: Record<string, string>) {
-  const running = new Map(Object.entries(services));
+function project(services: ReadonlyArray<readonly [string, string]>) {
+  const running = new Map<string, string>(services);
   return {
     answer: (argv: readonly string[]): DockerResult => {
       if (argv[0] === 'ps') {
         return {
           status: 0,
           stdout: [...running]
-            .map(([service, id]) => `${id}\t${service}`)
+            .map(([service, container]) => `${container}\t${service}`)
             .join('\n'),
         };
       }
-      for (const [service, id] of running) {
-        if (argv[0] === 'kill' && argv[1] === id) {
+      for (const [service, container] of running) {
+        if (argv[0] === 'kill' && argv[1] === container) {
           running.delete(service);
         }
       }
       return {status: 0, stdout: ''};
     },
     running: () => [...running.keys()].sort(),
-    recreate: (service: string, id: string) => running.set(service, id),
+    recreate: (service: string, container: string) =>
+      running.set(service, container),
   };
 }
 
@@ -366,13 +367,11 @@ function composeConnect(
   connectionId: string,
   scope: readonly string[],
   options: {
-    service?: string;
     action?: 'stop' | 'none';
     engine?: typeof ENGINE;
     containerId?: string;
   } = {},
 ): void {
-  const service = options.service ?? scope[0] ?? 'app';
   registry.register(leaseId, {
     type: 'register',
     connectionId,
@@ -385,7 +384,7 @@ function composeConnect(
   registry.setCompose({
     type: 'compose',
     connectionId,
-    compose: {project: 'proj', service, scope},
+    compose: {project: 'proj', service: scope[0] ?? 'app', scope},
   });
   if (options.containerId !== undefined) {
     registry.setContainer({
@@ -397,9 +396,43 @@ function composeConnect(
   }
 }
 
+/** Services `app` and `db`, whose containers are `a1` and `d1`. */
+const APP_AND_DB = [
+  ['app', 'a1'],
+  ['db', 'd1'],
+] as const;
+
+/**
+ * The services running after each of the lease lists in `steps` is the live set and ten seconds have passed, for
+ * connections of the project that `connections` describe (lease 1, 2, ... in order).
+ */
+async function runningAfter(
+  services: ReadonlyArray<readonly [string, string]>,
+  connections: ReadonlyArray<readonly string[]>,
+  steps: ReadonlyArray<readonly number[]>,
+): Promise<string[][]> {
+  const world = project(services);
+  const {registry, advance} = scene(world.answer);
+  connections.forEach((scope, position) => {
+    composeConnect(
+      registry,
+      position + 1,
+      `conn${String(position + 1)}`,
+      scope,
+    );
+  });
+  const seen: string[][] = [];
+  for (const live of steps) {
+    registry.leasesChanged(live);
+    await advance(CHECK_MILLISECONDS);
+    seen.push(world.running());
+  }
+  return seen;
+}
+
 describe('the shutdown registry, the Compose stop (card containers-144)', () => {
   it('F-0417 AC-10, AC-11: a Compose connection that ends kills the running containers of its scope at ten seconds, with docker kill and no Compose call', async () => {
-    const world = project({app: 'a1', db: 'd1'});
+    const world = project(APP_AND_DB);
     const {registry, advance, runs} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app', 'db'], {containerId: 'a1'});
     registry.leasesChanged([]);
@@ -418,7 +451,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
   });
 
   it('F-0417 AC-4, BR-12: a Compose connection whose action is none runs no docker command', async () => {
-    const world = project({app: 'a1'});
+    const world = project([['app', 'a1']]);
     const {registry, advance, runs} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app'], {
       containerId: 'a1',
@@ -430,68 +463,71 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
   });
 
   it('F-0417 AC-13, AC-63, AC-59: a service outside the scope, a depends_on one or one started by hand, stays running', async () => {
-    const world = project({app: 'a1', db: 'd1', hand: 'h1'});
-    const {registry, advance} = scene(world.answer);
-    composeConnect(registry, 1, 'a', ['app']);
-    registry.leasesChanged([]);
-    await advance(CHECK_MILLISECONDS);
-    deepStrictEqual(world.running(), ['db', 'hand']);
+    deepStrictEqual(
+      await runningAfter(
+        [
+          ['app', 'a1'],
+          ['db', 'd1'],
+          ['hand', 'h1'],
+        ],
+        [['app']],
+        [[]],
+      ),
+      [['db', 'hand']],
+    );
   });
 
   it('F-0417 AC-16, AC-38: the close of one of two connections of a project stops nothing, and the last close stops every container', async () => {
-    const world = project({app: 'a1', db: 'd1'});
-    const {registry, advance} = scene(world.answer);
-    composeConnect(registry, 1, 'a', ['app', 'db']);
-    composeConnect(registry, 2, 'b', ['app', 'db']);
-    registry.leasesChanged([1]);
-    await advance(4 * CHECK_MILLISECONDS);
-    const afterFirst = world.running();
-    registry.leasesChanged([]);
-    await advance(CHECK_MILLISECONDS);
-    deepStrictEqual([afterFirst, world.running()], [['app', 'db'], []]);
+    deepStrictEqual(
+      await runningAfter(
+        APP_AND_DB,
+        [
+          ['app', 'db'],
+          ['app', 'db'],
+        ],
+        [[1], []],
+      ),
+      [['app', 'db'], []],
+    );
   });
 
   it('F-0417 AC-39, AC-40: with disjoint scopes each close stops its own service only', async () => {
-    const world = project({app: 'a1', web: 'w1'});
-    const {registry, advance} = scene(world.answer);
-    composeConnect(registry, 1, 'a', ['app']);
-    composeConnect(registry, 2, 'b', ['web']);
-    registry.leasesChanged([2]);
-    await advance(CHECK_MILLISECONDS);
-    const afterFirst = world.running();
-    registry.leasesChanged([]);
-    await advance(CHECK_MILLISECONDS);
-    deepStrictEqual([afterFirst, world.running()], [['web'], []]);
+    deepStrictEqual(
+      await runningAfter(APP_AND_DB, [['app'], ['db']], [[2], []]),
+      [['db'], []],
+    );
   });
 
+  /** Three services, a window of all three and one of two of them, closed in the order of `steps`. */
+  function threeServices(steps: ReadonlyArray<readonly number[]>) {
+    return runningAfter(
+      [
+        ['py', 'p1'],
+        ['node', 'n1'],
+        ['db', 'd1'],
+      ],
+      [
+        ['py', 'node', 'db'],
+        ['py', 'node'],
+      ],
+      steps,
+    );
+  }
+
   it('F-0417 AC-48: the first close stops the service only it ran, and the last close stops what the first one skipped', async () => {
-    const world = project({py: 'p1', node: 'n1', db: 'd1'});
-    const {registry, advance} = scene(world.answer);
-    composeConnect(registry, 1, 'a', ['py', 'node', 'db']);
-    composeConnect(registry, 2, 'b', ['py', 'node']);
-    registry.leasesChanged([2]);
-    await advance(CHECK_MILLISECONDS);
-    const afterFirst = world.running();
-    registry.leasesChanged([]);
-    await advance(CHECK_MILLISECONDS);
-    deepStrictEqual([afterFirst, world.running()], [['node', 'py'], []]);
+    deepStrictEqual(await threeServices([[2], []]), [['node', 'py'], []]);
   });
 
   it('F-0417 AC-49: when the smaller scope closes first nothing stops, and the last close stops all three', async () => {
-    const world = project({py: 'p1', node: 'n1', db: 'd1'});
-    const {registry, advance} = scene(world.answer);
-    composeConnect(registry, 1, 'a', ['py', 'node', 'db']);
-    composeConnect(registry, 2, 'b', ['py', 'node']);
-    registry.leasesChanged([1]);
-    await advance(CHECK_MILLISECONDS);
-    const afterFirst = world.running();
-    registry.leasesChanged([]);
-    await advance(CHECK_MILLISECONDS);
-    deepStrictEqual([afterFirst, world.running()], [['db', 'node', 'py'], []]);
+    deepStrictEqual(await threeServices([[1], []]), [['db', 'node', 'py'], []]);
   });
 
   it('F-0417 AC-53: a container an attach window holds stays up through both closes, and the last close stops it with the rest', async () => {
-    const world = project({app: 'a1', db: 'd1', web: 'w1'});
+    const world = project([
+      ['app', 'a1'],
+      ['db', 'd1'],
+      ['web', 'w1'],
+    ]);
     const {registry, advance} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app', 'db']);
     composeConnect(registry, 2, 'b', ['web', 'app']);
@@ -499,22 +535,17 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
       containerId: 'd1',
       action: 'none',
     });
-    registry.leasesChanged([2, 3]);
-    await advance(CHECK_MILLISECONDS);
-    const afterA = world.running();
-    registry.leasesChanged([2]);
-    await advance(CHECK_MILLISECONDS);
-    const afterAttach = world.running();
-    registry.leasesChanged([]);
-    await advance(CHECK_MILLISECONDS);
-    deepStrictEqual(
-      [afterA, afterAttach, world.running()],
-      [['app', 'db', 'web'], ['app', 'db', 'web'], []],
-    );
+    const seen: string[][] = [];
+    for (const live of [[2, 3], [2], []]) {
+      registry.leasesChanged(live);
+      await advance(CHECK_MILLISECONDS);
+      seen.push(world.running());
+    }
+    deepStrictEqual(seen, [['app', 'db', 'web'], ['app', 'db', 'web'], []]);
   });
 
   it('F-0417 AC-18: a connection whose action is none still counts as using its services', async () => {
-    const world = project({app: 'a1'});
+    const world = project([['app', 'a1']]);
     const {registry, advance} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app'], {
       containerId: 'a1',
@@ -527,7 +558,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
   });
 
   it('F-0417 AC-52, BR-8: a connection that ended does not count, and its own obligation runs at its end', async () => {
-    const world = project({app: 'a1', db: 'd1'});
+    const world = project(APP_AND_DB);
     const {registry, advance} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app', 'db']);
     composeConnect(registry, 2, 'b', ['app', 'db']);
@@ -540,7 +571,7 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
   });
 
   it('F-0417 BR-7: a service a close skipped is stopped at the last close even when its container was recreated, and a project of another engine does not count', async () => {
-    const world = project({app: 'a1', db: 'd1'});
+    const world = project(APP_AND_DB);
     const {registry, advance} = scene(world.answer);
     composeConnect(registry, 1, 'a', ['app', 'db']);
     composeConnect(registry, 2, 'b', ['app'], {
