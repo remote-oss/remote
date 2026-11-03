@@ -7,7 +7,7 @@ import type {Failed, FailurePresenter} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import {attachDialogOf, attachPickOf} from './attach-dialog.ts';
 import type {Translate} from './engine-dialogs.ts';
-import type {ErrorButton} from './recovery-presenter.ts';
+import {chosenButton, type ErrorButton, pickedItem} from './choose.ts';
 import {CONTAINERS_DOCUMENTATION} from './recovery-presenter.ts';
 
 /** What the presenter shows and does. */
@@ -53,11 +53,7 @@ export function attachRecoveryPresenterOf(
   /** The quick pick of More Actions...; Open Documentation shows it again. */
   async function showQuickPick(failed: Failed): Promise<void> {
     const pick = attachPickOf(failed, translate);
-    const chosen = await ports.pick(
-      pick.placeholder,
-      pick.items.map(item => item.label),
-    );
-    const item = pick.items.find(each => each.label === chosen);
+    const item = await pickedItem(ports, pick);
     if (item?.action === 'startContainer') {
       await started();
       await ports.reloadWindow();
@@ -76,15 +72,12 @@ export function attachRecoveryPresenterOf(
   return {
     present: async failed => {
       const dialog = attachDialogOf(failed, translate);
-      const chosen = await ports.showError(
+      const button = await chosenButton(
+        ports,
         '',
         dialog.detail,
-        dialog.buttons.map(button => ({
-          title: button.label,
-          ...(button.action === 'moreActions' ? {isCloseAffordance: true} : {}),
-        })),
+        dialog.buttons,
       );
-      const button = dialog.buttons.find(each => each.label === chosen);
       if (button?.action === 'retry') {
         return 'reload';
       }

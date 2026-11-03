@@ -9,7 +9,7 @@ import type {Translate} from './engine-dialogs.ts';
 import {failureText, reasonText} from './failure-strings.ts';
 
 /** What choosing a button or an item does. */
-export type AttachAction =
+type AttachAction =
   | 'chooseContainer'
   | 'startContainer'
   | 'retry'
@@ -20,7 +20,7 @@ export type AttachAction =
   | 'openDocumentation';
 
 /** One button or item. */
-export interface AttachChoice {
+interface AttachChoice {
   label: string;
   action: AttachAction;
 }
@@ -36,13 +36,6 @@ export interface AttachPick {
   placeholder: string;
   items: readonly AttachChoice[];
 }
-
-/** The kinds of failure an attach shows its own dialog for. */
-export const ATTACH_FAILURES: ReadonlySet<string> = new Set([
-  'attachedNotFound',
-  'attachedNotRunning',
-  'attachFailed',
-]);
 
 /** The primary button of the failure: the choice that gets the attach going again. */
 function primaryOf(kind: string, translate: Translate): AttachChoice {

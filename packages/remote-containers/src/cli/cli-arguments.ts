@@ -47,6 +47,20 @@ export interface UpOptions {
   workspaceMountConsistency: string;
 }
 
+/** The size of the terminal a run's lifecycle commands show in, as arguments; none when the size is not known. */
+function terminalArguments(
+  size: {rows: number; columns: number} | undefined,
+): string[] {
+  return size === undefined
+    ? []
+    : [
+        '--terminal-rows',
+        String(size.rows),
+        '--terminal-columns',
+        String(size.columns),
+      ];
+}
+
 /** The arguments every subcommand starts with, up to the log format and the terminal size. */
 function commonArguments(subcommand: string, target: CliTarget): string[] {
   return [
@@ -77,14 +91,7 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     target.logLevel,
     '--log-format',
     'json',
-    ...(target.terminalSize === undefined
-      ? []
-      : [
-          '--terminal-rows',
-          String(target.terminalSize.rows),
-          '--terminal-columns',
-          String(target.terminalSize.columns),
-        ]),
+    ...terminalArguments(target.terminalSize),
   ];
 }
 
@@ -288,14 +295,7 @@ function attachedCommonArguments(target: AttachedCliTarget): string[] {
     target.logLevel,
     '--log-format',
     'json',
-    ...(target.terminalSize === undefined
-      ? []
-      : [
-          '--terminal-rows',
-          String(target.terminalSize.rows),
-          '--terminal-columns',
-          String(target.terminalSize.columns),
-        ]),
+    ...terminalArguments(target.terminalSize),
   ];
 }
 
