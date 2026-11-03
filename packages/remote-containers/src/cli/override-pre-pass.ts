@@ -28,6 +28,26 @@ function withDefaults(
   );
 }
 
+/** A reference to an environment variable, with or without a default. */
+const ANY_REFERENCE =
+  /\$\{(?:localEnv|env):([^:}]+)(?::([^:}]*))?(?::[^}]*)?\}/g;
+
+/** The text of a string value with every reference resolved from the editor's environment, an unset one by its default. */
+function resolved(
+  value: string,
+  environment: Readonly<Record<string, string | undefined>>,
+): string {
+  return value.replace(
+    ANY_REFERENCE,
+    (reference, name: string, fallback: string | undefined) => {
+      const editorValue = environment[name];
+      return editorValue === undefined || editorValue === ''
+        ? (fallback ?? '')
+        : editorValue;
+    },
+  );
+}
+
 /** The string values of a parsed configuration with the paths that lead to them. */
 function stringValues(
   value: unknown,
@@ -75,6 +95,24 @@ export function dropsImage(configText: string): boolean {
   return imageBesideBuild(parsedConfiguration(configText)?.value);
 }
 
+/** The text with each string value rewritten by `rewrite`, and the `image` beside a Dockerfile build taken out. */
+function rewrittenText(
+  configText: string,
+  parsedValue: unknown,
+  rewrite: (value: string) => string,
+): string {
+  let text = configText;
+  for (const {path, value} of stringValues(parsedValue, [])) {
+    const rewritten = rewrite(value);
+    if (rewritten !== value) {
+      text = applyEdits(text, modify(text, path, rewritten, {}));
+    }
+  }
+  return imageBesideBuild(parsedValue)
+    ? applyEdits(text, modify(text, ['image'], undefined, {}))
+    : text;
+}
+
 /**
  * The configuration text with the defaults of the empty variables put in and the `image` beside a Dockerfile build
  * taken out, or nothing when nothing changed or the text does not parse (the CLI reads it itself then, or fails in its
@@ -88,15 +126,46 @@ export function overrideText(
   if (parsed === undefined) {
     return undefined;
   }
-  let text = configText;
-  for (const {path, value} of stringValues(parsed.value, [])) {
-    const rewritten = withDefaults(value, editorEnvironment);
-    if (rewritten !== value) {
-      text = applyEdits(text, modify(text, path, rewritten, {}));
-    }
-  }
-  if (imageBesideBuild(parsed.value)) {
-    text = applyEdits(text, modify(text, ['image'], undefined, {}));
-  }
+  const text = rewrittenText(configText, parsed.value, value =>
+    withDefaults(value, editorEnvironment),
+  );
   return text === configText ? undefined : text;
+}
+
+/** Where a volume's dev container has its workspace: the mount of the volume, and the folder in it. */
+export interface VolumeWorkspace {
+  workspaceMount: string;
+  workspaceFolder: string;
+}
+
+/**
+ * The configuration text of a clone in a volume, for a CLI that runs in the bootstrap container and so can't see the
+ * editor's environment: every variable reference resolved from that environment, the `image` beside a Dockerfile build
+ * taken out, and the workspace set to the volume's. `ownWorkspace` says whether the configuration named its own, which
+ * is ignored. Nothing when the text does not parse to an object.
+ */
+export function volumeOverrideText(
+  configText: string,
+  editorEnvironment: Readonly<Record<string, string | undefined>>,
+  workspace: VolumeWorkspace,
+): {text: string; ownWorkspace: boolean} | undefined {
+  const configuration = parsedConfiguration(configText)?.value;
+  if (
+    typeof configuration !== 'object' ||
+    configuration === null ||
+    Array.isArray(configuration)
+  ) {
+    return undefined;
+  }
+  let text = rewrittenText(configText, configuration, value =>
+    resolved(value, editorEnvironment),
+  );
+  for (const [key, value] of Object.entries(workspace)) {
+    text = applyEdits(text, modify(text, [key], value, {}));
+  }
+  return {
+    text,
+    ownWorkspace:
+      'workspaceMount' in configuration || 'workspaceFolder' in configuration,
+  };
 }
