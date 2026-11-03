@@ -20,7 +20,9 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {DownloadRequest} from 'lib-server';
 import {
-  cacheExtensions,
+  cacheInBackground,
+  planExtensions,
+  reasonOf,
   checksumAddressOf,
   engineAccepts,
   type ExtensionCacheRequest,
@@ -298,7 +300,7 @@ describe('the extensions cache', () => {
       checksum: string | 404,
       packageFails = false,
     ): {
-      ports: Parameters<typeof cacheExtensions>[0];
+      ports: Parameters<typeof planExtensions>[0];
       downloads: string[];
       sink: MemorySink;
     } {
@@ -384,6 +386,21 @@ describe('the extensions cache', () => {
       };
     }
 
+    /** Plans the extensions, then runs the background step to its end, and gives the plan's installs. */
+    async function plannedAndCached(
+      ports: Parameters<typeof planExtensions>[0],
+      request: ExtensionCacheRequest,
+    ): Promise<string[]> {
+      const plan = await planExtensions(ports, request);
+      await cacheInBackground(
+        ports,
+        request,
+        plan.pending,
+        new AbortController().signal,
+      );
+      return plan.installs;
+    }
+
     function ownFile(): string {
       return path.join(root, 'own', 'acme.tool-1.2.0.vsix');
     }
@@ -392,10 +409,10 @@ describe('the extensions cache', () => {
       return path.join(root, 'shared', 'acme.tool-1.2.0.vsix');
     }
 
-    it('F-0419 AC-4: a package not yet cached is downloaded, checked, published on the volume and linked', async () => {
+    it('F-0419 AC-4, AC-17: a package not yet cached goes to the server as its id, and the background step downloads, checks, publishes and links it', async () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
-      const installs = await cacheExtensions(ports, requestOf(true));
+      const installs = await plannedAndCached(ports, requestOf(true));
       deepStrictEqual(
         [
           installs,
@@ -405,7 +422,7 @@ describe('the extensions cache', () => {
             encoding: 'utf8',
           }),
         ],
-        [[ownFile()], PACKAGE_BYTES, sharedFile(), ''],
+        [['acme.tool'], PACKAGE_BYTES, sharedFile(), ''],
       );
     });
 
@@ -413,11 +430,14 @@ describe('the extensions cache', () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
       deepStrictEqual(
-        await cacheExtensions(ports, {
-          ...requestOf(true),
-          extensions: ['acme.tool@1.2.0'],
-        }),
-        [ownFile()],
+        [
+          await plannedAndCached(ports, {
+            ...requestOf(true),
+            extensions: ['acme.tool@1.2.0'],
+          }),
+          readFileSync(sharedFile(), 'utf8'),
+        ],
+        [['acme.tool@1.2.0'], PACKAGE_BYTES],
       );
     });
 
@@ -429,7 +449,7 @@ describe('the extensions cache', () => {
       );
       const request = requestOf(true);
       writeFileSync(sharedFile(), PACKAGE_BYTES);
-      const installs = await cacheExtensions(ports, request);
+      const installs = await plannedAndCached(ports, request);
       deepStrictEqual(
         [
           installs,
@@ -446,7 +466,7 @@ describe('the extensions cache', () => {
     it("F-0419: a package that doesn't match its checksum writes nothing and is left to the server", async () => {
       const {channel, copies} = containerOf();
       const {ports, sink} = portsOf(channel, sha256Text('another package'));
-      const installs = await cacheExtensions(ports, requestOf(true));
+      const installs = await plannedAndCached(ports, requestOf(true));
       deepStrictEqual(
         [
           installs,
@@ -463,7 +483,7 @@ describe('the extensions cache', () => {
     it("F-0419: with no published checksum the package isn't cached, and the log says so", async () => {
       const {channel} = containerOf();
       const {ports, downloads, sink} = portsOf(channel, 404);
-      const installs = await cacheExtensions(ports, requestOf(true));
+      const installs = await plannedAndCached(ports, requestOf(true));
       deepStrictEqual(
         [
           installs,
@@ -479,7 +499,7 @@ describe('the extensions cache', () => {
     it('F-0419: a checksum file that holds no digest counts as none', async () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, 'not a checksum');
-      deepStrictEqual(await cacheExtensions(ports, requestOf(true)), [
+      deepStrictEqual(await plannedAndCached(ports, requestOf(true)), [
         'acme.tool',
       ]);
     });
@@ -488,7 +508,7 @@ describe('the extensions cache', () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
       deepStrictEqual(
-        await cacheExtensions(
+        await plannedAndCached(
           {...ports, readText: () => Promise.resolve(undefined)},
           requestOf(true),
         ),
@@ -499,7 +519,7 @@ describe('the extensions cache', () => {
     it('F-0419: a package address with no .vsix ending has no checksum beside it', async () => {
       const {channel} = containerOf();
       const {ports, downloads} = portsOf(channel, sha256Text(PACKAGE_BYTES));
-      const installs = await cacheExtensions(
+      const installs = await plannedAndCached(
         {
           ...ports,
           queryGallery: () =>
@@ -529,14 +549,14 @@ describe('the extensions cache', () => {
         path.join(request.clientFolder, 'acme.tool-1.2.0.vsix'),
         PACKAGE_BYTES,
       );
-      deepStrictEqual(await cacheExtensions(ports, request), ['acme.tool']);
+      deepStrictEqual(await plannedAndCached(ports, request), ['acme.tool']);
     });
 
     it("F-0419: with no volume a package the client can't keep is left to the server", async () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
       deepStrictEqual(
-        await cacheExtensions(
+        await plannedAndCached(
           {
             ...ports,
             files: {
@@ -554,7 +574,7 @@ describe('the extensions cache', () => {
     it("F-0419: a package that can't be downloaded is left to the server", async () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES), true);
-      deepStrictEqual(await cacheExtensions(ports, requestOf(true)), [
+      deepStrictEqual(await plannedAndCached(ports, requestOf(true)), [
         'acme.tool',
       ]);
     });
@@ -562,7 +582,7 @@ describe('the extensions cache', () => {
     it('F-0419: a copy into the volume that fails is left to the server', async () => {
       const {channel} = containerOf(true);
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
-      deepStrictEqual(await cacheExtensions(ports, requestOf(true)), [
+      deepStrictEqual(await plannedAndCached(ports, requestOf(true)), [
         'acme.tool',
       ]);
     });
@@ -585,10 +605,10 @@ describe('the extensions cache', () => {
           },
         },
       };
-      const installs = await cacheExtensions(racing, request);
+      const installs = await plannedAndCached(racing, request);
       deepStrictEqual(
         [installs, readFileSync(ownFile(), 'utf8')],
-        [[ownFile()], 'published first'],
+        [['acme.tool'], 'published first'],
       );
     });
 
@@ -596,7 +616,7 @@ describe('the extensions cache', () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
       const request = requestOf(false);
-      const installs = await cacheExtensions(ports, request);
+      const installs = await plannedAndCached(ports, request);
       deepStrictEqual(
         [
           installs,
@@ -607,7 +627,7 @@ describe('the extensions cache', () => {
           lstatSync(ownFile()).isSymbolicLink(),
           readFileSync(ownFile(), 'utf8'),
         ],
-        [[ownFile()], PACKAGE_BYTES, false, PACKAGE_BYTES],
+        [['acme.tool'], PACKAGE_BYTES, false, PACKAGE_BYTES],
       );
     });
 
@@ -620,7 +640,7 @@ describe('the extensions cache', () => {
         PACKAGE_BYTES,
       );
       deepStrictEqual(
-        [await cacheExtensions(ports, request), downloads],
+        [await plannedAndCached(ports, request), downloads],
         [[ownFile()], []],
       );
     });
@@ -628,7 +648,7 @@ describe('the extensions cache', () => {
     it('F-0419: with no volume a copy into the container that fails is left to the server', async () => {
       const {channel} = containerOf(true);
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
-      deepStrictEqual(await cacheExtensions(ports, requestOf(false)), [
+      deepStrictEqual(await plannedAndCached(ports, requestOf(false)), [
         'acme.tool',
       ]);
     });
@@ -636,7 +656,7 @@ describe('the extensions cache', () => {
     it('F-0419: an extension the gallery offers nothing of is left to the server, and the log says so', async () => {
       const {channel} = containerOf();
       const {ports, sink} = portsOf(channel, sha256Text(PACKAGE_BYTES));
-      const installs = await cacheExtensions(
+      const installs = await plannedAndCached(
         {...ports, queryGallery: () => Promise.resolve(undefined)},
         requestOf(true),
       );
@@ -657,7 +677,7 @@ describe('the extensions cache', () => {
       const {channel} = containerOf();
       const {ports, sink} = portsOf(channel, sha256Text(PACKAGE_BYTES));
       let queries = 0;
-      const installs = await cacheExtensions(
+      const installs = await plannedAndCached(
         {
           ...ports,
           queryGallery: () => {
@@ -690,7 +710,7 @@ describe('the extensions cache', () => {
       const {channel} = containerOf();
       const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
       const started = Date.now();
-      const installs = await cacheExtensions(
+      const installs = await plannedAndCached(
         {
           ...ports,
           queryGallery: (...[, , cancellation]) =>
@@ -722,9 +742,143 @@ describe('the extensions cache', () => {
             }),
         },
       };
-      deepStrictEqual(await cacheExtensions(failing, requestOf(true)), [
+      deepStrictEqual(await plannedAndCached(failing, requestOf(true)), [
         'acme.tool',
       ]);
+    });
+
+    it('F-0419 AC-17: the plan downloads nothing, so an uncached extension is installed by the server after it starts', async () => {
+      const {channel} = containerOf();
+      const {ports, downloads} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      const plan = await planExtensions(ports, requestOf(true));
+      deepStrictEqual(
+        [plan.installs, plan.pending.map(pick => pick.fileName), downloads],
+        [['acme.tool'], ['acme.tool-1.2.0.vsix'], []],
+      );
+    });
+
+    it('F-0419 AC-5: after the background step a second container takes the package from the cache as its path', async () => {
+      const {channel} = containerOf();
+      const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      const first = await plannedAndCached(ports, requestOf(true));
+      rmSync(path.join(root, 'own'), {recursive: true, force: true});
+      const second = await planExtensions(ports, requestOf(true));
+      deepStrictEqual(
+        [first, second.installs, second.pending],
+        [['acme.tool'], [ownFile()], []],
+      );
+    });
+
+    it('F-0419: the background step never replaces an entry the server wrote in the container’s cache, with a volume or without', async () => {
+      const seen: unknown[] = [];
+      for (const shared of [true, false]) {
+        rmSync(path.join(root, 'own'), {recursive: true, force: true});
+        rmSync(path.join(root, 'shared'), {recursive: true, force: true});
+        rmSync(path.join(root, 'client'), {recursive: true, force: true});
+        const {channel, copies} = containerOf();
+        const {ports} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+        const request = requestOf(shared);
+        const plan = await planExtensions(ports, request);
+        mkdirSync(path.join(root, 'own'), {recursive: true});
+        writeFileSync(ownFile(), 'the server wrote this');
+        await cacheInBackground(
+          ports,
+          request,
+          plan.pending,
+          new AbortController().signal,
+        );
+        seen.push([
+          lstatSync(ownFile()).isSymbolicLink(),
+          readFileSync(ownFile(), 'utf8'),
+          shared ? readFileSync(sharedFile(), 'utf8') : copies.length,
+        ]);
+      }
+      deepStrictEqual(seen, [
+        [false, 'the server wrote this', PACKAGE_BYTES],
+        [false, 'the server wrote this', 0],
+      ]);
+    });
+
+    it('F-0419: the background step stops when the connection ends, and when its time runs out, each with one log line', async () => {
+      const {channel} = containerOf();
+      const {ports, downloads, sink} = portsOf(
+        channel,
+        sha256Text(PACKAGE_BYTES),
+      );
+      const request = requestOf(true);
+      const plan = await planExtensions(ports, request);
+      const ended = new AbortController();
+      ended.abort();
+      await cacheInBackground(ports, request, plan.pending, ended.signal);
+      const afterEnded = [...downloads];
+      await cacheInBackground(
+        {
+          ...ports,
+          download: {
+            download: download =>
+              new Promise(resolve => {
+                download.cancellation.addEventListener('abort', () => {
+                  resolve({kind: 'failed', detail: 'cancelled'});
+                });
+              }),
+          },
+        },
+        request,
+        [...plan.pending, ...plan.pending],
+        new AbortController().signal,
+        10,
+      );
+      deepStrictEqual(
+        [
+          afterEnded,
+          sink.lines
+            .map(({message}) => message)
+            .filter(message =>
+              message.startsWith('the extensions cache stopped'),
+            ),
+        ],
+        [
+          [],
+          [
+            'the extensions cache stopped before acme.tool@1.2.0: the connection ended',
+            'the extensions cache stopped before acme.tool@1.2.0: its time ran out',
+          ],
+        ],
+      );
+    });
+
+    it('F-0419: an error inside the background step is one log line, and the step goes on to the next', async () => {
+      const {channel} = containerOf();
+      const {ports, sink} = portsOf(channel, sha256Text(PACKAGE_BYTES));
+      const request = requestOf(true);
+      const plan = await planExtensions(ports, request);
+      await cacheInBackground(
+        {
+          ...ports,
+          newTemporaryToken: () => {
+            throw new Error('no token');
+          },
+        },
+        request,
+        [...plan.pending, ...plan.pending],
+        new AbortController().signal,
+      );
+      deepStrictEqual(
+        sink.lines
+          .map(({message}) => message)
+          .filter(message => message.includes('could not be cached')),
+        [
+          'the extension acme.tool@1.2.0 could not be cached: no token',
+          'the extension acme.tool@1.2.0 could not be cached: no token',
+        ],
+      );
+    });
+
+    it('F-0419: a log line gives an error’s message, or the thrown value itself', () => {
+      deepStrictEqual(
+        [reasonOf(new Error('no token')), reasonOf('plain'), reasonOf(7)],
+        ['no token', 'plain', '7'],
+      );
     });
   });
 });
