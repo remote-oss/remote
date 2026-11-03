@@ -2,6 +2,7 @@ import {deepStrictEqual, doesNotThrow, strictEqual, throws} from 'node:assert';
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -1158,6 +1159,7 @@ describe('the stand-ins of a launch (card containers-09)', () => {
       workspace.root,
       {label: 'plain', kind: 'plain', suite: 'plain'},
       '^1.139.0',
+      workspace.root,
     );
     strictEqual(existsSync(path.join(workspace.root, 'extensions')), false);
   });
@@ -1166,11 +1168,175 @@ describe('the stand-ins of a launch (card containers-09)', () => {
     workspace.write('extensions-standing/extensions.json', []);
     throws(
       () => {
-        writeStandIns(workspace.root, STAND_IN, '^1.139.0');
+        writeStandIns(workspace.root, STAND_IN, '^1.139.0', workspace.root);
       },
       {
         message: `${path.join(workspace.root, 'extensions-standing', 'extensions.json')} lists no extension to copy a stand-in's entry from`,
       },
+    );
+  });
+});
+
+describe('the code stand-ins of a launch (card tooling-121)', () => {
+  const CODE: PlainLaunch = {
+    label: 'coding',
+    kind: 'plain',
+    suite: 'coding',
+    withExtensions: ['remote-oss.remote-containers'],
+    codeStandIns: ['remote-oss.remote-ssh'],
+  };
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('code-stand-ins');
+    workspace.write(
+      'tests/acceptance/fixtures/stand-ins/remote-oss.remote-ssh/package.json',
+      {
+        publisher: 'remote-oss',
+        name: 'remote-ssh',
+        version: '9.9.9',
+        main: './extension.cjs',
+        activationEvents: ['*'],
+      },
+    );
+    workspace.write(
+      'tests/acceptance/fixtures/stand-ins/remote-oss.remote-ssh/extension.cjs',
+      'module.exports = {activate() {}};\n',
+    );
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  /** The entry the editor's own install wrote for the extension `extension`, in the shape of its `extensions.json`. */
+  function installed(extension: string, version: string): object {
+    return {
+      identifier: {id: extension},
+      version,
+      location: {
+        $mid: 1,
+        path: `/old/${extension}-${version}`,
+        scheme: 'file',
+      },
+      relativeLocation: `${extension}-${version}`,
+    };
+  }
+
+  function listed(): Array<{
+    identifier: {id: string};
+    version: string;
+    relativeLocation: string;
+  }> {
+    return JSON.parse(
+      readFileSync(
+        path.join(workspace.root, 'extensions-coding', 'extensions.json'),
+        'utf8',
+      ),
+    ) as Array<{
+      identifier: {id: string};
+      version: string;
+      relativeLocation: string;
+    }>;
+  }
+
+  it('tooling-121: the fixture folder is copied whole, its manifest takes the version and the engines of the launch, and its other members stay', () => {
+    workspace.write('extensions-coding/extensions.json', [
+      installed('remote-oss.remote-containers', '0.1.0'),
+    ]);
+    writeStandIns(workspace.root, CODE, '^1.139.0', workspace.root);
+    const folder = path.join(
+      workspace.root,
+      'extensions-coding',
+      'remote-oss.remote-ssh-0.0.0',
+    );
+    deepStrictEqual(
+      [
+        JSON.parse(readFileSync(path.join(folder, 'package.json'), 'utf8')),
+        readFileSync(path.join(folder, 'extension.cjs'), 'utf8'),
+        listed().map(entry => [entry.identifier.id, entry.version]),
+      ],
+      [
+        {
+          publisher: 'remote-oss',
+          name: 'remote-ssh',
+          version: '0.0.0',
+          main: './extension.cjs',
+          activationEvents: ['*'],
+          engines: {vscode: '^1.139.0'},
+        },
+        'module.exports = {activate() {}};\n',
+        [
+          ['remote-oss.remote-containers', '0.1.0'],
+          ['remote-oss.remote-ssh', '0.0.0'],
+        ],
+      ],
+    );
+  });
+
+  it('tooling-121: an installed extension of the same id is replaced: its folder is gone and one entry is left', () => {
+    workspace.write('extensions-coding/extensions.json', [
+      installed('remote-oss.remote-containers', '0.1.0'),
+      installed('remote-oss.remote-ssh', '0.1.0'),
+    ]);
+    workspace.write(
+      'extensions-coding/remote-oss.remote-ssh-0.1.0/package.json',
+      {name: 'old'},
+    );
+    writeStandIns(workspace.root, CODE, '^1.139.0', workspace.root);
+    deepStrictEqual(
+      [
+        existsSync(
+          path.join(
+            workspace.root,
+            'extensions-coding',
+            'remote-oss.remote-ssh-0.1.0',
+          ),
+        ),
+        listed().map(entry => [entry.identifier.id, entry.relativeLocation]),
+      ],
+      [
+        false,
+        [
+          [
+            'remote-oss.remote-containers',
+            'remote-oss.remote-containers-0.1.0',
+          ],
+          ['remote-oss.remote-ssh', 'remote-oss.remote-ssh-0.0.0'],
+        ],
+      ],
+    );
+  });
+
+  it('tooling-121: a launch with both kinds writes both, and a manifest-only one gets no code', () => {
+    workspace.write('extensions-coding/extensions.json', [
+      installed('remote-oss.remote-containers', '0.1.0'),
+    ]);
+    writeStandIns(
+      workspace.root,
+      {...CODE, standIns: ['ms-vscode-remote.remote-containers']},
+      '^1.139.0',
+      workspace.root,
+    );
+    deepStrictEqual(
+      [
+        listed().map(entry => entry.identifier.id),
+        readdirSync(
+          path.join(
+            workspace.root,
+            'extensions-coding',
+            'ms-vscode-remote.remote-containers-0.0.0',
+          ),
+        ),
+      ],
+      [
+        [
+          'remote-oss.remote-containers',
+          'ms-vscode-remote.remote-containers',
+          'remote-oss.remote-ssh',
+        ],
+        ['package.json'],
+      ],
     );
   });
 });

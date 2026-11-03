@@ -293,6 +293,20 @@ export interface CompanionCall {
 }
 
 /**
+ * Sets how the calls to the stand-in companion end, by command id: each value is `{answer}`, `{reject}`, `{never}` or
+ * `{showErrorThenReject}`, as the stand-in reads them. It reads the file at each call, so no restart is needed; a call the
+ * modes do not name gets the answer of an empty companion. Only the `explorer-stand-in` launch has the stand-in.
+ */
+export function setStandInModes(
+  modes: Readonly<Record<string, unknown>>,
+): void {
+  writeFileSync(
+    variable('REMOTE_OSS_ACCEPTANCE_STAND_IN_MODE'),
+    JSON.stringify(modes),
+  );
+}
+
+/**
  * The pushes the explorer's inbox received in this launch, in order, of the command `commandId` when given; none before
  * the first. Only the launches with the explorer record them.
  */

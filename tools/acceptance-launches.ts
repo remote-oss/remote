@@ -130,6 +130,11 @@ export interface PlainLaunch extends LaunchCommon {
    * code and no contribution, carrying the id it stands for.
    */
   standIns?: readonly string[];
+  /**
+   * Ids of stand-ins with code: each is copied from `tests/acceptance/fixtures/stand-ins/<id>/` into this launch's own
+   * extensions folder before it starts, in place of an extension of the same id that the run installed.
+   */
+  codeStandIns?: readonly string[];
   /** The display language the editor starts in, as its `--locale` switch takes it. */
   locale?: string;
   /**
@@ -182,6 +187,8 @@ const EXPLORER_LAUNCH = {
   // The explorer appends each push its inbox receives from Remote - SSH to this file, which `companionCalls` reads.
   environment: {
     REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD: '<run>/companion-record.jsonl',
+    // The file the stand-in companion reads, at each call, for how that call ends (`setStandInModes`).
+    REMOTE_OSS_ACCEPTANCE_STAND_IN_MODE: '<run>/stand-in-mode.json',
   },
 } as const;
 
@@ -1093,6 +1100,15 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-standdown',
       suite: 'explorer-standdown',
       standIns: ['ms-vscode.remote-explorer'],
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-stand-in',
+      suite: 'explorer-stand-in',
+      // The companion is a stand-in with code that carries Remote - SSH's id, so the rows can make its calls fail.
+      codeStandIns: ['remote-oss.remote-ssh'],
+      // Core's dialogs are drawn in the window, where the renderer helpers read them.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
     },
     {
       ...TRUST_LAUNCH,

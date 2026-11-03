@@ -1324,8 +1324,11 @@ async function prepare(
     if (launch.kind === 'plain' && launch.languagePack !== undefined) {
       registerLanguagePack(runFolder, launch, launch.languagePack);
     }
-    if (launch.kind === 'plain' && launch.standIns !== undefined) {
-      writeStandIns(runFolder, launch, standInEngines(root, launch));
+    if (
+      launch.kind === 'plain' &&
+      (launch.standIns !== undefined || launch.codeStandIns !== undefined)
+    ) {
+      writeStandIns(runFolder, launch, standInEngines(root, launch), root);
     }
   }
   const devContainerImage = launches.some(needsDevContainerImage)

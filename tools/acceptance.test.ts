@@ -480,6 +480,7 @@ const LAUNCH_ORDER = [
   'explorer-no-proposals',
   'add-host',
   'explorer-standdown',
+  'explorer-stand-in',
   'trust',
   'trust-terminal',
   'web-ui',
@@ -546,6 +547,10 @@ describe('acceptance', () => {
     workspace.write(
       'packages/remote-explorer/package.json',
       JSON.stringify({engines: {vscode: '^1.139.0'}}),
+    );
+    workspace.write(
+      'tests/acceptance/fixtures/stand-ins/remote-oss.remote-ssh/package.json',
+      JSON.stringify({publisher: 'remote-oss', name: 'remote-ssh'}),
     );
     workspace.write(
       'tests/acceptance/suite-failure/cases.json',
@@ -1496,6 +1501,7 @@ describe('acceptance', () => {
             'explorer-no-proposals',
             'add-host',
             'explorer-standdown',
+            'explorer-stand-in',
           ].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [
