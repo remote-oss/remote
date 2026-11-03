@@ -157,7 +157,7 @@ describe('the commands of the SSH group run by a keybinding (card coverage-102, 
       const before = JSON.stringify(
         readFileSync(path.join(sshFolder(), 'config')),
       );
-      const results = [await keysReach(window)];
+      const results: unknown[] = [await keysReach(window)];
       await clickRowLabel(window, VIEW, 'user-one');
       results.push(await afterKey(window, 'j'));
       await clickRowLabel(window, VIEW, 'user-one');
