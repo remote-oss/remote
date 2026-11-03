@@ -80,6 +80,21 @@ describe('the folder list of a saved workspace (F-0404)', () => {
     );
   });
 
+  it('F-0404 BR-3: a folder whose name starts with two dots is inside the root, and the parent of the root is not', () => {
+    deepStrictEqual(
+      [
+        problemOf(
+          '{"folders": [{"path": "..hidden"}, {"path": "...more/sub"}]}',
+        ),
+        problemOf('{"folders": [{"path": ".."}]}'),
+      ],
+      [
+        undefined,
+        "Folder '/w' is not a subfolder of shared root folder '/w/root'.",
+      ],
+    );
+  });
+
   it('F-0404 BR-3: the first problem in file order wins, and a list with none gives none', () => {
     deepStrictEqual(
       [

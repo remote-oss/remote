@@ -65,7 +65,9 @@ function entryProblem(
   }
   const resolved = path.resolve(sharedRoot, record.path);
   const relative = path.relative(sharedRoot, resolved);
-  return relative.startsWith('..') || path.isAbsolute(relative)
+  return relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
     ? filled(translate, WORKSPACE_FOLDER_TEMPLATES.S185, [resolved, sharedRoot])
     : undefined;
 }
