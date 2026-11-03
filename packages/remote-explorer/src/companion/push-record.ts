@@ -42,5 +42,9 @@ export function recorderOf(
   ports: PushRecordPorts,
 ): PushRecorder | undefined {
   const write = lineWriterOf(COMPANION_RECORD_VARIABLE, environment, ports);
-  return write && ((commandId, envelope) => write({commandId, envelope}));
+  return write === undefined
+    ? undefined
+    : (commandId, envelope) => {
+        write({commandId, envelope});
+      };
 }

@@ -1,7 +1,7 @@
 /**
  * @fileoverview The record of the calls the explorer makes to the companion, for the acceptance runs: when the
  * environment names a file in `REMOTE_OSS_ACCEPTANCE_COMPANION_CALL_RECORD`, each command the protocol executes is
- * appended to it as one JSON line with its time and its id, never its argument or its answer (R-26). Without the
+ * appended to it as one JSON line with its time and its id, never its argument or its answer. Without the
  * variable nothing is recorded, and a record that cannot be written is dropped.
  */
 
@@ -21,21 +21,25 @@ export function callRecorderOf(
   ports: PushRecordPorts,
 ): CallRecorder | undefined {
   const write = lineWriterOf(CALL_RECORD_VARIABLE, environment, ports);
-  return write && (commandId => write({commandId}));
+  return write === undefined
+    ? undefined
+    : commandId => {
+        write({commandId});
+      };
 }
 
-/** `bus`, with `record` told the id of each command before it is executed; `bus` itself without a recorder. */
+/** `base`, with `record` told the id of each command before it is executed; `base` itself without a recorder. */
 export function recordedBus(
-  bus: CommandBus,
+  base: CommandBus,
   record: CallRecorder | undefined,
 ): CommandBus {
   return record === undefined
-    ? bus
+    ? base
     : {
-        ...bus,
+        ...base,
         executeCommand: (commandId, argument) => {
           record(commandId);
-          return bus.executeCommand(commandId, argument);
+          return base.executeCommand(commandId, argument);
         },
       };
 }
