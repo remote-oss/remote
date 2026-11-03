@@ -4,7 +4,8 @@
  */
 
 import {CVE_LINE, NO_FREE_PORT_PREFIX, READY_LINE} from './posix-functions.ts';
-import {POWERSHELL_FUNCTIONS, powershellQuote} from './powershell-functions.ts';
+import {powershellQuote, windowsArgument} from 'lib-host';
+import {POWERSHELL_FUNCTIONS} from './powershell-functions.ts';
 import {LAUNCHING_LINE} from './result-block.ts';
 import {
   type BootstrapRequest,
@@ -137,14 +138,15 @@ const INSTALL_TREE_BODY: readonly string[] = [
 ];
 
 /**
- * The server's start words as one Windows command line, each word double-quoted: Start-Process joins its arguments
- * with spaces and quotes nothing. A Windows host has no socket mode, so the server always listens on a port.
+ * The server's start words as one Windows command line, each word quoted as the C runtime splits it: Start-Process
+ * joins its arguments with spaces and quotes nothing. A Windows host has no socket mode, so the server always listens
+ * on a port.
  */
 function argumentLine(start: StartParameters): string {
   const words = startWordsOf({...start, socketMode: false}).map(word =>
     'text' in word
-      ? powershellQuote(`"${word.text.replaceAll('"', '\\"')}"`)
-      : `('"' + $${word.variable} + '"')`,
+      ? powershellQuote(windowsArgument(word.text))
+      : `(ConvertTo-WindowsArgument $${word.variable})`,
   );
   return `$SERVER_ARGUMENTS = @(${words.join(', ')}) -join ' '`;
 }
@@ -446,7 +448,7 @@ const START_CLI_BODY: readonly string[] = [
   '}',
   "Add-Fact 'cli.connectionToken' ([System.IO.File]::ReadAllText($TokenFile))",
   "$CliLog = [System.IO.Path]::Combine($DATA_DIR, '.cli.' + $COMMIT + '.log')",
-  `$CliArguments = 'command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "' + $CLI_DATA + '"'`,
+  "$CliArguments = 'command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir ' + (ConvertTo-WindowsArgument $CLI_DATA)",
   '$Parent = Get-ParentProcessId',
   'if ($Parent -gt 0) {',
   "  $CliArguments = $CliArguments + ' --parent-process-id ' + $Parent",
