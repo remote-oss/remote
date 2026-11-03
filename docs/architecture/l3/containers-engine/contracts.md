@@ -210,3 +210,26 @@ export function catalogueKeyOf(entryKey: string, catalogue: readonly CatalogueFe
 - `catalogueKeyOf` is BR-1's id matching: the catalogue key of the feature whose registry, namespace and id the entry
   names under any version form; a digest-pinned reference, the same id under another registry, a bare legacy id and a
   local path name nothing.
+
+```ts
+export function configureFeaturesOf(ports: ConfigureFeaturesPorts): () => Promise<FeaturesOutcome | undefined>;
+export type FeaturesOutcome =
+  | {kind: 'written'; file: string} | {kind: 'unchanged'} | {kind: 'cancelled'} | {kind: 'failed'; detail: string} | {kind: 'adding'};
+```
+
+- `configureFeaturesOf` is the Configure Container Features command (F-0807, brief §2.1 to §2.3) up to the pick: it finds the
+  configuration files of the window's roots that are on a disk (a local folder, or a folder of a remote window addressed on its own
+  host; a virtual root is never read or written, BR-19), with F-0301's discovery (the dotfile first, then
+  `.devcontainer/devcontainer.json`, then one subfolder level) and, in a local window, the folder's configuration in the store
+  of user data. One file is used at once; several are picked among with F-0301's selector, where Escape or "Open File" ends the
+  run. With none it shows the modal "No container configuration file found." whose "Add Files..." hands over to the wizard of
+  F-0801; a file that cannot be read as JSON gives the error dialog and no pick. A call made while a run is on returns at once.
+- "Add Files..." (`addFilesForFeatures`) runs F-0801's wizard for the window's folder: a saved workspace is checked as Reopen in
+  Container checks it (the modal of the first problem of its folder list, Continue or Cancel), an unsaved one of several folders
+  is told to be saved first, and a window of an SSH, WSL or tunnel host adds the files on that host, with no choice of location.
+- `featuresRunOf` is what follows the choice of the file: the catalogue is fetched (a failure gives the error dialog
+  "Command '…' resulted in an error" with the cause, and no pick); Select Features opens with no Back button and the Features the
+  file lists checked (`catalogueKeyOf`); what is accepted goes to `editFeatures` as picks that name Features by their catalogue
+  key, never by the key the file uses for them, the checked ones in the catalogue's order, and the text is written to the file
+  where it lives, whatever an open editor holds; the file then opens as a preview at the first line and column. A file that cannot be
+  written is left as it is and the error is shown.

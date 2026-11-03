@@ -43,6 +43,13 @@ import {storedCandidate, type StoredLookup} from './config/stored-candidate.ts';
 import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
 import {
+  configureFeaturesOf,
+  type WindowFolder,
+} from './authoring/configure-features.ts';
+import {addFilesForFeatures} from './authoring/features-add-files.ts';
+import {featuresRunOf} from './authoring/features-run.ts';
+import {
+  type AuthoringFiles,
   hostFiles,
   isUnder,
   routedFiles,
@@ -203,6 +210,13 @@ function authoringUriOf(file: string): vscode.Uri {
   return root !== undefined && folder !== undefined && isUnder(root, file)
     ? folder.uri.with({path: file})
     : vscode.Uri.file(file);
+}
+
+/** The wizard's ports with no choice of where the files go: for a window whose files can only go to its own host. */
+function withoutLocation(ports: WizardPorts): WizardPorts {
+  const copy = {...ports};
+  delete copy.location;
+  return copy;
 }
 
 function translate(template: string): string {
@@ -857,6 +871,30 @@ export async function activate(
         },
         logger: served.logger,
       };
+      const configSurfaces = configSurfacesOf(
+        {
+          createQuickPick: () => vscode.window.createQuickPick(),
+          showWarningMessage: (message, options, ...items) =>
+            vscode.window.showWarningMessage(message, options, ...items),
+          showTextDocument: (file, options) =>
+            vscode.window.showTextDocument(vscode.Uri.file(file), options),
+          iconOf: name => new vscode.ThemeIcon(name),
+        },
+        {
+          showError: (message, detail, items) =>
+            Promise.resolve(
+              vscode.window.showErrorMessage(
+                message,
+                {modal: true, detail},
+                ...items,
+              ),
+            ),
+          revealLog: () => {
+            logChannel?.show(true);
+          },
+        },
+        served.logger,
+      );
       const reopenPorts: ReopenPorts = {
         authoring,
         gate: {
@@ -913,30 +951,7 @@ export async function activate(
         now: Date.now,
         config: {
           files: configFiles,
-          surfaces: configSurfacesOf(
-            {
-              createQuickPick: () => vscode.window.createQuickPick(),
-              showWarningMessage: (message, options, ...items) =>
-                vscode.window.showWarningMessage(message, options, ...items),
-              showTextDocument: (file, options) =>
-                vscode.window.showTextDocument(vscode.Uri.file(file), options),
-              iconOf: name => new vscode.ThemeIcon(name),
-            },
-            {
-              showError: (message, detail, items) =>
-                Promise.resolve(
-                  vscode.window.showErrorMessage(
-                    message,
-                    {modal: true, detail},
-                    ...items,
-                  ),
-                ),
-              revealLog: () => {
-                logChannel?.show(true);
-              },
-            },
-            served.logger,
-          ),
+          surfaces: configSurfaces,
           composeCheck: (base, dialogs, cancellation) =>
             composeCheck(
               {
@@ -1103,6 +1118,123 @@ export async function activate(
         },
         translate,
       });
+      /** The address of a path in the file system of `root`: a folder of a remote window addresses its own host. */
+      function addressIn(
+        root: WindowFolder | undefined,
+        file: string,
+      ): vscode.Uri {
+        const folder =
+          root === undefined || root.scheme === 'file'
+            ? undefined
+            : (vscode.workspace.workspaceFolders ?? []).find(
+                each =>
+                  each.uri.scheme === root.scheme &&
+                  each.uri.path === root.path,
+              );
+        return folder === undefined
+          ? vscode.Uri.file(file)
+          : folder.uri.with({path: file});
+      }
+      /** The window's files under the address of `root`. */
+      function filesUnder(root: WindowFolder | undefined): AuthoringFiles {
+        return windowFiles(
+          vscode.workspace.fs,
+          {file: vscode.FileType.File, directory: vscode.FileType.Directory},
+          file => addressIn(root, file),
+        );
+      }
+      const configureFeatures = configureFeaturesOf({
+        window: {
+          folders: windowFolders,
+          remoteName: () => vscode.env.remoteName,
+        },
+        filesOf: filesUnder,
+        hostFiles: hostFiles(),
+        compare: collate,
+        stored: folder => storedCandidate(storedLookup, folder),
+        surfaces: {
+          pick: (rows, placeholder, tooltip) =>
+            configSurfaces.pick(rows, placeholder, tooltip),
+          openPreview: (file, root) =>
+            vscode.window.showTextDocument(addressIn(root, file), {
+              preview: true,
+            }),
+          showModal: (detail, buttons) =>
+            vscode.window.showInformationMessage(
+              '',
+              {modal: true, detail},
+              ...buttons,
+            ),
+          showError: (message, detail, items) =>
+            configSurfaces.dialogs.showError(message, detail, items),
+          revealLog: () => {
+            configSurfaces.dialogs.revealLog();
+          },
+        },
+        addFiles: () =>
+          addFilesForFeatures({
+            window: {
+              folders: windowFolders,
+              remoteName: () => vscode.env.remoteName,
+              workspaceFile: () => {
+                const file = vscode.workspace.workspaceFile;
+                return file === undefined
+                  ? undefined
+                  : {scheme: file.scheme, fsPath: file.fsPath};
+              },
+            },
+            informModal: text => reopenPorts.informModal(text),
+            addConfiguration: (folder, roots) =>
+              addConfiguration(continuation, folder, roots),
+            addHostConfiguration: folder => {
+              const hostFiles = filesUnder(
+                windowFolders().find(each => each.scheme === 'vscode-remote'),
+              );
+              return addConfiguration(
+                {
+                  ...continuation,
+                  wizard: wizardRunnerOf({
+                    ...withoutLocation(wizardPorts),
+                    files: hostFiles,
+                    stored: {...wizardPorts.stored, files: hostFiles},
+                  }),
+                  openPreview: file =>
+                    vscode.window.showTextDocument(
+                      addressIn(
+                        windowFolders().find(
+                          each => each.scheme === 'vscode-remote',
+                        ),
+                        file,
+                      ),
+                      {preview: true},
+                    ),
+                  offerReopen: () => undefined,
+                },
+                folder,
+                [],
+              );
+            },
+            readWorkspaceFile: file => reopenPorts.readWorkspaceFile(file),
+            confirmModal: text => reopenPorts.confirmModal(text),
+            translate,
+            logger: served.logger,
+          }),
+        features: featuresRunOf({
+          catalogue: wizardPorts.catalogue,
+          quick: {...wizardPorts.options, translate},
+          showError: (message, detail) =>
+            vscode.window.showErrorMessage(message, {modal: true, detail}),
+          openPreview: (file, root) =>
+            vscode.window.showTextDocument(addressIn(root, file), {
+              preview: true,
+              selection: new vscode.Range(0, 0, 0, 0),
+            }),
+          translate,
+          logger: served.logger,
+        }),
+        translate,
+        logger: served.logger,
+      });
       return {
         reopenInContainer: {execute: reopenHandler()},
         reopenLocally: {execute: reopenOrigin.reopenLocally},
@@ -1110,6 +1242,11 @@ export async function activate(
         reopenInWSL: {execute: reopenOrigin.reopenInWSL},
         reopenInTunnel: {execute: reopenOrigin.reopenInTunnel},
         openFolder: {execute: openFolder},
+        configureContainerFeatures: {
+          execute: async () => {
+            await configureFeatures();
+          },
+        },
         createDevContainerFile: {
           execute: createDevContainerFile({
             ...continuation,
