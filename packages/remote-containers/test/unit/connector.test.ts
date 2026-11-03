@@ -1662,16 +1662,23 @@ describe('the container connector: the folder trust (card containers-17)', () =>
     deepStrictEqual(scene.atTrust, {reads: 1, engineCalls: 0});
   });
 
-  it('F-0201 AC-55: with the folder untrusted and dockerPath a relative file, the read before the answer uses the default program, and what comes after it the folder’s own', async () => {
+  it('F-0201 AC-55: with the folder untrusted and dockerPath a relative file, the read before the answer is given a program that does not exist and the CLI the name to answer for, and what comes after it the folder’s own', async () => {
     const scene = sceneOf({dockerPath: 'tools/dk'});
     scene.trusted = false;
     await connected(scene);
     deepStrictEqual(
       [
         scene.configurationReads.map(read => read.target.dockerPath),
+        scene.cliEnvironments
+          .map(environment => environment.REMOTE_OSS_NO_ENGINE)
+          .filter(name => name !== undefined),
         scene.prepared.map(request => request.dockerPath),
       ],
-      [['docker', '/work/proj/tools/dk'], ['/work/proj/tools/dk']],
+      [
+        ['/remote-oss-no-engine', '/work/proj/tools/dk'],
+        ['/remote-oss-no-engine'],
+        ['/work/proj/tools/dk'],
+      ],
     );
   });
 

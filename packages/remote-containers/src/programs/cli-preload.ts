@@ -5,11 +5,16 @@
  * editor's copy is made resolvable to this process's `require` alone: no environment variable is set, so a lifecycle
  * command sees the editor's environment as before. The preload says what it loaded in one marker line on stderr.
  *
+ * It answers the spawns of one program in the CLI's place, with no output and a successful exit, when the host names it
+ * in `REMOTE_OSS_NO_ENGINE`: a read of a configuration before its folder is trusted must consult no engine, but the
+ * CLI asks the Docker program it is given for the container of the folder even then.
+ *
  * It also ends the CLI with its build when the extension host that started it is gone. The CLI runs in a process group
  * of its own, so that the host can end the whole group on a cancellation; a window that closes ends the host without
  * telling the extension, and nothing else would end the group then.
  */
 
+import childProcess from 'node:child_process';
 import module from 'node:module';
 import path from 'node:path';
 
@@ -29,6 +34,25 @@ delete process.env.ELECTRON_RUN_AS_NODE;
 /** Where the editor keeps `node-pty`: handed by the host, and removed so no child of the CLI sees it. */
 const editorModules = process.env.REMOTE_OSS_EDITOR_MODULES;
 delete process.env.REMOTE_OSS_EDITOR_MODULES;
+/** The program whose spawns are answered here, handed by the host and removed so no child of the CLI sees it. */
+const noEngine = process.env.REMOTE_OSS_NO_ENGINE;
+delete process.env.REMOTE_OSS_NO_ENGINE;
+
+if (noEngine !== undefined && noEngine !== '') {
+  const spawn = childProcess.spawn.bind(childProcess);
+  // A process that ends at once with nothing to say stands for the program: the CLI reads its empty output as "none".
+  const patched = ((command: string, ...rest: unknown[]) =>
+    command === noEngine
+      ? spawn(process.execPath, ['-e', ''], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {...process.env, ELECTRON_RUN_AS_NODE: '1'},
+        })
+      : (spawn as (...all: unknown[]) => unknown)(
+          command,
+          ...rest,
+        )) as typeof childProcess.spawn;
+  childProcess.spawn = patched;
+}
 
 /** The marker: whether `node-pty` loads in this process, and which copy did. */
 function marker(loaded: boolean, from: 'default' | 'editor' | 'none'): string {

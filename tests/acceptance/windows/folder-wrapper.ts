@@ -9,14 +9,18 @@ import path from 'node:path';
 
 /**
  * Writes the program at `<folder>/tools/dk` that records each call it gets in the run's file `calls` and passes it on
- * to Docker.
+ * to Docker, found as `docker` on the PATH or at the path `docker` names.
  */
-export function folderWrapper(folder: string, calls: string): void {
+export function folderWrapper(
+  folder: string,
+  calls: string,
+  docker = 'docker',
+): void {
   const wrapper = path.join(folder, 'tools', 'dk');
   mkdirSync(path.dirname(wrapper), {recursive: true});
   writeFileSync(
     wrapper,
-    `#!/bin/sh\nprintf '%s\\n' "$*" >>"${calls}"\nexec docker "$@"\n`,
+    `#!/bin/sh\nprintf '%s\\n' "$*" >>"${calls}"\nexec ${docker} "$@"\n`,
   );
   chmodSync(wrapper, 0o755);
 }

@@ -297,6 +297,9 @@ function mappedPath(
     : undefined;
 }
 
+/** The program a read before the trust answer is given: it does not exist, and the CLI's preload answers its spawns. */
+const NO_ENGINE_PROGRAM = '/remote-oss-no-engine';
+
 /** The settings, the program, the engine and the CLI of one folder. */
 interface Tools {
   settings: ReturnType<ContainerConnectorDependencies['settings']>;
@@ -819,7 +822,9 @@ export function containerConnectorOf(
   /**
    * The tools a read of the configuration uses. The CLI runs the Docker program it is given even for a read, and a
    * relative value of `dev.containers.dockerPath` is a file of the folder, which does not run before the window is
-   * trusted: until then the read uses the default program, which gives the same configuration.
+   * trusted: until then the read is given a program that does not exist and the CLI's preload answers its spawns with
+   * nothing, so that the read consults no engine. Without a container id the CLI asks the engine only for the
+   * container of the folder, so it reads the configuration as for a folder that has none.
    */
   function readToolsOf(tools: Tools, folder: DevContainerFolder): Tools {
     const relative =
@@ -832,7 +837,15 @@ export function containerConnectorOf(
           trusted: dependencies.trust.isTrusted(),
         }),
       ).kind === 'notFound'
-      ? {...tools, dockerPath: 'docker'}
+      ? {
+          ...tools,
+          dockerPath: NO_ENGINE_PROGRAM,
+          bridge: dependencies.cliFor({
+            ...dependencies.editorEnvironment,
+            ...environmentOfPinned(folder),
+            REMOTE_OSS_NO_ENGINE: NO_ENGINE_PROGRAM,
+          }),
+        }
       : tools;
   }
 

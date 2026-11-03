@@ -476,7 +476,8 @@ const LAUNCH_ORDER = [
   'web-ui-trust',
   ...['containers-a', 'containers-b', 'containers-standdown'],
   'containers-no-proposals',
-  ...['containers-trust', 'containers-volume', 'containers-explorer'],
+  ...['containers-trust', 'containers-nodocker', 'containers-volume'],
+  'containers-explorer',
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
   ...['containers-killed-23', 'containers-killed-35', 'containers-killed-43'],
@@ -1435,6 +1436,7 @@ describe('acceptance', () => {
             'containers-standdown',
             'containers-no-proposals',
             'containers-trust',
+            'containers-nodocker',
             'containers-volume',
           ].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
