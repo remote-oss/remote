@@ -156,6 +156,7 @@ function labelsFromExplorer(): string[] {
     'containers-standdown',
     'containers-no-proposals',
     'containers-trust',
+    'containers-nodocker',
     'containers-volume',
     'containers-explorer',
     'containers-ports',
@@ -449,6 +450,12 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['containers-trust', ['remote-oss.remote-containers'], true, undefined],
         [
+          'containers-nodocker',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
           'containers-volume',
           ['remote-oss.remote-containers'],
           true,
@@ -616,6 +623,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         [
+          'containers-nodocker',
+          'containers-nodocker',
+          {...shared, 'security.workspace.trust.startupPrompt': 'never'},
+          undefined,
+          undefined,
+        ],
+        [
           'containers-volume',
           'containers-volume',
           shared,
@@ -765,6 +779,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-standdown',
         'containers-no-proposals',
         'containers-trust',
+        'containers-nodocker',
         'containers-volume',
         'containers-explorer',
         'containers-ports',
@@ -831,6 +846,17 @@ describe('the launches of the VSCodium run', () => {
         ],
         [
           'containers-trust',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'window.dialogStyle': 'custom',
+            'files.simpleDialog.enable': true,
+            'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'security.workspace.trust.startupPrompt': 'never',
+          },
+        ],
+        [
+          'containers-nodocker',
           true,
           {
             'window.title': '[${rootName}]',
@@ -1818,7 +1844,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-nodocker also a PATH with no docker, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1831,6 +1857,13 @@ describe('the platform cases (card coverage-12)', () => {
         ['containers-a', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-b', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-trust', {DOCKER_CONFIG: '<run>/docker-config'}],
+        [
+          'containers-nodocker',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            PATH: '<run>/nodocker-bin',
+          },
+        ],
         ['containers-ports', {PATH: '<run>/xdg-bin:<path>'}],
         [
           'containers-features',

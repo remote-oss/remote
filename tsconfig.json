@@ -224,6 +224,9 @@
       "path": "tests/acceptance/containers-trust"
     },
     {
+      "path": "tests/acceptance/containers-nodocker"
+    },
+    {
       "path": "tests/acceptance/containers-context"
     },
     {

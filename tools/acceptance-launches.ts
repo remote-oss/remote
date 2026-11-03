@@ -1160,6 +1160,23 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...CONTAINERS_LAUNCH,
+      label: 'containers-nodocker',
+      suite: 'containers-nodocker',
+      workspaceTrust: true,
+      // A Docker configuration of its own, and a PATH with no `docker` on it: a row proves that nothing a window does
+      // before its folder is trusted needs the default program.
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/nodocker-bin`,
+      },
+      settings: {
+        ...CONTAINERS_LAUNCH.settings,
+        // A folder opens untrusted and silent, so the only trust dialog is the one Reopen asks for.
+        'security.workspace.trust.startupPrompt': 'never',
+      },
+    },
+    {
+      ...CONTAINERS_LAUNCH,
       label: 'containers-volume',
       suite: 'containers-volume',
     },

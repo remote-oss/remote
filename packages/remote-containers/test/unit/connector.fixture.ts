@@ -17,6 +17,7 @@ import {
   type ContainerConnector,
   type ContainerConnectorDependencies,
   containerConnectorOf,
+  noEngineProgramOf,
 } from '../../src/connect/connector.ts';
 import type {OpenRelay, RelayRequest} from '../../src/connect/host-relay.ts';
 import type {
@@ -38,6 +39,9 @@ import type {
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
 import {fakeEngine, type ProcessScript, type SpawnPlan} from './fake-engine.ts';
+
+/** The extension's global storage folder of the fixture: nothing is ever created in it. */
+export const FIXTURE_STORAGE = '/storage-of-the-fixture';
 
 /** The connection token of the fixture's server, a secret no log may hold. */
 export const SECRET_TOKEN = 'tok-s3cret';
@@ -411,6 +415,7 @@ export function sceneOf(
   };
   let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
+    noEngineProgram: noEngineProgramOf(FIXTURE_STORAGE),
     folderExists: () => Promise.resolve(scene.folderExists),
     discoverConfigurations: () => Promise.resolve(scene.candidates),
     shutdown: {

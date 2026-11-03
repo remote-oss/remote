@@ -155,6 +155,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/containers-standdown/tsconfig.json',
   './tests/acceptance/containers-no-proposals/tsconfig.json',
   './tests/acceptance/containers-trust/tsconfig.json',
+  './tests/acceptance/containers-nodocker/tsconfig.json',
   './tests/acceptance/containers-context/tsconfig.json',
   './tests/acceptance/containers-env-host/tsconfig.json',
   './tests/acceptance/containers-env-ctx/tsconfig.json',

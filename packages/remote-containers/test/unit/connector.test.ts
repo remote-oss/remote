@@ -1,4 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
+import {spawn} from 'node:child_process';
+import {existsSync, mkdtempSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {mock} from 'node:test';
 import type {ConnectPhase, Connected, Failed} from 'lib-authority';
 import type {ServerResult} from '../../src/connect/server-steps.ts';
@@ -7,6 +11,7 @@ import {
   type DevContainerFolder,
 } from '../../src/authority/payload.ts';
 import {
+  FIXTURE_STORAGE,
   FOLDER,
   inputOf,
   PAYLOAD,
@@ -16,6 +21,7 @@ import {
   STARTED_SERVER,
   type Scene,
 } from './connector.fixture.ts';
+import {noEngineProgramOf} from '../../src/connect/connector.ts';
 import {
   REBUILD_INTENTS_KEY,
   storeRebuildIntent,
@@ -1662,16 +1668,57 @@ describe('the container connector: the folder trust (card containers-17)', () =>
     deepStrictEqual(scene.atTrust, {reads: 1, engineCalls: 0});
   });
 
-  it('F-0201 AC-55: with the folder untrusted and dockerPath a relative file, the read before the answer uses the default program, and what comes after it the folder’s own', async () => {
+  it('F-0201 AC-55: with the folder untrusted and dockerPath a relative file, the read before the answer is given a program that does not exist and the CLI the name to answer for, and what comes after it the folder’s own', async () => {
     const scene = sceneOf({dockerPath: 'tools/dk'});
     scene.trusted = false;
     await connected(scene);
     deepStrictEqual(
       [
         scene.configurationReads.map(read => read.target.dockerPath),
+        scene.cliEnvironments
+          .map(environment => environment.REMOTE_OSS_NO_ENGINE)
+          .filter(name => name !== undefined),
         scene.prepared.map(request => request.dockerPath),
       ],
-      [['docker', '/work/proj/tools/dk'], ['/work/proj/tools/dk']],
+      [
+        [noEngineProgramOf(FIXTURE_STORAGE), '/work/proj/tools/dk'],
+        [noEngineProgramOf(FIXTURE_STORAGE)],
+        ['/work/proj/tools/dk'],
+      ],
+    );
+  });
+
+  it('F-0201 AC-55: with the preload absent, the program of the read fails with ENOENT on a path in the extension’s own storage, no program runs, and the path is still absent', async () => {
+    const storage = mkdtempSync(path.join(tmpdir(), 'no-engine-'));
+    try {
+      const program = noEngineProgramOf(storage);
+      const failure = await new Promise<string>(resolve => {
+        spawn(program).on('error', caught => {
+          resolve((caught as NodeJS.ErrnoException).code ?? '');
+        });
+      });
+      deepStrictEqual(
+        [
+          program.startsWith(storage),
+          failure,
+          existsSync(program),
+          existsSync(path.dirname(program)),
+        ],
+        [true, 'ENOENT', false, false],
+      );
+    } finally {
+      rmSync(storage, {recursive: true, force: true});
+    }
+  });
+
+  it('F-0201 AC-55: nothing a connect with the folder untrusted does creates the program of the read, or the folder it would be in', async () => {
+    const scene = sceneOf({dockerPath: 'tools/dk'});
+    scene.trusted = false;
+    await connected(scene);
+    const program = noEngineProgramOf(FIXTURE_STORAGE);
+    deepStrictEqual(
+      [existsSync(program), existsSync(path.dirname(program))],
+      [false, false],
     );
   });
 

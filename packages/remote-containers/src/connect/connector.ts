@@ -4,6 +4,7 @@
  * loopback into it, and holds the connection until the window ends or connects again.
  */
 
+import {join} from 'node:path';
 import type {
   ConnectInput,
   ConnectPhase,
@@ -186,6 +187,8 @@ export interface ContainerConnector extends Connector {
 export interface ContainerConnectorDependencies {
   /** Whether a folder exists on this machine. */
   folderExists(folder: string): Promise<boolean>;
+  /** The program a read before the trust answer is given (see `noEngineProgramOf`). */
+  noEngineProgram: string;
   /** The configuration files of a folder, in the order of the picker. */
   discoverConfigurations(
     folder: string,
@@ -295,6 +298,15 @@ function mappedPath(
   return path.startsWith(`${root}/`)
     ? hostPath + path.slice(root.length)
     : undefined;
+}
+
+/**
+ * The program a read before the trust answer is given: a path in a folder of the extension's own that nothing creates,
+ * so that no program is ever there to run, and the CLI's preload answers its spawns. A fixed path at a drive's root
+ * would let another user plant a program where the preload does not reach.
+ */
+export function noEngineProgramOf(storageFolder: string): string {
+  return join(storageFolder, 'no-engine', 'absent');
 }
 
 /** The settings, the program, the engine and the CLI of one folder. */
@@ -819,7 +831,9 @@ export function containerConnectorOf(
   /**
    * The tools a read of the configuration uses. The CLI runs the Docker program it is given even for a read, and a
    * relative value of `dev.containers.dockerPath` is a file of the folder, which does not run before the window is
-   * trusted: until then the read uses the default program, which gives the same configuration.
+   * trusted: until then the read is given a program that does not exist and the CLI's preload answers its spawns with
+   * nothing, so that the read consults no engine. Without a container id the CLI asks the engine only for the
+   * container of the folder, so it reads the configuration as for a folder that has none.
    */
   function readToolsOf(tools: Tools, folder: DevContainerFolder): Tools {
     const relative =
@@ -832,7 +846,15 @@ export function containerConnectorOf(
           trusted: dependencies.trust.isTrusted(),
         }),
       ).kind === 'notFound'
-      ? {...tools, dockerPath: 'docker'}
+      ? {
+          ...tools,
+          dockerPath: dependencies.noEngineProgram,
+          bridge: dependencies.cliFor({
+            ...dependencies.editorEnvironment,
+            ...environmentOfPinned(folder),
+            REMOTE_OSS_NO_ENGINE: dependencies.noEngineProgram,
+          }),
+        }
       : tools;
   }
 
