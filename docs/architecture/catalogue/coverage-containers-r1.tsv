@@ -457,7 +457,7 @@ F-0409.AC-16	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-17	deferred	containers release 1: later (F-0902's recent-folder rows)
 F-0409.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0409.AC-20	deferred	containers release 1: later (Reopen Folder Locally)
+F-0409.AC-20	acceptance	
 F-0409.AC-21	deferred	containers release 1: later (remote engines)
 F-0409.AC-22	acceptance	
 F-0409.AC-23	acceptance	
@@ -895,7 +895,7 @@ F-0501.AC-23	deferred	containers release 1: later (the attach, Kubernetes and Ap
 F-0501.AC-24	deferred	containers release 1: later (the recovery container)
 F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-26	acceptance	
-F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
+F-0501.AC-27	acceptance	
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
 F-0502.AC-1	acceptance	
 F-0502.AC-2	acceptance	
@@ -1228,7 +1228,7 @@ F-0901.AC-1	deferred	containers 0.4: F-0806 later
 F-0901.AC-2	acceptance	
 F-0901.AC-3	deferred	containers 0.4: F-0905 later
 F-0901.AC-4	unit	
-F-0901.AC-5	deferred	containers 0.4: F-0406 later
+F-0901.AC-5	acceptance	
 F-0901.AC-6	acceptance	
 F-0901.AC-7	deferred	containers 0.4: C12 attach later
 F-0901.AC-8	acceptance	
@@ -1374,7 +1374,7 @@ F-0906.AC-2	deferred	containers 0.4: F-0904 later
 F-0906.AC-3	deferred	containers 0.4: F-0904 later
 F-0906.AC-4	deferred	containers 0.4: F-0904 later
 F-0906.AC-5	deferred	containers 0.4: C12 attach later
-F-0906.AC-6	deferred	containers 0.4: F-0406 later
+F-0906.AC-6	acceptance	
 F-0906.AC-7	deferred	containers 0.4: C12 attach later
 F-0906.AC-8	deferred	containers 0.4: C12 attach later
 F-0906.AC-9	deferred	containers 0.4: C12 attach later
