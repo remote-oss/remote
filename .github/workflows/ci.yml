@@ -372,7 +372,7 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.launches }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
     # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01
     # (41252320561, 41264381137, 41279176317); its two parts take about an hour each, so the limit is 120 again
@@ -386,6 +386,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm acceptance:clean
+      - name: hosted runner facts
+        run: |
+          ssh -V; id; echo "DISPLAY=${DISPLAY:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-}"
+          command -v xvfb-run || { sudo apt-get update -qq && sudo apt-get install -y -qq xvfb >/dev/null; command -v xvfb-run; }
       - run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
@@ -409,6 +413,7 @@ jobs:
           fi
         env:
           LAUNCHES: ${{ matrix.launches }}
+          HARNESS_GREP: 'F-2303 AC-13|OpenSSH ControlMaster'
       - if: always()
         run: pnpm acceptance:clean
 

@@ -162,6 +162,16 @@ async function extensionState(): Promise<Record<string, unknown>> {
     : (JSON.parse(stored) as Record<string, unknown>);
 }
 
+import {connectionLog as diagnosticLog, recordLines as diagnosticRecord} from './harness.ts';
+
+// A one-off diagnosis on a hosted runner (never merged): every failing row prints the log's and the record's tails.
+afterEach(function () {
+  if (this.currentTest?.state === 'failed') {
+    console.log(`--- connection log, last 300 lines:\n${diagnosticLog().slice(-300).join('\n')}`);
+    console.log(`--- record, last 40 lines:\n${diagnosticRecord().slice(-40).map(line => JSON.stringify(line)).join('\n')}`);
+  }
+});
+
 describe('New Window on Active Host (card coverage-42)', function () {
   this.timeout(600_000);
 
