@@ -8,6 +8,7 @@
 
 import {
   posixQuote,
+  powershellQuote,
   preludeCommand,
   type ScriptInput,
   type ScriptRequest,
@@ -89,7 +90,7 @@ function powershellEnvironmentLines(
   environment: Readonly<Record<string, string>>,
 ): string[] {
   return Object.entries(environment).map(
-    ([name, value]) => `$env:${name} = '${value.replaceAll("'", "''")}'`,
+    ([name, value]) => `$env:${name} = ${powershellQuote(value)}`,
   );
 }
 

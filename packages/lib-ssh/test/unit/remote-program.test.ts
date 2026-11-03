@@ -127,6 +127,18 @@ describe('the PowerShell plan', () => {
       );
     });
 
+    it('S10: doubles the typographic single quotes as well', () => {
+      deepStrictEqual(
+        plannedOf(
+          powershellPlan(request({environment: {NAME: 'a\u2019b\u2018'}})),
+        ).input,
+        {
+          kind: 'text',
+          text: "$env:NAME = 'a\u2019\u2019b\u2018\u2018'\nWrite-Output hi\n",
+        },
+      );
+    });
+
     it('S10: is the script and a line end for an empty environment', () => {
       deepStrictEqual(plannedOf(powershellPlan(request())).input, {
         kind: 'text',

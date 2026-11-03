@@ -78,6 +78,16 @@ describe('the PowerShell plan, run under pwsh', function () {
     );
   });
 
+  for (const quote of ['\u2018', '\u2019', '\u201A', '\u201B']) {
+    it(`S10: a value holding U+${quote.codePointAt(0)?.toString(16).toUpperCase() ?? ''} stays a value and runs nothing`, async () => {
+      const value = `x${quote}; Write-Output INJECTED; ${quote}y`;
+      const ended = await runPlanned(
+        request('Write-Output $env:PAYLOAD', {environment: {PAYLOAD: value}}),
+      );
+      deepStrictEqual(ended.output.toString('utf8').trim(), value);
+    });
+  }
+
   it('F-2701 AC-5: a script reads every byte of a file that follows the prelude, byte for byte', async () => {
     const bytes = randomBytes(70_000);
     const folder = mkdtempSync(path.join(tmpdir(), 'remote-program-'));
