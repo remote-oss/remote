@@ -167,11 +167,14 @@ jobs:
           # work folder is kept: a later suite's new or changed definitions are copied over here, and the runner's own
           # catalogue of built fixtures stays, so verify rebuilds exactly the fixtures whose definition changed
           fixtures="$CONFORMANCE_WORK/fixtures"
+          mkdir -p "$fixtures"
           if [ -f "$fixtures/CATALOG.json" ]; then
             cp "$fixtures/CATALOG.json" "$RUNNER_TEMP/local-catalog.json"
-            cp -r "$CONFORMANCE_SUITE/fixtures/." "$fixtures/"
-            mv "$RUNNER_TEMP/local-catalog.json" "$fixtures/CATALOG.json"
+          else
+            echo '{"version": 1, "fixtures": []}' > "$RUNNER_TEMP/local-catalog.json"
           fi
+          cp -r "$CONFORMANCE_SUITE/fixtures/." "$fixtures/"
+          mv "$RUNNER_TEMP/local-catalog.json" "$fixtures/CATALOG.json"
           # the environment bin/conformance gives fixture.py, for its verify (bin/conformance runs only build and run)
           verified() {
             ( cd tests/conformance/runner/encode && ENCODE_ROOT="$CONFORMANCE_WORK" ENCODE_TESTS="$CONFORMANCE_SUITE/suite" ENCODE_FIXTURES="$CONFORMANCE_WORK/fixtures" \
