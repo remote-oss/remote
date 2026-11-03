@@ -1,5 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ShutdownReply} from '../../src/shutdown/protocol.ts';
+import type {
+  ContainerIdentity,
+  ShutdownReply,
+} from '../../src/shutdown/protocol.ts';
 import {
   CHECK_MILLISECONDS,
   createShutdownRegistry,
@@ -69,7 +72,7 @@ function connect(
   registry: ShutdownRegistry,
   leaseId: number,
   connectionId: string,
-  identity = IDENTITY,
+  identity: ContainerIdentity = IDENTITY,
   container?: {containerId: string; action: 'stop' | 'none'},
 ): void {
   registry.register(leaseId, {
@@ -250,6 +253,54 @@ describe('the shutdown registry (card containers-68)', () => {
         ['docker ps failed with status 1; the lookup ends'],
         1,
         ['container c0ffee is in use and stays running'],
+      ],
+    );
+  });
+
+  it('brief-volumes §7 (card containers-151): a clone in a volume is looked up by its volume and folder, held by a connection of the same volume, and never by a folder’s', async () => {
+    const volume = {volumeName: 'r-1', folder: 'r'};
+    /** Every docker run answers that c0ffee runs. */
+    function running(): DockerResult {
+      return {status: 0, stdout: 'c0ffee'};
+    }
+    const found = scene(argv =>
+      argv[0] === 'ps'
+        ? {status: 0, stdout: 'c0ffee\n'}
+        : {status: 0, stdout: ''},
+    );
+    connect(found.registry, 1, 'a', volume);
+    found.registry.leasesChanged([]);
+    await found.advance(CHECK_MILLISECONDS);
+    const held = scene(running);
+    connect(held.registry, 1, 'a', volume);
+    connect(held.registry, 2, 'b', volume);
+    held.registry.leasesChanged([2]);
+    await held.advance(CHECK_MILLISECONDS);
+    const mixed = [
+      [volume, IDENTITY],
+      [IDENTITY, volume],
+    ].map(async ([ending, staying]) => {
+      const each = scene(running);
+      connect(each.registry, 1, 'a', ending);
+      connect(each.registry, 2, 'b', staying);
+      each.registry.leasesChanged([2]);
+      await each.advance(CHECK_MILLISECONDS);
+      return each.runs.at(-1);
+    });
+    const never = scene();
+    connect(never.registry, 1, 'a', volume);
+    never.registry.leasesChanged([]);
+    await never.advance(20 * CHECK_MILLISECONDS);
+    deepStrictEqual(
+      [found.runs, held.logs, await Promise.all(mixed), never.logs],
+      [
+        [
+          '10s ps -q --filter label=vsch.local.repository.volume=r-1 --filter label=vsch.local.repository.folder=r',
+          '10s stop c0ffee',
+        ],
+        ['container c0ffee is in use and stays running'],
+        ['10s stop c0ffee', '10s stop c0ffee'],
+        ['no running container for the volume r-1; the lookup ends'],
       ],
     );
   });

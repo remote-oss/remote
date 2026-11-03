@@ -64,6 +64,8 @@ interface PreparedVolume {
   outcome: Extract<ContainerOutcome, {kind: 'ready'}>;
   /** The bootstrap container, still running: the caller removes it once connected. */
   bootstrap: string;
+  /** The volume the clone is in. */
+  volumeName: string;
   request: VolumeContainerRequest;
   /** The configuration's text, for the CLI runs on the host once the bootstrap is gone. */
   configText: string;
@@ -178,6 +180,7 @@ export async function resolveVolume(
     kind: 'prepared',
     outcome,
     bootstrap,
+    volumeName,
     request,
     configText,
     shallow: cloned.cloned && !cloned.deepened,

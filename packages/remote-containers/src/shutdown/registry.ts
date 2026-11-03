@@ -6,11 +6,13 @@
  * nothing is shown.
  */
 
-import type {
-  ContainerIdentity,
-  EngineCoordinates,
-  ShutdownReply,
-  ShutdownRequest,
+import {
+  type ContainerIdentity,
+  type EngineCoordinates,
+  identityFilters,
+  sameIdentity,
+  type ShutdownReply,
+  type ShutdownRequest,
 } from './protocol.ts';
 
 /** How long the check waits after a connection ends, in milliseconds: fixed, not a setting. */
@@ -92,15 +94,14 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     return obligation;
   }
 
-  /** Whether another live connection holds the container: by its id, or by the folder and configuration it is for. */
+  /** Whether another live connection holds the container: by its id, or by the identity it is for. */
   function inUse(connection: Connection, containerId: string): boolean {
     return [...connections.values()].some(
       other =>
         other !== connection &&
         other.live &&
         (other.containerId === containerId ||
-          (other.identity.hostPath === connection.identity.hostPath &&
-            other.identity.configFile === connection.identity.configFile)),
+          sameIdentity(other.identity, connection.identity)),
     );
   }
 
@@ -124,19 +125,15 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     }
   }
 
-  /** Looks for the running container of the connection's folder and configuration; looks again until it gives up. */
+  /** Looks for the running container of the connection's identity; looks again until it gives up. */
   async function lookUp(
     connection: Connection,
     attempt: number,
   ): Promise<void> {
-    const {hostPath, configFile} = connection.identity;
     const result = await ports.runDocker(connection.engine, [
       'ps',
       '-q',
-      '--filter',
-      `label=devcontainer.local_folder=${hostPath}`,
-      '--filter',
-      `label=devcontainer.config_file=${configFile}`,
+      ...identityFilters(connection.identity),
     ]);
     if (result.status !== 0) {
       ports.logLine(
@@ -153,7 +150,9 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       return;
     }
     if (attempt >= LOOKUP_ATTEMPTS) {
-      ports.logLine(`no running container for ${hostPath}; the lookup ends`);
+      ports.logLine(
+        `no running container for ${'hostPath' in connection.identity ? connection.identity.hostPath : `the volume ${connection.identity.volumeName}`}; the lookup ends`,
+      );
       return;
     }
     await later(CHECK_MILLISECONDS, () => lookUp(connection, attempt + 1));

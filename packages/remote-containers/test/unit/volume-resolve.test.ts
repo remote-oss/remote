@@ -205,6 +205,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
           kind: 'prepared',
           outcome: READY,
           bootstrap: 'boot1',
+          volumeName,
           request: undefined,
           configText: '{"image": "alpine"}',
           shallow: false,
