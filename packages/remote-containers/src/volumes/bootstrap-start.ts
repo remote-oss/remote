@@ -5,7 +5,6 @@
  */
 
 import type {Logger} from 'lib-log';
-import type {EngineHost, EngineOptions} from '../engine/engine-host.ts';
 import {
   BOOTSTRAP_TOOLS,
   type BootstrapSettings,
@@ -18,6 +17,7 @@ import {
   toolCheckOutcomeOf,
 } from './bootstrap.ts';
 import {volumeCreateArguments, volumeInspectArguments} from './clone-volume.ts';
+import {type EngineStepPorts, type StepResult, stepOf} from './engine-step.ts';
 
 /** A temporary build context that holds our Dockerfile and the bundled CLI. */
 export interface BuildContext {
@@ -26,9 +26,7 @@ export interface BuildContext {
 }
 
 /** What the start needs of the engine and the host. */
-export interface BootstrapStartPorts {
-  engine: Pick<EngineHost, 'run'>;
-  options: EngineOptions;
+export interface BootstrapStartPorts extends EngineStepPorts {
   /** Writes a fresh build context for our image; called only when the built-in image is used. */
   buildContext(): Promise<BuildContext>;
   logger: Logger;
@@ -45,32 +43,6 @@ export type BootstrapStart =
   | {kind: 'started'; container: string}
   | {kind: 'missingTool'; reason: 'S344' | 'S345'}
   | {kind: 'engineFailed'; detail: string};
-
-/** An engine step's result: what it printed when it exited 0, or why it didn't. */
-type StepResult =
-  {succeeded: true; stdout: string} | {succeeded: false; detail: string};
-
-/** Runs one engine step. */
-async function stepOf(
-  ports: BootstrapStartPorts,
-  argv: readonly string[],
-): Promise<StepResult> {
-  const outcome = await ports.engine.run(argv, {kind: 'none'}, ports.options);
-  if (outcome.kind === 'failed') {
-    return {succeeded: false, detail: outcome.detail};
-  }
-  if (outcome.status === 0) {
-    return {succeeded: true, stdout: outcome.stdout};
-  }
-  const stderr = outcome.stderr.trim();
-  return {
-    succeeded: false,
-    detail:
-      stderr === ''
-        ? `docker ${String(argv[0])} exited with ${String(outcome.status)}`
-        : stderr,
-  };
-}
 
 /** Creates the volume unless it exists; an existing volume keeps the labels it was created with. */
 async function ensureVolume(

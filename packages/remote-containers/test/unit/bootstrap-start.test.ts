@@ -2,16 +2,16 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
+import {
+  type EngineScript,
+  exited,
+  scriptedEngine,
+} from './engine-script.fixture.ts';
 import type {BootstrapSettings} from '../../src/volumes/bootstrap.ts';
 import {
   type BootstrapStart,
   startBootstrap,
 } from '../../src/volumes/bootstrap-start.ts';
-
-/** An engine reply that exited with `status`. */
-function exited(status: number, stdout = '', stderr = ''): EngineRunOutcome {
-  return {kind: 'ran', status, stdout, stderr};
-}
 
 /** What a scene did: the engine calls, short, the log, the context's life, and the start's outcome. */
 interface SceneRecord {
@@ -36,25 +36,17 @@ function shortOf(argv: readonly string[]): string {
 
 /** Runs a start whose engine answers each call by `answer`, which gives undefined for a plain success. */
 async function sceneOf(
-  answer: (short: string) => EngineRunOutcome | undefined,
+  answer: EngineScript,
   settings: BootstrapSettings = BUILT_IN,
 ): Promise<SceneRecord> {
   const sink = new MemorySink();
-  const calls: string[] = [];
+  const scripted = scriptedEngine(shortOf, answer, short =>
+    short === 'run --detach' ? 'c1\n' : '',
+  );
   const context: string[] = [];
   const outcome = await startBootstrap(
     {
-      engine: {
-        // eslint-disable-next-line id-length -- the port's method is named run
-        run: argv => {
-          const short = shortOf(argv);
-          calls.push(short);
-          return Promise.resolve(
-            answer(short) ?? exited(0, short === 'run --detach' ? 'c1\n' : ''),
-          );
-        },
-      },
-      options: {cancellation: new AbortController().signal},
+      ...scripted,
       buildContext: () => {
         context.push('written');
         return Promise.resolve({
@@ -71,7 +63,7 @@ async function sceneOf(
     settings,
   );
   return {
-    calls,
+    calls: scripted.calls,
     logLines: sink.lines.map(line => line.message),
     context,
     outcome,

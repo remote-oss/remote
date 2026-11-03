@@ -46,7 +46,7 @@ describe('the repository a clone takes (card containers-151)', () => {
     );
   });
 
-  it('F-0701 BR-2: a GitHub URL gives its repository, its branch with slashes, its commit or its pull request', () => {
+  it('F-0701 BR-2: a GitHub URL gives its repository, its branch with slashes, its commit (marked) or its pull request', () => {
     const base = 'https://github.com/microsoft/vscode-remote-try-node';
     deepStrictEqual(
       [
@@ -54,22 +54,30 @@ describe('the repository a clone takes (card containers-151)', () => {
         accepted(`${base}/commit/45f5e33e47f4b113804ea808b7ce4c90a6823867`),
         accepted(`${base}/pull/161`),
         accepted(`${base}/`),
-      ].map(({urlToClone, ref, pullRequest, repositoryName}) => [
+      ].map(({urlToClone, ref, commit, pullRequest, repositoryName}) => [
         urlToClone,
         ref,
+        commit,
         pullRequest,
         repositoryName,
       ]),
       [
-        [base, 'copilot/migrate', undefined, 'vscode-remote-try-node'],
         [
           base,
-          '45f5e33e47f4b113804ea808b7ce4c90a6823867',
+          'copilot/migrate',
+          undefined,
           undefined,
           'vscode-remote-try-node',
         ],
-        [base, undefined, 161, 'vscode-remote-try-node'],
-        [base, undefined, undefined, 'vscode-remote-try-node'],
+        [
+          base,
+          '45f5e33e47f4b113804ea808b7ce4c90a6823867',
+          true,
+          undefined,
+          'vscode-remote-try-node',
+        ],
+        [base, undefined, undefined, 161, 'vscode-remote-try-node'],
+        [base, undefined, undefined, undefined, 'vscode-remote-try-node'],
       ],
     );
   });

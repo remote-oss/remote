@@ -15,6 +15,8 @@ export interface CloneSource {
   urlToClone: string;
   /** The branch or tag of a `/tree/` URL, slashes kept, or the full SHA of a `/commit/` URL. */
   ref?: string;
+  /** Set when the ref is a `/commit/` URL's SHA, which is checked out after the clone instead of cloned as a branch. */
+  commit?: true;
   /** The number of a GitHub `/pull/` URL. */
   pullRequest?: number;
   /** The repository's own name: the folder under `/workspaces`, and the first part of the volume's name. */
@@ -91,7 +93,9 @@ function lastSegment(text: string): string {
 /** A GitHub URL's repository, ref, commit or pull request; undefined for any other source. */
 function githubParts(
   text: string,
-): Pick<CloneSource, 'urlToClone' | 'ref' | 'pullRequest'> | undefined {
+):
+  | Pick<CloneSource, 'urlToClone' | 'ref' | 'commit' | 'pullRequest'>
+  | undefined {
   const match = GITHUB.exec(text);
   if (match === null) {
     return undefined;
@@ -104,7 +108,7 @@ function githubParts(
   }
   const commit = /^\/commit\/([0-9a-f]{40})$/i.exec(rest);
   if (commit !== null) {
-    return {urlToClone: repository, ref: String(commit[1])};
+    return {urlToClone: repository, ref: String(commit[1]), commit: true};
   }
   const pull = /^\/pull\/([0-9]+)$/.exec(rest);
   if (pull !== null) {
@@ -173,6 +177,7 @@ export function cloneSourceOf(
     repositoryPath,
     urlToClone,
     ...(github?.ref === undefined ? {} : {ref: github.ref}),
+    ...(github?.commit === undefined ? {} : {commit: github.commit}),
     ...(github?.pullRequest === undefined
       ? {}
       : {pullRequest: github.pullRequest}),
