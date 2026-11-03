@@ -67,6 +67,16 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
           "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+      # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
+      - name: Docker's buildx plugin for the Windows CLI
+        run: |
+          $plugins = Join-Path $env:USERPROFILE '.docker\cli-plugins'
+          New-Item -ItemType Directory -Force $plugins | Out-Null
+          $exe = Join-Path $plugins 'docker-buildx.exe'
+          Invoke-WebRequest 'https://github.com/docker/buildx/releases/download/v0.38.0/buildx-v0.38.0.windows-amd64.exe' -OutFile $exe
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26') { "docker-buildx.exe has sha256 $hash, not its pin"; exit 1 }
+          docker buildx version
       # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
       # to Node on that adapter only
       - name: The download host is reached from the WSL distro
