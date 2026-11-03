@@ -124,18 +124,17 @@ jobs:
           docker run --rm alpine:3.22 sh -c 'getent hosts host.lima.internal; getent hosts host.docker.internal; ip route' || true
           addr=$(colima ssh -- getent hosts host.lima.internal | awk '{print $1}')
           echo "host.lima.internal = $addr"
-          mkdir -p "$RUNNER_TEMP/serve" && echo probe-ok > "$RUNNER_TEMP/serve/probe.txt"
-          python3 -m http.server 47116 --bind 127.0.0.1 --directory "$RUNNER_TEMP/serve" >"$RUNNER_TEMP/serve.log" 2>&1 &
-          srv=$!; sleep 3
-          echo "host fetch: $(curl -s -m 5 http://127.0.0.1:47116/probe.txt) (listener pid $srv: $(kill -0 $srv && echo alive))"
-          colima ssh -- sh -c "wget -qO- -T 10 http://$addr:47116/probe.txt; echo vm fetch exit=\$?" || true
-          docker run --rm --add-host "downloads:$addr" alpine:3.22 wget -qO- -T 10 http://downloads:47116/probe.txt; echo "container fetch (loopback listener) exit=$?"
-          echo "--- a listener on every interface, for comparison (this probe only)"
-          kill $srv; python3 -m http.server 47117 --bind 0.0.0.0 --directory "$RUNNER_TEMP/serve" >/dev/null 2>&1 &
-          srv=$!; sleep 3
-          docker run --rm --add-host "downloads:$addr" alpine:3.22 wget -qO- -T 10 http://downloads:47117/probe.txt; echo "container fetch (wildcard listener) exit=$?"
-          kill $srv; cat "$RUNNER_TEMP/serve.log" | tail -5
-          colima list
+          serve() { node -e "require('http').createServer((q, s) => s.end('probe-ok-' + process.argv[2] + '\\n')).listen(+process.argv[1], process.argv[2])" "$1" "$2" & }
+          for bind in 127.0.0.1 0.0.0.0; do
+            port=$([ "$bind" = 127.0.0.1 ] && echo 47116 || echo 47117)
+            serve "$port" "$bind"; srv=$!; sleep 2
+            echo "== listener $bind:$port"
+            echo "host fetch: $(curl -s -m 5 http://127.0.0.1:$port/ || echo FAIL)"
+            echo "vm fetch: $(colima ssh -- wget -qO- -T 8 http://$addr:$port/ 2>&1 || echo FAIL)"
+            echo "container fetch: $(docker run --rm --add-host downloads:$addr alpine:3.22 wget -qO- -T 8 http://downloads:$port/ 2>&1 || echo FAIL)"
+            kill $srv 2>/dev/null || true
+          done
+          colima list || true
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
       - if: always()
