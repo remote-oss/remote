@@ -109,7 +109,7 @@ F-1008) are the next brief, together with the two r1 lines that wait on them.
 - **Runs don't exclude each other** (BR-2). Nothing is stored, and no Docker object is created (BR-4).
 - **Failures propagate** to core's command-error surface, with no dialog of ours (BR-5, 7.E1, 7.E3). A client without
   a POSIX shell fails the host phase (BR-8), as platform data (ADR-0013).
-- **Ruling `(ruling-NNNN-test-connection-bound)`, BR-6:**
+- **Ruling `(ruling-2042-test-connection-bound)`, BR-6:**
   - **What changes:** each round trip is bounded at 5 minutes (R-79), not unbounded. At the bound the run logs that
     the round trip didn't answer and ends like 7.E1.
   - **Why AC-19 still passes:** it holds an exec for at least 60 seconds and then releases it, so it passes
@@ -136,11 +136,11 @@ F-1008) are the next brief, together with the two r1 lines that wait on them.
 
 ## 5. Readings and rulings
 
-1. **`(reading-NNNN-empty-object)`, F-0812 AC-7:**
+1. **`(reading-2042-empty-object)`, F-0812 AC-7:**
    - **What it says:** AC-7 calls the new per-image file's initial content `{}`, while F-0602 BR-3, the file format's
      owner, gives the bytes as `{` newline `}`.
    - **The reading:** we write F-0602's bytes. AC-7's row asserts the parsed content, an empty object.
-2. **`(ruling-NNNN-test-connection-bound)`:** §3.
+2. **`(ruling-2042-test-connection-bound)`:** §3.
 
 ## 6. The cut and the cards
 
