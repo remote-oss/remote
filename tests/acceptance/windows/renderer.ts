@@ -3959,14 +3959,10 @@ export async function settingRow(
   );
 }
 
-/**
- * How many terminal tabs of window `name` carry a warning icon: the mark core draws on a terminal that an extension's
- * environment contribution has changed since the shell started, which wants a relaunch. A single terminal's tab is
- * `.single-terminal-tab`; with several they are the entries of the tabs list.
- */
-export async function terminalTabWarnings(name: string): Promise<number> {
-  return evaluate<number>(
+/** The accessible labels of the terminal tabs of window `name` that carry a warning icon: each names the terminal and core's reason for the mark. */
+export async function markedTerminalTabs(name: string): Promise<string[]> {
+  return evaluate<string[]>(
     name,
-    `document.querySelectorAll('.single-terminal-tab .codicon-warning, .terminal-tabs-entry .codicon-warning').length`,
+    `[...document.querySelectorAll('.single-terminal-tab, .terminal-tabs-entry')].filter(tab => tab.querySelector('.codicon-warning') !== null).map(tab => tab.getAttribute('aria-label') ?? tab.getAttribute('title') ?? (tab.textContent ?? '').trim())`,
   );
 }
