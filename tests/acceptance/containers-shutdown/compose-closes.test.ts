@@ -94,7 +94,7 @@ describe('what closing a Compose window does to its project (card containers-144
     );
   });
 
-  it('F-0413 AC-6, AC-68, F-0417 AC-13 (c144-scope): runServices app, which depends on db, starts no third service; the close kills app 11 to 17 seconds later while db and a service started by hand stay up', async () => {
+  it('F-0413 AC-6, AC-68, F-0417 AC-13, AC-63 (c144-scope): runServices app, which depends on db, starts no third service; the close kills app 11 to 17 seconds later while db and a service started by hand stay up', async () => {
     const folder = composeFolder({
       name: 'c144-scope',
       place: 'devcontainer',

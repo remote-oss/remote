@@ -169,62 +169,71 @@ describe('what closing one of two windows of a Compose project does (card contai
     await removeComposeContainers();
   });
 
-  for (const first of WINDOWS) {
-    const other = first === 'first' ? 'second' : 'first';
-    it(`F-0417 AC-16, AC-38 (c144-two-${first}-first): closing the ${first} window stops nothing for 40 seconds and leaves the ${other} window connected, and the last close kills every container 11 to 17 seconds later`, async () => {
-      const result = await twoWindowsClosed(
-        `c144-two-${first}`,
-        () => ({}),
-        first,
-        QUIET_SECONDS,
-      );
-      deepStrictEqual(
-        {
-          quiet: result.afterFirst.map(stayedRunning),
-          otherConnected: result.otherConnected,
-          killed: result.afterSecond.map(outcome =>
-            stoppedWithin(outcome, 137, COMPOSE_STOP_WINDOW),
-          ),
-        },
-        {quiet: [true, true], otherConnected: true, killed: [true, true]},
-      );
-    });
+  /** Closing `first` stops nothing for 40 seconds and leaves the other window connected; the last close kills everything. */
+  async function quietThenKilled(first: WindowName): Promise<void> {
+    const result = await twoWindowsClosed(
+      `c144-two-${first}`,
+      () => ({}),
+      first,
+      QUIET_SECONDS,
+    );
+    deepStrictEqual(
+      {
+        quiet: result.afterFirst.map(stayedRunning),
+        otherConnected: result.otherConnected,
+        killed: result.afterSecond.map(outcome =>
+          stoppedWithin(outcome, 137, COMPOSE_STOP_WINDOW),
+        ),
+      },
+      {quiet: [true, true], otherConnected: true, killed: [true, true]},
+    );
   }
 
-  for (const first of WINDOWS) {
+  /** With `runServices` of each window naming its own service, each close kills its own container only. */
+  async function ownKilled(first: WindowName): Promise<void> {
     const firstIndex = WINDOWS.indexOf(first);
     const otherIndex = 1 - firstIndex;
-    it(`F-0417 AC-39, AC-40 (c144-own-${first}-first): with runServices naming only its own service, closing the ${first} window kills only its container, and the other window's close kills the other`, async () => {
-      const result = await twoWindowsClosed(
-        `c144-own-${first}`,
-        service => ({runServices: [service]}),
-        first,
-        STOP_SECONDS,
-      );
-      deepStrictEqual(
-        {
-          firstKilled: stoppedWithin(
-            outcomeAt(result.afterFirst, firstIndex),
-            137,
-            COMPOSE_STOP_WINDOW,
-          ),
-          otherUp: stayedRunning(outcomeAt(result.afterFirst, otherIndex)),
-          otherConnected: result.otherConnected,
-          otherKilled: stoppedWithin(
-            outcomeAt(result.afterSecond, otherIndex),
-            137,
-            COMPOSE_STOP_WINDOW,
-          ),
-        },
-        {
-          firstKilled: true,
-          otherUp: true,
-          otherConnected: true,
-          otherKilled: true,
-        },
-      );
-    });
+    const result = await twoWindowsClosed(
+      `c144-own-${first}`,
+      service => ({runServices: [service]}),
+      first,
+      STOP_SECONDS,
+    );
+    deepStrictEqual(
+      {
+        firstKilled: stoppedWithin(
+          outcomeAt(result.afterFirst, firstIndex),
+          137,
+          COMPOSE_STOP_WINDOW,
+        ),
+        otherUp: stayedRunning(outcomeAt(result.afterFirst, otherIndex)),
+        otherConnected: result.otherConnected,
+        otherKilled: stoppedWithin(
+          outcomeAt(result.afterSecond, otherIndex),
+          137,
+          COMPOSE_STOP_WINDOW,
+        ),
+      },
+      {
+        firstKilled: true,
+        otherUp: true,
+        otherConnected: true,
+        otherKilled: true,
+      },
+    );
   }
+
+  it('F-0417 AC-38 (c144-two-first-first): closing the first window stops nothing for 40 seconds and leaves the second window connected, and the last close kills every container 11 to 17 seconds later', () =>
+    quietThenKilled('first'));
+
+  it('F-0417 AC-16 (c144-two-second-first): closing the second window stops nothing for 40 seconds and leaves the first window connected, and the last close kills every container 11 to 17 seconds later', () =>
+    quietThenKilled('second'));
+
+  it('F-0417 AC-39 (c144-own-first-first): with runServices naming only its own service, closing the first window kills only its container, and the second window’s close kills the other', () =>
+    ownKilled('first'));
+
+  it('F-0417 AC-40 (c144-own-second-first): with runServices naming only its own service, closing the second window kills only its container, and the first window’s close kills the other', () =>
+    ownKilled('second'));
 
   it('F-0417 AC-18 (c144-two-none): with shutdownAction none in both configurations no container stops through either close, and Docker shows no kill or stop', async () => {
     const result = await twoWindowsClosed(
