@@ -10,12 +10,14 @@ import type {Translate} from '../surfaces/engine-dialogs.ts';
 const PROGRESS_TEMPLATES = {
   S087: '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)',
   S283: '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)',
+  S074: 'Cloning Repository',
   S209: 'Installing server',
   S334: 'Starting server',
 } as const;
 
 /** The stage text, by the stage that names it. */
 const STAGE_TEMPLATES = {
+  cloningRepository: PROGRESS_TEMPLATES.S074,
   installing: PROGRESS_TEMPLATES.S209,
   startingServer: PROGRESS_TEMPLATES.S334,
   // The download is part of the install: the suffix stays until the next stage replaces it.

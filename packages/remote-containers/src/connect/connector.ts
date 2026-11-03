@@ -1545,6 +1545,7 @@ export function containerConnectorOf(
         clearTyped: typedPayload => volumes.clearTyped(typedPayload),
         onCloning: () => {
           logger.info('Cloning Repository');
+          phases.tell({name: 'cloningRepository'});
         },
         prepare: (bootstrap, request, configText) => {
           const pass = hostPassOf(request, configText);

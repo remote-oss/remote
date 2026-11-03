@@ -212,5 +212,6 @@
   "Error: {0}": "Error: {0}",
   "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.": "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.",
   "The bootstrap container image does not include a Docker CLI. Please use an image that has the Docker CLI installed.": "The bootstrap container image does not include a Docker CLI. Please use an image that has the Docker CLI installed.",
-  "The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.": "The bootstrap container image does not include a Git CLI. Please use an image that has Git installed."
+  "The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.": "The bootstrap container image does not include a Git CLI. Please use an image that has Git installed.",
+  "Cloning Repository": "Cloning Repository"
 }

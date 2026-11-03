@@ -60,4 +60,11 @@ describe('the titles of the connect progress (card containers-08)', () => {
       '<Installing server>',
     );
   });
+
+  it('F-0701 AC-6 (card containers-151): a clone into a volume shows S074 after the title', () => {
+    deepStrictEqual(
+      phaseTitleOf({name: 'cloningRepository'}, template => template),
+      'Cloning Repository',
+    );
+  });
 });
