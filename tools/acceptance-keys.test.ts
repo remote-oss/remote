@@ -1,13 +1,6 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
@@ -367,28 +360,50 @@ describe('the run agent', function () {
     );
   });
 
-  it("tooling-118: a loosened key is readable by anyone: mode 0644 elsewhere, and on Windows Everyone's read in its access list", () => {
+  it("tooling-118: a loosened key is readable by anyone, mode 0644 elsewhere and Everyone's read on Windows, and ssh-keygen refuses it", () => {
     const folder = mkdtempSync(path.join(tmpdir(), 'loose-key-'));
     const file = path.join(folder, 'id_loose');
     const commands: string[] = [];
     try {
-      writeFileSync(file, 'key', {mode: 0o600});
+      runCommand('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', file]);
       loosenKey(runCommand, file, 'linux');
       loosenKey(
         (program, programArguments) => {
           commands.push([program, ...programArguments].join(' '));
-          return {status: 0, stdout: '', stderr: ''};
+          return {
+            status: program === 'ssh-keygen' ? 255 : 0,
+            stdout: '',
+            stderr: '',
+          };
         },
         'C:\\run\\id_loose',
         'win32',
       );
       deepStrictEqual(
         [statSync(file).mode & 0o777, commands],
-        [0o644, ['icacls C:\\run\\id_loose /grant *S-1-1-0:R']],
+        [
+          0o644,
+          [
+            'icacls C:\\run\\id_loose /grant *S-1-1-0:R',
+            'ssh-keygen -y -f C:\\run\\id_loose',
+          ],
+        ],
       );
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+
+  it('tooling-118: a loosened key that ssh-keygen still reads stops the run', () => {
+    throws(
+      () => {
+        loosenKey(exitingWith(0), 'C:\\run\\id_loose', 'win32');
+      },
+      {
+        message:
+          'ssh-keygen still reads C:\\run\\id_loose once anyone may read it: OpenSSH would not refuse it',
+      },
+    );
   });
 
   it('tooling-118: the askpass is a shell script elsewhere and a batch file on Windows, each printing the passphrase file', () => {
