@@ -1,10 +1,9 @@
-# The acceptance suite with a Windows and a macOS client, on GitHub's hosted runners (card platform-01, #1966; ADR-0013
-# decision 6). On a schedule and by dispatch only, never on a pull request (D-93), so no fork's code reaches a hosted
-# runner from here, and with no secret.
+# The acceptance suite with a Windows and a macOS client, on GitHub's hosted runners. On a schedule and by dispatch only,
+# never on a pull request, so no fork's code reaches a hosted runner from here, and with no secret.
 #
 # - windows-2025: the Windows client. WSL2 gives the Linux side: an Ubuntu 24.04 distro whose Docker engine runs the
 #   SSH hosts and the dev containers, reached from Windows over WSL2's localhost forwarding (the Windows engine of the
-#   image runs Windows containers only). VSCodium answers on its debugging port there (run 41467076289).
+#   image runs Windows containers only). VSCodium answers on its debugging port there.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
