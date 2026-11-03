@@ -1231,7 +1231,7 @@ describe('the launches of the VSCodium run', () => {
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings?.['window.title']),
-      Array.from({length: 9}, () => '[${rootName}]${remoteName}'),
+      Array.from({length: 10}, () => '[${rootName}]${remoteName}'),
     );
   });
 
