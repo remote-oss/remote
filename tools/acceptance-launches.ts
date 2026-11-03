@@ -418,6 +418,7 @@ const CONTAINERS_B_FILES: readonly string[] = [
   'server-rows.test.ts',
   'setup-failure-actions.test.ts',
   'setup-failure-state.test.ts',
+  'switch-container.test.ts',
   'targets-menus.test.ts',
   'template-catalogue.test.ts',
   'transport-token.test.ts',
