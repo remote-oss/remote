@@ -11,6 +11,8 @@ import {type Translate, filled} from './strings.ts';
 export const OWN_TEMPLATES = {
   [SSH_LABEL_PREFIX_ID]: 'SSH: {0}',
   platformPickPlaceholder: 'Select the platform of the remote host "{0}"',
+  platformPickAfterBrokenPipe:
+    'Error connecting, please select the platform of the remote host: "{0}"',
   mitigationReloadWindow: 'Reload Window',
   S085: 'Killed VS Code Server on {0}.',
   S076: 'Failed to kill VS Code Server on {0}.',

@@ -337,6 +337,8 @@ export function steps(
         note('openTunnel', {kind: 'done', value: tunnelOf(recording)}),
       );
     },
+    pickAfterBrokenPipe: () =>
+      note('pickAfterBrokenPipe', Promise.resolve(undefined)),
     rememberPlatform: () => {
       note('rememberPlatform', undefined);
       return Promise.resolve();

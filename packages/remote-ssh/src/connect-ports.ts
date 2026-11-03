@@ -67,6 +67,7 @@ import {
   serverDownloadProgress,
 } from './cli/server-download-progress.ts';
 import {announcePlatform} from './connect/platform-notice.ts';
+import type {PlatformPickVariant} from './connect/platform-picker.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
@@ -141,6 +142,7 @@ export interface ConnectSurfaces {
   /** Asks the user for the host's platform; nothing when the pick closed without one. */
   pickPlatform: (
     alias: string,
+    variant: PlatformPickVariant,
     cancellation: AbortSignal,
   ) => Promise<RemotePlatform | undefined>;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`, in the user's settings. */

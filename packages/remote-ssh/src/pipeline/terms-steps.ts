@@ -4,6 +4,7 @@
  * and the write to `remote.SSH.remotePlatform`.
  */
 
+import type {PlatformPickVariant} from '../connect/platform-picker.ts';
 import {hostAlias} from './host-settings.ts';
 import {
   decidePlatform,
@@ -27,6 +28,7 @@ export interface TermsStepDependencies {
   /** Asks the user for the host's platform; none when the user dismisses the picker or the connect is cancelled. */
   pickPlatform: (
     alias: string,
+    variant: PlatformPickVariant,
     cancellation: AbortSignal,
   ) => Promise<RemotePlatform | undefined>;
   /** Shows the notice for the platform about to be stored; the connect does not wait for it. */
@@ -35,7 +37,8 @@ export interface TermsStepDependencies {
   writePlatform: (alias: string, platform: RemotePlatform) => Promise<void>;
 }
 
-type TermsStepNames = 'decideTerms' | 'rememberPlatform';
+type TermsStepNames =
+  'decideTerms' | 'pickAfterBrokenPipe' | 'rememberPlatform';
 
 /** The steps that decide the terms and remember the platform. */
 export function createTermsSteps(
@@ -50,7 +53,11 @@ export function createTermsSteps(
       if (decision.kind === 'decided') {
         platform = decision.platform;
       } else if (decision.kind === 'ask') {
-        const picked = await dependencies.pickPlatform(alias, cancellation);
+        const picked = await dependencies.pickPlatform(
+          alias,
+          'ask',
+          cancellation,
+        );
         if (picked === undefined) {
           // The extension's own pick dismissed: the connect was cancelled by the user, as the licence decline.
           return {
@@ -72,6 +79,12 @@ export function createTermsSteps(
         },
       };
     },
+    pickAfterBrokenPipe: (input, cancellation) =>
+      dependencies.pickPlatform(
+        hostAlias(input.target),
+        'brokenPipe',
+        cancellation,
+      ),
     rememberPlatform: async (input, reported) => {
       const alias = hostAlias(input.target);
       const write = platformWrite(

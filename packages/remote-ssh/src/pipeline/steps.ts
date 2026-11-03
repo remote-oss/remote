@@ -29,6 +29,7 @@ import type {PortRange, TunnelPath} from 'lib-forwarding';
 import type {HostChannel, PlatformHint} from 'lib-host';
 import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
 import type {FailureDetail} from './failure.ts';
+import type {RemotePlatform} from './platform.ts';
 
 /** The target of a connect as the authority decoded it: a plain host string, or a host with a user and a port. */
 export type ConnectTarget =
@@ -300,6 +301,14 @@ export interface ConnectSteps {
     /** Takes the pipeline's bound off the step, for a step that waits on purpose until the connect is cancelled. */
     disarmBound?: () => void,
   ): Promise<StepResult<TunnelOpening>>;
+  /**
+   * Asks the user for the host's platform after `ssh` ended in a broken pipe during setup, with the pick's own words;
+   * none when the user closed it or the connect was cancelled. It writes nothing: the choice is for one more attempt.
+   */
+  pickAfterBrokenPipe(
+    input: ConnectInput,
+    cancellation: AbortSignal,
+  ): Promise<RemotePlatform | undefined>;
   /** Writes the platform the host reported to the settings after a connect has worked, where the settings ask for it. */
   rememberPlatform(
     input: ConnectInput,

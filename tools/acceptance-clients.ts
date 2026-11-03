@@ -30,6 +30,8 @@ export interface FakeClient {
   copyCommands?: string;
   /** A variable the real client runs with, as `NAME=value`; none runs it with the run's environment. */
   exported?: string;
+  /** A connection through the program ends at once with the client's broken-pipe line and status 255. */
+  brokenPipe?: boolean;
 }
 
 const OPENSSH_BANNER = 'OpenSSH_9.6p1, OpenSSL 3.0.13';
@@ -137,6 +139,14 @@ export const FAKE_CLIENTS: readonly FakeClient[] = [
     mode: 0o755,
     exported: 'DISPLAY=1',
   },
+  {
+    folder: 'broken-pipe',
+    banner: OPENSSH_BANNER,
+    stream: 'stderr',
+    status: 0,
+    mode: 0o755,
+    brokenPipe: true,
+  },
 ];
 
 /** The folder the fakes live in. */
@@ -175,6 +185,14 @@ export function clientScript(client: FakeClient, callsLog: string): string {
     lines.push('  rm -f "$0"');
   }
   lines.push(`  exit ${String(client.status)}`, 'fi');
+  if (client.brokenPipe === true) {
+    lines.push(
+      'if [ "$kind" = connect ]; then',
+      "  printf '%s\\n' 'send disconnect: Broken pipe' >&2",
+      '  exit 255',
+      'fi',
+    );
+  }
   if (client.exported !== undefined) {
     const [name = '', ...value] = client.exported.split('=');
     lines.push(`export ${name}=${quoted(value.join('='))}`);
