@@ -31,6 +31,7 @@ function container(changes: Partial<ListedContainer> = {}): ListedContainer {
     finishedAt: undefined,
     labels: {},
     binds: [],
+    volumes: [],
     ...changes,
   };
 }

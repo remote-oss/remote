@@ -195,3 +195,27 @@ describe('the bind mounts of a listed container (card containers-146)', () => {
     );
   });
 });
+
+describe('the volume mounts of a listed container (card containers-168)', () => {
+  it('F-0905 BR-2: the volumes are the names of the volume mounts, and nothing for a bind or a mount that lacks a name', () => {
+    const listed = listedContainersOf(
+      JSON.stringify([
+        element({
+          Mounts: [
+            {Type: 'volume', Name: 'one', Destination: '/vscode'},
+            {Type: 'bind', Source: '/h/p', Destination: '/workspaces/p'},
+            {Type: 'volume', Destination: '/anonymous'},
+            {Type: 'volume', Name: 'two', Destination: '/workspaces'},
+            null,
+          ],
+        }),
+        element({Mounts: 'x'}),
+        element(),
+      ]),
+    );
+    deepStrictEqual(
+      listed?.map(each => each.volumes),
+      [['one', 'two'], [], []],
+    );
+  });
+});

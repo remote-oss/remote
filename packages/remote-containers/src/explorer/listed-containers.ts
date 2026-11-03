@@ -23,6 +23,8 @@ export interface ListedContainer {
   labels: Readonly<Record<string, string>>;
   /** The bind mounts, as host folder and container folder, in the engine's order. */
   binds: ReadonlyArray<{source: string; destination: string}>;
+  /** The names of the volumes the container mounts, in the engine's order. */
+  volumes: readonly string[];
 }
 
 /** `docker ps -a -q --no-trunc`: every container's id. */
@@ -77,6 +79,16 @@ function bindsOf(value: unknown): Array<{source: string; destination: string}> {
   });
 }
 
+/** The names of the volume mounts of `docker inspect`'s `Mounts`; those that lack one are left out. */
+function volumesOf(value: unknown): string[] {
+  return (Array.isArray(value) ? (value as unknown[]) : []).flatMap(each => {
+    const mount = recordOf(each);
+    return mount?.Type === 'volume' && typeof mount.Name === 'string'
+      ? [mount.Name]
+      : [];
+  });
+}
+
 /** The container one element of the array describes, or none when the element lacks what the view needs. */
 function containerOf(element: unknown): ListedContainer | undefined {
   const inspected = recordOf(element);
@@ -102,6 +114,7 @@ function containerOf(element: unknown): ListedContainer | undefined {
     finishedAt: timeOf(state.FinishedAt),
     labels: labelsOf(config.Labels),
     binds: bindsOf(inspected.Mounts),
+    volumes: volumesOf(inspected.Mounts),
   };
 }
 

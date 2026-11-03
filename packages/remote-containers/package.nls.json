@@ -26,6 +26,8 @@
   "commands.Rebuildandreopenincontainer.title": "Rebuild and Reopen in Container",
   "commands.Rebuildwithoutcacheandreopenincontainer.title": "Rebuild Without Cache and Reopen in Container",
   "commands.Settings.title": "Settings",
+  "commands.cleanUpDevContainers.title": "Clean Up Dev Containers...",
+  "commands.pruneVolumes.title": "Clean Up Dev Volumes...",
   "setting.Dockerpath.description": "Docker (or Podman or WSLc) executable name or path.",
   "setting.Dockercomposepath.description": "Docker Compose executable name or path.",
   "setting.ServerDownloadBaseUrl.description": "Base URL for downloading the VS Code server. The path `/commit:{commit}/server-{platform}/{quality}` will be appended to this URL. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`.",

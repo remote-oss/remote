@@ -1256,7 +1256,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [25, true, false],
+      [26, true, false],
     );
   });
 
@@ -1281,6 +1281,62 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0905 3.1, F-0901 AC-3, AC-12: Clean Up Dev Containers and Clean Up Dev Volumes are commands of the palette with the clear-all icon, and the Dev Containers view shows the first in its title between New and Refresh, with the clause of Refresh', () => {
+    const commandsOf = VIEW_PARTS.commands as Array<Record<string, unknown>>;
+    deepStrictEqual(
+      [
+        ['cleanUpDevContainers', 'pruneVolumes'].map(name =>
+          commandsOf.find(
+            entry => entry.command === `remote-containers.${name}`,
+          ),
+        ),
+        ['cleanUpDevContainers', 'pruneVolumes'].map(name =>
+          VIEW_PARTS.menus.commandPalette?.find(
+            entry => entry.command === `remote-containers.${name}`,
+          ),
+        ),
+        VIEW_PARTS.menus['view/title']?.slice(1, 2),
+        readJson('package.nls.json')['commands.cleanUpDevContainers.title'],
+        readJson('package.nls.json')['commands.pruneVolumes.title'],
+      ],
+      [
+        [
+          {
+            command: 'remote-containers.cleanUpDevContainers',
+            title: '%commands.cleanUpDevContainers.title%',
+            category: 'Dev Containers',
+            icon: '$(clear-all)',
+          },
+          {
+            command: 'remote-containers.pruneVolumes',
+            title: '%commands.pruneVolumes.title%',
+            category: 'Dev Containers',
+            icon: '$(clear-all)',
+          },
+        ],
+        [
+          {
+            command: 'remote-containers.cleanUpDevContainers',
+            when: '!remote-containers:standingDown',
+          },
+          {
+            command: 'remote-containers.pruneVolumes',
+            when: '!remote-containers:standingDown',
+          },
+        ],
+        [
+          {
+            command: 'remote-containers.cleanUpDevContainers',
+            group: 'navigation@2',
+            when: TARGETS_TITLE_WHEN,
+          },
+        ],
+        'Clean Up Dev Containers...',
+        'Clean Up Dev Volumes...',
+      ],
+    );
+  });
+
   it('F-0903 3.3: the Details view is in the remote container with the reference group, clause and remote names and no stand-down clause, its Refresh is out of the palette, and the toolbar has Rebuild then Refresh with the stand-down clause', () => {
     deepStrictEqual(
       [
@@ -1289,7 +1345,7 @@ describe('the manifest', () => {
         VIEW_PARTS.menus.commandPalette?.find(
           entry => entry.command === 'remote-containers.explorerDetailsRefresh',
         ),
-        VIEW_PARTS.menus['view/title']?.slice(1),
+        VIEW_PARTS.menus['view/title']?.slice(2),
         ENGLISH['views.detailsContainers.name'],
       ],
       [
