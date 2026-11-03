@@ -2115,7 +2115,7 @@ describe('containerLifecycleOf', () => {
   it('F-0419 AC-14: the first reserved property is reported, in the order mounts, runArgs, workspaceMount', async () => {
     const run = await imageRun({
       mounts: ['type=volume,source=d,target=/data'],
-      runArgs: ['-v', 'x:/vscode'],
+      runArgs: ['-v', 'data:/vscode'],
       workspaceMount: 'source=/work,target=/vscode,type=bind',
     });
     deepStrictEqual(
@@ -2147,7 +2147,7 @@ describe('containerLifecycleOf', () => {
     const run = await imageRun({
       cacheVolume: false,
       mounts: ['type=volume,source=d,target=/vscode'],
-      runArgs: ['-v', 'x:/vscode'],
+      runArgs: ['-v', 'data:/vscode'],
       workspaceMount: 'source=/work,target=/vscode,type=bind',
     });
     deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);

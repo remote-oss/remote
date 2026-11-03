@@ -120,4 +120,43 @@ describe('the targets the cache volume reserves (F-0419 7.E3)', () => {
       [],
     );
   });
+
+  it('F-0419 AC-23: a drive letter’s colon belongs to the source, so the target of a volume value is read after it', () => {
+    deepStrictEqual(
+      [
+        'C:\\data:/vscode/x',
+        'C:/data:/vscode',
+        'c:\\data:/vscode:ro',
+        'D:\\x',
+        'c:/vscode',
+        'data:/vscode',
+        '/src:/data:ro',
+        '/vscode',
+      ].map(serviceVolumeTargetOf),
+      [
+        '/vscode/x',
+        '/vscode',
+        '/vscode',
+        'D:\\x',
+        'c:/vscode',
+        '/vscode',
+        '/data',
+        '/vscode',
+      ],
+    );
+  });
+
+  it('F-0419 AC-23: runArgsTargets reads an attached -v value, and a drive letter inside it', () => {
+    deepStrictEqual(
+      runArgsTargets([
+        '-v/src:/vscode',
+        '-vname:/vscode/x',
+        '-vC:\\data:/vscode/y',
+        '-v/lone',
+        '--volume-driver=local',
+        '-v',
+      ]),
+      ['/vscode', '/vscode/x', '/vscode/y', '/lone'],
+    );
+  });
 });
