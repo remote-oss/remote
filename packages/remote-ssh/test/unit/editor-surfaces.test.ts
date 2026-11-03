@@ -97,6 +97,8 @@ function surfacesWith(
     translate: template => template,
     hintState: {get: () => undefined, update: () => Promise.resolve()},
     documentation: () => 'https://docs.example/ssh',
+    environmentHints: () => [],
+    logText: () => '',
     help: {
       getHelp: {
         execute: () => {

@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ConnectInput, ConnectPhase} from 'lib-authority';
+import type {ConnectInput, ConnectPhase, FailureHint} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
+import type {FailureHint as SshFailureHint} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
@@ -35,6 +36,7 @@ function connectorOptions(
 function connectorFor(
   changes: Partial<ConnectSteps> = {},
   terminalMode: () => boolean = () => false,
+  resolveEnded?: (hints: readonly FailureHint[]) => void,
 ): {
   connector: SshConnector;
   recording: Recording;
@@ -56,6 +58,7 @@ function connectorFor(
       applyTerminalEnvironment: variables => {
         environments.push(variables);
       },
+      ...(resolveEnded === undefined ? {} : {resolveEnded}),
     }),
     logged: () => logSink.lines.map(line => line.message),
     recording,
@@ -287,6 +290,48 @@ describe('the connector over the connect pipeline', () => {
       logged().filter(line => line.startsWith('the held connection')),
       ['the held connection is given back: a new connect starts'],
     );
+  });
+
+  it('connect-135: the resolve step’s end is told once, with the hints of a failure, none for a connection, and none when the connect throws', async () => {
+    const hint: SshFailureHint = {
+      status: 'OfflineError',
+      message: 'Error: OfflineError',
+      mitigations: [],
+      resources: [],
+    };
+    const told: Array<readonly FailureHint[]> = [];
+    function record(hints: readonly FailureHint[]): void {
+      told.push(hints);
+    }
+    const failing = connectorFor(
+      {
+        openTunnel: () =>
+          Promise.resolve({
+            kind: 'failed' as const,
+            failure: {
+              kind: 'channelClosed' as const,
+              reason: {text: 'gone'},
+              hints: [hint],
+            },
+          }),
+      },
+      () => false,
+      record,
+    );
+    await failing.connector.connect(HOST_INPUT);
+    await connectorFor({}, () => false, record).connector.connect(HOST_INPUT);
+    const throwing = connectorOf({
+      stepsFor: () => {
+        throw new Error('broken');
+      },
+      terminalMode: () => false,
+      options: connectorOptions(setup().options),
+      revealLog: () => undefined,
+      applyTerminalEnvironment: () => undefined,
+      resolveEnded: record,
+    });
+    await throwing.connect(HOST_INPUT).catch(() => undefined);
+    deepStrictEqual(told, [[hint], [], []]);
   });
 
   it('contracts §3.2: a cancel after a connect releases the connection once', async () => {

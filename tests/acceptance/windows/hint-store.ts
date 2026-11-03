@@ -13,6 +13,8 @@ export type HintRecords = Array<{
   hints: Array<{
     kind?: string;
     status?: string;
+    statusNumber?: number;
+    text?: string;
     message?: string;
     details?: string;
     mitigations?: string[];
@@ -20,24 +22,39 @@ export type HintRecords = Array<{
   }>;
 }>;
 
+/** Waits `milliseconds` without freeing the thread's other work: the editor holds the database for a moment while it writes. */
+function pause(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
 /** The records of the hint store the extension keeps in its global state; none before it writes one. */
 export function hintRecords(): HintRecords {
-  const database = new DatabaseSync(
-    path.join(variable('HARNESS_USER_DATA'), 'User/globalStorage/state.vscdb'),
-    {readOnly: true},
-  );
-  try {
-    const entry = database
-      .prepare('SELECT value FROM ItemTable WHERE key = ?')
-      .get('remote-oss.remote-ssh') as {value: string} | undefined;
-    const store =
-      entry === undefined
-        ? undefined
-        : ((JSON.parse(entry.value) as Record<string, unknown>)[
-            'remote.ssh.hints'
-          ] as {records?: HintRecords} | undefined);
-    return store?.records ?? [];
-  } finally {
-    database.close();
+  for (let attempt = 1; ; attempt += 1) {
+    const database = new DatabaseSync(
+      path.join(
+        variable('HARNESS_USER_DATA'),
+        'User/globalStorage/state.vscdb',
+      ),
+      {readOnly: true},
+    );
+    try {
+      const entry = database
+        .prepare('SELECT value FROM ItemTable WHERE key = ?')
+        .get('remote-oss.remote-ssh') as {value: string} | undefined;
+      const store =
+        entry === undefined
+          ? undefined
+          : ((JSON.parse(entry.value) as Record<string, unknown>)[
+              'remote.ssh.hints'
+            ] as {records?: HintRecords} | undefined);
+      return store?.records ?? [];
+    } catch (caught) {
+      if (attempt === 20) {
+        throw caught;
+      }
+      pause(250);
+    } finally {
+      database.close();
+    }
   }
 }

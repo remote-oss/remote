@@ -121,6 +121,18 @@ describe('the log channel', () => {
     deepStrictEqual(channel.reveals, [false, false]);
   });
 
+  it('keeps the text of its lines from the first, one to a line, as the channel shows them', () => {
+    const {port, channel} = recordingPort();
+    const logChannel = openLogChannel(
+      port,
+      ENVIRONMENT,
+      () => 'debug',
+      () => localTime(9, 5, 7, 42),
+    );
+    logChannel.logger.info('later');
+    deepStrictEqual(logChannel.text(), channel.lines.join('\n'));
+  });
+
   it('ends the channel when it is disposed', () => {
     const {port, channel} = recordingPort();
     openLogChannel(

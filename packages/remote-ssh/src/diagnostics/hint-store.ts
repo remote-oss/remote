@@ -9,11 +9,14 @@
  */
 export const HINT_STORE_KEY = 'remote.ssh.hints';
 
-type SessionHint =
+/** One hint of a record: an environment fact, a recognised error, or the log text. */
+export type SessionHint =
   | {kind: 'environment'; message: string; details?: string}
   | {
       kind: 'error';
       status: string;
+      /** The number of the status in lib-ssh's table; absent in a record written before the table existed. */
+      statusNumber?: number;
       message: string;
       details?: string;
       mitigations?: string[];

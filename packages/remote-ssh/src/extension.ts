@@ -29,7 +29,12 @@ import {
   systemTimers,
 } from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
-import {clientPlatformOf, listHosts} from 'lib-ssh';
+import {clientPlatformOf, environmentHints, listHosts} from 'lib-ssh';
+import {
+  descriptionsOf,
+  type ManifestSettings,
+  sessionEnvironmentOf,
+} from './diagnostics/session-environment.ts';
 import type {Logger} from 'lib-log';
 import {type ProductProfile, profileOf} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
@@ -136,6 +141,7 @@ interface Manifest {
   contributes?: {
     commands?: Array<{command: string; title: string}>;
     remoteHelp?: Record<string, unknown>;
+    configuration?: {properties?: ManifestSettings};
   };
 }
 
@@ -303,6 +309,7 @@ export async function activate(
       revealLog: () => {
         result.revealLog();
       },
+      logText: () => result.logText(),
       logger: result.logger,
       help: helpHandlers(help, helpLinksOf(manifest), extension),
       resolversGranted: result.proposals.granted.includes('resolvers'),
@@ -418,6 +425,8 @@ async function surfaceAdapters(): Promise<EditorAdapters> {
 /** What the connect takes from the activation that served. */
 interface ServedActivation {
   revealLog(): void;
+  /** The log's text from its first line. */
+  logText(): string;
   logger: Logger;
   help: HelpHandlers;
   resolversGranted: boolean;
@@ -436,6 +445,15 @@ async function registerConnectOf(
   adapters: EditorAdapters,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
+  const descriptions = descriptionsOf(
+    manifest.contributes?.configuration?.properties ?? {},
+    JSON.parse(
+      await readFile(
+        path.join(context.extensionPath, 'package.nls.json'),
+        'utf8',
+      ),
+    ) as Record<string, string>,
+  );
   const windowName = await acceptanceWindowName();
   const surfaces = editorSurfacesOf(
     adapters,
@@ -456,6 +474,19 @@ async function registerConnectOf(
       noticeState: context.globalState,
       hintState: context.globalState,
       documentation: () => helpLinksOf(manifest).documentation,
+      environmentHints: () =>
+        environmentHints(
+          sessionEnvironmentOf({
+            read: name =>
+              vscode.workspace.getConfiguration('remote.SSH').get(name),
+            descriptions,
+            editorVersion: vscode.version,
+            extensionVersion: manifest.version,
+            platform: process.platform,
+            architecture: process.arch,
+          }),
+        ),
+      logText: () => served.logText(),
       logger: served.logger,
       applyTerminalEnvironment: terminalEnvironmentOf(
         context.environmentVariableCollection,

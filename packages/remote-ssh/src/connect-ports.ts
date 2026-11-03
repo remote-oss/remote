@@ -557,6 +557,12 @@ export function connectAssemblyOf(
     },
     terminalMode: () => terminalModeOf(surfaces.settings),
     applyTerminalEnvironment: surfaces.applyTerminalEnvironment,
+    resolveEnded: hints => {
+      hints.forEach(hint => {
+        surfaces.hints.record(hint);
+      });
+      surfaces.hints.end();
+    },
   });
   const {translate} = surfaces;
   let shownTitle = '';

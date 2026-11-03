@@ -790,6 +790,7 @@ describe('the manifest rows of slices 1 and 2', () => {
         title: string;
         category: string;
         icon?: unknown;
+        enablement?: string;
       }>;
       menus: Record<
         string,
@@ -1055,7 +1056,7 @@ describe('the manifest rows of slices 1 and 2', () => {
     );
   });
 
-  it('F-2605 AC-18: the clear command is in the palette of local and remote windows', () => {
+  it('F-2605 AC-18: the clear command is in the palette of local and remote windows whatever the chat key says: it has no enablement and no menu entry that could hide it, and the chat setting is not declared', () => {
     const command = manifest.contributes.commands.find(
       entry => entry.command === 'opensshremotes.clearAllSessionHints',
     );
@@ -1064,11 +1065,36 @@ describe('the manifest rows of slices 1 and 2', () => {
         placesOf('opensshremotes.clearAllSessionHints'),
         command?.category,
         resolved(command?.title),
+        command?.enablement,
+        'remote.SSH.experimental.chat' in properties,
       ],
       [
         [],
         'Remote-SSH',
         'Clear previous session metadata (used for enhanced error reporting)',
+        undefined,
+        false,
+      ],
+    );
+  });
+
+  it('F-2605 AC-1: enhancedSessionLogs is a boolean setting, true by default, of application scope, tagged experimental, with its description', () => {
+    const schema =
+      properties['remote.SSH.experimental.enhancedSessionLogs'] ?? {};
+    deepStrictEqual(
+      [
+        schema.type,
+        schema.default,
+        schema.scope,
+        schema.tags,
+        resolved(schema.markdownDescription),
+      ],
+      [
+        'boolean',
+        true,
+        'application',
+        ['experimental'],
+        'Generates a summarized table of issues detected from the previous session.',
       ],
     );
   });

@@ -190,7 +190,7 @@ F-2601	68	remote-ssh	feature	spec:draft	E26	Connection failure notification and 
 F-2602	69	remote-ssh	feature	spec:draft	E26	Mitigation picker: More Actions..., settings fixes and resources	B	ssh.mitigation-picker	lib-authority	24	5	False	2	5	0	0	ssh-remote		ssh;scp;sshd		18
 F-2603	70	remote-ssh	feature	spec:draft	E26	Network-level connection errors	A	ssh.error-classifier.network	lib-ssh	27	9	False	0	4	0	0	ssh-remote	resolvers	ssh	openssh	16
 F-2604	71	remote-ssh	feature	spec:draft	E26	TCP forwarding disabled on the server	A	ssh.error-classifier.forwarding	lib-forwarding	22	6	False	1	5	0	0	ssh-remote	resolvers	ssh;sshd;powershell	openssh	16
-F-2605	72	remote-ssh	feature	spec:draft	E26	Enhanced session logs and session hints	A	ssh.session-hints	lib-log	27	5	False	1	5	1	0	ssh-remote		ssh;sshd		10
+F-2605	72	remote-ssh	feature	spec:reviewed	E26	Enhanced session logs and session hints	A	ssh.session-hints	lib-log	25	5	False	1	5	1	0	ssh-remote		ssh;sshd		10
 F-2606	73	remote-ssh	feature	spec:draft	E26	The @remote-ssh chat participant	B	ssh.chat-participant	none	24	4	False	0	3	0	0	ssh-remote				10
 F-2701	74	remote-ssh	feature	spec:needs-revision	E27	Windows SSH hosts	D	ssh.host-profile.windows	lib-server	18	8	False	1	9	0	0	ssh-remote	resolvers	ssh;powershell;sh;bash;busybox	openssh;editor-cli	18
 F-2702	75	remote-ssh	feature	spec:reviewed	E27	macOS SSH hosts	A	ssh.host-profile.macos	lib-server	39	6	False	2	9	0	0	ssh-remote	resolvers	ssh;zsh;tar;curl;wget;scp;sh;bash	openssh;editor-cli	22

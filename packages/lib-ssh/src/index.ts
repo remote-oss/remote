@@ -77,6 +77,17 @@ export type {
   PromptText,
 } from './prompts/classify.ts';
 export {classifyPrompt} from './prompts/classify.ts';
+export type {
+  EnvironmentHint,
+  EnvironmentSnapshot,
+  SettingSnapshot,
+} from './diagnostics/session-hints.ts';
+export {
+  environmentHints,
+  settingValueText,
+  STATUS_NUMBERS,
+  statusNumberOf,
+} from './diagnostics/session-hints.ts';
 export type {ClientCandidate, ClientEnvironment} from './client/locate.ts';
 export {
   candidates,
