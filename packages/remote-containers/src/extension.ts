@@ -58,6 +58,9 @@ import {
   storeRootOf,
   type StoreFiles,
 } from './authoring/user-data-store.ts';
+import {gitRemotesOf, GIT_READ_MILLISECONDS} from './config/git-remotes.ts';
+import {mirroredCandidatesOf} from './config/mirrored-lookup.ts';
+import {repositoryRootsOf} from './config/mirrored-paths.ts';
 import {storedCandidate, type StoredLookup} from './config/stored-candidate.ts';
 import type {LocationRow} from './authoring/location.ts';
 import {wizardRunnerOf} from './authoring/wizard.ts';
@@ -78,7 +81,7 @@ import {
 import {finishTooltip} from './authoring/select-features.ts';
 import {writeTemplate} from './authoring/write.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
-import {discoverConfigurations} from './config/discovery.ts';
+import {type Candidate, discoverConfigurations} from './config/discovery.ts';
 import {
   type DiagnosticsHost,
   featureDiagnosticsProviderOf,
@@ -679,6 +682,34 @@ export async function activate(
     store: userDataStore,
     home: os.homedir(),
   };
+  /** The configurations the remotes of `folder` map to under the roots of the setting; none while it is untrusted. */
+  function mirroredFor(
+    logger: Logger,
+  ): (folder: string) => Promise<Candidate[]> {
+    return folder =>
+      mirroredCandidatesOf(
+        {
+          trusted: () => vscode.workspace.isTrusted,
+          roots: () =>
+            repositoryRootsOf(
+              vscode.workspace
+                .getConfiguration()
+                .get(settings.repositoryConfigurationPaths.id),
+            ),
+          remotes: directory =>
+            gitRemotesOf(
+              nodeEngineHost('git'),
+              directory,
+              AbortSignal.timeout(GIT_READ_MILLISECONDS),
+            ),
+          list: target => configFiles.list(target),
+          compare: collate,
+          home: os.homedir(),
+          logger,
+        },
+        folder,
+      );
+  }
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
@@ -907,7 +938,13 @@ export async function activate(
             (await slotOf(storedLookup.root, folder, userDataStore)) !==
             undefined
           ) {
-            return 'stored';
+            return 'external';
+          }
+          if (
+            vscode.workspace.workspaceFile === undefined &&
+            (await mirroredFor(logger)(folder)).length > 0
+          ) {
+            return 'external';
           }
           return (await discoverConfigurations(folder, configFiles, collate))
             .length > 0
@@ -1363,6 +1400,7 @@ export async function activate(
             ),
           compare: collate,
           stored: folder => storedCandidate(storedLookup, folder),
+          mirrored: mirroredFor(served.logger),
           useTemplate: folder =>
             addConfiguration(continuation, folder, windowRoots()),
           translate,
@@ -1550,6 +1588,7 @@ export async function activate(
         hostFiles: hostFiles(),
         compare: collate,
         stored: folder => storedCandidate(storedLookup, folder),
+        mirrored: mirroredFor(served.logger),
         surfaces: {
           pick: (rows, placeholder, tooltip) =>
             configSurfaces.pick(rows, placeholder, tooltip),

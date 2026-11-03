@@ -47,9 +47,9 @@ interface Scene {
   global: RecordingMemento;
   workspace: RecordingMemento;
   window: ReopenNotificationPorts['window'];
-  configuration: 'none' | 'folder' | 'stored';
+  configuration: 'none' | 'folder' | 'external';
   /** The kind of a root that differs from `configuration`, by path. */
-  rootKinds: Record<string, 'none' | 'folder' | 'stored'>;
+  rootKinds: Record<string, 'none' | 'folder' | 'external'>;
   /** What each `show` answers, in order. */
   answers: Array<string | undefined>;
   shown: Array<[string, readonly string[]]>;
@@ -203,7 +203,7 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
 
   it('F-0302 BR-4: a folder with a stored configuration shows the S368 variant, whether or not its own files hold one too', async () => {
     const scene = sceneOf();
-    scene.configuration = 'stored';
+    scene.configuration = 'external';
     await offered(scene);
     deepStrictEqual(
       [scene.shown, scene.asked],
@@ -427,7 +427,7 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
   it('F-0402 BR-1: a saved workspace whose only configuration is a stored one shows S427 with S368', async () => {
     const scene = workspaceScene('saved', 2);
     scene.configuration = 'none';
-    scene.rootKinds = {'/w/q': 'stored'};
+    scene.rootKinds = {'/w/q': 'external'};
     await offered(scene);
     deepStrictEqual(scene.shown, [[S427_S368, [REOPEN, SUPPRESS]]]);
   });

@@ -12,7 +12,7 @@ import {
   parseConfiguration,
 } from '../config/configuration-text.ts';
 import {type Candidate, discoverConfigurations} from '../config/discovery.ts';
-import {byAbsolutePath} from '../config/stored-candidate.ts';
+import {joinedCandidates} from '../config/candidates.ts';
 import type {PickerAnswer} from '../config/choose-configuration.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
@@ -78,6 +78,8 @@ export interface ConfigureFeaturesPorts {
   compare: (left: string, right: string) => number;
   /** The folder's configuration in the store of user data, when it has one. */
   stored?(folder: string): Promise<Candidate | undefined>;
+  /** The configurations the folder's remotes map to under the user's roots; none while the folder is untrusted. */
+  mirrored?(folder: string): Promise<Candidate[]>;
   surfaces: {
     /** The single-select picker of the configurations, with an "Open File" button on each row. */
     pick(
@@ -151,11 +153,20 @@ export function configureFeaturesOf(
           {list: target => files.list(target)},
           ports.compare,
         );
-        const stored =
-          root.scheme === 'file' && ports.window.remoteName() === undefined
-            ? await ports.stored?.(folder)
-            : undefined;
-        return {candidates, stored, files, root};
+        const onHost =
+          root.scheme === 'file' && ports.window.remoteName() === undefined;
+        const stored = onHost ? await ports.stored?.(folder) : undefined;
+        // A multi-root window looks nowhere outside its folders (BR-12).
+        const mirrored =
+          onHost && roots.length === 1
+            ? ((await ports.mirrored?.(folder)) ?? [])
+            : [];
+        return {
+          candidates,
+          external: stored === undefined ? mirrored : [stored, ...mirrored],
+          files,
+          root,
+        };
       }),
     );
     const own = perRoot.flatMap(each =>
@@ -165,22 +176,21 @@ export function configureFeaturesOf(
         root: each.root,
       })),
     );
-    const stored = perRoot.flatMap(each =>
-      each.stored === undefined
-        ? []
-        : [
-            {
-              candidate: each.stored,
-              files: ports.hostFiles,
-              root: undefined,
-            },
-          ],
+    const outside = perRoot.flatMap(each =>
+      each.external.map(candidate => ({
+        candidate,
+        files: ports.hostFiles,
+        root: undefined,
+      })),
     );
-    if (stored.length === 0) {
+    if (outside.length === 0) {
       return own;
     }
-    const all = [...own, ...stored];
-    const order = byAbsolutePath(all.map(each => each.candidate));
+    const all = [...own, ...outside];
+    const order = joinedCandidates(
+      own.map(each => each.candidate),
+      outside.map(each => each.candidate),
+    );
     return order.flatMap(candidate =>
       all.filter(each => each.candidate === candidate),
     );

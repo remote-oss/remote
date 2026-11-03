@@ -40,6 +40,10 @@ interface Scene {
   stored: Candidate | undefined;
   /** How many times the store was asked. */
   storedAsked: number;
+  /** The configurations the folder's remotes map to under the roots; none by default. */
+  mirrored: Candidate[];
+  /** How many times the mirrored lookup was asked. */
+  mirroredAsked: number;
   /** The absolute paths that exist besides the configuration files; none by default, so a named Dockerfile is missing. */
   existing: string[];
   /** What the Compose check answers; none when the flow has no such check. */
@@ -74,6 +78,8 @@ function sceneOf(contents: Scene['contents']): Scene {
     mountGitWorktreeCommonDir: false,
     stored: undefined,
     storedAsked: 0,
+    mirrored: [],
+    mirroredAsked: 0,
     existing: [],
     composeCheck: undefined,
     calls: [],
@@ -111,6 +117,7 @@ async function choose(
   scene: Scene,
   configFile?: string,
   switching?: {current: string; reconnectCurrent: boolean},
+  external?: boolean,
 ): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
@@ -123,6 +130,7 @@ async function choose(
       engineCheck: scene.engineCheck,
       ...(configFile === undefined ? {} : {configFile}),
       ...(switching === undefined ? {} : {switching}),
+      ...(external === undefined ? {} : {external}),
     },
     {
       files: {
@@ -181,6 +189,10 @@ async function choose(
       stored: () => {
         scene.storedAsked += 1;
         return Promise.resolve(scene.stored);
+      },
+      mirrored: () => {
+        scene.mirroredAsked += 1;
+        return Promise.resolve(scene.mirrored);
       },
       useTemplate: folder => {
         scene.calls.push(`useTemplate ${folder}`);
@@ -1027,6 +1039,103 @@ describe('choosing the configuration while the engine is checked (card container
       ],
       [[ALPHA, BETA], 0],
     );
+  });
+
+  const MIRRORED_FILE =
+    '/roots/one/github.com/o/n/.devcontainer/devcontainer.json';
+  const MIRRORED: Candidate = {
+    file: MIRRORED_FILE,
+    relative: MIRRORED_FILE,
+    place: {kind: 'main'},
+  };
+  const OTHER_FILE = '/roots/two/github.com/o/n/.devcontainer.json';
+  const OTHER: Candidate = {
+    file: OTHER_FILE,
+    relative: OTHER_FILE,
+    place: {kind: 'dotfile'},
+  };
+
+  it('F-0302 AC-1, BR-14: a mirrored configuration alone is chosen with no picker, and the CLI reads it with the mirrored file and the opened folder', async () => {
+    const scene = sceneOf({[MIRRORED_FILE]: IMAGE});
+    scene.mirrored = [MIRRORED];
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice.kind === 'chosen' ? choice.configFile : choice.kind,
+        scene.calls.includes('pick'),
+        (scene.targets[0] as [{workspaceFolder: string; configFile: string}])[0]
+          .configFile,
+        (scene.targets[0] as [{workspaceFolder: string; configFile: string}])[0]
+          .workspaceFolder,
+      ],
+      [MIRRORED_FILE, false, MIRRORED_FILE, FOLDER],
+    );
+  });
+
+  it('F-0302 AC-12: two mirrored configurations give the pick, ordered by absolute path with the first focused, and nothing is chosen silently', async () => {
+    const scene = sceneOf({
+      [MIRRORED_FILE]: IMAGE,
+      [OTHER_FILE]: '{"image":"i"}',
+    });
+    scene.mirrored = [OTHER, MIRRORED];
+    await choose(scene);
+    deepStrictEqual(
+      (scene.rows[0] as [Array<{description: string}>])[0].map(
+        entry => entry.description,
+      ),
+      [MIRRORED_FILE, OTHER_FILE],
+    );
+  });
+
+  it('F-0302 AC-13, AC-19: the folder’s own file, a stored one and mirrored ones are all listed, none collapsed, ordered by absolute path whatever the source; the one picked is chosen', async () => {
+    const scene = sceneOf({
+      [ONLY]: IMAGE,
+      [STORED_FILE]: '{"image":"i"}',
+      [MIRRORED_FILE]: '{"image":"i"}',
+      [OTHER_FILE]: '{"image":"i"}',
+    });
+    scene.stored = STORED;
+    scene.mirrored = [OTHER, MIRRORED];
+    scene.answer = {kind: 'picked', index: 2};
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        (scene.rows[0] as [Array<{description: string}>])[0].map(
+          entry => entry.description,
+        ),
+        choice.kind === 'chosen' ? choice.configFile : choice.kind,
+      ],
+      [[STORED.relative, MIRRORED_FILE, OTHER_FILE, ONLY], OTHER_FILE],
+    );
+  });
+
+  it('F-0302 BR-3: a file that two sources find counts once, so one candidate is chosen with no picker', async () => {
+    const scene = sceneOf({[MIRRORED_FILE]: IMAGE});
+    scene.mirrored = [MIRRORED, MIRRORED];
+    scene.stored = {...MIRRORED, place: {kind: 'stored', slot: 'p'}};
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [choice.kind, scene.calls.includes('pick')],
+      ['chosen', false],
+    );
+  });
+
+  it('F-0302 BR-12: with external false neither source is asked and the folder’s own files are all there is', async () => {
+    const scene = sceneOf({[MIRRORED_FILE]: IMAGE, [STORED_FILE]: IMAGE});
+    scene.mirrored = [MIRRORED];
+    scene.stored = STORED;
+    const choice = await choose(scene, undefined, undefined, false);
+    deepStrictEqual(
+      [choice.kind, scene.mirroredAsked, scene.storedAsked],
+      ['noConfiguration', 0, 0],
+    );
+  });
+
+  it('F-0302 BR-3: a file the caller names does not ask the mirrored lookup either', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.mirrored = [MIRRORED];
+    await choose(scene, `${FOLDER}/${ONLY}`);
+    deepStrictEqual(scene.mirroredAsked, 0);
   });
 
   it('F-0412 5.1: an existing Dockerfile goes on to the read', async () => {

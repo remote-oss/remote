@@ -175,7 +175,8 @@ export interface CommandChecksPorts {
 
 /**
  * The checks before a reload of an open command, over `folder`, with the program the engine runs as `dockerPath`. With
- * `configFile` the choice is that file and no picker shows.
+ * `configFile` the choice is that file and no picker shows. With `external` false the sources outside the folder are not
+ * consulted.
  */
 export async function commandBeforeReload(
   ports: CommandChecksPorts,
@@ -184,6 +185,7 @@ export async function commandBeforeReload(
   dockerPath: string,
   configFile?: string,
   switching?: ConfigurationRequest['switching'],
+  external?: boolean,
 ): ReturnType<typeof beforeReload> {
   const result = await beforeReload(
     {
@@ -206,6 +208,7 @@ export async function commandBeforeReload(
       ),
       ...(configFile === undefined ? {} : {configFile}),
       ...(switching === undefined ? {} : {switching}),
+      ...(external === undefined ? {} : {external}),
     },
   );
   if (result.choice.kind !== 'chosen') {

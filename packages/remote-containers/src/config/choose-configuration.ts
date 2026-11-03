@@ -31,7 +31,7 @@ import {
   type ConfigFiles,
   discoverConfigurations,
 } from './discovery.ts';
-import {byAbsolutePath} from './stored-candidate.ts';
+import {joinedCandidates} from './candidates.ts';
 
 /** The English templates of the texts of the picker and its dialogs, by their string ids. */
 const CONFIG_TEMPLATES = {
@@ -92,6 +92,8 @@ export interface ConfigurationPorts {
   compare: (left: string, right: string) => number;
   /** The configuration of the folder in the store of user data, when it has one; asked where the folder's own are. */
   stored?(folder: string): Promise<Candidate | undefined>;
+  /** The configurations the folder's remotes map to under the user's roots; none while the folder is untrusted. */
+  mirrored?(folder: string): Promise<Candidate[]>;
   /** Adds a configuration to the folder with the wizard, and shows what the command that adds one shows after it. */
   useTemplate(folder: string): PromiseLike<unknown>;
   translate: Translate;
@@ -123,6 +125,11 @@ export interface ConfigurationRequest {
    * or one newly written to the store of user data: with it nothing is discovered and no picker shows.
    */
   configFile?: string;
+  /**
+   * Whether the sources outside the folder are consulted. They are not for a multi-root workspace (BR-12); absent means
+   * they are.
+   */
+  external?: boolean;
   /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
    * ends `stopped`, nothing more is shown and the answer is `stopped`. The work (discovery, reads, the CLI) doesn't
@@ -292,10 +299,14 @@ export async function chooseConfiguration(
     request.configFile === undefined
       ? await discoverConfigurations(folder, files, ports.compare)
       : [namedCandidate(folder, request.configFile)];
-  const stored =
-    request.configFile === undefined ? await ports.stored?.(folder) : undefined;
-  const candidates =
-    stored === undefined ? found : byAbsolutePath([...found, stored]);
+  const lookedUp =
+    request.configFile === undefined && request.external !== false;
+  const stored = lookedUp ? await ports.stored?.(folder) : undefined;
+  const mirrored = lookedUp ? ((await ports.mirrored?.(folder)) ?? []) : [];
+  const candidates = joinedCandidates(
+    found,
+    stored === undefined ? mirrored : [stored, ...mirrored],
+  );
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
     if (!(await engineAllows())) {

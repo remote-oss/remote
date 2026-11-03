@@ -25,14 +25,23 @@ export interface AuthoringPort {
 export async function chooseOrAuthor(
   ports: CommandChecksPorts & AuthoringPort,
   firstCheck: Parameters<typeof commandBeforeReload>[1],
-  request: {title: string; folder: string; dockerPath: string},
+  request: {
+    title: string;
+    folder: string;
+    dockerPath: string;
+    /** False for a multi-root workspace, whose configuration is never looked up outside its folder (BR-12). */
+    external?: boolean;
+  },
 ): ReturnType<typeof commandBeforeReload> {
-  const {title, folder, dockerPath} = request;
+  const {title, folder, dockerPath, external} = request;
   const first = await commandBeforeReload(
     ports,
     firstCheck,
     folder,
     dockerPath,
+    undefined,
+    undefined,
+    external,
   );
   if (first.choice.kind !== 'noConfiguration') {
     return first;
@@ -55,5 +64,7 @@ export async function chooseOrAuthor(
     outcome.place === 'userData'
       ? path.join(outcome.target, '.devcontainer', 'devcontainer.json')
       : undefined,
+    undefined,
+    external,
   );
 }

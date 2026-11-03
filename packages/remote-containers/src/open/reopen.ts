@@ -122,7 +122,12 @@ export function reopenHandlersOf(
       ports,
       (base, dialogs, cancellation) =>
         ports.engine.firstCheck(base, dialogs, cancellation),
-      {title, folder, dockerPath: executable.file},
+      {
+        title,
+        folder,
+        dockerPath: executable.file,
+        external: target.workspaceFile === undefined,
+      },
     );
     try {
       if (choice.kind !== 'chosen') {

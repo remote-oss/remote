@@ -33,6 +33,7 @@ function sceneOf(
     printed?: string;
     roots?: readonly string[];
     trusted?: boolean;
+    home?: string;
     files?: Readonly<Record<string, readonly string[]>>;
   } = {},
 ): Scene {
@@ -50,6 +51,7 @@ function sceneOf(
       },
       list: listOf(options.files ?? {}),
       compare: (left, right) => left.localeCompare(right),
+      home: options.home ?? '/home/u',
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     },
   };
@@ -199,6 +201,27 @@ describe('the lookup of a repository’s configuration (card containers-161, F-0
         logged.includes('https://host/../../etc'),
       ],
       [false, true, true, true],
+    );
+  });
+
+  it('F-0302 AC-37: a candidate’s description is its path, ~-relative when it is under the home folder', async () => {
+    const scene = sceneOf({
+      printed: 'remote.origin.url https://github.com/o/n.git\n',
+      roots: [ROOT, '/home/u/roots'],
+      home: '/home/u',
+      files: {
+        [MIRRORED]: ['.devcontainer.json'],
+        [path.resolve('/home/u/roots/github.com/o/n')]: ['.devcontainer.json'],
+      },
+    });
+    deepStrictEqual(
+      (await mirroredCandidatesOf(scene.ports, '/w/p')).map(
+        each => each.relative,
+      ),
+      [
+        `${MIRRORED}/.devcontainer.json`,
+        '~/roots/github.com/o/n/.devcontainer.json',
+      ].map(each => path.normalize(each)),
     );
   });
 });
