@@ -186,7 +186,9 @@ export function checksumAddressOf(packageAddress: string): string | undefined {
 /**
  * The fixed script of the container side, by `CACHE_ACTION`: `own` makes the container's cache folder; `link` links
  * the shared package into it when the package is there; `publish` gives the copied part its final name in the shared
- * cache without replacing a package another container published first, then links it. It reports `server.cached`.
+ * cache without replacing a package another container published first, then links it; `present` only looks. A link
+ * is made only where the container's cache has no entry of that name, so an entry the server wrote stays. It reports
+ * `server.cached` and `server.present`.
  */
 export const CACHE_SCRIPT = [
   'set -u',
@@ -200,10 +202,12 @@ export const CACHE_SCRIPT = [
   '    [ -f "$SHARED_FOLDER/$FILE_NAME" ] && cached=yes',
   '    ;;',
   'esac',
-  'if [ "$cached" = yes ]; then',
-  '  ln -sfn -- "$SHARED_FOLDER/$FILE_NAME" "$OWN_FOLDER/$FILE_NAME" || cached=no',
+  'present=no',
+  '{ [ -e "$OWN_FOLDER/$FILE_NAME" ] || [ -L "$OWN_FOLDER/$FILE_NAME" ]; } && present=yes',
+  'if [ "$cached" = yes ] && [ "$present" = no ]; then',
+  '  ln -s -- "$SHARED_FOLDER/$FILE_NAME" "$OWN_FOLDER/$FILE_NAME" || cached=no',
   'fi',
-  `printf '%s\\n' '${RESULT_BEGIN}' 'status=Ok' "server.cached=$cached" '${RESULT_END}'`,
+  `printf '%s\\n' '${RESULT_BEGIN}' 'status=Ok' "server.cached=$cached" "server.present=$present" '${RESULT_END}'`,
   '',
 ].join('\n');
 
@@ -243,12 +247,18 @@ export interface ExtensionCacheRequest {
   cancellation: AbortSignal;
 }
 
-/** Runs the container side with `variables`, and gives whether the package ended up linked or copied into place. */
+/** What the container side found: whether the shared package is there, and whether the container's cache had an entry. */
+interface ContainerFacts {
+  cached: boolean;
+  present: boolean;
+}
+
+/** Runs the container side with `variables`, and gives what it found. */
 async function containerSide(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
   variables: Readonly<Record<string, string>>,
-): Promise<boolean> {
+): Promise<ContainerFacts> {
   const lines: string[] = [];
   const outcome = await ports.channel.runScript(
     {
@@ -270,11 +280,11 @@ async function containerSide(
     },
   );
   const parsed = outcome.kind === 'failed' ? undefined : parseResult(lines);
-  return (
-    parsed !== undefined &&
-    'block' in parsed &&
-    parsed.block.serverFacts.cached === 'yes'
-  );
+  const facts =
+    parsed !== undefined && 'block' in parsed
+      ? parsed.block.serverFacts
+      : undefined;
+  return {cached: facts?.cached === 'yes', present: facts?.present === 'yes'};
 }
 
 /** Downloads `address` into the client file `destination`; gives whether it worked, logging why when it didn't. */
@@ -299,32 +309,50 @@ async function downloaded(
   return result.kind === 'failed' && result.status === 404 ? 'missing' : false;
 }
 
-/** The package of `pick`, checked and kept: the path the server installs from, or none when it could not be cached. */
-async function cachedPackage(
+/**
+ * The path of `pick`'s package in the container when a cache already holds it: linked from the shared cache, or copied
+ * from the client's own folder when no volume is mounted. None when no cache has it yet.
+ */
+async function existingPackage(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
   pick: GalleryPick,
 ): Promise<string | undefined> {
-  const {logger, files} = ports;
-  const label = `${pick.id}@${pick.version}`;
   const ownFile = `${request.ownFolder}/${pick.fileName}`;
-  const clientFile = `${request.clientFolder}/${pick.fileName}`;
-  const shared = request.sharedFolder;
-  if (
-    shared !== undefined &&
-    (await containerSide(ports, request, {
+  if (request.sharedFolder !== undefined) {
+    const facts = await containerSide(ports, request, {
       CACHE_ACTION: 'link',
       FILE_NAME: pick.fileName,
-    }))
-  ) {
-    logger.info(`the extension ${label} is taken from the shared cache`);
+    });
+    if (!facts.cached) {
+      return undefined;
+    }
+    ports.logger.info(
+      `the extension ${pick.id}@${pick.version} is taken from the shared cache`,
+    );
     return ownFile;
   }
-  if (shared === undefined && (await files.exists(clientFile))) {
-    return (await copiedToContainer(ports, request, clientFile, ownFile))
-      ? ownFile
-      : undefined;
+  const clientFile = `${request.clientFolder}/${pick.fileName}`;
+  if (!(await ports.files.exists(clientFile))) {
+    return undefined;
   }
+  return (await copiedToContainer(ports, request, pick, clientFile))
+    ? ownFile
+    : undefined;
+}
+
+/**
+ * Downloads `pick`'s package and its published checksum, checks it, and keeps it: published in the shared cache, or in
+ * the client's folder, and given to the container's own cache where it has no entry of that name. Each way it can't
+ * is one log line; nothing is kept that didn't match.
+ */
+async function storedPackage(
+  ports: ExtensionCachePorts,
+  request: ExtensionCacheRequest,
+  pick: GalleryPick,
+): Promise<void> {
+  const {logger, files} = ports;
+  const label = `${pick.id}@${pick.version}`;
   const checksumAddress = checksumAddressOf(pick.packageAddress);
   const token = ports.newTemporaryToken();
   const checksumFile = `${request.clientFolder}/.${pick.fileName}.${token}.sha256`;
@@ -345,7 +373,7 @@ async function cachedPackage(
         : undefined;
     if (expected === undefined || !/^[0-9a-f]{64}$/.test(expected)) {
       logger.info(`no checksum is published for ${label}; it isn't cached`);
-      return undefined;
+      return;
     }
     if (
       (await downloaded(
@@ -358,63 +386,67 @@ async function cachedPackage(
       logger.info(
         `the extension ${label} could not be downloaded for the cache`,
       );
-      return undefined;
+      return;
     }
     if ((await files.sha256(partFile)) !== expected) {
       logger.info(
         `the extension ${label} doesn't match its published checksum; nothing is cached`,
       );
-      return undefined;
+      return;
     }
-    return shared === undefined
-      ? await keptOnClient(ports, request, partFile, clientFile, ownFile)
-      : await publishedShared(ports, request, {
-          sharedFolder: shared,
-          pick,
-          partFile,
-          ownFile,
-          token,
-        });
+    if (request.sharedFolder === undefined) {
+      await keptOnClient(ports, request, pick, partFile);
+    } else {
+      await publishedShared(ports, request, {
+        sharedFolder: request.sharedFolder,
+        pick,
+        partFile,
+        token,
+      });
+    }
   } finally {
     await files.remove(checksumFile);
     await files.remove(partFile);
   }
 }
 
-/** Copies a client file to the container's own cache, its folder made first; gives whether it worked. */
+/** Copies a client file into the container's own cache, its folder made first, unless an entry of its name is there; gives whether the container has it. */
 async function copiedToContainer(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
+  pick: GalleryPick,
   clientFile: string,
-  ownFile: string,
 ): Promise<boolean> {
-  await containerSide(ports, request, {});
+  const facts = await containerSide(ports, request, {
+    CACHE_ACTION: 'present',
+    FILE_NAME: pick.fileName,
+  });
+  if (facts.present) {
+    return true;
+  }
   const copied = await ports.channel.copyToHost({
     localFile: clientFile,
-    remotePath: ownFile,
+    remotePath: `${request.ownFolder}/${pick.fileName}`,
     cancellation: request.cancellation,
   });
   return copied.kind !== 'failed';
 }
 
-/** Keeps a checked package in the client's folder, then copies it into the container. */
+/** Keeps a checked package in the client's folder under its final name, then gives it to the container. */
 async function keptOnClient(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
+  pick: GalleryPick,
   partFile: string,
-  clientFile: string,
-  ownFile: string,
-): Promise<string | undefined> {
+): Promise<void> {
+  const clientFile = `${request.clientFolder}/${pick.fileName}`;
   const renamed = await ports.files.rename(partFile, clientFile);
-  if (renamed.kind === 'failed') {
-    return undefined;
+  if (renamed.kind !== 'failed') {
+    await copiedToContainer(ports, request, pick, clientFile);
   }
-  return (await copiedToContainer(ports, request, clientFile, ownFile))
-    ? ownFile
-    : undefined;
 }
 
-/** Copies a checked package into the shared cache under a part name, publishes it there and links it. */
+/** Copies a checked package into the shared cache under a part name, then publishes it there and links it. */
 async function publishedShared(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
@@ -422,37 +454,53 @@ async function publishedShared(
     sharedFolder: string;
     pick: GalleryPick;
     partFile: string;
-    ownFile: string;
     token: string;
   },
-): Promise<string | undefined> {
+): Promise<void> {
   const sharedPart = `${place.sharedFolder}/.${place.pick.fileName}.${place.token}.part`;
   const copied = await ports.channel.copyToHost({
     localFile: place.partFile,
     remotePath: sharedPart,
     cancellation: request.cancellation,
   });
-  if (copied.kind === 'failed') {
-    return undefined;
+  if (copied.kind !== 'failed') {
+    await containerSide(ports, request, {
+      CACHE_ACTION: 'publish',
+      FILE_NAME: place.pick.fileName,
+      PART_FILE: sharedPart,
+    });
   }
-  return (await containerSide(ports, request, {
-    CACHE_ACTION: 'publish',
-    FILE_NAME: place.pick.fileName,
-    PART_FILE: sharedPart,
-  }))
-    ? place.ownFile
-    : undefined;
 }
 
+/** What the server's start gets, and what the cache keeps for after it. */
+export interface ExtensionPlan {
+  /**
+   * The extensions for the server's `--install-extension`, in order: the path of each package a cache already holds,
+   * and the entry itself for every other, which the server installs from the gallery after it starts.
+   */
+  installs: string[];
+  /** The gallery versions no cache holds yet: the background step caches them for the next container. */
+  pending: GalleryPick[];
+}
+
+/** The text a log line gives for something thrown: an error's message, or the value itself. */
+export function reasonOf(caught: unknown): string {
+  return caught instanceof Error ? caught.message : String(caught);
+}
+
+/** How long the background step may take in all, in milliseconds. */
+const BACKGROUND_CACHE_MILLISECONDS = 600_000;
+
 /**
- * The extensions for the server's `--install-extension`, in order: the path of each package the cache gave the
- * container, and the id itself for one it couldn't. Nothing of this fails the connect.
+ * The plan of a new container's extensions, before its server starts: a gallery query for each plain entry, and the
+ * cached package's path where a cache has it. Nothing is downloaded here, so the server's own installs are still
+ * running when the window connects. Nothing of this fails the connect.
  */
-export async function cacheExtensions(
+export async function planExtensions(
   ports: ExtensionCachePorts,
   request: ExtensionCacheRequest,
-): Promise<string[]> {
-  const installs: string[] = [];
+): Promise<ExtensionPlan> {
+  const plan: ExtensionPlan = {installs: [], pending: []};
   for (const entry of request.extensions) {
     const parts = entry.split('@');
     const [extensionId = '', pinned] = parts;
@@ -464,7 +512,7 @@ export async function cacheExtensions(
       ports.logger.info(
         `${entry} isn't a plain gallery id or pinned version; the server installs it`,
       );
-      installs.push(entry);
+      plan.installs.push(entry);
       continue;
     }
     const answer = await ports.queryGallery(
@@ -486,10 +534,45 @@ export async function cacheExtensions(
       ports.logger.info(
         `the gallery offers no version of ${entry} for ${request.target}; the server installs it`,
       );
-      installs.push(entry);
+      plan.installs.push(entry);
       continue;
     }
-    installs.push((await cachedPackage(ports, request, pick)) ?? entry);
+    const cached = await existingPackage(ports, request, pick);
+    plan.installs.push(cached ?? entry);
+    if (cached === undefined) {
+      plan.pending.push(pick);
+    }
   }
-  return installs;
+  return plan;
+}
+
+/**
+ * Caches the pending versions after the server is ready, one at a time, for the next container. `lifetime` ends with
+ * the connection; the whole step is bounded besides. Its failures are log lines: nothing is shown, and the connection
+ * is never touched.
+ */
+export async function cacheInBackground(
+  ports: ExtensionCachePorts,
+  request: Omit<ExtensionCacheRequest, 'cancellation'>,
+  pending: readonly GalleryPick[],
+  lifetime: AbortSignal,
+  bound: number = BACKGROUND_CACHE_MILLISECONDS,
+): Promise<void> {
+  const cancellation = AbortSignal.any([lifetime, AbortSignal.timeout(bound)]);
+  const bounded = {...request, cancellation};
+  for (const pick of pending) {
+    if (cancellation.aborted) {
+      ports.logger.info(
+        `the extensions cache stopped before ${pick.id}@${pick.version}: ${lifetime.aborted ? 'the connection ended' : 'its time ran out'}`,
+      );
+      return;
+    }
+    try {
+      await storedPackage(ports, bounded, pick);
+    } catch (caught) {
+      ports.logger.info(
+        `the extension ${pick.id}@${pick.version} could not be cached: ${reasonOf(caught)}`,
+      );
+    }
+  }
 }

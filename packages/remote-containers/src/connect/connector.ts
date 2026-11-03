@@ -110,6 +110,7 @@ import type {
   StartedContainerServer,
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
+import {reasonOf} from './extension-cache.ts';
 import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 import {
   appPortOf,
@@ -322,6 +323,8 @@ interface Held {
   relay: OpenRelay;
   identity: WindowIdentity;
   connected: Connected;
+  /** Ends when the connection is given back: what runs for the connection, the extensions cache's background step, stops then. */
+  lifetime: AbortController;
   /** The ports the merged configuration declared when the connection was made; a reconnect keeps them. */
   ports: DeclaredPorts;
 }
@@ -478,6 +481,7 @@ export function containerConnectorOf(
     const current = held;
     held = undefined;
     if (current !== undefined) {
+      current.lifetime.abort();
       current.relay.close();
       heldChanges.tell();
     }
@@ -1228,6 +1232,7 @@ export function containerConnectorOf(
       relay,
       identity: {name, context: engineLabelOf(folder)},
       connected,
+      lifetime: new AbortController(),
       ports: {
         forwardPorts: merged?.forwardPorts,
         portsAttributes: merged?.portsAttributes,
@@ -1238,6 +1243,9 @@ export function containerConnectorOf(
     owner.connection = connection;
     failedContainer = undefined;
     heldChanges.tell();
+    server.afterReady?.(connection.lifetime.signal).catch((caught: unknown) => {
+      logger.info(`the extensions cache stopped: ${reasonOf(caught)}`);
+    });
     relay.onClosed(() => {
       if (held === connection) {
         lost.tell();
