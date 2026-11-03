@@ -1510,9 +1510,9 @@ export async function activate(
         discoverConfigurations(folder, configFiles, collate),
       noEngineProgram: noEngineProgramOf(context.globalStorageUri.fsPath),
       clientPlatform: process.platform,
-      folderExists: async folder => {
+      pathExists: async place => {
         try {
-          await vscode.workspace.fs.stat(vscode.Uri.file(folder));
+          await vscode.workspace.fs.stat(vscode.Uri.file(place));
           return true;
         } catch {
           return false;

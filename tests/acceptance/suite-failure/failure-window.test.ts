@@ -75,7 +75,7 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
     );
   });
 
-  it('F-2601 AC-2: the dialog has exactly Close Remote, Retry and More Actions..., in that order', () => {
+  it('F-2601 AC-2, F-2606 AC-16: the dialog has exactly Close Remote, Retry and More Actions..., in that order', () => {
     deepStrictEqual(
       record.find(line => line.surface === 'failureDialog')?.buttons,
       ['Close Remote', 'Retry', 'More Actions...'],

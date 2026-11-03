@@ -76,6 +76,22 @@ interface Manifest {
 /** A generated-table entry: an id plus whatever the kind carries. */
 type TableEntry = {id: string} & Record<string, unknown>;
 
+/** Whether the dependency `name` is a chat or prompt library the no-chat rule keeps out of the package. */
+function chatDependency(name: string): boolean {
+  return (
+    [
+      '@vscode/prompt-tsx',
+      '@vscode/chat-extension-utils',
+      'openai',
+      '@azure/openai',
+      '@anthropic-ai/sdk',
+      'ai',
+      'langchain',
+    ].includes(name) ||
+    ['@langchain/', '@ai-sdk/'].some(scope => name.startsWith(scope))
+  );
+}
+
 /** Reads a JSON file of the package. */
 function read(file: string): unknown {
   return JSON.parse(readFileSync(path.join(PACKAGE, file), 'utf8'));
@@ -1096,6 +1112,50 @@ describe('the manifest rows of slices 1 and 2', () => {
         ['experimental'],
         'Generates a summarized table of issues detected from the previous session.',
       ],
+    );
+  });
+
+  it('F-2606 AC-15: the manifest holds no chat participant, no experimental.chat setting and no chat or prompt dependency, and the clear command has no enablement', () => {
+    const rawManifest = JSON.parse(
+      readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
+    ) as {
+      dependencies?: Record<string, string>;
+      contributes: {
+        chatParticipants?: unknown;
+        commands?: Array<Record<string, unknown>>;
+        configuration: {properties: Record<string, unknown>};
+      };
+    };
+    const clear = rawManifest.contributes.commands?.find(
+      entry => entry.command === 'opensshremotes.clearAllSessionHints',
+    );
+    deepStrictEqual(
+      [
+        rawManifest.contributes.chatParticipants,
+        rawManifest.contributes.configuration.properties[
+          'remote.SSH.experimental.chat'
+        ],
+        Object.keys(rawManifest.dependencies ?? {}).filter(chatDependency),
+        clear === undefined,
+        clear?.enablement,
+      ],
+      [undefined, undefined, [], false, undefined],
+    );
+  });
+
+  it('F-2606.AC-26: the manifest contributes no chat participant and bundles no chat or prompt library', () => {
+    const rawManifest = JSON.parse(
+      readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
+    ) as {
+      dependencies?: Record<string, string>;
+      contributes?: {chatParticipants?: unknown};
+    };
+    deepStrictEqual(
+      [
+        rawManifest.contributes?.chatParticipants,
+        Object.keys(rawManifest.dependencies ?? {}).filter(chatDependency),
+      ],
+      [undefined, []],
     );
   });
 

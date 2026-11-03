@@ -1,9 +1,10 @@
 # Layout, typecheck, lint, format and unit tests (ADR-0002); duplicated code, dead code and coverage (ADR-0003).
 # Triggers (athena on #142, ruling 4): every pull request from this repository runs the checks and the cheap acceptance
 # jobs (slice 1, server lifecycle) at its head, so that "passing in CI" means the head, not the last dispatch. The
-# costly jobs (real server, VSCodium, host variants) stay opt-in on a manual dispatch, and always run on the tag of a
-# release (`<package>-v<semver>`). Every push to main runs the VSCodium launches the merged change can reach (the
-# post-merge run), and the schedule runs all of them: the backstops for main's launches, which PR CI never runs. The
+# costly jobs (real server, the whole VSCodium suite, host variants) stay opt-in on a manual dispatch, and always run on
+# the tag of a release (`<package>-v<semver>`). A pull request runs the VSCodium launches its change selects, up to six
+# (acceptance-pr). Every push to main runs the VSCodium launches the merged change can reach (the post-merge run), and
+# the schedule runs all of them: the backstops for main's launches. The
 # jobs run on the self-hosted runners, so they use no Actions minutes.
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
@@ -342,6 +343,23 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
+  # A pull request from this repository runs the VSCodium launches its change selects, at most six, and a failing row
+  # blocks its merge, since the gate needs this job. A larger selection gets a notice and runs by a dispatch at the head,
+  # or under the acceptance-full label, here when the label is on the pull request and in acceptance-full.yml when it
+  # is added.
+  acceptance-pr:
+    if: >-
+      github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    # a newer push to the pull request cancels the run of an older head, and the acceptance-full run of one; a run of
+    # another event, which skips this job, gets a group of its own (its run id), so it never meets another run's
+    concurrency:
+      group: acceptance-pr-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: true
+    uses: ./.github/workflows/acceptance-launches.yml
+    with:
+      full: ${{ contains(github.event.pull_request.labels.*.name, 'acceptance-full') }}
+
   # The acceptance tests in the pinned VSCodium Insiders: a local window and a remote one on the
   # SSH host. The harness downloads the pinned release itself and checks its sha256, so the job needs nothing placed on
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
@@ -500,6 +518,7 @@ jobs:
       - acceptance-host-variants
       - acceptance-real-server
       - acceptance-vscodium
+      - acceptance-pr
       - acceptance-genuine
     if: always()
     runs-on: ubuntu-24.04
@@ -509,7 +528,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes post-merge-select checks unit quality slice-1 server host-variants real-server vscodium genuine: $RESULTS"
+          echo "changes post-merge-select checks unit quality slice-1 server host-variants real-server vscodium pr-launches genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||

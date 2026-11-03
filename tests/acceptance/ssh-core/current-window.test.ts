@@ -226,7 +226,7 @@ describe('Connect Current Window to Host', function () {
     );
   });
 
-  it('F-2302 AC-23: a typed unresolvable host fails in the reloaded window, whose More Actions pick opens', async () => {
+  it('F-2302 AC-23, F-2606 AC-16: a typed unresolvable host fails in the reloaded window, whose dialog has Close Remote, Retry and More Actions..., and whose More Actions pick opens', async () => {
     await userSettings({...PLATFORMS});
     const first = await openFolderWindow(folderOf('c41-nohost'));
     const next = nextEmptyName();
@@ -255,9 +255,14 @@ describe('Connect Current Window to Host', function () {
         recordLines('failureDialog', next)[0]?.question.includes(
           'Could not resolve hostname',
         ),
+        recordLines('failureDialog', next)[0]?.buttons,
         recordLines('mitigationPick', next)[0]?.question,
       ],
-      [true, 'Pick an action to help resolve the problem.'],
+      [
+        true,
+        ['Close Remote', 'Retry', 'More Actions...'],
+        'Pick an action to help resolve the problem.',
+      ],
     );
   });
 
