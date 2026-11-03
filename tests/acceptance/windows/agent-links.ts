@@ -28,3 +28,19 @@ export async function serverSessionSocket(user = 'harness'): Promise<string> {
     )
   ).trim();
 }
+
+/**
+ * The SSH_AUTH_SOCK of every extension host process of the servers of `user`, as they were started: what an extension
+ * such as Git reads from its own environment.
+ */
+export async function extensionHostSockets(
+  user = 'harness',
+): Promise<string[]> {
+  const listed = await onHostAs(
+    user,
+    'sh',
+    '-c',
+    `for pid in $(pgrep -f '[-]-type=extensionHost'); do tr '\\0' '\\n' < /proc/$pid/environ 2>/dev/null | sed -n 's/^SSH_AUTH_SOCK=//p'; done; true`,
+  );
+  return listed.split('\n').filter(line => line !== '');
+}
