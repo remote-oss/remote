@@ -131,6 +131,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/no-proposals/tsconfig.json',
   './tests/acceptance/default-ports/tsconfig.json',
   './tests/acceptance/ssh-core/tsconfig.json',
+  './tests/acceptance/ssh-containers/tsconfig.json',
   './tests/acceptance/terminal-pick/tsconfig.json',
   './tests/acceptance/preconnect/tsconfig.json',
   './tests/acceptance/explorer/tsconfig.json',

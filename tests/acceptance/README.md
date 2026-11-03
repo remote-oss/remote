@@ -123,6 +123,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `ssh-core`: a plain launch with the renderer helpers and no setting of its own; `ssh-core/*.test.ts` opens windows on the SSH host and reads the core features of the editor in them (terminals first) through the renderer, F-2508's rows.
 
+- `ssh-containers`: a plain launch with the renderer helpers, Dev Containers installed beside Remote - SSH, and the run's registry and templates; `ssh-containers/*.test.ts` opens windows on the SSH host and runs Dev Containers' commands in them, which edit a configuration where it lives (F-0807's rows). It is in the `containers` group.
+
 - `no-proposals`: the same without the proposed API.
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.

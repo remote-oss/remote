@@ -1392,3 +1392,55 @@ describe('the manifest', () => {
     });
   });
 });
+
+describe('where Configure Container Features is offered (F-0807 AC-1 to AC-5)', () => {
+  const contributes = MANIFEST.contributes as {
+    menus: {
+      commandPalette: Array<{command: string; when: string}>;
+      'statusBar/remoteIndicator': Array<{
+        command: string;
+        group: string;
+        when: string;
+      }>;
+    };
+  };
+  const COMMAND = 'remote-containers.configureContainerFeatures';
+
+  /** The remote names a `when` clause of the form `remoteName =~ /.../` lets through, of those tried. */
+  function remoteNamesAllowedBy(when: string): string[] {
+    const pattern = /remoteName =~ \/(.*?)\//.exec(when)?.[1] ?? '';
+    return [
+      '',
+      'dev-container',
+      'wsl',
+      'ssh-remote',
+      'tunnel',
+      'attached-container',
+      'codespaces',
+    ].filter(name => new RegExp(pattern).test(name));
+  }
+
+  it('F-0807 AC-1, AC-2, AC-3, AC-4: the palette offers it in a local window and in a dev container, WSL, SSH and tunnel window, unless every root is virtual', () => {
+    const entry = contributes.menus.commandPalette.find(
+      each => each.command === COMMAND,
+    );
+    deepStrictEqual(
+      [
+        remoteNamesAllowedBy(entry?.when ?? ''),
+        (entry?.when ?? '').includes('!virtualWorkspace'),
+        (entry?.when ?? '').includes('!remote-containers:standingDown'),
+      ],
+      [['', 'dev-container', 'wsl', 'ssh-remote', 'tunnel'], true, true],
+    );
+  });
+
+  it('F-0807 AC-5: the remote indicator offers it in a dev container window only, as the fourth entry of the Dev Containers group', () => {
+    const entry = contributes.menus['statusBar/remoteIndicator'].find(
+      each => each.command === COMMAND,
+    );
+    deepStrictEqual(
+      [remoteNamesAllowedBy(entry?.when ?? ''), entry?.group],
+      [['dev-container'], 'remote_30_dev-container_2_actions@4'],
+    );
+  });
+});
