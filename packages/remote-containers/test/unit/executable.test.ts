@@ -52,3 +52,20 @@ describe('the base of a relative dockerPath (card containers-142, F-0201 AC-55)'
     );
   });
 });
+
+describe('the executable of dev.containers.dockerComposePath', () => {
+  it('F-0201 AC-44: an empty or absent value names the default program given, and a written one is itself', () => {
+    deepStrictEqual(
+      [
+        executableOf('', undefined, 'docker-compose'),
+        executableOf(undefined, undefined, 'docker-compose'),
+        executableOf('tools/dc', '/w', 'docker-compose'),
+      ],
+      [
+        {kind: 'spawn', file: 'docker-compose', written: 'docker-compose'},
+        {kind: 'spawn', file: 'docker-compose', written: 'docker-compose'},
+        {kind: 'spawn', file: '/w/tools/dc', written: 'tools/dc'},
+      ],
+    );
+  });
+});

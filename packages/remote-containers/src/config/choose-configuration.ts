@@ -22,6 +22,7 @@ import {
   decodeConfiguration,
   dockerfileOf,
   hasContainerSource,
+  isComposeConfiguration,
   labelOf,
   parseConfiguration,
 } from './configuration-text.ts';
@@ -39,6 +40,8 @@ const CONFIG_TEMPLATES = {
   S181: "Failed to read Dev Container configuration '{0}' file.",
   S113: "Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.",
   S411: 'Workspace folder in devcontainer.json must be an absolute path.',
+  S412: 'Workspace folder not specified in devcontainer.json.',
+  openDevcontainer: 'Open devcontainer.json',
   S049: 'Cancelled container configuration selection.',
   S004: '"{0}" does not exist.',
   openConfiguration: 'Open {0}',
@@ -90,6 +93,15 @@ export interface ConfigurationPorts {
   useTemplate(folder: string): PromiseLike<unknown>;
   translate: Translate;
   logger: Logger;
+  /**
+   * C2's check of Docker Compose, made for a Compose configuration once the engine check allows the flow; it shows its
+   * own dialog when no Compose can be used. A flow with no such check goes on.
+   */
+  composeCheck?(
+    folder: string,
+    dialogs: ConfigSurfaces['dialogs'],
+    cancellation: AbortSignal,
+  ): Promise<FirstCheckResult>;
 }
 
 /** What an open command asks: the host folder and the engine the CLI is to use. */
@@ -307,6 +319,29 @@ export async function chooseConfiguration(
     );
     await opening;
     return {kind: 'rejected'};
+  }
+  if (isComposeConfiguration(parsed)) {
+    if (parsed.workspaceFolder === undefined || parsed.workspaceFolder === '') {
+      const open = textOf(translate, CONFIG_TEMPLATES.openDevcontainer);
+      const answer = await surfaces.dialogs.showError(
+        textOf(translate, CONFIG_TEMPLATES.S412),
+        '',
+        [open],
+      );
+      if (answer === open) {
+        await surfaces.openPreview(candidate.file);
+      }
+      return {kind: 'rejected'};
+    }
+    if (
+      (await ports.composeCheck?.(
+        folder,
+        surfaces.dialogs,
+        request.cancellation,
+      )) === 'stopped'
+    ) {
+      return stopped;
+    }
   }
   if (dockerfile !== undefined && missing) {
     const button = textOf(translate, CONFIG_TEMPLATES.openConfiguration, [

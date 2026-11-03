@@ -56,6 +56,33 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     ]);
   });
 
+  it('F-0201 AC-11: the Compose program of the second route is passed as --docker-compose-path after the Docker path, and the plugin route passes none', () => {
+    const target = {
+      ...TARGET,
+      composePath: '/opt/dc',
+      userDataFolder: '/storage/data',
+    };
+    const given = upArguments(target, PLAIN);
+    const start = given.indexOf('--docker-path');
+    deepStrictEqual(
+      [
+        given.slice(start, start + 6),
+        upArguments(TARGET, PLAIN).includes('--docker-compose-path'),
+      ],
+      [
+        [
+          '--docker-path',
+          'docker',
+          '--docker-compose-path',
+          '/opt/dc',
+          '--user-data-folder',
+          '/storage/data',
+        ],
+        false,
+      ],
+    );
+  });
+
   it('F-0413 AC-51: a data folder is passed as --user-data-folder right after the Docker path, for every subcommand', () => {
     const target = {...TARGET, userDataFolder: '/storage/data'};
     deepStrictEqual(

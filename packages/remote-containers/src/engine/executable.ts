@@ -29,14 +29,16 @@ export function engineBaseOf(window: WindowFolder): string | undefined {
 /**
  * The program that `dev.containers.dockerPath` names. The value is literal: nothing is expanded or split, and no
  * shell reads it. An absolute or bare name is spawned as written (a bare name is searched for on the PATH by the
- * spawn); a relative one is resolved against `base`, and has no program when there is none.
+ * spawn); a relative one is resolved against `base`, and has no program when there is none. An empty or absent value
+ * names `defaultProgram`.
  */
 export function executableOf(
   value: unknown,
   base: string | undefined,
+  defaultProgram: string = DEFAULT_PROGRAM,
 ): Executable {
   const written =
-    typeof value === 'string' && value !== '' ? value : DEFAULT_PROGRAM;
+    typeof value === 'string' && value !== '' ? value : defaultProgram;
   const relative =
     written.includes('/') && !written.startsWith('/') && !isShellForm(written);
   if (!relative) {

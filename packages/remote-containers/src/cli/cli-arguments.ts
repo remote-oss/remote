@@ -31,6 +31,8 @@ export interface CliTarget {
   logLevel: 'info' | 'debug' | 'trace';
   /** The size of the terminal the run's lifecycle commands show in, whole rows and columns of at least one. */
   terminalSize?: {rows: number; columns: number};
+  /** The Compose program of the second route, which the CLI runs instead of the Docker CLI's plugin. */
+  composePath?: string;
   /** Where the CLI keeps its data, among them the override files of a Compose project (`--user-data-folder`). */
   userDataFolder?: string;
   /** Variables added to the editor's environment for the CLI's process, such as `COMPOSE_PROJECT_NAME`. */
@@ -59,6 +61,9 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     ...target.idLabels.flatMap(label => ['--id-label', label]),
     '--docker-path',
     target.dockerPath,
+    ...(target.composePath === undefined
+      ? []
+      : ['--docker-compose-path', target.composePath]),
     ...(target.userDataFolder === undefined
       ? []
       : ['--user-data-folder', target.userDataFolder]),

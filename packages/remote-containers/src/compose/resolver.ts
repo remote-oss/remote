@@ -4,7 +4,13 @@
  */
 
 import path from 'node:path';
-import {parseConfiguration} from '../config/configuration-text.ts';
+import {
+  composeFileNamesOf,
+  isComposeConfiguration,
+  parseConfiguration,
+} from '../config/configuration-text.ts';
+import type {ComposeRoute} from '../engine/compose-route.ts';
+import type {EngineOptions, EngineRunOutcome} from '../engine/engine-host.ts';
 import {
   type ComposeModel,
   type ComposeModelPorts,
@@ -14,10 +20,24 @@ import {projectNameOf} from './project-name.ts';
 import {projectSourcesOf} from './project-sources.ts';
 import {composeScopeOf} from './scope.ts';
 
+/** A Compose that can be run. */
+type UsableRoute = Extract<ComposeRoute, {kind: 'plugin' | 'standalone'}>;
+
 /** What the resolver needs from outside. */
-export interface ComposeResolverPorts extends ComposeModelPorts {
+export interface ComposeResolverPorts extends Omit<
+  ComposeModelPorts,
+  'runCompose'
+> {
   /** The editor's environment. */
   environment: Readonly<Record<string, string | undefined>>;
+  /** The Compose to use now for a configuration in `base`. */
+  route(base: string, cancellation: AbortSignal): Promise<ComposeRoute>;
+  /** Runs Compose by `route` with `argv`, the arguments after its program. */
+  runVia(
+    route: UsableRoute,
+    argv: readonly string[],
+    options: EngineOptions,
+  ): Promise<EngineRunOutcome>;
 }
 
 /** What the resolver is asked about. */
@@ -36,34 +56,10 @@ export type ComposeResolution =
       service: string;
       scope: readonly string[];
       model: ComposeModel;
+      /** The program of the second route, which the CLI is told with `--docker-compose-path`; none on the plugin. */
+      composeFile: string | undefined;
     }
   | {kind: 'failed'; detail: string};
-
-/** The compose files of a configuration, absolute: the string or the list of strings `dockerComposeFile` holds. */
-function composeFilesOf(
-  value: unknown,
-  configFolder: string,
-): string[] | undefined {
-  const names: unknown = typeof value === 'string' ? [value] : value;
-  return Array.isArray(names) && names.every(name => typeof name === 'string')
-    ? names.map((name: string) => path.resolve(configFolder, name))
-    : undefined;
-}
-
-/** Whether the CLI would build the configuration from an image or a Dockerfile in spite of its compose file. */
-function namesNonComposeSource(
-  configuration: Record<string, unknown>,
-): boolean {
-  const {build} = configuration;
-  return (
-    'image' in configuration ||
-    'dockerFile' in configuration ||
-    (typeof build === 'object' &&
-      build !== null &&
-      !Array.isArray(build) &&
-      'dockerfile' in build)
-  );
-}
 
 /** The services `runServices` names, when it is a list of names. */
 function runServicesOf(value: unknown): string[] | undefined {
@@ -79,24 +75,35 @@ export function composeResolverOf(
   return async request => {
     const text = await ports.readText(request.configFile).catch(() => '');
     const configuration = parseConfiguration(text);
-    const files = composeFilesOf(
-      configuration?.dockerComposeFile,
-      path.dirname(request.configFile),
-    );
-    const service = configuration?.service;
-    if (
-      configuration === undefined ||
-      files === undefined ||
-      typeof service !== 'string' ||
-      namesNonComposeSource(configuration)
-    ) {
+    if (configuration === undefined || !isComposeConfiguration(configuration)) {
       return {kind: 'none'};
     }
-    const read = await composeModelOf(ports, {
-      files,
-      workspaceFolder: request.workspaceFolder,
-      cancellation: request.cancellation,
-    });
+    const configFolder = path.dirname(request.configFile);
+    const files = (
+      composeFileNamesOf(configuration.dockerComposeFile) ?? []
+    ).map(name => path.resolve(configFolder, name));
+    const service = configuration.service as string;
+    const route = await ports.route(
+      request.workspaceFolder,
+      request.cancellation,
+    );
+    if (route.kind === 'missing' || route.kind === 'broken') {
+      return {
+        kind: 'failed',
+        detail: `Docker Compose cannot be run: ${route.written}`,
+      };
+    }
+    const read = await composeModelOf(
+      {
+        ...ports,
+        runCompose: (argv, options) => ports.runVia(route, argv, options),
+      },
+      {
+        files,
+        workspaceFolder: request.workspaceFolder,
+        cancellation: request.cancellation,
+      },
+    );
     if (read.kind === 'rejected') {
       return {kind: 'failed', detail: read.detail};
     }
@@ -105,7 +112,7 @@ export function composeResolverOf(
         workspaceFolder: request.workspaceFolder,
         files,
         declaredName: read.model.declaredName,
-        dashAndUnderscore: true,
+        dashAndUnderscore: route.kind === 'plugin' || route.dashAndUnderscore,
       }),
     );
     if (name.kind === 'invalid') {
@@ -128,6 +135,7 @@ export function composeResolverOf(
         modelServices: [...read.model.services.keys()],
       }),
       model: read.model,
+      composeFile: route.kind === 'standalone' ? route.file : undefined,
     };
   };
 }

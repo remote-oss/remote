@@ -6,8 +6,10 @@
 import type {Logger} from 'lib-log';
 import {
   BUTTON_LINKS,
+  composeDialogOf,
   dialogOf,
   type EngineButton,
+  type EngineDialog,
   type Translate,
 } from '../surfaces/engine-dialogs.ts';
 import {
@@ -16,6 +18,7 @@ import {
   type SecondCheckOutcome,
   secondCheckOutcomeOf,
 } from './check-outcome.ts';
+import {type ComposeRoute, composeRouteOf} from './compose-route.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
 import {apiCheckSkipped} from './version-reply.ts';
@@ -126,6 +129,22 @@ async function chosen(
   return 'stopped';
 }
 
+/** Shows the modal error dialog, and does what the chosen button does; resolves what the caller does next. */
+async function shown(
+  dependencies: PreflightDependencies,
+  dialog: EngineDialog,
+): Promise<FirstCheckResult> {
+  const label = await dependencies.dialogs.showError(
+    dialog.message,
+    dialog.detail,
+    dialog.buttons.map(button => button.label),
+  );
+  return chosen(
+    dependencies,
+    dialog.buttons.find(button => button.label === label),
+  );
+}
+
 /**
  * The first check, before a reload or a picker: the client version, then the structured version. It shows one modal
  * error dialog for any outcome but a pass and resolves `proceed` for a pass and for the dialog's "Ignore", `stopped`
@@ -173,15 +192,7 @@ export async function firstCheck(
     return 'proceed';
   }
   const dialog = dialogOf(outcome, executable.written, dependencies.translate);
-  const label = await dependencies.dialogs.showError(
-    dialog.message,
-    dialog.detail,
-    dialog.buttons.map(button => button.label),
-  );
-  return chosen(
-    dependencies,
-    dialog.buttons.find(button => button.label === label),
-  );
+  return shown(dependencies, dialog);
 }
 
 /**
@@ -287,4 +298,53 @@ export async function contextEndpoint(
   } catch {
     return undefined;
   }
+}
+
+/** What the Compose check needs besides what the engine checks do. */
+export interface ComposeCheckDependencies extends PreflightDependencies {
+  /** `dev.containers.dockerComposePath` as the editor reports it now. */
+  composePath(): unknown;
+}
+
+/** The Compose that a configuration in `base` runs with now; nothing is shown. */
+export function composeRoute(
+  dependencies: ComposeCheckDependencies,
+  base: string | undefined,
+  cancellation: AbortSignal,
+): Promise<ComposeRoute> {
+  const docker = executableOf(dependencies.dockerPath(), base);
+  return composeRouteOf(
+    {
+      docker:
+        docker.kind === 'spawn'
+          ? dependencies.engineFor(docker.file)
+          : undefined,
+      engineFor: file => dependencies.engineFor(file),
+      composePath: () => dependencies.composePath(),
+      base,
+      logger: dependencies.logger,
+    },
+    cancellation,
+  );
+}
+
+/**
+ * The check of Compose before a reload, for a Compose configuration: it shows one modal error dialog when no Compose
+ * can be used, and resolves `proceed` when one can, `stopped` otherwise. Nothing is remembered: every call resolves
+ * Compose again.
+ */
+export async function composeCheck(
+  dependencies: ComposeCheckDependencies,
+  base: string | undefined,
+  cancellation: AbortSignal,
+): Promise<FirstCheckResult> {
+  const route = await composeRoute(dependencies, base, cancellation);
+  if (cancellation.aborted) {
+    return 'stopped';
+  }
+  if (route.kind === 'plugin' || route.kind === 'standalone') {
+    return 'proceed';
+  }
+  const dialog = composeDialogOf(route, dependencies.translate);
+  return shown(dependencies, dialog);
 }

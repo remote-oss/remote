@@ -150,3 +150,37 @@ export function dockerfileOf(
     ? path.resolve(path.dirname(configFile), value)
     : undefined;
 }
+
+/** The compose file names a `dockerComposeFile` value holds: a string, or a list of strings; none for any other value. */
+export function composeFileNamesOf(value: unknown): string[] | undefined {
+  const names: unknown = typeof value === 'string' ? [value] : value;
+  return Array.isArray(names) && names.every(name => typeof name === 'string')
+    ? names
+    : undefined;
+}
+
+/** Whether the CLI would build the configuration from an image or a Dockerfile in spite of its compose file. */
+export function namesNonComposeSource(
+  configuration: Record<string, unknown>,
+): boolean {
+  const {build} = configuration;
+  return (
+    'image' in configuration ||
+    'dockerFile' in configuration ||
+    (typeof build === 'object' &&
+      build !== null &&
+      !Array.isArray(build) &&
+      'dockerfile' in build)
+  );
+}
+
+/** Whether the configuration is a Compose one: compose files and a service, and no image or Dockerfile source. */
+export function isComposeConfiguration(
+  configuration: Record<string, unknown>,
+): boolean {
+  return (
+    composeFileNamesOf(configuration.dockerComposeFile) !== undefined &&
+    typeof configuration.service === 'string' &&
+    !namesNonComposeSource(configuration)
+  );
+}

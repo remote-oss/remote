@@ -4,6 +4,7 @@
  */
 
 import type {FirstCheckOutcome} from '../engine/check-outcome.ts';
+import type {ComposeRoute} from '../engine/compose-route.ts';
 
 /** Turns an English template into the text for the display language. */
 export type Translate = (template: string) => string;
@@ -14,6 +15,7 @@ export const ENGINE_LINKS = {
   licence:
     'https://www.docker.com/legal/docker-subscription-service-agreement/',
   permission: 'https://docs.docker.com/engine/install/linux-postinstall/',
+  compose: 'https://docs.docker.com/compose/install/',
 } as const;
 
 /** The English template of each text of the dialogs, by its string id. */
@@ -21,6 +23,8 @@ export const ENGINE_TEMPLATES = {
   S061: 'Check the license for details.',
   S079: "Command not found: '{0}'.",
   S103: "Current user does not have permission to run 'docker'.",
+  S134: 'Docker Compose required',
+  S135: 'Docker Compose returned an error.',
   S143: 'Docker returned an error.',
   S146: 'Docker version 17.12.0 or later required.',
   S147: 'Documentation',
@@ -34,7 +38,12 @@ export const ENGINE_TEMPLATES = {
 
 /** What a button does when it is chosen. */
 export type EngineButtonAction =
-  'openInstall' | 'openLicence' | 'openPermission' | 'ignore' | 'showLog';
+  | 'openInstall'
+  | 'openLicence'
+  | 'openPermission'
+  | 'openCompose'
+  | 'ignore'
+  | 'showLog';
 
 /** One button: its text, and what choosing it does. */
 export interface EngineButton {
@@ -56,6 +65,7 @@ export const BUTTON_LINKS: Readonly<
   openInstall: ENGINE_LINKS.install,
   openLicence: ENGINE_LINKS.licence,
   openPermission: ENGINE_LINKS.permission,
+  openCompose: ENGINE_LINKS.compose,
 };
 
 /** The dialog for an outcome other than `passed`; `written` is the value of `dockerPath` as written. */
@@ -98,5 +108,30 @@ export function dialogOf(
         ? licenceDetail
         : `${text('S079').replace('{0}', written)} ${licenceDetail}`,
     buttons: [install, licence],
+  };
+}
+
+/**
+ * The dialog for a Compose that cannot be used. The default program missing is the single line S134; any other program
+ * missing adds S079 with the value as written. A program that exists but cannot run gives S135 alone.
+ */
+export function composeDialogOf(
+  route: Extract<ComposeRoute, {kind: 'missing' | 'broken'}>,
+  translate: Translate,
+): EngineDialog {
+  function text(templateId: keyof typeof ENGINE_TEMPLATES): string {
+    return translate(ENGINE_TEMPLATES[templateId]);
+  }
+  if (route.kind === 'broken') {
+    return {
+      message: '',
+      detail: text('S135'),
+      buttons: [{label: text('S324'), action: 'showLog'}],
+    };
+  }
+  return {
+    message: text('S134'),
+    detail: route.byDefault ? '' : text('S079').replace('{0}', route.written),
+    buttons: [{label: text('S147'), action: 'openCompose'}],
   };
 }

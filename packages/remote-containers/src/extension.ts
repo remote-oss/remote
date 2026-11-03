@@ -80,7 +80,8 @@ import {
 import {configWatchOf} from './config-watch/config-watch.ts';
 import {engineBaseOf, executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
-import {currentContext, firstCheck} from './engine/preflight.ts';
+import {composeCheck, currentContext, firstCheck} from './engine/preflight.ts';
+import {composeRouteOf} from './engine/compose-route.ts';
 import {effectiveEngineKey} from './engine/engine-key.ts';
 import {engineWatchOf} from './engine/engine-watch.ts';
 import {
@@ -925,6 +926,25 @@ export async function activate(
             },
             served.logger,
           ),
+          composeCheck: (base, dialogs, cancellation) =>
+            composeCheck(
+              {
+                ...served.preflight,
+                dialogs: {
+                  ...dialogs,
+                  openExternal: address =>
+                    Promise.resolve(
+                      vscode.env.openExternal(vscode.Uri.parse(address)),
+                    ),
+                },
+                composePath: () =>
+                  vscode.workspace
+                    .getConfiguration()
+                    .get(settings.dockerComposePath.id),
+              },
+              engineBaseOf({folder: base, trusted: vscode.workspace.isTrusted}),
+              cancellation,
+            ),
           compare: collate,
           stored: folder => storedCandidate(storedLookup, folder),
           useTemplate: folder => addConfiguration(continuation, folder),
@@ -1238,8 +1258,27 @@ export async function activate(
           clock: Date.now,
           userDataFolder: path.join(context.globalStorageUri.fsPath, 'data'),
           compose: composeResolverOf({
-            runCompose: (argv, options) =>
-              engine.run(['compose', ...argv], {kind: 'none'}, options),
+            route: (base, cancellation) =>
+              composeRouteOf(
+                {
+                  docker: engine,
+                  engineFor: nodeEngineHost,
+                  composePath: () =>
+                    vscode.workspace
+                      .getConfiguration()
+                      .get(settings.dockerComposePath.id),
+                  base: engineBaseOf({
+                    folder: base,
+                    trusted: vscode.workspace.isTrusted,
+                  }),
+                  logger: logger.child('compose'),
+                },
+                cancellation,
+              ),
+            runVia: (route, argv, options) =>
+              route.kind === 'plugin'
+                ? engine.run(['compose', ...argv], {kind: 'none'}, options)
+                : nodeEngineHost(route.file).run(argv, {kind: 'none'}, options),
             readText: file => readFile(file, 'utf8'),
             environment: process.env,
             logger: logger.child('compose'),
