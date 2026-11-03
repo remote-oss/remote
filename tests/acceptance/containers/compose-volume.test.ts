@@ -3,7 +3,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {closeWindow, reopenStarted, variable} from '../windows/harness.ts';
 import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
-import {pressEscape, waitForDialog} from '../windows/renderer.ts';
+import {pressEscape, statusItem, waitForDialog} from '../windows/renderer.ts';
 import {
   composeContainersOfRun,
   composeFolder,
@@ -34,6 +34,17 @@ async function allVolumes(): Promise<string[]> {
     .split('\n')
     .filter(line => line !== '')
     .sort();
+}
+
+/** The creation time of the `vscode` volume `volume`, or nothing when the engine holds none. */
+async function createdAtOf(volume: string): Promise<string | undefined> {
+  try {
+    return (
+      await dockerRun('volume', 'inspect', '--format', '{{.CreatedAt}}', volume)
+    ).trim();
+  } catch {
+    return undefined;
+  }
 }
 
 /** A Compose folder whose primary service `app` mounts the volume `cache` at `/vscode/cache`. */
@@ -110,7 +121,7 @@ describe('the vscode volume of a Compose project (card containers-143, part D)',
     );
   });
 
-  it('F-0419 AC-20 (c143-reserved): a mounts entry at /vscode, and a service volume below it, each end the connect with a dialog that names the property, and create no container and no volume', async () => {
+  it('F-0419 AC-20 (c143-reserved): a mounts entry at /vscode, and a service volume below it, each end the connect with a dialog that names the property, leave the window not connected, and create no container and no volume', async () => {
     const cases = [
       {
         folder: composeFolder({
@@ -134,9 +145,14 @@ describe('the vscode volume of a Compose project (card containers-143, part D)',
       await reopenStarted(name);
       const dialog = await waitForDialog(name, 180_000);
       await pressEscape(name);
+      // A connected window's indicator names the container ("Dev Container: <name>"); a failed one does not.
+      const connected = (await statusItem(name, 'status.host')).text.includes(
+        'Dev Container: ',
+      );
       await closeWindow(name);
       found.push({
         details: dialog.details,
+        connected,
         containers: await composeContainersOfRun(),
         newVolumes: (await allVolumes()).filter(
           volume => !volumesBefore.includes(volume),
@@ -145,22 +161,32 @@ describe('the vscode volume of a Compose project (card containers-143, part D)',
     }
     deepStrictEqual(
       found,
-      cases.map(({text}) => ({details: text, containers: [], newVolumes: []})),
+      cases.map(({text}) => ({
+        details: text,
+        connected: false,
+        containers: [],
+        newVolumes: [],
+      })),
     );
   });
 
-  it('F-0419 AC-34 (c143-cache-off): with cacheVolume false the service container has no mount at /vscode', async () => {
+  it('F-0419 AC-34 (c143-cache-off): with cacheVolume false the service container has no mount at /vscode and the vscode volume is as it was', async () => {
     await setUserSetting('dev.containers.cacheVolume', false);
+    const createdBefore = await createdAtOf('vscode');
     const opened = await openedCompose(
       composeFolder({name: 'c143-cache-off', place: 'devcontainer'}),
     );
     const destinations = (await mountsOf(opened.containerId)).map(
       mount => mount.Destination,
     );
+    const createdAfter = await createdAtOf('vscode');
     await closeWindow(opened.name);
     deepStrictEqual(
-      destinations.filter(destination => destination.startsWith('/vscode')),
-      [],
+      [
+        destinations.filter(destination => destination.startsWith('/vscode')),
+        createdAfter,
+      ],
+      [[], createdBefore],
     );
   });
 });

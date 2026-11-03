@@ -61,7 +61,7 @@ describe('the targets the cache volume reserves (F-0419 7.E3)', () => {
         '/vscode',
         {type: 'volume', source: 'v', target: '/vscode/b'},
         7,
-      ].map(serviceVolumeTargetOf),
+      ].map(entry => serviceVolumeTargetOf(entry, true)),
       ['/vscode', '/vscode/a', '/vscode', '/vscode/b', undefined],
     );
   });
@@ -89,35 +89,96 @@ describe('the targets the cache volume reserves (F-0419 7.E3)', () => {
 
   it('F-0419 AC-23: runArgsTargets reads each spelling of the volume and mount options, in order', () => {
     deepStrictEqual(
-      runArgsTargets([
-        '-v',
-        'data:/a:ro',
-        '--volume',
-        '/b',
-        '--volume=src:/c',
-        '--mount',
-        'type=bind,source=/s,target=/d',
-        '--mount=type=volume,dst=/e',
-      ]),
+      runArgsTargets(
+        [
+          '-v',
+          'data:/a:ro',
+          '--volume',
+          '/b',
+          '--volume=src:/c',
+          '--mount',
+          'type=bind,source=/s,target=/d',
+          '--mount=type=volume,dst=/e',
+        ],
+        false,
+      ),
       ['/a', '/b', '/c', '/d', '/e'],
     );
   });
 
   it('F-0419 AC-23: runArgsTargets skips a value-less option at the end, a value that is no string, a mount with no target and other options', () => {
     deepStrictEqual(
-      runArgsTargets([
-        '--rm',
-        '-p',
-        '80:80',
-        '--mount',
-        'type=tmpfs',
-        '-v',
-        7,
-        '--mount=',
-        42,
-        '-v',
-      ]),
+      runArgsTargets(
+        [
+          '--rm',
+          '-p',
+          '80:80',
+          '--mount',
+          'type=tmpfs',
+          '-v',
+          7,
+          '--mount=',
+          42,
+          '-v',
+        ],
+        false,
+      ),
       [],
+    );
+  });
+
+  it('F-0419 AC-23: a drive letter’s colon belongs to the source, so the target of a volume value is read after it', () => {
+    deepStrictEqual(
+      [
+        'C:\\data:/vscode/x',
+        'C:/data:/vscode',
+        'c:\\data:/vscode:ro',
+        'D:\\x',
+        'c:/vscode',
+        'data:/vscode',
+        '/src:/data:ro',
+        '/vscode',
+      ].map(entry => serviceVolumeTargetOf(entry, true)),
+      [
+        '/vscode/x',
+        '/vscode',
+        '/vscode',
+        'D:\\x',
+        'c:/vscode',
+        '/vscode',
+        '/data',
+        '/vscode',
+      ],
+    );
+  });
+
+  it('F-0419 AC-23: runArgsTargets reads an attached -v value, and a drive letter inside it', () => {
+    deepStrictEqual(
+      runArgsTargets(
+        [
+          '-v/src:/vscode',
+          '-vname:/vscode/x',
+          '-vC:\\data:/vscode/y',
+          '-v/lone',
+          '--volume-driver=local',
+          '-v',
+        ],
+        true,
+      ),
+      ['/vscode', '/vscode/x', '/vscode/y', '/lone'],
+    );
+  });
+
+  it('F-0419 AC-23: off Windows a single letter before :/ is a volume name, so x:/vscode is the volume x at /vscode, and on Windows it is a drive', () => {
+    deepStrictEqual(
+      [
+        serviceVolumeTargetOf('x:/vscode', false),
+        serviceVolumeTargetOf('x:/vscode', true),
+        serviceVolumeTargetOf('C:\\data:/vscode/x', false),
+        runArgsTargets(['-v', 'x:/vscode'], false),
+        runArgsTargets(['-v', 'x:/vscode'], true),
+      ],
+      ['/vscode', 'x:/vscode', '\\data', ['/vscode'], ['x:/vscode']],
     );
   });
 });

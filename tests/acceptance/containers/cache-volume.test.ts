@@ -594,11 +594,12 @@ describe('F-0419 the vscode cache volume (card containers-53)', function () {
     }
   });
 
-  it('F-0419 AC-23 (c23): runArgs with -v, --volume= and --mount at /vscode, and a workspaceMount at /vscode, each fail before anything is created with a dialog naming the property', async () => {
+  it('F-0419 AC-23 (c23): runArgs with -v (also attached), --volume= and --mount at /vscode, and a workspaceMount at /vscode, each fail before anything is created with a dialog naming the property', async () => {
     await noCollisionVolumes('c53v-run');
     const cases: Array<[string, string, Record<string, unknown>]> = [
       ['runArgs', '/vscode', {runArgs: ['-v', 'c53v-run:/vscode']}],
       ['runArgs', '/vscode/x', {runArgs: ['--volume=c53v-run:/vscode/x']}],
+      ['runArgs', '/vscode', {runArgs: ['-vc53v-run:/vscode']}],
       [
         'runArgs',
         '/vscode',
