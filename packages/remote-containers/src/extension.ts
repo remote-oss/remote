@@ -4,7 +4,15 @@
  */
 
 import {appendFileSync, readFileSync, watch} from 'node:fs';
-import {mkdir, mkdtemp, readdir, readFile, stat} from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -48,6 +56,7 @@ import {
 } from './authoring/configure-features.ts';
 import {addFilesForFeatures} from './authoring/features-add-files.ts';
 import {featuresRunOf} from './authoring/features-run.ts';
+import {versionCheckOf} from './authoring/version-check.ts';
 import {
   type AuthoringFiles,
   hostFiles,
@@ -1229,6 +1238,25 @@ export async function activate(
               preview: true,
               selection: new vscode.Range(0, 0, 0, 0),
             }),
+          versionCheck: versionCheckOf({
+            outdated: (target, cancellation) =>
+              bridge.outdated(target, cancellation),
+            scratch: async text => {
+              const folder = await mkdtemp(
+                path.join(os.tmpdir(), 'remote-containers-versions-'),
+              );
+              await mkdir(path.join(folder, '.devcontainer'));
+              const file = path.join(
+                folder,
+                '.devcontainer',
+                'devcontainer.json',
+              );
+              await writeFile(file, text);
+              return {folder, file};
+            },
+            discard: folder => rm(folder, {recursive: true, force: true}),
+            logger: served.logger,
+          }),
           translate,
           logger: served.logger,
         }),

@@ -224,6 +224,7 @@ function fakeBridge(): FakeBridge {
       return Promise.resolve(bridge.configuration);
     },
     applyTemplate: () => Promise.reject(new Error('never applied')),
+    outdated: () => Promise.reject(new Error('never read')),
     templateMetadata: () => Promise.reject(new Error('never read')),
   };
   return bridge;

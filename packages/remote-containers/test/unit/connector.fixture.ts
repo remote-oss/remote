@@ -393,6 +393,8 @@ export function sceneOf(
     },
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
+    outdated: () =>
+      Promise.reject(new Error('the connector never checks versions')),
     templateMetadata: () =>
       Promise.reject(new Error('the connector never reads template metadata')),
   };

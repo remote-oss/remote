@@ -8,6 +8,7 @@ import type {Logger} from 'lib-log';
 import {
   applyTemplateArguments,
   type CliTarget,
+  outdatedArguments,
   readConfigurationArguments,
   runUserCommandsArguments,
   type TemplateRequest,
@@ -23,9 +24,11 @@ import {
   type ConfigurationResult,
   daemonRefusalOf,
   type DaemonRefusal,
+  type OutdatedResult,
   readStderrLine,
   readApplyTemplateResult,
   readConfigurationResult,
+  readOutdatedResult,
   readRunUserCommandsResult,
   readTemplateMetadataResult,
   readUpResult,
@@ -78,6 +81,11 @@ export interface CliBridge {
     onLine: (line: string) => void,
     cancellation: AbortSignal,
   ): Promise<ApplyTemplateResult>;
+  /** Which Features of the target's configuration are behind; its stderr is dropped. */
+  outdated(
+    target: CliTarget,
+    cancellation: AbortSignal,
+  ): Promise<OutdatedResult>;
   /** Reads a template's metadata; its stderr is dropped. */
   templateMetadata(
     templateId: string,
@@ -328,6 +336,13 @@ export function cliBridgeOf(
         applyTemplateArguments(request),
         readApplyTemplateResult,
         onLine,
+        cancellation,
+      ),
+    outdated: (target, cancellation) =>
+      driveTemplates(
+        outdatedArguments(target),
+        readOutdatedResult,
+        () => undefined,
         cancellation,
       ),
     templateMetadata: (templateId, cancellation) =>

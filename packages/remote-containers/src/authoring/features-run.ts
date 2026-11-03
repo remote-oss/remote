@@ -40,6 +40,8 @@ export interface FeaturesRunPorts {
     file: string,
     root: WindowFolder | undefined,
   ): PromiseLike<unknown>;
+  /** Checks the versions of the Features in the text written; the run does not wait for the check. */
+  versionCheck(text: string, relative: string): Promise<void>;
   translate: Translate;
   logger: Logger;
 }
@@ -140,6 +142,7 @@ export function featuresRunOf(
       await ports.showError('', detail);
       return {kind: 'failed', detail};
     }
+    void ports.versionCheck(edit.text, configuration.relative);
     await ports.openPreview(configuration.file, configuration.root);
     return {kind: 'written', file: configuration.file};
   };
