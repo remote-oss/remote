@@ -103,6 +103,9 @@ const HELPERS: Readonly<Partial<Record<StandInBehaviour, string>>> = {
   helperUnrunnable: '#!/bin/sh\nexit 127\n',
 };
 
+/** The commit the stand-in server was built for, which the install rewrites to the client's. */
+const STAND_IN_COMMIT = '0123456789abcdef0123456789abcdef01234567';
+
 /** The files of the stand-in server archive. */
 function standInFiles(behaviour: StandInBehaviour): ArchiveFile[] {
   const helper = HELPERS[behaviour];
@@ -123,7 +126,7 @@ function standInFiles(behaviour: StandInBehaviour): ArchiveFile[] {
     },
     {
       path: `${TOP_FOLDER}/product.json`,
-      content: '{"commit": "stand-in"}\n',
+      content: `{"commit": "${STAND_IN_COMMIT}"}\n`,
       mode: 0o644,
     },
   ];

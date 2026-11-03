@@ -571,6 +571,23 @@ describe('the fallback from the host to the client (F-2405.BR-2, BR-4)', () => {
 describe('a download on the client (F-2405.BR-3, BR-5)', () => {
   const CLIENT = {where: 'client'} as const;
 
+  it('F-3902 AC-16: the identity line names the archive the client placed on the host, not the address, and a block with only the first commit leaves the second empty', async () => {
+    const {logLines} = await runTransfer({
+      plan: CLIENT,
+      installs: [block('Ok', 'server.identityFrom=1234')],
+    });
+    const line = logLines.find(each => each.includes('was built for commit'));
+    deepStrictEqual(
+      [
+        line?.includes(ADDRESS),
+        line?.includes(
+          'was built for commit 1234; its identity now reads . Whether',
+        ),
+      ],
+      [false, true],
+    );
+  });
+
   it('F-2405.BR-3: the client downloads the plan address to its temporary folder', async () => {
     const {downloads} = await runTransfer({plan: CLIENT});
     deepStrictEqual(
