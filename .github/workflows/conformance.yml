@@ -181,7 +181,11 @@ jobs:
               ENCODE_REFERENCE_CATALOG="$CONFORMANCE_SUITE/fixtures/CATALOG.json" ENCODE_SLOTS_DIR="$CONFORMANCE_WORK/slots" \
               ENCODE_WORKSPACES="$CONFORMANCE_WORK/workspaces/encode" ENCODE_DIND_MOUNT="$CONFORMANCE_WORK/workspaces" \
               ENCODE_HOMES="$CONFORMANCE_WORK/homes" ENCODE_ISO="$CONFORMANCE_WORK/iso" ENCODE_NO_SYSTEMD=1 \
-              python3 fixture.py verify "$1" 2>/dev/null ) | grep -qE " $1@[0-9a-f]+ .*: ok$"
+              python3 fixture.py verify "$1" 2>&1 ) > "$RUNNER_TEMP/verify-$1.txt" || true
+            # verify's own lines go to the log, so a fixture it rejects names its reason (a changed definition, a missing
+            # or changed tarball) before it is rebuilt
+            sed "s/^/verify $1: /" "$RUNNER_TEMP/verify-$1.txt"
+            grep -qE " $1@[0-9a-f]+ .*: ok$" "$RUNNER_TEMP/verify-$1.txt"
           }
           conformance=tests/conformance/runner/bin/conformance
           verified encode-registry || $conformance build mirror --pull
