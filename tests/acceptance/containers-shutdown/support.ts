@@ -5,7 +5,9 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  isOpen,
   reopenInContainer,
+  windowNames,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 
@@ -224,5 +226,14 @@ export async function editorMainProcess(userData: string): Promise<string[]> {
       });
   } catch {
     return [];
+  }
+}
+
+/** Closes every open window but `local`, which earlier rows may have left, so that the rows after them read their own. */
+export async function closeOtherWindows(): Promise<void> {
+  for (const name of windowNames()) {
+    if (name !== 'local' && isOpen(name)) {
+      await closeWindow(name).catch(() => undefined);
+    }
   }
 }

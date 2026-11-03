@@ -724,6 +724,106 @@ export async function rowActionTitles(
   return titles;
 }
 
+/**
+ * Moves the mouse of window `name` onto the one row labelled `rowLabel` of view `viewName`, or to the corner of the
+ * window when `rowLabel` is `undefined`, so that no row is hovered. It fails naming the row when the view has not one.
+ */
+export async function hoverRow(
+  name: string,
+  viewName: string,
+  rowLabel: string | undefined,
+): Promise<void> {
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      if (${JSON.stringify(rowLabel ?? null)} === null) {
+        return {x: 1, y: 1};
+      }
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel ?? '')});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  await dispatchInput(await pageOf(name), name, [
+    {
+      method: 'Input.dispatchMouseEvent',
+      params: {type: 'mouseMoved', ...point},
+    },
+  ]);
+  await new Promise(resolve => setTimeout(resolve, 300));
+}
+
+/** Clicks the label of the one row labelled `rowLabel` in view `viewName` of window `name` with the mouse, which selects and focuses it. */
+export async function clickRowLabel(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<void> {
+  const point = await evaluate<{x: number; y: number} | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return null;
+      }
+      const box = rows[0].querySelector('.label-name').getBoundingClientRect();
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    })()`,
+  );
+  if (point === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  await dispatchInput(
+    await pageOf(name),
+    name,
+    ['mousePressed', 'mouseReleased'].map(type => ({
+      method: 'Input.dispatchMouseEvent',
+      params: {type, ...point, button: 'left', clickCount: 1},
+    })),
+  );
+}
+
+/**
+ * The titles of the inline actions of the one row labelled `rowLabel` in view `viewName` of window `name` that are
+ * drawn now, in the order shown: the row's actions stay out of sight until it is hovered, focused or selected.
+ */
+export async function shownRowActionTitles(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<string[]> {
+  const titles = await evaluate<string[] | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      return rows.length !== 1
+        ? null
+        : [...rows[0].querySelectorAll('.actions .action-label')]
+            .filter(label => label.getBoundingClientRect().width > 0 && getComputedStyle(label.closest('.actions')).display !== 'none')
+            .map(label => label.getAttribute('aria-label') ?? '');
+    })()`,
+  );
+  if (titles === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  return titles;
+}
+
 /** The titles of the title actions of view `viewName` in window `name`, in the order shown; none when the view is not there. */
 export async function titleActions(
   name: string,
@@ -2161,6 +2261,14 @@ export async function notificationButtons(
   return item === undefined ? null : [...item.querySelectorAll('.monaco-button')].map(each => each.textContent ?? '');
 })()`,
       )) ?? undefined,
+  );
+}
+
+/** The id core gives window `name`, which a reload in place keeps; `null` when the page has none. */
+export async function vscodeWindowId(name: string): Promise<number | null> {
+  return evaluate<number | null>(
+    name,
+    `(() => (typeof window.vscodeWindowId === 'number' ? window.vscodeWindowId : null))()`,
   );
 }
 

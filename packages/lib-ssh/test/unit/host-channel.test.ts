@@ -168,11 +168,7 @@ describe('SSH host channel', () => {
 
     it('§S10: the script text has no assignment lines', () => {
       deepStrictEqual(
-        scriptText({
-          script: 'echo hi',
-          interpreter: 'posixShell',
-          environment: {FIRST: 'secret'},
-        }),
+        scriptText({script: 'echo hi', environment: {FIRST: 'secret'}}),
         {kind: 'text', text: 'echo hi'},
       );
     });
@@ -268,13 +264,6 @@ describe('SSH host channel', () => {
       );
     });
 
-    it('refuses an interpreter other than the POSIX shell', () => {
-      deepStrictEqual(planScript(request({interpreter: 'powershell'})), {
-        kind: 'refused',
-        reason: 'the powershell interpreter is not available over SSH yet',
-      });
-    });
-
     it('refuses an environment name a variable cannot have', () => {
       deepStrictEqual(planScript(request({environment: {'A B': 'x'}})), {
         kind: 'refused',
@@ -316,12 +305,44 @@ describe('SSH host channel', () => {
       );
     });
 
-    it('fails as spawnFailed, without starting anything, for an interpreter it cannot run', async () => {
+    it('starts ssh for a PowerShell script with the planned command last and the planned input on its input', async () => {
+      const spawner = new ScriptedSpawner(prints('', 0));
+      await new SshHostChannel({
+        ...channelBase(),
+        spawner: spawner.spawn,
+      }).runScript(
+        request({interpreter: 'powershell', script: 'Write-Output hi'}),
+        () => undefined,
+      );
+      const planned = planScript(
+        request({interpreter: 'powershell', script: 'Write-Output hi'}),
+      );
+      const started = spawner.started[0];
+      deepStrictEqual(
+        [
+          spawner.started.length,
+          started?.specification.programArguments.at(-1),
+          started?.inputText(),
+          started?.inputEnded,
+        ],
+        [
+          1,
+          planned.kind === 'planned' ? planned.remoteProgram : planned.reason,
+          'Write-Output hi\n',
+          true,
+        ],
+      );
+    });
+
+    it('fails as spawnFailed, without starting anything, for an environment name a variable cannot have', async () => {
       const spawner = new ScriptedSpawner(prints('', 0));
       const outcome = await new SshHostChannel({
         ...channelBase(),
         spawner: spawner.spawn,
-      }).runScript(request({interpreter: 'powershell'}), () => undefined);
+      }).runScript(
+        request({interpreter: 'powershell', environment: {'A B': 'x'}}),
+        () => undefined,
+      );
       deepStrictEqual(
         [outcome, spawner.started.length],
         [
@@ -329,8 +350,7 @@ describe('SSH host channel', () => {
             kind: 'failed',
             failure: {
               kind: 'spawnFailed',
-              detail:
-                'the powershell interpreter is not available over SSH yet',
+              detail: "'A B' is not a name an environment variable can have",
             },
           },
           0,

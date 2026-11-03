@@ -5,90 +5,27 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import {mkdirSync, readdirSync, rmSync} from 'node:fs';
 import path from 'node:path';
-import {type ConfigFileReader, listHosts} from 'lib-ssh';
-import {openFolderWindow} from '../windows/folder-windows.ts';
 import {listing, VIEW} from '../windows/explorer-rows.ts';
 import {
-  appendScript,
+  sshFile,
+  sshFolder,
+  systemHosts,
+  viewWindow,
+} from '../windows/explorer-home.ts';
+import {
   closeWindow,
-  inWindow,
   readUserSettings,
   restoreUserSettings,
   userSettings,
-  variable,
 } from '../windows/harness.ts';
-import {notifications, rowAction, titleAction} from '../windows/renderer.ts';
-
-/** The run's HOME, as the launch gives it to the editor. */
-function home(): string {
-  return path.join(variable('HARNESS_RUN_FOLDER'), 'home');
-}
-
-/** The user's `.ssh` folder, made when it is missing. */
-function sshFolder(): string {
-  const folder = path.join(home(), '.ssh');
-  mkdirSync(folder, {recursive: true});
-  return folder;
-}
-
-/** Writes `lines` to `relative` under the user's `.ssh` folder and gives its path. */
-function sshFile(relative: string, lines: readonly string[]): string {
-  const file = path.join(sshFolder(), relative);
-  mkdirSync(path.dirname(file), {recursive: true});
-  writeFileSync(file, `${lines.join('\n')}\n`);
-  return file;
-}
-
-/** The files Remote - SSH reads, from the disk: text or entries, none for anything else. */
-const FILE_READER: ConfigFileReader = {
-  readText: file => {
-    try {
-      return readFileSync(file, 'utf8');
-    } catch {
-      return undefined;
-    }
-  },
-  listFolder: folder => {
-    try {
-      return readdirSync(folder);
-    } catch {
-      return undefined;
-    }
-  },
-};
-
-/**
- * The system file's hosts as Remote - SSH lists them, its Include lines followed, the hosts that come after the user's
- * in every list: read with a home folder that holds no user file, so they don't depend on the machine's own file.
- */
-function systemHosts(): string[] {
-  const listed = listHosts(
-    '',
-    {
-      homeFolder: path.join(variable('HARNESS_RUN_FOLDER'), 'no-home'),
-      platform: 'linux',
-    },
-    FILE_READER,
-  );
-  return 'hosts' in listed ? listed.hosts.map(entry => entry.name) : [];
-}
-
-/** A new folder window named `name` that shows the Remote Explorer. */
-async function viewWindow(name: string): Promise<string> {
-  const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'home-rows', name);
-  mkdirSync(folder, {recursive: true});
-  const window = await openFolderWindow(folder);
-  await inWindow(window, 'workbench.view.remote');
-  return window;
-}
+import {
+  chooseQuickPickRow,
+  notifications,
+  rowAction,
+  titleAction,
+} from '../windows/renderer.ts';
 
 describe("the hosts of the user's and the system's files (card coverage-25c, part b)", function () {
   this.timeout(240_000);
@@ -125,15 +62,8 @@ describe("the hosts of the user's and the system's files (card coverage-25c, par
     const window = await viewWindow('home-folder');
     try {
       await listing(window, systemHosts());
-      appendScript([
-        {
-          surface: 'filePick',
-          match: 'Select SSH configuration file to update',
-          answer: {label: config},
-          window,
-        },
-      ]);
       await rowAction(window, VIEW, 'SSH', 'Open SSH Config File');
+      await chooseQuickPickRow(window, config);
       await new Promise(resolve => setTimeout(resolve, 3_000));
       deepStrictEqual(
         [await notifications(window), readdirSync(config)],

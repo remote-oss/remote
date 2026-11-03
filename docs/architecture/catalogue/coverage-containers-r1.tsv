@@ -6,7 +6,7 @@ F-0101.AC-3b	deferred	containers release 1: increment 2 (the reopen notification
 F-0101.AC-4	todo	
 F-0101.AC-5	acceptance	
 F-0101.AC-6	deferred	containers release 1: the full contribution set comes with later increments
-F-0101.AC-7	deferred	containers release 1: increment 2 (shutdown)
+F-0101.AC-7	acceptance	
 F-0101.AC-8	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-9	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-10	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
@@ -234,7 +234,7 @@ F-0301.AC-42	unit
 F-0301.AC-43	unit	
 F-0301.AC-44	acceptance	
 F-0301.AC-47	acceptance	
-F-0301.AC-48	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
+F-0301.AC-48	acceptance	
 F-0301.AC-49	acceptance	
 F-0301.AC-50	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0301.AC-51	deferred	containers release 1: later (multi-root)
@@ -457,7 +457,7 @@ F-0409.AC-16	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-17	deferred	containers release 1: later (F-0902's recent-folder rows)
 F-0409.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0409.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0409.AC-20	deferred	containers release 1: later (Reopen Folder Locally)
+F-0409.AC-20	acceptance	
 F-0409.AC-21	deferred	containers release 1: later (remote engines)
 F-0409.AC-22	acceptance	
 F-0409.AC-23	acceptance	
@@ -809,7 +809,7 @@ F-0417.AC-50	deferred	containers release 1: later (Compose)
 F-0417.AC-51	acceptance	
 F-0417.AC-52	deferred	containers release 1: later (Compose)
 F-0417.AC-53	deferred	containers release 1: later (Compose)
-F-0417.AC-54	deferred	containers release 1: later (Reopen Folder Locally)
+F-0417.AC-54	acceptance	
 F-0417.AC-55	deferred	containers release 1: later (Switch Container, F-0407)
 F-0417.AC-56	acceptance	
 F-0417.AC-57	acceptance	
@@ -817,7 +817,7 @@ F-0417.AC-58	acceptance
 F-0417.AC-59	deferred	containers release 1: later (Compose)
 F-0417.AC-60	acceptance	
 F-0417.AC-61	acceptance	
-F-0417.AC-62	deferred	containers release 1: later (Reopen Folder Locally)
+F-0417.AC-62	acceptance	
 F-0417.AC-63	deferred	containers release 1: later (Compose)
 F-0417.AC-64	deferred	containers release 1: later (Compose)
 F-0417.AC-65	acceptance	
@@ -895,7 +895,7 @@ F-0501.AC-23	deferred	containers release 1: later (the attach, Kubernetes and Ap
 F-0501.AC-24	deferred	containers release 1: later (the recovery container)
 F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-26	acceptance	
-F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
+F-0501.AC-27	acceptance	
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
 F-0502.AC-1	acceptance	
 F-0502.AC-2	acceptance	
@@ -1049,7 +1049,7 @@ F-0505.AC-21	deferred	containers release 1: increment 2 (the shared extension ca
 F-0505.AC-22	deferred	containers release 1: later (attach)
 F-0505.AC-24	unit	
 F-0505.AC-25	unit	
-F-0505.AC-26	deferred	containers release 1: increment 2 (Features, F-0414)
+F-0505.AC-26	acceptance	
 F-0505.AC-27	unit	
 F-0505.AC-28	unit	
 F-0505.AC-29	unit	
@@ -1228,7 +1228,7 @@ F-0901.AC-1	deferred	containers 0.4: F-0806 later
 F-0901.AC-2	acceptance	
 F-0901.AC-3	deferred	containers 0.4: F-0905 later
 F-0901.AC-4	unit	
-F-0901.AC-5	deferred	containers 0.4: F-0406 later
+F-0901.AC-5	acceptance	
 F-0901.AC-6	acceptance	
 F-0901.AC-7	deferred	containers 0.4: C12 attach later
 F-0901.AC-8	acceptance	
@@ -1374,7 +1374,7 @@ F-0906.AC-2	deferred	containers 0.4: F-0904 later
 F-0906.AC-3	deferred	containers 0.4: F-0904 later
 F-0906.AC-4	deferred	containers 0.4: F-0904 later
 F-0906.AC-5	deferred	containers 0.4: C12 attach later
-F-0906.AC-6	deferred	containers 0.4: F-0406 later
+F-0906.AC-6	acceptance	
 F-0906.AC-7	deferred	containers 0.4: C12 attach later
 F-0906.AC-8	deferred	containers 0.4: C12 attach later
 F-0906.AC-9	deferred	containers 0.4: C12 attach later

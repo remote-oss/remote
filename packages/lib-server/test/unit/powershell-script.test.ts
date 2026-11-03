@@ -1,5 +1,10 @@
 import {deepStrictEqual, throws} from 'node:assert';
-import {execFile, spawn, spawnSync} from 'node:child_process';
+import {
+  type ChildProcess,
+  execFile,
+  spawn,
+  spawnSync,
+} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createServer, type Server} from 'node:http';
 import {
@@ -9,8 +14,11 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  copyFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -23,6 +31,8 @@ import {
   type ScriptParameters,
   type ScriptStep,
 } from '../../src/index.ts';
+import {powershellQuote, windowsArgument} from 'lib-host';
+import {POWERSHELL_FUNCTIONS} from '../../src/scripts/powershell-functions.ts';
 import {
   powershellParts,
   powershellScript,
@@ -172,6 +182,12 @@ function factsOf(
         value,
       ]),
     ),
+    ...Object.fromEntries(
+      Object.entries(block.cliFacts).map(([key, value]) => [
+        `cli.${key}`,
+        value,
+      ]),
+    ),
   };
   return {
     status: block.status,
@@ -296,6 +312,35 @@ describe('the PowerShell bootstrap script, run under pwsh', function () {
       );
     });
 
+    it('ADR-0013: a value holding any of PowerShell’s single-quote characters stays one string, and no code it carries runs', () => {
+      const host = powershellHost();
+      const seen = ["'", '\u2018', '\u2019', '\u201A', '\u201B'].map(quote => {
+        const root = `srv${quote}; Add-Fact 'host.injected' 'yes'; ${quote}x`;
+        const parameters = {...parametersFor(), installRoot: `~/${root}`};
+        return [
+          factsOf(runOn(host, single('probe'), parameters), [
+            'server.installDir',
+            'host.injected',
+          ]),
+          path.join(
+            host.home,
+            root,
+            parameters.dataFolderName,
+            'bin',
+            parameters.commit,
+          ),
+        ];
+      });
+      deepStrictEqual(
+        seen.map(([facts]) => facts),
+        seen.map(([, expected]) => ({
+          status: 'Ok',
+          'server.installDir': expected,
+          'host.injected': undefined,
+        })),
+      );
+    });
+
     it('V9: a complete server tree is reported', () => {
       const host = powershellHost();
       const tree = path.join(host.root, 'tree');
@@ -407,6 +452,26 @@ function lockFile(host: PowershellHost, parameters: ScriptParameters): string {
   );
 }
 
+/** A pwsh process that holds the lock file with no sharing, as another install would, once it says so. */
+async function holdingLock(lock: string): Promise<ChildProcess> {
+  const holder = spawn(
+    'pwsh',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `$held = [System.IO.File]::Open('${lock}', 'OpenOrCreate', 'ReadWrite', 'None'); 'held'; Start-Sleep 30`,
+    ],
+    {env: {...process.env, POWERSHELL_TELEMETRY_OPTOUT: '1'}},
+  );
+  await new Promise<void>(resolve => {
+    holder.stdout.once('data', () => {
+      resolve();
+    });
+  });
+  return holder;
+}
+
 /** Serves `body` at every address with `status`, and gives the server's address once it listens. */
 function serving(
   status: number,
@@ -516,22 +581,8 @@ describe('the PowerShell install, run under pwsh', function () {
     const parameters = installFrom(serverArchive(host, 'bin/launcher'));
     const lock = lockFile(host, parameters);
     mkdirSync(path.dirname(lock), {recursive: true});
-    const holder = spawn(
-      'pwsh',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `$s = [System.IO.File]::Open('${lock}', 'OpenOrCreate', 'ReadWrite', 'None'); 'held'; Start-Sleep 30`,
-      ],
-      {env: {...process.env, POWERSHELL_TELEMETRY_OPTOUT: '1'}},
-    );
+    const holder = await holdingLock(lock);
     try {
-      await new Promise<void>(resolve => {
-        holder.stdout.once('data', () => {
-          resolve();
-        });
-      });
       deepStrictEqual(
         factsOf(await runOnWhileServing(host, single('install'), parameters), [
           'server.lockPath',
@@ -1105,20 +1156,590 @@ describe('the PowerShell extension install, run under pwsh', function () {
   });
 });
 
+/** Whether a process with the id is still running. */
+function isRunning(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Starts a copy of `sleep` from inside `folder`, so its program lies there, and gives its process id. */
+function sleeperIn(folder: string): number {
+  mkdirSync(folder, {recursive: true});
+  const program = path.join(folder, 'sleep');
+  copyFileSync('/bin/sleep', program);
+  chmodSync(program, 0o755);
+  const child = spawn(program, ['30'], {detached: true, stdio: 'ignore'});
+  child.unref();
+  return child.pid ?? 0;
+}
+
+/** Waits until the process ends, for at most two seconds; gives whether it ended. */
+async function endedSoon(processId: number): Promise<boolean> {
+  for (let tries = 0; tries < 20 && isRunning(processId); tries += 1) {
+    await new Promise(resolve => {
+      setTimeout(resolve, 100);
+    });
+  }
+  return !isRunning(processId);
+}
+
+describe('the PowerShell kill and uninstall, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2411: Kill ends a recorded server, and removes its PID file and the installs', async () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    const started = startOn(host, parameters);
+    const serverId = Number(
+      started === 'none' ? 0 : (started.serverFacts.pid ?? 0),
+    );
+    const dataFolder = path.join(host.home, parameters.dataFolderName);
+    const outcome = factsOf(runOn(host, single('kill'), parameters), []);
+    deepStrictEqual(
+      [
+        outcome,
+        await endedSoon(serverId),
+        existsSync(path.join(dataFolder, 'bin')),
+        readdirSync(dataFolder).filter(name => name.endsWith('.pid')),
+      ],
+      [{status: 'Ok'}, true, false, []],
+    );
+  });
+
+  it('F-2411: Kill ends a process that runs from the installs without a PID file', async () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    const sleeper = sleeperIn(
+      path.join(host.home, parameters.dataFolderName, 'bin', 'old', 'bin'),
+    );
+    runOn(host, single('kill'), parameters);
+    deepStrictEqual(await endedSoon(sleeper), true);
+  });
+
+  it('F-2411: Kill leaves a process that runs from elsewhere', async () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    const sleeper = sleeperIn(path.join(host.root, 'elsewhere'));
+    try {
+      runOn(host, single('kill'), parameters);
+      deepStrictEqual(await endedSoon(sleeper), false);
+    } finally {
+      process.kill(sleeper);
+    }
+  });
+
+  it('F-2412: Uninstall ends the servers and removes the data folder', async () => {
+    const host = powershellHost();
+    const parameters = parametersFor();
+    const dataFolder = path.join(host.home, parameters.dataFolderName);
+    const sleeper = sleeperIn(path.join(dataFolder, 'bin', 'old'));
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('uninstall'), parameters), []),
+        await endedSoon(sleeper),
+        existsSync(dataFolder),
+      ],
+      [{status: 'Ok'}, true, false],
+    );
+  });
+
+  it("F-2407: with an install root, Uninstall also ends the home folder's servers and removes that data folder", async () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      installRoot: path.join(host.root, 'root'),
+    };
+    const homeData = path.join(host.home, parameters.dataFolderName);
+    const sleeper = sleeperIn(path.join(homeData, 'bin', 'old'));
+    runOn(host, single('uninstall'), parameters);
+    deepStrictEqual(
+      [await endedSoon(sleeper), existsSync(homeData)],
+      [true, false],
+    );
+  });
+
+  it('F-2411: no data folder name touches nothing', () => {
+    const host = powershellHost();
+    const parameters = {...parametersFor(), dataFolderName: ''};
+    writeFileSync(path.join(host.home, 'kept'), 'kept');
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('kill'), parameters), []),
+        existsSync(path.join(host.home, 'kept')),
+      ],
+      [{status: 'Ok'}, true],
+    );
+  });
+});
+
+/** Makes the folders under `bin/`, each with the age in seconds it is given, oldest last. */
+function installsAged(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  ages: Readonly<Record<string, number>>,
+): string {
+  const installs = path.join(host.home, parameters.dataFolderName, 'bin');
+  const now = Date.now() / 1000;
+  for (const [name, seconds] of Object.entries(ages)) {
+    mkdirSync(path.join(installs, name), {recursive: true});
+    utimesSync(path.join(installs, name), now - seconds, now - seconds);
+  }
+  return installs;
+}
+
+const COMMIT_A = 'a'.repeat(40);
+const COMMIT_B = 'b'.repeat(40);
+const COMMIT_C = 'c'.repeat(40);
+
+describe('the PowerShell cleanup, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2413: keepNewest keeps the newest installs and the current one', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'keepNewest' as const, count: 2},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 400,
+      [COMMIT_A]: 10,
+      [COMMIT_B]: 20,
+      [COMMIT_C]: 30,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [COMMIT_A, COMMIT_B, parameters.commit].sort(),
+    );
+  });
+
+  it('F-2413: onlyCurrentRemoveLeftovers removes other commits and leftovers, and keeps the rest', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'onlyCurrentRemoveLeftovers' as const},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [COMMIT_A]: 20,
+      [`${COMMIT_B}-1700000000000`]: 30,
+      notes: 40,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      ['notes', parameters.commit].sort(),
+    );
+  });
+
+  it('F-2413: onlyCurrentKeepLeftovers removes only other commits', () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+    };
+    const installs = installsAged(host, parameters, {
+      [parameters.commit]: 10,
+      [COMMIT_A]: 20,
+      [`${COMMIT_B}-1700000000000`]: 30,
+    });
+    runOn(host, single('cleanup'), parameters);
+    deepStrictEqual(
+      readdirSync(installs).sort(),
+      [`${COMMIT_B}-1700000000000`, parameters.commit].sort(),
+    );
+  });
+
+  it('F-2408: an install whose lock another step holds is left', async () => {
+    const host = powershellHost();
+    const parameters = {
+      ...parametersFor(),
+      cleanup: {kind: 'onlyCurrentKeepLeftovers' as const},
+    };
+    const installs = installsAged(host, parameters, {[COMMIT_A]: 20});
+    const lock = path.join(
+      installs,
+      COMMIT_A,
+      `${parameters.lock.filePrefix}.${COMMIT_A}`,
+    );
+    const holder = await holdingLock(lock);
+    try {
+      await runOnWhileServing(host, single('cleanup'), parameters);
+      deepStrictEqual(existsSync(path.join(installs, COMMIT_A)), true);
+    } finally {
+      holder.kill();
+    }
+  });
+});
+
+/** The key of the CLI's place in the parameters. */
+const CLI_PARAMETERS = 'cli';
+
+/** The parameters of a CLI step: the CLI's name and data folder, and its archive. */
+function cliParameters(
+  host: PowershellHost,
+  overrides: Partial<ScriptParameters> = {},
+): ScriptParameters {
+  return {
+    ...parametersFor(),
+    launcher: 'codium',
+    archiveFormat: 'zip',
+    [CLI_PARAMETERS]: {
+      name: 'codium-abc123',
+      dataFolder: path.join(host.root, 'cli-data'),
+    },
+    ...overrides,
+  };
+}
+
+/** Where the CLI is installed for the parameters on the host. */
+function cliFileOf(host: PowershellHost, parameters: ScriptParameters): string {
+  return path.join(
+    host.home,
+    parameters.dataFolderName,
+    parameters.cli?.name ?? '',
+  );
+}
+
+describe('the PowerShell CLI install, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2403: the CLI is unpacked into a stage and its program moved into the data folder', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: serverArchive(host, 'codium'),
+    });
+    const outcome = factsOf(runOn(host, single('installCli'), parameters), [
+      'cli.path',
+    ]);
+    deepStrictEqual(
+      [
+        outcome,
+        readFileSync(cliFileOf(host, parameters), 'utf8'),
+        existsSync(path.join(host.home, parameters.dataFolderName, 'cli-bin')),
+      ],
+      [
+        {status: 'Ok', 'cli.path': cliFileOf(host, parameters)},
+        'launcher',
+        false,
+      ],
+    );
+  });
+
+  it('F-2403: an installed CLI is kept', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: path.join(host.root, 'absent.zip'),
+    });
+    mkdirSync(path.dirname(cliFileOf(host, parameters)), {recursive: true});
+    writeFileSync(cliFileOf(host, parameters), 'kept');
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('installCli'), parameters), []),
+        readFileSync(cliFileOf(host, parameters), 'utf8'),
+      ],
+      [{status: 'Ok'}, 'kept'],
+    );
+  });
+
+  it('F-2403: an archive without the CLI fails to unpack, and the stage is cleared', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host, {
+      archivePath: serverArchive(host, 'other'),
+    });
+    deepStrictEqual(
+      [
+        factsOf(runOn(host, single('installCli'), parameters), []),
+        existsSync(path.join(host.home, parameters.dataFolderName, 'cli-bin')),
+      ],
+      [{status: 'UnpackFailed'}, false],
+    );
+  });
+
+  it('F-2403: a CLI download answered 404 fails, and says so', async () => {
+    const {server, address} = await serving(404, Buffer.from('missing'));
+    try {
+      const host = powershellHost();
+      deepStrictEqual(
+        factsOf(
+          await runOnWhileServing(
+            host,
+            single('installCli'),
+            cliParameters(host, {archiveUrl: address}),
+          ),
+          ['server.downloadStatus'],
+        ),
+        {status: 'ServerDownloadFailed', 'server.downloadStatus': '404'},
+      );
+    } finally {
+      server.close();
+    }
+  });
+});
+
+/** The token's stand-ins for `entries`, and the parent `parent` unless the native query is to run. */
+function cliStub(
+  host: PowershellHost,
+  entries: readonly StandInEntry[],
+  parent: number | 'native',
+): string {
+  return [
+    tokenStub(host, entries),
+    ...(parent === 'native'
+      ? []
+      : [`function Get-ParentProcessId { return ${String(parent)} }`]),
+  ].join('\n');
+}
+
+/** A stand-in CLI that names its arguments in its log, says it listens on 4243, and stays up a while. */
+function standInCli(
+  host: PowershellHost,
+  parameters: ScriptParameters,
+  body: string,
+): void {
+  const cliFile = cliFileOf(host, parameters);
+  mkdirSync(path.dirname(cliFile), {recursive: true});
+  writeFileSync(cliFile, `#!/bin/sh\n${body}\n`);
+  chmodSync(cliFile, 0o755);
+}
+
+const READY_CLI = [
+  'echo "args: $*"',
+  'echo "Listening on 127.0.0.1:4243"',
+  'sleep 5',
+].join('\n');
+
+/** The Windows variables with the CLI's token requirement set. */
+const CLI_VARIABLES = {...WINDOWS_VARIABLES, VSCODE_CLI_REQUIRE_TOKEN: '1'};
+
+/** The CLI's token file for the parameters. */
+function tokenOf(parameters: ScriptParameters): string {
+  return path.join(parameters.cli?.dataFolder ?? '', 'connection-token');
+}
+
+/** The CLI's own log for the parameters on the host. */
+function cliLogOf(host: PowershellHost, parameters: ScriptParameters): string {
+  return readFileSync(
+    path.join(
+      host.home,
+      parameters.dataFolderName,
+      `.cli.${parameters.commit}.log`,
+    ),
+    'utf8',
+  );
+}
+
+/**
+ * A CLI start on a new host with a ready stand-in CLI, a token file holding `token` beforehand (or none), the token ACL
+ * `entries` and the parent `parent`; gives the host, the parameters and the result block.
+ */
+function startedCli(
+  token: string | undefined,
+  entries: Parameters<typeof cliStub>[1],
+  parent: Parameters<typeof cliStub>[2],
+): {
+  host: PowershellHost;
+  parameters: ScriptParameters;
+  block: ResultBlock | 'none';
+} {
+  const host = powershellHost();
+  const parameters = cliParameters(host);
+  standInCli(host, parameters, READY_CLI);
+  if (token !== undefined) {
+    mkdirSync(path.dirname(tokenOf(parameters)), {recursive: true});
+    writeFileSync(tokenOf(parameters), token);
+  }
+  return {
+    host,
+    parameters,
+    block: runOn(
+      host,
+      single('startCli'),
+      parameters,
+      CLI_VARIABLES,
+      cliStub(host, entries, parent),
+    ),
+  };
+}
+
+/** Whether the token file holds a new 32-character secret. */
+function isNewToken(parameters: ScriptParameters): boolean {
+  return /^[A-Za-z0-9]{32}$/.test(readFileSync(tokenOf(parameters), 'utf8'));
+}
+
+describe('the PowerShell CLI start, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2403: the CLI starts with a new token whose ACL is set before the secret, and with its native parent', () => {
+    const {host, parameters, block} = startedCli(
+      undefined,
+      THREE_PRINCIPALS,
+      4242,
+    );
+    deepStrictEqual(
+      [
+        factsOf(block, ['cli.port', 'cli.parent']),
+        isNewToken(parameters),
+        readFileSync(aclRecordOf(host), 'utf8').trim().split('\n'),
+        cliLogOf(host, parameters).includes('--parent-process-id 4242'),
+      ],
+      [
+        {status: 'Ok', 'cli.port': '4243', 'cli.parent': 'native'},
+        true,
+        [
+          'protected True',
+          'length 0',
+          `rule ${USER_SID} FullControl Allow`,
+          'rule S-1-5-18 FullControl Allow',
+          'rule S-1-5-32-544 FullControl Allow',
+        ],
+        true,
+      ],
+    );
+  });
+
+  it('F-2403: where the native parent query fails, the CLI starts without the flag, and says so', () => {
+    const {host, parameters, block} = startedCli(
+      undefined,
+      THREE_PRINCIPALS,
+      'native',
+    );
+    deepStrictEqual(
+      [
+        factsOf(block, ['cli.parent']),
+        cliLogOf(host, parameters).includes('--parent-process-id'),
+      ],
+      [{status: 'Ok', 'cli.parent': 'none'}, false],
+    );
+  });
+
+  it('F-2403: a token only the user, SYSTEM and Administrators may read is kept, a deny entry and a non-reading right ignored', () => {
+    const {parameters} = startedCli(
+      'kept-token',
+      [
+        ...THREE_PRINCIPALS,
+        {principal: 'S-1-5-32-545', rights: 2032127, type: 'Deny'},
+        {principal: 'S-1-5-32-545', rights: 0x100000, type: 'Allow'},
+      ],
+      0,
+    );
+    deepStrictEqual(readFileSync(tokenOf(parameters), 'utf8'), 'kept-token');
+  });
+
+  it('F-2403: a token another principal may read is rewritten, compared by SID', () => {
+    const {parameters} = startedCli(
+      'loose-token',
+      [
+        ...THREE_PRINCIPALS,
+        {principal: 'S-1-5-32-545', rights: 0x1, type: 'Allow'},
+      ],
+      0,
+    );
+    deepStrictEqual(isNewToken(parameters), true);
+  });
+
+  it('F-2403: no token required, no CLI, or a CLI that ends early fails the start', () => {
+    const host = powershellHost();
+    const parameters = cliParameters(host);
+    const stub = cliStub(host, THREE_PRINCIPALS, 0);
+    const missing = factsOf(
+      runOn(host, single('startCli'), parameters, CLI_VARIABLES, stub),
+      [],
+    );
+    standInCli(host, parameters, 'exit 1');
+    deepStrictEqual(
+      [
+        missing,
+        factsOf(
+          runOn(host, single('startCli'), parameters, WINDOWS_VARIABLES, stub),
+          ['cli.tokenMissing'],
+        ),
+        factsOf(
+          runOn(host, single('startCli'), parameters, CLI_VARIABLES, stub),
+          [],
+        ),
+      ],
+      [
+        {status: 'ServerFailedToStart'},
+        {status: 'ServerFailedToStart', 'cli.tokenMissing': 'yes'},
+        {status: 'ServerFailedToStart'},
+      ],
+    );
+  });
+});
+
+describe('the PowerShell CLI stop, run under pwsh', function () {
+  this.timeout(60000);
+
+  it('F-2403: the recorded CLI is ended while it is still the CLI, and nothing else is', async () => {
+    const host = powershellHost();
+    const base = cliParameters(host);
+    const cliFile = cliFileOf(host, base);
+    mkdirSync(path.dirname(cliFile), {recursive: true});
+    copyFileSync('/bin/sleep', cliFile);
+    chmodSync(cliFile, 0o755);
+    const cliProgram = spawn(cliFile, ['30'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    cliProgram.unref();
+    const other = sleeperIn(path.join(host.root, 'other'));
+    try {
+      const outcomes = [cliProgram.pid ?? 0, other, 'x1'].map(processId =>
+        factsOf(
+          runOn(host, single('stopCli'), {
+            ...base,
+            [CLI_PARAMETERS]: {
+              ...(base.cli ?? {name: '', dataFolder: ''}),
+              stopProcessId: processId as number,
+            },
+          }),
+          ['cli.stopped'],
+        ),
+      );
+      deepStrictEqual(
+        [outcomes, await endedSoon(cliProgram.pid ?? 0), isRunning(other)],
+        [
+          [
+            {status: 'Ok', 'cli.stopped': 'yes'},
+            {status: 'Ok', 'cli.stopped': 'no'},
+            {status: 'Ok', 'cli.stopped': 'no'},
+          ],
+          true,
+          true,
+        ],
+      );
+    } finally {
+      process.kill(other);
+    }
+  });
+});
+
 describe('the PowerShell bootstrap script, as text', () => {
   it('F-2701: a step it does not have yet still answers with a failure', () => {
     deepStrictEqual(
-      scriptFor(single('kill'), 'powershell', parametersFor()).includes(
-        'status=ServerFailedToStart',
-      ),
+      scriptFor(
+        {installMode: 'stepwise', step: 'prepare'},
+        'powershell',
+        parametersFor(),
+      ).includes('status=ServerFailedToStart'),
       true,
     );
   });
 
   it('F-2701: rendering a step it does not have is a programming error', () => {
     throws(
-      () => powershellScript(single('kill'), parametersFor()),
-      /no kill step/,
+      () =>
+        powershellScript(
+          {installMode: 'stepwise', step: 'prepare'},
+          parametersFor(),
+        ),
+      /no prepare step/,
     );
   });
 
@@ -1126,6 +1747,56 @@ describe('the PowerShell bootstrap script, as text', () => {
     deepStrictEqual(
       scriptFor(single('probe'), 'powershell', parametersFor()).length < 8192,
       true,
+    );
+  });
+});
+
+describe('the Windows arguments of the PowerShell script, under pwsh', function () {
+  this.timeout(30000);
+
+  /** Values a command line splits wrongly unless they are quoted as the C runtime reads them. */
+  const VALUES = [
+    'plain',
+    'a b',
+    'say "hi"',
+    'a\\"b',
+    'C:\\dir\\',
+    'C:\\dir\\file',
+    '',
+  ];
+
+  it('ADR-0013: ConvertTo-WindowsArgument quotes as windowsArgument does, and .NET splits the joined line back into the values', () => {
+    const script = [
+      ...POWERSHELL_FUNCTIONS.common,
+      `$Values = @(${VALUES.map(value => powershellQuote(value)).join(', ')})`,
+      '$Quoted = @($Values | ForEach-Object { ConvertTo-WindowsArgument $_ })',
+      '$Quoted | ForEach-Object { [Console]::Out.Write(\'quoted \' + $_ + "`n") }',
+      "$Start = New-Object System.Diagnostics.ProcessStartInfo 'printf'",
+      "$Start.Arguments = (ConvertTo-WindowsArgument '%s|') + ' ' + ($Quoted -join ' ')",
+      '$Start.UseShellExecute = $false',
+      '$Start.RedirectStandardOutput = $true',
+      '$Child = [System.Diagnostics.Process]::Start($Start)',
+      '[Console]::Out.Write(\'split \' + $Child.StandardOutput.ReadToEnd() + "`n")',
+      '$Child.WaitForExit()',
+    ].join('\n');
+    const host = powershellHost();
+    const file = path.join(host.root, 'arguments.ps1');
+    writeFileSync(file, script);
+    const pwshRun = spawnSync(
+      'pwsh',
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', file],
+      {encoding: 'utf8'},
+    );
+    const lines = pwshRun.stdout.split('\n');
+    deepStrictEqual(
+      [
+        lines.filter(line => line.startsWith('quoted ')),
+        lines.find(line => line.startsWith('split ')),
+      ],
+      [
+        VALUES.map(value => `quoted ${windowsArgument(value)}`),
+        `split ${VALUES.map(value => `${value}|`).join('')}`,
+      ],
     );
   });
 });

@@ -130,22 +130,32 @@ describe('the host channel over the shared session', () => {
     );
   });
 
-  it('refuses the PowerShell interpreter, and a name no variable can have, before it runs anything', async () => {
-    const shared = channel();
-    const outcomes = [
-      await shared.runScript(
-        {...REQUEST, interpreter: 'powershell'},
-        () => undefined,
-      ),
-      await shared.runScript(
-        {...REQUEST, environment: {'a b': 'x'}},
-        () => undefined,
-      ),
-    ];
-    deepStrictEqual(
-      [outcomes.map(outcome => outcome.kind), runs.length],
-      [['failed', 'failed'], 0],
+  it('refuses the PowerShell interpreter with its reason, and writes nothing to the session', async () => {
+    const outcome = await channel().runScript(
+      {...REQUEST, interpreter: 'powershell'},
+      () => undefined,
     );
+    deepStrictEqual(
+      [outcome, runs.length],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'spawnFailed',
+            detail: 'the shared session runs no powershell script yet',
+          },
+        },
+        0,
+      ],
+    );
+  });
+
+  it('refuses a name no variable can have before it runs anything', async () => {
+    const outcome = await channel().runScript(
+      {...REQUEST, environment: {'a b': 'x'}},
+      () => undefined,
+    );
+    deepStrictEqual([outcome.kind, runs.length], ['failed', 0]);
   });
 
   it('gives a text input to the session as base64, and none for an empty text', async () => {

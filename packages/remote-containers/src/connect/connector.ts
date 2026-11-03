@@ -143,6 +143,10 @@ export interface HeldConnection {
   remoteWorkspaceFolder: string;
   /** The engine the connection was made with, whatever `dev.containers.dockerPath` says now. */
   engine: EngineHost;
+  /** The local path of the configuration file the connection was made for. */
+  configFile: string;
+  /** Whether this connection created the container: a first build, a rebuild, or a build after it was removed. */
+  created: boolean;
 }
 
 /** The connector, with the identity the window's label reads. */
@@ -309,6 +313,10 @@ interface Held {
   containerId: string;
   startedAt: string;
   engine: EngineHost;
+  /** The local path of the configuration file the connection was made for. */
+  configFile: string;
+  /** Whether the connect that made the connection created the container. */
+  created: boolean;
   channel: HostChannel;
   server: StartedContainerServer;
   relay: OpenRelay;
@@ -1213,6 +1221,8 @@ export function containerConnectorOf(
           ? ''
           : started.startedAt,
       engine,
+      configFile: folder.configFile.fsPath ?? folder.configFile.path,
+      created: prepared.created,
       channel,
       server,
       relay,
@@ -1305,6 +1315,8 @@ export function containerConnectorOf(
             hostPath: held.hostPath,
             remoteWorkspaceFolder: held.remoteWorkspaceFolder,
             engine: held.engine,
+            configFile: held.configFile,
+            created: held.created,
           },
     announceShutdown: authority => {
       const decoded =

@@ -180,6 +180,8 @@
   "Don't show again for the current workspace or for any workspace?": "Don't show again for the current workspace or for any workspace?",
   "Any Workspace": "Any Workspace",
   "Current Workspace": "Current Workspace",
+  "Configuration file(s) changed: {0}. The container might need to be rebuilt to apply the changes.": "Configuration file(s) changed: {0}. The container might need to be rebuilt to apply the changes.",
+  "Rebuild": "Rebuild",
   "You need to first save your workspace in a folder containing all its workspace folders.": "You need to first save your workspace in a folder containing all its workspace folders.",
   "Folder '{0}' is not a subfolder of shared root folder '{1}'.": "Folder '{0}' is not a subfolder of shared root folder '{1}'.",
   "Problems loading workspace file {0}: {1}": "Problems loading workspace file {0}: {1}",

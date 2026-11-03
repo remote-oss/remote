@@ -4,14 +4,10 @@
  * line feed, so the result block reads the same as the POSIX script's.
  */
 
+import {powershellQuote} from 'lib-host';
 import {PROGRESS_PREFIX} from './progress-line.ts';
 import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 import type {FunctionRole} from './steps.ts';
-
-/** Quote a value for PowerShell as one single-quoted string, whatever it holds. */
-export function powershellQuote(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
 
 /** The functions every step uses: the result block, facts, programs, times and the data folder's places. */
 const COMMON_FUNCTIONS: readonly string[] = [
@@ -64,6 +60,9 @@ const COMMON_FUNCTIONS: readonly string[] = [
   "    $Launch.WindowStyle = 'Hidden'",
   '  }',
   '  return Start-Process @Launch',
+  '}',
+  'function ConvertTo-WindowsArgument([string]$Value) {',
+  `  return '"' + ([regex]::Replace($Value, '(\\\\*)"', '$1$1\\"') -replace '(\\\\+)$', '$1$1') + '"'`,
   '}',
   'function Get-NowSeconds {',
   '  return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()',
@@ -322,6 +321,110 @@ const SECRET_TOKEN_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * Ends every server of the data folder: each one a PID file records, and every process whose program lies under the
+ * folder's `bin` or `cli/servers`, with its process tree (`taskkill /T` where Windows has it). Only the user's own
+ * processes show a program path, so no other user's process is touched.
+ */
+const STOP_FUNCTIONS: readonly string[] = [
+  'function Stop-ServerTree([int]$ServerId) {',
+  "  if (Test-Program 'taskkill.exe') {",
+  '    & taskkill.exe /PID $ServerId /T /F *> $null',
+  '  } else {',
+  '    Stop-Process -Id $ServerId -Force -ErrorAction SilentlyContinue',
+  '  }',
+  '}',
+  'function Stop-Servers {',
+  "  foreach ($Recorded in @(Get-ChildItem -LiteralPath $DATA_DIR -Filter '.*.pid' -Force -File -ErrorAction SilentlyContinue)) {",
+  '    $ServerProcess = Get-RecordedServer $Recorded.FullName',
+  '    if ($null -ne $ServerProcess) {',
+  '      Stop-ServerTree $ServerProcess.Id',
+  '    }',
+  '  }',
+  '  $Separator = [System.IO.Path]::DirectorySeparatorChar',
+  "  $Prefixes = @(([System.IO.Path]::Combine($DATA_DIR, 'bin') + $Separator), ([System.IO.Path]::Combine($DATA_DIR, 'cli', 'servers') + $Separator))",
+  '  foreach ($Running in @(Get-Process -ErrorAction SilentlyContinue)) {',
+  '    $Program = [string]$Running.Path',
+  "    if ($Running.Id -eq $PID -or $Program -eq '') {",
+  '      continue',
+  '    }',
+  '    foreach ($Prefix in $Prefixes) {',
+  '      if ($Program.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {',
+  '        Stop-ServerTree $Running.Id',
+  '        break',
+  '      }',
+  '    }',
+  '  }',
+  '}',
+];
+
+/** The kind of a folder under `bin/`: a 40-character commit, a `<commit>-<suffix>` leftover, or something else. */
+const FOLDER_KIND_FUNCTIONS: readonly string[] = [
+  'function Get-FolderKind([string]$Name) {',
+  "  if ($Name -cmatch '^[0-9a-f]{40}$') {",
+  "    return 'commit'",
+  '  }',
+  "  if ($Name -cmatch '^[0-9a-f]{40}-') {",
+  "    return 'leftover'",
+  '  }',
+  "  return 'other'",
+  '}',
+  'function Remove-Install([string]$Name) {',
+  '  if ((Enter-Lock $Name) -ne 0) {',
+  '    return',
+  '  }',
+  "  Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, 'bin', $Name)) -Recurse -Force -ErrorAction SilentlyContinue",
+  "  foreach ($Suffix in @('log', 'pid', 'token', 'err.log', 'socket.log', 'socket.pid', 'socket.token')) {",
+  "    Remove-Item -LiteralPath ([System.IO.Path]::Combine($DATA_DIR, '.' + $Name + '.' + $Suffix)) -Force -ErrorAction SilentlyContinue",
+  '  }',
+  '  Exit-Lock',
+  '}',
+];
+
+/**
+ * The CLI start's functions: its ready port in the log, and its parent process. The parent comes from a native query,
+ * and is none where the host refuses to compile it.
+ */
+const CLI_START_FUNCTIONS: readonly string[] = [
+  'function Get-CliReadyPort {',
+  "  $Found = Select-String -LiteralPath $CliLog -Pattern '^Listening on 127\\.0\\.0\\.1:([0-9]+)$' -ErrorAction SilentlyContinue | Select-Object -First 1",
+  '  if ($null -eq $Found) {',
+  "    return ''",
+  '  }',
+  '  return $Found.Matches[0].Groups[1].Value',
+  '}',
+  'function Get-ParentProcessId {',
+  '  try {',
+  "    Add-Type -ErrorAction Stop -TypeDefinition @'",
+  'using System;',
+  'using System.Runtime.InteropServices;',
+  'public static class RemoteOssParentProcess {',
+  '  [StructLayout(LayoutKind.Sequential)]',
+  '  private struct BasicInformation {',
+  '    public IntPtr ExitStatus;',
+  '    public IntPtr PebBaseAddress;',
+  '    public IntPtr AffinityMask;',
+  '    public IntPtr BasePriority;',
+  '    public IntPtr UniqueProcessId;',
+  '    public IntPtr InheritedFromUniqueProcessId;',
+  '  }',
+  '  [DllImport("ntdll.dll")]',
+  '  private static extern int NtQueryInformationProcess(IntPtr process, int informationClass, ref BasicInformation information, int length, out int returned);',
+  '  public static long Of(IntPtr process) {',
+  '    BasicInformation information = new BasicInformation();',
+  '    int returned;',
+  '    int status = NtQueryInformationProcess(process, 0, ref information, Marshal.SizeOf(information), out returned);',
+  '    return status == 0 ? information.InheritedFromUniqueProcessId.ToInt64() : 0;',
+  '  }',
+  '}',
+  "'@",
+  '    return [long][RemoteOssParentProcess]::Of((Get-Process -Id $PID).Handle)',
+  '  } catch {',
+  '    return 0',
+  '  }',
+  '}',
+];
+
 /** Ends the script with a status after releasing the lock it holds. */
 const LEAVE_FUNCTIONS: readonly string[] = [
   'function Exit-Step([string]$Status) {',
@@ -331,8 +434,9 @@ const LEAVE_FUNCTIONS: readonly string[] = [
 ];
 
 /**
- * The text of each function role in the PowerShell script. BusyBox doesn't exist on Windows, so its role is empty; the
- * other empty roles are filled as their steps are built.
+ * The text of each function role in the PowerShell script. BusyBox doesn't exist on Windows, and the stop's path scan
+ * covers a server tree's processes, so those roles are empty; the other empty roles are filled as their steps are
+ * built.
  */
 export const POWERSHELL_FUNCTIONS: Readonly<
   Record<FunctionRole, readonly string[]>
@@ -347,8 +451,8 @@ export const POWERSHELL_FUNCTIONS: Readonly<
   process: PROCESS_FUNCTIONS,
   secretToken: SECRET_TOKEN_FUNCTIONS,
   serverTree: [],
-  stop: [],
-  cliPort: [],
-  folderKind: [],
+  stop: STOP_FUNCTIONS,
+  cliStart: CLI_START_FUNCTIONS,
+  folderKind: FOLDER_KIND_FUNCTIONS,
   tree: [],
 };

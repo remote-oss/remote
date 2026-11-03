@@ -1873,6 +1873,24 @@ describe('the container connector: cancelling (card containers-08)', () => {
     deepStrictEqual(heard, ['held', 'none']);
   });
 
+  it('F-0303 §9, card containers-141: the held connection names the configuration file it was made for, and says whether the connect created the container', async () => {
+    const created = sceneOf();
+    await connected(created);
+    const found = sceneOf();
+    found.outcome = {...READY, created: false};
+    await connected(found);
+    deepStrictEqual(
+      [created, found].map(scene => {
+        const held = scene.connector.heldConnection();
+        return [held?.configFile, held?.created];
+      }),
+      [
+        ['/work/proj/.devcontainer/devcontainer.json', true],
+        ['/work/proj/.devcontainer/devcontainer.json', false],
+      ],
+    );
+  });
+
   it('F-0901 6.21 step 4, card containers-30: the held connection names the container, its folders and the engine the connect used, and it is nothing before the connect and after a cancel', async () => {
     const scene = sceneOf();
     const before = scene.connector.heldConnection();
