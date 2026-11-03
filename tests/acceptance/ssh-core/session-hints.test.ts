@@ -100,6 +100,16 @@ function descriptions(): Record<string, string> {
   );
 }
 
+/** The hosts the log hint of `record` shows a resolve of: each resolve's own text starts at its own resolver line. */
+function logOf(record: HintRecords[number]): {resolves: string[]} {
+  const text = record.hints.find(hint => hint.kind === 'log')?.text ?? '';
+  return {
+    resolves: [...text.matchAll(/Resolving ssh-remote\+(\S+),/gu)].map(
+      found => found[1] ?? '',
+    ),
+  };
+}
+
 /** Waits until the store holds `count` records, and gives them. */
 async function recordsWhen(count: number): Promise<HintRecords> {
   await waitFor(
@@ -223,7 +233,7 @@ describe('the session record of every resolve (card connect-135)', function () {
     seen.push({count: (await recordsWhen(1)).length, starts: []});
     await openWindow('harness', 'c135-b2');
     try {
-      const both = await recordsWhen(2);
+      const both = await recordsWithLog(2);
       seen.push({
         count: both.length,
         starts: both.map(record => record.started),
@@ -248,8 +258,16 @@ describe('the session record of every resolve (card connect-135)', function () {
         last[0]?.started === seen[1]?.starts[1],
         last.every(record => record.started !== '' && record.hints.length > 0),
         (last[0]?.started ?? '') < (last[1]?.started ?? ''),
+        last.map(record => logOf(record)),
       ],
-      [[1, 2], 2, true, true, true],
+      [
+        [1, 2],
+        2,
+        true,
+        true,
+        true,
+        [{resolves: ['harness']}, {resolves: ['nowhere']}],
+      ],
     );
   });
 

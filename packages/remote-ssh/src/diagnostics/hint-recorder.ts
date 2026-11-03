@@ -31,8 +31,10 @@ export interface HintRecorderEnvironment {
   now: () => Date;
   /** The environment hints a new record starts with, read as the settings are then. */
   environmentHints: () => readonly EnvironmentHint[];
-  /** The session's log text now, from its first line, as the log hint keeps it. */
-  logText: () => string;
+  /** How many lines the log holds now: where the log text of a resolve that begins now starts. */
+  logMark: () => number;
+  /** The log's text from its `from`-th line on, as the log hint keeps it. */
+  logText: (from: number) => string;
 }
 
 /** The recorder of one window's hints. */
@@ -93,6 +95,7 @@ export function hintRecorderOf(
 ): HintRecorder {
   let started = environment.now().toISOString();
   let begun = false;
+  let logFrom = 0;
   let open = false;
   let writing: PromiseLike<void> = Promise.resolve();
   /**
@@ -127,6 +130,7 @@ export function hintRecorderOf(
       started = environment.now().toISOString();
       begun = true;
       open = true;
+      logFrom = environment.logMark();
       append(started, [...environment.environmentHints()], true);
     },
     record: hint => {
@@ -154,7 +158,11 @@ export function hintRecorderOf(
     end: () => {
       if (open) {
         open = false;
-        append(started, [{kind: 'log', text: environment.logText()}], false);
+        append(
+          started,
+          [{kind: 'log', text: environment.logText(logFrom)}],
+          false,
+        );
       }
     },
   };

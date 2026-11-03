@@ -26,8 +26,10 @@ export interface LogChannel {
   readonly logger: Logger;
   /** Shows the panel with the channel selected and the focus in it, as often as asked. */
   reveal(): void;
-  /** Everything the channel has been given, line by line, from its first line. */
-  text(): string;
+  /** How many lines the channel has been given so far. */
+  mark(): number;
+  /** The lines the channel was given from the `from`-th on (from the first by default), one to a line. */
+  text(from?: number): string;
   dispose(): void;
 }
 
@@ -89,7 +91,8 @@ export function openLogChannel(
     reveal: () => {
       channel.show(false);
     },
-    text: () => written.join('\n'),
+    mark: () => written.length,
+    text: (from = 0) => written.slice(from).join('\n'),
     dispose: () => {
       channel.dispose();
     },

@@ -110,8 +110,10 @@ export interface SurfaceContext {
   documentation: () => string;
   /** The environment hints a new record starts with, read as the settings are now. */
   environmentHints: () => readonly EnvironmentHint[];
-  /** The text of the window's log from its first line, which a record keeps when its resolve step ends. */
-  logText: () => string;
+  /** How many lines the window's log holds now: where a resolve's own text begins. */
+  logMark: () => number;
+  /** The text of the window's log from its `from`-th line on, which a record keeps when its resolve step ends. */
+  logText: (from: number) => string;
   /** The window's log, where a notice that could not be shown is noted. */
   logger: Logger;
   /** Makes these the only variables the window's terminals get from the extension. */
@@ -189,6 +191,7 @@ export function editorSurfacesOf(
       documentation: context.documentation,
       now: () => new Date(),
       environmentHints: context.environmentHints,
+      logMark: context.logMark,
       logText: context.logText,
     }),
     licenceModal: licenceModalOf(

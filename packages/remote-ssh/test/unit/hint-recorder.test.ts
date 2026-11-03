@@ -20,7 +20,7 @@ const HINT: FailureHint = {
 };
 
 /** A recorder over an in-memory state, with the clock at `times` in turn. */
-function recording(times: string[]) {
+function recording(times: string[], marks: number[] = []) {
   const stored: {value?: HintStore} = {};
   const keys: string[] = [];
   let tick = 0;
@@ -38,7 +38,8 @@ function recording(times: string[]) {
       documentation: () => 'https://docs.example/ssh',
       now: () => new Date(times[tick++] ?? times.at(-1) ?? 0),
       environmentHints: () => ENVIRONMENT,
-      logText: () => 'the log\nlines',
+      logMark: () => marks.shift() ?? 0,
+      logText: from => `from ${String(from)}: the log\nlines`,
     },
   );
   return {recorder, stored, keys};
@@ -140,6 +141,7 @@ describe('the hint recorder (card connect-119)', () => {
         documentation: () => 'https://docs.example/ssh',
         now: () => new Date('2026-11-02T00:00:00Z'),
         environmentHints: () => [],
+        logMark: () => 0,
         logText: () => '',
       },
     );
@@ -244,7 +246,7 @@ describe('the hint recorder (card connect-119)', () => {
         ['environment', 'two'],
         ['error', 'AllowTcpForwardingDisabled', 5],
         ['error', 'Unnumbered', undefined],
-        ['log', 'the log\nlines'],
+        ['log', 'from 0: the log\nlines'],
       ],
     );
   });
@@ -337,6 +339,24 @@ describe('the hint recorder (card connect-119)', () => {
     deepStrictEqual(
       current()?.records.map(record => record.started),
       ['2026-11-02T00:00:02.000Z'],
+    );
+  });
+
+  it('F-2605.AC-17: the log hint is the text of its own resolve, from the line where the record began', async () => {
+    const {recorder, stored} = recording(
+      ['2026-11-02T00:00:00Z', '2026-11-02T00:00:01Z', '2026-11-02T00:00:02Z'],
+      [4, 11],
+    );
+    recorder.begin();
+    recorder.end();
+    recorder.begin();
+    recorder.end();
+    await settled();
+    deepStrictEqual(
+      stored.value?.records.map(record =>
+        record.hints.flatMap(hint => (hint.kind === 'log' ? [hint.text] : [])),
+      ),
+      [['from 4: the log\nlines'], ['from 11: the log\nlines']],
     );
   });
 });

@@ -353,9 +353,12 @@ describe('the activation', () => {
     const result = await activateRemoteSsh(inputs);
     deepStrictEqual(
       result.kind === 'serving'
-        ? result.logText().split('\n')[0]?.endsWith('Log level: debug')
+        ? [
+            result.logText(0).split('\n')[0]?.endsWith('Log level: debug'),
+            result.logText(result.logMark()),
+          ]
         : undefined,
-      true,
+      [true, ''],
     );
   });
 

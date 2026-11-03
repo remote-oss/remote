@@ -309,7 +309,8 @@ export async function activate(
       revealLog: () => {
         result.revealLog();
       },
-      logText: () => result.logText(),
+      logMark: () => result.logMark(),
+      logText: from => result.logText(from),
       logger: result.logger,
       help: helpHandlers(help, helpLinksOf(manifest), extension),
       resolversGranted: result.proposals.granted.includes('resolvers'),
@@ -425,8 +426,10 @@ async function surfaceAdapters(): Promise<EditorAdapters> {
 /** What the connect takes from the activation that served. */
 interface ServedActivation {
   revealLog(): void;
-  /** The log's text from its first line. */
-  logText(): string;
+  /** How many lines the log holds now. */
+  logMark(): number;
+  /** The log's text from its `from`-th line on. */
+  logText(from: number): string;
   logger: Logger;
   help: HelpHandlers;
   resolversGranted: boolean;
@@ -486,7 +489,8 @@ async function registerConnectOf(
             architecture: process.arch,
           }),
         ),
-      logText: () => served.logText(),
+      logMark: () => served.logMark(),
+      logText: from => served.logText(from),
       logger: served.logger,
       applyTerminalEnvironment: terminalEnvironmentOf(
         context.environmentVariableCollection,

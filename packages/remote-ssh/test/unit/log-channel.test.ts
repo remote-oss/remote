@@ -130,7 +130,10 @@ describe('the log channel', () => {
       () => localTime(9, 5, 7, 42),
     );
     logChannel.logger.info('later');
-    deepStrictEqual(logChannel.text(), channel.lines.join('\n'));
+    deepStrictEqual(
+      [logChannel.text(), logChannel.mark(), logChannel.text(4)],
+      [channel.lines.join('\n'), 5, channel.lines[4]],
+    );
   });
 
   it('ends the channel when it is disposed', () => {

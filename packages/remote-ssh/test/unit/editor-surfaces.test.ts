@@ -98,6 +98,7 @@ function surfacesWith(
     hintState: {get: () => undefined, update: () => Promise.resolve()},
     documentation: () => 'https://docs.example/ssh',
     environmentHints: () => [],
+    logMark: () => 0,
     logText: () => '',
     help: {
       getHelp: {
