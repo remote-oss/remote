@@ -42,6 +42,8 @@ export type FailedKind =
   /** Reserved for the client-side lock on the host; no step reports it yet. */
   | 'lockTimeout'
   | 'retriesExhausted'
+  /** The host cannot serve an exec server: the setting is off, there is no command-line program for it, or it could not be set up. */
+  | 'execServerUnavailable'
   | 'cancelled';
 
 /** The kind of a failure and the reason it gives, before the connect adds what it knows around it. */
@@ -404,6 +406,33 @@ function startReason(
     : undefined;
 }
 
+/** The refusal of an exec server when `remote.SSH.useExecServer` is off. */
+export const EXEC_SERVER_SETTING_OFF: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is off: the setting remote.SSH.useExecServer is false.',
+  },
+};
+
+/** The refusal of an exec server for a host that has no command-line program build. */
+export const EXEC_SERVER_NO_CLI: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is not available for this host: there is no command-line program for its platform.',
+  },
+};
+
+/** The refusal of an exec server whose command-line program could not be set up on the host; `cause` is for the log. */
+export function execServerNotSetUp(cause: string): FailureDetail {
+  return {
+    kind: 'execServerUnavailable',
+    reason: {
+      text: 'The exec server could not be set up on the host: its command-line program did not start.',
+    },
+    logDetail: cause,
+  };
+}
+
 /** The failure of the server start. */
 export function ofStart(
   failure: StartFailure,
@@ -461,6 +490,7 @@ export const KIND_MAY_RECOVER: Readonly<Record<FailedKind, boolean>> = {
   preconnectFailed: false,
   lockTimeout: false,
   retriesExhausted: false,
+  execServerUnavailable: false,
   cancelled: false,
 };
 

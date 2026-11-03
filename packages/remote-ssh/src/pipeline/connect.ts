@@ -10,9 +10,17 @@
 import type {Connected, Failed} from 'lib-authority';
 import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
-import type {ProbedHost, StartedServer, TransferPhase} from 'lib-server';
+import type {
+  CliControl,
+  ProbedHost,
+  StartedServer,
+  TransferPhase,
+} from 'lib-server';
 import {
   CONNECT_WAIT_TIMEOUT,
+  EXEC_SERVER_NO_CLI,
+  EXEC_SERVER_SETTING_OFF,
+  execServerNotSetUp,
   type FailureContext,
   type FailureDetail,
   failedWith,
@@ -21,7 +29,7 @@ import {
   ofStart,
   ofTransfer,
 } from './failure.ts';
-import {connectOverCli} from '../cli/cli-connect.ts';
+import {connectOverCli, holdOverCli} from '../cli/cli-connect.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
 import {
   hostPlatformLine,
@@ -146,6 +154,8 @@ export type TransportEvent = 'lost' | 'closed';
 /** A connect that worked: what the window gets, and the end of the connection when the window ends. */
 export interface Connection {
   connected: Connected;
+  /** The control connection of the command-line program the window's bridge rides on; none for a direct install. */
+  control?: CliControl;
   /** The TCP port the server listens on at the host's loopback. */
   serverPort: number;
   /** The window's agent link and display plans, which set its terminals' environment. */
@@ -155,6 +165,18 @@ export interface Connection {
   /** Hears what happens to the connection's transport; the returned function stops it. */
   onTransport(listener: (event: TransportEvent) => void): () => void;
 }
+
+/** A connect that held the command-line program's control connection and no server, for an exec server. */
+export interface ControlConnection {
+  control: CliControl;
+  /** Closes the control connection and the tunnel, and gives the lease back. */
+  release(): void;
+  /** Hears the loss of the control connection; the returned function stops it. */
+  onTransport(listener: (event: TransportEvent) => void): () => void;
+}
+
+/** What a connect is for: the window's own server, or the control connection alone. */
+type Purpose = 'window' | 'control';
 
 /** What a connect has made so far, to give back when it fails; the tunnel is last, and it is the window's to close. */
 interface Held {
@@ -191,11 +213,45 @@ const CHECKS = [
 ] as const;
 
 /** One connect: runs the steps in order and returns the connection, or the failure. */
-export async function connect(
+export function connect(
   input: ConnectInput,
   steps: ConnectSteps,
   options: ConnectOptions,
 ): Promise<Connection | Failed> {
+  return run(input, steps, options, 'window');
+}
+
+/**
+ * One connect for an exec server: the same steps up to the command-line program's control connection, which it holds
+ * and returns. No server is started and no window tunnel is opened, and a host with no command-line program is refused
+ * with the reason rather than served by a direct install.
+ */
+export function connectControl(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+): Promise<ControlConnection | Failed> {
+  return run(input, steps, options, 'control');
+}
+
+function run(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+  purpose: 'window',
+): Promise<Connection | Failed>;
+function run(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+  purpose: 'control',
+): Promise<ControlConnection | Failed>;
+async function run(
+  input: ConnectInput,
+  steps: ConnectSteps,
+  options: ConnectOptions,
+  purpose: Purpose,
+): Promise<Connection | ControlConnection | Failed> {
   const held: Held = {};
 
   function failure(step: StepFailure): Failed {
@@ -219,7 +275,14 @@ export async function connect(
     resolverLine(input.rawHostString, input.attempt, input.isReconnection),
   );
   try {
-    const result = await runSteps(input, steps, options, held, failure);
+    const result = await runSteps(
+      input,
+      steps,
+      options,
+      held,
+      failure,
+      purpose,
+    );
     if ('connected' in result) {
       options.logger.info(
         resolvedLine(input.rawHostString, result.connected.address.port),
@@ -238,7 +301,8 @@ async function runSteps(
   options: ConnectOptions,
   held: Held,
   failure: (step: StepFailure) => Failed,
-): Promise<Connection | Failed> {
+  purpose: Purpose,
+): Promise<Connection | ControlConnection | Failed> {
   const {cancellation} = options;
 
   /** A bounded step that gives a result; a result that is not its value is the failure to return. */
@@ -437,6 +501,36 @@ async function runSteps(
   if (gate.kind === 'cancelled') {
     return failure({kind: 'cancelled'});
   }
+  if (purpose === 'control') {
+    if (planned.plan.kind !== 'cli') {
+      return failure(
+        options.useExecServer ? EXEC_SERVER_NO_CLI : EXEC_SERVER_SETTING_OFF,
+      );
+    }
+    const holding = await holdOverCli({
+      input,
+      lease,
+      host,
+      plan: planned.plan,
+      steps,
+      logger: options.logger,
+      serve: options.serve,
+      useExecServer: options.useExecServer,
+      failedOf: detail => failedWith(detail, contextOf(input, options, detail)),
+      cancellation,
+    });
+    if (holding.kind === 'held') {
+      return holding;
+    }
+    return (
+      cancelled() ??
+      failure(
+        holding.kind === 'failed'
+          ? holding.failure
+          : execServerNotSetUp(holding.cause),
+      )
+    );
+  }
   if (planned.plan.kind === 'cli') {
     const overCli = await connectOverCli({
       input,
@@ -458,6 +552,7 @@ async function runSteps(
       steps.linkAgent(lease, forwarding.agentLink);
       return {
         connected: overCli.connected,
+        control: overCli.control,
         serverPort: 0,
         forwarding,
         release: () => {
