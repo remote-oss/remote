@@ -8,6 +8,7 @@ import {
   parseLogLine,
   readConfigurationResult,
   readRunUserCommandsResult,
+  readSetUpResult,
   readUpResult,
 } from '../../src/cli/cli-lines.ts';
 
@@ -193,6 +194,31 @@ describe('the output of the dev container CLI (card containers-04)', () => {
         ),
       ],
       [{kind: 'done'}, {kind: 'malformedResult', field: 'result'}],
+    );
+  });
+
+  it('F-0601 BR-13: set-up gives the merged configuration, an error line gives its failure, and anything else is malformed or no result', () => {
+    deepStrictEqual(
+      [
+        readSetUpResult(
+          '{"outcome":"success","mergedConfiguration":{"remoteUser":"vscode"}}',
+          0,
+        ),
+        readSetUpResult(
+          '{"outcome":"error","message":"no user","description":"d"}',
+          1,
+        ).kind,
+        readSetUpResult('{"outcome":"success"}', 0),
+        readSetUpResult('not json', 0),
+        readSetUpResult(undefined, 1),
+      ],
+      [
+        {kind: 'setUp', mergedConfiguration: {remoteUser: 'vscode'}},
+        'setupFailed',
+        {kind: 'malformedResult', field: 'mergedConfiguration'},
+        {kind: 'malformedResult', field: 'result'},
+        {kind: 'noResult', status: 1},
+      ],
     );
   });
 

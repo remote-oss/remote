@@ -3,6 +3,7 @@ import {
   type CliTarget,
   readConfigurationArguments,
   runUserCommandsArguments,
+  setUpArguments,
   upArguments,
   type UpOptions,
 } from '../../src/cli/cli-arguments.ts';
@@ -175,6 +176,61 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         false,
         false,
         false,
+      ],
+    );
+  });
+
+  it('F-0601 BR-13: set-up names the container, the attach file when there is one, the common flags and the two skip and merge flags', () => {
+    const attached = {
+      containerId: 'abc',
+      dockerPath: 'docker',
+      logLevel: 'info' as const,
+    };
+    deepStrictEqual(
+      [
+        setUpArguments(attached),
+        setUpArguments({
+          ...attached,
+          configFile: '/store/nameConfigs/n.json',
+          terminalSize: {rows: 24, columns: 80},
+          userDataFolder: '/data',
+        }),
+      ],
+      [
+        [
+          'set-up',
+          '--container-id',
+          'abc',
+          '--docker-path',
+          'docker',
+          '--log-level',
+          'info',
+          '--log-format',
+          'json',
+          '--skip-non-blocking-commands',
+          '--include-merged-configuration',
+        ],
+        [
+          'set-up',
+          '--container-id',
+          'abc',
+          '--config',
+          '/store/nameConfigs/n.json',
+          '--docker-path',
+          'docker',
+          '--user-data-folder',
+          '/data',
+          '--log-level',
+          'info',
+          '--log-format',
+          'json',
+          '--terminal-rows',
+          '24',
+          '--terminal-columns',
+          '80',
+          '--skip-non-blocking-commands',
+          '--include-merged-configuration',
+        ],
       ],
     );
   });

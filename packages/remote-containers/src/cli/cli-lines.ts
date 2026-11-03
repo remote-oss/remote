@@ -89,6 +89,10 @@ export type UpResult =
 /** What `run-user-commands` gives. */
 export type RunUserCommandsResult = {kind: 'done'} | CliFailure;
 
+/** What `set-up` gives: the container's merged configuration. */
+export type SetUpResult =
+  {kind: 'setUp'; mergedConfiguration: Record<string, unknown>} | CliFailure;
+
 /** What `templates apply` gives. */
 export type ApplyTemplateResult =
   {kind: 'applied'; files: string[]} | CliFailure;
@@ -353,6 +357,24 @@ export function readRunUserCommandsResult(
   return fields.result === 'done'
     ? {kind: 'done'}
     : {kind: 'malformedResult', field: 'result'};
+}
+
+/** What `set-up` gave, from its result line and the process's status. */
+export function readSetUpResult(
+  result: string | undefined,
+  status: number | null,
+): SetUpResult {
+  const parsed = parsedResult(result, status);
+  if ('failure' in parsed) {
+    return parsed.failure;
+  }
+  const {fields} = parsed;
+  if (fields.outcome === 'error') {
+    return errorOf(fields);
+  }
+  return isFields(fields.mergedConfiguration)
+    ? {kind: 'setUp', mergedConfiguration: fields.mergedConfiguration}
+    : {kind: 'malformedResult', field: 'mergedConfiguration'};
 }
 
 /**

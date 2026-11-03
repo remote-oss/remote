@@ -565,6 +565,31 @@ describe('the CLI bridge (card containers-04)', () => {
     );
   });
 
+  it('F-0601 BR-13: set-up runs with its arguments and the engine in the environment, reads the attach file for secrets only, and makes no override file', async () => {
+    const {bridge, calls, environments, written} = setup(
+      ending('{"outcome":"success","mergedConfiguration":{}}'),
+    );
+    const result = await bridge.setUp(
+      {
+        containerId: 'abc',
+        dockerPath: 'docker',
+        logLevel: 'info',
+        environment: {DOCKER_HOST: 'tcp://far'},
+      },
+      () => undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      [result, calls[0]?.slice(0, 3), environments[0], written],
+      [
+        {kind: 'setUp', mergedConfiguration: {}},
+        ['set-up', '--container-id', 'abc'],
+        {DOCKER_HOST: 'tcp://far'},
+        [],
+      ],
+    );
+  });
+
   it('C3: a host that cannot start the CLI is spawnFailed', async () => {
     const {bridge} = setup(() =>
       Promise.resolve({kind: 'spawnFailed', message: 'ENOENT'}),
