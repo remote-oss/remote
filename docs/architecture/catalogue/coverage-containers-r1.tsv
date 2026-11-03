@@ -147,13 +147,13 @@ F-0205.AC-12a	deferred	containers release 1: later (remote engines)
 F-0205.AC-13	deferred	containers release 1: later (remote engines)
 F-0205.AC-14	deferred	containers release 1: later (remote engines)
 F-0205.AC-14a	todo	
-F-0205.AC-14b	todo	
-F-0205.AC-14c	todo	
-F-0205.AC-14d	todo	
-F-0205.AC-15	todo	
+F-0205.AC-14b	acceptance	
+F-0205.AC-14c	acceptance	
+F-0205.AC-14d	acceptance	
+F-0205.AC-15	acceptance	
 F-0205.AC-15a	deferred	containers release 1: later (remote engines)
-F-0205.AC-16	todo	
-F-0205.AC-17	todo	
+F-0205.AC-16	acceptance	
+F-0205.AC-17	core	core: the Docker CLI keeps a context under the HOME it was made in (BR-2); the extension passes no HOME of its own
 F-0205.AC-18	deferred	containers release 1: later (remote engines)
 F-0205.AC-19	deferred	containers release 1: later (remote engines)
 F-0205.AC-20	deferred	containers release 1: later (remote engines)
@@ -168,26 +168,26 @@ F-0205.AC-28	deferred	containers release 1: later (remote engines)
 F-0205.AC-29	acceptance	
 F-0205.AC-30	acceptance	
 F-0205.AC-31	acceptance	
-F-0205.AC-32	todo	
+F-0205.AC-32	acceptance	
 F-0205.AC-33	acceptance	
-F-0205.AC-34	todo	
-F-0205.AC-35	todo	
+F-0205.AC-34	acceptance	
+F-0205.AC-35	deferred	containers release 1: later (remote engines)
 F-0205.AC-36	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0205.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0205.AC-38	todo	
+F-0205.AC-38	acceptance	
 F-0205.AC-39	acceptance	
 F-0205.AC-40	deferred	containers release 1: later (remote engines)
 F-0205.AC-41	acceptance	
-F-0205.AC-42	todo	
+F-0205.AC-42	acceptance	
 F-0205.AC-43	deferred	containers release 1: later (remote engines)
 F-0205.AC-44	deferred	containers release 1: later (remote engines)
-F-0205.AC-45	todo	
+F-0205.AC-45	deferred	containers release 1: later (attach)
 F-0205.AC-46	deferred	containers release 1: later (remote engines)
 F-0205.AC-47	deferred	containers release 1: later (remote engines)
 F-0205.AC-48	deferred	containers release 1: later (remote engines)
-F-0205.AC-49	todo	
-F-0205.AC-50	todo	
-F-0205.AC-51	todo	
+F-0205.AC-49	deferred	containers release 1: later (volumes and Clone in Volume)
+F-0205.AC-50	acceptance	
+F-0205.AC-51	acceptance	
 F-0205.AC-52	todo	
 F-0205.AC-53	deferred	containers release 1: later (remote engines)
 F-0205.AC-54	deferred	containers release 1: later (remote engines)
