@@ -36,9 +36,12 @@ describe('the platform picker (F-2206)', () => {
   });
 
   it('F-2603 AC-19: both variants show the same items and focus Linux', () => {
-    const ask = platformPickOf('box', 'ask');
+    const asking = platformPickOf('box', 'ask');
     const broken = platformPickOf('box', 'brokenPipe');
-    deepStrictEqual([broken.items, broken.active], [ask.items, ask.active]);
+    deepStrictEqual(
+      [broken.items, broken.active],
+      [asking.items, asking.active],
+    );
   });
 
   it('F-2206 AC-2: the placeholder names the host', () => {

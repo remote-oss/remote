@@ -939,44 +939,89 @@ describe('the connect pipeline, when a step fails', () => {
 
   it('F-2603 AC-19 (a): a broken pipe from the connection asks the platform before any failure, tries it at once, and a second broken pipe is returned with no second question', async () => {
     const {recording, options} = setup();
-    const run = brokenPipeSteps(
+    const outcome = brokenPipeSteps(
       recording,
       [{kind: 'brokenPipe'}, {kind: 'brokenPipe'}],
       'linux',
     );
-    const result = await connect(INPUT, run.steps, options);
+    const result = await connect(INPUT, outcome.steps, options);
     deepStrictEqual(
-      ['kind' in result ? result.kind : result, run.platforms, run.asked],
+      [
+        'kind' in result ? result.kind : result,
+        outcome.platforms,
+        outcome.asked,
+      ],
       ['brokenPipe', ['unknown', 'linux'], [1]],
     );
   });
 
   it('F-2603 AC-19 (c): no choice returns the first broken pipe and runs no ssh again', async () => {
     const {recording, options} = setup();
-    const run = brokenPipeSteps(recording, [{kind: 'brokenPipe'}], undefined);
-    const result = await connect(INPUT, run.steps, options);
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'brokenPipe'}],
+      undefined,
+    );
+    const result = await connect(INPUT, outcome.steps, options);
     deepStrictEqual(
-      ['kind' in result ? result.kind : result, run.platforms, run.asked],
+      [
+        'kind' in result ? result.kind : result,
+        outcome.platforms,
+        outcome.asked,
+      ],
       ['brokenPipe', ['unknown'], [1]],
     );
   });
 
-  it('F-2603 AC-19 (d): a choice and then a working run connects with the chosen platform', async () => {
+  it('F-2603 AC-19 (d): a choice and then a working outcome connects with the chosen platform', async () => {
     const {recording, options} = setup();
-    const run = brokenPipeSteps(recording, [{kind: 'brokenPipe'}], 'windows');
-    const result = await connect(INPUT, run.steps, options);
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'brokenPipe'}],
+      'windows',
+    );
+    const result = await connect(INPUT, outcome.steps, options);
     deepStrictEqual(
-      ['connected' in result, run.platforms, run.asked],
+      ['connected' in result, outcome.platforms, outcome.asked],
       [true, ['unknown', 'windows'], [1]],
+    );
+  });
+
+  it('F-2603 AC-19 (f): a cancel while the platform is being asked ends the connect with no second try', async () => {
+    const {recording, options} = setup();
+    const controller = new AbortController();
+    const outcome = brokenPipeSteps(recording, [{kind: 'brokenPipe'}], 'linux');
+    const result = await connect(
+      INPUT,
+      {
+        ...outcome.steps,
+        pickAfterBrokenPipe: () => {
+          controller.abort();
+          return Promise.resolve('linux');
+        },
+      },
+      {...options, cancellation: controller.signal},
+    );
+    deepStrictEqual(
+      ['kind' in result ? result.kind : result, outcome.platforms],
+      ['cancelled', ['unknown']],
     );
   });
 
   it('F-2603 AC-19 (e): a failure of another kind asks nothing', async () => {
     const {recording, options} = setup();
-    const run = brokenPipeSteps(recording, [{kind: 'authentication'}], 'linux');
-    const result = await connect(INPUT, run.steps, options);
+    const outcome = brokenPipeSteps(
+      recording,
+      [{kind: 'authentication'}],
+      'linux',
+    );
+    const result = await connect(INPUT, outcome.steps, options);
     deepStrictEqual(
-      ['kind' in result ? result.kind : result, run.platforms, run.asked],
+      [
+        'kind' in result ? result.kind : result,
+        outcome.platforms,
+        outcome.asked,
+      ],
       ['authentication', ['unknown'], []],
     );
   });
