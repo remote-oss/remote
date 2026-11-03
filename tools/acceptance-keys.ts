@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {type CommandRunner, checked} from './command-runner.ts';
+import {type CommandRunner, checked, runCommand} from './command-runner.ts';
 import {newPassword} from './acceptance-run.ts';
 import {type Started, startDetached} from './acceptance-plain.ts';
 
@@ -93,7 +93,41 @@ function publicKeyOf(file: string): string {
   return readFileSync(`${file}.pub`, 'utf8').trim();
 }
 
-/** Makes a key protected by the passphrase that `askpass` prints, which never reaches a command line. */
+/**
+ * Fails unless the key `file` needs a passphrase: when it opens with an empty one, `ssh-keygen` did not use the run's
+ * askpass and wrote the key unprotected.
+ */
+export function checkProtected(command: CommandRunner, file: string): void {
+  if (command('ssh-keygen', ['-y', '-P', '', '-f', file]).status === 0) {
+    throw new Error(
+      `ssh-keygen wrote ${file} without the run's passphrase: it did not use the askpass`,
+    );
+  }
+}
+
+/**
+ * Writes the script that prints the passphrase in `passphraseFile`, for `SSH_ASKPASS`, and gives its file: a shell
+ * script, or on Windows (`platform`) a batch file, which OpenSSH for Windows starts.
+ */
+export function writeAskpass(
+  runFolder: string,
+  passphraseFile: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === 'win32') {
+    const batch = path.join(runFolder, 'askpass-passphrase.cmd');
+    writeFileSync(batch, `@type "${passphraseFile}"\r\n`);
+    return batch;
+  }
+  const script = path.join(runFolder, 'askpass-passphrase');
+  writeFileSync(script, `#!/bin/sh\ncat '${passphraseFile}'\n`, {mode: 0o700});
+  return script;
+}
+
+/**
+ * Makes a key protected by the passphrase that `askpass` prints, which never reaches a command line, and checks that
+ * the key needs it.
+ */
 function protectedKey(
   command: CommandRunner,
   askpass: string,
@@ -113,6 +147,7 @@ function protectedKey(
     '-f',
     file,
   ]);
+  checkProtected(command, file);
 }
 
 /** Makes a key without a passphrase. */
@@ -131,6 +166,28 @@ function plainKey(command: CommandRunner, file: string, comment: string): void {
 }
 
 /**
+ * Lets anyone read the key file `file`, so that ssh refuses to use it: mode 0644, or on Windows (`platform`), whose
+ * OpenSSH reads the file's access list instead of a mode, read access for Everyone (by its SID, which no language of
+ * the system renames). Fails when `ssh-keygen` still reads the key, as OpenSSH reads it for a login.
+ */
+export function loosenKey(
+  command: CommandRunner,
+  file: string,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  if (platform === 'win32') {
+    checked(command, 'icacls', [file, '/grant', '*S-1-1-0:R']);
+  } else {
+    chmodSync(file, 0o644);
+  }
+  if (command('ssh-keygen', ['-y', '-f', file]).status === 0) {
+    throw new Error(
+      `ssh-keygen still reads ${file} once anyone may read it: OpenSSH would not refuse it`,
+    );
+  }
+}
+
+/**
  * Makes the run's further keys in `runFolder`. The host is to accept the passphrase key and the second key (so also its
  * loose copy) for its key accounts, the no-forwarding key for them with `no-port-forwarding`, and the certificate for
  * `harness-cert`.
@@ -141,10 +198,7 @@ export function makeRunKeys(
 ): RunKeys {
   const passphraseFile = path.join(runFolder, 'passphrase');
   writeFileSync(passphraseFile, newPassword(), {mode: 0o600});
-  const passphraseAskpass = path.join(runFolder, 'askpass-passphrase');
-  writeFileSync(passphraseAskpass, `#!/bin/sh\ncat '${passphraseFile}'\n`, {
-    mode: 0o700,
-  });
+  const passphraseAskpass = writeAskpass(runFolder, passphraseFile);
   const passphraseKey = path.join(runFolder, 'id_passphrase');
   protectedKey(
     command,
@@ -161,7 +215,7 @@ export function makeRunKeys(
   const looseKey = path.join(runFolder, 'id_loose');
   copyFileSync(secondKey, looseKey);
   copyFileSync(`${secondKey}.pub`, `${looseKey}.pub`);
-  chmodSync(looseKey, 0o644);
+  loosenKey(command, looseKey);
   const authority = path.join(runFolder, 'ca');
   plainKey(command, authority, 'acceptance-ca');
   const certifiedKey = path.join(runFolder, 'id_certified');
@@ -245,12 +299,43 @@ export function agentEnvironment(
   );
 }
 
-/** Starts the run's own ssh-agent in the foreground on `socket`, with no way to ask the user. */
-export function startRunAgent(socket: string): Started {
+/** The variable that lets a run outside CI empty the user's own Windows ssh-agent service. */
+export const EMPTY_AGENT_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_EMPTY_AGENT';
+
+/**
+ * Starts the run's own ssh-agent in the foreground on `socket`, with no way to ask the user. On Windows (`platform`)
+ * the agent is the system's service, which the job starts and which keeps its keys between runs: the run empties it
+ * with `ssh-add -D` at its start and at its end. That service is also the user's own agent, so outside CI
+ * (`GITHUB_ACTIONS`) the run does so only with `REMOTE_OSS_ACCEPTANCE_EMPTY_AGENT=1`, and otherwise stops before any
+ * `ssh-add`.
+ */
+export function startRunAgent(
+  socket: string,
+  platform: NodeJS.Platform = process.platform,
+  command: CommandRunner = runCommand,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Started {
+  if (platform === 'win32') {
+    if (
+      environment.GITHUB_ACTIONS !== 'true' &&
+      environment[EMPTY_AGENT_VARIABLE] !== '1'
+    ) {
+      throw new Error(
+        `the run would empty this user's ssh-agent service (ssh-add -D) at its start and end; outside CI it does so only with ${EMPTY_AGENT_VARIABLE}=1`,
+      );
+    }
+    checked(command, 'ssh-add', ['-D']);
+    return {
+      stop: () => {
+        checked(command, 'ssh-add', ['-D']);
+        return Promise.resolve();
+      },
+    };
+  }
   return startDetached({
     file: 'ssh-agent',
     programArguments: ['-a', socket, '-D'],
-    environment: agentEnvironment(process.env),
+    environment: agentEnvironment(environment),
   });
 }
 
@@ -263,28 +348,50 @@ const LONGEST_CONTROL_SOCKET = 'cm-autoask-'.length + 40 + 17;
 /**
  * The folder of the ControlMaster sockets of the run's aliases: the run's folder, or, when the longest socket name in
  * it would pass the limit of a Unix socket path, a short folder `shortFolder` makes (by default a new one under
- * `/tmp`). A runner's temporary folder and run id make a run folder too deep for it.
+ * `/tmp`). A runner's temporary folder and run id make a run folder too deep for it. On Windows (`platform`), which
+ * has no ControlMaster alias, it is the run's folder.
  */
 export function controlFolderOf(
   runFolder: string,
   shortFolder: () => string = () => mkdtempSync('/tmp/control-'),
+  platform: NodeJS.Platform = process.platform,
 ): string {
-  return Buffer.byteLength(runFolder) + 1 + LONGEST_CONTROL_SOCKET <=
-    SOCKET_PATH_LIMIT
+  return platform === 'win32' ||
+    Buffer.byteLength(runFolder) + 1 + LONGEST_CONTROL_SOCKET <=
+      SOCKET_PATH_LIMIT
     ? runFolder
     : shortFolder();
 }
 
+/** The named pipe of OpenSSH for Windows' agent, a service of the system rather than a program of the run. */
+export const WINDOWS_AGENT_PIPE = '\\\\.\\pipe\\openssh-ssh-agent';
+
 /**
  * Where the run's agent listens: `agent.sock` in the run's folder, or, when that path is too long for a Unix socket,
- * in a short folder `shortFolder` makes (by default a new one under `/tmp`).
+ * in a short folder `shortFolder` makes (by default a new one under `/tmp`). On Windows (`platform`) it is the agent
+ * service's pipe.
  */
 export function agentSocketPath(
   runFolder: string,
   shortFolder: () => string = () => mkdtempSync('/tmp/agent-'),
+  platform: NodeJS.Platform = process.platform,
 ): string {
+  if (platform === 'win32') {
+    return WINDOWS_AGENT_PIPE;
+  }
   const inRunFolder = path.join(runFolder, 'agent.sock');
   return Buffer.byteLength(inRunFolder) <= SOCKET_PATH_LIMIT
     ? inRunFolder
     : path.join(shortFolder(), 'agent.sock');
+}
+
+/**
+ * A path as the run's ssh_config writes it: as it is, or on Windows (`platform`) with forward slashes (`C:/…`), which
+ * OpenSSH for Windows reads and its parser does not take for escapes.
+ */
+export function sshConfigPath(
+  file: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return platform === 'win32' ? file.replaceAll('\\', '/') : file;
 }
