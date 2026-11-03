@@ -7,6 +7,7 @@ import {
   cloneInUniqueVolume,
 } from '../../src/volumes/clone-command.ts';
 import type {PrecheckOutcome} from '../../src/volumes/precheck.ts';
+import type {PickedRepository} from '../../src/volumes/source-pick.ts';
 import {volumeTargetOf} from '../../src/volumes/volume-payload.ts';
 
 /** How a scene's ports answer. */
@@ -14,7 +15,8 @@ interface Answers {
   accepted: boolean;
   trust: CloneTrustAnswer;
   engineReady: boolean;
-  typed: string | undefined;
+  /** The text typed, the GitHub row with what its picker gives, or a dismissed pick. */
+  typed: string | {github: PickedRepository | undefined} | undefined;
   precheck: PrecheckOutcome;
   currentRepository: string | undefined;
 }
@@ -55,7 +57,21 @@ async function runWith(
     },
     pickSource: () => {
       calls.push('pick');
-      return Promise.resolve(answers.typed);
+      const {typed} = answers;
+      return Promise.resolve(
+        typeof typed === 'object'
+          ? {kind: 'github' as const}
+          : typed === undefined
+            ? undefined
+            : {kind: 'typed' as const, text: typed},
+      );
+    },
+    pickGithub: () => {
+      calls.push('github');
+      const {typed} = answers;
+      return Promise.resolve(
+        typeof typed === 'object' ? typed.github : undefined,
+      );
     },
     precheck: (source, origin) => {
       calls.push(`precheck ${source.urlToClone} ${origin}`);
@@ -194,5 +210,28 @@ describe('Clone Repository in Container Volume, up to the reload (card container
       'engine',
       'cannotAccess /home/u/repo',
     ]);
+  });
+
+  it('F-0701 6.3: the GitHub row picks a repository and a branch, which clones as their branch URL; a GitHub pick left ends the attempt', async () => {
+    const [picked, bare, left] = await Promise.all([
+      runWith({
+        typed: {github: {url: 'https://github.com/o/r.git', branch: 'dev'}},
+      }),
+      runWith({typed: {github: {url: 'https://github.com/o/r.git'}}}),
+      runWith({typed: {github: undefined}}),
+    ]);
+    deepStrictEqual(
+      [picked.slice(0, 4), bare.slice(0, 4), left],
+      [
+        ['engine', 'pick', 'github', 'precheck https://github.com/o/r typed'],
+        [
+          'engine',
+          'pick',
+          'github',
+          'precheck https://github.com/o/r.git typed',
+        ],
+        ['engine', 'pick', 'github'],
+      ],
+    );
   });
 });

@@ -12,6 +12,7 @@ import {
   type CloneSource,
 } from './clone-source.ts';
 import type {PrecheckOutcome} from './precheck.ts';
+import {type PickedRepository, pickedSourceOf} from './source-pick.ts';
 import {
   type DevContainerVolume,
   UNIQUE_VOLUME,
@@ -37,8 +38,12 @@ export interface CloneCommandPorts {
   trust: CloneTrustPorts;
   /** The engine check, which shows its own dialog when the engine isn't ready. */
   engineReady(): Promise<boolean>;
-  /** The source the user gives: the text typed, or nothing when the pick was dismissed. */
-  pickSource(): Promise<string | undefined>;
+  /** The source the user gives: the text typed, the GitHub row, or nothing when the pick was dismissed. */
+  pickSource(): Promise<
+    {kind: 'typed'; text: string} | {kind: 'github'} | undefined
+  >;
+  /** Picks a repository on GitHub, and its branch, through the editor's own remote sources; nothing when left. */
+  pickGithub(): Promise<PickedRepository | undefined>;
   precheck(
     source: CloneSource,
     origin: CloneOrigin,
@@ -108,6 +113,18 @@ export async function cloneConsented(trust: CloneTrustPorts): Promise<boolean> {
   return true;
 }
 
+/** The source text the user gives: typed, or the repository picked on GitHub; nothing when either pick was left. */
+async function sourceTextOf(
+  ports: CloneCommandPorts,
+): Promise<string | undefined> {
+  const picked = await ports.pickSource();
+  if (picked?.kind !== 'github') {
+    return picked?.text;
+  }
+  const repository = await ports.pickGithub();
+  return repository === undefined ? undefined : pickedSourceOf(repository);
+}
+
 /**
  * Runs the command once, up to the reload; every way it ends before then leaves the window as it was. A `link` is a
  * source the extension was handed, such as the remote of a repository: it is read as a link, not as the user's own
@@ -122,7 +139,7 @@ export async function cloneInUniqueVolume(
     return;
   }
   const origin: CloneOrigin = link === undefined ? 'typed' : 'link';
-  const given = link ?? (await ports.pickSource());
+  const given = link ?? (await sourceTextOf(ports));
   if (given === undefined) {
     return;
   }
