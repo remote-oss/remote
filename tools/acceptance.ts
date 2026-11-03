@@ -72,6 +72,7 @@ import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
   agentSocketPath,
+  sshConfigPath,
   changedKeyHostsFile,
   CHANGED_KEY_ALIAS,
   controlFolderOf,
@@ -394,9 +395,31 @@ function masterAlias(
   return accountAlias(name, 'harness-pw', port, runFolder, [
     ...PASSWORD_LINES,
     `ControlMaster ${mode}`,
-    `ControlPath ${path.join(controlFolder, socket)}`,
+    `ControlPath ${path.posix.join(controlFolder, socket)}`,
     'ControlPersist 600',
   ]);
+}
+
+/** The run's ControlMaster aliases, each with its mode and the name of its socket. */
+const MASTER_ALIASES = [
+  ['master', 'auto', 'cm-%C'],
+  ['master-ask', 'ask', 'cm-ask-%C'],
+  ['master-yes', 'yes', 'cm-yes-%C'],
+  ['master-autoask', 'autoask', 'cm-autoask-%C'],
+] as const;
+
+/** The run's ControlMaster aliases, none on Windows, whose OpenSSH has no ControlMaster. */
+function masterAliases(
+  port: number,
+  runFolder: string,
+  controlFolder: string,
+  platform: NodeJS.Platform,
+): string[] {
+  return platform === 'win32'
+    ? []
+    : MASTER_ALIASES.flatMap(([name, mode, socket]) =>
+        masterAlias(name, mode, socket, port, runFolder, controlFolder),
+      );
 }
 
 /**
@@ -456,7 +479,8 @@ export function sshConfigOf(
  * and for one that may not create links in /tmp (the Ubuntu 26.04 host's); three for the
  * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
  * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
- * sockets of the ControlMaster aliases are in `controlFolder`.
+ * sockets of the ControlMaster aliases are in `controlFolder`. On Windows (`platform`) its paths have forward slashes
+ * and it has no ControlMaster alias.
  */
 export function harnessSshConfig(
   port: number,
@@ -464,30 +488,33 @@ export function harnessSshConfig(
   agentSocket: string,
   routedAddress: string,
   controlFolder = runFolder,
+  platform: NodeJS.Platform = process.platform,
 ): string {
+  const folder = sshConfigPath(runFolder, platform);
+  const agent = sshConfigPath(agentSocket, platform);
   return [
     'Host harness',
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
     'Host 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
     'Host refused',
     '  HostName 127.0.0.1',
@@ -502,22 +529,22 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking ask',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_stranger')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_stranger')}`,
     '',
     'Host routed',
     `  HostName ${routedAddress}`,
     '  Port 22',
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_routed')}`,
     '',
     // The harness account reached through the harness host as a jump host: the target is the host's own sshd, at the port it listens on inside.
     'Host jumped',
@@ -525,13 +552,13 @@ export function harnessSshConfig(
     '  Port 22',
     '  User harness',
     '  ProxyJump harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_jumped')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_jumped')}`,
     '',
     // The run's key against a known-hosts file that pins another key for the host: ssh finds the host key changed and,
     // as StrictHostKeyChecking is off, connects with password and keyboard-interactive login and every forward disabled.
@@ -539,23 +566,23 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_ed25519')}`,
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     `  HostKeyAlias ${CHANGED_KEY_ALIAS}`,
     '  StrictHostKeyChecking no',
     '  BatchMode yes',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${changedKeyHostsFile(runFolder)}`,
+    `  UserKnownHostsFile ${sshConfigPath(changedKeyHostsFile(runFolder), platform)}`,
     '',
-    ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
+    ...accountAlias('password', 'harness-pw', port, folder, PASSWORD_LINES),
     // The Ubuntu 26.04 host's keyboard-interactive accounts: a password and a one-time code, a forced change, and a
     // question the extension doesn't recognise before the password.
-    ...accountAlias('twofactor', 'harness-2fa', port, runFolder, KBD_LINES),
-    ...accountAlias('expired', 'harness-expired', port, runFolder, KBD_LINES),
-    ...accountAlias('ask-odd', 'harness-odd', port, runFolder, KBD_LINES),
+    ...accountAlias('twofactor', 'harness-2fa', port, folder, KBD_LINES),
+    ...accountAlias('expired', 'harness-expired', port, folder, KBD_LINES),
+    ...accountAlias('ask-odd', 'harness-odd', port, folder, KBD_LINES),
     // The password account with ssh's default of three password prompts, so that a wrong password is asked again.
-    ...accountAlias('password-retry', 'harness-pwonly', port, runFolder, [
+    ...accountAlias('password-retry', 'harness-pwonly', port, folder, [
       'PubkeyAuthentication no',
       'PreferredAuthentications password',
       'NumberOfPasswordPrompts 3',
@@ -567,12 +594,12 @@ export function harnessSshConfig(
     '  User harness-pw',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_proxy-ask-terminal')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_proxy-ask-terminal')}`,
     ...PASSWORD_LINES.map(line => `  ${line}`),
     `  ProxyCommand bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
     '',
     // The password account behind a ProxyCommand that asks on the terminal, which a window without one cannot answer.
-    ...accountAlias('proxy-ask', 'harness-pw', port, runFolder, [
+    ...accountAlias('proxy-ask', 'harness-pw', port, folder, [
       ...PASSWORD_LINES,
       `ProxyCommand setsid bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
     ]),
@@ -583,146 +610,95 @@ export function harnessSshConfig(
     '  IdentityAgent none',
     '  StrictHostKeyChecking ask',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_password_ask')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts_password_ask')}`,
     ...PASSWORD_LINES.map(line => `  ${line}`),
     '',
     ...accountAlias(
       'noforward',
       'harness-nofwd',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
-    ...accountAlias('x11-forbidden', 'harness-nox11', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-forbidden', 'harness-nox11', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
     ]),
     ...accountAlias(
       'nosocket',
       'harness-nosock',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
-    ...accountAlias(
-      'noall',
-      'harness-noall',
-      port,
-      runFolder,
-      keyLines(runFolder),
-    ),
+    ...accountAlias('noall', 'harness-noall', port, folder, keyLines(folder)),
     ...FORWARD_ALIASES.flatMap(([alias, user, lines]) =>
-      accountAlias(alias, user, port, runFolder, [
-        ...keyLines(runFolder),
-        ...lines,
-      ]),
+      accountAlias(alias, user, port, folder, [...keyLines(folder), ...lines]),
     ),
-    ...accountAlias(
-      'mute',
-      'harness-mute',
-      port,
-      runFolder,
-      keyLines(runFolder),
-    ),
-    ...accountAlias(
-      'i686',
-      'harness-i686',
-      port,
-      runFolder,
-      keyLines(runFolder),
-    ),
+    ...accountAlias('mute', 'harness-mute', port, folder, keyLines(folder)),
+    ...accountAlias('i686', 'harness-i686', port, folder, keyLines(folder)),
     ...accountAlias(
       'harness-fish',
       'harness-fish',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-bash',
       'harness-bash',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-zsh',
       'harness-zsh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-dash',
       'harness-dash',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-ksh',
       'harness-ksh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-csh',
       'harness-csh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
     ...accountAlias(
       'harness-tcsh',
       'harness-tcsh',
       port,
-      runFolder,
-      keyLines(runFolder),
+      folder,
+      keyLines(folder),
     ),
-    ...accountAlias(
-      'readonly',
-      'harness-ro',
-      port,
-      runFolder,
-      keyLines(runFolder),
-    ),
-    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder, controlFolder),
-    ...masterAlias(
-      'master-ask',
-      'ask',
-      'cm-ask-%C',
-      port,
-      runFolder,
-      controlFolder,
-    ),
-    ...masterAlias(
-      'master-yes',
-      'yes',
-      'cm-yes-%C',
-      port,
-      runFolder,
-      controlFolder,
-    ),
-    ...masterAlias(
-      'master-autoask',
-      'autoask',
-      'cm-autoask-%C',
-      port,
-      runFolder,
-      controlFolder,
-    ),
-    ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
+    ...accountAlias('readonly', 'harness-ro', port, folder, keyLines(folder)),
+    ...masterAliases(port, folder, controlFolder, platform),
+    ...keyAlias('passkey', 'harness', port, folder, ['id_passphrase']),
     // The same alias again under other names, so that a row finds no shared connection a row before it left.
     ...passkeyCopies().flatMap(alias =>
-      keyAlias(alias, 'harness', port, runFolder, ['id_passphrase']),
+      keyAlias(alias, 'harness', port, folder, ['id_passphrase']),
     ),
     // The passphrase key with each AddKeysToAgent value.
     ...keyAlias(
       'passkey-add-yes',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent yes'],
     ),
@@ -730,7 +706,7 @@ export function harnessSshConfig(
       'passkey-ask-yes',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent ask'],
     ),
@@ -738,7 +714,7 @@ export function harnessSshConfig(
       'passkey-ask-no',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent ask'],
     ),
@@ -746,7 +722,7 @@ export function harnessSshConfig(
       'passkey-ask-escape',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent ask'],
     ),
@@ -754,17 +730,17 @@ export function harnessSshConfig(
       'passkey-add-confirm',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_passphrase'],
       ['AddKeysToAgent confirm'],
     ),
     // No usable key, each in its own way.
-    ...keyAlias('nokey-missing', 'harness', port, runFolder, ['id_missing']),
+    ...keyAlias('nokey-missing', 'harness', port, folder, ['id_missing']),
     ...keyAlias(
       'nokey-none',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityFile none'],
     ),
@@ -772,16 +748,16 @@ export function harnessSshConfig(
       'nokey-nopubkey',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_second'],
       ['PubkeyAuthentication no'],
     ),
-    ...keyAlias('nokey-agent-only', 'harness', port, runFolder, [], []),
+    ...keyAlias('nokey-agent-only', 'harness', port, folder, [], []),
     ...keyAlias(
       'nokey-agent-none',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityAgent none'],
       false,
@@ -791,46 +767,44 @@ export function harnessSshConfig(
       'agent-other-file',
       'harness',
       port,
-      runFolder,
+      folder,
       ['id_unauthorised'],
       [],
       false,
     ),
     // The harness account with a key whose line on the host carries no-port-forwarding, though sshd allows forwarding.
-    ...keyAlias('noforward-key', 'harness', port, runFolder, ['id_noportfwd']),
+    ...keyAlias('noforward-key', 'harness', port, folder, ['id_noportfwd']),
     // The harness account with a RequestTTY of its own.
     ...['force', 'yes', 'no'].flatMap(request =>
       keyAlias(
         `pty-${request}`,
         'harness',
         port,
-        runFolder,
+        folder,
         ['id_ed25519'],
         ['BatchMode yes', 'IdentityAgent none', `RequestTTY ${request}`],
       ),
     ),
-    ...keyAlias('several-files', 'harness', port, runFolder, [
+    ...keyAlias('several-files', 'harness', port, folder, [
       'id_missing',
       'id_passphrase_stranger',
       'id_second',
     ]),
-    ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
+    ...keyAlias('passkey-then-second', 'harness', port, folder, [
       'id_passphrase',
       'id_second',
     ]),
-    ...keyAlias('loosekey', 'harness', port, runFolder, ['id_loose']),
-    ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, runFolder, [
+    ...keyAlias('loosekey', 'harness', port, folder, ['id_loose']),
+    ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, folder, [
       'id_certified',
     ]),
-    ...keyAlias('certpass', CERTIFIED_PRINCIPAL, port, runFolder, [
-      'id_certpass',
-    ]),
+    ...keyAlias('certpass', CERTIFIED_PRINCIPAL, port, folder, ['id_certpass']),
     // The agent named by a variable of the editor's environment, set or not (no key file of its own).
     ...keyAlias(
       'agent-var-set',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityAgent $HARNESS_AGENT_SOCKET'],
       false,
@@ -839,12 +813,12 @@ export function harnessSshConfig(
       'agent-var-unset',
       'harness',
       port,
-      runFolder,
+      folder,
       [],
       ['IdentityAgent $HARNESS_NO_SUCH_VARIABLE'],
       false,
     ),
-    ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
+    ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, folder, [
       'id_second',
     ]),
     // Two aliases, so the window with the setting off finds no connection, and no stored plan, of the other.
@@ -853,14 +827,14 @@ export function harnessSshConfig(
         alias,
         'harness',
         port,
-        runFolder,
-        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
-        agentSocket,
+        folder,
+        [...keyLines(folder), `ForwardAgent ${agent}`],
+        agent,
       ),
     ),
     // ForwardAgent given as no, which forwards nothing, as unset does.
-    ...accountAlias('agentfwd-no', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('agentfwd-no', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardAgent no',
     ]),
     // The agent forwarded for an account whose login shell sets TMPDIR to a folder of its own (the Alpine host's), and
@@ -873,37 +847,37 @@ export function harnessSshConfig(
         alias ?? '',
         user ?? '',
         port,
-        runFolder,
-        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
-        agentSocket,
+        folder,
+        [...keyLines(folder), `ForwardAgent ${agent}`],
+        agent,
       ),
     ),
-    ...accountAlias('x11fwd', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11fwd', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
     // The same without the trusted request, so the server's X11 extensions are the untrusted client's.
-    ...accountAlias('x11-untrusted', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-untrusted', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
     ]),
     // Untrusted forwarding whose cookie expires after a minute.
-    ...accountAlias('x11-timeout', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-timeout', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
       'ForwardX11Trusted no',
       'ForwardX11Timeout 60s',
     ]),
     // A client that cannot find its xauth, so ssh forwards nothing.
-    ...accountAlias('x11-noauth', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-noauth', 'harness', port, folder, [
+      ...keyLines(folder),
       'ForwardX11 yes',
       'XAuthLocation /nonexistent/xauth',
     ]),
     // ForwardX11 given only in a Match block that applies to the alias.
-    ...accountAlias('x11-match', 'harness', port, runFolder, [
-      ...keyLines(runFolder),
+    ...accountAlias('x11-match', 'harness', port, folder, [
+      ...keyLines(folder),
       'Match originalhost x11-match',
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
@@ -912,11 +886,11 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
-    `  IdentityFile ${path.join(runFolder, 'id_unauthorised')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_unauthorised')}`,
     '  IdentitiesOnly yes',
     '  BatchMode yes',
     '  StrictHostKeyChecking accept-new',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
     'Host blackhole',
     '  HostName 192.0.2.1',
@@ -926,9 +900,9 @@ export function harnessSshConfig(
     '  HostName 127.0.0.1',
     '  BatchMode yes',
     '  IdentitiesOnly yes',
-    `  IdentityFile ${path.join(runFolder, 'id_unauthorised')}`,
+    `  IdentityFile ${path.posix.join(folder, 'id_unauthorised')}`,
     '  StrictHostKeyChecking accept-new',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(folder, 'known_hosts')}`,
     '',
   ].join('\n');
 }
@@ -954,13 +928,13 @@ function keyAlias(
     `  User ${user}`,
     ...keyFiles.map(
       file =>
-        `  IdentityFile ${file.startsWith('/') ? file : path.join(runFolder, file)}`,
+        `  IdentityFile ${file.startsWith('/') ? file : path.posix.join(runFolder, file)}`,
     ),
     `  IdentitiesOnly ${identitiesOnly ? 'yes' : 'no'}`,
     ...further.map(line => `  ${line}`),
     '  StrictHostKeyChecking accept-new',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    `  UserKnownHostsFile ${path.posix.join(runFolder, 'known_hosts')}`,
     '',
   ];
 }
@@ -981,7 +955,7 @@ const KBD_LINES = [
 /** The lines of an alias that logs in with the run's key and never prompts. */
 function keyLines(runFolder: string): string[] {
   return [
-    `IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    `IdentityFile ${path.posix.join(runFolder, 'id_ed25519')}`,
     'IdentitiesOnly yes',
     'BatchMode yes',
   ];
@@ -1044,7 +1018,7 @@ function accountAlias(
     `  IdentityAgent ${identityAgent}`,
     '  StrictHostKeyChecking accept-new',
     '  ConnectTimeout 10',
-    `  UserKnownHostsFile ${path.join(runFolder, `known_hosts_${alias}`)}`,
+    `  UserKnownHostsFile ${path.posix.join(runFolder, `known_hosts_${alias}`)}`,
     ...further.map(line => `  ${line}`),
     '',
   ];

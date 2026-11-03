@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {existsSync, mkdtempSync, readFileSync, rmSync, statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -13,7 +13,9 @@ import {
   makeRunKeys,
   PASSPHRASE_KEY_COMMENT,
   type RunKeys,
+  sshConfigPath,
   startRunAgent,
+  WINDOWS_AGENT_PIPE,
 } from './acceptance-keys.ts';
 import {type CommandRunner, runCommand} from './command-runner.ts';
 
@@ -270,6 +272,84 @@ describe('the run agent', function () {
     const folder = controlFolderOf(`/${'d'.repeat(SOCKET_PATH_LIMIT)}`);
     rmSync(folder, {recursive: true, force: true});
     strictEqual(folder.startsWith('/tmp/control-'), true);
+  });
+
+  it("tooling-118: on Windows the agent is the service's pipe, and no short folder is made", () => {
+    strictEqual(
+      agentSocketPath(
+        `C:\\${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+        () => {
+          throw new Error('a short folder was made');
+        },
+        'win32',
+      ),
+      '\\\\.\\pipe\\openssh-ssh-agent',
+    );
+  });
+
+  it("tooling-118: on Windows the control folder is the run's folder, however deep", () => {
+    strictEqual(
+      controlFolderOf(
+        `C:\\${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+        () => {
+          throw new Error('a short folder was made');
+        },
+        'win32',
+      ),
+      `C:\\${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+    );
+  });
+
+  it("tooling-118: ssh_config's paths have forward slashes on Windows and stay as they are elsewhere", () => {
+    deepStrictEqual(
+      [
+        sshConfigPath('C:\\Users\\runner\\run\\id_ed25519', 'win32'),
+        sshConfigPath(WINDOWS_AGENT_PIPE, 'win32'),
+        sshConfigPath('/tmp/run/id_ed25519', 'win32'),
+        sshConfigPath('/tmp/run/a\\b', 'linux'),
+        sshConfigPath('/tmp/run/a\\b', 'darwin'),
+      ],
+      [
+        'C:/Users/runner/run/id_ed25519',
+        '//./pipe/openssh-ssh-agent',
+        '/tmp/run/id_ed25519',
+        '/tmp/run/a\\b',
+        '/tmp/run/a\\b',
+      ],
+    );
+  });
+
+  it("tooling-118: on Windows the run empties the service's agent at its start and at its end, and starts no agent", async () => {
+    const commands: string[] = [];
+    const agent = startRunAgent(
+      WINDOWS_AGENT_PIPE,
+      'win32',
+      (program, programArguments) => {
+        commands.push([program, ...programArguments].join(' '));
+        return {status: 0, stdout: '', stderr: ''};
+      },
+    );
+    const atStart = [...commands];
+    await agent.stop();
+    deepStrictEqual(
+      [atStart, commands],
+      [['ssh-add -D'], ['ssh-add -D', 'ssh-add -D']],
+    );
+  });
+
+  it('tooling-118: on Windows an agent service that is not running stops the run, naming ssh-add', () => {
+    throws(
+      () =>
+        startRunAgent(WINDOWS_AGENT_PIPE, 'win32', () => ({
+          status: 2,
+          stdout: '',
+          stderr: 'Error connecting to agent: No such file or directory\n',
+        })),
+      {
+        message:
+          'ssh-add -D failed (2): Error connecting to agent: No such file or directory',
+      },
+    );
   });
 
   it('tooling-29: the agent sees no variable through which it could ask', () => {

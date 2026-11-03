@@ -630,6 +630,56 @@ describe('acceptance', () => {
     );
   });
 
+  it('tooling-118: on Windows every path of the ssh_config has forward slashes, and no alias has a ControlMaster', () => {
+    const config = harnessSshConfig(
+      49153,
+      'C:\\Users\\runner\\acceptance-1',
+      '\\\\.\\pipe\\openssh-ssh-agent',
+      ROUTED_ADDRESS,
+      'C:\\Users\\runner\\acceptance-1',
+      'win32',
+    );
+    const lines = config.split('\n');
+    deepStrictEqual(
+      [
+        lines.filter(line => line.includes('\\')),
+        lines.filter(line => /Control(Master|Path|Persist)/.test(line)),
+        lines.find(line => line.includes('IdentityFile')),
+        lines.find(
+          line =>
+            line.includes('changedkey') && line.includes('UserKnownHostsFile'),
+        ),
+        lines.find(line => line.includes('ForwardAgent')),
+      ],
+      [
+        [],
+        [],
+        '  IdentityFile C:/Users/runner/acceptance-1/id_ed25519',
+        '  UserKnownHostsFile C:/Users/runner/acceptance-1/known_hosts_changedkey',
+        '  ForwardAgent //./pipe/openssh-ssh-agent',
+      ],
+    );
+  });
+
+  it('tooling-118: elsewhere the ssh_config keeps its four ControlMaster aliases', () => {
+    const hosts = harnessSshConfig(
+      49153,
+      '/run',
+      '/run/agent.sock',
+      ROUTED_ADDRESS,
+      '/run',
+      'linux',
+    )
+      .split('\n')
+      .filter(line => line.startsWith('Host master'));
+    deepStrictEqual(hosts, [
+      'Host master',
+      'Host master-ask',
+      'Host master-yes',
+      'Host master-autoask',
+    ]);
+  });
+
   it('coverage-13: Host 127.0.0.1 reaches the harness host by the address as typed', () => {
     strictEqual(
       harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS).split(
