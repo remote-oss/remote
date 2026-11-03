@@ -55,16 +55,20 @@ jobs:
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
           wsl -l -v
-          wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io 2>&1 | tail -3; command -v dockerd; dockerd --version'
-          # dockerd as the foreground process of a detached wsl.exe, so the distro and the engine outlive this step
-          Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '-u', 'root', '--', 'sh', '-c', 'exec dockerd -H unix:///var/run/docker.sock -H tcp://0.0.0.0:2375 >/var/log/dockerd.log 2>&1'
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'cat /etc/wsl.conf; ps -p 1 -o comm='
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-buildx 2>&1 | tail -2'
+          # the packaged service (Ubuntu under WSL runs systemd), with a TCP listener the Windows side reaches over WSL2's
+          # localhost forwarding
+          wsl -d Ubuntu-24.04 -u root -- sh -c 'mkdir -p /etc/systemd/system/docker.service.d && printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375 --containerd=/run/containerd/containerd.sock\n" > /etc/systemd/system/docker.service.d/tcp.conf && systemctl daemon-reload && systemctl restart docker && systemctl is-active docker'
+          # a wsl.exe that stays, so the distro and its engine outlive this step
+          Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d', 'Ubuntu-24.04', '--', 'sleep', 'infinity'
           $up = $false
           for ($i = 0; $i -lt 60 -and -not $up; $i++) {
             Start-Sleep 2
             docker -H tcp://127.0.0.1:2375 version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}' 2>$null
             $up = $LASTEXITCODE -eq 0
           }
-          if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'tail -30 /var/log/dockerd.log; ip -4 addr show eth0'; exit 1 }
+          if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15; ss -ltnp | head'; exit 1 }
           "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
@@ -91,9 +95,11 @@ jobs:
       - name: Docker for linux/x86_64 through colima
         timeout-minutes: 25
         run: |
-          brew install colima docker >/dev/null
+          brew install colima docker docker-buildx >/dev/null
+          mkdir -p ~/.docker && printf '{"cliPluginsExtraDirs": ["%s/lib/docker/cli-plugins"]}\n' "$(brew --prefix)" > ~/.docker/config.json
           colima start --cpu 3 --memory 8
           docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
+          docker buildx version
           # probe only: the harness binds Docker's Linux bridge address on the client; alias it to find the next gap
           sudo ifconfig lo0 alias 172.17.0.1/32
       - name: The launches
