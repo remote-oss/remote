@@ -70,6 +70,21 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15; ss -ltnp | head'; exit 1 }
           "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+      - name: Probe, the client address a container reaches (card tooling-116)
+        continue-on-error: true
+        run: |
+          $gw = (wsl -d Ubuntu-24.04 -u root -- sh -c "ip route show default | awk '{print `$3}'").Trim()
+          "distro default gateway (the Windows host as the distro sees it): $gw"
+          Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | ForEach-Object { "windows adapter $($_.InterfaceAlias): $($_.IPAddress)" }
+          New-NetFirewallRule -DisplayName 'tooling-116 probe' -Direction Inbound -Protocol TCP -LocalPort 47116 -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\serve" | Out-Null
+          'probe-ok' | Set-Content "$env:RUNNER_TEMP\serve\probe.txt"
+          $srv = Start-Process python -PassThru -WindowStyle Hidden -ArgumentList '-m', 'http.server', '47116', '--bind', $gw, '--directory', "$env:RUNNER_TEMP\serve"
+          Start-Sleep 3
+          "listening: $(Get-NetTCPConnection -LocalPort 47116 -State Listen -ErrorAction SilentlyContinue | ForEach-Object LocalAddress)"
+          docker run --rm --add-host "downloads:$gw" alpine:3.22 wget -qO- -T 10 http://downloads:47116/probe.txt
+          "container fetch exit=$LASTEXITCODE"
+          Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
       - if: always()
@@ -100,8 +115,18 @@ jobs:
           colima start --cpu 3 --memory 8
           docker version --format '{{.Server.Os}}/{{.Server.Arch}} {{.Server.Version}}'
           docker buildx version
-          # probe only: the harness binds Docker's Linux bridge address on the client; alias it to find the next gap
-          sudo ifconfig lo0 alias 172.17.0.1/32
+      - name: Probe, the client address a container reaches (card tooling-116)
+        continue-on-error: true
+        run: |
+          echo "inside the VM: $(colima ssh -- getent hosts host.lima.internal)"
+          docker run --rm alpine:3.22 sh -c 'getent hosts host.lima.internal; getent hosts host.docker.internal; ip route' || true
+          addr=$(colima ssh -- getent hosts host.lima.internal | awk '{print $1}')
+          echo "host.lima.internal = $addr"
+          mkdir -p "$RUNNER_TEMP/serve" && echo probe-ok > "$RUNNER_TEMP/serve/probe.txt"
+          python3 -m http.server 47116 --bind 127.0.0.1 --directory "$RUNNER_TEMP/serve" >/dev/null 2>&1 &
+          srv=$!; sleep 2
+          docker run --rm --add-host "downloads:$addr" alpine:3.22 wget -qO- -T 10 http://downloads:47116/probe.txt; echo "container fetch (loopback listener) exit=$?"
+          kill $srv
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
       - if: always()
