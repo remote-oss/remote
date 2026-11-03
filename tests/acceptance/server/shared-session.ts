@@ -8,12 +8,15 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {type HelperParameters, nodeEndpointPort} from 'lib-helper';
+import {
+  type HelperParameters,
+  nodeEndpointPort,
+  nodeLauncherFiles,
+} from 'lib-helper';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
 import {
   acquireConnection,
   type ConnectOutcome,
-  nodeLauncherFiles,
   nodeLocalFiles,
   nodeProcessSpawner,
   runConnectionHelper,

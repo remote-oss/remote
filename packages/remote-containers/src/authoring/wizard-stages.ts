@@ -144,6 +144,11 @@ export interface WizardPorts {
 export interface StagePorts extends WizardPorts {
   title: string;
   facts: FolderFacts;
+  /**
+   * The listed roots of a saved multi-root workspace, whose file's folder is the wizard's; none for a single folder.
+   * With roots, the template pick offers no file of the folder and no stored copy first.
+   */
+  roots: readonly string[];
 }
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -221,12 +226,13 @@ function templatePickStage(
     name: 'templatePick',
     execute: async (state, previous, cancellation) => {
       const location = ports.location;
+      const reuse = ports.roots.length === 0;
       const storedSlot =
-        location === undefined || state.target.kind !== 'workspace'
+        location === undefined || state.target.kind !== 'workspace' || !reuse
           ? undefined
           : await slotOf(location.storeRoot, state.folder, location.store);
       const choice = await pickTemplate(
-        {title: ports.title, folder: ports.facts, catalogue, storedSlot},
+        {title: ports.title, folder: ports.facts, catalogue, storedSlot, reuse},
         {
           ...ports.pick,
           curatedPrefix: prefix,
@@ -308,6 +314,7 @@ function locationStage(
           folder: state.folder,
           facts: ports.facts,
           files: ports.files,
+          roots: ports.roots,
           translate: ports.translate,
         },
         cancellation,

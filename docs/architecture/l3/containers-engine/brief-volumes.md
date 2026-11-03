@@ -45,8 +45,8 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - The GitHub picker uses core's `github` authentication provider (6.3).
 3. **The host-side pre-check (BR-5):** `git ls-remote` on the host, before any Docker object. Git's and ssh's
    credential and host-key prompts become quick inputs.
-   - **The askpass relay is one, shared.** lib-ssh's `askpass/` (endpoint, launcher, messages) moves to **lib-host**, as
-     containers-02 moved `posixQuote`, so that remote-containers can use it without importing lib-ssh (components §3).
+   - **The askpass relay is one, shared.** lib-ssh's `askpass/` (endpoint, launcher, messages) moves to **lib-helper** (athena's ruling, register 5c82020;
+     lib-host stays a leaf), so that remote-containers can use it without importing lib-ssh (components §3).
      The move touches transport-and-server `contracts.md`'s S2 and S7 rows (the askpass environment), and remote-ssh's
      imports follow.
    - **The program git runs:** remote-containers ships an askpass program of its own, `src/programs/askpass.ts` built
@@ -55,7 +55,7 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
      `classifyPrompt` today, so the move takes it as an argument.
      - ssh's classifier stays in lib-ssh.
      - C13 passes its own, covering git's "Username for" and "Password for" prompts and ssh's host-key and passphrase
-       questions. If C13 reuses ssh's patterns for those, the pure classifier moves to lib-host too.
+       questions. If C13 reuses ssh's patterns for those, the pure classifier moves to lib-helper too.
      - S7's contract row changes with it.
    - **git's input** (proteus on #1970), on the host and in the bootstrap alike:
      - every git call takes the source as one argv element after `--`, never inside a shell string, with
@@ -215,7 +215,7 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
     the CLI runs on the bootstrap image's Node (Alpine's `nodejs`, at least 20 as the CLI needs). The amendment goes
     into ADR-0009's decision with this card.
 - **C2:** volume create, list and inspect, build, run, exec and remove for the bootstrap.
-- **The askpass relay:** lib-ssh → lib-host (remote-ssh's imports follow).
+- **The askpass relay:** lib-ssh → lib-helper (remote-ssh's imports follow); lib-helper gains an edge to lib-host for `posixQuote`.
 - **`components.md`:** C13 joins the built components, with F-0701 to F-0708 and the volume halves of F-0806 and F-0808.
 - **The bootstrap and Explore definitions** ship as files in the package. No new runtime dependency: Alpine's packages
   are installed inside the images, not into the extension.
@@ -233,7 +233,7 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
 
 **Suggested cards** (daedalus; the first is the core the others need):
 1. **The core**, through F-0701:
-   - the askpass relay's move to lib-host;
+   - the askpass relay's move to lib-helper;
    - the pre-check, the payload, C6's reload and C5's forced trust;
    - the volume, the bootstrap image and container, and the clone with its deepening;
    - C3's container CLI host and `up`;

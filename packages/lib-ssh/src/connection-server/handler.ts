@@ -13,7 +13,9 @@ import type {
   RequestContext,
   Scheduler,
 } from 'lib-helper';
-import {AskpassEndpoint} from '../askpass/endpoint.ts';
+import {AskpassEndpoint} from 'lib-helper';
+import {classifyPrompt} from '../prompts/classify.ts';
+import type {PromptSurface} from './messages.ts';
 import type {Invocation} from '../arguments/invocation.ts';
 import {classify} from '../diagnostics/classify.ts';
 import {setupMarkerOf} from '../diagnostics/setup-report.ts';
@@ -71,13 +73,14 @@ type ConnectionState = 'idle' | 'connecting' | 'connected';
 export class ConnectionHandler implements MessageHandler {
   private readonly options: ConnectionHandlerOptions;
   private readonly ownership: LoginOwnership;
-  private readonly askpass: AskpassEndpoint;
+  private readonly askpass: AskpassEndpoint<PromptSurface>;
   private control!: HelperControl;
   private wait: ConnectWait | undefined;
   private runs: ShellRuns | undefined;
   private leaseCount = 0;
   private state: ConnectionState = 'idle';
   private session: SshSession | undefined;
+  private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
   private killed = false;
 
@@ -87,17 +90,19 @@ export class ConnectionHandler implements MessageHandler {
     this.ownership = new LoginOwnership(owner => {
       this.tell({type: 'ownerChanged', owner});
     });
+    const {displayHost, ...askpass} = options.askpass;
     this.askpass = new AskpassEndpoint({
-      ...options.askpass,
+      ...askpass,
+      classify: text => classifyPrompt(text, displayHost).surface,
       scheduler: options.scheduler,
       logLine: options.logLine,
       onPrompt: prompt => {
+        this.feed?.flush();
         this.tell({type: 'prompt', ...prompt});
         this.wait?.promptOpened();
       },
       onPromptClosed: promptId => {
-        this.tell({type: 'promptClosed', promptId});
-        this.wait?.promptAnswered();
+        this.closePrompt(promptId);
       },
     });
   }
@@ -195,10 +200,16 @@ export class ConnectionHandler implements MessageHandler {
   private answer(promptId: number, text: string): PlainData {
     const accepted = this.askpass.answer(promptId, text);
     if (accepted) {
-      this.tell({type: 'promptClosed', promptId});
-      this.wait?.promptAnswered();
+      this.closePrompt(promptId);
     }
     return {type: 'answered', accepted};
+  }
+
+  /** Tells the windows that a question closed, after ssh's lines that came before it. */
+  private closePrompt(promptId: number): void {
+    this.feed?.flush();
+    this.tell({type: 'promptClosed', promptId});
+    this.wait?.promptAnswered();
   }
 
   /**
@@ -259,6 +270,7 @@ export class ConnectionHandler implements MessageHandler {
     const feed = new SshLineFeed(batch => {
       this.tell({type: 'sshLines', lines: batch});
     }, this.options.scheduler);
+    this.feed = feed;
     let timedOut = false;
     const wait = new ConnectWait(
       this.options.waitSettings,
@@ -327,6 +339,7 @@ export class ConnectionHandler implements MessageHandler {
       this.askpass.closeAll();
       lines.flush();
       feed.flush();
+      this.feed = undefined;
       if (this.killed) {
         return;
       }

@@ -178,7 +178,13 @@ function outcomeOf(
  * the template is written with what they chose.
  */
 export async function runWizard(
-  request: {title: string; folder: string; target?: WizardTarget},
+  request: {
+    title: string;
+    folder: string;
+    target?: WizardTarget;
+    /** The listed roots of a saved multi-root workspace whose file `folder` holds; none for a single folder. */
+    roots?: readonly string[];
+  },
   ports: WizardPorts,
   cancellation: AbortSignal,
 ): Promise<WizardOutcome> {
@@ -189,7 +195,12 @@ export async function runWizard(
   }
   const facts = await readFolderFacts(ports.files, request.folder);
   const walked = await walkStages(
-    stagesOf(catalogue, {...ports, title: request.title, facts}),
+    stagesOf(catalogue, {
+      ...ports,
+      title: request.title,
+      facts,
+      roots: request.roots ?? [],
+    }),
     {
       folder: request.folder,
       target: request.target ?? {kind: 'workspace'},
@@ -256,10 +267,10 @@ const WIZARD_TEMPLATES = {
 /** The wizard as the commands start it: for a folder, titled S024, and never cancelled from outside. */
 export function wizardRunnerOf(
   ports: WizardPorts,
-): (folder: string) => Promise<WizardOutcome> {
-  return folder =>
+): (folder: string, roots: readonly string[]) => Promise<WizardOutcome> {
+  return (folder, roots) =>
     runWizard(
-      {title: ports.translate(WIZARD_TEMPLATES.S024), folder},
+      {title: ports.translate(WIZARD_TEMPLATES.S024), folder, roots},
       ports,
       new AbortController().signal,
     );

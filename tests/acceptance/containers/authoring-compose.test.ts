@@ -1,7 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
-import {waitFor} from '../windows/harness.ts';
 import {
   chooseQuickPickRow,
   dialogOf,
@@ -17,6 +16,8 @@ import {
   closeScreen,
   configurationOf,
   filesIn,
+  fromEntry,
+  pickShown,
   rowsOf,
   startCommand,
   takeFeatureScreen,
@@ -37,22 +38,6 @@ const GENERATED = '.devcontainer/docker-compose.yml';
 /** A compose file with the services `names`, each a keep-alive Alpine. */
 function composeWith(...names: string[]): string {
   return `services:\n${names.map(name => `  ${name}:\n    image: alpine\n    command: sleep infinity\n`).join('')}`;
-}
-
-/** Starts the wizard in `window`, takes the workspace and picks the From row of `entry`. */
-async function fromEntry(window: string, entry: string): Promise<void> {
-  await startCommand(window);
-  await chooseWorkspace(window);
-  await chooseQuickPickRow(window, `From '${entry}'`);
-}
-
-/** Waits for the pick whose placeholder is `placeholder`. */
-function pickShown(window: string, placeholder: string): Promise<void> {
-  return waitFor(
-    `the pick ${placeholder}`,
-    async () => (await quickPickOf(window))?.placeholder === placeholder,
-    60_000,
-  );
 }
 
 /** The key line of the generated compose file's first service. */

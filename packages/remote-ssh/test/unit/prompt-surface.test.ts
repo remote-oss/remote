@@ -2,7 +2,10 @@ import {deepStrictEqual} from 'node:assert';
 import type {ConnectionNotice} from 'lib-ssh';
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import {
+  ANSWERED_LINE,
   attachPromptSurface,
+  CLOSED_LINE,
+  DISMISSED_LINE,
   type PickRequest,
   type PromptEditor,
 } from '../../src/surfaces/prompt-surface.ts';
@@ -110,13 +113,23 @@ interface Setup {
   lease: FakeLease;
   editor: FakeEditor;
   surface: ReturnType<typeof attachPromptSurface>;
+  /** The lines the surface logged, in order. */
+  logged: string[];
 }
 
 function setup(): Setup {
   const lease = new FakeLease();
   const editor = new FakeEditor();
-  const surface = attachPromptSurface(lease, editor, {displayHost: 'box'});
-  return {lease, editor, surface};
+  const logged: string[] = [];
+  const surface = attachPromptSurface(lease, editor, {
+    displayHost: 'box',
+    logger: {
+      info: line => {
+        logged.push(line);
+      },
+    },
+  });
+  return {lease, editor, surface, logged};
 }
 
 function question(
@@ -337,5 +350,80 @@ describe('the prompt surface: its end', () => {
     await question(context, 1, PASSWORD_TEXT);
     context.surface.dispose();
     deepStrictEqual(context.editor.last().signal.aborted, true);
+  });
+});
+
+describe('the prompt surface: its log lines (card connect-144, F-2003 BR-6 item 7)', () => {
+  it('F-2003 BR-6 item 7: a password question is logged with its whole text, then its answer masked', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    const before = [...context.logged];
+    context.editor.last().finish('s3cret!');
+    await settled();
+    deepStrictEqual(
+      [before, context.logged],
+      [
+        [`prompt: ${PASSWORD_TEXT}`],
+        [`prompt: ${PASSWORD_TEXT}`, 'prompt answered: ***'],
+      ],
+    );
+  });
+
+  it('F-2003 BR-6 item 7, R-26: whatever the answer is, the line is the same and the answer is in no line', async () => {
+    const answers = ['s3cret!', 'x'.repeat(60), '***', '', 'line\nbreak'];
+    const lines: string[][] = [];
+    for (const answer of answers) {
+      const context = setup();
+      await question(context, 1, PASSWORD_TEXT);
+      context.editor.last().finish(answer);
+      await settled();
+      lines.push(context.logged.slice(1));
+    }
+    deepStrictEqual(
+      lines,
+      answers.map(() => [ANSWERED_LINE]),
+    );
+  });
+
+  it('F-2003 BR-6 item 7, R-26: the answer is in no logged line unless the answer is the mask itself', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.editor.last().finish('s3cret!');
+    await settled();
+    deepStrictEqual(
+      context.logged.filter(line => line.includes('s3cret!')),
+      [],
+    );
+  });
+
+  it('F-2003 BR-6 item 7: a dismissed question is logged as dismissed', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.editor.last().finish(undefined);
+    await settled();
+    deepStrictEqual(context.logged.slice(1), [DISMISSED_LINE]);
+  });
+
+  it('F-2003 BR-6 item 7: a question the editor could not show is logged as dismissed', async () => {
+    const context = setup();
+    context.editor.failsToShow = true;
+    await question(context, 1, PASSWORD_TEXT);
+    deepStrictEqual(context.logged.slice(1), [DISMISSED_LINE]);
+  });
+
+  it('F-2003 BR-6 item 7: a question ssh drops is logged as closed unanswered, and one that is not open adds nothing', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.lease.send({type: 'promptClosed', promptId: 9});
+    const before = context.logged.length;
+    context.lease.send({type: 'promptClosed', promptId: 1});
+    await settled();
+    deepStrictEqual([before, context.logged.slice(1)], [1, [CLOSED_LINE]]);
+  });
+
+  it('F-2003 BR-6 item 7: a host-key question is logged with its whole text', async () => {
+    const context = setup();
+    await question(context, 1, FINGERPRINT_TEXT);
+    deepStrictEqual(context.logged, [`prompt: ${FINGERPRINT_TEXT}`]);
   });
 });

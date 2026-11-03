@@ -3,8 +3,7 @@
  * question to the helper's askpass endpoint and prints the answer on standard output. It loads nothing of the editor.
  */
 
-import {nodeEndpointPort} from 'lib-helper';
-import {runAskpassProgram} from 'lib-ssh';
+import {nodeEndpointPort, runAskpassProgram} from 'lib-helper';
 
 runAskpassProgram({
   programArguments: process.argv.slice(2),

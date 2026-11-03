@@ -30,6 +30,7 @@ function sceneOf(
     {scheme: 'file', fsPath: '/w/p'},
   ],
   remoteName?: string,
+  workspaceFile?: {scheme: string; fsPath: string},
 ): Scene {
   const calls: string[] = [];
   const sink = new MemorySink();
@@ -41,6 +42,7 @@ function sceneOf(
         folders: () =>
           folders.map(folder => ({path: folder.fsPath, ...folder})),
         remoteName: () => remoteName,
+        workspaceFile: () => workspaceFile,
       },
       showModal: (message, buttons) => {
         calls.push(`modal ${message} ${buttons.join('|')}`);
@@ -50,8 +52,12 @@ function sceneOf(
         calls.push('openFolder');
         return Promise.resolve();
       },
-      wizard: folder => {
-        calls.push(`wizard ${folder}`);
+      wizard: (folder, roots) => {
+        calls.push(
+          roots.length === 0
+            ? `wizard ${folder}`
+            : `wizard ${folder} roots ${roots.join(',')}`,
+        );
         return Promise.resolve(outcome);
       },
       openPreview: file => {
@@ -97,7 +103,7 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
       kind: 'openStored',
       file: '/store/configs/p/.devcontainer/devcontainer.json',
     });
-    await addConfiguration(scene.ports, '/w/p');
+    await addConfiguration(scene.ports, '/w/p', []);
     deepStrictEqual(scene.calls, [
       'wizard /w/p',
       'preview /store/configs/p/.devcontainer/devcontainer.json',
@@ -111,7 +117,7 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
       target: '/store/configs/p',
       place: 'userData',
     });
-    await addConfiguration(scene.ports, '/w/p');
+    await addConfiguration(scene.ports, '/w/p', []);
     deepStrictEqual(scene.calls, ['wizard /w/p', 'offerReopen userData']);
   });
 
@@ -147,11 +153,33 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
     deepStrictEqual(scene.calls.length, 1);
   });
 
-  it('F-0801 AC-1: a window of several folders, or of one that is not a file, does nothing and says so', async () => {
-    const several = sceneOf(WRITTEN, null, [
-      {scheme: 'file', fsPath: '/a'},
-      {scheme: 'file', fsPath: '/b'},
-    ]);
+  it('F-0801 6.8, AC-7: a saved multi-root workspace runs the wizard for its file’s folder, with its local roots', async () => {
+    const scene = sceneOf(
+      WRITTEN,
+      null,
+      [
+        {scheme: 'file', fsPath: '/w/one'},
+        {scheme: 'vscode-vfs', fsPath: '/elsewhere'},
+        {scheme: 'file', fsPath: '/w/two'},
+      ],
+      undefined,
+      {scheme: 'file', fsPath: '/w/team.code-workspace'},
+    );
+    await createDevContainerFile(scene.ports)();
+    deepStrictEqual(scene.calls[0], 'wizard /w roots /w/one,/w/two');
+  });
+
+  it('F-0801 AC-1: an untitled window of several folders, or a window of one that is not a file, does nothing and says so', async () => {
+    const several = sceneOf(
+      WRITTEN,
+      null,
+      [
+        {scheme: 'file', fsPath: '/a'},
+        {scheme: 'file', fsPath: '/b'},
+      ],
+      undefined,
+      {scheme: 'untitled', fsPath: '/u/workspace.json'},
+    );
     const remote = sceneOf(WRITTEN, null, [
       {scheme: 'vscode-vfs', fsPath: '/a'},
     ]);
@@ -212,6 +240,6 @@ describe('the Add Dev Container Configuration Files command (card containers-80)
 
   it('F-0301 7.E2: the continuation runs the wizard for the folder it is given, and gives the outcome', async () => {
     const scene = sceneOf(WRITTEN);
-    deepStrictEqual(await addConfiguration(scene.ports, '/w/q'), WRITTEN);
+    deepStrictEqual(await addConfiguration(scene.ports, '/w/q', []), WRITTEN);
   });
 });

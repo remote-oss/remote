@@ -28,6 +28,7 @@ import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
 import {
   addConfiguration,
+  savedWorkspaceOf,
   createDevContainerFile,
 } from './authoring/create-file.ts';
 import type {OptionRow} from './authoring/option-screens.ts';
@@ -830,9 +831,19 @@ export async function activate(
         },
         translate,
       };
-      const authoring = {execute: wizardRunnerOf(wizardPorts)};
+      const wizardFor = wizardRunnerOf(wizardPorts);
+      // An open command authors in the folder it opens: in a saved multi-root workspace, its file's folder.
+      function windowRoots(): string[] {
+        return (
+          savedWorkspaceOf(windowFolders(), vscode.workspace.workspaceFile)
+            ?.roots ?? []
+        );
+      }
+      const authoring = {
+        execute: (folder: string) => wizardFor(folder, windowRoots()),
+      };
       const continuation = {
-        wizard: authoring.execute,
+        wizard: wizardFor,
         openPreview: (file: string) =>
           vscode.window.showTextDocument(authoringUriOf(file), {
             preview: true,
@@ -947,7 +958,8 @@ export async function activate(
             ),
           compare: collate,
           stored: folder => storedCandidate(storedLookup, folder),
-          useTemplate: folder => addConfiguration(continuation, folder),
+          useTemplate: folder =>
+            addConfiguration(continuation, folder, windowRoots()),
           translate,
         },
         settings: {
@@ -1104,6 +1116,7 @@ export async function activate(
             window: {
               folders: windowFolders,
               remoteName: () => vscode.env.remoteName,
+              workspaceFile: () => vscode.workspace.workspaceFile,
             },
             showModal: (message, buttons) =>
               vscode.window.showInformationMessage(

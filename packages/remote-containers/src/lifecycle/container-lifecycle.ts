@@ -17,8 +17,10 @@ import type {
 import type {EngineHost} from '../engine/engine-host.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
 import {
+  type MountSource,
   mountTargetOf,
   reservedMount,
+  runArgsTargets,
   serviceVolumeTargetOf,
 } from './reserved-mounts.ts';
 import {
@@ -63,6 +65,10 @@ export interface ContainerRequest {
   features: FeatureSettings;
   /** The `mounts` of the configuration, as the CLI read them; none when it has none. */
   mounts: readonly unknown[];
+  /** The `runArgs` of the configuration, as the CLI read them; none when it has none. */
+  runArgs: readonly unknown[];
+  /** The `workspaceMount` of the configuration, as the CLI read it; none when it has none. */
+  workspaceMount: unknown;
   /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
   pausedRetry: (containerId: string) => Promise<boolean>;
 }
@@ -507,6 +513,33 @@ export function containerLifecycleOf(dependencies: {
     };
   }
 
+  /** The properties of the configuration that can mount a target, in the order the first reserved one is reported. */
+  function mountSourcesOf(
+    request: ContainerRequest,
+    composeResolution: ComposeResolution,
+  ): MountSource[] {
+    if (composeResolution.kind !== 'ready') {
+      return [
+        {property: 'mounts', targets: request.mounts.map(mountTargetOf)},
+        {property: 'runArgs', targets: runArgsTargets(request.runArgs)},
+        {
+          property: 'workspaceMount',
+          targets: [mountTargetOf(request.workspaceMount)],
+        },
+      ];
+    }
+    return [
+      {property: 'mounts', targets: request.mounts.map(mountTargetOf)},
+      {
+        property: `services.${composeResolution.service}.volumes`,
+        targets: (
+          composeResolution.model.services.get(composeResolution.service)
+            ?.volumes ?? []
+        ).map(serviceVolumeTargetOf),
+      },
+    ];
+  }
+
   async function prepare(
     request: ContainerRequest,
     onStep: (step: ContainerStep) => void,
@@ -528,19 +561,9 @@ export function containerLifecycleOf(dependencies: {
     if (composeResolution.kind === 'failed') {
       return {kind: 'discoveryFailed', detail: composeResolution.detail};
     }
-    const reserved =
-      request.cacheVolume && composeResolution.kind === 'ready'
-        ? reservedMount([
-            {property: 'mounts', targets: request.mounts.map(mountTargetOf)},
-            {
-              property: `services.${composeResolution.service}.volumes`,
-              targets: (
-                composeResolution.model.services.get(composeResolution.service)
-                  ?.volumes ?? []
-              ).map(serviceVolumeTargetOf),
-            },
-          ])
-        : undefined;
+    const reserved = request.cacheVolume
+      ? reservedMount(mountSourcesOf(request, composeResolution))
+      : undefined;
     if (reserved !== undefined) {
       return {kind: 'reservedMount', ...reserved};
     }

@@ -1110,6 +1110,10 @@ export function containerConnectorOf(
         mounts: Array.isArray(read?.configuration.mounts)
           ? read.configuration.mounts
           : [],
+        runArgs: Array.isArray(read?.configuration.runArgs)
+          ? read.configuration.runArgs
+          : [],
+        workspaceMount: read?.configuration.workspaceMount,
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}

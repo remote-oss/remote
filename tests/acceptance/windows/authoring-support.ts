@@ -113,6 +113,22 @@ export async function chooseWorkspace(window: string): Promise<void> {
   await waitForPickAfterLocation(window);
 }
 
+/** Starts the wizard in `window`, takes the workspace and picks the From row of `entry`. */
+export async function fromEntry(window: string, entry: string): Promise<void> {
+  await startCommand(window);
+  await chooseWorkspace(window);
+  await chooseQuickPickRow(window, `From '${entry}'`);
+}
+
+/** Waits for the pick whose placeholder is `placeholder`. */
+export function pickShown(window: string, placeholder: string): Promise<void> {
+  return waitFor(
+    `the pick ${placeholder}`,
+    async () => (await quickPickOf(window))?.placeholder === placeholder,
+    60_000,
+  );
+}
+
 /** Waits for the option screen whose placeholder is `placeholder`, and takes its focused item, the template's default. */
 export async function takeOptionScreen(
   window: string,
@@ -134,7 +150,8 @@ export const ALPINE_OPTION = 'Alpine version:';
 export const FEATURES_PLACEHOLDER = 'Select additional features to install';
 
 /** The placeholder of the Optional Files/Directories screen. */
-const OPTIONAL_PLACEHOLDER = 'Include the following optional files/directories';
+export const OPTIONAL_PLACEHOLDER =
+  'Include the following optional files/directories';
 
 /** Waits for Optional Files/Directories and presses OK with nothing checked, which leaves every optional file out. */
 export async function takeOptionalScreen(window: string): Promise<void> {
