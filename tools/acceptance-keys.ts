@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {type CommandRunner, checked} from './command-runner.ts';
+import {type CommandRunner, checked, runCommand} from './command-runner.ts';
 import {newPassword} from './acceptance-run.ts';
 import {type Started, startDetached} from './acceptance-plain.ts';
 
@@ -245,8 +245,25 @@ export function agentEnvironment(
   );
 }
 
-/** Starts the run's own ssh-agent in the foreground on `socket`, with no way to ask the user. */
-export function startRunAgent(socket: string): Started {
+/**
+ * Starts the run's own ssh-agent in the foreground on `socket`, with no way to ask the user. On Windows (`platform`)
+ * the agent is the system's service, which the job starts and which keeps its keys between runs: the run empties it
+ * with `ssh-add -D` at its start and at its end.
+ */
+export function startRunAgent(
+  socket: string,
+  platform: NodeJS.Platform = process.platform,
+  command: CommandRunner = runCommand,
+): Started {
+  if (platform === 'win32') {
+    checked(command, 'ssh-add', ['-D']);
+    return {
+      stop: () => {
+        checked(command, 'ssh-add', ['-D']);
+        return Promise.resolve();
+      },
+    };
+  }
   return startDetached({
     file: 'ssh-agent',
     programArguments: ['-a', socket, '-D'],
@@ -263,28 +280,50 @@ const LONGEST_CONTROL_SOCKET = 'cm-autoask-'.length + 40 + 17;
 /**
  * The folder of the ControlMaster sockets of the run's aliases: the run's folder, or, when the longest socket name in
  * it would pass the limit of a Unix socket path, a short folder `shortFolder` makes (by default a new one under
- * `/tmp`). A runner's temporary folder and run id make a run folder too deep for it.
+ * `/tmp`). A runner's temporary folder and run id make a run folder too deep for it. On Windows (`platform`), which
+ * has no ControlMaster alias, it is the run's folder.
  */
 export function controlFolderOf(
   runFolder: string,
   shortFolder: () => string = () => mkdtempSync('/tmp/control-'),
+  platform: NodeJS.Platform = process.platform,
 ): string {
-  return Buffer.byteLength(runFolder) + 1 + LONGEST_CONTROL_SOCKET <=
-    SOCKET_PATH_LIMIT
+  return platform === 'win32' ||
+    Buffer.byteLength(runFolder) + 1 + LONGEST_CONTROL_SOCKET <=
+      SOCKET_PATH_LIMIT
     ? runFolder
     : shortFolder();
 }
 
+/** The named pipe of OpenSSH for Windows' agent, a service of the system rather than a program of the run. */
+export const WINDOWS_AGENT_PIPE = '\\\\.\\pipe\\openssh-ssh-agent';
+
 /**
  * Where the run's agent listens: `agent.sock` in the run's folder, or, when that path is too long for a Unix socket,
- * in a short folder `shortFolder` makes (by default a new one under `/tmp`).
+ * in a short folder `shortFolder` makes (by default a new one under `/tmp`). On Windows (`platform`) it is the agent
+ * service's pipe.
  */
 export function agentSocketPath(
   runFolder: string,
   shortFolder: () => string = () => mkdtempSync('/tmp/agent-'),
+  platform: NodeJS.Platform = process.platform,
 ): string {
+  if (platform === 'win32') {
+    return WINDOWS_AGENT_PIPE;
+  }
   const inRunFolder = path.join(runFolder, 'agent.sock');
   return Buffer.byteLength(inRunFolder) <= SOCKET_PATH_LIMIT
     ? inRunFolder
     : path.join(shortFolder(), 'agent.sock');
+}
+
+/**
+ * A path as the run's ssh_config writes it: as it is, or on Windows (`platform`) with forward slashes (`C:/…`), which
+ * OpenSSH for Windows reads and its parser does not take for escapes.
+ */
+export function sshConfigPath(
+  file: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return platform === 'win32' ? file.replaceAll('\\', '/') : file;
 }
