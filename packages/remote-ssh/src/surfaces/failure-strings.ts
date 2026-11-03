@@ -69,6 +69,7 @@ export type FailureStringId =
   | 'installPathProvided'
   | 'reversedPortRange'
   | 'sshTimedOut'
+  | 'forwardingRefused'
   | 'templateNotHttp'
   | 'templateUnknownPlaceholder'
   | 'preconnectNotAPath'
@@ -148,6 +149,8 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   preconnectValueNumber: 'a number',
   preconnectValueObject: 'an object',
   sshTimedOut: 'Connecting with SSH timed out',
+  forwardingRefused:
+    'TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
   trustRefused: 'Got bad result from install script',

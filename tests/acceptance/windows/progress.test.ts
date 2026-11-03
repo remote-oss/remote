@@ -17,10 +17,10 @@ function linesOfPg1() {
   return recordLines(undefined, 'pg1');
 }
 
-describe('the progress of a connect that core retries (card coverage-29)', function () {
+describe('the progress of a connect that a refused forward ends (card coverage-29)', function () {
   this.timeout(180000);
 
-  it('F-2304 AC-20 (progress-reconnect): a platform pick dismissed during core’s reconnection attempts shows no failure dialog, the progress starts again and the next pick is held', async () => {
+  it('F-2304 AC-20 (ruling-1985-forwarding-fails): with the second ssh and a host that refuses TCP forwarding the platform is picked once, and the connect then fails with the forwarding dialog, with no reconnection and no second pick', async () => {
     const saved = readUserSettings();
     try {
       await userSettings({
@@ -36,65 +36,35 @@ describe('the progress of a connect that core retries (card coverage-29)', funct
           window: 'pg1',
         },
         {
-          surface: 'platformPick',
-          match: 'noforward',
+          surface: 'failureDialog',
+          match: 'Could not establish connection',
           answer: 'dismiss',
           window: 'pg1',
         },
         {
-          surface: 'platformPick',
-          match: 'noforward',
-          answer: 'linux',
+          surface: 'mitigationPick',
+          match: 'Pick an action',
+          answer: 'dismiss',
           window: 'pg1',
-          after: 'never',
         },
       ]);
       await openWindow('noforward', 'pg1');
       await waitFor(
-        'the dismissed platform pick',
-        () =>
-          linesOfPg1().some(
-            line =>
-              line.surface === 'platformPick' && line.answer === 'dismiss',
-          ),
+        'the failure dialog',
+        () => linesOfPg1().some(line => line.surface === 'failureDialog'),
         120_000,
-      );
-      const dismissedAt = linesOfPg1().findIndex(
-        line => line.surface === 'platformPick' && line.answer === 'dismiss',
-      );
-      const dismissedTime = linesOfPg1()[dismissedAt]?.time ?? 0;
-      await waitFor(
-        'a new progress and the held pick after the dismissed one',
-        () => {
-          const after = linesOfPg1().slice(dismissedAt + 1);
-          const restart = after.findIndex(
-            line => line.surface === 'progress' && line.question === SETTING_UP,
-          );
-          return (
-            restart !== -1 &&
-            after
-              .slice(restart + 1)
-              .some(line => line.surface === 'platformPick')
-          );
-        },
-        5000,
       );
       await new Promise(resolve => setTimeout(resolve, 10_000));
       const lines = linesOfPg1();
-      const restartLine = lines
-        .slice(dismissedAt + 1)
-        .find(
-          line => line.surface === 'progress' && line.question === SETTING_UP,
-        );
       deepStrictEqual(
         [
+          lines.filter(line => line.surface === 'platformPick').length,
+          lines.filter(line => line.surface === 'failureDialog').length,
           lines.filter(
             line => line.surface === 'progress' && line.question === SETTING_UP,
-          ).length >= 2,
-          lines.some(line => line.surface === 'failureDialog'),
-          (restartLine?.time ?? Infinity) - dismissedTime <= 5000,
+          ).length,
         ],
-        [true, false, true],
+        [1, 1, 1],
       );
     } finally {
       await closeWindow('pg1');

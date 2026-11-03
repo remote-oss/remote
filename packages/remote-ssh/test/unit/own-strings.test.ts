@@ -1,6 +1,7 @@
 import {deepStrictEqual, throws} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {FAILURE_TEMPLATES} from '../../src/surfaces/failure-strings.ts';
 import {OWN_TEMPLATES, ownText} from '../../src/surfaces/own-strings.ts';
 
 const BUNDLES = path.join(import.meta.dirname, '..', '..', 'l10n');
@@ -14,6 +15,13 @@ function german(template: string): string {
 }
 
 describe('the strings that are ours alone', () => {
+  it('F-2604 AC-6 (ruling-1985-forwarding-fails): the log line of a refused forward is the dialog reason with the ERROR lead, so the two have one text', () => {
+    deepStrictEqual(
+      OWN_TEMPLATES.S046,
+      `ERROR: ${FAILURE_TEMPLATES.forwardingRefused}`,
+    );
+  });
+
   it('F-2502 BR-2: the label prefix fills the host label', () => {
     deepStrictEqual(
       ownText({id: 'sshLabelPrefix', values: ['dev']}, same),

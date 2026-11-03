@@ -66,9 +66,12 @@ export type {
 } from './diagnostics/classify.ts';
 export {
   classify,
+  CLIENT_FORWARDING_DISABLED,
   endWithFullStop,
+  FORWARDING_PROHIBITED_HINT,
   isDebugLine,
   logLinesOf,
+  warnsForwardingDisabled,
 } from './diagnostics/classify.ts';
 export type {
   PickItem,

@@ -55,6 +55,30 @@ describe('the refusal of a forward in ssh lines (card connect-119)', () => {
     );
   });
 
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): the changed host key’s warning is noticed for the connect, and a new connect starts without it', () => {
+    const {watch} = watching();
+    const before = watch.warned();
+    logSshLines(
+      watch.logger,
+      [
+        'Warning: Port forwarding is disabled to avoid man-in-the-middle attacks.',
+      ],
+      undefined,
+    );
+    const during = watch.warned();
+    watch.begin();
+    deepStrictEqual([before, during, watch.warned()], [false, true, false]);
+  });
+
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a refused channel is noticed as prohibited for the connect, and a new connect starts without it', () => {
+    const {watch} = watching();
+    const before = watch.prohibited();
+    logSshLines(watch.logger, [REFUSED], undefined);
+    const during = watch.prohibited();
+    watch.begin();
+    deepStrictEqual([before, during, watch.prohibited()], [false, true, false]);
+  });
+
   it('F-2604 AC-2: several refused channels log the setting text once', () => {
     const {watch, sink} = watching();
     logSshLines(

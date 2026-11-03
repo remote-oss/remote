@@ -733,6 +733,28 @@ describe("the assembled ports' other parts", () => {
     );
   });
 
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): the tunnel asks the refusal watch of the connect whether ssh warned of a changed host key and whether it reported a forward prohibited, and with no watch neither is so', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({});
+    const watched = wiringPortsOf(surfaces, machine, loggerOf(recorded), {
+      warned: () => true,
+      prohibited: () => false,
+    }).tunnel;
+    const unwatched = wiringPortsOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).tunnel;
+    deepStrictEqual(
+      [
+        watched.warnedForwardingDisabled(),
+        watched.prohibitedForwarding(),
+        unwatched.warnedForwardingDisabled(),
+        unwatched.prohibitedForwarding(),
+      ],
+      [true, false, false, false],
+    );
+  });
+
   it('F-2104: the tunnel reads its path settings at each connect', () => {
     const {surfaces, machine, recorded} = assemblyInputs({
       'remote.SSH.remoteServerListenOnSocket': true,
