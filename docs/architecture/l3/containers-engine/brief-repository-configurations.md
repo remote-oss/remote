@@ -33,12 +33,14 @@ F-0402 (S368's wording). Decisions: D-100, D-105, F-0302 Q2, R-27, ADR-0010.
    - **F-0302 Q2 adds `git://` and portless `ssh://`,** both mirrored to `<host>/<path>` (7.E3, 7.E6).
    - **A mirrored path never leaves its root** (dike on #2015). F-0302 has no rule for it, and a remote's URL is text
      the repository controls.
-     - A derived path with an empty, `.` or `..` segment, a NUL, or a segment holding a path separator of the client
-       (`\` on Windows) names nothing, and the remote is skipped.
+     - A derived path with an empty, `.` or `..` segment, a `\` on any client, or any control character names nothing,
+       and that remote (or clone URL) is skipped (dike and proteus on #2015).
      - After the join, the path is resolved, and it's used only if it stays under `<root>/` (a prefix test on the
        resolved paths, with the trailing separator).
-     - Unit rows: a `..` segment, a `.` segment, an empty segment, and a URL whose path resolves outside the root each
-       name nothing, and a sibling-prefix root (`/r` against `/r2/…`) is refused.
+     - Unit rows: a `..` segment (`https://host/../../x`, `git@host:../x`), a `.` segment, an empty segment, a `\`, a
+       control character, and a URL whose path resolves outside the root each name nothing, from a configured remote
+       and from a Clone-in-Volume URL alike (an F-0706 link included). A sibling-prefix root (`/r` against `/r2/…`) is
+       refused.
 3. **The files** under each `<root>/<mirrored path>/`: F-0301's three shapes, `.devcontainer/devcontainer.json`, a root
    `.devcontainer.json`, and `.devcontainer/<name>/devcontainer.json` (BR-1, File shapes).
 4. **The setting** (BR-7, BR-9):
