@@ -80,7 +80,7 @@ function uniqueVolumeTargetOf(
 }
 
 /** The URI of a volume target's window: its folder under `/workspaces`. */
-function volumeWindowUriOf(target: DevContainerVolume): string {
+export function volumeWindowUriOf(target: DevContainerVolume): string {
   return `${AUTHORITY_PREFIX}${volumePayloadOf(target)}/workspaces/${encodeURIComponent(target.folder)}`;
 }
 
@@ -100,22 +100,33 @@ async function trusted(ports: CloneCommandPorts): Promise<boolean> {
   return true;
 }
 
-/** Runs the command once, up to the reload; every way it ends before then leaves the window as it was. */
-export async function cloneInUniqueVolume(
+/** The steps both clone commands share, up to the pre-check: the trust confirmation, the engine check, the source the user gives, and the modal for a source that can't be read: the source, or nothing when the command stops. */
+export async function givenSourceOf(
   ports: CloneCommandPorts,
-  cancellation: AbortSignal,
-): Promise<void> {
+): Promise<CloneSource | undefined> {
   if (!(await trusted(ports)) || !(await ports.engineReady())) {
-    return;
+    return undefined;
   }
   const typed = await ports.pickSource();
   if (typed === undefined) {
-    return;
+    return undefined;
   }
   const source = cloneSourceOf(typed, 'typed');
   if ('refused' in source) {
     ports.logger.info(`the source was refused: ${source.refused}`);
     await ports.cannotAccess(typed.trim());
+    return undefined;
+  }
+  return source;
+}
+
+/** Runs the command once, up to the reload; every way it ends before then leaves the window as it was. */
+export async function cloneInUniqueVolume(
+  ports: CloneCommandPorts,
+  cancellation: AbortSignal,
+): Promise<void> {
+  const source = await givenSourceOf(ports);
+  if (source === undefined) {
     return;
   }
   if (ports.currentRepository() === source.repositoryPath) {

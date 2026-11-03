@@ -14,6 +14,13 @@ const CLONE_TEMPLATES = {
   S252: 'Only clone a repository in a Dev Container if you trust its authors.',
   gotIt: 'Got It',
   learnMore: 'Learn More',
+  S007: '$(plus) Create a new volume...',
+  S166: 'Enter the target folder name.',
+  S167: 'Enter the volume name.',
+  S318: 'Select the volume for the cloned repository',
+  S391: 'Use this volume to store several cloned repositories.',
+  S395: 'Volume already exists',
+  S419: 'created at {0}',
   sourcePlaceholder: 'Provide repository URL or pick a repository source.',
   hostKeyContinue: 'Continue',
 } as const;

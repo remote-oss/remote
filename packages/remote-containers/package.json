@@ -200,6 +200,11 @@
         "command": "remote-containers.openRepositoryInUniqueVolume",
         "title": "%commands.Openrepositoryinuniquevolume.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openRepositoryInVolume",
+        "title": "%commands.Openrepositoryinvolume.title%",
+        "category": "Dev Containers"
       }
     ],
     "menus": {
@@ -298,6 +303,10 @@
         },
         {
           "command": "remote-containers.openRepositoryInUniqueVolume",
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openRepositoryInVolume",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         }
       ],

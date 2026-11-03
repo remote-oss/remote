@@ -66,6 +66,7 @@ function plainPass(short: string): ReturnType<EngineScript> {
 /** What a scene did. */
 interface SceneRecord {
   calls: string[];
+  creates: string[][];
   logLines: string[];
   record: string[];
   requests: VolumeContainerRequest[];
@@ -84,8 +85,14 @@ async function sceneOf(
   const sink = new MemorySink();
   const record: string[] = [];
   const requests: VolumeContainerRequest[] = [];
+  const creates: string[][] = [];
   const scripted = scriptedEngine(
-    shortOf,
+    argv => {
+      if (argv[0] === 'volume' && argv[1] === 'create') {
+        creates.push([...argv]);
+      }
+      return shortOf(argv);
+    },
     short => options.script?.(short) ?? plainPass(short),
     short => {
       if (short === 'run --detach') {
@@ -125,6 +132,7 @@ async function sceneOf(
   );
   return {
     calls: scripted.calls,
+    creates,
     logLines: sink.lines.map(line => line.message),
     record,
     requests,
@@ -350,7 +358,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
     );
   });
 
-  it('F-0702: a named volume is used by its name and made with no labels; a history that wasn’t fetched marks the pass shallow', async () => {
+  it('F-0702 AC-14, BR-8: a named volume is created with the labels its own clone fixed, and a history that wasn’t fetched marks the pass shallow', async () => {
     const scene = await sceneOf({
       target: {...TARGET, volumeName: 'data'},
       script: short =>
@@ -360,8 +368,40 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
       [
         scene.requests[0]?.workspace.workspaceMount,
         scene.resolution.kind === 'prepared' && scene.resolution.shallow,
+        scene.creates,
       ],
-      ['type=volume,source=data,target=/workspaces', true],
+      [
+        'type=volume,source=data,target=/workspaces',
+        true,
+        [
+          [
+            'volume',
+            'create',
+            '--label',
+            'vsch.local.repository=https://github.com/o/r',
+            '--label',
+            'vsch.local.repository.unique=false',
+            '--',
+            'data',
+          ],
+        ],
+      ],
+    );
+  });
+
+  it('F-0702 AC-10, AC-17, BR-5, BR-10: a named volume’s folder passes through as typed, traversal included; only an empty one is refused before any step', async () => {
+    const scenes = await Promise.all(
+      ['', '../../etc', 'a/b'].map(folder =>
+        sceneOf({target: {...TARGET, volumeName: 'data', folder}}),
+      ),
+    );
+    deepStrictEqual(
+      scenes.map(scene => [scene.calls.length, scene.resolution.kind]),
+      [
+        [0, 'failed'],
+        [15, 'prepared'],
+        [15, 'prepared'],
+      ],
     );
   });
 });

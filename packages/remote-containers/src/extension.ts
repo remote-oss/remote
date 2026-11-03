@@ -109,10 +109,25 @@ import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {composeCheck, currentContext, firstCheck} from './engine/preflight.ts';
 import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
 import {
+  type CloneCommandPorts,
   CLONE_TRUST_KEY,
   CLONE_TRUST_PAGE,
   cloneInUniqueVolume,
 } from './volumes/clone-command.ts';
+import {cloneInNamedVolume} from './volumes/clone-named-volume.ts';
+import {
+  type NamedVolumeFact,
+  namedVolumeInspectArguments,
+  namedVolumeListArguments,
+  namedVolumesOf,
+  volumeInspectArguments,
+} from './volumes/clone-volume.ts';
+import {stepOf} from './volumes/engine-step.ts';
+import {namedVolumeRowsOf} from './volumes/named-volume-pick.ts';
+import {
+  VOLUME_NAME_DEFAULT,
+  volumeNameMessageOf,
+} from './volumes/volume-name-rules.ts';
 import {
   clearTypedSource,
   storeTypedSource,
@@ -766,6 +781,78 @@ export async function activate(
           ),
         );
       }
+      /** The ports the clone commands share, over the editor and this machine. */
+      function sharedClonePorts(): Omit<CloneCommandPorts, 'engine'> {
+        return {
+          trust: {
+            accepted: () => context.globalState.get(CLONE_TRUST_KEY) === true,
+            confirm: async () => {
+              const learnMore = cloneText('learnMore', translate);
+              const gotIt = cloneText('gotIt', translate);
+              const answer = await vscode.window.showWarningMessage(
+                cloneText('S075', translate),
+                {modal: true, detail: cloneText('S252', translate)},
+                learnMore,
+                gotIt,
+              );
+              if (answer === gotIt) {
+                return 'gotIt';
+              }
+              return answer === learnMore ? 'learnMore' : 'cancel';
+            },
+            remember: async () => {
+              await context.globalState.update(CLONE_TRUST_KEY, true);
+            },
+            learnMore: () => {
+              void vscode.env.openExternal(vscode.Uri.parse(CLONE_TRUST_PAGE));
+            },
+          },
+          engineReady: async () =>
+            (await firstCheck(
+              served.preflight,
+              engineBaseOf({
+                folder: firstFolder(),
+                trusted: vscode.workspace.isTrusted,
+              }),
+              new AbortController().signal,
+            )) === 'proceed',
+          pickSource: () => pickCloneSource(),
+          precheck: (source, cancellation) =>
+            precheck(
+              source,
+              'typed',
+              {
+                openRelay: () => openCloneRelay(),
+                runGit: (gitArguments, environment, signal) =>
+                  runHostProgram('git', gitArguments, environment, signal),
+              },
+              cancellation,
+            ),
+          cannotAccess: async repository => {
+            await vscode.window.showErrorMessage(
+              cloneText('S052', translate, [repository]),
+              {modal: true},
+            );
+          },
+          currentRepository: () => {
+            const authority = vscode.env.remoteAuthority ?? '';
+            return authority.startsWith('dev-container+')
+              ? volumeTargetOf(authority.slice('dev-container+'.length))
+                  ?.repositoryPath
+              : undefined;
+          },
+          recordTyped: payload =>
+            storeTypedSource(context.globalState, payload, Date.now()),
+          reload: async uri => {
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(uri),
+              {forceReuseWindow: true},
+            );
+          },
+          logger: served.logger,
+        };
+      }
       /** Clone Repository in Container Volume's command, over the editor and this machine. */
       function cloneCommand(): CommandHandler {
         let engine: PinnedEngine = {};
@@ -773,88 +860,138 @@ export async function activate(
           execute: async () => {
             engine = await windowPinnedEngine();
             await cloneInUniqueVolume(
+              {...sharedClonePorts(), engine: () => engine},
+              new AbortController().signal,
+            );
+          },
+        };
+      }
+      /** Clone Repository in Named Container Volume's command, over the editor and this machine. */
+      function namedCloneCommand(): CommandHandler {
+        let engine: PinnedEngine = {};
+        return {
+          execute: async () => {
+            engine = await windowPinnedEngine();
+            const configured = vscode.workspace
+              .getConfiguration()
+              .get(settings.dockerPath.id);
+            const dockerPath = (configured as string | undefined) ?? 'docker';
+            const host = withEnvironment(nodeEngineHost(dockerPath), () =>
+              engineEnvironment(engineSources()),
+            );
+            async function engineStep(argv: readonly string[]) {
+              return stepOf(
+                {
+                  engine: host,
+                  options: {cancellation: new AbortController().signal},
+                },
+                argv,
+              );
+            }
+            await cloneInNamedVolume(
               {
-                trust: {
-                  accepted: () =>
-                    context.globalState.get(CLONE_TRUST_KEY) === true,
-                  confirm: async () => {
-                    const learnMore = cloneText('learnMore', translate);
-                    const gotIt = cloneText('gotIt', translate);
-                    const answer = await vscode.window.showWarningMessage(
-                      cloneText('S075', translate),
-                      {modal: true, detail: cloneText('S252', translate)},
-                      learnMore,
-                      gotIt,
-                    );
-                    if (answer === gotIt) {
-                      return 'gotIt';
-                    }
-                    return answer === learnMore ? 'learnMore' : 'cancel';
-                  },
-                  remember: async () => {
-                    await context.globalState.update(CLONE_TRUST_KEY, true);
-                  },
-                  learnMore: () => {
-                    void vscode.env.openExternal(
-                      vscode.Uri.parse(CLONE_TRUST_PAGE),
-                    );
-                  },
-                },
-                engineReady: async () =>
-                  (await firstCheck(
-                    served.preflight,
-                    engineBaseOf({
-                      folder: firstFolder(),
-                      trusted: vscode.workspace.isTrusted,
-                    }),
-                    new AbortController().signal,
-                  )) === 'proceed',
-                pickSource: () => pickCloneSource(),
-                precheck: (source, cancellation) =>
-                  precheck(
-                    source,
-                    'typed',
-                    {
-                      openRelay: () => openCloneRelay(),
-                      runGit: (gitArguments, environment, signal) =>
-                        runHostProgram(
-                          'git',
-                          gitArguments,
-                          environment,
-                          signal,
-                        ),
-                    },
-                    cancellation,
-                  ),
-                cannotAccess: async repository => {
-                  await vscode.window.showErrorMessage(
-                    cloneText('S052', translate, [repository]),
-                    {modal: true},
-                  );
-                },
-                currentRepository: () => {
-                  const authority = vscode.env.remoteAuthority ?? '';
-                  return authority.startsWith('dev-container+')
-                    ? volumeTargetOf(authority.slice('dev-container+'.length))
-                        ?.repositoryPath
-                    : undefined;
-                },
+                ...sharedClonePorts(),
                 engine: () => engine,
-                recordTyped: payload =>
-                  storeTypedSource(context.globalState, payload, Date.now()),
-                reload: async uri => {
-                  await vscode.commands.executeCommand(
-                    'vscode.openFolder',
-                    vscode.Uri.parse(uri),
-                    {forceReuseWindow: true},
+                namedVolumes: async () => {
+                  const listed = await engineStep(namedVolumeListArguments());
+                  if (!listed.succeeded) {
+                    return [];
+                  }
+                  const names = listed.stdout
+                    .split('\n')
+                    .filter(name => name !== '');
+                  if (names.length === 0) {
+                    return [];
+                  }
+                  const dated = await engineStep(
+                    namedVolumeInspectArguments(names),
+                  );
+                  return dated.succeeded ? namedVolumesOf(dated.stdout) : [];
+                },
+                pickVolume: volumes => pickNamedVolume(volumes),
+                volumeName: async () =>
+                  vscode.window.showInputBox({
+                    value: VOLUME_NAME_DEFAULT,
+                    prompt: cloneText('S167', translate),
+                    validateInput: name => volumeNameMessageOf(name, translate),
+                  }),
+                volumeExists: async name =>
+                  (await engineStep(volumeInspectArguments(name))).succeeded,
+                volumeAlreadyExists: async () => {
+                  await vscode.window.showErrorMessage(
+                    '',
+                    {
+                      modal: true,
+                      detail: cloneText('S395', translate),
+                    },
+                    'OK',
                   );
                 },
-                logger: served.logger,
+                folderName: async defaultFolder =>
+                  vscode.window.showInputBox({
+                    value: defaultFolder,
+                    prompt: cloneText('S166', translate),
+                  }),
+                currentClone: () => {
+                  const authority = vscode.env.remoteAuthority ?? '';
+                  if (!authority.startsWith('dev-container+')) {
+                    return undefined;
+                  }
+                  const target = volumeTargetOf(
+                    authority.slice('dev-container+'.length),
+                  );
+                  return target === undefined
+                    ? undefined
+                    : {
+                        repositoryPath: target.repositoryPath,
+                        volumeName: target.volumeName,
+                        folder: target.folder,
+                      };
+                },
               },
               new AbortController().signal,
             );
           },
         };
+      }
+      /** The volume pick: the create row first, then the named volumes; the picked name, `null` for a new volume, or nothing when the pick closes. */
+      function pickNamedVolume(
+        volumes: readonly NamedVolumeFact[],
+      ): Promise<string | null | undefined> {
+        const picker = vscode.window.createQuickPick();
+        picker.placeholder = cloneText('S318', translate);
+        const rows = namedVolumeRowsOf(
+          volumes.map(volume => ({
+            name: volume.name,
+            created:
+              volume.created === undefined ||
+              Number.isNaN(Date.parse(volume.created))
+                ? undefined
+                : new Date(volume.created),
+          })),
+          translate,
+        );
+        picker.items = rows.map(entry => ({
+          label: entry.label,
+          description: entry.description,
+        }));
+        return new Promise(resolve => {
+          picker.onDidAccept(() => {
+            const item = picker.selectedItems[0] ?? picker.items[0];
+            const index =
+              item === undefined
+                ? -1
+                : picker.items.findIndex(other => other === item);
+            const entry = index === -1 ? undefined : rows[index];
+            resolve(entry?.volume ?? null);
+            picker.dispose();
+          });
+          picker.onDidHide(() => {
+            resolve(undefined);
+            picker.dispose();
+          });
+          picker.show();
+        });
       }
       /** The source pick: one row that clones the typed text, once there is text; the text, or nothing for Escape. */
       function pickCloneSource(): Promise<string | undefined> {
@@ -1541,6 +1678,7 @@ export async function activate(
           execute: argument => rowOpen.inNewWindow(argument),
         },
         openRepositoryInUniqueVolume: cloneCommand(),
+        openRepositoryInVolume: namedCloneCommand(),
         showReopenInContainerNotificationReset: {
           execute: () =>
             resetReopenNotification(context.globalState, Date.now()),

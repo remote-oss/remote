@@ -3051,7 +3051,7 @@ export async function chooseQuickPickItem(
   label: string,
 ): Promise<void> {
   const shown = await waitForQuickPick(name, 30_000);
-  if (!shown.items.includes(label)) {
+  if (!shown.items.some(item => item === label || item.trim() === label)) {
     throw new Error(
       `window ${name}: no item ${JSON.stringify(label)} among ${JSON.stringify(shown.items)}`,
     );

@@ -79,6 +79,10 @@ const IMPOSED_PROPERTY_KEYS = [
   't',
   // VS Code extension manifest: the `url` of the `repository` and `bugs` objects.
   'url',
+  // Intl: the `day` of a DateTimeFormat's options.
+  'day',
+  // The process: the `TZ` of process.env.
+  'TZ',
   // VS Code: the `uri` of the openFolder command core executes.
   'uri',
   // The identifier inventory of the Remote - SSH package (ADR-0008): a setting's `key`, and the context keys the

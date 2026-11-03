@@ -25,7 +25,7 @@ import {type BuildContext, startBootstrap} from './bootstrap-start.ts';
 import {bootstrapFilesOf} from './bootstrap-files.ts';
 import {cloneSourceOf} from './clone-source.ts';
 import {cloneIntoVolume, VOLUME_ROOT} from './clone-steps.ts';
-import {uniqueVolumeLabelsOf} from './clone-volume.ts';
+import {namedVolumeLabelsOf, uniqueVolumeLabelsOf} from './clone-volume.ts';
 import {type EngineStepPorts, stepOf} from './engine-step.ts';
 import {type DevContainerVolume, UNIQUE_VOLUME} from './volume-payload.ts';
 import {uniqueVolumeName} from './volume-name.ts';
@@ -86,6 +86,14 @@ function plainFolder(folder: string): boolean {
   return !['', '.', '..'].includes(folder) && !FOLDER_REFUSED.test(folder);
 }
 
+/**
+ * Whether `folder` can be resolved: for a unique volume its name is derived and plain, while a named volume's
+ * folder is used verbatim, traversal and all, and only an empty one is refused.
+ */
+function resolvableFolder(folder: string, unique: boolean): boolean {
+  return unique ? plainFolder(folder) : folder !== '';
+}
+
 /** Removes the bootstrap container; the outcome is only logged. */
 async function removeBootstrap(
   ports: VolumeResolvePorts,
@@ -107,18 +115,23 @@ export async function resolveVolume(
 ): Promise<VolumeResolution> {
   const origin = ports.typed(payload) ? 'typed' : 'link';
   const source = cloneSourceOf(target.repositoryPath, origin);
-  if ('refused' in source || !plainFolder(target.folder)) {
+  const unique = target.volumeName === UNIQUE_VOLUME;
+  if ('refused' in source || !resolvableFolder(target.folder, unique)) {
     ports.logger.info(
       `the window's source can't be cloned: ${'refused' in source ? source.refused : 'folder'}`,
     );
     return {kind: 'failed', failure: containerSetupFailed()};
   }
-  const unique = target.volumeName === UNIQUE_VOLUME;
   const volumeName = unique ? uniqueVolumeName(source) : target.volumeName;
   ports.onCloning();
   const started = await startBootstrap(
     ports,
-    {name: volumeName, labels: unique ? uniqueVolumeLabelsOf(source) : []},
+    {
+      name: volumeName,
+      labels: unique
+        ? uniqueVolumeLabelsOf(source)
+        : namedVolumeLabelsOf(source),
+    },
     ports.settings(),
   );
   if (started.kind === 'missingTool') {

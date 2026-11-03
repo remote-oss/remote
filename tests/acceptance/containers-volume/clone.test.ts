@@ -7,7 +7,10 @@ import {
   waitFor,
   windowState,
 } from '../windows/harness.ts';
-import {openMemoryWindow} from '../windows/folder-windows.ts';
+import {
+  closeStrayWindows,
+  openMemoryWindow,
+} from '../windows/folder-windows.ts';
 import {
   acceptQuickPick,
   answerDialog,
@@ -77,6 +80,7 @@ async function removeClone(repository: string): Promise<void> {
 
 describe('Clone Repository in Container Volume (card containers-151)', function () {
   this.timeout(1_200_000);
+  beforeEach(closeStrayWindows);
   before(() => removeClone(REPOSITORY));
 
   after(() => removeClone(REPOSITORY));

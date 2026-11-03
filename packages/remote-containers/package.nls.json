@@ -54,6 +54,7 @@
   "setting.Lockfile.description": "Controls whether a devcontainer-lock.json should be written.",
   "setting.RepositoryConfigurationPaths.description": "Absolute paths of folders that hold dev container configurations for repositories. A configuration for a repository goes in <folder>/<host>/<path of the repository>/.devcontainer/devcontainer.json, with the host and the path as the repository's remote URL gives them. Only literal absolute paths are read: no ~ and no variables.",
   "commands.Openrepositoryinuniquevolume.title": "Clone Repository in Container Volume...",
+  "commands.Openrepositoryinvolume.title": "Clone Repository in Named Container Volume...",
   "commands.Openrepositoryinuniquevolume.title": "Clone Repository in Container Volume...",
   "setting.DockerSocketPath.description": "Docker socket path. Used, e.g., when connecting to a Dev Container with the devcontainer.json in a Docker Volume.",
   "setting.BootstrapImage.description": "Docker image to use as the bootstrap container for cloning repositories into Docker volumes, and for inspect and recovery containers. When set, this image is used directly instead of building from the built-in Dockerfile. The image must include the Docker and Git CLIs, and optionally SSH, Git LFS and Node.js. When Node.js is not installed, it will be added from a VS Code Server download matching the architecture.",

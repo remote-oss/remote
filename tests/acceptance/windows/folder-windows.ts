@@ -27,6 +27,19 @@ export function activations(name: string): number {
   return windowEvents(name).filter(each => each.event === 'activated').length;
 }
 
+/**
+ * Closes every live window but `local`: a failed row may have left its window behind, and a fresh window's agent does
+ * not activate beside one it holds, so a row's suite starts each row on none of them. Only live windows are closed, and
+ * a close that does not finish fails the row, because a close left in the name's channel would close the next window.
+ */
+export async function closeStrayWindows(): Promise<void> {
+  for (const name of windowNames()) {
+    if (name !== 'local' && isOpen(name)) {
+      await closeWindow(name);
+    }
+  }
+}
+
 /** How many names a window on one folder can take: the folder's name, then with -2, -3, … up to this many. */
 const NAMES_PER_FOLDER = 8;
 
