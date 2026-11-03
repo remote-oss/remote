@@ -580,6 +580,7 @@
     "lib-log": "workspace:*",
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
-    "lib-standdown": "workspace:*"
+    "lib-standdown": "workspace:*",
+    "yaml": "2.9.1"
   }
 }

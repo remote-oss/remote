@@ -40,6 +40,22 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     });
   });
 
+  it('F-0413 BR-4: an up success of a Compose project also gives the project name the CLI used', () => {
+    deepStrictEqual(
+      readUpResult(
+        '{"outcome":"success","containerId":"c","remoteUser":"r","remoteWorkspaceFolder":"/w","composeProjectName":"proj"}',
+        0,
+      ),
+      {
+        kind: 'up',
+        containerId: 'c',
+        remoteUser: 'r',
+        remoteWorkspaceFolder: '/w',
+        composeProjectName: 'proj',
+      },
+    );
+  });
+
   it('C3: a field of an up success that is missing or not a string is malformed, naming the field', () => {
     deepStrictEqual(
       [

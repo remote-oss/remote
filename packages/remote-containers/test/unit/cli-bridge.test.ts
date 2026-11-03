@@ -52,13 +52,15 @@ function setup(
 ) {
   const calls: string[][] = [];
   const stdinOf: Array<StdinOf | undefined> = [];
+  const environments: Array<Readonly<Record<string, string>> | undefined> = [];
   const written: string[] = [];
   const removed: string[] = [];
   const sink = new MemorySink();
   const host: CliHost = {
     // eslint-disable-next-line id-length -- the port's method is named run
-    run: (cliArguments, onLine, cancellation, onStdin) => {
+    run: (cliArguments, onLine, cancellation, onStdin, environment) => {
       stdinOf.push(onStdin);
+      environments.push(environment);
       calls.push([...cliArguments]);
       return script(cliArguments, onLine, cancellation, onStdin);
     },
@@ -87,7 +89,7 @@ function setup(
     options.environment ?? {},
     createLogger(sink, {minimumLevel: () => 'info'}),
   );
-  return {bridge, calls, stdinOf, written, removed, sink};
+  return {bridge, calls, stdinOf, environments, written, removed, sink};
 }
 
 /** A script that ends with `result` and `status`. */
@@ -139,6 +141,18 @@ describe('the CLI bridge (card containers-04)', () => {
       [stdinOf.length, stdinOf.every(each => each === onStdin)],
       [3, true],
     );
+  });
+
+  it('F-0413 BR-4: the environment of the target reaches the host, and a target with none gives it none', async () => {
+    const {bridge, environments} = setup(ending(UP_LINE));
+    await bridge.up(
+      {...TARGET, environment: {COMPOSE_PROJECT_NAME: 'proj'}},
+      UP_OPTIONS,
+      () => undefined,
+      NEVER,
+    );
+    await bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER);
+    deepStrictEqual(environments, [{COMPOSE_PROJECT_NAME: 'proj'}, undefined]);
   });
 
   it('C3: a run whose pre-pass changes something writes the override file, passes it, and removes it after success', async () => {
