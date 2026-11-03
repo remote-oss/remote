@@ -42,6 +42,44 @@ export function serviceVolumeTargetOf(entry: unknown): string | undefined {
   return mountTargetOf(entry);
 }
 
+/** The options of `runArgs` that mount a volume or a bind by `src:dst[:mode]`, and the one that mounts by `key=value,...`. */
+const VOLUME_OPTIONS = new Set(['-v', '--volume']);
+const MOUNT_OPTIONS = new Set(['--mount']);
+
+/**
+ * The targets the `-v`, `--volume` and `--mount` options of `runArgs` name, in order: an option takes its value from the
+ * next element, or after an `=` in a long option; an option with no string value, and any other element, names none.
+ */
+export function runArgsTargets(runArgs: readonly unknown[]): string[] {
+  const targets: string[] = [];
+  for (let index = 0; index < runArgs.length; index += 1) {
+    const option = runArgs[index];
+    if (typeof option !== 'string') {
+      continue;
+    }
+    const separator = option.indexOf('=');
+    const inline = option.startsWith('--') && separator > 0;
+    const name = inline ? option.slice(0, separator) : option;
+    if (!VOLUME_OPTIONS.has(name) && !MOUNT_OPTIONS.has(name)) {
+      continue;
+    }
+    const value = inline ? option.slice(separator + 1) : runArgs[index + 1];
+    if (!inline) {
+      index += 1;
+    }
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const target = VOLUME_OPTIONS.has(name)
+      ? serviceVolumeTargetOf(value)
+      : mountTargetOf(value);
+    if (target !== undefined) {
+      targets.push(target);
+    }
+  }
+  return targets;
+}
+
 /** One property and the targets it names. */
 export interface MountSource {
   property: string;

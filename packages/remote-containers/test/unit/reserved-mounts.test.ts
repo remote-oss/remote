@@ -3,6 +3,7 @@ import {
   isReservedTarget,
   mountTargetOf,
   reservedMount,
+  runArgsTargets,
   serviceVolumeTargetOf,
 } from '../../src/lifecycle/reserved-mounts.ts';
 
@@ -83,6 +84,40 @@ describe('the targets the cache volume reserves (F-0419 7.E3)', () => {
         {property: 'services.app.volumes', targets: []},
       ]),
       undefined,
+    );
+  });
+
+  it('F-0419 AC-23: runArgsTargets reads each spelling of the volume and mount options, in order', () => {
+    deepStrictEqual(
+      runArgsTargets([
+        '-v',
+        'data:/a:ro',
+        '--volume',
+        '/b',
+        '--volume=src:/c',
+        '--mount',
+        'type=bind,source=/s,target=/d',
+        '--mount=type=volume,dst=/e',
+      ]),
+      ['/a', '/b', '/c', '/d', '/e'],
+    );
+  });
+
+  it('F-0419 AC-23: runArgsTargets skips a value-less option at the end, a value that is no string, a mount with no target and other options', () => {
+    deepStrictEqual(
+      runArgsTargets([
+        '--rm',
+        '-p',
+        '80:80',
+        '--mount',
+        'type=tmpfs',
+        '-v',
+        7,
+        '--mount=',
+        42,
+        '-v',
+      ]),
+      [],
     );
   });
 });
