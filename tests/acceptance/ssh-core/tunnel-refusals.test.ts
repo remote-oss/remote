@@ -17,8 +17,12 @@ import {
   windowEvents,
   windowState,
 } from '../windows/harness.ts';
-import {closeAllButLocal, freshHost} from '../windows/maintenance.ts';
-import {notifications, portsRows, statusItem} from '../windows/renderer.ts';
+import {
+  closeAllButLocal,
+  dismissals,
+  freshHost,
+} from '../windows/maintenance.ts';
+import {portsRows, statusItem} from '../windows/renderer.ts';
 import {
   addedSince,
   connectedWith,
@@ -232,16 +236,12 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     ]);
   });
 
-  it('F-2104 AC-20, AC-21, AC-22, AC-47 (c79-socks-refused): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and its progress waits for port forwarding with no dialog and no success for a minute', async () => {
+  it('F-2104 AC-20, AC-21, AC-22, AC-47 (ruling-1985-forwarding-fails): when the host refuses forwarding on the SOCKS path, whether by sshd or by ClearAllForwardings, the window shows the error notification once, with a Show log link and no button, whose command opens the Remote - SSH channel holding the refusal, and the connect then fails with F-2601’s dialog that names the refused forward', async () => {
     const seen: Array<{
       notices: Array<[string, string[] | undefined]>;
-      toast: string[];
-      indicator: string;
-      dialogs: number;
+      dialogs: Array<string | undefined>;
       channel: string | null | undefined;
       refusal: boolean;
-      later: number;
-      stillWaiting: boolean;
     }> = [];
     for (const alias of ['noforward', 'fwd-clearall']) {
       await closeAllButLocal();
@@ -255,42 +255,32 @@ describe('the tunnel of a window that its host or its configuration refuses (car
             answer: 'dismiss',
             window: name,
           },
+          ...dismissals(name),
         ]);
         await openWindow(alias, name);
         await waitFor(
-          'the notification',
-          () => recordLines('notice', name).length > 0,
+          'the failure dialog',
+          () => recordLines('failureDialog', name).length > 0,
           120_000,
         );
-        async function toasts(): Promise<string[]> {
-          return (await notifications(name)).filter(text =>
-            text.includes('Waiting'),
-          );
-        }
-        const toast = await toasts();
-        const indicator = (await statusItem(name, 'status.host')).text;
         // The link of the message runs this command, which the row then runs, as the editor does for a click.
         await inWindow(name, 'opensshremotes.showLog');
         await windowState(name);
         const channel = windowEvents(name)
           .filter(entry => entry.event === 'state')
           .at(-1)?.visibleOutputChannel;
-        const first = recordLines('notice', name).length;
-        await new Promise(resolve => setTimeout(resolve, 60_000));
         seen.push({
           notices: recordLines('notice', name).map(line => [
             line.question,
             line.buttons,
           ]),
-          toast,
-          indicator,
-          dialogs: recordLines('failureDialog', name).length,
+          dialogs: recordLines('failureDialog', name).map(
+            line => line.question,
+          ),
           channel,
           refusal: connectionLog().some(line =>
             line.includes('administratively prohibited'),
           ),
-          later: recordLines('notice', name).length - first,
-          stillWaiting: (await toasts()).length > 0,
         });
         await closeWindow(name);
       });
@@ -302,21 +292,21 @@ describe('the tunnel of a window that its host or its configuration refuses (car
           [],
         ],
       ],
-      toast: [
-        'Setting up SSH Host ALIAS: Waiting for port forwarding to be ready',
-      ],
-      indicator: 'Opening Remote...',
-      dialogs: 0,
       channel: 'Remote - SSH',
       refusal: true,
-      later: 0,
-      stillWaiting: true,
     };
+    const reason =
+      'TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.';
     deepStrictEqual(seen, [
-      {...expected, toast: [expected.toast[0]?.replace('ALIAS', 'noforward')]},
       {
         ...expected,
-        toast: [expected.toast[0]?.replace('ALIAS', 'fwd-clearall')],
+        dialogs: [`Could not establish connection to "noforward": ${reason}`],
+      },
+      {
+        ...expected,
+        dialogs: [
+          `Could not establish connection to "fwd-clearall": ${reason}`,
+        ],
       },
     ]);
   });
@@ -485,7 +475,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     deepStrictEqual(seen, ['SSH: fwd-exit', 'SSH: fwd-exit']);
   });
 
-  it('F-2104 AC-28 (c79-second-refused): with the second ssh and a host that refuses TCP forwarding the dialog says the connection closed, a few seconds after the tunnel began', async () => {
+  it('F-2104 AC-28 (ruling-1985-forwarding-fails): with the second ssh and a host that refuses TCP forwarding the dialog names the refused forward, a few seconds after the tunnel began', async () => {
     await keepingSettings(async () => {
       const failed = await failing(
         'c79-second-refused',
@@ -503,7 +493,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
             5000,
         ],
         [
-          'Could not establish connection to "noforward": Connection closed.',
+          'Could not establish connection to "noforward": TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.',
           BUTTONS,
           true,
         ],
@@ -601,7 +591,7 @@ describe('the tunnel of a window that its host or its configuration refuses (car
     });
   });
 
-  it('F-2104 AC-48 (c79-bind-host): a bind host that is not the loopback of the host leaves the window unconnected on the SOCKS path and on the second ssh, with the server listening on that address', async () => {
+  it('F-2104 AC-48 (ruling-1985-forwarding-fails): a bind host that is not the loopback of the host leaves the window unconnected on the SOCKS path and on the second ssh, with the dialog and the server listening on that address', async () => {
     const address = variable('HARNESS_ROUTED_ADDRESS');
     const seen: Array<[string, string | undefined, boolean]> = [];
     for (const settings of [{}, SECOND_SSH]) {
@@ -621,14 +611,12 @@ describe('the tunnel of a window that its host or its configuration refuses (car
         ]);
       });
     }
+    // Both paths fail the connect at once on the refused forward (ruling-1985-forwarding-fails), with the TCP setting's reason.
+    const refused =
+      'Could not establish connection to "harness": TCP port forwarding appears to be disabled on the remote host. Ensure that the sshd_config has `AllowTcpForwarding yes`. Contact your system administrator if needed.';
     deepStrictEqual(seen, [
-      // On the SOCKS path the refused forward keeps the progress and shows the notification, with no dialog.
-      ['Opening Remote...', undefined, true],
-      [
-        'Disconnected from SSH: harness',
-        'Could not establish connection to "harness": Connection closed.',
-        true,
-      ],
+      ['Disconnected from SSH: harness', refused, true],
+      ['Disconnected from SSH: harness', refused, true],
     ]);
   });
 

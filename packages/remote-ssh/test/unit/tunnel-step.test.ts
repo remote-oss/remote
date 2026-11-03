@@ -61,6 +61,8 @@ function stepWith(
     /** What the host's check says of the server's port: listening, not, or no answer. */
     listening?: 'yes' | 'no' | 'none' | 'status' | 'silent';
     onSettingUp?: () => void;
+    /** Whether ssh warned, in this connect, that it disabled forwarding itself after a changed host key. */
+    warned?: boolean;
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
@@ -99,6 +101,7 @@ function stepWith(
     },
     chooseLocalPort: () => Promise.resolve(choice),
     environment: () => ENVIRONMENT,
+    warnedForwardingDisabled: () => options.warned ?? false,
     forwardRefused: () => {
       refused.push(1);
     },
@@ -181,6 +184,29 @@ describe('the step that opens the window tunnel', () => {
         1,
       ],
     );
+  });
+
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a refused relay with the changed host key’s warning fails with S107 and its own hint, and without it with the server’s reason and hint', async () => {
+    const results = [];
+    for (const warned of [true, false]) {
+      const {open, clock} = stepWith({
+        dialScript: ['closedBeforeReply'],
+        warned,
+        limits: {...LIMITS, readyMilliseconds: 10_000, retryMilliseconds: 100},
+      });
+      const pending = open();
+      await pastTheBound(clock);
+      const result = await pending;
+      results.push(
+        result.kind === 'failed'
+          ? [result.failure.reason, result.failure.hints?.[0]?.status]
+          : result.kind,
+      );
+    }
+    deepStrictEqual(results, [
+      [{id: 'S107'}, 'MitmPortForwardingDisabled'],
+      [{id: 'forwardingRefused'}, 'AllowTcpForwardingDisabled'],
+    ]);
   });
 
   /** The kind of the step's result, and how often it told the window, for a run that `dialScript` and `listening` steer. */

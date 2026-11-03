@@ -22,6 +22,8 @@ import type {StartedServer} from 'lib-server';
 import {
   type Classification,
   connectWaitMilliseconds,
+  CLIENT_FORWARDING_DISABLED,
+  CONNECTION_CLOSED_TEXT,
   type FailureHint,
   FORWARDING_PROHIBITED_HINT,
   type Forward,
@@ -74,6 +76,8 @@ export interface TunnelStepDependencies {
   ): {onQuestion(text: string): void; dispose(): void};
   /** Tells the user, once for the window, that the host refuses the forwarding the SOCKS relay needs. */
   forwardRefused(): void;
+  /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
+  warnedForwardingDisabled(): boolean;
   /** `remote.SSH.showLoginTerminal`, read once per attempt. */
   revealLoginTerminals(): boolean;
   /** What decides the length of the connect wait, which also bounds a question of the tunnel login that nobody can see. */
@@ -97,6 +101,24 @@ const FORWARDING_REFUSED: StepFailure = {
   reason: {id: 'forwardingRefused'},
   hints: [FORWARDING_PROHIBITED_HINT],
 };
+
+/** The failure of a connection whose ssh disabled forwarding itself after a changed host key: its own reason and hint, never the server's. */
+const FORWARDING_DISABLED_BY_CLIENT: StepFailure = {
+  kind: 'forwardingDisabled',
+  ...(CLIENT_FORWARDING_DISABLED.reason === undefined
+    ? {}
+    : {reason: CLIENT_FORWARDING_DISABLED.reason}),
+  hints: CLIENT_FORWARDING_DISABLED.hints,
+};
+
+/** The failure of a refused forward: the changed host key's own when ssh warned of it, else the server's. */
+function refusedFailure(dependencies: {
+  warnedForwardingDisabled(): boolean;
+}): StepFailure {
+  return dependencies.warnedForwardingDisabled()
+    ? FORWARDING_DISABLED_BY_CLIENT
+    : FORWARDING_REFUSED;
+}
 
 /** The reason of a tunnel whose port never accepted: "Error establishing tunnel (Max wait time exhausted)." */
 const MAX_WAIT_EXHAUSTED = {
@@ -336,7 +358,14 @@ async function openTerminalTunnel(
     dependencies.logger.warn(
       'the host refused the forward of the tunnel: the port closed the connection that proved it accepting',
     );
-    return {kind: 'failed', failure: FORWARDING_REFUSED};
+    // Over a socket the refusal is of stream-local forwarding, which the TCP setting does not name: the connection closed.
+    return {
+      kind: 'failed',
+      failure:
+        path === 'socket'
+          ? {kind: 'channelClosed', reason: {text: CONNECTION_CLOSED_TEXT}}
+          : refusedFailure(dependencies),
+    };
   }
   if (outcome.kind !== 'open') {
     return {
@@ -485,7 +514,7 @@ export function openTunnelStep(
     stopNotices();
     if (outcome.kind === 'relayRefused') {
       dependencies.forwardRefused();
-      return {kind: 'failed', failure: FORWARDING_REFUSED};
+      return {kind: 'failed', failure: refusedFailure(dependencies)};
     }
     if (outcome.kind !== 'open') {
       return NOT_OPENED;

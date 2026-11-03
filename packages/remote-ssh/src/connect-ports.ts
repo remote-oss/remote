@@ -274,6 +274,7 @@ export function wiringPortsOf(
   surfaces: ConnectSurfaces,
   machine: ConnectMachine,
   logger: Logger,
+  warnedForwardingDisabled: () => boolean = () => false,
 ): WiringPorts {
   const {settings} = surfaces;
   let refusedTold = false;
@@ -479,6 +480,7 @@ export function wiringPortsOf(
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
       chooseLocalPort: chooseWindowPort,
+      warnedForwardingDisabled,
       forwardRefused: () => {
         // The extension host is the window's, so a flag of this assembly is a flag of the window.
         if (refusedTold) {
@@ -534,6 +536,7 @@ export function connectAssemblyOf(
     {...surfaces, terminals: tracker},
     machine,
     watch.logger,
+    watch.warned,
   );
   const connector = connectorFrom({
     stepsFor: onPhase => {

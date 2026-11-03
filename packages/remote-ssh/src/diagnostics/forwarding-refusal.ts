@@ -4,7 +4,7 @@
  */
 
 import type {Logger} from 'lib-log';
-import {classify, type FailureHint} from 'lib-ssh';
+import {classify, type FailureHint, warnsForwardingDisabled} from 'lib-ssh';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {SshLogger} from '../pipeline/ssh-log.ts';
 import type {ConnectSteps} from '../pipeline/steps.ts';
@@ -21,6 +21,8 @@ export interface RefusalPort {
 /** A logger that watches the lines of ssh it is given, and what starts a connect. */
 export interface RefusalWatch {
   logger: Logger & Required<SshLogger>;
+  /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
+  warned(): boolean;
   /** Starts a connect: the next refusal is recorded again, and logged only when the connect has started the login. */
   begin(): void;
   /** The connect's connection is open: whether this connect started its login. A connect that joined one logs no setting line. */
@@ -36,8 +38,11 @@ export function refusalWatchOf(
   port: RefusalPort,
   translate: Translate,
 ): RefusalWatch {
-  const state = {recorded: false, logged: false};
+  const state = {recorded: false, logged: false, warned: false};
   function noticed(line: string): void {
+    if (warnsForwardingDisabled(line)) {
+      state.warned = true;
+    }
     if (state.recorded && state.logged) {
       return;
     }
@@ -82,7 +87,9 @@ export function refusalWatchOf(
   };
   return {
     logger: watching,
+    warned: () => state.warned,
     begin: () => {
+      state.warned = false;
       state.recorded = false;
       // Until the connection is open and says it started the login, a refusal line relayed to this window is another connect's.
       state.logged = true;

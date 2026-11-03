@@ -70,6 +70,8 @@ function stepWith(
     retryMilliseconds?: number;
     input?: string;
     reconnection?: boolean;
+    /** Whether ssh warned, in this connect, that it disabled forwarding itself after a changed host key. */
+    warned?: boolean;
     /** `remote.SSH.useExecServer`: on unless the row says otherwise, as by default. */
   } = {},
 ) {
@@ -125,6 +127,7 @@ function stepWith(
       };
     },
     revealLoginTerminals: () => options.reveal ?? false,
+    warnedForwardingDisabled: () => options.warned ?? false,
     forwardRefused: () => undefined,
     connectWait: () =>
       options.connectWait ?? {
@@ -549,15 +552,14 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     return {...context, pending};
   }
 
-  it('F-2410 7.E1, F-2604 AC-6 (ruling-1985-forwarding-fails): on a first resolve, a port that closes the connection that proved it accepting fails the step as a refused forward, with the reason and the hint', async () => {
+  it('F-2410 7.E1: on a first resolve, a port that closes the connection that proved it accepting fails the step with the reason "Connection closed."', async () => {
     const {pending, local} = await accepted(false);
     local.probes[0]?.close();
     deepStrictEqual(await pending, {
       kind: 'failed',
       failure: {
-        kind: 'forwardingDisabled',
-        reason: {id: 'forwardingRefused'},
-        hints: [FORWARDING_PROHIBITED_HINT],
+        kind: 'channelClosed',
+        reason: {text: 'Connection closed.'},
       },
     });
   });
@@ -625,16 +627,26 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     });
   });
 
-  it('connect-109, F-2410 7.E1: on the socket path the first refusal fails the step as a refused forward', async () => {
+  it('F-2604 AC-19 (ruling-1985-forwarding-fails): on the second ssh the changed host key’s warning gives S107 and its own hint', async () => {
+    const {pending} = await refusedFirstForward({warned: true}, 0);
+    const result = await pending;
+    deepStrictEqual(
+      result.kind === 'failed'
+        ? [result.failure.reason, result.failure.hints?.[0]?.status]
+        : result.kind,
+      [{id: 'S107'}, 'MitmPortForwardingDisabled'],
+    );
+  });
+
+  it('connect-109, F-2410 7.E1: on the socket path the first refusal fails the step with the connection closed, not the TCP setting’s reason', async () => {
     const {pending} = await refusedFirstForward(
       {settings: SOCKET, server: SOCKET_SERVER},
       0,
     );
-    const result = await pending;
-    deepStrictEqual(
-      result.kind === 'failed' ? result.failure.kind : result.kind,
-      'forwardingDisabled',
-    );
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {kind: 'channelClosed', reason: {text: 'Connection closed.'}},
+    });
   });
 
   it('connect-109: a reconnection gets no refusal bound on any path', async () => {

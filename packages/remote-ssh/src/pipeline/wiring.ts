@@ -188,11 +188,7 @@ export interface WiringPorts {
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
     TunnelStepDependencies,
-    | 'environment'
-    | 'connectWait'
-    | 'tunnelInvocation'
-    | 'tunnelInput'
-    | 'useExecServer'
+    'environment' | 'connectWait' | 'tunnelInvocation' | 'tunnelInput'
   >;
   cliPath: CliWiring;
   /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */

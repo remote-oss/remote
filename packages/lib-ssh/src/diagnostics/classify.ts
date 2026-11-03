@@ -130,9 +130,7 @@ export function classify(
     mode === 'terminal' &&
     containsAfterSession(FAILURE_PATTERNS.forwardingDisabledByClient)
   ) {
-    return withHint('forwardingDisabled', 'MitmPortForwardingDisabled', {
-      id: 'S107',
-    });
+    return CLIENT_FORWARDING_DISABLED;
   }
   if (containsAfterSession(FAILURE_PATTERNS.forwardingProhibited)) {
     return {
@@ -197,6 +195,18 @@ function withHint(
     ],
     logLines: [],
   };
+}
+
+/** The failure of a connection whose ssh disabled port forwarding itself, after a changed host key: S107 and its hint. */
+export const CLIENT_FORWARDING_DISABLED: Classification = withHint(
+  'forwardingDisabled',
+  'MitmPortForwardingDisabled',
+  {id: 'S107'},
+);
+
+/** Whether `line` is the warning with which ssh says it disabled port forwarding itself, after a changed host key. */
+export function warnsForwardingDisabled(line: string): boolean {
+  return FAILURE_PATTERNS.forwardingDisabledByClient.test(withoutReturn(line));
 }
 
 /** A classification without hints or log lines. */
