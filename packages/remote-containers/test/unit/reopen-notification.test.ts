@@ -142,6 +142,9 @@ function lines(scene: Scene): string[] {
 const S368 =
   'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
 
+const S427_S368 =
+  'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen workspace to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
+
 describe('the reopen notification (card containers-23, F-0402)', () => {
   it('F-0402 AC-1: a local folder with a configuration shows S426 with S186 and the two buttons', async () => {
     const scene = sceneOf();
@@ -429,7 +432,18 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     ]);
   });
 
-  it('F-0302 BR-12, AC-26: a saved workspace whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
+  it('F-0402 BR-1: a saved workspace of one folder whose only configuration is a stored or mirrored one shows S427 with S368, and its root is asked to look outside the folder', async () => {
+    const scene = workspaceScene('saved', 1);
+    scene.configuration = 'none';
+    scene.rootKinds = {'/w/p': 'external'};
+    await offered(scene);
+    deepStrictEqual(
+      [scene.shown, scene.askedExternal],
+      [[[S427_S368, [REOPEN, SUPPRESS]]], [true]],
+    );
+  });
+
+  it('F-0302 BR-12, AC-26: a saved workspace of two folders whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
     const scene = workspaceScene('saved', 2);
     scene.configuration = 'none';
     scene.rootKinds = {'/w/q': 'external'};
@@ -437,7 +451,7 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     deepStrictEqual([scene.shown, scene.askedExternal], [[], [false, false]]);
   });
 
-  it('F-0302 BR-12: an unsaved workspace is not asked to look outside its folders either', async () => {
+  it('F-0302 BR-12: an unsaved workspace of two folders is not asked to look outside its folders either', async () => {
     const scene = workspaceScene('untitled', 2);
     scene.configuration = 'none';
     scene.rootKinds = {'/w/q': 'external'};

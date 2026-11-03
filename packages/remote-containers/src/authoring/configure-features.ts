@@ -12,6 +12,7 @@ import {
   parseConfiguration,
 } from '../config/configuration-text.ts';
 import {type Candidate, discoverConfigurations} from '../config/discovery.ts';
+import {externalSourcesApply} from '../config/external-sources.ts';
 import {joinedCandidates} from '../config/candidates.ts';
 import type {PickerAnswer} from '../config/choose-configuration.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
@@ -158,7 +159,7 @@ export function configureFeaturesOf(
         const stored = onHost ? await ports.stored?.(folder) : undefined;
         // A multi-root window looks nowhere outside its folders (BR-12).
         const mirrored =
-          onHost && roots.length === 1
+          onHost && externalSourcesApply(ports.window.folders().length)
             ? ((await ports.mirrored?.(folder)) ?? [])
             : [];
         return {

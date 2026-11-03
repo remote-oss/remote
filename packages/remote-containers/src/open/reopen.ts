@@ -4,6 +4,7 @@
  * dev-container authority at the folder, or the workspace file, the container will show. It never creates or starts a container; the resolve does.
  */
 
+import {externalSourcesApply} from '../config/external-sources.ts';
 import path from 'node:path';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {openPathAllowed} from './open-gate.ts';
@@ -126,7 +127,7 @@ export function reopenHandlersOf(
         title,
         folder,
         dockerPath: executable.file,
-        external: target.workspaceFile === undefined,
+        external: externalSourcesApply(window.folders().length),
       },
     );
     try {

@@ -4,6 +4,7 @@
  * is suppressed is kept in the extension's own storage, as the time of the choice against the time of the last reset.
  */
 
+import {externalSourcesApply} from '../config/external-sources.ts';
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
@@ -207,7 +208,10 @@ export async function offerReopen(
       ? ['external' as const]
       : await Promise.all(
           roots.map(root =>
-            ports.configurationKind(root.fsPath, window.workspace === 'none'),
+            ports.configurationKind(
+              root.fsPath,
+              externalSourcesApply(roots.length),
+            ),
           ),
         );
   const offer = offerFor(window.workspace, kinds);
