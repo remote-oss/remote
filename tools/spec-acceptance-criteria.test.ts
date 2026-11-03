@@ -82,7 +82,7 @@ describe('acceptanceCriteriaOf, a removed criterion', () => {
 });
 
 describe('the features of slice 1', () => {
-  it('#142, D-86, coverage-44, coverage-47: there are thirty-nine, F-3901, F-3903, the six of D-86, the nine of coverage-44, the three of coverage-47 and F-2311 of coverage-99 among them', () => {
+  it('#142, D-86, coverage-44, coverage-47: there are forty, F-3901, F-3903, the six of D-86, the nine of coverage-44, the three of coverage-47 and F-2311 of coverage-99 among them', () => {
     deepStrictEqual(
       [
         SLICE_ONE_FEATURES.length,
@@ -110,7 +110,7 @@ describe('the features of slice 1', () => {
           'F-2311',
         ].every(feature => SLICE_ONE_FEATURES.includes(feature)),
       ],
-      [39, true],
+      [40, true],
     );
   });
 });
