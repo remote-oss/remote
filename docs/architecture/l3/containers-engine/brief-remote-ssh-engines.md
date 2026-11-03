@@ -29,8 +29,16 @@ Packages type it with a structural type of ours carrying only the members used, 
 
 ## 2. remote-ssh serves the exec server (cross-family; `brief-cli-path.md`'s "slice 3")
 
-- **remote-ssh's resolver gains `resolveExecServer(authority)`.** It returns an exec server over the window's **CLI
-  control connection** (exec mode), the authenticated connection `brief-cli-path.md` already holds per connect.
+- **remote-ssh's resolver gains `resolveExecServer(authority)`**, with two cases. Measured in
+  `[oss] extHostExtensionService.ts` at 1.139.1: for `dev-container+…@ssh-remote+host`, core calls the outer resolver's
+  `resolveExecServer` **only**, never its `resolve`, then our `resolve` with that `execServer`.
+  - **In the SSH window itself** (`getRemoteExecServer` before a reload): the window's own live **CLI control
+    connection** serves it. That's the authenticated connection `brief-cli-path.md` already holds per connect.
+  - **In the nested window:** remote-ssh's connect pipeline never runs, so `resolveExecServer` runs it itself:
+    - the host key, the authentication, the CLI install and the control connection;
+    - stopping before `serve` (no VS Code server on the SSH host belongs to this window), with no window tunnel;
+    - then it holds that connection for the window's life, since §3's channels, relays and lease ride on it.
+    - **A lost connection** is the window's lost transport: our resolver's `onTransportLost` follows it.
 - **lib-server's `cli-control` client gains** the CLI control server's methods (`[cli] cli/src/tunnels/control_server.rs`,
   MIT):
   - `spawn`, with three duplex streams;
@@ -42,13 +50,22 @@ Packages type it with a structural type of ours carrying only the members used, 
 - **The adapter** `execServerOf(control)` maps those methods to the `ExecServer` shape. It lives in lib-server, so
   Remote - Tunnels serves the same adapter over its own control connection later.
 - **Direct mode** (no CLI: `remote.SSH.useExecServer` off, or no CLI build for the host's platform):
-  - `resolveExecServer` refuses with a reason, and the nested resolve fails through C8 with that reason in its log;
+  - `resolveExecServer` refuses with a reason;
+  - **in the SSH window**, the entry commands call `getRemoteExecServer` **first**, before any reload, so the refusal
+    shows there as C8's failure dialog with the reason. The window stays as it was;
+  - **a nested window that meets a refusal** (a recent entry, say) fails in core itself, since core ends the chain
+    before our resolver runs. That's core's error, not ours;
   - no second exec route is built over plain ssh channels, because it would duplicate the CLI's work for an opted-out
     case.
   - **CLI builds:** the CLI archives come in Alpine builds first (#1815's ruling). F-1302's rows need a CLI for the lab's
     SSH host, which is the "row needs a glibc host" condition for glibc builds.
 - **Security:** the exec server answers only the window's own extension host through core's API. remote-ssh registers
   nothing else. `spawn`'s environment goes in the CLI's spawn options, never in argv (R-26).
+- **Facts from the CLI** (`[cli] control_server.rs`, `util/command.rs` at 1.139.1), which the design relies on:
+  - `spawn`'s `env` **merges** onto the CLI process's environment (`Command::envs`), so `PATH` and `HOME` stay;
+  - a spawned child isn't killed when its handler is dropped (tokio's `kill_on_drop` is off by default);
+  - `fs_connect` is a `copy_bidirectional` between the RPC stream and the host socket, so the RPC stream's end closes
+    the socket.
 
 ## 3. remote-containers over the exec server
 
@@ -56,9 +73,14 @@ Packages type it with a structural type of ours carrying only the members used, 
    argv, {env})`, and the coordinate's variables go in `env`. The engine coordinate is the SSH host's: the effective
    engine is read from the host's environment (`env()`) plus the window's settings (F-0205's rules), not the client's.
 2. **C3's CLI on the SSH host** (ADR-0009, a second exception, amended with this card):
-   - **The program:** the pinned dev container CLI and our preload are written once per version to
-     `<the outer server's data folder>/remote-oss-containers-cli/<version>/` through `fs_write`. They run on the outer
-     VS Code server's own `node`, as C11's relay script runs on a server's `node`.
+   - **The `node`:** it's the VS Code server's for the host's platform, installed on the host by lib-server's probe,
+     plan and transfer, **with no start**. F-1302 §2 has the CLI "inside the remote host's own VS Code Server".
+     - It goes over a lib-host `HostChannel` adapter on the exec server (`runScript` = `spawn('sh', …)` with stdin;
+       `copyToHost` = a tar through `spawn`, as `contracts.md` §1's pattern).
+     - It's idempotent: a server already there from the SSH window's session is found by the probe.
+     - That's the same transfer-before-use the personalization brief does inside containers.
+   - **The program:** the pinned dev container CLI and our preload are copied once per version to
+     `<the server's data folder>/remote-oss-containers-cli/<version>/` the same way, and run on that `node`.
    - **The environment:** the spawn environment is the host's (`env()`), so `${localEnv}` and `${localWorkspaceFolder}`
      resolve on the host (BR-11).
    - **The override file** goes on the host, mode 0600, deleted after the run.
@@ -71,12 +93,13 @@ Packages type it with a structural type of ours carrying only the members used, 
 5. **The label** gains " @ <host>" from the outer authority, so the title reads `[Dev Container: <name> @ <host>]` and
    Open Recent records the hop (BR-13).
 6. **The shutdown stop on the SSH host** (F-0417 AC-29, AC-31, AC-32, BR-13; the reference fails here, 7.E5):
-   - **Where the helper runs:** C9's helper runs on the host, where the engine is, started through the exec server
-     with the outer server's `node`, detached so it outlives the SSH connection. It listens on an owner-only Unix
-     socket in the host's runtime folder.
+   - **Where the helper runs:** C9's helper runs on the host, where the engine is, on §3.2's `node`. It's started
+     through `spawn('sh', ['-c', …])` that runs it under `setsid` with stdio from and to `/dev/null` and returns at
+     once, so it outlives the SSH connection (the facts of §2). It listens on an owner-only Unix socket in the host's
+     runtime folder.
    - **The lease:** each dev container connection's lease is an `fs_connect` stream to that socket. When the window
-     closes, the SSH connection ends, the stream ends, and the helper's 10 s check and stop run on the host (same
-     registry code, same rules).
+     closes, the SSH connection ends, the RPC stream ends, and the CLI closes the socket (§2's facts). The helper sees
+     EOF, and its 10 s check and stop run on the host (same registry code, same rules).
    - **One helper per host user**, found again by its socket.
 
 ## 4. The rest of the SSH-window lines
@@ -119,8 +142,12 @@ Packages type it with a structural type of ours carrying only the members used, 
 
 **Suggested cards**, in order:
 1. **lib-server:** the duplex framing, the methods, `execServerOf`, with unit rows over `testing/fake-cli.ts`.
-2. **remote-ssh:** `resolveExecServer` in exec mode, and the direct-mode refusal. The acceptance row is an extension
-   in an SSH window that spawns `echo` through `getRemoteExecServer`.
+2. **remote-ssh:** `resolveExecServer` in both cases (the SSH window's live connection; the nested window's own
+   connection, held), and the direct-mode refusal. The acceptance row is an extension in an SSH window that spawns
+   `echo` through `getRemoteExecServer`.
+
+Cards 1 and 2 change the transport area's contracts. They wait for proteus's agreement (co-architect). Cards 3 and
+after are cut against §3.
 3. **remote-containers:** C2, C3 (the CLI on the host, plus the ADR-0009 amendment) and C11 over the exec server; the
    nested resolve; the label. Rows: F-1302's.
 4. **The host-side shutdown helper** (§3.6). Rows: F-0417 AC-29, AC-31, AC-32.

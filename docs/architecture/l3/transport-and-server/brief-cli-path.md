@@ -109,7 +109,8 @@ test resolver), so the extension is the `serve` caller and draws S045 from `serv
   - **Rejected:** `ManagedResolvedAuthority`, which would need a second `Connected` shape in `lib-authority` and a
     second loss rule for one path. And `resolveExecServer` / `getRemoteExecServer`, which is the editor's contract for
     *other* extensions that run processes on the host (F-1302's nested authorities, slice 3). It isn't the window's
-    route to its own server, and when slice 3 builds it, it can be served over this same control client.
+    route to its own server, and when slice 3 builds it, it can be served over this same control client. Slice 3 is
+    `containers-engine/brief-remote-ssh-engines.md` §2.
 - **Correction (athena, 2026-10-13, #412; daedalus measured, triton on #477): the connection token.** The bullet above
   assumed each window's `serve` gets a server holding that window's token. It doesn't: a second window's `serve` finds
   the running server (BR-8), which keeps the first window's token, so a per-connect token is refused. And the CLI
