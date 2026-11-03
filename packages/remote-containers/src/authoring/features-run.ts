@@ -20,6 +20,7 @@ import type {
 } from './configure-features.ts';
 import {catalogueKeyOf, editFeatures} from './edit-features.ts';
 import type {QuickInputPorts} from './option-screens.ts';
+import {askFeatureOptions} from './feature-options.ts';
 import {askFeatures, featureKeyOf} from './select-features.ts';
 
 /** The English templates of the texts of the run, by their string ids. */
@@ -88,11 +89,34 @@ export function featuresRunOf(
       return {kind: 'cancelled'};
     }
     const chosen = new Set(answer.features.map(each => each.id));
+    // The checked Features in the catalogue's order, which is the order of the walk and of the keys written.
+    const ordered = catalogue.features.filter(feature =>
+      chosen.has(featureKeyOf(feature)),
+    );
+    const walk =
+      answer.mode === 'configure'
+        ? await askFeatureOptions(
+            ordered.map(feature => ({
+              choice: {id: featureKeyOf(feature), options: {}},
+              feature,
+            })),
+            true,
+            ports.quick,
+            cancellation,
+            true,
+          )
+        : undefined;
+    if (walk !== undefined && walk.kind !== 'chosen') {
+      return {kind: 'cancelled'};
+    }
+    const options = new Map(
+      (walk?.features ?? []).map(each => [each.id, each.options]),
+    );
     const edit = editFeatures(configuration.text, {
-      checked: catalogue.features
-        .map(feature => featureKeyOf(feature))
-        .filter(key => chosen.has(key))
-        .map(key => ({key, value: {}})),
+      checked: ordered.map(feature => ({
+        key: featureKeyOf(feature),
+        value: options.get(featureKeyOf(feature)) ?? {},
+      })),
       unchecked: present.filter(key => !chosen.has(key)),
     });
     if (edit.kind === 'notAnObject') {
