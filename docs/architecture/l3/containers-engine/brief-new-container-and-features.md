@@ -135,9 +135,10 @@ features (F-0804) and optional-files (F-0805) stages.
   with group 13).
 - **Trust and the engine program** (F-0201 AC-55, #1934): every engine program these flows run resolves
   `dev.containers.dockerPath` through `engineBaseOf`, so a relative value names a file of the folder only in a trusted
-  window. That covers C2's engine check (F-0806's "+", and the name step's volume listing) and C3's `outdated` and
-  `templates apply`, whose `--docker-path` is the same program. F-0807 runs in Restricted Mode (BR-6), which makes
-  this binding there.
+  window. That covers C2's engine check (F-0806's "+", and the name step's volume listing) and C3's `templates apply`,
+  whose `--docker-path` is the same program. C3's `outdated` passes no `--docker-path` and runs on a scratch copy of
+  the written file, so nothing of the folder runs there (proteus on #2006). F-0807 runs in Restricted Mode (BR-6),
+  which makes this binding there.
 - **No new runtime dependency.**
 
 ## 6. The cut and the cards
