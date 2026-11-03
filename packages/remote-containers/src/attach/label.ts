@@ -20,6 +20,12 @@ export interface AttachedIdentity {
   name: string;
 }
 
+/** The " @ <engine>" part of a label, empty for the default engine. */
+export function engineSuffixOf(engine: PinnedEngine): string {
+  const label = engineLabelOf(engine);
+  return label === undefined ? '' : ` @ ${label}`;
+}
+
 /** The suffix of the window's label. */
 export function attachedSuffixOf(
   identity: AttachedIdentity | undefined,
@@ -29,10 +35,9 @@ export function attachedSuffixOf(
   if (identity === undefined) {
     return translate(LABEL_TEMPLATES.container);
   }
-  const label = engineLabelOf(engine);
   return filled(translate, LABEL_TEMPLATES.S091, [
     identity.image,
     identity.name,
-    label === undefined ? '' : ` @ ${label}`,
+    engineSuffixOf(engine),
   ]);
 }
