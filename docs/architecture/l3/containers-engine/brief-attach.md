@@ -269,9 +269,9 @@ A failure keeps `contracts.md` §2's rule:
 
 ## 9. Readings
 
-1. **`(reading-NNNN-compose-child)`, F-0901 AC-38:** the two identical child rows "in this lab's test" are a reference
+1. **`(reading-2026-compose-child)`, F-0901 AC-38:** the two identical child rows "in this lab's test" are a reference
    defect. We show one child row per recorded folder, and the row asserts each child's 6.5 rules and no duplicate.
-2. **`(reading-NNNN-extension-write)`, F-0602 BR-8 and AC-21:**
+2. **`(reading-2026-extension-write)`, F-0602 BR-8 and AC-21:**
    - **The problem:** no stable API lets a UI extension see an install into the container's extension host.
      `extensions.onDidChange` covers its own host, and the cross-host list is a proposal.
    - **The reading:** we take the accepted outcome. Installing or uninstalling writes no `extensions` entry, and no file
