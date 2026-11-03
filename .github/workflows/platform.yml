@@ -42,6 +42,9 @@ jobs:
       LAUNCHES: ${{ inputs.windows-launches || 'containers-a,containers-b,containers-trust,local,remote' }}
       WSL_UTF8: '1'
     steps:
+      # the host images and their scripts are built in the WSL engine from this checkout, so they keep the repository's
+      # LF line ends: a CRLF shell script would end the host's entrypoint at once
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
