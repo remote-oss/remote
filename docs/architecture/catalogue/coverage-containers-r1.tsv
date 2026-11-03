@@ -1162,7 +1162,7 @@ F-0803.AC-18	acceptance
 F-0803.AC-19	acceptance	
 F-0803.AC-20	acceptance	
 F-0803.AC-21	acceptance	
-F-0803.AC-22	deferred	containers release 1: later (Configure Container Features, F-0807)
+F-0803.AC-22	acceptance	
 F-0803.AC-23	acceptance	
 F-0803.AC-24	acceptance	
 F-0803.AC-25	acceptance	
@@ -1173,7 +1173,7 @@ F-0803.AC-29	acceptance
 F-0803.AC-30	acceptance	
 F-0803.AC-31	acceptance	
 F-0803.AC-32	acceptance	
-F-0804.AC-1	deferred	containers release 1: later (Configure Container Features, F-0807)
+F-0804.AC-1	acceptance	
 F-0804.AC-2	todo	
 F-0804.AC-3	acceptance	
 F-0804.AC-4	acceptance	
@@ -1186,19 +1186,19 @@ F-0804.AC-10	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-11	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-12	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-13	deferred	containers release 1: later (New Dev Container, F-0806)
-F-0804.AC-14	deferred	containers release 1: later (Configure Container Features, F-0807)
-F-0804.AC-15	deferred	containers release 1: later (Configure Container Features, F-0807)
+F-0804.AC-14	acceptance	
+F-0804.AC-15	acceptance	
 F-0804.AC-16	deferred	containers release 1: later (New Dev Container and Configure Container Features, F-0806 and F-0807)
 F-0804.AC-17	deferred	containers release 1: later (New Dev Container and Configure Container Features, F-0806 and F-0807)
 F-0804.AC-18	deferred	containers release 1: later (Configure Container Features, F-0807)
 F-0804.AC-19	acceptance	
 F-0804.AC-20	deferred	containers release 1: later (New Dev Container, F-0806)
-F-0804.AC-21	deferred	containers release 1: later (Configure Container Features, F-0807)
+F-0804.AC-21	acceptance	
 F-0804.AC-22	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-23	acceptance	
 F-0804.AC-24	deferred	containers release 1: later (New Dev Container and Configure Container Features, F-0806 and F-0807)
 F-0804.AC-25	acceptance	
-F-0804.AC-26	deferred	containers release 1: later (Configure Container Features, F-0807)
+F-0804.AC-26	acceptance	
 F-0804.AC-27	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-28	deferred	containers release 1: later (New Dev Container, F-0806)
 F-0804.AC-29	deferred	containers release 1: later (Configure Container Features, F-0807)

@@ -232,4 +232,8 @@ export type FeaturesOutcome =
   file lists checked (`catalogueKeyOf`); what is accepted goes to `editFeatures` as picks that name Features by their catalogue
   key, never by the key the file uses for them, the checked ones in the catalogue's order, and the text is written to the file
   where it lives, whatever an open editor holds; the file then opens as a preview at the first line and column. A file that cannot be
-  written is left as it is and the error is shown.
+  written is left as it is and the error is shown. Finish writes the checked Features as `{}`; OK with a Feature checked asks
+  "Keep Feature defaults or configure options?" once (`askFeatureOptions` with `alwaysAsk`, so a Feature that declares no option
+  is asked about too), where Keep Defaults writes as Finish does and Configure Options walks F-0803's screens for each checked
+  Feature in catalogue order, from the schema's defaults and never the file's values. Escape on the question goes into the walk,
+  a second Escape or Back on its first screen ends the run with nothing written, and OK with nothing checked asks nothing.

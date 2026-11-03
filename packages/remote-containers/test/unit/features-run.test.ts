@@ -8,9 +8,12 @@ import type {
 import {featuresRunOf} from '../../src/authoring/features-run.ts';
 import type {AuthoringFiles} from '../../src/authoring/window-files.ts';
 import {
+  checking,
   finishWith,
   FINISH_BUTTON,
   type FakeOptionPicker,
+  pick,
+  pressBack,
   pressEscape,
   scriptedInput,
   type Step,
@@ -28,8 +31,20 @@ const INDEX = JSON.stringify({
         repository: 'https://github.com/devcontainers/features',
       },
       features: [
-        {id: NODE, version: '1.6.3', name: 'Node'},
-        {id: GIT_ID, version: '1.3.2', name: 'Git'},
+        {
+          id: NODE,
+          version: '1.6.3',
+          name: 'Node',
+          options: {
+            version: {type: 'string', enum: ['lts', '18'], default: 'lts'},
+          },
+        },
+        {
+          id: GIT_ID,
+          version: '1.3.2',
+          name: 'Git',
+          options: {verbose: {type: 'boolean', default: false}},
+        },
         {id: COMMON, version: '2.5.3', name: 'Common Utilities'},
       ],
     },
@@ -209,16 +224,108 @@ describe('the pick and write of Configure Container Features (card containers-15
     );
   });
 
-  it('F-0807 AC-32: OK writes what is checked, as Finish does', async () => {
+  it('F-0807 AC-32, AC-33: OK with a Feature checked asks to keep the defaults or configure, and Keep Defaults writes what Finish writes', async () => {
     const scene = sceneOf();
-    await scene.runWith('{\n    "image": "x"\n}\n', [
-      picker => {
-        picker.acceptChecked(['Git']);
-      },
+    const text = '{\n    "image": "x"\n}\n';
+    await scene.runWith(text, [checking(['Git']), pick('Keep Defaults')]);
+    const kept = scene.written.map(withoutFile);
+    const finished = sceneOf();
+    await finished.runWith(text, [finishWith(['Git'])]);
+    const [, gate] = scene.screens;
+    deepStrictEqual(
+      [
+        gate?.title,
+        gate?.labels(),
+        gate?.buttons,
+        kept,
+        finished.written.map(withoutFile),
+      ],
+      [
+        'Keep Feature defaults or configure options?',
+        ['Keep Defaults', 'Configure Options'],
+        [],
+        finished.written.map(withoutFile),
+        kept,
+      ],
+    );
+  });
+
+  it('F-0807 AC-35, BR-9: OK with nothing checked asks nothing and writes nothing for a file with no Features', async () => {
+    const scene = sceneOf();
+    const outcome = await scene.runWith('{"image": "x"}', [checking([])]);
+    deepStrictEqual(
+      [outcome, scene.screens.length, scene.written],
+      [{kind: 'unchanged'}, 1, []],
+    );
+  });
+
+  it('F-0807 AC-34: Configure Options walks the checked Features in catalogue order, and each key holds what its walk gave', async () => {
+    const scene = sceneOf();
+    await scene.runWith('{}', [
+      checking(['Common Utilities', 'Git', 'Node']),
+      pick('Configure Options'),
+      pick('18'),
+      checking(['verbose']),
     ]);
-    deepStrictEqual(scene.written.map(withoutFile), [
-      `{\n    "image": "x",\n    "features": {\n        "${GIT_ID}:1": {}\n    }\n}\n`,
+    const [, , nodeScreen, gitScreen] = scene.screens;
+    deepStrictEqual(
+      [
+        nodeScreen?.title,
+        gitScreen?.title,
+        scene.screens.length,
+        JSON.parse(withoutFile(scene.written[0] ?? '')),
+      ],
+      [
+        "Select options for 'Node'",
+        "Select boolean options for 'Git'",
+        4,
+        {
+          features: {
+            [`${NODE}:1`]: {version: '18'},
+            [`${GIT_ID}:1`]: {verbose: true},
+            [`${COMMON}:2`]: {},
+          },
+        },
+      ],
+    );
+  });
+
+  it('F-0807 AC-34: a Feature that declares no option gets {} from Configure Options, and the gate is asked for it', async () => {
+    const scene = sceneOf();
+    await scene.runWith('{}', [
+      checking(['Common Utilities']),
+      pick('Configure Options'),
     ]);
+    deepStrictEqual(
+      [scene.screens.length, JSON.parse(withoutFile(scene.written[0] ?? ''))],
+      [2, {features: {[`${COMMON}:2`]: {}}}],
+    );
+  });
+
+  it('F-0807 AC-36, BR-12: Escape on the gate goes into the wizard, and a second Escape cancels with no write', async () => {
+    const scene = sceneOf();
+    const outcome = await scene.runWith('{}', [
+      checking(['Node']),
+      pressEscape,
+      pressEscape,
+    ]);
+    deepStrictEqual(
+      [outcome, scene.screens.length, scene.screens[2]?.title, scene.written],
+      [{kind: 'cancelled'}, 3, "Select options for 'Node'", []],
+    );
+  });
+
+  it('F-0807 AC-49: Back on the first screen of the wizard ends the run with the file unchanged', async () => {
+    const scene = sceneOf();
+    const outcome = await scene.runWith('{}', [
+      checking(['Node']),
+      pick('Configure Options'),
+      pressBack,
+    ]);
+    deepStrictEqual(
+      [outcome, scene.written, scene.opened],
+      [{kind: 'cancelled'}, [], []],
+    );
   });
 
   it('F-0807 AC-55, 7.E6: a "features" that is an array writes nothing and opens no editor', async () => {
