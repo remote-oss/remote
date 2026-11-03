@@ -211,10 +211,10 @@ export function editFeatures(text: string, picks: FeaturePicks): FeatureEdit {
       ? `${hasProperties(tree) ? ',' : ''}${lineEnds}${indentedOf(step, 1)}"features": ${objectText}`
       : objectText;
   const edits = modify(text, ['features'], {}, {});
-  let newText = text;
-  for (const edit of edits) {
-    newText = applyEdits(newText, [{...edit, content}]);
-  }
+  const newText = applyEdits(
+    text,
+    edits.slice(0, 1).map(edit => ({...edit, content})),
+  );
   return newText === text
     ? {kind: 'unchanged'}
     : {kind: 'edited', text: newText};
