@@ -37,8 +37,9 @@ on SSH hosts and tunnels) is group 16's.
 - **S240** (modal info: "Cancel" | "Open Folder in Container..." (primary), which goes to F-0403's folder dialog) shows:
   - with one configuration, whatever the workspace origin (AC-6, AC-22, decided Q4);
   - in a recovery container window (AC-7);
-  - in a DISCONNECTED window, where discovery doesn't run (AC-23). C6 asks lib-authority's resolver host whether this
-    window's resolve ended in `Failed` without a recovery container.
+  - in a DISCONNECTED window, where discovery doesn't run (AC-23). C6 reads lib-authority's existing
+    `ResolverHandle.lastResolve()`. `'failed'` means S240 at once, and a recovery-container payload has already given
+    S240 by AC-7. No new member of lib-authority is needed (`contracts.md` §4).
 - **Invoked in a local window** (7.E8, R-46):
   - zero or one configuration gives S240 (AC-28);
   - two or more go to C6's Reopen in Container flow, with its picker and trust step. That's safe (AC-29) and reuses
