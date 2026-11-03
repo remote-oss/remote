@@ -63,6 +63,17 @@ function editorResolverOf(
     resolve: async (authority, context) =>
       resultOf(editor, await resolver.resolve(authority, context)),
   };
+  const {resolveExecServer} = resolver;
+  if (resolveExecServer !== undefined) {
+    // The exec server is the extension's, built to the editor's proposed shape, which the host holds as an object.
+    editorResolver.resolveExecServer = async (authority, context) =>
+      (await resolveExecServer(authority, {
+        resolveAttempt: context.resolveAttempt,
+        ...(context.execServer === undefined
+          ? {}
+          : {execServer: context.execServer}),
+      })) as vscode.ExecServer;
+  }
   if (options.candidatePortSource === 'output') {
     editorResolver.candidatePortSource = editor.CandidatePortSource.Output;
   }

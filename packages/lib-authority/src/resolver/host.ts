@@ -66,9 +66,23 @@ export interface ConnectInput {
 /** What ended a connect: the user's Cancel on the progress notification, or the window's resolver being disposed. */
 export type CancelSource = 'progress' | 'dispose';
 
+/**
+ * An exec server as the editor takes it from a resolver. Its shape is the editor's (the proposed `resolvers` API), which
+ * this package needs no types of, so the host holds it as an object and the editor adapter gives it its type.
+ */
+export type ExecServerHandle = object;
+
 /** What an extension supplies: its own way to connect, and the events it reports on the way. */
 export interface Connector {
   connect(input: ConnectInput): Promise<Connected | Failed>;
+  /**
+   * The exec server of the window, for an authority the editor asks for one: the window's own connection serves it, or
+   * a connect made for it alone when the window has none (a window nested in this authority). An extension that serves
+   * no exec server leaves it off.
+   */
+  execServer?(
+    input: ConnectInput,
+  ): Promise<{execServer: ExecServerHandle} | Failed>;
   /** Ends prompts and processes. The host calls it only when the window is torn down, or on the user's Cancel. */
   cancel(source?: CancelSource): void;
   /** Shows the detail of the connect, as the log. */
@@ -84,6 +98,8 @@ export type PresenterOutcome = 'handled' | 'reload' | 'closeRemote';
 /** What an extension supplies to tell the user of a failure. */
 export interface FailurePresenter {
   present(failed: Failed): Promise<PresenterOutcome>;
+  /** The text the failure's dialog shows, which a failure that is told some other way carries as its message. */
+  textOf?(failed: Failed): string;
 }
 
 /** What the editor takes of a resolved connection. */
@@ -102,6 +118,14 @@ export interface EditorResolver {
     authority: string,
     context: {resolveAttempt: number},
   ): Promise<ResolvedConnection>;
+  /**
+   * The exec server of an authority that is a midpoint of a nested one, or that an extension asks for with
+   * `getRemoteExecServer`; the editor asks again on every resolve attempt and every use, and keeps none.
+   */
+  resolveExecServer?: (
+    authority: string,
+    context: {resolveAttempt: number; execServer?: ExecServerHandle},
+  ) => Promise<ExecServerHandle>;
   /** The local path a URI of this window stands for, for a family that maps one (windows contracts §3.2). */
   canonicalPath?: (
     authority: string,
@@ -371,10 +395,10 @@ export async function registerResolver(
     });
   }
 
-  async function connect(
+  async function connect<Result>(
     decoded: DecodedTarget,
-    input: ConnectInput,
-  ): Promise<Connected | Failed> {
+    work: () => Promise<Result>,
+  ): Promise<Result> {
     let shown:
       | {title: string; details: boolean; staged: boolean; stage: PhaseName}
       | undefined;
@@ -468,7 +492,7 @@ export async function registerResolver(
       }
     });
     try {
-      return await connector.connect(input);
+      return await work();
     } finally {
       stop();
       stopTimer();
@@ -479,6 +503,52 @@ export async function registerResolver(
         await closedWithin(progressDone, PROGRESS_CLOSE_MILLISECONDS);
       }
     }
+  }
+
+  function inputOf(
+    decoded: DecodedTarget,
+    context: {resolveAttempt: number},
+    isReconnection: boolean,
+  ): ConnectInput {
+    return {
+      target: decoded.target,
+      rawHostString: decoded.rawHostString,
+      attempt: context.resolveAttempt,
+      isReconnection,
+      windowId: editor.windowId(),
+      windowWorkspace: editor.windowWorkspace(),
+    };
+  }
+
+  async function resolveExecServerOne(
+    authority: string,
+    context: {resolveAttempt: number},
+    serve: NonNullable<Connector['execServer']>,
+  ): Promise<ExecServerHandle> {
+    const decoded = decodeAuthority(authority);
+    if ('malformed' in decoded || decoded.family !== options.family) {
+      throw editor.notAvailable(undefined, false);
+    }
+    if (state.leaving) {
+      throw editor.notAvailable(undefined, true);
+    }
+    let result: Awaited<ReturnType<typeof serve>>;
+    try {
+      result = await connect(decoded, () =>
+        serve(inputOf(decoded, context, memory.connectedBefore)),
+      );
+    } catch (caught) {
+      result = failureOfThrown(caught);
+    }
+    if ('execServer' in result) {
+      return result.execServer;
+    }
+    // The editor shows this error itself, or the extension that asked for the exec server tells the user: the failure's
+    // dialog is not shown here, but its text is the error's message.
+    throw editor.notAvailable(
+      options.presenter.textOf?.(result) ?? messageOf(result),
+      false,
+    );
   }
 
   async function resolveOne(
@@ -506,14 +576,9 @@ export async function registerResolver(
     }
     let result: Connected | Failed;
     try {
-      result = await connect(decoded, {
-        target: decoded.target,
-        rawHostString: decoded.rawHostString,
-        attempt: context.resolveAttempt,
-        isReconnection,
-        windowId: editor.windowId(),
-        windowWorkspace: editor.windowWorkspace(),
-      });
+      result = await connect(decoded, () =>
+        connector.connect(inputOf(decoded, context, isReconnection)),
+      );
     } catch (caught) {
       result = failureOfThrown(caught);
     }
@@ -526,16 +591,24 @@ export async function registerResolver(
     throw await errorFor(result, isReconnection);
   }
 
+  function queued<Result>(work: () => Promise<Result>): Promise<Result> {
+    const turn = state.queue.then(work);
+    state.queue = turn.then(
+      () => undefined,
+      () => undefined,
+    );
+    return turn;
+  }
+
   const resolver: EditorResolver = {
-    resolve: (authority, context) => {
-      const turn = state.queue.then(() => resolveOne(authority, context));
-      state.queue = turn.then(
-        () => undefined,
-        () => undefined,
-      );
-      return turn;
-    },
+    resolve: (authority, context) =>
+      queued(() => resolveOne(authority, context)),
   };
+  const serveExecServer = connector.execServer?.bind(connector);
+  if (serveExecServer !== undefined) {
+    resolver.resolveExecServer = (authority, context) =>
+      queued(() => resolveExecServerOne(authority, context, serveExecServer));
+  }
   const {canonical} = options;
   if (canonical !== undefined) {
     resolver.canonicalPath = async (authority, path) => {

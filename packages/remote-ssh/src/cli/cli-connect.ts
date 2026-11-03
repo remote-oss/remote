@@ -9,7 +9,13 @@
 import {busyRangeReason} from '../pipeline/port-choice.ts';
 import type {Connected, Failed} from 'lib-authority';
 import type {Logger} from 'lib-log';
-import {openCliControl, type Plan, type ProbedHost} from 'lib-server';
+import {
+  type CliControl,
+  openCliControl,
+  type Plan,
+  type ProbedHost,
+  type StartedServer,
+} from 'lib-server';
 import {
   type FailureDetail,
   ofCliServe,
@@ -45,6 +51,8 @@ export type CliConnectResult =
   | {
       kind: 'connected';
       connected: Connected;
+      /** The control connection the window's bridge rides on, for the exec server of the window. */
+      control: CliControl;
       release(): void;
       onTransport: (listener: (event: 'lost' | 'closed') => void) => () => void;
     }
@@ -75,10 +83,31 @@ function causeOf(detail: FailureDetail): string {
     : `${detail.kind}: ${detail.logDetail}`;
 }
 
-/** Runs the CLI path. */
-export async function connectOverCli(
+/** The CLI started, reached and authenticated: its control connection, and what gives everything back. */
+interface OpenedControl {
+  kind: 'opened';
+  control: CliControl;
+  server: StartedServer;
+  tunnel: TunnelOpening;
+  /** Hears the end of the control connection; the listener runs once. */
+  onControlEnded(listener: () => void): void;
+  /** Closes the control connection and the tunnel, and stops the CLI. */
+  abandon(): Promise<void>;
+  /** Stops the CLI. */
+  stop(): Promise<void>;
+}
+
+/**
+ * Places the CLI, starts it with a control token, reaches its control port through a tunnel, checks that it requires
+ * its token, and authenticates. A failure before the window resolves falls back to the direct install.
+ */
+async function openControl(
   context: CliConnectContext,
-): Promise<CliConnectResult> {
+): Promise<
+  | OpenedControl
+  | {kind: 'failed'; failure: FailureDetail}
+  | {kind: 'fallback'; cause: string}
+> {
   const {input, lease, host, plan, steps, logger, cancellation} = context;
   const installed = await steps.installCli(
     input,
@@ -168,19 +197,40 @@ export async function connectOverCli(
       cause: `the CLI refused its token: ${authenticated.kind}`,
     };
   }
+  return {
+    kind: 'opened',
+    control,
+    server: started.server,
+    tunnel,
+    onControlEnded: listener => {
+      controlEnded.push(listener);
+    },
+    abandon,
+    stop,
+  };
+}
+
+/** Runs the CLI path. */
+export async function connectOverCli(
+  context: CliConnectContext,
+): Promise<CliConnectResult> {
+  const {lease, steps, logger} = context;
+  const opened = await openControl(context);
+  if (opened.kind !== 'opened') {
+    return opened;
+  }
+  const {control, server, tunnel, abandon, stop} = opened;
   const serveParams = {
     commit: context.serve.commit,
     quality: context.serve.quality,
-    connectionToken: started.server.connectionToken,
+    connectionToken: server.connectionToken,
     useLocalDownload: false,
   };
   const bridge = await steps.openBridge(control, serveParams, {
     onServeLog: line => {
       logger[LOG_LEVELS[line.level] ?? 'info'](line.text);
     },
-    onControlEnded: listener => {
-      controlEnded.push(listener);
-    },
+    onControlEnded: opened.onControlEnded,
   });
   if (bridge !== undefined && 'busyRange' in bridge) {
     await abandon();
@@ -199,6 +249,7 @@ export async function connectOverCli(
   }
   return {
     kind: 'connected',
+    control,
     connected: {
       ...tunnel.opened,
       address: bridge.address,
@@ -240,6 +291,72 @@ export async function connectOverCli(
       });
       return () => {
         active = false;
+      };
+    },
+  };
+}
+
+/** What the CLI path gives an exec server: the control connection held, with no server and no window tunnel. */
+export type CliHoldResult =
+  | {
+      kind: 'held';
+      control: CliControl;
+      release(): void;
+      onTransport: (listener: (event: 'lost' | 'closed') => void) => () => void;
+    }
+  | {kind: 'failed'; failure: FailureDetail}
+  | {kind: 'fallback'; cause: string};
+
+/**
+ * Runs the CLI path as far as the authenticated control connection and holds it, for an exec server: no `serve`, since
+ * no VS Code server on the host belongs to this window, and no bridge. The control connection's end, or the end of the
+ * tunnel it rides on, is the lost transport.
+ */
+export async function holdOverCli(
+  context: CliConnectContext,
+): Promise<CliHoldResult> {
+  const {lease, logger} = context;
+  const opened = await openControl(context);
+  if (opened.kind !== 'opened') {
+    return opened;
+  }
+  let released = false;
+  const listeners: Array<() => void> = [];
+  function ended(): void {
+    if (!released) {
+      for (const listener of listeners) {
+        listener();
+      }
+    }
+  }
+  opened.onControlEnded(ended);
+  opened.tunnel.onClosed(detail => {
+    logger.warn(`the tunnel to the CLI ended: ${detail}`);
+    ended();
+  });
+  function giveBack(): void {
+    lease.release();
+  }
+  return {
+    kind: 'held',
+    control: opened.control,
+    release: () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      opened.control.close();
+      opened.tunnel.close();
+      // The lease goes back once the stop has settled, which the step bounds: the stop runs over the lease's channel.
+      void opened.stop().then(giveBack, giveBack);
+    },
+    onTransport: listener => {
+      const wrapped = (): void => {
+        listener('lost');
+      };
+      listeners.push(wrapped);
+      return () => {
+        listeners.splice(listeners.indexOf(wrapped), 1);
       };
     },
   };

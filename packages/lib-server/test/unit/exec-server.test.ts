@@ -6,6 +6,7 @@ import {
   type ExecSpawnedCommand,
   ExecServerFailure,
   execServerOf,
+  watchedExecServer,
 } from '../../src/cli-control/exec-server.ts';
 import {
   announcing,
@@ -433,6 +434,26 @@ describe('the exec server over the control connection', () => {
           errorLine: undefined,
         }).message,
         'serve failed: boom',
+      );
+    });
+  });
+
+  describe('watched', () => {
+    it('F-2103 BR-10: keeps the members of the server and adds the owner’s loss event', async () => {
+      const {control} = connectedTo({
+        get_env: replying({env: {}, os_platform: 'linux', os_release: '6'}),
+      });
+      const calls: string[] = [];
+      const watched = watchedExecServer(execServerOf(control), listener => {
+        calls.push('subscribed');
+        listener();
+        return () => calls.push('stopped');
+      });
+      const stop = watched.onTransportLost(() => calls.push('lost'));
+      stop();
+      deepStrictEqual(
+        [(await watched.env()).osPlatform, calls],
+        ['linux', ['subscribed', 'lost', 'stopped']],
       );
     });
   });
