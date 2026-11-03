@@ -26,6 +26,12 @@ interface AgentCommand {
   concurrent?: true;
 }
 
+/** A line that takes back a command no start of the window accepted, so that a later window of the name never runs it. */
+interface AgentWithdrawal {
+  id: string;
+  withdrawn: true;
+}
+
 /** The name of this window's current start: claimed or kept at activation, reported at deactivation. */
 let windowName: string | undefined;
 
@@ -119,18 +125,26 @@ function acceptedIds(agentFolder: string, name: string): Set<string> {
   );
 }
 
-/** The commands of this window's file that no start of its agent has accepted yet: a reload does not lose or repeat one. */
+/** The commands of this window's file that no start of its agent has accepted yet and the test has not taken back: a reload does not lose or repeat one. */
 function pendingCommands(agentFolder: string, name: string): AgentCommand[] {
   const file = agentFile(agentFolder, name, 'commands');
   if (!existsSync(file)) {
     return [];
   }
   const accepted = acceptedIds(agentFolder, name);
-  return readFileSync(file, 'utf8')
+  const lines = readFileSync(file, 'utf8')
     .split('\n')
     .filter(line => line !== '')
-    .map(line => JSON.parse(line) as AgentCommand)
-    .filter(each => !accepted.has(each.id));
+    .map(line => JSON.parse(line) as AgentCommand | AgentWithdrawal);
+  const withdrawn = new Set(
+    lines.filter(each => 'withdrawn' in each).map(each => each.id),
+  );
+  return lines.filter(
+    (each): each is AgentCommand =>
+      !('withdrawn' in each) &&
+      !accepted.has(each.id) &&
+      !withdrawn.has(each.id),
+  );
 }
 
 /** Runs one command: `accepted` first, since a reload or a close may never write `done`. */
