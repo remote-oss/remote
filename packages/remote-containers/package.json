@@ -211,6 +211,18 @@
         "command": "remote-containers.attachToRunningContainer",
         "title": "%commands.attachToRunningContainer.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+        "title": "%commands.openRepositoryFromRemoteHubWithEditSession.title%",
+        "category": "Dev Containers",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "remote-containers.openRepositoryFromGitWithEditSession",
+        "title": "%commands.openRepositoryFromGitWithEditSession.title%",
+        "category": "Dev Containers",
+        "icon": "$(repo-clone)"
       }
     ],
     "menus": {
@@ -318,6 +330,14 @@
         {
           "command": "remote-containers.attachToRunningContainer",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.openRepositoryFromGitWithEditSession",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -656,7 +676,23 @@
           "description": "%setting.BootstrapImagePull.description%"
         }
       }
-    }
+    },
+    "continueEditSession": [
+      {
+        "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+        "group": "0_local@2",
+        "remoteGroup": "remote_30_dev-container_2_actions@8",
+        "qualifiedName": "%continueEditSession.qualifiedName%",
+        "when": "!isWeb && remoteHub:hasVirtualFolders && !remote-containers:standingDown"
+      },
+      {
+        "command": "remote-containers.openRepositoryFromGitWithEditSession",
+        "group": "0_local@2",
+        "remoteGroup": "remote_30_dev-container_2_actions@8",
+        "qualifiedName": "%continueEditSession.qualifiedName%",
+        "when": "git.state == initialized && gitOpenRepositoryCount != 0 && remoteName =~ /(codespaces*.*|tunnel)/ && false && !remote-containers:standingDown"
+      }
+    ]
   },
   "dependencies": {
     "@devcontainers/cli": "0.89.0",

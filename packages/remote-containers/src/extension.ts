@@ -859,6 +859,8 @@ export async function activate(
       searchPath: () => process.env.PATH ?? '',
     }),
     handlers: served => {
+      // The two edit-session commands are registered and hidden; no proposal is requested, so the editor never offers them.
+      const dormantCommand = {execute: () => Promise.resolve()};
       function firstFolder(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       }
@@ -1681,6 +1683,8 @@ export async function activate(
               cancellation: new AbortController().signal,
             }),
         },
+        openRepositoryFromRemoteHubWithEditSession: dormantCommand,
+        openRepositoryFromGitWithEditSession: dormantCommand,
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
         },
