@@ -60,6 +60,26 @@ export const FOLDER: DevContainerFolder = {
   },
 };
 
+/**
+ * Makes the reads that name a container answer `failure`, while the read before the container starts keeps the
+ * scene's answer: a connect that goes on past a failed read after the start.
+ */
+export function containerReadsFail(
+  scene: Scene,
+  failure: Exclude<
+    Awaited<ReturnType<CliBridge['readConfiguration']>>,
+    {kind: 'configuration'}
+  >,
+): void {
+  const before = scene.configuration;
+  scene.configuration = () => {
+    if (scene.configurationReads.at(-1)?.containerId !== undefined) {
+      return Promise.resolve(failure);
+    }
+    return typeof before === 'function' ? before() : Promise.resolve(before);
+  };
+}
+
 /** The input of a resolve of `payload`. */
 export function inputOf(
   payload: string,

@@ -128,6 +128,15 @@ export function disallowedFeature(
   };
 }
 
+/** A CLI command other than `up` failed inside the connect; `description` is the CLI's own account of the failure. */
+export function commandFailed(description: string): Failed {
+  return failure(
+    'containerSetupFailed',
+    {},
+    {id: 'S420', values: [description]},
+  );
+}
+
 /** The configuration's image or Dockerfile entry has the wrong type; `configFile` is the configuration's path. */
 export function configurationInvalid(configFile: string): Failed {
   return failure(

@@ -27,6 +27,8 @@ import type {CliBridge} from '../cli/cli-bridge.ts';
 import {
   type ConfigurationResult,
   type CliEvent,
+  type CliFailure,
+  cliDescriptionOf,
   cliFailureText,
   withoutControlSequences,
 } from '../cli/cli-lines.ts';
@@ -87,6 +89,7 @@ import {
   cancelled,
   configurationInvalid,
   containerGone,
+  commandFailed,
   containerSetupFailed,
   disallowedFeature,
   featureResolutionFailed,
@@ -493,7 +496,7 @@ export function containerConnectorOf(
   /** The reconnection attempts of core that this connector, one per window session, has answered (S286). */
   let reconnectionAttempts = 0;
   /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
-  const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
+  const reads = new Map<string, Promise<ConfigurationResult | CliFailure>>();
 
   /** Gives back the connection the window holds, and stops hearing its relay. */
   function releaseHeld(): void {
@@ -866,14 +869,14 @@ export function containerConnectorOf(
 
   /**
    * The workspace folder of `payload`'s configuration, read without a container by the first that asks, a canonical
-   * request or the connect's start. It runs no repository code. A failed read is dropped, so the next request reads
-   * again.
+   * request or the connect's start. It runs no repository code. A failed read gives its failure and is dropped, so
+   * the next request reads again.
    */
   function readOf(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<ConfigurationResult | undefined> {
+  ): Promise<ConfigurationResult | CliFailure> {
     const kept = reads.get(payload);
     if (kept !== undefined) {
       return kept;
@@ -892,7 +895,6 @@ export function containerConnectorOf(
           logger.warn(
             `the configuration of ${folder.hostPath} could not be read: ${cliFailureText(result)}`,
           );
-          return undefined;
         }
         return result;
       });
@@ -900,12 +902,12 @@ export function containerConnectorOf(
     return reading;
   }
 
-  /** The read of `payload`, or nothing once the canonical request has waited its longest. */
+  /** The read of `payload` or its failure, or nothing once the canonical request has waited its longest. */
   function readWithinCap(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<ConfigurationResult | undefined> {
+  ): Promise<ConfigurationResult | CliFailure | undefined> {
     return new Promise(resolve => {
       const stop = dependencies.preflight.setTimer(
         CANONICAL_READ_MILLISECONDS,
@@ -974,7 +976,9 @@ export function containerConnectorOf(
       connection === undefined
         ? await readWithinCap(payload, decoded)
         : undefined;
-    const root = connection?.remoteWorkspaceFolder ?? read?.workspaceFolder;
+    const root =
+      connection?.remoteWorkspaceFolder ??
+      (read?.kind === 'configuration' ? read.workspaceFolder : undefined);
     const local =
       root === undefined ? undefined : mappedPath(root, decoded.hostPath, path);
     if (local !== undefined) {
@@ -1058,7 +1062,8 @@ export function containerConnectorOf(
     if (trustedAtStart) {
       registerWithShutdown(folder, tools);
     }
-    const read = await readWithinCap(payload, folder, tools);
+    const reading = await readWithinCap(payload, folder, tools);
+    const read = reading?.kind === 'configuration' ? reading : undefined;
     if (!(await trustedFolder(folder, cancellation, trustedAtStart))) {
       return trustDeclined();
     }
@@ -1075,6 +1080,14 @@ export function containerConnectorOf(
     );
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
+    }
+    // A read that failed with the engine answering is the CLI's own failure; one that ran out of time is not.
+    if (
+      reading !== undefined &&
+      reading.kind !== 'configuration' &&
+      reading.kind !== 'cancelled'
+    ) {
+      return commandFailed(cliDescriptionOf(reading));
     }
     if (read !== undefined && !sourceTypesValid(read.configuration)) {
       // The next attempt reads the file again, so a fix the user saves is seen by Retry.

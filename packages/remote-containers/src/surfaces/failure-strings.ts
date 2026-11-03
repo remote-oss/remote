@@ -35,6 +35,7 @@ export const FAILURE_TEMPLATES = {
   S346: 'The container does not meet all the requirements of the VS Code Server.',
   S357: 'The feature was not found either because it is no longer available or because of insufficient permissions to access it.',
   S359: "The hardware architecture '{0}' of the container is not supported.",
+  S420: 'devcontainer command failed: {0}',
 } as const;
 
 /** The text of a value of a placeholder: a literal as it is, or a string of the table resolved in turn. */
