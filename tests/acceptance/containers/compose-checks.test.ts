@@ -1,27 +1,39 @@
 import {deepStrictEqual} from 'node:assert';
+import {mkdirSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   closeWindow,
+  containersLog,
   devContainersOf,
   inWindow,
   reopenStarted,
+  variable,
   windowState,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   answerDialog,
+  dialogOf,
   pressEscape,
+  notifications,
   statusBarText,
   waitForDialog,
+  windowTitle,
 } from '../windows/renderer.ts';
 import {
   composeContainersOfRun,
   composeFolder,
+  composeNetworks,
+  derivedImagesOf,
   type ComposeFolderOptions,
   removeComposeContainers,
 } from './compose-support.ts';
 
 /** The generic dialog of a setup that fails (F-0410's). */
 const GENERIC_DIALOG = 'An error occurred setting up the container.';
+
+/** How long the generic dialog may take to come after Reopen, in milliseconds: a few seconds. */
+const FEW_SECONDS = 30_000;
 
 /** The text of the S412 dialog. */
 const S412 = 'Workspace folder not specified in devcontainer.json.';
@@ -60,12 +72,17 @@ describe('the checks of a Compose configuration before and while it connects (ca
       });
       const name = await openFolderWindow(folder);
       const before = await placeOf(name);
+      const titleBefore = await windowTitle(name);
       const running = inWindow(name, 'remote-containers.reopenInContainer');
       running.catch(() => undefined);
       const dialog = await waitForDialog(name, 60_000);
       const shown = [dialog.message, dialog.details].filter(
         line => line !== '',
       );
+      const connecting = (await notifications(name)).filter(text =>
+        text.includes('Connecting'),
+      );
+      const titleOpen = await windowTitle(name);
       await answerDialog(name, 'Cancel');
       await running.catch(() => undefined);
       const afterCancel = await placeOf(name);
@@ -79,6 +96,8 @@ describe('the checks of a Compose configuration before and while it connects (ca
         label,
         shown,
         buttons: dialog.buttons,
+        quiet: connecting,
+        titled: titleOpen === titleBefore,
         unchanged: JSON.stringify(afterCancel) === JSON.stringify(before),
         opened: afterOpen.editor?.endsWith('.devcontainer/devcontainer.json'),
         remote: afterOpen.remote,
@@ -92,6 +111,8 @@ describe('the checks of a Compose configuration before and while it connects (ca
         label,
         shown: [S412],
         buttons: ['Cancel', 'Open devcontainer.json'],
+        quiet: [],
+        titled: true,
         unchanged: true,
         opened: true,
         remote: null,
@@ -123,10 +144,13 @@ describe('the checks of a Compose configuration before and while it connects (ca
       ['missing-file', {configuration: {dockerComposeFile: 'missing.yml'}}],
       ['yaml-error', {composeText: 'services: [unclosed\n'}],
       ['bad-model', {composeText: 'services:\n  - app\n  - db\n'}],
+      ['scalar-model', {composeText: 'services: nope\n'}],
       ['no-such-service', {configuration: {service: 'nowhere'}}],
       ['no-service', {configuration: {service: undefined}}],
     ];
     const results: Array<[string, string, string[], string[]]> = [];
+    const started = containersLog().length;
+    const slow: string[] = [];
     for (const [label, options] of cases) {
       const folder = composeFolder({
         name: `c143-fail-${label}`,
@@ -135,8 +159,12 @@ describe('the checks of a Compose configuration before and while it connects (ca
       });
       const name = await openFolderWindow(folder);
       try {
+        const began = Date.now();
         await reopenStarted(name);
         const dialog = await waitForDialog(name, 90_000);
+        if (Date.now() - began > FEW_SECONDS) {
+          slow.push(label);
+        }
         results.push([
           label,
           [dialog.message, dialog.details]
@@ -146,6 +174,8 @@ describe('the checks of a Compose configuration before and while it connects (ca
           [
             ...(await devContainersOf(folder)),
             ...(await composeContainersOfRun()),
+            ...(await composeNetworks()),
+            ...(await derivedImagesOf(`c143-fail-${label}`)),
           ],
         ]);
       } finally {
@@ -153,13 +183,69 @@ describe('the checks of a Compose configuration before and while it connects (ca
       }
     }
     deepStrictEqual(
-      results,
-      cases.map(([label]) => [
-        label,
-        GENERIC_DIALOG,
-        ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+      [
+        results,
+        slow,
+        containersLog()
+          .slice(started)
+          .filter(line => line.includes('Docker Compose returned an error.')),
+      ],
+      [
+        cases.map(([label]) => [
+          label,
+          GENERIC_DIALOG,
+          ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          [],
+        ]),
         [],
-      ]),
+        [],
+      ],
+    );
+  });
+
+  it('F-0301 AC-64, AC-70 (c143-precedence): a missing compose file with no workspaceFolder shows S412, not the generic dialog, and a configuration with no source at all, closed with Escape, opens its file as a preview and leaves the window local', async () => {
+    const folder = composeFolder({
+      name: 'c143-precedence',
+      place: 'devcontainer',
+      configuration: {
+        dockerComposeFile: 'missing.yml',
+        workspaceFolder: undefined,
+      },
+    });
+    const name = await openFolderWindow(folder);
+    const titleBefore = await windowTitle(name);
+    const running = inWindow(name, 'remote-containers.reopenInContainer');
+    running.catch(() => undefined);
+    const dialog = await waitForDialog(name, 60_000);
+    const shown = [dialog.message, dialog.details].filter(line => line !== '');
+    const titleOpen = await windowTitle(name);
+    await answerDialog(name, 'Cancel');
+    await running.catch(() => undefined);
+    await closeWindow(name);
+    const bare = path.join(variable('HARNESS_RUN_FOLDER'), 'c143-bare');
+    mkdirSync(path.join(bare, '.devcontainer'), {recursive: true});
+    writeFileSync(
+      path.join(bare, '.devcontainer', 'devcontainer.json'),
+      '{"name":"x"}',
+    );
+    const second = await openFolderWindow(bare);
+    const escaping = inWindow(second, 'remote-containers.reopenInContainer');
+    escaping.catch(() => undefined);
+    await waitForDialog(second, 60_000).catch(() => undefined);
+    const shownSecond = await dialogOf(second);
+    await pressEscape(second);
+    await escaping.catch(() => undefined);
+    const after = await placeOf(second);
+    await closeWindow(second);
+    deepStrictEqual(
+      [
+        shown,
+        titleOpen === titleBefore,
+        shownSecond !== undefined,
+        after.remote,
+        after.editor?.endsWith('.devcontainer/devcontainer.json'),
+      ],
+      [[S412], true, true, null, true],
     );
   });
 });

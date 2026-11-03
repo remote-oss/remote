@@ -303,3 +303,27 @@ export async function composeContainersOfRun(): Promise<string[]> {
     .split('\n')
     .filter(line => line !== '');
 }
+
+/** The networks that Compose projects hold now. */
+export async function composeNetworks(): Promise<string[]> {
+  return (
+    await docker(
+      'network',
+      'ls',
+      '--quiet',
+      '--filter',
+      'label=com.docker.compose.project',
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '');
+}
+
+/** The images derived for a workspace folder named `folderName`, which the CLI tags `vsc-<name>-<hash>`. */
+export async function derivedImagesOf(folderName: string): Promise<string[]> {
+  return (
+    await docker('images', '--quiet', `vsc-${folderName.toLowerCase()}-*`)
+  )
+    .split('\n')
+    .filter(line => line !== '');
+}
