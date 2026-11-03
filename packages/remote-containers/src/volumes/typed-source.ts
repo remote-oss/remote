@@ -13,7 +13,7 @@ import {
 } from '../state/timed-store.ts';
 
 /** The extension's own key in `globalState`; never synced. */
-export const TYPED_SOURCES_KEY =
+const TYPED_SOURCES_KEY =
   'remote-oss.remote-containers.typedCloneSources';
 
 /** How long a record lives. */

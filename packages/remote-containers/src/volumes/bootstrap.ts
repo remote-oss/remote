@@ -5,7 +5,7 @@
  */
 
 /** The tag our built-in bootstrap image is built under. */
-export const BOOTSTRAP_TAG = 'vsc-volume-bootstrap:latest';
+const BOOTSTRAP_TAG = 'vsc-volume-bootstrap:latest';
 
 /** The tools the check looks for, in its fixed order. */
 export const BOOTSTRAP_TOOLS = [
@@ -30,7 +30,7 @@ export interface BootstrapSettings {
 }
 
 /** The socket the container binds when the setting gives none. */
-export const DEFAULT_SOCKET_PATH = '/var/run/docker.sock';
+const DEFAULT_SOCKET_PATH = '/var/run/docker.sock';
 
 /** The settings as they are read: a value of the wrong type, or an empty one, counts as unset. */
 export function bootstrapSettingsOf(read: {

@@ -55,7 +55,7 @@ export interface VolumeResolvePorts extends EngineStepPorts {
 }
 
 /** A dev container that is ready, and what the connect needs of the pass that made it. */
-export interface PreparedVolume {
+interface PreparedVolume {
   kind: 'prepared';
   outcome: Extract<ContainerOutcome, {kind: 'ready'}>;
   /** The bootstrap container, still running: the caller removes it once connected. */

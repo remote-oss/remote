@@ -61,7 +61,7 @@ export const CLONE_TRUST_PAGE =
 const AUTHORITY_PREFIX = 'vscode-remote://dev-container+';
 
 /** The volume payload of a source: a unique volume, named when the clone runs. */
-export function uniqueVolumeTargetOf(
+function uniqueVolumeTargetOf(
   source: CloneSource,
   engine: PinnedEngine,
 ): DevContainerVolume {
@@ -80,7 +80,7 @@ export function uniqueVolumeTargetOf(
 }
 
 /** The URI of a volume target's window: its folder under `/workspaces`. */
-export function volumeWindowUriOf(target: DevContainerVolume): string {
+function volumeWindowUriOf(target: DevContainerVolume): string {
   return `${AUTHORITY_PREFIX}${volumePayloadOf(target)}/workspaces/${encodeURIComponent(target.folder)}`;
 }
 

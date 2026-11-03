@@ -19,7 +19,7 @@ import {
 export const VOLUME_ROOT = '/workspaces';
 
 /** The configuration files looked for in a clone, in the order the first found is taken. */
-export const CLONE_CONFIGURATIONS = [
+const CLONE_CONFIGURATIONS = [
   '.devcontainer/devcontainer.json',
   '.devcontainer.json',
 ] as const;
