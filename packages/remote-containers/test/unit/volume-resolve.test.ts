@@ -114,8 +114,8 @@ async function sceneOf(
         return Promise.resolve();
       },
       onCloning: () => record.push('cloning'),
-      prepare: (bootstrap, request) => {
-        record.push(`prepare in ${bootstrap}`);
+      prepare: (bootstrap, request, configText) => {
+        record.push(`prepare in ${bootstrap} with ${configText}`);
         requests.push(request);
         return Promise.resolve(options.outcome ?? READY);
       },
@@ -184,7 +184,7 @@ describe('the resolve of a clone in a volume (card containers-151)', () => {
           'read payload1',
           'cloning',
           'cleared payload1',
-          'prepare in boot1',
+          'prepare in boot1 with {"image": "alpine"}',
         ],
         request: {
           folder: '/workspaces/r',

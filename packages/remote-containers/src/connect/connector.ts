@@ -23,6 +23,20 @@ import {
   folderTargetOf,
 } from '../authority/payload.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {VolumeWorkspace} from '../cli/override-pre-pass.ts';
+import {
+  bootstrapRemoveArguments,
+  type BootstrapSettings,
+} from '../volumes/bootstrap.ts';
+import type {BuildContext} from '../volumes/bootstrap-start.ts';
+import {
+  type DevContainerVolume,
+  volumeTargetOf,
+} from '../volumes/volume-payload.ts';
+import {
+  resolveVolume,
+  type VolumeContainerRequest,
+} from '../volumes/volume-resolve.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import {
   type ConfigurationResult,
@@ -37,6 +51,7 @@ import type {EngineHost} from '../engine/engine-host.ts';
 import {
   environmentOfPinned,
   engineLabelOf,
+  type PinnedEngine,
   withEnvironment,
 } from '../engine/effective-engine.ts';
 import {
@@ -55,8 +70,10 @@ import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf} from '../exec/exec-channel.ts';
 import {
+  type BackgroundStage,
   type ContainerLifecycle,
   type ContainerOutcome,
+  type ContainerRequest,
   type ContainerStep,
   type LifecyclePresenter,
 } from '../lifecycle/container-lifecycle.ts';
@@ -187,8 +204,36 @@ export interface ContainerConnector extends Connector {
   canonicalPathOf(authority: string, path: string): Promise<string | undefined>;
 }
 
+/** What a connect to a clone in a volume needs beyond a folder's. */
+export interface VolumeConnectDependencies {
+  /** The bootstrap settings, read at every start. */
+  bootstrapSettings(): BootstrapSettings;
+  buildContext(): Promise<BuildContext>;
+  /** Whether our record says the source of `payload` was typed. */
+  typed(payload: string): boolean;
+  clearTyped(payload: string): Promise<void>;
+  /** The bridge whose CLI runs in the bootstrap container, the configuration rewritten for `workspace`. */
+  bootstrapBridge(
+    bootstrap: string,
+    workspace: VolumeWorkspace,
+    environment: Readonly<Record<string, string | undefined>>,
+  ): CliBridge;
+  /** The bridge on the host for the runs after `up`, over the configuration's text rewritten for `workspace`. */
+  hostBridge(
+    configText: string,
+    workspace: VolumeWorkspace,
+    environment: Readonly<Record<string, string | undefined>>,
+  ): CliBridge;
+  /** A fresh, empty folder on the host that the CLI is given as its workspace folder there. */
+  standIn(): Promise<{folder: string; dispose(): Promise<void>}>;
+  /** Shows that only the latest commits of `repository` were cloned. */
+  showShallow(repository: string): void;
+}
+
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
+  /** What a clone in a volume needs; without it, a volume payload is no authority the connector reads. */
+  volumes?: VolumeConnectDependencies;
   /** Whether a file or a folder exists on this machine. */
   pathExists(place: string): Promise<boolean>;
   /** The program a read before the trust answer is given (see `noEngineProgramOf`). */
@@ -203,11 +248,12 @@ export interface ContainerConnectorDependencies {
   engineFor(file: string): EngineHost;
   /** The CLI bridge for the environment its processes get. */
   cliFor(environment: Readonly<Record<string, string | undefined>>): CliBridge;
-  /** The container lifecycle over an engine and a CLI. */
+  /** The container lifecycle over an engine and a CLI; a clone in a volume gives its background stage. */
   lifecycleFor(
     engine: EngineHost,
     cli: CliBridge,
     presenter: LifecyclePresenter,
+    backgroundStage?: BackgroundStage,
   ): ContainerLifecycle;
   /** The settings this connector reads, at every connect. */
   settings(): {
@@ -1161,21 +1207,69 @@ export function containerConnectorOf(
         context: folder.context,
       };
     }
+    return connectPrepared(
+      {
+        payload,
+        prepared,
+        engine,
+        bridge,
+        cliTarget: cliTargetOf(folder, tools),
+        settings,
+        pinned: folder,
+        shutdownAction: read?.configuration.shutdownAction,
+        connectionId,
+        hostPath: folder.hostPath,
+        configFile: folder.configFile.fsPath ?? folder.configFile.path,
+        trusted: false,
+      },
+      cancellation,
+    );
+  }
+
+  /** What the last part of a connect needs of the target it connects, once its container is ready. */
+  interface PreparedContext {
+    payload: string;
+    prepared: Extract<ContainerOutcome, {kind: 'ready'}>;
+    engine: EngineHost;
+    /** The CLI and its target for the reads after `up`. */
+    bridge: CliBridge;
+    cliTarget: CliTarget;
+    settings: Tools['settings'];
+    /** The engine the window is pinned to. */
+    pinned: PinnedEngine;
+    /** The configuration file's `shutdownAction`, for a container that records none. */
+    shutdownAction: unknown;
+    /** The connection the shutdown helper knows; none when it knows none. */
+    connectionId: string | undefined;
+    hostPath: string;
+    configFile: string;
+    /** Whether the window is trusted by the connection itself. */
+    trusted: boolean;
+  }
+
+  /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
+  async function connectPrepared(
+    context: PreparedContext,
+    cancellation: AbortSignal,
+  ): Promise<Connected | Failed> {
+    const {payload, prepared, engine, bridge, settings, connectionId} = context;
     if (isAborted(cancellation)) {
       return cancelled();
     }
     logger.info(
       `container ${shortId(prepared.containerId)} was ${prepared.created ? 'newly started' : 'already running'}`,
     );
-    await tellShutdownContainer(
-      connectionId,
-      prepared.containerId,
-      read?.configuration.shutdownAction,
-      engine,
-      cancellation,
-    );
+    if (connectionId !== undefined) {
+      await tellShutdownContainer(
+        connectionId,
+        prepared.containerId,
+        context.shutdownAction,
+        engine,
+        cancellation,
+      );
+    }
     const configuration = await bridge.readConfiguration(
-      cliTargetOf(folder, tools),
+      context.cliTarget,
       prepared.containerId,
       logCliEvent,
       cancellation,
@@ -1285,15 +1379,15 @@ export function containerConnectorOf(
           ? appPortOf(configuration.configuration)
           : undefined,
         engineIsLocal({
-          context: folder.context,
-          dockerHost: folder.host,
+          context: context.pinned.context,
+          dockerHost: context.pinned.host,
         }),
       ),
-      trusted: false,
+      trusted: context.trusted,
     };
     held = {
       payload,
-      hostPath: folder.hostPath,
+      hostPath: context.hostPath,
       remoteWorkspaceFolder: prepared.remoteWorkspaceFolder,
       containerId: prepared.containerId,
       startedAt:
@@ -1301,12 +1395,12 @@ export function containerConnectorOf(
           ? ''
           : started.startedAt,
       engine,
-      configFile: folder.configFile.fsPath ?? folder.configFile.path,
+      configFile: context.configFile,
       created: prepared.created,
       channel,
       server,
       relay,
-      identity: {name, context: engineLabelOf(folder)},
+      identity: {name, context: engineLabelOf(context.pinned)},
       connected,
       lifetime: new AbortController(),
       ports: {
@@ -1327,6 +1421,190 @@ export function containerConnectorOf(
         lost.tell();
       }
     });
+    return connected;
+  }
+
+  /** The options of `up` a clone in a volume gives the lifecycle, beyond its folder, file and labels. */
+  function volumeRequestOf(
+    request: VolumeContainerRequest,
+    settings: Tools['settings'],
+    rebuild: {buildNoCache: boolean} | undefined,
+  ): ContainerRequest {
+    return {
+      folder: request.folder,
+      configFile: request.configFile,
+      idLabels: request.idLabels,
+      dockerPath: 'docker',
+      logLevel: 'info',
+      cacheVolume: settings.cacheVolume(),
+      workspaceMountConsistency: workspaceMountConsistencyOf(
+        settings.workspaceMountConsistency,
+        settings.legacyWorkspaceMountConsistency,
+      ),
+      mountGitWorktreeCommonDir: false,
+      features: featureSettingsOf(
+        settings.defaultFeatures,
+        settings.lockfile,
+        undefined,
+      ),
+      mounts: [],
+      runArgs: [],
+      workspaceMount: undefined,
+      pausedRetry: takenPausedRetry,
+      ...(rebuild === undefined ? {} : {rebuild}),
+    };
+  }
+
+  /**
+   * Connects a clone in a volume: the bootstrap container clones and runs `up`, and the CLI on the host, given a stand-in
+   * folder, does the reads and the background commands after it, so that the bootstrap can go once connected.
+   */
+  async function connectVolume(
+    volumes: VolumeConnectDependencies,
+    payload: string,
+    target: DevContainerVolume,
+    controller: AbortController,
+    input: ConnectInput,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    const settings = dependencies.settings();
+    const executable = executableOf(settings.dockerPath, undefined);
+    if (executable.kind !== 'spawn') {
+      logger.info('dev.containers.dockerPath names no program');
+      return engineCheckFailed('S339');
+    }
+    const environment = environmentOfPinned(target);
+    const engine = withEnvironment(
+      dependencies.engineFor(executable.file),
+      () => environment,
+    );
+    phases.tell({name: 'initializing'});
+    const checked = await secondCheck(
+      {
+        ...dependencies.preflight,
+        engineFor: () => engine,
+        dockerPath: () => settings.dockerPath,
+      },
+      undefined,
+      cancellation,
+    );
+    if (checked.kind === 'failed') {
+      return engineCheckFailed(checked.detail);
+    }
+    const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
+    const dockerFile = executable.file;
+    const rebuild = await takenRebuild(input);
+    const standIn = await volumes.standIn();
+    /** The CLI on the host and its target, for the runs after `up`: the stand-in folder, the host's Docker program. */
+    function hostPassOf(
+      request: VolumeContainerRequest,
+      configText: string,
+    ): {bridge: CliBridge; target: CliTarget} {
+      return {
+        bridge: volumes.hostBridge(
+          configText,
+          request.workspace,
+          cliEnvironment,
+        ),
+        target: {
+          workspaceFolder: standIn.folder,
+          configFile: join(
+            standIn.folder,
+            request.configFile.slice(request.folder.length + 1),
+          ),
+          dockerPath: dockerFile,
+          idLabels: request.idLabels,
+          mountWorkspaceGitRoot: true,
+          mountGitWorktreeCommonDir: false,
+          features: featureSettingsOf(
+            settings.defaultFeatures,
+            settings.lockfile,
+          ),
+          mounts: [],
+          logLevel: 'info',
+        },
+      };
+    }
+    const resolution = await resolveVolume(
+      {
+        engine,
+        options: {cancellation},
+        logger,
+        settings: () => volumes.bootstrapSettings(),
+        buildContext: () => volumes.buildContext(),
+        typed: typedPayload => volumes.typed(typedPayload),
+        clearTyped: typedPayload => volumes.clearTyped(typedPayload),
+        onCloning: () => {
+          logger.info('Cloning Repository');
+        },
+        prepare: (bootstrap, request, configText) => {
+          const pass = hostPassOf(request, configText);
+          lifecycle = dependencies.lifecycleFor(
+            engine,
+            volumes.bootstrapBridge(
+              bootstrap,
+              request.workspace,
+              cliEnvironment,
+            ),
+            dependencies.lifecyclePresenter,
+            {
+              // eslint-disable-next-line id-length -- the stage's bridge is named cli, as the lifecycle's own
+              cli: pass.bridge,
+              targetOf: upTarget => ({...upTarget, ...pass.target}),
+              ended: () => {
+                void standIn.dispose();
+              },
+            },
+          );
+          return lifecycle.prepare(
+            volumeRequestOf(request, settings, rebuild),
+            (step: ContainerStep) => {
+              logger.info(
+                step === 'startingContainer' ? 'Starting container' : step,
+              );
+            },
+            logCliEvent,
+            cancellation,
+          );
+        },
+      },
+      payload,
+      target,
+    );
+    if (resolution.kind !== 'prepared') {
+      await standIn.dispose();
+      return resolution.kind === 'failed'
+        ? resolution.failure
+        : failureOf(resolution.outcome, []);
+    }
+    const pass = hostPassOf(resolution.request, resolution.configText);
+    const connected = await connectPrepared(
+      {
+        payload,
+        prepared: resolution.outcome,
+        engine,
+        bridge: pass.bridge,
+        cliTarget: pass.target,
+        settings,
+        pinned: target,
+        shutdownAction: undefined,
+        connectionId: undefined,
+        hostPath: '',
+        configFile: resolution.request.configFile,
+        trusted: true,
+      },
+      cancellation,
+    );
+    void engine.run(
+      bootstrapRemoveArguments(resolution.bootstrap),
+      {kind: 'none'},
+      {cancellation: new AbortController().signal},
+    );
+    if ('connectionToken' in connected && resolution.shallow) {
+      volumes.showShallow(target.repositoryPath);
+    }
     return connected;
   }
 
@@ -1353,6 +1631,20 @@ export function containerConnectorOf(
           return remoteEngine();
         }
         const stored = devContainerTargetOf(target.payload);
+        const volume = volumeTargetOf(target.payload);
+        if (volume !== undefined && dependencies.volumes !== undefined) {
+          const result = await connectVolume(
+            dependencies.volumes,
+            target.payload,
+            volume,
+            controller,
+            input,
+          );
+          if (!('connectionToken' in result)) {
+            await leaveShutdown();
+          }
+          return result;
+        }
         if ('malformed' in stored) {
           return malformedAuthority();
         }

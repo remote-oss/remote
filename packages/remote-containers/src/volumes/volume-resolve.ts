@@ -46,10 +46,11 @@ export interface VolumeResolvePorts extends EngineStepPorts {
   clearTyped(payload: string): Promise<void>;
   /** Told when the volume and the clone begin. */
   onCloning(): void;
-  /** Finds or creates the dev container, with the CLI in the bootstrap container `bootstrap`. */
+  /** Finds or creates the dev container, with the CLI in the bootstrap container `bootstrap`; `configText` is the file's. */
   prepare(
     bootstrap: string,
     request: VolumeContainerRequest,
+    configText: string,
   ): Promise<ContainerOutcome>;
 }
 
@@ -164,7 +165,7 @@ export async function resolveVolume(
   const configText = await bootstrapFilesOf(ports, bootstrap)
     .readText(configFile)
     .catch(() => '');
-  const outcome = await ports.prepare(bootstrap, request);
+  const outcome = await ports.prepare(bootstrap, request, configText);
   if (outcome.kind !== 'ready') {
     await removeBootstrap(ports, bootstrap);
     return {kind: 'notReady', outcome};

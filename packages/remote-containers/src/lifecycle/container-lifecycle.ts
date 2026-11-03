@@ -116,6 +116,14 @@ export interface LifecyclePresenter {
   terminalSize(): {rows: number; columns: number};
 }
 
+/** The bridge the background run goes to, the target it is given in place of `up`'s, and what is done once it ended. */
+export interface BackgroundStage {
+  cli: CliBridge;
+  targetOf(upTarget: CliTarget): CliTarget;
+  /** Called once the run has ended, however it ended. */
+  ended(): void;
+}
+
 /** Finds or creates the container of a folder. */
 export interface ContainerLifecycle {
   prepare(
@@ -268,15 +276,8 @@ export function containerLifecycleOf(dependencies: {
   userDataFolder?: string;
   /** What a connect knows of a Compose configuration before the CLI runs; a configuration is no Compose one without it. */
   compose?: (request: ComposeResolveRequest) => Promise<ComposeResolution>;
-  /**
-   * Where the commands left for the background run, when not where `up` ran: the bridge, the target it is given in
-   * place of `up`'s, and what is done once the run has ended, however it ended.
-   */
-  backgroundStage?: {
-    cli: CliBridge;
-    targetOf(upTarget: CliTarget): CliTarget;
-    ended(): void;
-  };
+  /** Where the commands left for the background run go, when not where `up` ran. */
+  backgroundStage?: BackgroundStage;
 }): ContainerLifecycle {
   const {
     engine,
