@@ -203,12 +203,19 @@ export async function secondCheck(
   );
 }
 
-/** The name of the current Docker context, or undefined for the default one or when it can't be read. */
-export async function currentContext(
+/** What `docker context show` says: the current context, that the engine has no contexts, or nothing usable. */
+export type ContextState =
+  {kind: 'context'; name: string} | {kind: 'noContexts'} | {kind: 'unreadable'};
+
+/**
+ * What the engine says of its current context. An engine without the command (Podman exits 125) has no contexts: that
+ * is no news. A spawn that failed, or a query that did not finish in time, still is.
+ */
+export async function contextState(
   dependencies: PreflightDependencies,
   base: string | undefined,
   cancellation: AbortSignal,
-): Promise<string | undefined> {
+): Promise<ContextState> {
   const executable = executableOf(dependencies.dockerPath(), base);
   if (executable.kind === 'spawn') {
     const result = await query(
@@ -218,18 +225,66 @@ export async function currentContext(
       cancellation,
     );
     if (succeeded(result) && result.kind === 'ran') {
-      const name = result.stdout.trim();
-      return name === '' || name === 'default' ? undefined : name;
+      return {kind: 'context', name: result.stdout.trim()};
     }
-    // An engine without the command (Podman exits 125) has no context: that is no news. A spawn that failed, or a
-    // query that did not finish in time, still is.
     const missing =
       result.kind === 'ran' && !result.timedOut && result.status !== undefined;
     dependencies.logger[missing ? 'debug' : 'warn'](
       `the Docker context could not be read: ${exitText(result)}`,
     );
-    return undefined;
+    return missing ? {kind: 'noContexts'} : {kind: 'unreadable'};
   }
   dependencies.logger.warn('the Docker context could not be read: not found');
-  return undefined;
+  return {kind: 'unreadable'};
+}
+
+/** The name of the current Docker context, or undefined for the default one or when it can't be read. */
+export async function currentContext(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  const state = await contextState(dependencies, base, cancellation);
+  return state.kind === 'context' &&
+    state.name !== '' &&
+    state.name !== 'default'
+    ? state.name
+    : undefined;
+}
+
+/** The endpoint the Docker context `name` (the default one when empty) points to, or undefined when it can't be read. */
+export async function contextEndpoint(
+  dependencies: PreflightDependencies,
+  base: string | undefined,
+  name: string,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  const executable = executableOf(dependencies.dockerPath(), base);
+  if (executable.kind !== 'spawn') {
+    return undefined;
+  }
+  const result = await query(
+    dependencies,
+    executable,
+    [
+      'context',
+      'inspect',
+      name === '' ? 'default' : name,
+      '--format',
+      '{{json .Endpoints.docker.Host}}',
+    ],
+    cancellation,
+  );
+  if (!succeeded(result) || result.kind !== 'ran') {
+    dependencies.logger.debug(
+      `the Docker context's endpoint could not be read: ${exitText(result)}`,
+    );
+    return undefined;
+  }
+  try {
+    const endpoint: unknown = JSON.parse(result.stdout.trim());
+    return typeof endpoint === 'string' ? endpoint : undefined;
+  } catch {
+    return undefined;
+  }
 }

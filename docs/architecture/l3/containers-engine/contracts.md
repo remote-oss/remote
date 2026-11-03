@@ -60,7 +60,7 @@ process ends while the container runs, and **`onTransportClosed`** when the cont
 `docker.certPath` and `docker.tlsVerify` settings, and the editor's environment that holds it; no other variable of an
 environment setting is taken. A host wins over a context, and a context brings its own certificates. The current context
 joins only when nothing else picks the engine. C3, C11, C15 and the shutdown helper spawn with the coordinate and never
-read the settings; a connected window's engine comes from its payload.
+read the settings; a connected window's engine comes from its payload. C2 raises an engine-change event, with no payload, when the effective engine of a local window changes: the current context or its endpoint, when no setting or variable names the engine; C15 is its only listener.
 
 ## 3. The `dev-container` payload (F-0501 BR-2a)
 

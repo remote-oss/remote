@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   engineEnvironment,
+  engineKeyOf,
   engineLabelOf,
   environmentOfPinned,
   type EngineSources,
@@ -285,5 +286,41 @@ describe('the effective engine (card containers-133)', () => {
       {DOCKER_HOST: 'tcp://b:1'},
       {DOCKER_HOST: 'tcp://c:1', EXTRA: 'y'},
     ]);
+  });
+});
+
+describe('the key of the effective engine (card containers-142)', () => {
+  const AMBIENTS = [
+    {context: undefined, endpoint: 'unix:///a.sock'},
+    {context: 'box', endpoint: 'tcp://box:2376'},
+  ] as const;
+
+  it('F-0205 AC-39, BR-17: a host or a context from a setting names the engine alone, so the current context changes nothing', () => {
+    deepStrictEqual(
+      [{DOCKER_HOST: 'tcp://far:2376'}, {DOCKER_CONTEXT: 'fixed'}].map(
+        environment =>
+          AMBIENTS.map(ambient => engineKeyOf(environment, ambient)).concat(
+            engineKeyOf(environment, 'noContexts'),
+          ),
+      ),
+      [
+        Array(3).fill('{"DOCKER_HOST":"tcp://far:2376"}'),
+        Array(3).fill('{"DOCKER_CONTEXT":"fixed"}'),
+      ],
+    );
+  });
+
+  it('F-0205 AC-39, BR-17: with none, the current context and its endpoint make the key, the default context named default', () => {
+    deepStrictEqual(
+      AMBIENTS.map(ambient => engineKeyOf({}, ambient)),
+      [
+        '{"context":"default","endpoint":"unix:///a.sock"}',
+        '{"context":"box","endpoint":"tcp://box:2376"}',
+      ],
+    );
+  });
+
+  it('F-0205 BR-17: an engine without contexts has the key noContexts', () => {
+    deepStrictEqual(engineKeyOf({}, 'noContexts'), 'noContexts');
   });
 });
