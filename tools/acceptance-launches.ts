@@ -348,6 +348,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'compose-engine.test.ts',
   'compose-lifecycle.test.ts',
   'compose-names.test.ts',
+  'compose-volume.test.ts',
   'config-watch.test.ts',
   'configuration-errors.test.ts',
   'configuration-open.test.ts',

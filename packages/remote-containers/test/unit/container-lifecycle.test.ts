@@ -50,6 +50,7 @@ const REQUEST: ContainerRequest = {
   workspaceMountConsistency: 'cached',
   mountGitWorktreeCommonDir: false,
   features: {defaultFeatures: {}, lockfile: true},
+  mounts: [],
   pausedRetry: () => Promise.resolve(false),
 };
 const UP: UpResult = {
@@ -1969,11 +1970,121 @@ describe('containerLifecycleOf', () => {
     );
   });
 
-  it('F-0413 AC-17: the entitlement variable reaches the environment of up for a Compose project, and neither the background commands nor an image configuration', async () => {
+  /** A Compose resolution whose primary service `app` has the `volumes` entries. */
+  function composeWithVolumes(volumes: readonly unknown[]): ComposeResolution {
+    const ready = composeReady('proj');
+    return ready.kind === 'ready'
+      ? {
+          ...ready,
+          model: {
+            ...ready.model,
+            services: new Map([['app', {build: undefined, volumes}]]),
+          },
+        }
+      : ready;
+  }
+
+  /** What a Compose prepare does with the cache volume on and the `mounts` and `volumes` it is given. */
+  async function reservedRun(
+    mounts: readonly unknown[],
+    volumes: readonly unknown[],
+    cacheVolume = true,
+  ) {
+    const scene = composeLifecycle(composeWithVolumes(volumes));
+    const outcome = await prepareOf(
+      scene.lifecycle,
+      new AbortController().signal,
+      {...REQUEST, mounts, cacheVolume},
+    );
+    return {
+      outcome,
+      ups: scene.bridge.ups.length,
+      commands: scene.engine.commands,
+    };
+  }
+
+  it('F-0419 AC-20: a mounts entry at /vscode fails the Compose connect naming mounts, before the engine or the CLI is asked for anything', async () => {
+    deepStrictEqual(
+      await reservedRun(['type=volume,source=d,target=/vscode/x'], []),
+      {
+        outcome: {
+          kind: 'reservedMount',
+          property: 'mounts',
+          target: '/vscode/x',
+        },
+        ups: 0,
+        commands: [],
+      },
+    );
+  });
+
+  it('F-0419 AC-20: a service volume below /vscode fails the Compose connect naming the service’s volumes', async () => {
+    deepStrictEqual(await reservedRun([], ['data:/vscode/cache:ro']), {
+      outcome: {
+        kind: 'reservedMount',
+        property: 'services.app.volumes',
+        target: '/vscode/cache',
+      },
+      ups: 0,
+      commands: [],
+    });
+  });
+
+  it('F-0419 AC-21: a project volume named vscode mounted elsewhere is no collision', async () => {
+    const run = await reservedRun([], ['vscode:/data', '/vscodex:/vscodex']);
+    deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);
+  });
+
+  it('F-0419 AC-34: with cacheVolume off a reserved target is not checked', async () => {
+    const run = await reservedRun([], ['data:/vscode'], false);
+    deepStrictEqual([run.outcome.kind, run.ups], ['ready', 1]);
+  });
+
+  it('F-0419 AC-20: an image configuration is not checked here', async () => {
+    const bridge = fakeBridge();
+    const outcome = await prepareOf(
+      composeLifecycle({kind: 'none'}, bridge).lifecycle,
+      new AbortController().signal,
+      {...REQUEST, mounts: ['type=volume,source=d,target=/vscode']},
+    );
+    deepStrictEqual([outcome.kind, bridge.ups.length], ['ready', 1]);
+  });
+
+  /** The bridges of a Compose project and of an image configuration, each after its prepare. */
+  async function preparedBoth(): Promise<{
+    compose: FakeBridge;
+    image: FakeBridge;
+  }> {
     const compose = fakeBridge();
     const image = fakeBridge();
     await prepareOf(composeLifecycle(composeReady('proj'), compose).lifecycle);
     await prepareOf(composeLifecycle({kind: 'none'}, image).lifecycle);
+    return {compose, image};
+  }
+
+  it('F-0419 AC-8: a Compose project mounts the shared vscode volume as an external one, and an image configuration as before', async () => {
+    const {compose, image} = await preparedBoth();
+    deepStrictEqual(
+      [compose.ups[0]?.target.mounts, image.ups[0]?.target.mounts],
+      [
+        ['type=volume,source=vscode,target=/vscode,external=true'],
+        ['type=volume,source=vscode,target=/vscode'],
+      ],
+    );
+  });
+
+  it('F-0419 AC-34: with cacheVolume off a Compose project passes no mount', async () => {
+    const bridge = fakeBridge();
+    await prepareOf(
+      composeLifecycle(composeReady('proj'), bridge).lifecycle,
+      new AbortController().signal,
+      {...REQUEST, cacheVolume: false},
+    );
+    deepStrictEqual(bridge.ups[0]?.target.mounts, []);
+  });
+
+  it('F-0413 AC-17: the entitlement variable reaches the environment of up for a Compose project, and neither the background commands nor an image configuration', async () => {
+    const {compose, image} = await preparedBoth();
     await settle();
     deepStrictEqual(
       [

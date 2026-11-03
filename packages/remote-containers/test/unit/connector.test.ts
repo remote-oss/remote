@@ -432,6 +432,23 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it('F-0419 AC-20: a reserved mount ends the connect with the setup failure and the detail that names the property and the target', async () => {
+    const scene = sceneOf();
+    scene.outcome = {
+      kind: 'reservedMount',
+      property: 'mounts',
+      target: '/vscode/x',
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      'reason' in result ? [result.kind, result.reason] : result,
+      [
+        'containerSetupFailed',
+        {id: 'vscodeMountReserved', values: ['mounts', '/vscode/x']},
+      ],
+    );
+  });
+
   it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with the probed environment and no tunnels, and the phases in order', async () => {
     const scene = sceneOf();
     const phases: ConnectPhase[] = [];

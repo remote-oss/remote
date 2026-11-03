@@ -834,7 +834,7 @@ F-0419.AC-4	acceptance
 F-0419.AC-5	acceptance	
 F-0419.AC-6	acceptance	
 F-0419.AC-7	acceptance	
-F-0419.AC-8	deferred	containers release 1: later (Compose)
+F-0419.AC-8	acceptance	
 F-0419.AC-9	acceptance	
 F-0419.AC-10	unit	
 F-0419.AC-11	deferred	containers release 1: later (attach)
@@ -846,8 +846,8 @@ F-0419.AC-16	acceptance
 F-0419.AC-17	acceptance	
 F-0419.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0419.AC-19	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0419.AC-20	deferred	containers release 1: later (Compose)
-F-0419.AC-21	deferred	containers release 1: later (Compose)
+F-0419.AC-20	acceptance	
+F-0419.AC-21	acceptance	
 F-0419.AC-22	todo	
 F-0419.AC-23	todo	
 F-0419.AC-24	acceptance	
@@ -860,7 +860,7 @@ F-0419.AC-30	acceptance
 F-0419.AC-31	unit	
 F-0419.AC-32	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0419.AC-33	todo	
-F-0419.AC-34	deferred	containers release 1: later (Compose)
+F-0419.AC-34	acceptance	
 F-0419.AC-35	acceptance	
 F-0419.AC-36	acceptance	
 F-0419.AC-37	acceptance	
