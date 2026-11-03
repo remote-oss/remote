@@ -459,7 +459,7 @@
         {
           "command": "remote-containers.openRepositoryInUniqueVolume",
           "group": "remote_30_dev-container_2_actions@5",
-          "when": "!hideConnectCommands && !remote-containers:standingDown && (workspaceFolderCount == 0 && remoteName =~ /^(wsl|ssh-remote|tunnel)$/ || workspaceFolderCount == 0 && !remoteName && !virtualWorkspace || remoteName =~ /tunnel*.*/ && gitOpenRepositoryCount == 0)"
+          "when": "!hideConnectCommands && (workspaceFolderCount == 0 && remoteName =~ /^(wsl|ssh-remote|tunnel)$/ || workspaceFolderCount == 0 && !remoteName && !virtualWorkspace || remoteName =~ /tunnel*.*/ && gitOpenRepositoryCount == 0) && !remote-containers:standingDown"
         }
       ]
     },
