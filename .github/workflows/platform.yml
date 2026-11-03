@@ -84,6 +84,15 @@ jobs:
       # to Node on that adapter only
       - name: The download host is reached from the WSL distro
         run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
+      # The image's OpenSSH for Windows, whose agent is a service on a named pipe (disabled until a job starts it); the
+      # run's keys go into it and the run takes them out again.
+      - name: The OpenSSH client and its agent service
+        run: |
+          Get-Command ssh, ssh-keygen, ssh-agent, ssh-add, env -All -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Source
+          ssh -V
+          Set-Service ssh-agent -StartupType Manual
+          Start-Service ssh-agent
+          Get-Service ssh-agent | Format-Table -AutoSize Name, Status, StartType
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
       - if: always()
