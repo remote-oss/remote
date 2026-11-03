@@ -106,6 +106,8 @@ export interface BooleanScreen {
   items: readonly BooleanItem[];
   /** True on Select Features: a title-bar button that finishes the wizard with what is checked. */
   finishButton?: true;
+  /** True for a screen with no Back button: nothing came before it. */
+  withoutBack?: true;
   /** True for a screen that stays open when the focus leaves it. */
   keepOpen?: true;
   /** True for a screen that starts with no row focused. */
@@ -130,14 +132,13 @@ function text(
 /** The title-bar buttons of a screen: none for a bare one, Back, and Finish where the screen has an answer for it. */
 function titleButtonsOf(
   ports: QuickInputPorts,
-  ends: {finishing?: unknown; bare?: true},
+  ends: {finishing?: unknown; bare?: true; withoutBack?: true},
 ): unknown[] {
   if (ends.bare === true) {
     return [];
   }
-  return ends.finishing === undefined
-    ? [ports.backButton]
-    : [ports.backButton, ports.finishButton];
+  const back = ends.withoutBack === true ? [] : [ports.backButton];
+  return ends.finishing === undefined ? back : [...back, ports.finishButton];
 }
 
 /** A screen that ends when its answer is given, Back is pressed or it is hidden. */
@@ -151,6 +152,8 @@ export function shown<Answer extends {kind: string}>(
     finishing?: (picker: OptionPicker) => Answer;
     /** True for a screen with no title-bar button at all. */
     bare?: true;
+    /** True for a screen with no Back button. */
+    withoutBack?: true;
   },
   setUp: (picker: OptionPicker, finish: (answer: Answer) => void) => void,
 ): Promise<Answer> {
@@ -284,6 +287,7 @@ export function pickBooleans(
     {
       escape: {kind: 'escape'},
       back: {kind: 'back'},
+      ...(screen.withoutBack === true ? {withoutBack: true as const} : {}),
       ...(screen.finishButton === true
         ? {
             finishing: (picker: OptionPicker): BooleanAnswer => ({

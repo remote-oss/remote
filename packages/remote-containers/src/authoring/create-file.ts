@@ -53,10 +53,11 @@ interface WindowFolder {
 export function savedWorkspaceOf(
   folders: readonly WindowFolder[],
   workspaceFile: {scheme: string; fsPath: string} | undefined,
-): {folder: string; roots: string[]} | undefined {
+): {folder: string; roots: string[]; file: string} | undefined {
   return workspaceFile?.scheme === 'file' && folders.length > 1
     ? {
         folder: path.dirname(workspaceFile.fsPath),
+        file: workspaceFile.fsPath,
         roots: folders
           .filter(each => each.scheme === 'file')
           .map(each => each.fsPath),
