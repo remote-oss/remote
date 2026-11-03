@@ -830,8 +830,8 @@ F-0417.AC-71	deferred	containers release 1: later (attach)
 F-0419.AC-1	acceptance	
 F-0419.AC-2	acceptance	
 F-0419.AC-3	unit	
-F-0419.AC-4	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
-F-0419.AC-5	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
+F-0419.AC-4	acceptance	
+F-0419.AC-5	acceptance	
 F-0419.AC-6	acceptance	
 F-0419.AC-7	acceptance	
 F-0419.AC-8	deferred	containers release 1: later (Compose)
@@ -861,14 +861,13 @@ F-0419.AC-31	unit
 F-0419.AC-32	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0419.AC-33	acceptance	
 F-0419.AC-34	deferred	containers release 1: later (Compose)
-F-0419.AC-35	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
+F-0419.AC-35	acceptance	
 F-0419.AC-36	acceptance	
 F-0419.AC-37	acceptance	
 F-0419.AC-38	deferred	containers release 1: later (remote engines)
-F-0419.AC-39	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
+F-0419.AC-39	acceptance	
 F-0419.AC-40	acceptance	
-F-0419.AC-41	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
-F-0419.AC-42	deferred	containers release 1: increment 2 (the extension-cache half of F-0419)
+F-0419.AC-42	acceptance	
 F-0501.AC-1	acceptance	
 F-0501.AC-2	acceptance	
 F-0501.AC-3	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
@@ -1045,7 +1044,7 @@ F-0505.AC-17	unit
 F-0505.AC-18	unit	
 F-0505.AC-19	unit	
 F-0505.AC-20	unit	
-F-0505.AC-21	deferred	containers release 1: increment 2 (the shared extension cache)
+F-0505.AC-21	acceptance	
 F-0505.AC-22	deferred	containers release 1: later (attach)
 F-0505.AC-24	unit	
 F-0505.AC-25	unit	
