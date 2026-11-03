@@ -77,16 +77,23 @@ describe('F-2106: pseudo-terminal allocation', function () {
   it('F-2106 AC-4 (c86-on-request): with the setting on, RequestTTY yes and RequestTTY no both leave the session without a terminal', async () => {
     await keepingSettings(async () => {
       const seen: Array<ReturnType<typeof summary>> = [];
+      const commands: string[][] = [];
       for (const alias of ['pty-yes', 'pty-no']) {
         await closeAllButLocal();
-        seen.push(
-          summary(await ptyConnect('c86-on-request', alias, {[PERMIT]: true})),
-        );
+        const found = await ptyConnect('c86-on-request', alias, {
+          [PERMIT]: true,
+        });
+        seen.push(summary(found));
+        commands.push(found.commands);
       }
-      deepStrictEqual(seen, [
-        [true, [false], ['notty']],
-        [true, [false], ['notty']],
-      ]);
+      deepStrictEqual(
+        seen,
+        [
+          [true, [false], ['notty']],
+          [true, [false], ['notty']],
+        ],
+        `the ssh argument lists seen: ${JSON.stringify(commands)}`,
+      );
     });
   });
 
