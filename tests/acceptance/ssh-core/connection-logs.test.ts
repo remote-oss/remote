@@ -2,9 +2,12 @@ import {deepStrictEqual} from 'node:assert';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  appendScript,
   closeWindow,
+  connectedWithin,
   connectionLog,
   editorLogsFolder,
+  hostPassword,
   onHost,
   openWindow,
 } from '../windows/harness.ts';
@@ -72,6 +75,49 @@ describe('the logs of a connected SSH window (card connect-125, #1600)', functio
       );
     } finally {
       await closeWindow('c125-logs').catch(() => undefined);
+    }
+  });
+
+  it('F-2003 AC-11 (c139-order): BR-6 item 7, ssh’s host-key line comes before the password question, the question before its masked answer, and both before "Authenticated to"', async () => {
+    appendScript([
+      {
+        surface: 'maskedInput',
+        match: 'Enter password',
+        answer: {text: hostPassword()},
+        window: 'c139',
+      },
+    ]);
+    await openWindow('password', 'c139');
+    try {
+      await connectedWithin('c139', 60_000);
+      const lines = connectionLog();
+      const start = lines.findLastIndex(line =>
+        line.startsWith('Resolving ssh-remote+password'),
+      );
+      const window = lines.slice(start);
+      function position(matches: (line: string) => boolean): number {
+        return window.findIndex(matches);
+      }
+      const order = [
+        position(line => line.startsWith('[ssh] debug1: Server host key')),
+        position(
+          line => line.startsWith('prompt: ') && line.includes('password'),
+        ),
+        position(line => line === 'prompt answered: ***'),
+        position(line => line.startsWith('[ssh] Authenticated to')),
+      ];
+      deepStrictEqual(
+        [
+          order.every(index => index >= 0),
+          order.every(
+            (index, place) => place === 0 || index > (order[place - 1] ?? 0),
+          ),
+          window.some(line => line.includes(hostPassword())),
+        ],
+        [true, true, false],
+      );
+    } finally {
+      await closeWindow('c139');
     }
   });
 });
