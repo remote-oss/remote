@@ -43,6 +43,10 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - URL, `owner/repo` (exactly two segments, BR-7), local path or SSH URL, trimmed (BR-15);
    - `/tree/<ref>`, `/commit/<sha>` and `/pull/<n>` parsed for github.com only (BR-2).
    - The GitHub picker uses core's `github` authentication provider (6.3).
+     - **The picker itself** is the built-in git-base API's `pickRemoteSource({providerName: 'GitHub', branch: true})`
+       (athena on #1973). It's looked up at use time, never in `extensionDependencies`, with our S067 as its title and
+       S068 as its placeholder. S295 and S245 are git-base's own labels.
+     - **Without git-base and a GitHub provider** the item isn't offered, with one log line.
 3. **The host-side pre-check (BR-5):** `git ls-remote` on the host, before any Docker object. Git's and ssh's
    credential and host-key prompts become quick inputs.
    - **The askpass relay is one, shared.** lib-ssh's `askpass/` (endpoint, launcher, messages) moves to **lib-helper** (athena's ruling, register 5c82020;
