@@ -1296,7 +1296,19 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         },
       ]);
     } finally {
-      await closeWindow(window).catch(() => undefined);
+      await closeWindow(window).catch(async () => {
+        // Closing the window that holds an unsaved untitled workspace makes core prompt to save it first.
+        const dialog = await waitForDialog(window, 30_000).catch(
+          () => undefined,
+        );
+        if (dialog !== undefined) {
+          const button = dialog.buttons.includes("Don't Save")
+            ? "Don't Save"
+            : (dialog.buttons[0] ?? '');
+          await answerDialog(window, button).catch(() => undefined);
+        }
+        await closeWindow(window).catch(() => undefined);
+      });
       await removeContainers('c152-untitled');
       await removeVolume('c152-untitled');
       rmSync(added, {recursive: true, force: true});
