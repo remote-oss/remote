@@ -77,6 +77,12 @@ export type {
   PromptText,
 } from './prompts/classify.ts';
 export {classifyPrompt} from './prompts/classify.ts';
+export type {HintTableRow} from './diagnostics/hint-table.ts';
+export {
+  hintTable,
+  messageCellOf,
+  wrappedText,
+} from './diagnostics/hint-table.ts';
 export type {
   EnvironmentHint,
   EnvironmentSnapshot,
