@@ -53,3 +53,5 @@ release tag always run every launch.
 ## 5. Not in scope
 
 Splitting one VSCodium run over several runners (the one-group rule of #912 stays); selecting tests inside a launch.
+
+A pull request runs the launches its change selects, up to six (card tooling-120).
