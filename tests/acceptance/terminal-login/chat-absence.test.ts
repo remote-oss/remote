@@ -84,7 +84,13 @@ describe('the absence of the chat participant (card connect-137)', function () {
   this.timeout(300_000);
 
   it('F-2606 AC-15: typing @remote in the chat input offers no row from this extension', async () => {
-    deepStrictEqual(await chatOffersRemote('local'), false);
+    const saved = readUserSettings();
+    try {
+      await userSettings({'chat.disableAIFeatures': false});
+      deepStrictEqual(await chatOffersRemote('local'), false);
+    } finally {
+      restoreUserSettings(saved);
+    }
   });
 
   for (const value of [false, true]) {
@@ -95,6 +101,7 @@ describe('the absence of the chat participant (card connect-137)', function () {
       try {
         await userSettings({
           [EXPERIMENTAL_CHAT]: value,
+          ['chat.disableAIFeatures']: false,
           ['remote.SSH.remotePlatform']: {...PLATFORMS},
         });
         await openHarnessWindow(name);

@@ -1141,9 +1141,9 @@ export async function lineMarkedUnnecessary(
 
 /**
  * The rows the chat input's picker offers in window `name` after `text` is typed into the chat input, which must be
- * shown already, as "Chat: Open Chat (Ask)" leaves it shown: the picker's items, none while the picker is hidden, and
- * nothing at all when the chat input itself is not shown. The typed text is verified in the input before the picker
- * is read, so a read is never made against an empty guess.
+ * shown already, as "Chat: Open Chat (Ask)" leaves it shown: the picker's items, none while the picker is hidden;
+ * a wait that sees no chat input at all fails. The typed text is verified in the input before the picker is read,
+ * so a read is never made against an empty guess.
  */
 export async function chatInputRows(
   name: string,
@@ -1159,15 +1159,11 @@ export async function chatInputRows(
       })()`,
     );
   }
-  try {
-    await settled(
-      () => `the chat input of window ${name}`,
-      async () => ((await inputShown()) ? true : undefined),
-      milliseconds,
-    );
-  } catch {
-    return [];
-  }
+  await settled(
+    () => `the chat input of window ${name}`,
+    async () => ((await inputShown()) ? true : undefined),
+    milliseconds,
+  );
   const address = await pageOf(name);
   const point = await evaluate<{x: number; y: number} | null>(
     name,

@@ -1120,12 +1120,15 @@ describe('the manifest rows of slices 1 and 2', () => {
       readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
     ) as {
       dependencies?: Record<string, string>;
-      enablement?: unknown;
       contributes: {
         chatParticipants?: unknown;
+        commands?: Array<Record<string, unknown>>;
         configuration: {properties: Record<string, unknown>};
       };
     };
+    const clear = rawManifest.contributes.commands?.find(
+      entry => entry.command === 'opensshremotes.clearAllSessionHints',
+    );
     deepStrictEqual(
       [
         rawManifest.contributes.chatParticipants,
@@ -1133,9 +1136,10 @@ describe('the manifest rows of slices 1 and 2', () => {
           'remote.SSH.experimental.chat'
         ],
         Object.keys(rawManifest.dependencies ?? {}).filter(chatDependency),
-        rawManifest.enablement,
+        clear === undefined,
+        clear?.enablement,
       ],
-      [undefined, undefined, [], undefined],
+      [undefined, undefined, [], false, undefined],
     );
   });
 
