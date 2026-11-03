@@ -250,6 +250,24 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.openHere',
+      (inPath: string, forceNewWindow?: boolean) => {
+        const fresh = forceNewWindow === true;
+        // The same remote as this window, on `inPath` there: File > Open Folder... typed with a path of the remote.
+        void vscode.commands.executeCommand(
+          'vscode.openFolder',
+          vscode.Uri.from({
+            scheme: 'vscode-remote',
+            // The authority of this window's own folder: the remote the window is on.
+            authority:
+              vscode.workspace.workspaceFolders?.[0]?.uri.authority ?? '',
+            path: inPath,
+          }),
+          {forceNewWindow: fresh, forceReuseWindow: !fresh},
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.sleep',
       (milliseconds: number) =>
         new Promise<void>(resolve => {
@@ -576,6 +594,16 @@ export function activate(context: vscode.ExtensionContext): void {
           new TextEncoder().encode(text),
         );
       },
+    ),
+    // Adding a folder to a single-folder window makes it an untitled multi-root workspace.
+    vscode.commands.registerCommand(
+      'acceptance.agent.addFolder',
+      (folder: string) =>
+        vscode.workspace.updateWorkspaceFolders(
+          vscode.workspace.workspaceFolders?.length ?? 0,
+          0,
+          {uri: vscode.Uri.file(folder)},
+        ),
     ),
     vscode.commands.registerCommand(
       'acceptance.agent.environment',

@@ -71,6 +71,8 @@ export type UpResult =
       containerId: string;
       remoteUser: string;
       remoteWorkspaceFolder: string;
+      /** The Compose project the CLI used, for a Compose configuration. */
+      composeProjectName?: string;
     }
   | CliFailure;
 
@@ -315,7 +317,14 @@ export function readUpResult(
   if (remoteWorkspaceFolder === undefined) {
     return {kind: 'malformedResult', field: 'remoteWorkspaceFolder'};
   }
-  return {kind: 'up', containerId, remoteUser, remoteWorkspaceFolder};
+  const composeProjectName = textOf(fields.composeProjectName);
+  return {
+    kind: 'up',
+    containerId,
+    remoteUser,
+    remoteWorkspaceFolder,
+    ...(composeProjectName === undefined ? {} : {composeProjectName}),
+  };
 }
 
 /** What `run-user-commands` gave. */

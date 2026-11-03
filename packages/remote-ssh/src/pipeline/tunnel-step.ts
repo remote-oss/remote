@@ -472,6 +472,9 @@ export function openTunnelStep(
       target: {kind: 'port', port: portOf(server)},
       localPort,
       limits: dependencies.limits,
+      onLine: line => {
+        dependencies.logger.info(line);
+      },
       onWaiting,
       // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
       confirmRefusal: async cause => {

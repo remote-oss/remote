@@ -4,7 +4,7 @@
  */
 
 import {appendFileSync, readFileSync, watch} from 'node:fs';
-import {mkdir, mkdtemp, readdir, readFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readdir, readFile, stat} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -78,9 +78,11 @@ import {
   withEnvironment,
 } from './engine/effective-engine.ts';
 import {configWatchOf} from './config-watch/config-watch.ts';
-import {executableOf} from './engine/executable.ts';
+import {engineBaseOf, executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
+import {effectiveEngineKey} from './engine/engine-key.ts';
+import {engineWatchOf} from './engine/engine-watch.ts';
 import {
   commands,
   contextKeys,
@@ -91,6 +93,7 @@ import {
 } from './identifiers.generated.ts';
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
+import {composeResolverOf} from './compose/resolver.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {createAttemptLog, writeAttemptLog} from './connect/attempt-log.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -865,6 +868,27 @@ export async function activate(
             modal: true,
             detail: text,
           }),
+        readWorkspaceFile: async file => {
+          try {
+            return {kind: 'text', text: await readFile(file, 'utf8')};
+          } catch (caught) {
+            return {
+              kind: 'unreadable',
+              message:
+                caught instanceof Error ? caught.message : String(caught),
+            };
+          }
+        },
+        confirmModal: async text => {
+          const proceed = translate('Continue');
+          return (
+            (await vscode.window.showInformationMessage(
+              '',
+              {modal: true, detail: text},
+              proceed,
+            )) === proceed
+          );
+        },
         translate,
         ensureTrusted: commandTitle =>
           ensureTrusted(served.trust, {
@@ -935,7 +959,10 @@ export async function activate(
                 engineEnvironment(engineSources()),
                 await currentContext(
                   served.preflight,
-                  firstFolder(),
+                  engineBaseOf({
+                    folder: firstFolder(),
+                    trusted: vscode.workspace.isTrusted,
+                  }),
                   new AbortController().signal,
                 ),
               ),
@@ -1209,6 +1236,14 @@ export async function activate(
           logger,
           presenter,
           clock: Date.now,
+          userDataFolder: path.join(context.globalStorageUri.fsPath, 'data'),
+          compose: composeResolverOf({
+            runCompose: (argv, options) =>
+              engine.run(['compose', ...argv], {kind: 'none'}, options),
+            readText: file => readFile(file, 'utf8'),
+            environment: process.env,
+            logger: logger.child('compose'),
+          }),
         }),
       lifecyclePresenter: lifecyclePresenterOf(
         terminalPortOf(),
@@ -1516,6 +1551,45 @@ export async function activate(
         served.preflight.setTimer(milliseconds, callback),
       logger,
     });
+    const engineWatch = engineWatchOf({
+      configFolder: () =>
+        process.env.DOCKER_CONFIG ?? path.join(os.homedir(), '.docker'),
+      watchFolder: (folder, recursive, listener) => {
+        try {
+          const watcher = watch(folder, {recursive}, (kind, name) => {
+            listener(name ?? undefined);
+          });
+          watcher.on('error', () => {
+            watcher.close();
+          });
+          return {
+            dispose: () => {
+              watcher.close();
+            },
+          };
+        } catch {
+          return undefined;
+        }
+      },
+      signature: file =>
+        stat(file).then(
+          found => `${String(found.size)}:${String(found.mtimeMs)}`,
+          () => 'missing',
+        ),
+      engineKey: () =>
+        effectiveEngineKey(
+          engineSources(),
+          served.preflight,
+          {
+            folder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            trusted: vscode.workspace.isTrusted,
+          },
+          new AbortController().signal,
+        ),
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
+      logger,
+    });
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
       held: () => connector.heldConnection(),
@@ -1529,6 +1603,7 @@ export async function activate(
       now: Date.now,
       setTimer: (milliseconds, callback) =>
         served.preflight.setTimer(milliseconds, callback),
+      onEngineChange: listener => engineWatch.onEngineChange(listener),
       onDockerPathChange: listener =>
         vscode.workspace.onDidChangeConfiguration(event => {
           if (event.affectsConfiguration(settings.dockerPath.id)) {

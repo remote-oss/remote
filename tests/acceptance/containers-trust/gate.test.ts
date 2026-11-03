@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -478,6 +479,11 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
         welcome: await welcomeText(name, VIEW),
         calls: recordedCalls(calls),
       };
+      // A change of the Docker configuration is what the engine watch reads the engine again for; the folder's program must not run for it either.
+      mkdirSync(inRun('docker-config'), {recursive: true});
+      writeFileSync(path.join(inRun('docker-config'), 'config.json'), '{}');
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      const afterConfigurationChange = recordedCalls(calls);
       const running = inWindow(name, 'remote-containers.reopenInContainer');
       const shown = await waitForDialog(name);
       const whileAsking = recordedCalls(calls);
@@ -505,6 +511,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
           untrusted,
           atOpen,
           view,
+          afterConfigurationChange,
           asked: shown.message,
           whileAsking,
           declined,
@@ -518,6 +525,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
               'Get started with containers by installing Docker or by visiting the help view. Refresh after installation and startup.',
             calls: [],
           },
+          afterConfigurationChange: [],
           asked: TRUST_QUESTION,
           whileAsking: [],
           declined: {

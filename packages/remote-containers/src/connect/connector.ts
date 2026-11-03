@@ -36,7 +36,11 @@ import {
   engineLabelOf,
   withEnvironment,
 } from '../engine/effective-engine.ts';
-import {type Executable, executableOf} from '../engine/executable.ts';
+import {
+  engineBaseOf,
+  type Executable,
+  executableOf,
+} from '../engine/executable.ts';
 import {effectiveAction} from '../shutdown/effective-action.ts';
 import type {EngineCoordinates} from '../shutdown/protocol.ts';
 import {
@@ -110,6 +114,7 @@ import type {
   StartedContainerServer,
 } from './server-steps.ts';
 import type {WindowIdentity} from './window-identity.ts';
+import {reasonOf} from './extension-cache.ts';
 import type {DeclaredPorts} from '../ports/declared-forwards.ts';
 import {
   appPortOf,
@@ -322,6 +327,8 @@ interface Held {
   relay: OpenRelay;
   identity: WindowIdentity;
   connected: Connected;
+  /** Ends when the connection is given back: what runs for the connection, the extensions cache's background step, stops then. */
+  lifetime: AbortController;
   /** The ports the merged configuration declared when the connection was made; a reconnect keeps them. */
   ports: DeclaredPorts;
 }
@@ -478,6 +485,7 @@ export function containerConnectorOf(
     const current = held;
     held = undefined;
     if (current !== undefined) {
+      current.lifetime.abort();
       current.relay.close();
       heldChanges.tell();
     }
@@ -809,6 +817,26 @@ export function containerConnectorOf(
   }
 
   /**
+   * The tools a read of the configuration uses. The CLI runs the Docker program it is given even for a read, and a
+   * relative value of `dev.containers.dockerPath` is a file of the folder, which does not run before the window is
+   * trusted: until then the read uses the default program, which gives the same configuration.
+   */
+  function readToolsOf(tools: Tools, folder: DevContainerFolder): Tools {
+    const relative =
+      executableOf(tools.settings.dockerPath, undefined).kind === 'notFound';
+    return relative &&
+      executableOf(
+        tools.settings.dockerPath,
+        engineBaseOf({
+          folder: folder.hostPath,
+          trusted: dependencies.trust.isTrusted(),
+        }),
+      ).kind === 'notFound'
+      ? {...tools, dockerPath: 'docker'}
+      : tools;
+  }
+
+  /**
    * The workspace folder of `payload`'s configuration, read without a container by the first that asks, a canonical
    * request or the connect's start. It runs no repository code. A failed read is dropped, so the next request reads
    * again.
@@ -822,7 +850,7 @@ export function containerConnectorOf(
     if (kept !== undefined) {
       return kept;
     }
-    const readTools = tools ?? toolsOf(folder);
+    const readTools = readToolsOf(tools ?? toolsOf(folder), folder);
     const reading = readTools.bridge
       .readConfiguration(
         cliTargetOf(folder, readTools),
@@ -1228,6 +1256,7 @@ export function containerConnectorOf(
       relay,
       identity: {name, context: engineLabelOf(folder)},
       connected,
+      lifetime: new AbortController(),
       ports: {
         forwardPorts: merged?.forwardPorts,
         portsAttributes: merged?.portsAttributes,
@@ -1238,6 +1267,9 @@ export function containerConnectorOf(
     owner.connection = connection;
     failedContainer = undefined;
     heldChanges.tell();
+    server.afterReady?.(connection.lifetime.signal).catch((caught: unknown) => {
+      logger.info(`the extensions cache stopped: ${reasonOf(caught)}`);
+    });
     relay.onClosed(() => {
       if (held === connection) {
         lost.tell();

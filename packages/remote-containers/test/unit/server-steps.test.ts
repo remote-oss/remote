@@ -386,6 +386,30 @@ function treesOf(channel: RecordingChannel): string[] {
   });
 }
 
+/** A gallery's answer offering acme.tool 1.2.0 for every platform. */
+const ACME_TOOL_ANSWER = {
+  results: [
+    {
+      extensions: [
+        {
+          versions: [
+            {
+              version: '1.2.0',
+              targetPlatform: 'universal',
+              files: [
+                {
+                  assetType: 'Microsoft.VisualStudio.Services.VSIXPackage',
+                  source: 'https://gallery.invalid/acme.tool-1.2.0.vsix',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 describe('the server steps of a connect (card containers-08)', () => {
   it('transport contracts 5.0: every script of a connect sets umask 022 (F-0419 AC-37)', async () => {
     const channel = channelOf();
@@ -439,6 +463,55 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
+  /** The steps for acme.tool with a gallery and a volume, whose container side answers `cached`. */
+  async function galleryRun(cached: 'yes' | 'no'): Promise<{
+    channel: RecordingChannel;
+    result: ServerResult;
+  }> {
+    const channel = channelOf({
+      volume: true,
+      extra: [
+        answer(
+          script => script === CACHE_SCRIPT,
+          blockOf('Ok', `server.cached=${cached}`),
+        ),
+      ],
+    });
+    const {result} = await runSteps(channel, {
+      volume: true,
+      defaultExtensions: ['acme.tool'],
+      profile: {...PROFILE, gallery: {serviceUrl: 'https://gallery.invalid'}},
+      galleryAnswer: ACME_TOOL_ANSWER,
+    });
+    return {channel, result};
+  }
+
+  it('F-0419 AC-17: with a gallery, a package no cache holds reaches the start as its id, and the result carries the background step', async () => {
+    const {channel, result} = await galleryRun('no');
+    const ended = new AbortController();
+    ended.abort();
+    await (result.kind === 'started' ? result.afterReady : undefined)?.(
+      ended.signal,
+    );
+    deepStrictEqual(
+      [
+        (scriptsOf(channel).find(isStart) ?? '').includes(
+          "'--install-extension' 'acme.tool'",
+        ),
+        result.kind === 'started' && result.afterReady !== undefined,
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-0419 AC-5: with a gallery, a cached package leaves no background step', async () => {
+    const {result} = await galleryRun('yes');
+    deepStrictEqual(
+      result.kind === 'started' ? result.afterReady : 'not started',
+      undefined,
+    );
+  });
+
   it('F-0419 AC-5: with a gallery, a package the shared cache holds reaches the start as the file to install', async () => {
     const channel = channelOf({
       volume: true,
@@ -453,29 +526,7 @@ describe('the server steps of a connect (card containers-08)', () => {
       volume: true,
       defaultExtensions: ['acme.tool'],
       profile: {...PROFILE, gallery: {serviceUrl: 'https://gallery.invalid'}},
-      galleryAnswer: {
-        results: [
-          {
-            extensions: [
-              {
-                versions: [
-                  {
-                    version: '1.2.0',
-                    targetPlatform: 'universal',
-                    files: [
-                      {
-                        assetType:
-                          'Microsoft.VisualStudio.Services.VSIXPackage',
-                        source: 'https://gallery.invalid/acme.tool-1.2.0.vsix',
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
+      galleryAnswer: ACME_TOOL_ANSWER,
     });
     deepStrictEqual(
       (scriptsOf(channel).find(isStart) ?? '').includes(

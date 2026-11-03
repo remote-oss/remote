@@ -103,6 +103,31 @@ export function withAmbientContext(
     : {...environment, DOCKER_CONTEXT: ambientContext};
 }
 
+/**
+ * What names the effective engine of a local window, as one text that is equal exactly when the engine is the same.
+ * A host or a context from a setting or the editor's environment names it alone, so `docker context use` changes
+ * nothing; with none, it is the current context and its endpoint, or `noContexts` for an engine without contexts.
+ */
+export function engineKeyOf(
+  environment: EngineEnvironment,
+  ambient: {context: string | undefined; endpoint: string} | 'noContexts',
+): string {
+  if (
+    environment.DOCKER_HOST !== undefined ||
+    environment.DOCKER_CONTEXT !== undefined
+  ) {
+    return JSON.stringify(environment);
+  }
+  if (ambient === 'noContexts') {
+    return 'noContexts';
+  }
+  return JSON.stringify({
+    ...environment,
+    context: ambient.context ?? 'default',
+    endpoint: ambient.endpoint,
+  });
+}
+
 /** The members of a payload for `environment`. */
 export function pinnedEngineOf(environment: EngineEnvironment): PinnedEngine {
   const pinned: PinnedEngine = {};

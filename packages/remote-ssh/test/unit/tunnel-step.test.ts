@@ -229,6 +229,16 @@ describe('the step that opens the window tunnel', () => {
     );
   });
 
+  it('connect-131: the step passes the relay’s lines to the log, a failing probe with the server port it asked for', async () => {
+    const outcome = await refusalRun({dialScript: ['closedBeforeReply']});
+    deepStrictEqual(
+      outcome.lines.filter(line => line.startsWith('a probe to the host')),
+      [
+        "a probe to the host's port 4321 failed: the relay closed the connection before its reply",
+      ],
+    );
+  });
+
   it('connect-106: closed probes with the server gone from the host are today’s outcome: not ready, with no notice', async () => {
     const outcome = await refusalRun({
       dialScript: ['closedBeforeReply'],

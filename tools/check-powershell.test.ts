@@ -7,6 +7,7 @@ import {readFileSync} from 'node:fs';
 import {
   analyzerArguments,
   findingsOf,
+  GOLDEN_POWERSHELL_FOLDERS,
   pinnedAnalyzerVersion,
 } from './check-powershell.ts';
 
@@ -18,7 +19,7 @@ describe('check-powershell', () => {
   describe('analyzerArguments', () => {
     it('quotes the folder as one PowerShell string', () => {
       deepStrictEqual(
-        analyzerArguments("/tmp/it's here", '1.25.0')
+        analyzerArguments(["/tmp/it's here"], '1.25.0')
           .at(-1)
           ?.includes("'/tmp/it''s here'"),
         true,
@@ -27,12 +28,32 @@ describe('check-powershell', () => {
 
     it('loads the pinned module before it analyses', () => {
       deepStrictEqual(
-        analyzerArguments('/tmp/x', '1.25.0')
+        analyzerArguments(['/tmp/x'], '1.25.0')
           .at(-1)
           ?.startsWith(
             "Import-Module PSScriptAnalyzer -RequiredVersion '1.25.0';",
           ),
         true,
+      );
+    });
+  });
+
+  describe('the folders', () => {
+    it('are the rendered steps of lib-server and the reader of lib-ssh', () => {
+      deepStrictEqual(
+        GOLDEN_POWERSHELL_FOLDERS.map(folder => folder.split(path.sep)[1]),
+        ['lib-server', 'lib-ssh'],
+      );
+    });
+
+    it('are each named once in the analyser arguments', () => {
+      deepStrictEqual(
+        GOLDEN_POWERSHELL_FOLDERS.map(folder =>
+          analyzerArguments(GOLDEN_POWERSHELL_FOLDERS, PINNED)
+            .at(-1)
+            ?.includes(`'${folder}'`),
+        ),
+        [true, true],
       );
     });
   });
@@ -85,9 +106,13 @@ describe('check-powershell', () => {
           path.join(folder, 'step.ps1'),
           '$a = $null\n$b = $a ?? 1\n',
         );
-        const analysis = spawnSync('pwsh', analyzerArguments(folder, PINNED), {
-          encoding: 'utf8',
-        });
+        const analysis = spawnSync(
+          'pwsh',
+          analyzerArguments([folder], PINNED),
+          {
+            encoding: 'utf8',
+          },
+        );
         deepStrictEqual(
           findingsOf(analysis.stdout).map(finding => finding.split(':')[0]),
           ['step.ps1'],

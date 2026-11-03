@@ -11,6 +11,7 @@ import {chooseOrAuthor} from './author-first.ts';
 import type {RebuildOptions} from './rebuild-intent.ts';
 import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
+import {workspaceFoldersAccepted} from './workspace-folders.ts';
 
 /** The English text of the modal an unsaved multi-root workspace gets, by its string id. */
 const WORKSPACE_TEMPLATES = {
@@ -103,6 +104,15 @@ export function reopenHandlersOf(
       return;
     }
     const {folder} = target;
+    if (
+      target.workspaceFile !== undefined &&
+      !(await workspaceFoldersAccepted(
+        ports,
+        path.join(folder, target.workspaceFile),
+      ))
+    ) {
+      return;
+    }
     // With the folder as base, the setting always names a program.
     const executable = executableOf(
       ports.settings.dockerPath(),

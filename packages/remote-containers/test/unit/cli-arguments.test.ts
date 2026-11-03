@@ -56,6 +56,28 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     ]);
   });
 
+  it('F-0413 AC-51: a data folder is passed as --user-data-folder right after the Docker path, for every subcommand', () => {
+    const target = {...TARGET, userDataFolder: '/storage/data'};
+    deepStrictEqual(
+      [
+        upArguments(target, PLAIN),
+        runUserCommandsArguments(target, 'c'),
+        readConfigurationArguments(target, undefined),
+      ].map(each =>
+        each.slice(
+          each.indexOf('--docker-path'),
+          each.indexOf('--docker-path') + 4,
+        ),
+      ),
+      [0, 1, 2].map(() => [
+        '--docker-path',
+        'docker',
+        '--user-data-folder',
+        '/storage/data',
+      ]),
+    );
+  });
+
   it('C3: removing the existing container and building without the cache add their flags after the consistency', () => {
     deepStrictEqual(
       upArguments(TARGET, {

@@ -79,6 +79,9 @@ function Start-Program([hashtable]$Launch) {
   }
   return Start-Process @Launch
 }
+function ConvertTo-WindowsArgument([string]$Value) {
+  return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
 function Get-NowSeconds {
   return [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 }
@@ -212,7 +215,7 @@ if (-not (Test-ConnectionToken $TokenFile)) {
 }
 Add-Fact 'cli.connectionToken' ([System.IO.File]::ReadAllText($TokenFile))
 $CliLog = [System.IO.Path]::Combine($DATA_DIR, '.cli.' + $COMMIT + '.log')
-$CliArguments = 'command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "' + $CLI_DATA + '"'
+$CliArguments = 'command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir ' + (ConvertTo-WindowsArgument $CLI_DATA)
 $Parent = Get-ParentProcessId
 if ($Parent -gt 0) {
   $CliArguments = $CliArguments + ' --parent-process-id ' + $Parent

@@ -6,11 +6,12 @@
 
 import path from 'node:path';
 import {
-  hostPathOf,
-  posixQuote,
   type ChannelFailure,
   type CopyOutcome,
   type HostChannel,
+  hostPathOf,
+  posixQuote,
+  powershellQuote,
 } from 'lib-host';
 import type {Logger} from 'lib-log';
 import {redirectAllows} from 'lib-product';
@@ -430,11 +431,6 @@ async function sizeOnHost(
     },
   );
   return outcome.kind === 'exited' ? size : undefined;
-}
-
-/** A PowerShell single-quoted literal. */
-function powershellQuote(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
 }
 
 /**

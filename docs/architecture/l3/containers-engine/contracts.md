@@ -36,8 +36,11 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    its own F-0201 dialog). It shows nothing: a failure returns its detail id (S339, S104 or S144), and the connector
    returns `Failed{userAlreadyNotified: false}` with that reason, for C8 to present as F-0202's three-button dialog
    (amended 2026-10-14, containers-03 §6.1, #842).
-3. C7: find, reuse, start or create the container (F-0409, F-0412, F-0415), with the rebuild intent if the payload
-   carries one (F-0405 BR-17).
+3. C7: for a Compose configuration, first read the model and compute the project name and the scope (F-0413; brief-compose
+   §2: `compose/model.ts`, `project-name.ts`, `scope.ts`, `resolver.ts`); then find, reuse, start or create the container
+   (F-0409, F-0412, F-0415), with the rebuild intent if the payload carries one (F-0405 BR-17). A model Compose rejects,
+   or a project name Compose would not accept, ends the step as a setup failure (F-0410's generic dialog). The CLI is run
+   with `COMPOSE_PROJECT_NAME` in its environment and `--user-data-folder <global storage>/data`.
 4. lib-server: probe, plan, transfer and start over C11 with the remote-containers policy row (§5), the licence gate
    (R-68) and `installTree` from V9 when the `vscode` volume is mounted.
 5. The host listener: choose the local port with lib-forwarding's port search, preferring the server's container
@@ -60,7 +63,7 @@ process ends while the container runs, and **`onTransportClosed`** when the cont
 `docker.certPath` and `docker.tlsVerify` settings, and the editor's environment that holds it; no other variable of an
 environment setting is taken. A host wins over a context, and a context brings its own certificates. The current context
 joins only when nothing else picks the engine. C3, C11, C15 and the shutdown helper spawn with the coordinate and never
-read the settings; a connected window's engine comes from its payload.
+read the settings; a connected window's engine comes from its payload. C2 raises an engine-change event, with no payload, when the effective engine of a local window changes: the current context or its endpoint, when no setting or variable names the engine; C15 is its only listener.
 
 ## 3. The `dev-container` payload (F-0501 BR-2a)
 

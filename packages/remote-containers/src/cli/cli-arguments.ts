@@ -31,6 +31,10 @@ export interface CliTarget {
   logLevel: 'info' | 'debug' | 'trace';
   /** The size of the terminal the run's lifecycle commands show in, whole rows and columns of at least one. */
   terminalSize?: {rows: number; columns: number};
+  /** Where the CLI keeps its data, among them the override files of a Compose project (`--user-data-folder`). */
+  userDataFolder?: string;
+  /** Variables added to the editor's environment for the CLI's process, such as `COMPOSE_PROJECT_NAME`. */
+  environment?: Readonly<Record<string, string>>;
 }
 
 /** What `up` may be asked to do beyond the target. */
@@ -55,6 +59,9 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     ...target.idLabels.flatMap(label => ['--id-label', label]),
     '--docker-path',
     target.dockerPath,
+    ...(target.userDataFolder === undefined
+      ? []
+      : ['--user-data-folder', target.userDataFolder]),
     ...(target.mountWorkspaceGitRoot
       ? []
       : ['--mount-workspace-git-root=false']),

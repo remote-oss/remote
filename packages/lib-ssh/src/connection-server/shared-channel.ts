@@ -85,6 +85,12 @@ export class SharedSessionChannel implements HostChannel {
     request: ScriptRequest,
     onLine: (line: string) => void,
   ): Promise<ScriptOutcome> {
+    if (request.interpreter === 'powershell') {
+      return failFrom(
+        'spawnFailed',
+        'the shared session runs no powershell script yet',
+      );
+    }
     const script = scriptText(request);
     if (script.kind === 'refused') {
       return failFrom('spawnFailed', script.reason);

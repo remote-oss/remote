@@ -10,6 +10,10 @@ import {namesContainerSource} from '../config/configuration-text.ts';
 import type {StdinPresentation} from '../cli/cli-host.ts';
 import type {CliTarget, FeatureSettings} from '../cli/cli-arguments.ts';
 import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
+import type {
+  ComposeResolution,
+  ComposeResolveRequest,
+} from '../compose/resolver.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {hasVscodeVolume, inspectedFacts} from './inspect-lines.ts';
 import {
@@ -234,8 +238,20 @@ export function containerLifecycleOf(dependencies: {
   presenter: LifecyclePresenter;
   /** The time in epoch milliseconds, from which the terminal counts the run. */
   clock: () => number;
+  /** Where the CLI keeps its data, `<global storage>/data`; the CLI's own default when absent. */
+  userDataFolder?: string;
+  /** What a connect knows of a Compose configuration before the CLI runs; a configuration is no Compose one without it. */
+  compose?: (request: ComposeResolveRequest) => Promise<ComposeResolution>;
 }): ContainerLifecycle {
-  const {engine, cli: bridge, logger, presenter, clock} = dependencies;
+  const {
+    engine,
+    cli: bridge,
+    logger,
+    presenter,
+    clock,
+    compose,
+    userDataFolder,
+  } = dependencies;
   let background: AbortController | undefined;
   let stage: 'idle' | 'running' | 'ended' = 'idle';
   let runStart = 0;
@@ -419,6 +435,16 @@ export function containerLifecycleOf(dependencies: {
     stage = 'idle';
     runStart = clock();
     onStep('findingContainer');
+    const composeResolution: ComposeResolution =
+      compose === undefined
+        ? {kind: 'none'}
+        : await compose({workspaceFolder: folder, configFile, cancellation});
+    if (isAborted(cancellation)) {
+      return {kind: 'cancelled'};
+    }
+    if (composeResolution.kind === 'failed') {
+      return {kind: 'discoveryFailed', detail: composeResolution.detail};
+    }
     const discovery = await discoverWithRetry(engine, folder, cancellation);
     if (discovery.kind === 'cancelled') {
       return {kind: 'cancelled'};
@@ -482,6 +508,10 @@ export function containerLifecycleOf(dependencies: {
       features: request.features,
       mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
       logLevel: request.logLevel,
+      ...(userDataFolder === undefined ? {} : {userDataFolder}),
+      ...(composeResolution.kind === 'ready'
+        ? {environment: {COMPOSE_PROJECT_NAME: composeResolution.projectName}}
+        : {}),
     };
     // a rebuild removes the folder's containers itself, whatever their labels: the CLI's remove would miss a legacy one
     // (it only finds the labels it's given), and its check of the disallowed Features runs before its remove. It does so
@@ -578,6 +608,15 @@ export function containerLifecycleOf(dependencies: {
       return foundContainerId === undefined
         ? upResult
         : {...upResult, foundContainerId};
+    }
+    if (
+      composeResolution.kind === 'ready' &&
+      upResult.composeProjectName !== undefined &&
+      upResult.composeProjectName !== composeResolution.projectName
+    ) {
+      logger.warn(
+        `the dev container CLI used the Compose project ${upResult.composeProjectName} where ${composeResolution.projectName} was computed`,
+      );
     }
     if (
       !rebuilding &&
