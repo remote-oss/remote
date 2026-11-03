@@ -330,10 +330,16 @@ let imageBuilt: Promise<string> | undefined;
  * Starts an SSH Docker host of the run: the second engine's daemon with OpenSSH's server, in a privileged container of
  * the run, sshd published on 127.0.0.1. Its accounts are `ACCOUNT_KEYS`'s, `engine-pw` and `engine-pw2` with the
  * passwords given. It waits until `docker -H ssh://engine@…` answers through the run's client with the host's key
- * known, and creates the container only it holds. A `shared` folder is mounted at the same path, as for `secondEngine`.
+ * known, and creates the container only it holds. A `shared` folder is mounted at the same path, as for `secondEngine`,
+ * and a `hostPort` fixes the port sshd is published on.
  */
 export async function sshEngine(
-  options: {password?: string; password2?: string; shared?: string} = {},
+  options: {
+    password?: string;
+    password2?: string;
+    shared?: string;
+    hostPort?: number;
+  } = {},
 ): Promise<SshEngine> {
   await writeSshClient();
   imageBuilt ??= localDocker(
@@ -376,7 +382,7 @@ export async function sshEngine(
       ? []
       : ['-v', `${options.shared}:${options.shared}`]),
     '-p',
-    '127.0.0.1::22',
+    `127.0.0.1:${options.hostPort === undefined ? '' : String(options.hostPort)}:22`,
     SSH_ENGINE_IMAGE,
   );
   async function stop(): Promise<void> {

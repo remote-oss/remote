@@ -165,6 +165,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/containers-env-host/tsconfig.json',
   './tests/acceptance/containers-env-ctx/tsconfig.json',
   './tests/acceptance/containers-ssh-engine/tsconfig.json',
+  './tests/acceptance/containers-ssh-env-host/tsconfig.json',
   './tests/acceptance/containers-ssh-noclient/tsconfig.json',
   './tests/acceptance/containers-index/tsconfig.json',
   './tests/acceptance/containers-volume/tsconfig.json',

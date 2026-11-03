@@ -173,6 +173,7 @@ function labelsFromExplorer(): string[] {
     'containers-env-host',
     'containers-env-ctx',
     'containers-ssh-engine',
+    'containers-ssh-env-host',
     'containers-ssh-noclient',
     'extensionpack',
     'extensionpack-german',
@@ -545,7 +546,11 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
-        ...['containers-ssh-engine', 'containers-ssh-noclient'].map(label => [
+        ...[
+          'containers-ssh-engine',
+          'containers-ssh-env-host',
+          'containers-ssh-noclient',
+        ].map(label => [
           label,
           ['remote-oss.remote-containers'],
           true,
@@ -739,13 +744,11 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
-        ...['containers-ssh-engine', 'containers-ssh-noclient'].map(label => [
-          label,
-          label,
-          shared,
-          undefined,
-          undefined,
-        ]),
+        ...[
+          'containers-ssh-engine',
+          'containers-ssh-env-host',
+          'containers-ssh-noclient',
+        ].map(label => [label, label, shared, undefined, undefined]),
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -840,6 +843,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-env-host',
         'containers-env-ctx',
         'containers-ssh-engine',
+        'containers-ssh-env-host',
         'containers-ssh-noclient',
         'extensionpack',
         'extensionpack-german',
@@ -1892,7 +1896,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-nodocker also a PATH with no docker, containers-ssh-engine also the run’s ssh first on its PATH and containers-ssh-noclient a PATH of docker alone, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-nodocker also a PATH with no docker, containers-ssh-engine also the run’s ssh first on its PATH, containers-ssh-env-host that and the SSH host’s address as DOCKER_HOST, and containers-ssh-noclient a PATH of docker alone, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -1959,6 +1963,14 @@ describe('the platform cases (card coverage-12)', () => {
           'containers-ssh-engine',
           {
             DOCKER_CONFIG: '<run>/docker-config',
+            PATH: '<run>/ssh-engine-bin:<path>',
+          },
+        ],
+        [
+          'containers-ssh-env-host',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            DOCKER_HOST: 'ssh://engine@127.0.0.1:23722',
             PATH: '<run>/ssh-engine-bin:<path>',
           },
         ],

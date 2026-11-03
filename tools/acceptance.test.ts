@@ -496,6 +496,7 @@ const LAUNCH_ORDER = [
   'containers-env-host',
   'containers-env-ctx',
   'containers-ssh-engine',
+  'containers-ssh-env-host',
   'containers-ssh-noclient',
   'extensionpack',
   'extensionpack-german',
@@ -1615,6 +1616,7 @@ describe('acceptance', () => {
             'containers-env-host',
             'containers-env-ctx',
             'containers-ssh-engine',
+            'containers-ssh-env-host',
             'containers-ssh-noclient',
           ].map(containersOnly),
           ...['extensionpack', 'extensionpack-german'].map(label => ({
