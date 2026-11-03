@@ -410,7 +410,10 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
       await inWindow('c136-i', 'workbench.action.toggleMaximizedPanel');
       await new Promise(resolve => setTimeout(resolve, 2_000));
       const table = await tableOf('c136-i');
-      const [status, message, mitigations, resources] = firstRowOf(table);
+      // A narrow column breaks inside long words, so the cells are compared with every space taken out.
+      const [status, message, mitigations, resources] = firstRowOf(table).map(
+        cell => cell.replaceAll(' ', ''),
+      );
       deepStrictEqual(
         {
           header: cellsOf(table[1]),
@@ -426,9 +429,15 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
           header: ['Status', 'Message', 'Mitigations', 'Resources'],
           status: 'AllowTcpForwardingDisabled',
           message:
-            "The remote server's SSH configuration may have TCP forwarding disabled",
+            "The remote server's SSH configuration may have TCP forwarding disabled".replaceAll(
+              ' ',
+              '',
+            ),
           mitigations:
-            "• Add the setting 'AllowTcpForwarding yes' to the server's '/etc/ssh/sshd_config' (or similar) configuration file • Restart the SSH server on the remote machine to apply any changes to the configuration",
+            "• Add the setting 'AllowTcpForwarding yes' to the server's '/etc/ssh/sshd_config' (or similar) configuration file • Restart the SSH server on the remote machine to apply any changes to the configuration".replaceAll(
+              ' ',
+              '',
+            ),
           resources: [true, true],
         },
       );
