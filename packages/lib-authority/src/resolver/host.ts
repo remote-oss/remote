@@ -505,6 +505,18 @@ export async function registerResolver(
     }
   }
 
+  /** The decoded target of an authority this host serves, or the editor's error for one it does not or while it is leaving. */
+  function decodedFor(authority: string): DecodedTarget {
+    const decoded = decodeAuthority(authority);
+    if ('malformed' in decoded || decoded.family !== options.family) {
+      throw editor.notAvailable(undefined, false);
+    }
+    if (state.leaving) {
+      throw editor.notAvailable(undefined, true);
+    }
+    return decoded;
+  }
+
   function inputOf(
     decoded: DecodedTarget,
     context: {resolveAttempt: number},
@@ -525,13 +537,7 @@ export async function registerResolver(
     context: {resolveAttempt: number},
     serve: NonNullable<Connector['execServer']>,
   ): Promise<ExecServerHandle> {
-    const decoded = decodeAuthority(authority);
-    if ('malformed' in decoded || decoded.family !== options.family) {
-      throw editor.notAvailable(undefined, false);
-    }
-    if (state.leaving) {
-      throw editor.notAvailable(undefined, true);
-    }
+    const decoded = decodedFor(authority);
     let result: Awaited<ReturnType<typeof serve>>;
     try {
       result = await connect(decoded, () =>
@@ -555,13 +561,7 @@ export async function registerResolver(
     authority: string,
     context: {resolveAttempt: number},
   ): Promise<ResolvedConnection> {
-    const decoded = decodeAuthority(authority);
-    if ('malformed' in decoded || decoded.family !== options.family) {
-      throw editor.notAvailable(undefined, false);
-    }
-    if (state.leaving) {
-      throw editor.notAvailable(undefined, true);
-    }
+    const decoded = decodedFor(authority);
     const isReconnection = memory.connectedBefore;
     applyAndAnnounce({
       kind: 'resolveStarted',

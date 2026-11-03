@@ -218,7 +218,7 @@ export function connect(
   steps: ConnectSteps,
   options: ConnectOptions,
 ): Promise<Connection | Failed> {
-  return run(input, steps, options, 'window');
+  return runConnect(input, steps, options, 'window');
 }
 
 /**
@@ -231,22 +231,22 @@ export function connectControl(
   steps: ConnectSteps,
   options: ConnectOptions,
 ): Promise<ControlConnection | Failed> {
-  return run(input, steps, options, 'control');
+  return runConnect(input, steps, options, 'control');
 }
 
-function run(
+function runConnect(
   input: ConnectInput,
   steps: ConnectSteps,
   options: ConnectOptions,
   purpose: 'window',
 ): Promise<Connection | Failed>;
-function run(
+function runConnect(
   input: ConnectInput,
   steps: ConnectSteps,
   options: ConnectOptions,
   purpose: 'control',
 ): Promise<ControlConnection | Failed>;
-async function run(
+async function runConnect(
   input: ConnectInput,
   steps: ConnectSteps,
   options: ConnectOptions,
@@ -514,13 +514,12 @@ async function runSteps(
       plan: planned.plan,
       steps,
       logger: options.logger,
-      serve: options.serve,
       useExecServer: options.useExecServer,
-      failedOf: detail => failedWith(detail, contextOf(input, options, detail)),
       cancellation,
     });
     if (holding.kind === 'held') {
-      return holding;
+      const {control, release, onTransport} = holding;
+      return {control, release, onTransport};
     }
     return (
       cancelled() ??

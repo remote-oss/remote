@@ -57,6 +57,14 @@ stopped or was removed while connected answers `silent: true` (F-0502's "plain N
 other failure is presented. `retryable` is true only for a lost transport of a container that still runs (F-0502's
 reconnection rules). `diagnostics` never hold the token.
 
+**The nested resolve (brief-remote-ssh-engines §2; connect-146, #2070).** For `dev-container+…@ssh-remote+host` core calls
+the outer resolver's `resolveExecServer` only, then this connector's `connect` with `context.execServer` set. The
+connector takes that exec server afresh on each resolve and never keeps one across a loss: core asks the outer resolver
+again on every resolve attempt, and the owner makes a new connect when its held one has ended (transport-and-server
+contracts V7c). The exec server is a `WatchedExecServer`, so `onTransportLost` follows its `onTransportLost` while the
+window holds it. When the outer resolver cannot serve one, core ends the chain before this connector runs, and shows the
+message of remote-ssh's error.
+
 **`cancel()`** ends C3's and C2's processes and the exec relays. **`onTransportLost`** fires when the relay's exec
 process ends while the container runs, and **`onTransportClosed`** when the container stops.
 

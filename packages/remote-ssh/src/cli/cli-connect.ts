@@ -83,6 +83,19 @@ function causeOf(detail: FailureDetail): string {
     : `${detail.kind}: ${detail.logDetail}`;
 }
 
+/** What the CLI path needs to reach and authenticate the CLI's control connection. */
+export type CliControlContext = Pick<
+  CliConnectContext,
+  | 'input'
+  | 'lease'
+  | 'host'
+  | 'plan'
+  | 'steps'
+  | 'logger'
+  | 'useExecServer'
+  | 'cancellation'
+>;
+
 /** The CLI started, reached and authenticated: its control connection, and what gives everything back. */
 interface OpenedControl {
   kind: 'opened';
@@ -90,11 +103,11 @@ interface OpenedControl {
   server: StartedServer;
   tunnel: TunnelOpening;
   /** Hears the end of the control connection; the listener runs once. */
-  onControlEnded(listener: () => void): void;
+  onControlEnded: (listener: () => void) => void;
   /** Closes the control connection and the tunnel, and stops the CLI. */
-  abandon(): Promise<void>;
+  abandon: () => Promise<void>;
   /** Stops the CLI. */
-  stop(): Promise<void>;
+  stop: () => Promise<void>;
 }
 
 /**
@@ -102,7 +115,7 @@ interface OpenedControl {
  * its token, and authenticates. A failure before the window resolves falls back to the direct install.
  */
 async function openControl(
-  context: CliConnectContext,
+  context: CliControlContext,
 ): Promise<
   | OpenedControl
   | {kind: 'failed'; failure: FailureDetail}
@@ -301,7 +314,7 @@ export type CliHoldResult =
   | {
       kind: 'held';
       control: CliControl;
-      release(): void;
+      release: () => void;
       onTransport: (listener: (event: 'lost' | 'closed') => void) => () => void;
     }
   | {kind: 'failed'; failure: FailureDetail}
@@ -313,7 +326,7 @@ export type CliHoldResult =
  * tunnel it rides on, is the lost transport.
  */
 export async function holdOverCli(
-  context: CliConnectContext,
+  context: CliControlContext,
 ): Promise<CliHoldResult> {
   const {lease, logger} = context;
   const opened = await openControl(context);
@@ -351,9 +364,9 @@ export async function holdOverCli(
       void opened.stop().then(giveBack, giveBack);
     },
     onTransport: listener => {
-      const wrapped = (): void => {
+      function wrapped(): void {
         listener('lost');
-      };
+      }
       listeners.push(wrapped);
       return () => {
         listeners.splice(listeners.indexOf(wrapped), 1);

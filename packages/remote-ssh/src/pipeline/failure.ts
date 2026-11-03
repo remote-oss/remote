@@ -422,6 +422,14 @@ export const EXEC_SERVER_NO_CLI: FailureDetail = {
   },
 };
 
+/** The refusal of an exec server while the window's connection to the host is lost. */
+export const EXEC_SERVER_LOST: FailureDetail = {
+  kind: 'execServerUnavailable',
+  reason: {
+    text: 'The exec server is not available: the connection to the host was lost.',
+  },
+};
+
 /** The refusal of an exec server whose command-line program could not be set up on the host; `cause` is for the log. */
 export function execServerNotSetUp(cause: string): FailureDetail {
   return {
