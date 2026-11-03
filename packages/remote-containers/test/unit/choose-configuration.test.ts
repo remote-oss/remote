@@ -45,6 +45,8 @@ interface Scene {
   /** What the Compose check answers; none when the flow has no such check. */
   composeCheck: FirstCheckResult | undefined;
   calls: string[];
+  /** The title each picker was given. */
+  titles: Array<string | undefined>;
   rows: unknown[];
   targets: unknown[];
   sink: MemorySink;
@@ -76,6 +78,7 @@ function sceneOf(contents: Scene['contents']): Scene {
     composeCheck: undefined,
     calls: [],
     rows: [],
+    titles: [],
     targets: [],
     sink: new MemorySink(),
   };
@@ -107,6 +110,7 @@ function listing(scene: Scene): Record<string, Array<[string, string]>> {
 async function choose(
   scene: Scene,
   configFile?: string,
+  switching?: {current: string; reconnectCurrent: boolean},
 ): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
@@ -118,6 +122,7 @@ async function choose(
       cancellation: NEVER,
       engineCheck: scene.engineCheck,
       ...(configFile === undefined ? {} : {configFile}),
+      ...(switching === undefined ? {} : {switching}),
     },
     {
       files: {
@@ -145,8 +150,9 @@ async function choose(
         },
       },
       surfaces: {
-        pick: (rows, placeholder, tooltip) => {
+        pick: (rows, placeholder, tooltip, title) => {
           scene.calls.push('pick');
+          scene.titles.push(title);
           scene.rows.push([rows, placeholder, tooltip]);
           return Promise.resolve(scene.answer);
         },
@@ -215,6 +221,13 @@ async function choose(
       translate: template => template,
       logger: createLogger(scene.sink, {minimumLevel: () => 'debug'}),
     },
+  );
+}
+
+/** The descriptions of the rows of each picker the scene showed. */
+function descriptionsOf(scene: Scene): string[][] {
+  return (scene.rows as Array<[Array<{description: string}>]>).map(([rows]) =>
+    rows.map(each => each.description),
   );
 }
 
@@ -1130,5 +1143,59 @@ describe('choosing the configuration while the engine is checked (card container
         '{"dockerComposeFile":"c.yml","service":"app","workspaceFolder":"/workspace"}',
     });
     deepStrictEqual((await choose(scene)).kind, 'chosen');
+  });
+
+  it('F-0407 AC-2, AC-19: switching gives the picker the title S299 and marks the description of the connected configuration " (Current)"; a plain choice gives no title and no mark', async () => {
+    const plain = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    await choose(plain);
+    const switching = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    await choose(switching, undefined, {
+      current: `${FOLDER}/${BETA}`,
+      reconnectCurrent: false,
+    });
+    deepStrictEqual(
+      [
+        plain.titles,
+        descriptionsOf(plain),
+        switching.titles,
+        descriptionsOf(switching),
+      ],
+      [
+        [undefined],
+        [[ALPHA, BETA]],
+        ['Select Configuration'],
+        [[ALPHA, `${BETA} (Current)`]],
+      ],
+    );
+  });
+
+  it('F-0407 AC-4, BR-5: choosing the connected configuration ends the choice as dismissed with nothing read; in a window with no folder it goes on and reads it', async () => {
+    const results = [];
+    for (const reconnectCurrent of [false, true]) {
+      const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+      scene.answer = {kind: 'picked', index: 1};
+      const choice = await choose(scene, undefined, {
+        current: `${FOLDER}/${BETA}`,
+        reconnectCurrent,
+      });
+      results.push([choice.kind, scene.calls.includes('readConfiguration')]);
+    }
+    deepStrictEqual(results, [
+      ['dismissed', false],
+      ['chosen', true],
+    ]);
+  });
+
+  it('F-0407 BR-5: the connected configuration alone, with the engine check stopped, ends the choice as stopped and not as dismissed', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.engineCheck = Promise.resolve('stopped');
+    const choice = await choose(scene, undefined, {
+      current: `${FOLDER}/${ONLY}`,
+      reconnectCurrent: false,
+    });
+    deepStrictEqual(
+      [choice.kind, scene.calls.includes('pick')],
+      ['stopped', false],
+    );
   });
 });

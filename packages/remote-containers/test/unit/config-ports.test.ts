@@ -13,6 +13,7 @@ class FakePick implements QuickPickHandle {
   items: QuickPickHandle['items'] = [];
   activeItems: QuickPickHandle['activeItems'] = [];
   selectedItems: QuickPickHandle['selectedItems'] = [];
+  title: string | undefined = undefined;
   placeholder: string | undefined = undefined;
   canSelectMany = true;
   matchOnDescription = true;
@@ -276,6 +277,17 @@ describe('the files of the configuration choice (card containers-13)', () => {
     deepStrictEqual(
       [await readable.read('/f'), await denied.read('/f')],
       [Uint8Array.from([1, 2]), 'unreadable'],
+    );
+  });
+
+  it('F-0407 AC-19: the quick pick takes the title when one is given', () => {
+    const titled = scene();
+    void titled.surfaces.pick(ROWS, 'p', 'Open File', 'Select Configuration');
+    const plain = scene();
+    void plain.surfaces.pick(ROWS, 'p', 'Open File');
+    deepStrictEqual(
+      [titled.pick.title, plain.pick.title],
+      ['Select Configuration', undefined],
     );
   });
 });

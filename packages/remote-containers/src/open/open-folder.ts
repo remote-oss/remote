@@ -5,7 +5,7 @@
  */
 
 import {devContainerTargetOf} from '../authority/payload.ts';
-import {type Executable, executableOf} from '../engine/executable.ts';
+import {checkedProgramOf} from './engine-program.ts';
 import {openPathAllowed} from './open-gate.ts';
 import {chooseOrAuthor} from './author-first.ts';
 import {reloadIntoContainer} from './reload.ts';
@@ -81,14 +81,10 @@ export function openFolderInContainer(
     const own = ownFolder();
     // A relative value is the window's own folder's file, which runs only once that folder is trusted.
     const base = window.isTrusted() ? own : undefined;
-    if ((await ports.engine.firstCheck(base, ports.dialogs)) === 'stopped') {
+    const dockerFile = await checkedProgramOf(ports, base);
+    if (dockerFile === undefined) {
       return;
     }
-    // The passed check means the setting names a program, with the window's folder as base or none.
-    const executable = executableOf(
-      ports.settings.dockerPath(),
-      base,
-    ) as Extract<Executable, {kind: 'spawn'}>;
     const picked = await ports.pickFolder(own ?? window.homeFolder());
     if (picked === undefined) {
       logger.info(`${TITLE} was cancelled`);
@@ -106,7 +102,7 @@ export function openFolderInContainer(
     const {choice, progress} = await chooseOrAuthor(
       ports,
       () => Promise.resolve('proceed'),
-      {title: TITLE, folder, dockerPath: executable.file},
+      {title: TITLE, folder, dockerPath: dockerFile},
     );
     try {
       if (choice.kind !== 'chosen') {
@@ -116,7 +112,7 @@ export function openFolderInContainer(
         target: 'current',
         title: TITLE,
         folder,
-        dockerFile: executable.file,
+        dockerFile,
         chosen: choice,
         progress,
       });

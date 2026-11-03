@@ -60,6 +60,11 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.switchContainer",
+        "title": "%commands.switchContainer.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.openFolder",
         "title": "%commands.Openfolder.title%",
         "category": "Dev Containers"
@@ -234,6 +239,10 @@
         {
           "command": "remote-containers.openFolder",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.switchContainer",
+          "when": "remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.createDevContainerFile",

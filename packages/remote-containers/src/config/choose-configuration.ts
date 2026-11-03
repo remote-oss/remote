@@ -36,6 +36,8 @@ import {byAbsolutePath} from './stored-candidate.ts';
 /** The English templates of the texts of the picker and its dialogs, by their string ids. */
 const CONFIG_TEMPLATES = {
   S303: 'Select a devcontainer.json file.',
+  S299: 'Select Configuration',
+  S001: '(Current)',
   S257: 'Open File',
   S181: "Failed to read Dev Container configuration '{0}' file.",
   S113: "Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.",
@@ -63,11 +65,12 @@ export type PickerAnswer =
 
 /** The editor surfaces the choice uses. */
 export interface ConfigSurfaces {
-  /** Shows the single-select picker: no title, `placeholder`, rows in order with one "Open File" button each. */
+  /** Shows the single-select picker: `title` when given, `placeholder`, rows in order with one "Open File" button each. */
   pick(
     rows: readonly PickerRow[],
     placeholder: string,
     openFileTooltip: string,
+    title?: string,
   ): Promise<PickerAnswer>;
   /** The engine dialogs' modal error and log reveal, reused as they are. */
   dialogs: Pick<EngineDialogPort, 'showError' | 'revealLog'>;
@@ -126,6 +129,12 @@ export interface ConfigurationRequest {
    * wait.
    */
   engineCheck: Promise<FirstCheckResult>;
+  /**
+   * Set by Switch Container: the picker has the title S299, the description of the configuration `current` (absolute)
+   * is followed by S001, and choosing `current` ends the choice with nothing read, unless `reconnectCurrent` is set (a
+   * window with no folder open, where every pick reconnects).
+   */
+  switching?: {current: string; reconnectCurrent: boolean};
 }
 
 /** How choosing ended. */
@@ -249,7 +258,10 @@ export async function chooseConfiguration(
             : parseConfiguration(decodeConfiguration(bytes));
         return {
           label: labelOf(candidate.place, parsed, translate),
-          description: candidate.relative,
+          description:
+            candidate.file === request.switching?.current
+              ? `${candidate.relative} ${textOf(translate, CONFIG_TEMPLATES.S001)}`
+              : candidate.relative,
         };
       }),
     );
@@ -260,6 +272,9 @@ export async function chooseConfiguration(
       rows,
       textOf(translate, CONFIG_TEMPLATES.S303),
       textOf(translate, CONFIG_TEMPLATES.S257),
+      request.switching === undefined
+        ? undefined
+        : textOf(translate, CONFIG_TEMPLATES.S299),
     );
     if (answer.kind === 'dismissed') {
       logger.info(textOf(translate, CONFIG_TEMPLATES.S049));
@@ -291,6 +306,12 @@ export async function chooseConfiguration(
   const candidate =
     candidates.length === 1 ? candidates[0] : await picked(candidates);
   if (candidate === undefined) {
+    return (await engineAllows()) ? {kind: 'dismissed'} : stopped;
+  }
+  if (
+    request.switching?.current === candidate.file &&
+    !request.switching.reconnectCurrent
+  ) {
     return (await engineAllows()) ? {kind: 'dismissed'} : stopped;
   }
   const bytes = await files.read(candidate.file);

@@ -1567,3 +1567,47 @@ describe('where Configure Container Features is offered (F-0807 AC-1 to AC-5)', 
     );
   });
 });
+
+describe('where Switch Container is offered (F-0407 AC-1)', () => {
+  const contributes = MANIFEST.contributes as {
+    commands: Array<{command: string; title: string; category: string}>;
+    menus: {
+      commandPalette: Array<{command: string; when: string}>;
+      'statusBar/remoteIndicator': Array<{command: string}>;
+    };
+  };
+  const COMMAND = 'remote-containers.switchContainer';
+
+  it('F-0407 AC-1: the palette offers it in a dev container window only, with the title and category of the command, and the remote indicator does not', () => {
+    const entry = contributes.menus.commandPalette.find(
+      each => each.command === COMMAND,
+    );
+    const pattern =
+      /remoteName =~ \/(.*?)\//.exec(entry?.when ?? '')?.[1] ?? '';
+    deepStrictEqual(
+      [
+        [
+          '',
+          'dev-container',
+          'wsl',
+          'ssh-remote',
+          'tunnel',
+          'attached-container',
+        ].filter(name => new RegExp(pattern).test(name)),
+        contributes.commands.find(each => each.command === COMMAND),
+        contributes.menus['statusBar/remoteIndicator'].some(
+          each => each.command === COMMAND,
+        ),
+      ],
+      [
+        ['dev-container'],
+        {
+          command: COMMAND,
+          title: '%commands.switchContainer.title%',
+          category: 'Dev Containers',
+        },
+        false,
+      ],
+    );
+  });
+});
