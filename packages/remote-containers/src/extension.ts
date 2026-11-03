@@ -933,17 +933,15 @@ export async function activate(
                   ),
               },
             }),
-        configurationKind: async folder => {
+        configurationKind: async (folder, external) => {
           if (
+            external &&
             (await slotOf(storedLookup.root, folder, userDataStore)) !==
-            undefined
+              undefined
           ) {
             return 'external';
           }
-          if (
-            vscode.workspace.workspaceFile === undefined &&
-            (await mirroredFor(logger)(folder)).length > 0
-          ) {
+          if (external && (await mirroredFor(logger)(folder)).length > 0) {
             return 'external';
           }
           return (await discoverConfigurations(folder, configFiles, collate))

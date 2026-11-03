@@ -53,7 +53,10 @@ export interface ReopenNotificationPorts {
   global: IntentMemento;
   workspace: IntentMemento;
   /** Where the folder's configuration is: none, the folder's own, or an external one (stored or mirrored), which wins when both exist. */
-  configurationKind(folder: string): Promise<'none' | 'folder' | 'external'>;
+  configurationKind(
+    folder: string,
+    external: boolean,
+  ): Promise<'none' | 'folder' | 'external'>;
   /**
    * The clone in a volume that the notification offers a folder with a Git remote, on a host that is not Linux; none on
    * a Linux host. It names the remote a folder can be cloned from, and starts the clone of that remote.
@@ -203,7 +206,9 @@ export async function offerReopen(
     variant === 'userData'
       ? ['external' as const]
       : await Promise.all(
-          roots.map(root => ports.configurationKind(root.fsPath)),
+          roots.map(root =>
+            ports.configurationKind(root.fsPath, window.workspace === 'none'),
+          ),
         );
   const offer = offerFor(window.workspace, kinds);
   if (offer === undefined) {

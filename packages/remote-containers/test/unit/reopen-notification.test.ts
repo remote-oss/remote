@@ -50,6 +50,8 @@ interface Scene {
   configuration: 'none' | 'folder' | 'external';
   /** The kind of a root that differs from `configuration`, by path. */
   rootKinds: Record<string, 'none' | 'folder' | 'external'>;
+  /** Whether each lookup was allowed to look outside the folder, in the order asked. */
+  askedExternal: boolean[];
   /** What each `show` answers, in order. */
   answers: Array<string | undefined>;
   shown: Array<[string, readonly string[]]>;
@@ -73,6 +75,7 @@ function sceneOf(): Scene {
     },
     configuration: 'folder',
     rootKinds: {},
+    askedExternal: [],
     answers: [],
     shown: [],
     reopened: 0,
@@ -107,9 +110,14 @@ async function offered(
               },
             },
           }),
-      configurationKind: folder => {
+      configurationKind: (folder, external) => {
         scene.asked.push(folder);
-        return Promise.resolve(scene.rootKinds[folder] ?? scene.configuration);
+        scene.askedExternal.push(external);
+        const kind = scene.rootKinds[folder] ?? scene.configuration;
+        // A lookup that may not look outside the folder finds no external configuration.
+        return Promise.resolve(
+          kind === 'external' && !external ? 'none' : kind,
+        );
       },
       show: (message, buttons) => {
         scene.shown.push([message, buttons]);
@@ -133,9 +141,6 @@ function lines(scene: Scene): string[] {
 
 const S368 =
   'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
-
-const S427_S368 =
-  'There is a [Dev Container configuration](command:remote-containers.openDevContainerFile) available for this repository. Reopen workspace to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).';
 
 describe('the reopen notification (card containers-23, F-0402)', () => {
   it('F-0402 AC-1: a local folder with a configuration shows S426 with S186 and the two buttons', async () => {
@@ -424,12 +429,27 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     ]);
   });
 
-  it('F-0402 BR-1: a saved workspace whose only configuration is a stored one shows S427 with S368', async () => {
+  it('F-0302 BR-12, AC-26: a saved workspace whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
     const scene = workspaceScene('saved', 2);
     scene.configuration = 'none';
     scene.rootKinds = {'/w/q': 'external'};
     await offered(scene);
-    deepStrictEqual(scene.shown, [[S427_S368, [REOPEN, SUPPRESS]]]);
+    deepStrictEqual([scene.shown, scene.askedExternal], [[], [false, false]]);
+  });
+
+  it('F-0302 BR-12: an unsaved workspace is not asked to look outside its folders either', async () => {
+    const scene = workspaceScene('untitled', 2);
+    scene.configuration = 'none';
+    scene.rootKinds = {'/w/q': 'external'};
+    await offered(scene);
+    deepStrictEqual([scene.shown, scene.askedExternal], [[], [false, false]]);
+  });
+
+  it('F-0302 AC-3: a window with one folder is asked to look outside it, and an external configuration gives S368', async () => {
+    const scene = sceneOf();
+    scene.configuration = 'external';
+    await offered(scene);
+    deepStrictEqual(scene.askedExternal, [true]);
   });
 
   it('F-0301 6.5 step 4: a saved workspace with no root that has a configuration shows nothing, whatever sits beside its file', async () => {
