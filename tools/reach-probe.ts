@@ -14,6 +14,8 @@ const runFolder = mkdtempSync(path.join(tmpdir(), 'reach-'));
 const downloads = await startRunDownloads(runCommand, downloadWithRetry, REPOSITORY_ROOT, runFolder);
 const port = downloads.variables.HARNESS_DOWNLOADS_PORT;
 console.log(`download host up, http port ${port}, container address ${downloads.containerAddress}`);
-const fetched = runCommand('docker', ['run', '--rm', ...downloadHostArguments(downloads.containerAddress), 'alpine:3.22', 'wget', '-S', '-O', '/dev/null', '-T', '15', `http://downloads:${port}/`]);
-console.log(`container fetch exit ${fetched.status}: ${(fetched.stderr + fetched.stdout).split('\n').filter(line => /HTTP\//.test(line)).join(' | ') || (fetched.stderr + fetched.stdout).trim().slice(0, 300)}`);
+runCommand('docker', ['pull', '-q', 'alpine:3.22']);
+// any HTTP answer proves the container reached the download host; a refused or timed-out connection doesn't
+const fetched = runCommand('docker', ['run', '--rm', ...downloadHostArguments(downloads.containerAddress), 'alpine:3.22', 'sh', '-c', `wget -S -O /dev/null -T 15 http://downloads:${port}/ 2>&1; echo "wget exit $?"`]);
+console.log(`container fetch (docker exit ${fetched.status}):\n${(fetched.stdout + fetched.stderr).trim()}`);
 await downloads.stop();
