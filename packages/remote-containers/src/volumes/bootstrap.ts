@@ -65,6 +65,12 @@ export function imageArgumentsOf(
   };
 }
 
+/** One `key=value` field of a `--mount` value, CSV-quoted when the value holds a comma or a quote. */
+export function mountFieldOf(key: string, value: string): string {
+  const field = `${key}=${value}`;
+  return /[,"]/.test(value) ? `"${field.replaceAll('"', '""')}"` : field;
+}
+
 /** The engine's arguments that start the bootstrap container: as root, the volume at `/workspaces`, the socket bound. */
 export function bootstrapRunArguments(
   image: string,
@@ -77,9 +83,9 @@ export function bootstrapRunArguments(
     '--user',
     'root',
     '--mount',
-    `type=volume,src=${volume},dst=/workspaces`,
+    `type=volume,${mountFieldOf('src', volume)},dst=/workspaces`,
     '--mount',
-    `type=bind,src=${socketPath},dst=/var/run/docker.sock`,
+    `type=bind,${mountFieldOf('src', socketPath)},dst=/var/run/docker.sock`,
     '--entrypoint',
     '/bin/sh',
     image,

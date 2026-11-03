@@ -16,7 +16,11 @@ import {
 } from '../connect/failures.ts';
 import type {ContainerOutcome} from '../lifecycle/container-lifecycle.ts';
 import {volumeIdLabels} from '../lifecycle/labels.ts';
-import {type BootstrapSettings, bootstrapRemoveArguments} from './bootstrap.ts';
+import {
+  type BootstrapSettings,
+  bootstrapRemoveArguments,
+  mountFieldOf,
+} from './bootstrap.ts';
 import {type BuildContext, startBootstrap} from './bootstrap-start.ts';
 import {bootstrapFilesOf} from './bootstrap-files.ts';
 import {cloneSourceOf} from './clone-source.ts';
@@ -158,7 +162,7 @@ export async function resolveVolume(
       configFile,
     }),
     workspace: {
-      workspaceMount: `type=volume,source=${volumeName},target=${VOLUME_ROOT}`,
+      workspaceMount: `type=volume,${mountFieldOf('source', volumeName)},target=${VOLUME_ROOT}`,
       workspaceFolder: folder,
     },
   };

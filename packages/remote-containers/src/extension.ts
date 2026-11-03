@@ -1693,7 +1693,7 @@ export async function activate(
           }),
         standIn: async () => {
           const folder = await mkdtemp(
-            path.join(os.tmpdir(), 'vsc-volume-stand-in-'),
+            path.join(os.tmpdir(), 'remote-containers-stand-in-'),
           );
           return {
             folder,

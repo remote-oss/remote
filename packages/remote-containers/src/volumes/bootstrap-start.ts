@@ -137,12 +137,27 @@ async function checkedContainer(
   return {kind: 'missingTool', reason: outcome.reason};
 }
 
+/** A control character, which no field of a `--mount` can carry. */
+// eslint-disable-next-line no-control-regex -- control characters are what this refuses
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+
 /** Prepares the volume and starts a checked bootstrap container on it, with the settings read for this start. */
 export async function startBootstrap(
   ports: BootstrapStartPorts,
   volume: VolumeRequest,
   settings: BootstrapSettings,
 ): Promise<BootstrapStart> {
+  const mountValues: Array<[string, string]> = [
+    ['the volume name', volume.name],
+    ['dev.containers.dockerSocketPath', settings.socketPath],
+  ];
+  const unsafe = mountValues.find(([, value]) => CONTROL_CHARACTER.test(value));
+  if (unsafe !== undefined) {
+    return {
+      kind: 'engineFailed',
+      detail: `${unsafe[0]} holds a control character, which a mount can't take`,
+    };
+  }
   const volumeReady = await ensureVolume(ports, volume);
   if (!volumeReady.succeeded) {
     return {kind: 'engineFailed', detail: volumeReady.detail};

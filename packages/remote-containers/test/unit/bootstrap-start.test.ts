@@ -38,6 +38,7 @@ function shortOf(argv: readonly string[]): string {
 async function sceneOf(
   answer: EngineScript,
   settings: BootstrapSettings = BUILT_IN,
+  volumeName = 'r-1',
 ): Promise<SceneRecord> {
   const sink = new MemorySink();
   const scripted = scriptedEngine(shortOf, answer, short =>
@@ -59,7 +60,7 @@ async function sceneOf(
       },
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     },
-    {name: 'r-1', labels: ['a=1']},
+    {name: volumeName, labels: ['a=1']},
     settings,
   );
   return {
@@ -200,6 +201,34 @@ describe('the bootstrap start (card containers-151)', () => {
         {kind: 'engineFailed', detail: 'docker volume exited with 1'},
         2,
         {kind: 'engineFailed', detail: 'spawn docker EACCES'},
+      ],
+    );
+  });
+
+  it('a socket path or a volume name holding a control character is refused before any engine step', async () => {
+    const scenes = await Promise.all([
+      sceneOf(absentVolume, {...BUILT_IN, socketPath: '/run/d\n.sock'}),
+      sceneOf(absentVolume, BUILT_IN, 'data\u0000'),
+    ]);
+    deepStrictEqual(
+      scenes.map(scene => [scene.calls, scene.outcome]),
+      [
+        [
+          [],
+          {
+            kind: 'engineFailed',
+            detail:
+              "dev.containers.dockerSocketPath holds a control character, which a mount can't take",
+          },
+        ],
+        [
+          [],
+          {
+            kind: 'engineFailed',
+            detail:
+              "the volume name holds a control character, which a mount can't take",
+          },
+        ],
       ],
     );
   });

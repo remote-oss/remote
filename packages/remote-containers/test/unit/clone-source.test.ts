@@ -281,4 +281,26 @@ describe('the git calls of a clone (card containers-151)', () => {
       ],
     );
   });
+
+  it('R-26: an http(s) source loses its user and password everywhere the clone keeps it; ssh and the scp form keep their user', () => {
+    deepStrictEqual(
+      [
+        'https://user:token@github.com/o/r',
+        'https://token@example.com/o/r.git',
+        'HTTP://u:p@host/x/r',
+        'ssh://git@host/o/r',
+        'git@host:o/r.git',
+      ].map(input => {
+        const {repositoryPath, urlToClone} = accepted(input);
+        return [repositoryPath, urlToClone];
+      }),
+      [
+        ['https://github.com/o/r', 'https://github.com/o/r'],
+        ['https://example.com/o/r.git', 'https://example.com/o/r.git'],
+        ['HTTP://host/x/r', 'HTTP://host/x/r'],
+        ['ssh://git@host/o/r', 'ssh://git@host/o/r'],
+        ['git@host:o/r.git', 'git@host:o/r.git'],
+      ],
+    );
+  });
 });

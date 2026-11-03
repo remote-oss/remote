@@ -96,6 +96,16 @@ describe('the bootstrap container (card containers-151)', () => {
     );
   });
 
+  it('a mount field holding a comma or a quote is CSV-quoted, its quotes doubled, so it adds no option', () => {
+    const runArguments = bootstrapRunArguments('img', 'r-1', '/run/a,b"c.sock');
+    deepStrictEqual(runArguments.slice(4, 8), [
+      '--mount',
+      'type=volume,src=r-1,dst=/workspaces',
+      '--mount',
+      'type=bind,"src=/run/a,b""c.sock",dst=/var/run/docker.sock',
+    ]);
+  });
+
   it('F-0704 BR-6: each tool is looked for on PATH, its name passed as the shell’s argument, never as code', () => {
     deepStrictEqual(toolCheckArguments('c1', 'git-lfs'), [
       'exec',

@@ -57,6 +57,9 @@ const OPTION_HOST = /^(?:[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:[^/@]*@)?|[^\s/@:]+@)-/;
 /** The scp-style form `user@host:path`, with no scheme and a path after the colon. */
 const SCP_STYLE = /^[^\s/@:]+@[^\s/:]+:[^\s]+$/;
 
+/** The user and password of an `http(s)` URL, which are kept out of everything the clone stores, labels or logs. */
+const WEB_USERINFO = /^(https?:\/\/)[^/?#@]*@/i;
+
 /** A GitHub shorthand: exactly two non-empty segments, no scheme. */
 const SHORTHAND = /^[^\s/:]+\/[^\s/:]+$/;
 
@@ -149,7 +152,8 @@ function refusalOf(
 
 /**
  * The source `input` names, or why it is refused. Whitespace around it is removed first; a GitHub shorthand becomes
- * its `https://github.com/` URL; a GitHub URL's `/tree/`, `/commit/` or `/pull/` part is read off it; any other text
+ * its `https://github.com/` URL; an `http(s)` URL loses its user and password, while `ssh://` and the scp form keep
+ * their user; a GitHub URL's `/tree/`, `/commit/` or `/pull/` part is read off it; any other text
  * is used as typed. A local path is a source only when the user typed it.
  */
 export function cloneSourceOf(
@@ -163,7 +167,7 @@ export function cloneSourceOf(
   }
   const repositoryPath = SHORTHAND.test(trimmed)
     ? `https://github.com/${trimmed}`
-    : trimmed;
+    : trimmed.replace(WEB_USERINFO, '$1');
   const github = githubParts(repositoryPath);
   const urlToClone = github?.urlToClone ?? repositoryPath;
   const repositoryName = lastSegment(urlToClone);
