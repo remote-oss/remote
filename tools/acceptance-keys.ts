@@ -168,7 +168,7 @@ function plainKey(command: CommandRunner, file: string, comment: string): void {
 /**
  * Lets anyone read the key file `file`, so that ssh refuses to use it: mode 0644, or on Windows (`platform`), whose
  * OpenSSH reads the file's access list instead of a mode, read access for Everyone (by its SID, which no language of
- * the system renames).
+ * the system renames). Fails when `ssh-keygen` still reads the key, as OpenSSH reads it for a login.
  */
 export function loosenKey(
   command: CommandRunner,
@@ -179,6 +179,11 @@ export function loosenKey(
     checked(command, 'icacls', [file, '/grant', '*S-1-1-0:R']);
   } else {
     chmodSync(file, 0o644);
+  }
+  if (command('ssh-keygen', ['-y', '-f', file]).status === 0) {
+    throw new Error(
+      `ssh-keygen still reads ${file} once anyone may read it: OpenSSH would not refuse it`,
+    );
   }
 }
 
