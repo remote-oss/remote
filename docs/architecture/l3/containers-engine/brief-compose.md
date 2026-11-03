@@ -95,7 +95,7 @@ tagged `later (Compose)`. Decisions: D-105, ADR-0002 rule 8, ADR-0005, ADR-0009,
      (R-31).
    - **The setting's program exists but can't run** (no execute permission, or it fails every call): STR:S135 with
      "Cancel" | "Show Log" (AC-45).
-   - **Reading, `(reading-compose-s135)`:** F-0413's rule that S135 is never shown covers the conditions F-0413
+   - **Reading, `(reading-1908-s135)`:** F-0413's rule that S135 is never shown covers the conditions F-0413
      describes, and its 7.E8 has the plugin present. F-0201's boundary has no plugin, so it is the one place S135
      shows.
    - **After any of these dialogs** nothing exists, and a retry gives the same outcome (AC-12).
