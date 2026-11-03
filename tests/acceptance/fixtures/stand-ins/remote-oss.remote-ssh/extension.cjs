@@ -9,30 +9,30 @@
 const nodeFs = require('node:fs');
 const vscode = require('vscode');
 
-/** The interface version the explorer speaks. */
-const INTERFACE_VERSION = {major: 1, minor: 0};
-
-/** What a call answers when the file names no mode for it: the reply of a companion with nothing to say. */
-const DEFAULT_ANSWERS = {
-  'remote-internal.getActiveSshRemote': {
-    interfaceVersion: INTERFACE_VERSION,
-    connected: false,
-  },
-  'remote-internal.getConfiguredHostnames': {
-    interfaceVersion: INTERFACE_VERSION,
-    hostnames: [],
-  },
-  'remote-internal.getSshFoldersHistory': {
-    interfaceVersion: INTERFACE_VERSION,
-    hosts: [],
-  },
-  'remote-internal.deleteSshFolderFromHistory': {
-    interfaceVersion: INTERFACE_VERSION,
-    changed: false,
-  },
-  'opensshremotes.openConfigFile': undefined,
-  'opensshremotes.addNewSshHost': undefined,
+/** The commands whose reply is an empty envelope, with the member that makes it empty. */
+const EMPTY_REPLIES = {
+  'remote-internal.getActiveSshRemote': {connected: false},
+  'remote-internal.getConfiguredHostnames': {hostnames: []},
+  'remote-internal.getSshFoldersHistory': {hosts: []},
+  'remote-internal.deleteSshFolderFromHistory': {changed: false},
 };
+
+/** The commands that reply with nothing. */
+const SILENT_COMMANDS = [
+  'opensshremotes.openConfigFile',
+  'opensshremotes.addNewSshHost',
+];
+
+/**
+ * What a call answers when the file names no mode for it: the reply of a companion with nothing to say, in the interface
+ * version the call itself carries, so that a new version of the interface needs no change here.
+ */
+function defaultAnswerTo(commandId, request) {
+  const empty = EMPTY_REPLIES[commandId];
+  return empty === undefined
+    ? undefined
+    : {interfaceVersion: request?.interfaceVersion, ...empty};
+}
 
 /** The mode the file names for `commandId` now; none when the file is missing, unreadable or names no mode for it. */
 function modeOf(commandId) {
@@ -45,10 +45,10 @@ function modeOf(commandId) {
 }
 
 /** How the call to `commandId` ends. */
-function answerTo(commandId) {
+function answerTo(commandId, request) {
   const mode = modeOf(commandId);
   if (mode === undefined || mode === null) {
-    return Promise.resolve(DEFAULT_ANSWERS[commandId]);
+    return Promise.resolve(defaultAnswerTo(commandId, request));
   }
   if ('answer' in mode) {
     return Promise.resolve(mode.answer);
@@ -63,14 +63,16 @@ function answerTo(commandId) {
   if ('never' in mode) {
     return new Promise(() => undefined);
   }
-  return Promise.resolve(DEFAULT_ANSWERS[commandId]);
+  return Promise.resolve(defaultAnswerTo(commandId, request));
 }
 
 /** Registers every command of the companion that the explorer calls. */
 function activate(context) {
-  for (const commandId of Object.keys(DEFAULT_ANSWERS)) {
+  for (const commandId of [...Object.keys(EMPTY_REPLIES), ...SILENT_COMMANDS]) {
     context.subscriptions.push(
-      vscode.commands.registerCommand(commandId, () => answerTo(commandId)),
+      vscode.commands.registerCommand(commandId, request =>
+        answerTo(commandId, request),
+      ),
     );
   }
 }
