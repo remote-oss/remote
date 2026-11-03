@@ -192,6 +192,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # the pinned pwsh and PSScriptAnalyzer, first on the PATH, for the unit rows of the PowerShell host scripts
       - run: tools/install-pwsh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # the rendered PowerShell steps use no syntax newer than Windows PowerShell 5.1
+      - run: pnpm check-powershell
       - run: pnpm test:unit --parallel --jobs 4
         env:
           TMPDIR: ${{ runner.temp }}
