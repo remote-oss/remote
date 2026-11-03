@@ -201,6 +201,15 @@ const TRUST_LAUNCH = {...RENDERER_LAUNCH, workspaceTrust: true} as const;
  * What the containers launches share: Dev Containers and its proposed API, the renderer, core's dialogs drawn in the
  * window where the renderer reads them, and the server downloaded from the run's download host.
  */
+/** The address the rows of `containers-env-host` publish their daemon on, which the editor of that launch has as `DOCKER_HOST`. */
+export const ENGINE_HOST_ADDRESS = 'tcp://127.0.0.1:23760';
+
+/** The context that the editor of `containers-env-host` has as `DOCKER_CONTEXT`, which its rows make. */
+export const ENGINE_HOST_CONTEXT = 'c133-env-conflict';
+
+/** The context that the editor of `containers-env-ctx` has as `DOCKER_CONTEXT`, which its row makes. */
+export const ENGINE_CONTEXT_NAME = 'c133-env-dead';
+
 const CONTAINERS_LAUNCH = {
   ...RENDERER_LAUNCH,
   withExtensions: ['remote-oss.remote-containers'],
@@ -741,7 +750,7 @@ function forwardingLaunch(
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
- * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view`, `containers-context` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers-explorer`, `containers-ports`, `containers-features`, `containers-shutdown`, `containers-view`, `containers-context`, `containers-env-host`, `containers-env-ctx` and the two `containers-index-…` launches do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
  * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
@@ -1235,6 +1244,27 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers-context',
       // A Docker configuration of its own, so that a row can create, use and delete a context without touching the machine's.
       environment: {DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`},
+    },
+    // The editor starts with a DOCKER_HOST and a DOCKER_CONTEXT of its own: the host is the address its rows publish a daemon on.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-env-host',
+      suite: 'containers-env-host',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        DOCKER_HOST: ENGINE_HOST_ADDRESS,
+        DOCKER_CONTEXT: ENGINE_HOST_CONTEXT,
+      },
+    },
+    // The editor starts with a DOCKER_CONTEXT of its own and no DOCKER_HOST: the context its rows make for a dead endpoint.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-env-ctx',
+      suite: 'containers-env-ctx',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        DOCKER_CONTEXT: ENGINE_CONTEXT_NAME,
+      },
     },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
     {

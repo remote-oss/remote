@@ -227,6 +227,12 @@
       "path": "tests/acceptance/containers-context"
     },
     {
+      "path": "tests/acceptance/containers-env-host"
+    },
+    {
+      "path": "tests/acceptance/containers-env-ctx"
+    },
+    {
       "path": "tests/acceptance/containers-index"
     },
     {

@@ -168,6 +168,8 @@ function labelsFromExplorer(): string[] {
     'containers-killed-43',
     'containers-podman',
     'containers-context',
+    'containers-env-host',
+    'containers-env-ctx',
     'extensionpack',
     'extensionpack-german',
     'extensionpack-partial',
@@ -518,6 +520,18 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        [
+          'containers-env-host',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-env-ctx',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ...['extensionpack', 'extensionpack-german'].map(label => [
           label,
           [
@@ -685,6 +699,20 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-env-host',
+          'containers-env-host',
+          shared,
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-env-ctx',
+          'containers-env-ctx',
+          shared,
+          undefined,
+          undefined,
+        ],
         ['containers-view', 'containers-view', shared, undefined, undefined],
       ],
     );
@@ -749,6 +777,8 @@ describe('the launches of the VSCodium run', () => {
         'containers-killed-43',
         'containers-podman',
         'containers-context',
+        'containers-env-host',
+        'containers-env-ctx',
         'extensionpack',
         'extensionpack-german',
         'extensionpack-lp-de',
@@ -1829,6 +1859,21 @@ describe('the platform cases (card coverage-12)', () => {
         ['containers-killed-35', {HARNESS_KILLED_CASE: '35'}],
         ['containers-killed-43', {HARNESS_KILLED_CASE: '43'}],
         ['containers-context', {DOCKER_CONFIG: '<run>/docker-config'}],
+        [
+          'containers-env-host',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            DOCKER_HOST: 'tcp://127.0.0.1:23760',
+            DOCKER_CONTEXT: 'c133-env-conflict',
+          },
+        ],
+        [
+          'containers-env-ctx',
+          {
+            DOCKER_CONFIG: '<run>/docker-config',
+            DOCKER_CONTEXT: 'c133-env-dead',
+          },
+        ],
       ],
     );
   });

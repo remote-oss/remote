@@ -77,6 +77,8 @@
         "containers-no-proposals/*.test.ts",
         "containers-trust/*.test.ts",
         "containers-context/*.test.ts",
+        "containers-env-host/*.test.ts",
+        "containers-env-ctx/*.test.ts",
         "containers-index/*.test.ts",
         "containers-volume/*.test.ts",
         "containers-explorer/*.test.ts",
