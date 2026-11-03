@@ -210,6 +210,58 @@ describe('Configure Container Features around the window’s state (card contain
         'You need to first save your workspace in a folder containing all its workspace folders.',
       );
     } finally {
+      // An unsaved workspace asks whether to save it when its window closes.
+      const closing = closeWindow(window).catch(() => undefined);
+      await waitForDialog(window, 20_000)
+        .then(() => answerDialog(window, 'Don’t Save'))
+        .catch(() => undefined);
+      await closing;
+    }
+  });
+
+  it('F-0804 AC-29 (c150-index-offline): with the served catalogue unreadable the error dialog shows with the cause, no pick opens and the file is as it was; once the catalogue is back the next run opens the pick', async () => {
+    const text = '{\n    "image": "x"\n}\n';
+    const folder = folderWith('c150-index-offline', {
+      '.devcontainer/devcontainer.json': text,
+    });
+    const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+    const served = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'downloads',
+      'templates',
+      'devcontainer-index.json',
+    );
+    const index = readFileSync(served, 'utf8');
+    const window = await openFolderWindow(folder);
+    try {
+      writeFileSync(served, '{"collections": ');
+      inWindow(window, COMMAND).catch(() => undefined);
+      const dialog = await waitForDialog(window, 60_000);
+      const pick = await quickPickFacts(window);
+      await answerDialog(window, dialog.buttons[0] ?? 'OK');
+      writeFileSync(served, index);
+      inWindow(window, COMMAND).catch(() => undefined);
+      await screenWith(window, FEATURES_PLACEHOLDER);
+      const again = (await quickPickFacts(window))?.title;
+      await pressEscape(window);
+      deepStrictEqual(
+        [
+          dialog.message,
+          dialog.details,
+          pick,
+          readFileSync(file, 'utf8'),
+          again,
+        ],
+        [
+          "Command 'Dev Containers: Configure Container Features...' resulted in an error",
+          'Unexpected end of JSON input',
+          undefined,
+          text,
+          'Select Features',
+        ],
+      );
+    } finally {
+      writeFileSync(served, index);
       await closeWindow(window).catch(() => undefined);
     }
   });
