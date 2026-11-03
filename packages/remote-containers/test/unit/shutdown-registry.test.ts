@@ -544,6 +544,84 @@ describe('the shutdown registry, the Compose stop (card containers-144)', () => 
     deepStrictEqual(seen, [['app', 'db', 'web'], ['app', 'db', 'web'], []]);
   });
 
+  /** A closing window of `app` and `db`, an attach window on the container `held`, and a second window of `db` alone. */
+  async function attachScene(held: string): Promise<string[][]> {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    connect(registry, 2, 'attached', OTHER_IDENTITY, {
+      containerId: held,
+      action: 'none',
+    });
+    composeConnect(registry, 3, 'c', ['db']);
+    const seen: string[][] = [];
+    for (const live of [[2, 3], [3], []]) {
+      registry.leasesChanged(live);
+      await advance(CHECK_MILLISECONDS);
+      seen.push(world.running());
+    }
+    return seen;
+  }
+
+  it('F-0417 AC-15 (reading-1912-primary-in-use): an attach window on the primary container makes the close stop nothing, and the last close of the project stops what it skipped', async () => {
+    deepStrictEqual(await attachScene('a1'), [
+      ['app', 'db'],
+      ['app', 'db'],
+      [],
+    ]);
+  });
+
+  it('F-0417 AC-15: an attach window on a container that is not the primary keeps only that container up', async () => {
+    deepStrictEqual(await attachScene('d1'), [['db'], ['db'], []]);
+  });
+
+  it('F-0417 AC-15, AC-16 (reading-1912-primary-in-use): a second window on the same primary service makes the first close stop nothing, and the last close stops the whole scope', async () => {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db'], {containerId: 'a1'});
+    composeConnect(registry, 2, 'b', ['app'], {containerId: 'a1'});
+    const seen: string[][] = [];
+    for (const live of [[2], []]) {
+      registry.leasesChanged(live);
+      await advance(CHECK_MILLISECONDS);
+      seen.push(world.running());
+    }
+    deepStrictEqual(seen, [['app', 'db'], []]);
+  });
+
+  /** The services running after a window of `app` and `db` ends while a reloaded window of the same folder, on `engine`, has not yet said which project it holds. */
+  async function reloadedAfter(engine: typeof ENGINE): Promise<string[]> {
+    const world = project(APP_AND_DB);
+    const {registry, advance} = scene(world.answer);
+    composeConnect(registry, 1, 'a', ['app', 'db']);
+    registry.register(2, {
+      type: 'register',
+      connectionId: 'reloaded',
+      identity: {
+        hostPath: '/home/user/a',
+        configFile: '/home/user/a/devcontainer.json',
+      },
+      engine,
+    });
+    registry.leasesChanged([2]);
+    await advance(CHECK_MILLISECONDS);
+    return world.running();
+  }
+
+  it('F-0417 AC-24, BR-7: a reloaded window of the same folder and configuration on the same engine holds the project before it says which, so the old connection’s end stops nothing', async () => {
+    deepStrictEqual(await reloadedAfter(ENGINE), ['app', 'db']);
+  });
+
+  it('F-0417 BR-7: a window of the same folder on another engine holds nothing of this one', async () => {
+    deepStrictEqual(
+      await reloadedAfter({
+        dockerPath: 'docker',
+        environment: {DOCKER_HOST: 'ssh://far'},
+      }),
+      [],
+    );
+  });
+
   it('F-0417 AC-18: a connection whose action is none still counts as using its services', async () => {
     const world = project([['app', 'a1']]);
     const {registry, advance} = scene(world.answer);

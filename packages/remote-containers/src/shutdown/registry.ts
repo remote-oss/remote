@@ -75,6 +75,16 @@ interface Connection {
 const PROJECT_LABEL = 'com.docker.compose.project';
 const SERVICE_LABEL = 'com.docker.compose.service';
 
+/** Whether two connections are for the same folder and configuration. */
+function sameIdentity(
+  left: ContainerIdentity,
+  right: ContainerIdentity,
+): boolean {
+  return (
+    left.hostPath === right.hostPath && left.configFile === right.configFile
+  );
+}
+
 /** The engine a connection used, as one text: connections to the same engine give the same one. */
 function engineKeyOf(engine: EngineCoordinates): string {
   return JSON.stringify([
@@ -118,8 +128,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         other !== connection &&
         other.live &&
         (other.containerId === containerId ||
-          (other.identity.hostPath === connection.identity.hostPath &&
-            other.identity.configFile === connection.identity.configFile)),
+          sameIdentity(other.identity, connection.identity)),
     );
   }
 
@@ -155,9 +164,10 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         other !== connection &&
         other.live &&
         (other.containerId === container.id ||
-          (other.compose?.project === compose.project &&
-            engineKeyOf(other.engine) === key &&
-            other.compose.scope.includes(container.service))),
+          (engineKeyOf(other.engine) === key &&
+            (sameIdentity(other.identity, connection.identity) ||
+              (other.compose?.project === compose.project &&
+                other.compose.scope.includes(container.service))))),
     );
   }
 
@@ -198,14 +208,17 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
       other =>
         other !== connection &&
         other.live &&
-        other.compose?.project === compose.project &&
-        engineKeyOf(other.engine) === key,
+        engineKeyOf(other.engine) === key &&
+        (sameIdentity(other.identity, connection.identity) ||
+          other.compose?.project === compose.project),
     );
   }
 
   /**
    * Kills the running containers of the connection's scope that no other live connection uses, and at the last close of
-   * the project those of the services that earlier closes left running. A failure is one line and is not retried.
+   * the project those of the services that earlier closes left running. When another live connection is connected to the
+   * primary service's container (an attach window, or a window on the same primary service), nothing of the scope is
+   * killed and its running services count as skipped. A failure is one line and is not retried.
    */
   async function stopComposeScope(
     connection: Connection,
@@ -218,6 +231,28 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     const memory = `${engineKeyOf(connection.engine)} ${compose.project}`;
     const remembered = skipped.get(memory) ?? new Set<string>();
     const last = lastOfProject(connection, compose);
+    const primaryInUse = running.some(
+      container =>
+        container.service === compose.service &&
+        [...connections.values()].some(
+          other =>
+            other !== connection &&
+            other.live &&
+            other.containerId === container.id,
+        ),
+    );
+    if (primaryInUse) {
+      ports.logLine(
+        `the primary service ${compose.service} of ${compose.project} is in use: nothing of its scope is stopped`,
+      );
+      for (const container of running) {
+        if (compose.scope.includes(container.service)) {
+          remembered.add(container.service);
+        }
+      }
+      skipped.set(memory, remembered);
+      return;
+    }
     for (const container of running) {
       const inScope = compose.scope.includes(container.service);
       if (!inScope && !(last && remembered.has(container.service))) {
