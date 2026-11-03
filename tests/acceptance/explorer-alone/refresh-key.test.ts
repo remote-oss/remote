@@ -1,6 +1,6 @@
 /**
  * @fileoverview The refresh key in set C0 (card coverage-25e, #1348): with the SSH companion absent and the launch's
- * one empty window, pressing the key runs the command and changes nothing.
+ * one empty window, pressing the key runs the command and changes nothing, in the view or the window.
  */
 
 import {deepStrictEqual} from 'node:assert';
