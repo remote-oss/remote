@@ -693,8 +693,8 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         },
       ]);
     } finally {
-      await removeContainers('c152-clone');
       await closeWindow('vscode-remote-try-node').catch(() => undefined);
+      await removeContainers('c152-clone');
       await removeVolume('c152-clone');
     }
   });
@@ -887,8 +887,8 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         },
       ]);
     } finally {
-      await removeContainers('c152-e5');
       await closeWindow('e5-folder').catch(() => undefined);
+      await removeContainers('c152-e5');
       await removeVolume('c152-e5');
     }
   });
@@ -1003,8 +1003,8 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         },
       ]);
     } finally {
-      await removeContainers('c152-nocfg');
       await closeWindow('Hello-World').catch(() => undefined);
+      await removeContainers('c152-nocfg');
       await removeVolume('c152-nocfg');
     }
   });
@@ -1206,8 +1206,8 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         },
       ]);
     } finally {
-      await removeContainers('c152-branch');
       await closeWindow('vscode-remote-try-python').catch(() => undefined);
+      await removeContainers('c152-branch');
       await removeVolume('c152-branch');
     }
   });
@@ -1266,8 +1266,8 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
         },
       ]);
     } finally {
-      await removeContainers('c152-untitled');
       await closeWindow(window).catch(() => undefined);
+      await removeContainers('c152-untitled');
       await removeVolume('c152-untitled');
     }
   });
