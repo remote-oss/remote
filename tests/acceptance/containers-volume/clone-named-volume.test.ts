@@ -1050,7 +1050,25 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
       const firstBox = await boxOf(window, FOLDER_NAME_PROMPT);
       const volumeBaseline = windowNames();
       await answerInputBox(window, firstBox.value);
-      const volumeFailed = await reloadedName(window, volumeBaseline);
+      let volumeFailed: string;
+      try {
+        volumeFailed = await reloadedName(window, volumeBaseline);
+      } catch (caught) {
+        // Diagnosis for #1974: what the original window holds when no window reloaded.
+        console.log(
+          'c152-too-long volume case: no window reloaded',
+          JSON.stringify({
+            windows: windowNames(),
+            originalRemote:
+              (await windowState(window).catch(() => undefined))?.remoteName ??
+              'unknown',
+            originalDialog: await waitForDialog(window, 5_000).catch(
+              () => 'none',
+            ),
+          }),
+        );
+        throw caught;
+      }
       const setupDialog = await waitForDialog(volumeFailed, 300_000);
       seen.push({
         window: volumeFailed,
@@ -1080,7 +1098,25 @@ describe('Clone Repository in Named Container Volume (card containers-152)', fun
       );
       const folderBaseline = windowNames();
       await acceptQuickPick(secondWindow);
-      const folderFailed = await reloadedName(secondWindow, folderBaseline);
+      let folderFailed: string;
+      try {
+        folderFailed = await reloadedName(secondWindow, folderBaseline);
+      } catch (caught) {
+        // Diagnosis for #1974: what the original window holds when no window reloaded.
+        console.log(
+          'c152-too-long folder case: no window reloaded',
+          JSON.stringify({
+            windows: windowNames(),
+            originalRemote:
+              (await windowState(secondWindow).catch(() => undefined))
+                ?.remoteName ?? 'unknown',
+            originalDialog: await waitForDialog(secondWindow, 5_000).catch(
+              () => 'none',
+            ),
+          }),
+        );
+        throw caught;
+      }
       const cloneDialog = await waitForDialog(folderFailed, 300_000);
       seen.push({
         window: folderFailed,
