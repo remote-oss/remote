@@ -220,5 +220,12 @@
   "I/O performance": "I/O performance",
   "reduced by bridging OSes": "reduced by bridging OSes",
   "Clone in Volume": "Clone in Volume",
-  " Or: Clone repository in Docker volume for [better I/O performance]({0}).": " Or: Clone repository in Docker volume for [better I/O performance]({0})."
+  " Or: Clone repository in Docker volume for [better I/O performance]({0}).": " Or: Clone repository in Docker volume for [better I/O performance]({0}).",
+  "Attaching to a container may execute arbitrary code.": "Attaching to a container may execute arbitrary code.",
+  "Only attach to a container if you trust its origin.": "Only attach to a container if you trust its origin.",
+  "There are no running containers to attach to.": "There are no running containers to attach to.",
+  "OK": "OK",
+  "Container {0} ({1}){2}": "Container {0} ({1}){2}",
+  "Container": "Container",
+  "Select the container to attach VS Code": "Select the container to attach VS Code"
 }
