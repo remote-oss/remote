@@ -141,6 +141,7 @@ function labelsFromExplorer(): string[] {
     'explorer',
     'explorer-alone',
     'explorer-trust',
+    'explorer-trust-pickers',
     'explorer-home',
     'explorer-rows',
     'explorer-folders',
@@ -418,6 +419,12 @@ describe('the launches of the VSCodium run', () => {
           ['remote-oss.remote-ssh'],
         ],
         ['explorer-trust', ['remote-oss.remote-explorer'], true, undefined],
+        [
+          'explorer-trust-pickers',
+          ['remote-oss.remote-explorer'],
+          true,
+          undefined,
+        ],
         ['explorer-home', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-rows', ['remote-oss.remote-explorer'], true, undefined],
         ['explorer-folders', ['remote-oss.remote-explorer'], true, undefined],
@@ -753,6 +760,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-trust',
+        'explorer-trust-pickers',
         'explorer-home',
         'explorer-rows',
         'explorer-folders',
@@ -848,6 +856,14 @@ describe('the launches of the VSCodium run', () => {
           'explorer-trust',
           true,
           {'window.title': '[${rootName}]${remoteName}'},
+        ],
+        [
+          'explorer-trust-pickers',
+          true,
+          {
+            'window.title': '[${rootName}]${remoteName}',
+            'window.dialogStyle': 'custom',
+          },
         ],
         [
           'trust',

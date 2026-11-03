@@ -2,6 +2,7 @@ import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
   pageAmong,
   pageTitleByName,
+  nextListKey,
   pageTitleFor,
   pagesForState,
   pagesOfRemoteness,
@@ -407,6 +408,31 @@ describe('pagesForState', () => {
         page => page.id,
       ),
       ['p1', 'p3'],
+    );
+  });
+});
+
+describe('nextListKey', () => {
+  it('tooling-122: the last row is reached by End, the first by Home from below the first, and a long distance by a page key', () => {
+    deepStrictEqual(
+      [
+        nextListKey(0, 2000, 2000, 20),
+        nextListKey(1500, 1, 2000, 20),
+        nextListKey(1, 1000, 2000, 20),
+        nextListKey(1500, 1000, 2000, 20),
+      ],
+      ['End', 'Home', 'PageDown', 'PageUp'],
+    );
+  });
+
+  it('tooling-122: the last few rows are reached by single steps, and from the group above the first row the first is one step down', () => {
+    deepStrictEqual(
+      [
+        nextListKey(985, 1000, 2000, 20),
+        nextListKey(1010, 1000, 2000, 20),
+        nextListKey(0, 1, 2000, 20),
+      ],
+      ['ArrowDown', 'ArrowUp', 'ArrowDown'],
     );
   });
 });

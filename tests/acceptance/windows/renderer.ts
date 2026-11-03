@@ -3601,16 +3601,184 @@ export async function clickQuickPickRow(
 
 /** The protocol virtual key codes of the keys the helpers press. */
 const VIRTUAL_KEY_CODES: Record<
-  'Enter' | 'Escape' | 'Backspace' | 'Delete' | 'ArrowUp' | 'ArrowDown',
+  | 'Enter'
+  | 'Escape'
+  | 'Backspace'
+  | 'Delete'
+  | 'ArrowUp'
+  | 'ArrowDown'
+  | 'Home'
+  | 'End'
+  | 'PageUp'
+  | 'PageDown',
   number
 > = {
   ArrowUp: 38,
   ArrowDown: 40,
+  Home: 36,
+  // eslint-disable-next-line id-length -- the name of the key
+  End: 35,
+  PageUp: 33,
+  PageDown: 34,
   Enter: 13,
   Escape: 27,
   Backspace: 8,
   Delete: 46,
 };
+
+/** A row of a virtualized list as its ARIA attributes give it: its label, its place among its siblings and their number. */
+export interface ListRowReading {
+  label: string;
+  position: number;
+  size: number;
+}
+
+/** The keys that move the focus of a list. */
+export type ListKey =
+  'Home' | 'End' | 'PageUp' | 'PageDown' | 'ArrowUp' | 'ArrowDown';
+
+/**
+ * The key that brings the focus of a list nearer to the row at `wanted` (1-based) among `size` siblings, from the
+ * row at `current` (0 when the focus is on no row of that set). `page` is the number of rows the list shows at once,
+ * so a page key never passes the row.
+ */
+export function nextListKey(
+  current: number,
+  wanted: number,
+  size: number,
+  page: number,
+): ListKey {
+  if (wanted === size) {
+    return 'End';
+  }
+  if (wanted === 1 && current > 1) {
+    return 'Home';
+  }
+  if (current < wanted) {
+    return wanted - current >= page ? 'PageDown' : 'ArrowDown';
+  }
+  return current - wanted >= page ? 'PageUp' : 'ArrowUp';
+}
+
+/** Where a list is read: the page-side statement that focuses it, and the expression of its focused row. */
+interface ListAccess {
+  focus: string;
+  /** An object with `label`, `position`, `size`, `level` of the focused row and `rendered`, the rows drawn. */
+  focused: string;
+}
+
+/** What the page says of a list's focused row. */
+interface FocusedRow {
+  label: string;
+  position: number;
+  size: number;
+  level: number | null;
+  rendered: number;
+}
+
+/**
+ * The row at 1-based `position` among the siblings of `level` (any row, for a flat list), reached by the keyboard alone:
+ * `Home`, `End`, the page keys and the arrows, reading only the focused row's label and its `aria-posinset` and
+ * `aria-setsize`. Fails, naming the last row it reached, when the focus doesn't arrive within a bound of key presses.
+ */
+async function rowAtPosition(
+  name: string,
+  access: ListAccess,
+  position: number,
+  level: number | undefined,
+): Promise<ListRowReading> {
+  await evaluate<null>(name, `(() => { ${access.focus}; return null; })()`);
+  const address = await pageOf(name);
+  // Until a row of the set is reached its size is unknown, and the walk may take only a few steps to reach it.
+  let size = 0;
+  let bound = LIST_ENTRY_PRESSES;
+  let last = '';
+  for (let presses = 0; presses <= bound; presses += 1) {
+    const reading = await evaluate<FocusedRow>(name, access.focused);
+    const inSet = level === undefined || reading.level === level;
+    const current = inSet ? reading.position : 0;
+    last = `${JSON.stringify(reading.label)} at ${String(current)} of ${String(reading.size)}`;
+    if (inSet && current === position) {
+      return {label: reading.label, position: current, size: reading.size};
+    }
+    const page = Math.max(1, reading.rendered);
+    if (inSet) {
+      size = reading.size;
+      bound = presses + Math.ceil(size / page) + 20;
+    }
+    await pressKey(
+      address,
+      name,
+      size === 0 ? 'ArrowDown' : nextListKey(current, position, size, page),
+    );
+    await new Promise(resolve => setTimeout(resolve, LIST_KEY_PAUSE));
+  }
+  throw new Error(
+    `window ${name}: the list did not reach position ${String(position)}; the focus is on ${last}`,
+  );
+}
+
+/** How many presses the walk may take to get its focus into the set of rows it looks for. */
+const LIST_ENTRY_PRESSES = 10;
+
+/** How long the page has to draw the row a key moved the focus to. */
+const LIST_KEY_PAUSE = 150;
+
+/** The page-side reading of the focused row of the list `list`, a selector's element. */
+function focusedRowExpression(listElement: string): string {
+  return `(() => {
+    const list = ${listElement};
+    const row = list?.querySelector('.monaco-list-row.focused');
+    const rendered = list?.querySelectorAll('.monaco-list-row').length ?? 0;
+    if (row === null || row === undefined) {
+      return {label: '', position: 0, size: 0, level: null, rendered};
+    }
+    const level = row.getAttribute('aria-level');
+    return {
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      position: Number(row.getAttribute('aria-posinset')),
+      size: Number(row.getAttribute('aria-setsize')),
+      level: level === null ? null : Number(level),
+      rendered,
+    };
+  })()`;
+}
+
+/**
+ * The row at 1-based `position` among the rows of tree level `level` (the hosts under the SSH group, by default) of
+ * view `viewName` in window `name`, reached by the keyboard alone. Nothing is restored: the focus stays on the row.
+ */
+export function viewRowAt(
+  name: string,
+  viewName: string,
+  position: number,
+  level = 2,
+): Promise<ListRowReading> {
+  const list = `${paneExpression(viewName)}?.querySelector('.monaco-list')`;
+  return rowAtPosition(
+    name,
+    {focus: `${list}?.focus()`, focused: focusedRowExpression(list)},
+    position,
+    level,
+  );
+}
+
+/**
+ * The row at 1-based `position` of the quick pick open in window `name`, reached by the keyboard alone, with the
+ * input keeping its text. Nothing is restored: the focus stays on the row.
+ */
+export function quickPickRowAt(
+  name: string,
+  position: number,
+): Promise<ListRowReading> {
+  const list = `document.querySelector('${QUICK_WIDGET} .quick-input-list .monaco-list')`;
+  return rowAtPosition(
+    name,
+    {focus: `${list}?.focus()`, focused: focusedRowExpression(list)},
+    position,
+    undefined,
+  );
+}
 
 /** Presses `key` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
 async function pressKey(

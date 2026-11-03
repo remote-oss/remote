@@ -58,6 +58,7 @@
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "explorer-trust/*.test.ts",
+        "explorer-trust-pickers/*.test.ts",
         "explorer-home/*.test.ts",
         "add-host/*.test.ts",
         "explorer-rows/*.test.ts",

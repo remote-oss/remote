@@ -1053,6 +1053,20 @@ export function launchesOf(root: string): Launch[] {
     },
     {
       ...EXPLORER_LAUNCH,
+      label: 'explorer-trust-pickers',
+      suite: 'explorer-trust-pickers',
+      workspaceTrust: true,
+      // Core's dialogs are drawn in the window, and the empty script makes Remote - SSH show its real pickers, in the
+      // run's own home.
+      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      environment: {
+        ...EXPLORER_LAUNCH.environment,
+        HOME: '<run>/home',
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+      },
+    },
+    {
+      ...EXPLORER_LAUNCH,
       label: 'explorer-home',
       suite: 'explorer-home',
       // Core's dialogs are drawn in the window, where the renderer helpers read them.
