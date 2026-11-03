@@ -10,7 +10,8 @@ Owner: athena (architect). Plan: #1807 group 11. Specs:
   F-0505.
 
 Decisions: D-14, D-105, F-1406, R-26, R-27, R-31, R-60, R-79, ADR-0005, ADR-0009, ADR-0010, ADR-0013, and the effective
-engine of `contracts.md` §2. Kubernetes (F-0604) is group 12. The Apple family (F-0605) is #1992's `host: macOS` lines.
+engine of `contracts.md` §2. Kubernetes (F-0604) is group 12. The Apple family (F-0605) stays with the plan's Apple group: AC-13 to AC-18 are
+`host: macOS` (#1992), and its other lines are `todo` there.
 
 ## 1. What exists, and what this adds
 
@@ -40,11 +41,12 @@ engine of `contracts.md` §2. Kubernetes (F-0604) is group 12. The Apple family 
   - F-0906 AC-5, AC-9 and AC-19's item lists follow from the menus and are asserted on them.
 - **The order of the run:**
   1. C5's attach warning (§7.1).
-  2. The picker opens at once, empty and busy, through `createQuickPick`:
-     - no title, and placeholder S316;
-     - C2's pre-flight checks then run, with F-0201's and F-0202's dialogs over it (PRE-1 (c), (d); 7.E7);
-     - "Ignore" fills the picker, and every other button closes it.
-     - With core's default `closeOnFocusLost`, only the dialog shows, as PRE-1 says.
+  2. C2's checks, split as PRE-1 splits them:
+     - **Before any picker:** the program exists and may run. A missing CLI shows S146 (PRE-1 (a), (b)), and a
+       permission error shows S103 + S380 (F-0201 AC-27). No picker opens.
+     - **Then the picker opens,** empty and busy, through `createQuickPick`, with no title and placeholder S316.
+     - **Over it:** the version and daemon checks (PRE-1 (c), (d); 7.E7). "Ignore" fills the picker, and every other
+       button closes it. With core's default `closeOnFocusLost`, only the dialog shows, as PRE-1 says.
   3. The listing: `docker ps` through C2, keeping only status exactly `running`, so a paused container is out (BR-2).
      - **Gone in between:** a container that `docker inspect` no longer finds drops out (7.E5).
      - **Nothing left:** S365 as a modal with "OK", and the picker closes (7.E1).
@@ -91,6 +93,8 @@ with C12's container step. That's the same split the volume path makes for its s
      payload. That record lives in `globalState` under a key of ours (R-27), keyed by the payload. It's decision
      F-0601 Q1's preferred outcome (AC-61): a renamed container is reattached, and the formatter is registered again
      with the new name.
+   - **Name first:** the record is consulted only when the name doesn't resolve. After a rename *and* a new container
+     under the old name, a reload attaches to the new one, as BR-8 has it.
    - **Neither resolves:** S053 with "Choose Container" (primary) | "Close Remote" | "More Actions..." (7.E3).
 2. **The state** (BR-14). An attach never starts a container by itself.
    - **Not `running`** (exited, created or paused): S054 with "Start Container" (primary) | "Close Remote" |
@@ -147,10 +151,13 @@ with C12's container step. That's the same split the volume path makes for its s
    - C10's mount step is skipped for this family.
 10. **Connected** with `trusted: true`. F-0106 BR-13 forces trust for attached windows (AC-37, AC-43); core shows the
     "trusted by nature" lines itself.
-11. **The background stage:** `run-user-commands --container-id <id>`, with `--config` as in step 3, after the connect.
+11. **The background stage:** C3's new `attachedUserCommandsArguments` runs `run-user-commands --container-id <id>`,
+    with `--config` as in step 3 and the same common flags, after the connect.
+    - **No `--workspace-folder`:** the CLI's working directory stands in. The CLI reads `--config` through the same
+      reader as `set-up`, with no name check, and finds the container by id. A unit row pins this against the bundled
+      CLI.
     - S085 shows in the status bar while it runs. That's C7's background stage, reused (F-0602 `postAttachCommand`).
     - Its failure is log-only (F-0602 BR-15).
-    - If the CLI needs a `--workspace-folder`, it gets the stand-in folder of #1973's Q1.
 12. **The preview line** (F-0502 AC-17): `connect/preview-note.ts` gains the Alpine forms for x64 and arm64. The line
     is in the log only.
 13. **On success:** C12 writes the id record of step 1.
@@ -274,9 +281,10 @@ A failure keeps `contracts.md` §2's rule:
 ## 10. Contracts, components, dependencies
 
 - **`contracts.md`:**
-  - §2: C10's attached family and its container step (§4).
+  - §2: C10's attached family and its container step (§4). `Connected.trusted` becomes per family: `false` for
+    `dev-container`, `true` for `attached-container` (F-0106 BR-13).
   - §3: the attached-container payload and the id record.
-  - §4: C3's `setUpArguments`.
+  - §4: C3's `setUpArguments` and `attachedUserCommandsArguments`.
 - **`components.md`:**
   - C12 joins the built components, with F-0601, F-0602 and the attach halves of F-0106, F-0901 to F-0903, F-0906,
     F-0417 and F-0505;
@@ -302,7 +310,7 @@ A failure keeps `contracts.md` §2's rule:
    - unit rows for the codec, the collation, the filter and the label;
    - acceptance rows for F-0601 5.0, 7.E1, 7.E5, 7.E7 and PRE-1, F-0106's attach lines, F-0205 AC-45 and F-0906.
 2. **The connect:** §4, after card 1. Rows:
-   - unit rows for `setUpArguments` against the bundled CLI, the Alpine step's argv and the id record;
+   - unit rows for `setUpArguments` and `attachedUserCommandsArguments` against the bundled CLI, the Alpine step's argv and the id record;
    - acceptance rows for F-0601 7.E2 to 7.E8 and BR-13, and for F-0415 AC-25, F-0419 AC-11, F-0502 AC-17, F-0503,
      F-0505 AC-22 and F-0417's three lines.
 3. **The configuration files:** §5, after card 2. Rows: F-0602's criteria, and F-0903 AC-5 and AC-17.
