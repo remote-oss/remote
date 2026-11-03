@@ -1662,6 +1662,29 @@ describe('the container connector: the folder trust (card containers-17)', () =>
     deepStrictEqual(scene.atTrust, {reads: 1, engineCalls: 0});
   });
 
+  it('F-0201 AC-55: with the folder untrusted and dockerPath a relative file, the read before the answer uses the default program, and what comes after it the folder’s own', async () => {
+    const scene = sceneOf({dockerPath: 'tools/dk'});
+    scene.trusted = false;
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.configurationReads.map(read => read.target.dockerPath),
+        scene.prepared.map(request => request.dockerPath),
+      ],
+      [['docker', '/work/proj/tools/dk'], ['/work/proj/tools/dk']],
+    );
+  });
+
+  it('F-0201 AC-55: with the folder untrusted and an absolute dockerPath, the read uses that program', async () => {
+    const scene = sceneOf({dockerPath: '/opt/docker'});
+    scene.trusted = false;
+    await connected(scene);
+    deepStrictEqual(
+      scene.configurationReads.map(read => read.target.dockerPath),
+      ['/opt/docker', '/opt/docker'],
+    );
+  });
+
   it('F-0106 6.2: a trusted folder connects with no request and no modal', async () => {
     const scene = sceneOf();
     const result = await connected(scene);

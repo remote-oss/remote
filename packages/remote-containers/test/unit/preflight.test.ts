@@ -673,6 +673,8 @@ describe('what the engine says of its contexts (card containers-142)', () => {
 });
 
 describe('the key of the effective engine (card containers-142)', () => {
+  const TRUSTED = {folder: undefined, trusted: true};
+
   const NO_SETTINGS: EngineSources = {
     containersEnvironment: undefined,
     dockerEnvironment: undefined,
@@ -698,13 +700,13 @@ describe('the key of the effective engine (card containers-142)', () => {
       await effectiveEngineKey(
         NO_SETTINGS,
         first.dependencies,
-        undefined,
+        TRUSTED,
         NEVER_ABORTED,
       ),
       await effectiveEngineKey(
         NO_SETTINGS,
         second.dependencies,
-        undefined,
+        TRUSTED,
         NEVER_ABORTED,
       ),
     ];
@@ -721,13 +723,13 @@ describe('the key of the effective engine (card containers-142)', () => {
         await effectiveEngineKey(
           {...NO_SETTINGS, dockerHost: 'tcp://far:2376'},
           scene.dependencies,
-          undefined,
+          TRUSTED,
           NEVER_ABORTED,
         ),
         await effectiveEngineKey(
           {...NO_SETTINGS, processEnvironment: {DOCKER_CONTEXT: 'fixed'}},
           scene.dependencies,
-          undefined,
+          TRUSTED,
           NEVER_ABORTED,
         ),
         scene.argvs,
@@ -748,23 +750,48 @@ describe('the key of the effective engine (card containers-142)', () => {
         await effectiveEngineKey(
           NO_SETTINGS,
           podman.dependencies,
-          undefined,
+          TRUSTED,
           NEVER_ABORTED,
         ),
         await effectiveEngineKey(
           NO_SETTINGS,
           broken.dependencies,
-          undefined,
+          TRUSTED,
           NEVER_ABORTED,
         ),
         await effectiveEngineKey(
           NO_SETTINGS,
           noEndpoint.dependencies,
-          undefined,
+          TRUSTED,
           NEVER_ABORTED,
         ),
       ],
       ['noContexts', undefined, undefined],
+    );
+  });
+
+  it('F-0201 AC-55, F-0205 BR-17: a relative dockerPath is the folder’s own file, so with the folder untrusted no command runs and there is no key, and once it is trusted the program is run', async () => {
+    const untrusted = sceneOf({}, {values: ['tools/dk']});
+    const trusted = sceneOf({}, {values: ['tools/dk']});
+    const folder = '/work/untrusted-folder';
+    deepStrictEqual(
+      [
+        await effectiveEngineKey(
+          NO_SETTINGS,
+          untrusted.dependencies,
+          {folder, trusted: false},
+          NEVER_ABORTED,
+        ),
+        untrusted.argvs,
+        await effectiveEngineKey(
+          NO_SETTINGS,
+          trusted.dependencies,
+          {folder, trusted: true},
+          NEVER_ABORTED,
+        ),
+        trusted.argvs.length > 0,
+      ],
+      [undefined, [], 'noContexts', true],
     );
   });
 });

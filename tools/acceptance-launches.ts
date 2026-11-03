@@ -1130,6 +1130,8 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-trust',
       suite: 'containers-trust',
       workspaceTrust: true,
+      // A Docker configuration of its own, so that a row can change it, and what watches it, without touching the machine's.
+      environment: {DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`},
       // The run's registry and templates, as in `containers`: the wizard's rows run in an untrusted folder too.
       registry: true,
       templates: true,

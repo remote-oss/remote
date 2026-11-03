@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {executableOf} from '../../src/engine/executable.ts';
+import {engineBaseOf, executableOf} from '../../src/engine/executable.ts';
 
 describe('the executable of dev.containers.dockerPath', () => {
   for (const [value, base, expected] of [
@@ -24,4 +24,31 @@ describe('the executable of dev.containers.dockerPath', () => {
       deepStrictEqual(executableOf(value, base), {...expected, written});
     });
   }
+});
+
+describe('the base of a relative dockerPath (card containers-142, F-0201 AC-55)', () => {
+  it('F-0201 AC-55: the window’s first folder is the base only once the window is trusted, and a relative value then names a program only then', () => {
+    const folder = '/work/proj';
+    deepStrictEqual(
+      [
+        engineBaseOf({folder, trusted: true}),
+        engineBaseOf({folder, trusted: false}),
+        engineBaseOf({folder: undefined, trusted: true}),
+        executableOf('tools/dk', engineBaseOf({folder, trusted: false})).kind,
+        executableOf('tools/dk', engineBaseOf({folder, trusted: true})).kind,
+        executableOf('/opt/docker', engineBaseOf({folder, trusted: false}))
+          .kind,
+        executableOf('docker', engineBaseOf({folder, trusted: false})).kind,
+      ],
+      [
+        '/work/proj',
+        undefined,
+        undefined,
+        'notFound',
+        'spawn',
+        'spawn',
+        'spawn',
+      ],
+    );
+  });
 });
