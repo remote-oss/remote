@@ -284,6 +284,63 @@ describe('Reopen in Container', () => {
     );
   });
 
+  /** The outcome of Reopen in Container in a saved workspace whose file reads as `text`, the user answering `proceed`. */
+  async function savedWorkspaceReopened(text: string, proceed: boolean) {
+    const state = setup();
+    state.workspaceFile = {scheme: 'file', fsPath: '/w/p/team.code-workspace'};
+    state.folders = [{scheme: 'file', fsPath: '/w/p/a'}];
+    state.workspaceRead = {kind: 'text', text};
+    state.continueAnswer = proceed;
+    await reopened(state);
+    return {
+      confirms: state.confirms,
+      opened: state.commands.map(each => each.command),
+      checked: state.calls.includes('firstCheck /w/p'),
+    };
+  }
+
+  it('F-0404 7.E2, 7.E1: a saved workspace with a folder list that has a problem shows S363 with the first one, and Cancel stops before the engine check and the open', async () => {
+    deepStrictEqual(
+      await savedWorkspaceReopened(
+        '{"folders": [{"path": "/abs/folder"}, {"path": "../sibling"}]}',
+        false,
+      ),
+      {
+        confirms: [
+          "The workspace could fail to open in a container: Workspace contains an absolute folder path '/abs/folder'.",
+        ],
+        opened: [],
+        checked: false,
+      },
+    );
+  });
+
+  it('F-0404 7.E1: Continue goes on as if the list had no problem: the engine is checked and the workspace is opened', async () => {
+    deepStrictEqual(
+      await savedWorkspaceReopened(
+        '{"folders": [{"path": "../sibling"}]}',
+        true,
+      ),
+      {
+        confirms: [
+          "The workspace could fail to open in a container: Folder '/w/sibling' is not a subfolder of shared root folder '/w/p'.",
+        ],
+        opened: ['vscode.openFolder'],
+        checked: true,
+      },
+    );
+  });
+
+  it('F-0404 BR-3: a valid folder list shows no dialog', async () => {
+    deepStrictEqual(
+      await savedWorkspaceReopened(
+        '{"folders": [{"path": "."}, {"path": "sub"}]}',
+        false,
+      ),
+      {confirms: [], opened: ['vscode.openFolder'], checked: true},
+    );
+  });
+
   it('F-0401 6.5 step 1, 7.E3: an unsaved workspace shows S415 in a modal and the command stops there: no trust request, no check, no open', async () => {
     const state = setup();
     state.workspaceFile = {scheme: 'untitled', fsPath: '/Untitled-1'};

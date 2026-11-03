@@ -17,6 +17,7 @@ import type {PinnedEngine} from '../engine/effective-engine.ts';
 import type {AuthoringPort} from './author-first.ts';
 import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
+import type {WorkspaceFolderPorts} from './workspace-folders.ts';
 
 /** What the command reads of the window it runs in, at each call. */
 interface WindowPort {
@@ -42,7 +43,7 @@ interface EnginePort {
 }
 
 /** Everything the command needs. */
-export interface ReopenPorts extends AuthoringPort {
+export interface ReopenPorts extends AuthoringPort, WorkspaceFolderPorts {
   /** The guard of the open path, which holds the command back while a proposal it needs is missing. */
   gate: OpenGatePorts;
   window: WindowPort;

@@ -9,6 +9,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
 import type {PickerAnswer} from '../../src/config/choose-configuration.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
+import type {WorkspaceRead} from '../../src/open/workspace-folders.ts';
 import type {TrustOutcome} from '../../src/trust/trust-gate.ts';
 
 /** The folder the rows open. */
@@ -46,6 +47,10 @@ export interface Setup {
   workspaceFile: {scheme: string; fsPath: string} | undefined;
   /** The details of the modal information dialogs the command showed. */
   modals: string[];
+  /** What the workspace file reads as, the details of the Cancel/Continue dialogs shown, and what the user answers. */
+  workspaceRead: WorkspaceRead;
+  confirms: string[];
+  continueAnswer: boolean;
   trust: TrustOutcome;
   /** The command titles the trust check was asked for. */
   titles: string[];
@@ -95,6 +100,9 @@ export function setup(): Setup {
     folders: [{scheme: 'file', fsPath: FOLDER}],
     workspaceFile: undefined,
     modals: [],
+    workspaceRead: {kind: 'text', text: '{"folders": [{"path": "."}]}'},
+    confirms: [],
+    continueAnswer: true,
     trust: 'trusted',
     titles: [],
     updates: [],
@@ -161,6 +169,11 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     informModal: text => {
       state.modals.push(text);
       return Promise.resolve();
+    },
+    readWorkspaceFile: () => Promise.resolve(state.workspaceRead),
+    confirmModal: text => {
+      state.confirms.push(text);
+      return Promise.resolve(state.continueAnswer);
     },
     translate: template => template,
     ensureTrusted: async title => {
