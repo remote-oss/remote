@@ -250,6 +250,8 @@ describe("the Docker daemon's dev container lock", () => {
   });
 
   it('the holder format is one the daemon formats, and its line reads back as the lock it made', function () {
+    // A real daemon's first calls can take seconds on a busy hosted runner, past mocha's 10 s.
+    this.timeout(60_000);
     if (runCommand('docker', ['info', '--format', '{{.ID}}']).status !== 0) {
       this.skip();
     }
