@@ -172,9 +172,16 @@ describe('check-coverage', () => {
       ]);
     });
 
-    it('#142 1: a deferred line with a reason passes', () => {
-      tagged('F-2601.AC-1\tdeferred\tD-51');
+    it('#142 1: a deferred line for a host passes', () => {
+      tagged('F-2601.AC-1\tdeferred\thost: macOS (a macOS SSH host)');
       deepStrictEqual(problems(), []);
+    });
+
+    it('#142 1: a deferred line whose reason names no host fails, naming it', () => {
+      tagged('F-2601.AC-1\tdeferred\tD-86: x');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 is deferred for "D-86: x", but only a host (host: windows or host: macOS) defers a line`,
+      ]);
     });
 
     it('#142 1: an acceptance line with a reason fails', () => {
@@ -511,7 +518,7 @@ describe('check-coverage', () => {
 
     it('tooling-65: a deferred, an acceptance and a unit line get no problem and no note', () => {
       tagged(
-        'F-2601.AC-1\tdeferred\tD-51',
+        'F-2601.AC-1\tdeferred\thost: windows (the Windows client)',
         'F-2601.AC-2\tacceptance\t',
         'F-2601.AC-3\tunit\t',
       );
@@ -817,17 +824,19 @@ describe('check-coverage', () => {
       return problemsOf(checkCoverage(workspace.root, EXPLORER_SETS));
     }
 
-    it("coverage-25a: a deferred line whose reason is not one of the set's fails, naming it", () => {
+    it('coverage-25a: a deferred line whose reason names no host fails, naming it', () => {
       tagged('F-2601.AC-1\ttodo\t');
       explorerTagged('F-5101.AC-1\tdeferred\tlater');
       deepStrictEqual(explorerProblems(), [
-        `${EXPLORER_FILE}:00002: F-5101.AC-1 gives the reason "later", which isn't one of the set's`,
+        `${EXPLORER_FILE}:00002: F-5101.AC-1 is deferred for "later", but only a host (host: windows or host: macOS) defers a line`,
       ]);
     });
 
-    it("coverage-25a: a deferred line with one of the set's reasons passes", () => {
+    it('coverage-25a: a deferred line for a host passes', () => {
       tagged('F-2601.AC-1\ttodo\t');
-      explorerTagged('F-5101.AC-1\tdeferred\tD-55: no tunnel rows');
+      explorerTagged(
+        'F-5101.AC-1\tdeferred\thost: windows (the Windows client)',
+      );
       deepStrictEqual(explorerProblems(), []);
     });
 
