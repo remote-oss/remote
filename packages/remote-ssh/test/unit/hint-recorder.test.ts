@@ -251,7 +251,7 @@ describe('the hint recorder (card connect-119)', () => {
     );
   });
 
-  it('F-2605.7.E2: an error recognised after the step ended follows the log hint', async () => {
+  it('F-2605.7.E2, F-2605.AC-12: an error recognised after the step ended is stored after the log hint', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     recorder.begin();
     recorder.end();
