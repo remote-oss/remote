@@ -2,6 +2,8 @@ import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
 import {
   cancelled,
+  checkoutFailed,
+  cloneFailed,
   configurationInvalid,
   containerGone,
   containerSetupFailed,
@@ -18,6 +20,13 @@ import {
   transportLost,
   unsupportedPlatform,
 } from '../../src/connect/failures.ts';
+import {reasonText} from '../../src/surfaces/failure-strings.ts';
+import {ownText} from '../../src/surfaces/own-strings.ts';
+
+/** The English text of a template, as the editor gives it with no translation. */
+function english(template: string): string {
+  return template;
+}
 
 /** The kind, the reason and the three flags of a failure. */
 function shape(failed: Failed): unknown[] {
@@ -184,6 +193,32 @@ describe('the failures of the container connector (card containers-08)', () => {
         ],
         ['disallowedFeature', {id: 'S060', values: ['ghcr.io/o/f:1']}, []],
       ],
+    );
+  });
+
+  it('F-0701 7.E2, 7.E3 (card containers-151): a failed clone quotes git in S193, and a failed checkout wraps S176', () => {
+    deepStrictEqual(
+      [
+        cloneFailed('fatal: Remote branch x not found in upstream origin'),
+        checkoutFailed('https://github.com/o/r'),
+      ].map(failed => [failed.kind, reasonText(failed.reason, english)]),
+      [
+        [
+          'cloneFailed',
+          'Git clone failed. fatal: Remote branch x not found in upstream origin',
+        ],
+        [
+          'cloneFailed',
+          'Git clone failed. Error: Failed to checkout the repository https://github.com/o/r.',
+        ],
+      ],
+    );
+  });
+
+  it('a history that could not be fetched has a warning of our own that names the repository', () => {
+    deepStrictEqual(
+      ownText('historyNotFetched', ['https://github.com/o/r'], english),
+      "Only the latest commits of https://github.com/o/r were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.",
     );
   });
 });

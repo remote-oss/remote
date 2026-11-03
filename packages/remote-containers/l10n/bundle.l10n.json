@@ -206,5 +206,9 @@
   "Cloning a repository in a Dev Container may execute arbitrary code.": "Cloning a repository in a Dev Container may execute arbitrary code.",
   "Only clone a repository in a Dev Container if you trust its authors.": "Only clone a repository in a Dev Container if you trust its authors.",
   "Got It": "Got It",
-  "Provide repository URL or pick a repository source.": "Provide repository URL or pick a repository source."
+  "Provide repository URL or pick a repository source.": "Provide repository URL or pick a repository source.",
+  "Failed to checkout the repository {0}.": "Failed to checkout the repository {0}.",
+  "Git clone failed. {0}": "Git clone failed. {0}",
+  "Error: {0}": "Error: {0}",
+  "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.": "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again."
 }

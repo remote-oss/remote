@@ -21,6 +21,8 @@ export const FAILURE_TEMPLATES = {
   S144: 'Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.',
   S158: 'Edit {0} Locally',
   S163: 'Empty feature id',
+  S176: 'Failed to checkout the repository {0}.',
+  S193: 'Git clone failed. {0}',
   S218: 'Learn More',
   S220: 'Legacy feature not supported. Please check https://containers.dev/features for replacements.',
   S227: 'More Actions...',

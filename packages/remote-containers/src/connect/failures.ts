@@ -72,6 +72,25 @@ export function containerSetupFailed(refusal?: DaemonRefusal): Failed {
   );
 }
 
+/** The clone into the volume failed; the dialog quotes what git wrote. */
+export function cloneFailed(gitText: string): Failed {
+  return failure('cloneFailed', {}, {id: 'S193', values: [gitText]});
+}
+
+/** The commit the source names could not be checked out after the clone of `repository`. */
+export function checkoutFailed(repository: string): Failed {
+  return failure(
+    'cloneFailed',
+    {},
+    {
+      id: 'S193',
+      values: [
+        {id: 'errorPrefixed', values: [{id: 'S176', values: [repository]}]},
+      ],
+    },
+  );
+}
+
 /** A mount of the configuration targets `/vscode` or below while the cache volume is on; `property` names where it is written. */
 export function vscodeMountReserved(property: string, target: string): Failed {
   return failure(
