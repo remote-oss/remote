@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {
+  type Dialer,
   openForwardedTunnel,
   openRelayTunnel,
   type RelayTunnelRequest,
+  type TunnelTarget,
   type WindowTunnelOutcome,
 } from '../../src/index.ts';
 import {
@@ -408,17 +410,18 @@ describe('what the window tunnel through the relay logs (card connect-131)', () 
     ]);
   });
 
-  it('says a failure that is no error object by its text', async () => {
+  /** The first line the relay logs for a dialer that always fails, to a target. */
+  async function firstLineFor(
+    dialer: Dialer,
+    target: TunnelTarget,
+  ): Promise<string | undefined> {
     const lines: string[] = [];
     const clock = new FakeClock();
     const outcome = openRelayTunnel({
-      dialer: {
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a dialer that breaks its contract, on purpose
-        dial: () => Promise.reject('the dialer gave a bare text'),
-      },
+      dialer,
       local: new FakeLocalPort(),
       scheduler: clock.scheduler(),
-      target: {kind: 'port', port: 4321},
+      target,
       localPort: 50000,
       limits: LIMITS,
       onLine: line => {
@@ -427,30 +430,30 @@ describe('what the window tunnel through the relay logs (card connect-131)', () 
     });
     await advanced(clock, LIMITS.readyMilliseconds + 1000);
     await outcome;
-    deepStrictEqual(lines.slice(0, 1), [
+    return lines[0];
+  }
+
+  it('says a failure that is no error object by its text', async () => {
+    deepStrictEqual(
+      await firstLineFor(
+        {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a dialer that breaks its contract, on purpose
+          dial: () => Promise.reject('the dialer gave a bare text'),
+        },
+        {kind: 'port', port: 4321},
+      ),
       "a probe to the host's port 4321 failed: the dialer gave a bare text",
-    ]);
+    );
   });
 
   it('says its socket target without a path', async () => {
-    const lines: string[] = [];
-    const clock = new FakeClock();
-    const outcome = openRelayTunnel({
-      dialer: new FakeDialer(['fail']),
-      local: new FakeLocalPort(),
-      scheduler: clock.scheduler(),
-      target: {kind: 'socket', path: '/run/user/1000/server.sock'},
-      localPort: 50000,
-      limits: LIMITS,
-      onLine: line => {
-        lines.push(line);
-      },
-    });
-    await advanced(clock, LIMITS.readyMilliseconds + 1000);
-    await outcome;
-    deepStrictEqual(lines.slice(0, 1), [
+    deepStrictEqual(
+      await firstLineFor(new FakeDialer(['fail']), {
+        kind: 'socket',
+        path: '/run/user/1000/server.sock',
+      }),
       "a probe to the host's socket failed: the dialer cannot reach the host",
-    ]);
+    );
   });
 });
 
