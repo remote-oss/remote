@@ -81,7 +81,7 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
 
   after(() => removeClone(REPOSITORY));
 
-  it('F-0701 AC-6, AC-7 (c151-clone-url): a typed URL clones into a new unique volume through a bootstrap, connects the reloaded window, and the bootstrap is gone within 20 s', async () => {
+  it('F-0701 AC-6, AC-7 (c151-clone-url-part): a typed URL clones into a new unique volume through a bootstrap, connects the reloaded window, and the bootstrap is gone within 20 s', async () => {
     const local = await openMemoryWindow();
     await startInWindow(
       local,
