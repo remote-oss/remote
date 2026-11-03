@@ -53,8 +53,14 @@ Packages type it with a structural type of ours carrying only the members used, 
   - `resolveExecServer` refuses with a reason;
   - **in the SSH window**, the entry commands call `getRemoteExecServer` **first**, before any reload, so the refusal
     shows there as C8's failure dialog with the reason. The window stays as it was;
-  - **a nested window that meets a refusal** (a recent entry, say) fails in core itself, since core ends the chain
-    before our resolver runs. That's core's error, not ours;
+  - **a nested window whose `resolveExecServer` fails** (a refusal, or an SSH failure on a recent entry) fails in core
+    itself, since core ends the chain before our resolver runs (dike on #2067). What the user sees:
+    - core's own resolver-failure surface, carrying the message of remote-ssh's `RemoteAuthorityResolverError`;
+    - remote-ssh sets that message to the same text its F-2601 dialog would show for the cause, with the reason of a
+      direct-mode refusal;
+    - remote-ssh treats its connect inside `resolveExecServer` as a resolve attempt for F-2605: it writes the record,
+      and its summary check opens the troubleshooting terminal when it recognised a hint;
+    - our containers resolver shows nothing, because it never ran;
   - no second exec route is built over plain ssh channels, because it would duplicate the CLI's work for an opted-out
     case.
   - **CLI builds:** the CLI archives come in Alpine builds first (#1815's ruling). F-1302's rows need a CLI for the lab's
@@ -97,6 +103,14 @@ Packages type it with a structural type of ours carrying only the members used, 
      through `spawn('sh', ['-c', …])` that runs it under `setsid` with stdio from and to `/dev/null` and returns at
      once, so it outlives the SSH connection (the facts of §2). It listens on an owner-only Unix socket in the host's
      runtime folder.
+   - **The socket's folder** (dike on #2067):
+     - **Which folder:** `$XDG_RUNTIME_DIR` when the host's environment (`env()`) sets it. Otherwise
+       `<the host's temporary folder>/remote-oss-<uid>/`, created mode 0700.
+     - **Checks:** before the helper binds and before any lease connects, one script of ours checks that the folder is
+       a directory (not a link), owned by the user, mode 0700, and that the socket is a socket (not a link) owned by the
+       user. The same script prints the checked path as our marker (ADR-0010), which the window then connects to.
+     - **A check that fails:** no helper, no lease, one log line. The window still connects, and only its stop at close
+       is lost.
    - **The lease:** each dev container connection's lease is an `fs_connect` stream to that socket. When the window
      closes, the SSH connection ends, the RPC stream ends, and the CLI closes the socket (§2's facts). The helper sees
      EOF, and its 10 s check and stop run on the host (same registry code, same rules).
