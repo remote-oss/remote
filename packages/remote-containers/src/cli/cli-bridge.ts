@@ -7,11 +7,13 @@
 import type {Logger} from 'lib-log';
 import {
   applyTemplateArguments,
+  type AttachedCliTarget,
   type CliTarget,
   outdatedArguments,
   readConfigurationArguments,
   runUserCommandsArguments,
   type RunUserCommandsOptions,
+  setUpArguments,
   type TemplateRequest,
   templateMetadataArguments,
   upArguments,
@@ -31,9 +33,11 @@ import {
   readConfigurationResult,
   readOutdatedResult,
   readRunUserCommandsResult,
+  readSetUpResult,
   readTemplateMetadataResult,
   readUpResult,
   type RunUserCommandsResult,
+  type SetUpResult,
   type TemplateMetadataResult,
   type UpResult,
   withoutControlSequences,
@@ -77,6 +81,13 @@ export interface CliBridge {
     cancellation: AbortSignal,
     onStdin?: StdinOf,
   ): Promise<ConfigurationResult | CliFailure>;
+  /** Sets up the running container `target` names; no override file is made and no folder is read. */
+  setUp(
+    target: AttachedCliTarget,
+    onEvent: (event: CliEvent) => void,
+    cancellation: AbortSignal,
+    onStdin?: StdinOf,
+  ): Promise<SetUpResult | CliFailure>;
   /** Applies a template into the request's folder; stderr lines go to `onLine` and are never read for meaning. */
   applyTemplate(
     request: TemplateRequest,
@@ -168,6 +179,91 @@ export function cliBridgeOf(
   rewrite: (configText: string) => string | undefined = configText =>
     overrideText(configText, editorEnvironment),
 ): CliBridge {
+  /** One run of the CLI with `cliArguments`: events to `onEvent`, the secrets scrubbed, the result read by `read`. */
+  async function runCli<Result extends {kind: string}>(
+    cliArguments: string[],
+    environment: Readonly<Record<string, string>> | undefined,
+    secrets: readonly Secret[],
+    read: (
+      result: string | undefined,
+      status: number | null,
+      lastError: string | undefined,
+    ) => Result,
+    onEvent: (event: CliEvent) => void,
+    cancellation: AbortSignal,
+    onStdin?: StdinOf,
+  ): Promise<Result | CliFailure> {
+    const own = new AbortController();
+    function forward(): void {
+      own.abort();
+    }
+    if (cancellation.aborted) {
+      forward();
+    }
+    cancellation.addEventListener('abort', forward, {once: true});
+    let lastError: string | undefined;
+    let refusal: DaemonRefusal | undefined;
+    const rawHold = rawHoldOf();
+    function deliver(unscrubbed: CliEvent): void {
+      const event = scrubbedEvent(unscrubbed, secrets);
+      if (event.kind === 'log') {
+        lastError = firstLine(event.text);
+        // Only the client's own lines count: a lifecycle command's output has a channel.
+        refusal =
+          (event.channel === undefined ? refusalIn(event.text) : undefined) ??
+          refusal;
+      }
+      onEvent(event);
+    }
+    let guard: NodeJS.Timeout | undefined;
+    let idle: NodeJS.Timeout | undefined;
+    try {
+      const finished = await host.run(
+        cliArguments,
+        ({stream, line}) => {
+          if (stream === 'stdout') {
+            guard ??= setTimeout(() => {
+              logger.warn(
+                'the dev container CLI kept running after its result; ended',
+              );
+              own.abort();
+            }, GUARD_MILLISECONDS);
+            return;
+          }
+          const read = readStderrLine(line);
+          if (read.isRaw && read.event.kind === 'log') {
+            rawHold.push(read.event).forEach(deliver);
+            clearTimeout(idle);
+            idle = setTimeout(() => {
+              rawHold.releaseAll().forEach(deliver);
+            }, TAIL_IDLE_MILLISECONDS);
+            return;
+          }
+          rawHold.release(read.channel).forEach(deliver);
+          deliver(read.event);
+        },
+        own.signal,
+        onStdin,
+        environment,
+      );
+      rawHold.releaseAll().forEach(deliver);
+      if (finished.kind === 'spawnFailed') {
+        return {kind: 'spawnFailed', message: finished.message};
+      }
+      if (cancellation.aborted) {
+        return {kind: 'cancelled'};
+      }
+      return scrubbedResult(
+        withRefusal(read(finished.result, finished.status, lastError), refusal),
+        secrets,
+      );
+    } finally {
+      clearTimeout(guard);
+      clearTimeout(idle);
+      cancellation.removeEventListener('abort', forward);
+    }
+  }
+
   /** One run: prepares the target, runs the CLI, reads what it wrote, and removes the override file. */
   async function drive<Result extends {kind: string}>(
     target: CliTarget,
@@ -196,78 +292,15 @@ export function cliBridgeOf(
         overrideFile === undefined
           ? target
           : {...target, overrideConfigFile: overrideFile};
-      const own = new AbortController();
-      function forward(): void {
-        own.abort();
-      }
-      if (cancellation.aborted) {
-        forward();
-      }
-      cancellation.addEventListener('abort', forward, {once: true});
-      let lastError: string | undefined;
-      let refusal: DaemonRefusal | undefined;
-      const rawHold = rawHoldOf();
-      function deliver(unscrubbed: CliEvent): void {
-        const event = scrubbedEvent(unscrubbed, secrets);
-        if (event.kind === 'log') {
-          lastError = firstLine(event.text);
-          // Only the client's own lines count: a lifecycle command's output has a channel.
-          refusal =
-            (event.channel === undefined ? refusalIn(event.text) : undefined) ??
-            refusal;
-        }
-        onEvent(event);
-      }
-      let guard: NodeJS.Timeout | undefined;
-      let idle: NodeJS.Timeout | undefined;
-      try {
-        const finished = await host.run(
-          argumentsOf(prepared),
-          ({stream, line}) => {
-            if (stream === 'stdout') {
-              guard ??= setTimeout(() => {
-                logger.warn(
-                  'the dev container CLI kept running after its result; ended',
-                );
-                own.abort();
-              }, GUARD_MILLISECONDS);
-              return;
-            }
-            const read = readStderrLine(line);
-            if (read.isRaw && read.event.kind === 'log') {
-              rawHold.push(read.event).forEach(deliver);
-              clearTimeout(idle);
-              idle = setTimeout(() => {
-                rawHold.releaseAll().forEach(deliver);
-              }, TAIL_IDLE_MILLISECONDS);
-              return;
-            }
-            rawHold.release(read.channel).forEach(deliver);
-            deliver(read.event);
-          },
-          own.signal,
-          onStdin,
-          prepared.environment,
-        );
-        rawHold.releaseAll().forEach(deliver);
-        if (finished.kind === 'spawnFailed') {
-          return {kind: 'spawnFailed', message: finished.message};
-        }
-        if (cancellation.aborted) {
-          return {kind: 'cancelled'};
-        }
-        return scrubbedResult(
-          withRefusal(
-            read(finished.result, finished.status, lastError),
-            refusal,
-          ),
-          secrets,
-        );
-      } finally {
-        clearTimeout(guard);
-        clearTimeout(idle);
-        cancellation.removeEventListener('abort', forward);
-      }
+      return await runCli(
+        argumentsOf(prepared),
+        prepared.environment,
+        secrets,
+        read,
+        onEvent,
+        cancellation,
+        onStdin,
+      );
     } finally {
       if (overrideFile !== undefined) {
         await overrides.remove(overrideFile).catch((caught: unknown) => {
@@ -345,6 +378,21 @@ export function cliBridgeOf(
         cancellation,
         onStdin,
       ),
+    setUp: async (target, onEvent, cancellation, onStdin) => {
+      const configText =
+        target.configFile === undefined
+          ? ''
+          : await files.readText(target.configFile).catch(() => '');
+      return runCli(
+        setUpArguments(target),
+        target.environment,
+        referencedSecrets(configText, editorEnvironment),
+        (result, status) => readSetUpResult(result, status),
+        onEvent,
+        cancellation,
+        onStdin,
+      );
+    },
     applyTemplate: (request, onLine, cancellation) =>
       driveTemplates(
         applyTemplateArguments(request),

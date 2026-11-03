@@ -238,6 +238,7 @@ function fakeBridge(): FakeBridge {
       bridge.reads += 1;
       return Promise.resolve(bridge.configuration);
     },
+    setUp: () => Promise.reject(new Error('never set up')),
     applyTemplate: () => Promise.reject(new Error('never applied')),
     outdated: () => Promise.reject(new Error('never read')),
     templateMetadata: () => Promise.reject(new Error('never read')),

@@ -544,6 +544,7 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    setUp: () => Promise.reject(new Error('the connector never sets up here')),
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
