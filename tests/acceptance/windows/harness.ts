@@ -68,7 +68,8 @@ export interface AgentEvent {
     | 'tunnels'
     | 'environment'
     | 'called'
-    | 'editorText';
+    | 'editorText'
+    | 'linkOpened';
   time: number;
   id?: string;
   message?: string;
@@ -1450,6 +1451,24 @@ async function reported(
   return windowEvents(name)
     .filter(each => each.event === event)
     .at(-1);
+}
+
+/**
+ * Has window `name` open the link `rest` on the editor's own scheme, as a link a user clicks does (`<scheme>://rest`),
+ * and gives the link's whole text once it is handed to the editor, without waiting for the editor's own confirmation.
+ */
+export async function openOwnLink(name: string, rest: string): Promise<string> {
+  const before = countOf(name, 'linkOpened');
+  await startInWindow(name, 'acceptance.agent.openOwnLink', rest);
+  await waitUntil(
+    `window ${name} to open its link`,
+    () => countOf(name, 'linkOpened') > before,
+  );
+  return String(
+    windowEvents(name)
+      .filter(each => each.event === 'linkOpened')
+      .at(-1)?.value,
+  );
 }
 
 /** The value of the environment variable `variableName` in the extension host of window `name`, or null when it has none. */

@@ -246,5 +246,9 @@
   "Cannot connect to Docker daemon using 'ssh'.": "Cannot connect to Docker daemon using 'ssh'.",
   "Cannot connect to Docker daemon using 'ssh'. Make sure public/private keys are set up for connecting without keyboard interaction.": "Cannot connect to Docker daemon using 'ssh'. Make sure public/private keys are set up for connecting without keyboard interaction.",
   "Hostname must not start with a dash: {0}": "Hostname must not start with a dash: {0}",
-  "Make sure public/private keys are set up for connecting without keyboard interaction.": "Make sure public/private keys are set up for connecting without keyboard interaction."
+  "Make sure public/private keys are set up for connecting without keyboard interaction.": "Make sure public/private keys are set up for connecting without keyboard interaction.",
+  "Could not analyze the URL.": "Could not analyze the URL.",
+  "Failed to handle the URI '{0}' expected a 'url' query parameter.": "Failed to handle the URI '{0}' expected a 'url' query parameter.",
+  "Failed to parse scheme of URI": "Failed to parse scheme of URI",
+  "Invalid URI": "Invalid URI"
 }

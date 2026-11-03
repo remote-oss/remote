@@ -124,7 +124,9 @@ import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
 import {
   CLONE_TRUST_KEY,
   CLONE_TRUST_PAGE,
+  type CloneCommandPorts,
   cloneConsented,
+  cloneFromLink,
   cloneInUniqueVolume,
   type CloneTrustPorts,
 } from './volumes/clone-command.ts';
@@ -145,6 +147,7 @@ import {configurationAdded} from './volumes/volume-configuration.ts';
 import {containerCliHost} from './cli/container-cli-host.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import {cloneText} from './volumes/clone-strings.ts';
+import {linkRequestOf} from './volumes/clone-link.ts';
 import type {ClonePromptSurface} from './volumes/git-prompts.ts';
 import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
@@ -1071,6 +1074,58 @@ export async function activate(
           ),
         );
       }
+      /** What the clone needs of the editor and this machine; the window opens on the engine `engine` gives. */
+      function clonePortsOf(engine: () => PinnedEngine): CloneCommandPorts {
+        return {
+          trust: cloneTrustPorts(),
+          engineReady: async () =>
+            (await firstCheck(
+              served.preflight,
+              engineBaseOf({
+                folder: firstFolder(),
+                trusted: vscode.workspace.isTrusted,
+              }),
+              new AbortController().signal,
+            )) === 'proceed',
+          pickSource: () => pickCloneSource(),
+          pickGithub: () => pickGithubRepository(githubPorts, translate),
+          precheck: (source, origin, cancellation) =>
+            precheck(
+              source,
+              origin,
+              {
+                openRelay: () => openCloneRelay(),
+                runGit: (gitArguments, environment, signal) =>
+                  runHostProgram('git', gitArguments, environment, signal),
+              },
+              cancellation,
+            ),
+          cannotAccess: async repository => {
+            await vscode.window.showErrorMessage(
+              cloneText('S052', translate, [repository]),
+              {modal: true},
+            );
+          },
+          currentRepository: () => {
+            const authority = vscode.env.remoteAuthority ?? '';
+            return authority.startsWith('dev-container+')
+              ? volumeTargetOf(authority.slice('dev-container+'.length))
+                  ?.repositoryPath
+              : undefined;
+          },
+          engine,
+          recordTyped: payload =>
+            storeTypedSource(context.globalState, payload, Date.now()),
+          reload: async uri => {
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(uri),
+              {forceReuseWindow: true},
+            );
+          },
+          logger: served.logger,
+        };
+      }
       /** Clone Repository in Container Volume's command, over the editor and this machine. */
       function cloneCommand(): CommandHandler {
         let engine: PinnedEngine = {};
@@ -1078,66 +1133,55 @@ export async function activate(
           execute: async argument => {
             engine = await windowPinnedEngine();
             await cloneInUniqueVolume(
-              {
-                trust: cloneTrustPorts(),
-                engineReady: async () =>
-                  (await firstCheck(
-                    served.preflight,
-                    engineBaseOf({
-                      folder: firstFolder(),
-                      trusted: vscode.workspace.isTrusted,
-                    }),
-                    new AbortController().signal,
-                  )) === 'proceed',
-                pickSource: () => pickCloneSource(),
-                pickGithub: () => pickGithubRepository(githubPorts, translate),
-                precheck: (source, origin, cancellation) =>
-                  precheck(
-                    source,
-                    origin,
-                    {
-                      openRelay: () => openCloneRelay(),
-                      runGit: (gitArguments, environment, signal) =>
-                        runHostProgram(
-                          'git',
-                          gitArguments,
-                          environment,
-                          signal,
-                        ),
-                    },
-                    cancellation,
-                  ),
-                cannotAccess: async repository => {
-                  await vscode.window.showErrorMessage(
-                    cloneText('S052', translate, [repository]),
-                    {modal: true},
-                  );
-                },
-                currentRepository: () => {
-                  const authority = vscode.env.remoteAuthority ?? '';
-                  return authority.startsWith('dev-container+')
-                    ? volumeTargetOf(authority.slice('dev-container+'.length))
-                        ?.repositoryPath
-                    : undefined;
-                },
-                engine: () => engine,
-                recordTyped: payload =>
-                  storeTypedSource(context.globalState, payload, Date.now()),
-                reload: async uri => {
-                  await vscode.commands.executeCommand(
-                    'vscode.openFolder',
-                    vscode.Uri.parse(uri),
-                    {forceReuseWindow: true},
-                  );
-                },
-                logger: served.logger,
-              },
+              clonePortsOf(() => engine),
               new AbortController().signal,
               typeof argument === 'string' ? argument : undefined,
             );
           },
         };
       }
+      /** Opens the repository an "Open in Dev Containers" link names, or shows why the link can't be used. */
+      async function openCloneLink(uri: vscode.Uri): Promise<void> {
+        const text = uri.toString();
+        const request = linkRequestOf(
+          {scheme: uri.scheme, path: uri.path, query: uri.query, text},
+          {
+            editorScheme: vscode.env.uriScheme,
+            isUri: candidate => {
+              try {
+                vscode.Uri.parse(candidate, true);
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+        );
+        if (request.kind === 'ignored') {
+          return;
+        }
+        if (request.kind === 'refused') {
+          served.logger.info(`the link was refused: ${request.text}`);
+          await vscode.window.showErrorMessage(
+            cloneText(request.text, translate, [text]),
+            {modal: true},
+          );
+          return;
+        }
+        const engine = await windowPinnedEngine();
+        await cloneFromLink(
+          clonePortsOf(() => engine),
+          request.source,
+          new AbortController().signal,
+        );
+      }
+      context.subscriptions.push(
+        vscode.window.registerUriHandler({
+          handleUri: uri => {
+            void openCloneLink(uri);
+          },
+        }),
+      );
       /** The ports of the GitHub source, over the installed extensions. */
       const githubPorts = {
         installed: (extensionId: string) =>
