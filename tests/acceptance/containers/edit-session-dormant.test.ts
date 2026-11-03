@@ -1,6 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {commandsOf, containersLog} from '../windows/harness.ts';
-import {indicatorMenu, withWindow} from '../windows/authoring-support.ts';
+import {
+  ADD_ITEM,
+  indicatorMenu,
+  withWindow,
+} from '../windows/authoring-support.ts';
 import {
   notificationCentre,
   paletteRows,
@@ -18,9 +22,10 @@ describe('the edit-session entries are dormant (card containers-156)', function 
 
   before(() => rememberPage('local'));
 
-  it('F-0707 AC-1, AC-3, AC-6, AC-8 (c156-dormant): the two commands are registered and found nowhere; no row says Continue Working in Container Volume in the palette or the remote indicator menu, and the window shows no notification and writes no log line about them', async () => {
+  it('F-0707 AC-1, AC-3, AC-6, AC-8 (c156-dormant): the palette and the indicator menu are filled with this extension’s own entries, and yet the two commands are registered and found nowhere; no row says Continue Working in Container Volume in the palette or the remote indicator menu, and the window shows no notification and writes no log line about them', async () => {
     await withWindow('c156-dormant', {}, async window => {
       const before = containersLog().length;
+      const indicator = await indicatorMenu(window);
       const registered = (
         await commandsOf(window, 'remote-containers.openRepository')
       ).sort();
@@ -32,9 +37,16 @@ describe('the edit-session entries are dormant (card containers-156)', function 
         window,
         'Continue Working in Container Volume',
       );
-      const indicator = await indicatorMenu(window);
+      const ownPalette = await paletteRows(
+        window,
+        'Add Dev Container Configuration',
+      );
       deepStrictEqual(
         {
+          filled: [
+            ownPalette.includes(`Dev Containers: ${ADD_ITEM}`),
+            indicator.includes(ADD_ITEM),
+          ],
           registered,
           palette: palette.filter(entry => entry.includes('Container Volume')),
           continuing: continuing.filter(entry =>
@@ -49,6 +61,7 @@ describe('the edit-session entries are dormant (card containers-156)', function 
             .filter(text => /edit.?session|Container Volume/i.test(text)),
         },
         {
+          filled: [true, true],
           registered: COMMANDS,
           palette: [],
           continuing: [],

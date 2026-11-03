@@ -889,6 +889,9 @@ describe('the manifest', () => {
         'Attach to Running Container...',
         {command, when},
         {command, group: 'remote_30_dev-container_2_actions@2', when},
+      ],
+    );
+  });
 
   it('F-0707 BR-1, BR-2, AC-3: the two edit-session commands have the same title, the category and the icon, a palette entry that hides each, and no keybinding', () => {
     const contributes = MANIFEST.contributes as {
