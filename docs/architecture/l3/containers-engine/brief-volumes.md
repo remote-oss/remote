@@ -90,12 +90,12 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
    - **Reading the steps (ADR-0010):** each is read by its exit status and our own markers, never by git's text. S193
      quotes git's output as the dialog's detail, which is allowed, but nothing branches on it.
    - **The steps:**
-   - a shallow clone at the ref into `/workspaces/<folder>`, with no submodules (F-0701 BR-13);
-   - a non-empty folder is opened unchanged (F-0702 BR-9);
-   - the configuration is looked up (`.devcontainer/devcontainer.json`, then `.devcontainer.json`, BR-17), with a
-     `repositoryConfigurationPaths` match first (BR-10, with group 9);
-   - then full history and tags (BR-16). A failed deepening gives our own warning (7.E6), and the string joins the
-     table under R-27.
+     - a shallow clone at the ref into `/workspaces/<folder>`, with no submodules (F-0701 BR-13);
+     - a non-empty folder is opened unchanged (F-0702 BR-9);
+     - the configuration is looked up (`.devcontainer/devcontainer.json`, then `.devcontainer.json`, BR-17), with a
+       `repositoryConfigurationPaths` match first (BR-10, with group 9);
+     - then full history and tags (BR-16). A failed deepening gives our own warning (7.E6), and the string joins the
+       table under R-27.
    - **With no configuration,** C14's template picker runs on the cloned files (6.1, 6.8), and Escape gives S414.
    - **F-0806's source** copies the applied template's scratch folder into `/workspaces/<folder>` with `docker cp`
      through C2, instead of a clone.
