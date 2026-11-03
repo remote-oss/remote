@@ -55,6 +55,14 @@
       "card": "#1830",
       "slice": "containers release 1",
       "decision": "F-0406 (2026-11-02): defined, never set yet (its family sets it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/authoring/edit-features.ts",
+      "card": "#1971",
+      "slice": "containers release 2",
+      "decision": "F-0807 (2026-11-03): the pure edit of part A; part B's command consumes it"
     }
   ]
 }
