@@ -122,6 +122,9 @@ async function untilPrompt(name: string, prompt: string) {
   return facts;
 }
 
+/** The name of the terminal that a failed attempt with an error hint leaves (F-2605). */
+const TROUBLESHOOTING = 'Session Troubleshooting';
+
 describe('the login terminal of the terminal mode (card coverage-82)', function () {
   this.timeout(300_000);
 
@@ -276,8 +279,13 @@ describe('the login terminal of the terminal mode (card coverage-82)', function 
       indicator: (await connectSurface(name)).indicator.startsWith(
         'Disconnected from SSH',
       ),
-      terminals: await terminalNames(name),
-      tabs: await terminalTabsOf(name),
+      // The failed attempt recorded the PermissionDenied hint, so its troubleshooting terminal is up (F-2605 AC-6): the row reads the install terminal only.
+      terminals: (await terminalNames(name)).filter(
+        each => !each.includes(TROUBLESHOOTING),
+      ),
+      tabs: (await terminalTabsOf(name)).filter(
+        each => !each.includes(TROUBLESHOOTING),
+      ),
     };
     await answerDialog(name, 'Retry');
     await untilInstallTab(name);
