@@ -211,7 +211,7 @@ describe('Configure Container Features: in a dev container window and with two m
     }
   });
 
-  it('F-0807 AC-2, AC-5 (c150-container-menus): in a window attached to a dev container the Command Palette offers the command and the remote indicator’s menu lists it first among the Dev Containers entries', async () => {
+  it('F-0807 AC-2, AC-5 (reading-1971-indicator-order): in a window attached to a dev container the Command Palette offers the command and the remote indicator’s menu lists it first among the Dev Containers entries', async () => {
     const folder = devContainerFolder('c150-menus', {name: 'C150 Menus'});
     const window = await connectedWindow(folder);
     try {
