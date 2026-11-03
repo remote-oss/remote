@@ -25,8 +25,11 @@ ADR-0010. F-0410's setup-failure dialog itself is built (C8, release 1).
   built if absent. A `dev.containers.bootstrapImage` is used as is, with `bootstrapImagePull` (F-0704).
   - It has `git`, and a `docker` CLI with no daemon or socket (AC-16a).
   - No Microsoft registry.
-- **Its configuration is a synthetic file of ours on the host:**
-  `<temp>/vsch-<user>/recovery-volume/<extension version>/.devcontainer.json`.
+- **Its configuration is a synthetic file of ours on the host, one per volume:**
+  `<temp>/vsch-<user>/recovery-volume/<extension version>/<volume>/.devcontainer.json` (proteus on #2014).
+  - **Why per volume:** the file carries per-volume values (`workspaceMount`, `workspaceFolder`). One shared file would
+    let two windows recovering different volumes at once race on it, and one `up` could mount the other's volume.
+    BR-7's single path is reference data.
   - **Its own folder,** not F-0705's `inspect-volume`. F-0705 Q3 prefers the two kept apart, so their labels never
     collide.
   - **What it says:**
@@ -37,8 +40,8 @@ ADR-0010. F-0410's setup-failure dialog itself is built (C8, release 1).
     - `overrideCommand`: true;
     - no Features, so no registry fetch. 6.7 step 6's stale-Feature failure can't happen.
   - **Written on every start,** so an edit never sticks.
-- **The labels:** `vsch.local.volume` = the volume name, and `devcontainer.config_file` = the synthetic path. These are
-  F-0410's names, reused verbatim (F-1406, D-14).
+- **The labels:** `vsch.local.volume` = the volume name, and `devcontainer.config_file` = the volume's synthetic path.
+  These are F-0410's names, reused verbatim (F-1406, D-14). BR-7's reuse by both labels, and AC-28, still hold.
 - **Reuse (BR-7):**
   - a container matching both labels is reused, started again if stopped, never recreated;
   - the image isn't part of the match;
@@ -107,7 +110,8 @@ ADR-0010. F-0410's setup-failure dialog itself is built (C8, release 1).
 | AC-26 (WSL) | platform-01 |
 | 6.7 step 6's stale-Feature case | not reachable (no Features in our synthetic file), a reading on the card |
 
-**One card** (daedalus), after group 13's core lands: §1 to §4, with the rows above. It starts once brief-volumes'
+**One card** (daedalus), after group 13's core lands: §1 to §4, with the rows above, plus one more: two windows
+recovering two different volumes start at the same moment, and each container mounts only its own volume. It starts once brief-volumes'
 core card merges, since every row needs a volume window.
 
 **Measure before asserting**, as containers-41's method says. The likely stop is the CLI's `up` with a configuration
