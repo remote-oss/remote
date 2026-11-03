@@ -388,7 +388,7 @@ describe('the session troubleshooting terminal (card connect-136)', function () 
     }
   });
 
-  it('F-2605 AC-5 (c136-noforward): a host whose sshd forbids TCP forwarding gives the four-column table with the AllowTcpForwardingDisabled row, its two mitigations and a documentation address', async () => {
+  it('F-2605 AC-5, AC-12 (c136-noforward): a host whose sshd forbids TCP forwarding gives the four-column table with the AllowTcpForwardingDisabled row, its two mitigations and a documentation address', async () => {
     await userSettings({...PLATFORMS});
     appendScript([
       {
