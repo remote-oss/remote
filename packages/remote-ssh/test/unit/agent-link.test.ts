@@ -160,15 +160,77 @@ describe('planAgentLink (the agent link plan of a window)', () => {
     );
   });
 
-  it('F-2311.BR-1: a reused connection with a stored plan keeps it, setting off', () => {
-    const stored = {
-      kind: 'link' as const,
-      linkPath: '/tmp/vscode-ssh-auth-sock-41',
-      target: '/tmp/ssh-a/agent.1',
-    };
+  it('F-2311.BR-1, 6.7: a reload on a reused connection links the stored target under a new name, the setting now off', () => {
     deepStrictEqual(
       planAgentLink(
-        input({newConnection: false, stored, settingEnabled: false}),
+        input({
+          newConnection: false,
+          stored: {
+            kind: 'link',
+            linkPath: '/tmp/vscode-ssh-auth-sock-77',
+            target: '/run/u/agent.1',
+          },
+          settingEnabled: false,
+          draw: () => 9,
+        }),
+      ),
+      {
+        kind: 'link',
+        linkPath: '/tmp/vscode-ssh-auth-sock-9',
+        target: '/run/u/agent.1',
+      },
+    );
+  });
+
+  it('F-2311.AC-15, BR-3: a second window draws past the names taken, the first window’s included, and links the stored target', () => {
+    const draws = [77, 12];
+    deepStrictEqual(
+      planAgentLink(
+        input({
+          newConnection: false,
+          stored: {
+            kind: 'link',
+            linkPath: '/tmp/vscode-ssh-auth-sock-77',
+            target: '/run/u/agent.1',
+          },
+          takenNames: new Set(['/tmp/vscode-ssh-auth-sock-77']),
+          draw: () => draws.shift() ?? 0,
+        }),
+      ),
+      {
+        kind: 'link',
+        linkPath: '/tmp/vscode-ssh-auth-sock-12',
+        target: '/run/u/agent.1',
+      },
+    );
+  });
+
+  it('F-2311.AC-16, 6.5: a reconnection keeps the window’s own name, with the stored target, and draws nothing', () => {
+    deepStrictEqual(
+      planAgentLink(
+        input({
+          newConnection: false,
+          stored: {
+            kind: 'link',
+            linkPath: '/tmp/vscode-ssh-auth-sock-77',
+            target: '/run/u/agent.1',
+          },
+          windowLink: '/tmp/vscode-ssh-auth-sock-77',
+        }),
+      ),
+      {
+        kind: 'link',
+        linkPath: '/tmp/vscode-ssh-auth-sock-77',
+        target: '/run/u/agent.1',
+      },
+    );
+  });
+
+  it('F-2311.BR-1: a stored none stays, whatever the setting and the socket are now, and draws nothing', () => {
+    const stored = {kind: 'none' as const, reason: 'settingOff' as const};
+    deepStrictEqual(
+      planAgentLink(
+        input({newConnection: false, stored, settingEnabled: true}),
       ),
       stored,
     );

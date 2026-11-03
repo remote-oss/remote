@@ -96,8 +96,9 @@ function displayLine(plan: DisplayPlan): string {
 }
 
 /**
- * The window's plans. A connection whose record was stored keeps that record's plans; otherwise the settings and the
- * probe's facts decide, and a link takes the window's earlier path or a drawn one that no link in /tmp has.
+ * The window's plans. A connection whose record was stored keeps that record's decisions, with the link under this
+ * window session's own name; otherwise the settings and the probe's facts decide. A link takes the window's earlier
+ * path or a drawn one that no link in /tmp has.
  */
 export async function planForwarding(
   dependencies: ForwardingDependencies,
@@ -108,10 +109,12 @@ export async function planForwarding(
   const stored = lease.storedRecord;
   const newConnection = stored === undefined;
   const agentEnabled = dependencies.agentForwarding();
-  const takenNames =
-    agentEnabled && host.sshAuthSock !== ''
-      ? await takenLinks(lease.channel, cancellation, dependencies.logger)
-      : new Set<string>();
+  const mayLink =
+    (agentEnabled && host.sshAuthSock !== '') ||
+    stored?.agentLink?.kind === 'link';
+  const takenNames = mayLink
+    ? await takenLinks(lease.channel, cancellation, dependencies.logger)
+    : new Set<string>();
   const agentLink = planAgentLink({
     settingEnabled: agentEnabled,
     forwardedSocket: host.sshAuthSock,
