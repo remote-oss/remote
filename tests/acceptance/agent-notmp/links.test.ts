@@ -20,7 +20,11 @@ import {
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 import {freshHost, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {statusBarItemIds} from '../windows/renderer.ts';
-import {listedKeys, windowWithTerminal} from '../windows/terminal-support.ts';
+import {
+  listedKeys,
+  printedAfter,
+  windowWithTerminal,
+} from '../windows/terminal-support.ts';
 
 /** The account that may not create links in /tmp, and the alias that forwards the run's agent to it. */
 const USER = 'harness-notmp';
@@ -101,10 +105,15 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
     }
   });
 
-  it('F-2311 AC-26 (c99-notmp-back): once /tmp is writable again, a reload with the local server running makes a link to the same forwarded socket, and a new terminal lists the keys', async () => {
+  it('F-2311 AC-26 (c99-notmp-back): once /tmp is writable again, a reload with the local server running makes a link under a new name to the same forwarded socket, and a new terminal has that link and lists the keys', async () => {
     await connectedWindow('c99-notmp-back');
     try {
       const forwarded = await forwardedSockets();
+      const refused = await printedAfter(
+        'c99-notmp-back',
+        'SOCK',
+        '$SSH_AUTH_SOCK',
+      );
       await onHostAs('root', 'setfacl', '-x', `u:${USER}`, '/tmp');
       await reloadWindow('c99-notmp-back');
       await connectedWithin('c99-notmp-back', INSTALL_MILLISECONDS, USER);
@@ -120,15 +129,21 @@ describe('F-2311, an account that may not create links in /tmp (card coverage-99
         )
       ).trim();
       await inWindow('c99-notmp-back', 'workbench.action.terminal.new');
+      const linked = await printedAfter(
+        'c99-notmp-back',
+        'SOCK',
+        '$SSH_AUTH_SOCK',
+      );
       deepStrictEqual(
         {
           count: links.length,
+          newName: linked !== refused && links[0]?.endsWith(` ${linked}`),
           sameSocket: forwarded.length === 1 && target === forwarded[0],
           listsKey: (await listedKeys('c99-notmp-back')).includes(
             await fingerprintOf(keyFile()),
           ),
         },
-        {count: 1, sameSocket: true, listsKey: true},
+        {count: 1, newName: true, sameSocket: true, listsKey: true},
         `${links.join(',')} -> ${target} (forwarded ${forwarded.join(',')})`,
       );
     } finally {

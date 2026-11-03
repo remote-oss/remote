@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual} from 'node:assert';
 import {withNoise} from 'lib-host/testing/noise';
 import type {ChannelFailure} from 'lib-host';
 import {
@@ -212,8 +212,8 @@ describe('the forwarding plans of a connect', () => {
     });
   });
 
-  it("F-2311 6.4: a stored record's plans are kept, and the probe's facts are ignored", async () => {
-    const {dependencies} = forwardingOf();
+  it("F-2311 6.4: a stored record's decisions are kept, the link under a name of this window's own, and the probe's facts are ignored", async () => {
+    const {dependencies} = forwardingOf({draws: [7, 42]});
     const stored: SharedRecord = {
       ...RECORD,
       agentLink: {
@@ -225,14 +225,49 @@ describe('the forwarding plans of a connect', () => {
     };
     const plans = await plansOf(
       dependencies,
-      channelWith([]),
+      channelWith(['/tmp/vscode-ssh-auth-sock-7']),
       hostWith(AGENT_SOCKET, 'localhost:10.0'),
       stored,
     );
     deepStrictEqual(plans, {
-      agentLink: stored.agentLink,
+      agentLink: {
+        kind: 'link',
+        linkPath: '/tmp/vscode-ssh-auth-sock-42',
+        target: '/tmp/ssh-first/agent.9',
+      },
       display: stored.display,
     });
+  });
+
+  it('F-2311 AC-18 (b): a stored link reads the links in /tmp although the setting is now off', async () => {
+    const {dependencies} = forwardingOf({
+      agentForwarding: false,
+      draws: [7, 8],
+    });
+    const channel = channelWith(['/tmp/vscode-ssh-auth-sock-7']);
+    const plans = await plansOf(dependencies, channel, hostWith('', ''), {
+      ...RECORD,
+      agentLink: {
+        kind: 'link',
+        linkPath: '/tmp/vscode-ssh-auth-sock-7',
+        target: '/tmp/ssh-first/agent.9',
+      },
+    });
+    deepStrictEqual(plans.agentLink, {
+      kind: 'link',
+      linkPath: '/tmp/vscode-ssh-auth-sock-8',
+      target: '/tmp/ssh-first/agent.9',
+    });
+  });
+
+  it('F-2311 BR-1: a stored none with the setting off reads no listing', async () => {
+    const {dependencies} = forwardingOf({agentForwarding: false});
+    const channel = channelWith([]);
+    await plansOf(dependencies, channel, hostWith(AGENT_SOCKET, ''), {
+      ...RECORD,
+      agentLink: {kind: 'none', reason: 'settingOff'},
+    });
+    strictEqual(channel.calls.length, 0);
   });
 
   it('F-2311 R2: a stored record without plans plans as a new connection', async () => {

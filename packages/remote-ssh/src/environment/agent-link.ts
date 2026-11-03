@@ -10,7 +10,10 @@ export interface AgentLinkInput {
   settingEnabled: boolean;
   /** `SSH_AUTH_SOCK` as the session reports it; `''` when none was forwarded. */
   forwardedSocket: string;
-  /** False when the connection is reused and `stored` decides the plan. */
+  /**
+   * False when the connection is reused: then `stored` decides whether there is a link and its target, and the window
+   * session's own name is the link's path.
+   */
   newConnection: boolean;
   /** The plan the connection's first window stored. */
   stored: AgentLinkPlan | undefined;
@@ -45,13 +48,25 @@ export function linkPathFor(
   return linkPath;
 }
 
+/** The window session's own link path: the link it already made, which a reconnection keeps, else a fresh draw. */
+function ownLinkPath(input: AgentLinkInput): string {
+  return input.windowLink ?? linkPathFor(input.draw, input.takenNames);
+}
+
 /**
- * The plan for one window. A reused connection keeps its stored plan; otherwise the setting and the forwarded
- * socket decide, and a link reuses the window's own link or draws a fresh path.
+ * The plan for one window. A reused connection keeps the stored plan's decision, the setting now ignored: a stored
+ * `none` stays, and a stored link keeps its target under the window session's own name. Otherwise the setting and the
+ * forwarded socket decide, and a link reuses the window's own link or draws a fresh path.
  */
 export function planAgentLink(input: AgentLinkInput): AgentLinkPlan {
   if (!input.newConnection && input.stored !== undefined) {
-    return input.stored;
+    return input.stored.kind === 'link'
+      ? {
+          kind: 'link',
+          linkPath: ownLinkPath(input),
+          target: input.stored.target,
+        }
+      : input.stored;
   }
   if (!input.settingEnabled) {
     return {kind: 'none', reason: 'settingOff'};
@@ -59,9 +74,11 @@ export function planAgentLink(input: AgentLinkInput): AgentLinkPlan {
   if (input.forwardedSocket === '') {
     return {kind: 'none', reason: 'noForwardedSocket'};
   }
-  const linkPath =
-    input.windowLink ?? linkPathFor(input.draw, input.takenNames);
-  return {kind: 'link', linkPath, target: input.forwardedSocket};
+  return {
+    kind: 'link',
+    linkPath: ownLinkPath(input),
+    target: input.forwardedSocket,
+  };
 }
 
 /**

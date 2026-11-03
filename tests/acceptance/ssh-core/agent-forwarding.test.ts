@@ -5,6 +5,8 @@ import {
   closeWindow,
   connectedWithin,
   fingerprintOf,
+  inWindow,
+  nextEmptyWindow,
   noHelperWithin,
   reloadWindow,
   onHost,
@@ -15,6 +17,7 @@ import {
   userSettings,
   variable,
   waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {freshHost, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
 import {statusItemText} from '../windows/renderer.ts';
@@ -345,5 +348,133 @@ describe('F-2311, SSH agent forwarding into the remote environment (card coverag
       {before: before.length, after: await hostLinks()},
       {before: 1, after: before},
     );
+  });
+
+  /** The paths of the host's agent links, each with the socket it points to, as `<path> -> <socket>`. */
+  async function linkTargets(): Promise<string[]> {
+    return Promise.all(
+      (await hostLinks()).map(async link => {
+        const linkPath = link.split(' ')[1] ?? '';
+        return `${linkPath} -> ${(await onHost('readlink', linkPath).catch(() => '')).trim()}`;
+      }),
+    );
+  }
+
+  /** What `SSH_AUTH_SOCK` is in a new terminal of window `name`. */
+  async function socketOfNewTerminal(name: string): Promise<string> {
+    await inWindow(name, 'workbench.action.terminal.new');
+    return printedAfter(name, 'SOCK', '$SSH_AUTH_SOCK');
+  }
+
+  /**
+   * The lines a shell task of window `name` prints: its `SSH_AUTH_SOCK`, then what `ssh-add -l` lists. The window may be
+   * an empty one, which no terminal helper can tell from another empty window.
+   */
+  async function taskSees(name: string): Promise<string[]> {
+    const written = `/home/harness/${name}-task.txt`;
+    await onHost('rm', '-f', written);
+    await runShellTask(
+      name,
+      `{ echo "$SSH_AUTH_SOCK"; ssh-add -l; } > ${written} 2>&1`,
+    );
+    return (await onHost('cat', written)).trim().split('\n');
+  }
+
+  it('F-2311 AC-15 (c134-own-link): a second window of the host has a link name of its own pointing at the same socket, a shell task of it has that link, and after the first window closes a task of it still lists the keys', async () => {
+    await agentAdd(keyFile(), {confirm: false});
+    await connectedOn(FORWARDING, 'c134-a');
+    let second = '';
+    try {
+      const firstSocket = await printedAfter(
+        'c134-a',
+        'SOCK',
+        '$SSH_AUTH_SOCK',
+      );
+      second = await nextEmptyWindow(() =>
+        inWindow('c134-a', 'opensshremotes.openEmptyWindowOnCurrentHost'),
+      );
+      await waitFor(
+        'the second window to be connected',
+        async () =>
+          (await windowState(second).catch(() => undefined))?.remoteName ===
+          'ssh-remote',
+        INSTALL_MILLISECONDS,
+      );
+      await waitFor(
+        'a link for the second window',
+        async () => (await hostLinks()).length >= 2,
+        30_000,
+      ).catch(() => undefined);
+      const targets = await linkTargets();
+      const [secondSocket = ''] = await taskSees(second);
+      await closeWindow('c134-a');
+      const [, ...keys] = await taskSees(second);
+      deepStrictEqual(
+        {
+          links: targets.length,
+          sameSocket: new Set(targets.map(entry => entry.split(' -> ')[1]))
+            .size,
+          firstOwn: targets.some(entry => entry.startsWith(`${firstSocket} `)),
+          secondOwn:
+            secondSocket !== firstSocket &&
+            targets.some(entry => entry.startsWith(`${secondSocket} `)),
+          keys: keys.join('\n').includes(await fingerprintOf(keyFile())),
+        },
+        {links: 2, sameSocket: 1, firstOwn: true, secondOwn: true, keys: true},
+        `${targets.join(',')}; ${firstSocket}; ${secondSocket}`,
+      );
+    } finally {
+      await closeWindow(second).catch(() => undefined);
+      await closeWindow('c134-a').catch(() => undefined);
+    }
+  });
+
+  it('F-2311 AC-18 (c134-setting-off): with the setting true at connect and then false, nothing is shown and new terminals keep the link until a reload with the local server running, after which they get a new link name, the connect’s link stays and the agent lists the keys', async () => {
+    await agentAdd(keyFile(), {confirm: false});
+    await keepingSettings(async () => {
+      await userSettings({'remote.SSH.enableAgentForwarding': true});
+      await connectedOn(FORWARDING, 'c134-off');
+      try {
+        const connect = await socketOfNewTerminal('c134-off');
+        await userSettings({'remote.SSH.enableAgentForwarding': false});
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        const changed = await socketOfNewTerminal('c134-off');
+        await reloadWindow('c134-off');
+        await connectedWithin('c134-off', INSTALL_MILLISECONDS);
+        await inWindow('c134-off', 'workbench.action.terminal.new');
+        const reloaded = await printedAfter(
+          'c134-off',
+          'SOCK',
+          '$SSH_AUTH_SOCK',
+        );
+        const keys = await listedKeys('c134-off');
+        const targets = await linkTargets();
+        deepStrictEqual(
+          {
+            keptUntilReload: changed === connect,
+            newName:
+              reloaded !== connect &&
+              reloaded.startsWith('/tmp/vscode-ssh-auth-sock-'),
+            both: [connect, reloaded].map(link =>
+              targets.some(entry => entry.startsWith(`${link} `)),
+            ),
+            keys: keys.includes(await fingerprintOf(keyFile())),
+            shown: recordLines(undefined, 'c134-off')
+              .map(line => line.surface)
+              .filter(surface => SHOWN_SURFACES.includes(surface)),
+          },
+          {
+            keptUntilReload: true,
+            newName: true,
+            both: [true, true],
+            keys: true,
+            shown: [],
+          },
+          `${connect} ${changed} ${reloaded} ${targets.join(',')}`,
+        );
+      } finally {
+        await closeWindow('c134-off').catch(() => undefined);
+      }
+    });
   });
 });
