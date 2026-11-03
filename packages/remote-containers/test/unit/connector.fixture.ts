@@ -428,6 +428,9 @@ export function sceneOf(
       argv[0] === 'inspect' &&
       argv[4] === '{{json .NetworkSettings.Ports}}'
     ) {
+      if (scene.published === 'unreachable') {
+        return {kind: 'failed', detail: 'spawn docker ENOENT'};
+      }
       return scene.published === 'fails'
         ? {
             kind: 'ran',

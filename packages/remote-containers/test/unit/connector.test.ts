@@ -2783,7 +2783,7 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
   });
 
   it('F-1101 AC-19, AC-27: a Compose configuration whose ports cannot be read hands core none, and the appPort is ignored', async () => {
-    const answers = ['fails', 'not json'];
+    const answers = ['fails', 'not json', 'unreachable'];
     const handed: unknown[] = [];
     for (const answer of answers) {
       const scene = sceneOf();
@@ -2791,7 +2791,7 @@ describe('the container connector: the appPort rows (card containers-74)', () =>
       scene.published = answer;
       handed.push((await connected(scene)).environmentTunnels);
     }
-    deepStrictEqual(handed, [[], []]);
+    deepStrictEqual(handed, [[], [], []]);
   });
 
   /** The tunnels a connect over a remote engine hands core, for the configuration the scene holds. */
