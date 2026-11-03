@@ -34,6 +34,11 @@ export function switchOf(
   return valueOf(host, entry) === true;
 }
 
+/** A setting read by JavaScript truthiness: any value but `false`, `0`, `''`, `null`, `undefined` and `NaN` is on. */
+function truthyOf(host: SettingHost, entry: keyof typeof settings): boolean {
+  return Boolean(valueOf(host, entry));
+}
+
 /** A setting's text, or the empty text for any other value. */
 export function textOf(
   host: SettingHost,
@@ -108,7 +113,7 @@ export function termsSettingsOf(host: SettingHost): TermsSettings {
     useLocalServerSetting: switchOf(host, 'useLocalServer'),
     remotePlatform: valueOf(host, 'remotePlatform'),
     windowsRemotes: valueOf(host, 'windowsRemotes'),
-    enableRemoteCommand: switchOf(host, 'enableRemoteCommand'),
+    enableRemoteCommand: truthyOf(host, 'enableRemoteCommand'),
   };
 }
 
