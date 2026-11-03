@@ -190,3 +190,23 @@ export function runWizard(request: {title: string; folder: string; target?: Wiza
   before the questions, so a Skip leaves the user's own file alone and a failure writes nothing.
 - The curated table's prefix is the folder of the ids of the templates in the collection whose repository is the
   specification's (`https://github.com/devcontainers/templates`); with no such collection the flat list shows.
+
+```ts
+export interface FeatureEntry {key: string; value: Record<string, unknown>;}
+export interface FeaturePicks {checked: readonly FeatureEntry[]; unchecked: readonly string[];}
+export type FeatureEdit = {kind: 'edited'; text: string} | {kind: 'unchanged'} | {kind: 'notAnObject'};
+export function editFeatures(text: string, picks: FeaturePicks): FeatureEdit;
+export function catalogueKeyOf(entryKey: string, catalogue: readonly CatalogueFeature[]): string | undefined;
+```
+
+- `editFeatures` is the pure edit of a configuration's `"features"` object (F-0807, brief §2.4): over `jsonc-parser`'s
+  `modify` and `applyEdits`, with the file's own indentation and line ends detected, it adds the checked entries (after
+  every existing entry, in the order the picks give them), replaces a present key with its value, and removes the
+  unchecked keys, keeping every other byte: comments, indentation, line ends and every other key. A trailing comment
+  ends up after the last appended entry.
+- `unchanged` is what no write gives: no `features` key and nothing picked, or a byte-identical result. `notAnObject` is
+  a `features` value that is not an object (an array or a string); the caller writes nothing and opens nothing in both
+  cases (BR-9, 7.E6).
+- `catalogueKeyOf` is BR-1's id matching: the catalogue key of the feature whose registry, namespace and id the entry
+  names under any version form; a digest-pinned reference, the same id under another registry, a bare legacy id and a
+  local path name nothing.
