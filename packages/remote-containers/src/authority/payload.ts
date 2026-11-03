@@ -58,18 +58,26 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
   };
 }
 
-/** The payload of a target: its JSON text, members in a fixed order, as lowercase hex. */
-export function devContainerPayloadOf(target: DevContainerFolder): string {
-  const pinned = (
-    ['context', 'host', 'certPath', 'tlsVerify'] as const
-  ).flatMap((member): Array<[string, string]> => {
-    const value = target[member];
+/** The engine members a payload's `settings` may name, in their fixed order. */
+const ENGINE_MEMBERS = ['context', 'host', 'certPath', 'tlsVerify'] as const;
+
+/** A payload's `settings` member for an engine, or nothing when it is the default. */
+export function pinnedSettingsOf(
+  engine: PinnedEngine,
+): {settings: Record<string, string>} | Record<string, never> {
+  const pinned = ENGINE_MEMBERS.flatMap((member): Array<[string, string]> => {
+    const value = engine[member];
     return value === undefined ? [] : [[member, value]];
   });
+  return pinned.length === 0 ? {} : {settings: Object.fromEntries(pinned)};
+}
+
+/** The payload of a target: its JSON text, members in a fixed order, as lowercase hex. */
+export function devContainerPayloadOf(target: DevContainerFolder): string {
   const text = JSON.stringify({
     hostPath: target.hostPath,
     localDocker: target.localDocker,
-    ...(pinned.length === 0 ? {} : {settings: Object.fromEntries(pinned)}),
+    ...pinnedSettingsOf(target),
     configFile: target.configFile,
   });
   return Buffer.from(text, 'utf8').toString('hex');
@@ -102,7 +110,7 @@ function configFileOf(value: unknown): SerializedUri | undefined {
 }
 
 /** The engine of a payload: none, its members, or `false` for a `settings` member of the wrong shape. */
-function engineOf(settings: unknown): PinnedEngine | false {
+export function engineOf(settings: unknown): PinnedEngine | false {
   if (settings === undefined) {
     return {};
   }
@@ -111,7 +119,7 @@ function engineOf(settings: unknown): PinnedEngine | false {
     return false;
   }
   const engine: PinnedEngine = {};
-  for (const member of ['context', 'host', 'certPath', 'tlsVerify'] as const) {
+  for (const member of ENGINE_MEMBERS) {
     const value = record[member];
     if (value === undefined) {
       continue;

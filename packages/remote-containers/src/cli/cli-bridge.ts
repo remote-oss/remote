@@ -153,13 +153,18 @@ function firstLine(text: string): string {
   return end < 0 ? text : text.slice(0, end);
 }
 
-/** The CLI bridge over its host, the client's files, the override store and the editor's environment. */
+/**
+ * The CLI bridge over its host, the client's files, the override store and the editor's environment; `rewrite` gives the
+ * override text of a configuration, or none to let the CLI read the file itself.
+ */
 export function cliBridgeOf(
   host: CliHost,
   files: BridgeFiles,
   overrides: OverrideStore,
   editorEnvironment: Readonly<Record<string, string | undefined>>,
   logger: Logger,
+  rewrite: (configText: string) => string | undefined = configText =>
+    overrideText(configText, editorEnvironment),
 ): CliBridge {
   /** One run: prepares the target, runs the CLI, reads what it wrote, and removes the override file. */
   async function drive<Result extends {kind: string}>(
@@ -176,7 +181,7 @@ export function cliBridgeOf(
   ): Promise<Result | CliFailure> {
     const configText = await files.readText(target.configFile).catch(() => '');
     const secrets = referencedSecrets(configText, editorEnvironment);
-    const rewritten = overrideText(configText, editorEnvironment);
+    const rewritten = rewrite(configText);
     if (dropsImage(configText)) {
       logger.info(
         "the configuration's image is ignored, because it also builds from a Dockerfile (F-0412 Q-1)",

@@ -28,3 +28,15 @@ export function cliPathsOf(extensionPath: string, appRoot: string): CliPaths {
     editorModules: path.join(appRoot, 'node_modules.asar'),
   };
 }
+
+/** Where the bootstrap image of a clone in a volume keeps the dev container CLI the extension bundles, and the preload the CLI runs with. */
+export const BOOTSTRAP_CLI = {
+  entry: '/usr/local/share/remote-oss/devcontainers-cli/devcontainer.js',
+  preload: '/usr/local/share/remote-oss/cli-preload.js',
+} as const;
+
+/** The names in the bootstrap image's build context of the CLI's folder and the preload, which the image's definition copies in. */
+export const CONTEXT_NAMES = {
+  cliFolder: 'devcontainers-cli',
+  preload: 'cli-preload.js',
+} as const;

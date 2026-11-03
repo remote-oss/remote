@@ -4,15 +4,18 @@ import {
   composeDiscoveryArguments,
   createdKey,
   decide,
+  decideByLabels,
   decideCompose,
   devContainerFolderOf,
   discoveryArguments,
   idLabels,
   isDevContainer,
+  labelsDiscoveryArguments,
   legacyDiscoveryArguments,
   legacyIdLabels,
   configFileOf,
   localFolderOf,
+  volumeIdLabels,
 } from '../../src/lifecycle/labels.ts';
 
 const FOLDER = '/w/a b';
@@ -440,6 +443,77 @@ describe('the lookup of a Compose project’s container (F-0413 6.6, 6.9)', () =
         container('p', 'paused', '2026-10-14T03:00:00Z'),
       ]),
       {kind: 'unusable', containerId: 'p', status: 'paused'},
+    );
+  });
+});
+
+describe('the labels of a clone in a volume (card containers-151)', () => {
+  const LABELS = volumeIdLabels({
+    repositoryPath: 'https://github.com/o/r/tree/a=b',
+    volumeName: 'r-1',
+    folder: 'r',
+    configFile: '/workspaces/r/.devcontainer.json',
+  });
+
+  /** A container with `labels`, in `status`, created at `created`. */
+  function labelled(
+    containerId: string,
+    status: string,
+    created: string,
+    labels: Record<string, string>,
+  ): ContainerFacts {
+    return {id: containerId, created, status, labels};
+  }
+
+  const EVERY_LABEL = {
+    'vsch.local.repository': 'https://github.com/o/r/tree/a=b',
+    'vsch.local.repository.volume': 'r-1',
+    'vsch.local.repository.folder': 'r',
+    'devcontainer.config_file': '/workspaces/r/.devcontainer.json',
+  };
+
+  it('F-0701 BR-3, BR-17: the repository, the volume, the folder and the configuration, and a query that needs them all', () => {
+    deepStrictEqual(
+      [LABELS, labelsDiscoveryArguments(LABELS.slice(0, 2))],
+      [
+        [
+          'vsch.local.repository=https://github.com/o/r/tree/a=b',
+          'vsch.local.repository.volume=r-1',
+          'vsch.local.repository.folder=r',
+          'devcontainer.config_file=/workspaces/r/.devcontainer.json',
+        ],
+        [
+          'ps',
+          '-a',
+          '-q',
+          '--no-trunc',
+          '--filter',
+          'label=vsch.local.repository=https://github.com/o/r/tree/a=b',
+          '--filter',
+          'label=vsch.local.repository.volume=r-1',
+        ],
+      ],
+    );
+  });
+
+  it('the newest container with every label is used; one missing a label, or being removed, is not', () => {
+    deepStrictEqual(
+      [
+        decideByLabels(LABELS, [
+          labelled('a', 'exited', '2026-11-03T01:00:00Z', EVERY_LABEL),
+          labelled('b', 'running', '2026-11-03T02:00:00Z', EVERY_LABEL),
+          labelled('c', 'running', '2026-11-03T03:00:00Z', {
+            ...EVERY_LABEL,
+            'vsch.local.repository.folder': 's',
+          }),
+          labelled('d', 'removing', '2026-11-03T04:00:00Z', EVERY_LABEL),
+        ]),
+        decideByLabels(LABELS, []),
+      ],
+      [
+        {kind: 'use', containerId: 'b', status: 'running', idLabels: LABELS},
+        {kind: 'create'},
+      ],
     );
   });
 });

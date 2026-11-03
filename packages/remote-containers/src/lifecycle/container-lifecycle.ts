@@ -28,8 +28,10 @@ import {
   decide,
   decideCompose,
   discoveryArguments,
+  decideByLabels,
   idLabels,
   isLegacy,
+  labelsDiscoveryArguments,
   legacyDiscoveryArguments,
   legacyIdLabels,
   type ContainerFacts,
@@ -51,6 +53,8 @@ export type ContainerStep =
 export interface ContainerRequest {
   folder: string;
   configFile: string;
+  /** The labels that find and name the container instead of the folder's, for a clone in a volume. */
+  idLabels?: readonly string[];
   dockerPath: string;
   logLevel: 'info' | 'debug' | 'trace';
   /** Set when the window asked for a rebuild: the existing container is replaced, whatever its state. */
@@ -110,6 +114,14 @@ export interface LifecyclePresenter {
   ): void;
   /** The size a run's lifecycle commands get: the last size a "Configuring..." terminal reported, or 24×80. */
   terminalSize(): {rows: number; columns: number};
+}
+
+/** The bridge the background run goes to, the target it is given in place of `up`'s, and what is done once it ended. */
+export interface BackgroundStage {
+  cli: CliBridge;
+  targetOf(upTarget: CliTarget): CliTarget;
+  /** Called once the run has ended, however it ended. */
+  ended(): void;
 }
 
 /** Finds or creates the container of a folder. */
@@ -264,6 +276,8 @@ export function containerLifecycleOf(dependencies: {
   userDataFolder?: string;
   /** What a connect knows of a Compose configuration before the CLI runs; a configuration is no Compose one without it. */
   compose?: (request: ComposeResolveRequest) => Promise<ComposeResolution>;
+  /** Where the commands left for the background run go, when not where `up` ran. */
+  backgroundStage?: BackgroundStage;
 }): ContainerLifecycle {
   const {
     engine,
@@ -273,6 +287,7 @@ export function containerLifecycleOf(dependencies: {
     clock,
     compose,
     userDataFolder,
+    backgroundStage,
   } = dependencies;
   let background: AbortController | undefined;
   let stage: 'idle' | 'running' | 'ended' = 'idle';
@@ -362,9 +377,12 @@ export function containerLifecycleOf(dependencies: {
     background = own;
     stage = 'running';
     presenter.backgroundStarted();
-    void bridge
+    void (backgroundStage?.cli ?? bridge)
       .runUserCommands(
-        {...target, terminalSize: presenter.terminalSize()},
+        {
+          ...(backgroundStage?.targetOf(target) ?? target),
+          terminalSize: presenter.terminalSize(),
+        },
         containerId,
         onCliEvent,
         own.signal,
@@ -372,6 +390,7 @@ export function containerLifecycleOf(dependencies: {
         presenter.attachStdin,
       )
       .then(result => {
+        backgroundStage?.ended();
         if (background === own && !own.signal.aborted) {
           end();
         }
@@ -390,9 +409,14 @@ export function containerLifecycleOf(dependencies: {
     request: ContainerRequest,
     resolution: ComposeResolution,
   ): string[][] {
-    return resolution.kind === 'ready'
-      ? [composeDiscoveryArguments(resolution.projectName, resolution.service)]
-      : folderQueries(request.folder);
+    if (resolution.kind === 'ready') {
+      return [
+        composeDiscoveryArguments(resolution.projectName, resolution.service),
+      ];
+    }
+    return request.idLabels === undefined
+      ? folderQueries(request.folder)
+      : [labelsDiscoveryArguments(request.idLabels)];
   }
 
   /** The choice among the containers found: by the Compose labels for a Compose project, else by the folder's. */
@@ -401,9 +425,12 @@ export function containerLifecycleOf(dependencies: {
     resolution: ComposeResolution,
     containers: readonly ContainerFacts[],
   ): Decision {
-    return resolution.kind === 'ready'
-      ? decideCompose(request.folder, request.configFile, containers)
-      : decide(request.folder, request.configFile, containers);
+    if (resolution.kind === 'ready') {
+      return decideCompose(request.folder, request.configFile, containers);
+    }
+    return request.idLabels === undefined
+      ? decide(request.folder, request.configFile, containers)
+      : decideByLabels(request.idLabels, containers);
   }
 
   /** The container the engine holds for the folder after a failed `up`, found again: one the connect kept, or made. */
@@ -628,11 +655,11 @@ export function containerLifecycleOf(dependencies: {
     }
     const rebuilding = request.rebuild !== undefined;
     // a rebuild replaces the container with the current labels; a use keeps the labels its tier chose
-    const targetIdLabels = rebuilding
-      ? idLabels(folder, configFile)
-      : decision.kind === 'use'
+    const ownLabels = request.idLabels ?? idLabels(folder, configFile);
+    const targetIdLabels =
+      !rebuilding && decision.kind === 'use'
         ? decision.idLabels
-        : idLabels(folder, configFile);
+        : [...ownLabels];
     const target: CliTarget = {
       workspaceFolder: folder,
       configFile,

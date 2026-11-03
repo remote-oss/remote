@@ -1,10 +1,11 @@
 /**
- * @fileoverview A keyed map in the extension's own `globalState` whose entries expire after five minutes: what a window
- * leaves for the next one to take once, such as a rebuild intent or a pending edit. Entries that are malformed, stale
- * or dated in the future are dropped whenever the map is read.
+ * @fileoverview A keyed map in the extension's own `globalState` whose entries expire, after five minutes unless the
+ * caller gives another lifetime: what a window leaves for the next one to take once, such as a rebuild intent or a
+ * pending edit, or to read on each connect. Entries that are malformed, stale or dated in the future are dropped
+ * whenever the map is written.
  */
 
-/** How long an entry lives before it is cleared unused. */
+/** How long an entry lives before it is cleared unused, unless the caller says otherwise. */
 export const TIMED_ENTRY_MILLISECONDS = 5 * 60 * 1000;
 
 /** `ExtensionContext.globalState`, narrowed. */
@@ -29,6 +30,7 @@ function liveEntries(
   stored: unknown,
   now: number,
   isValue: (value: unknown) => boolean,
+  lifetime: number,
 ): Array<[string, TimedEntry<unknown>]> {
   if (!isObject(stored)) {
     return [];
@@ -40,7 +42,7 @@ function liveEntries(
       typeof entry.storedAt === 'number' &&
       Number.isFinite(entry.storedAt) &&
       now - entry.storedAt >= 0 &&
-      now - entry.storedAt <= TIMED_ENTRY_MILLISECONDS &&
+      now - entry.storedAt <= lifetime &&
       isValue(entry.value)
     ) {
       kept.push([entryName, {storedAt: entry.storedAt, value: entry.value}]);
@@ -56,10 +58,14 @@ export async function storeTimedEntry(
   entryName: string,
   value: unknown,
   now: number,
+  lifetime = TIMED_ENTRY_MILLISECONDS,
 ): Promise<void> {
-  const others = liveEntries(memento.get(key), now, () => true).filter(
-    ([name]) => name !== entryName,
-  );
+  const others = liveEntries(
+    memento.get(key),
+    now,
+    () => true,
+    lifetime,
+  ).filter(([name]) => name !== entryName);
   await memento.update(
     key,
     Object.fromEntries([...others, [entryName, {storedAt: now, value}]]),
@@ -76,9 +82,10 @@ export async function takeTimedEntry<Value>(
   entryName: string,
   now: number,
   isValue: (value: unknown) => value is Value,
+  lifetime = TIMED_ENTRY_MILLISECONDS,
 ): Promise<TimedEntry<Value> | undefined> {
   const stored = memento.get(key);
-  const entries = liveEntries(stored, now, isValue);
+  const entries = liveEntries(stored, now, isValue, lifetime);
   const remaining = Object.fromEntries(
     entries.filter(([name]) => name !== entryName),
   );
@@ -87,4 +94,18 @@ export async function takeTimedEntry<Value>(
   }
   return entries.find(([name]) => name === entryName)?.[1] as
     TimedEntry<Value> | undefined;
+}
+
+/** The entry under `entryName`, left in place; none when there is none or it expired. Nothing is written. */
+export function peekTimedEntry<Value>(
+  memento: IntentMemento,
+  key: string,
+  entryName: string,
+  now: number,
+  isValue: (value: unknown) => value is Value,
+  lifetime = TIMED_ENTRY_MILLISECONDS,
+): TimedEntry<Value> | undefined {
+  return liveEntries(memento.get(key), now, isValue, lifetime).find(
+    ([name]) => name === entryName,
+  )?.[1] as TimedEntry<Value> | undefined;
 }

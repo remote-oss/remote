@@ -48,7 +48,9 @@ side ends. `{kind: 'socket'}` is refused in release 1.
    port (F-0502 BR-3); `openRelayTunnel` with C11's exec dialer and the target `{kind: 'port', port: <container
    port>}`. The log names both ports.
 6. Return `Connected{address: {host: '127.0.0.1', port}, connectionToken, extensionHostEnv: {}, environmentTunnels: [],
-   trusted: false}`. No tunnel factory and no tunnel features are given to core (brief ruling 1).
+   trusted}`. `trusted` is `false` for a folder, and `true` for a clone in a volume (F-0106 BR-13's forced trust,
+   brief-volumes §3.8); the family registers with `allowsTrust: true`, so lib-authority passes it on. No tunnel factory
+   and no tunnel features are given to core (brief ruling 1).
 
 **Failures** (`Failed`): the dev-container family's kinds and their presentation are C8's (F-0410). A container that
 stopped or was removed while connected answers `silent: true` (F-0502's "plain NotAvailable, no dialog"), and every
@@ -84,6 +86,19 @@ its content:
   a later, ordinary open.
 - **The codec functions:** `devContainerPayloadOf(target) → string` and `devContainerTargetOf(payload) → target |
   malformed` are pure, with rows for every field and a malformed hex, JSON and shape.
+- **The volume payload** (brief-volumes §2.4, group 13): a second shape for a window whose workspace is a Docker
+  volume, the lowercase hex of the UTF-8 JSON `{"repositoryPath", "volumeName", "folder", "cloneInfo": {"urlToClone",
+  "ref"?}, "inspectVolume"}` with the same `"settings"` member for a pinned engine. The member names are F-0701
+  BR-12's, kept verbatim (F-1406, D-14); a unique volume is `"__UNIQUE__"`, and an explored volume (F-0705) has no
+  `cloneInfo`. The window's URI is `vscode-remote://dev-container+<hex>/workspaces/<folder>`. `volumePayloadOf(target)`
+  and `volumeTargetOf(payload) → target | undefined` are pure; the folder reader refuses a volume payload by its
+  shape, so the two shapes never read each other.
+- **The clone's source** (brief-volumes §2.3): one pure reader, `cloneSourceOf(input, origin)`, is the only way a
+  source reaches git. Whitespace around it is removed; a source with a control character, a leading `-` or a host
+  that starts with `-`, or a helper transport (`ext::`, `fd::`) is refused from either origin; from a link, `file://`,
+  a local path and anything outside `https`, `http`, `ssh`, `git` and the scp form are refused too. Every git call
+  takes the source as one argument after `--`, with `GIT_TERMINAL_PROMPT=0`, and a call for a source from a link
+  pins `protocol.allow=never` with those four allowed.
 
 ## 4. Ports C1–C8 use (all faked in unit rows)
 

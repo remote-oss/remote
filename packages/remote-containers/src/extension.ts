@@ -15,7 +15,7 @@ import {
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {randomBytes, randomUUID} from 'node:crypto';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
@@ -23,8 +23,16 @@ import {
   resolverEditorOf,
 } from 'lib-authority';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
-import {acquire, nodeClientEnvironment, nodeTimer} from 'lib-helper';
-import {identifierHost} from 'lib-identifiers';
+import {
+  acquire,
+  askpassEndpointPath,
+  nodeClientEnvironment,
+  nodeEndpointPort,
+  nodeLauncherFiles,
+  nodeTimer,
+  runtimeFolder,
+} from 'lib-helper';
+import {type CommandHandler, identifierHost} from 'lib-identifiers';
 import type {Logger, RevealableChannel} from 'lib-log';
 import {profileOf} from 'lib-product';
 import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
@@ -90,6 +98,7 @@ import {reopenOriginHandlersOf} from './open/reopen-origin.ts';
 import {
   type EngineSources,
   engineEnvironment,
+  type PinnedEngine,
   pinnedEngineOf,
   withAmbientContext,
   withEnvironment,
@@ -98,6 +107,32 @@ import {configWatchOf} from './config-watch/config-watch.ts';
 import {engineBaseOf, executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {composeCheck, currentContext, firstCheck} from './engine/preflight.ts';
+import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
+import {
+  CLONE_TRUST_KEY,
+  CLONE_TRUST_PAGE,
+  cloneInUniqueVolume,
+} from './volumes/clone-command.ts';
+import {
+  clearTypedSource,
+  storeTypedSource,
+  typedSourceRecorded,
+} from './volumes/typed-source.ts';
+import {bootstrapSettingsOf} from './volumes/bootstrap.ts';
+import {
+  bootstrapFilesOf,
+  bootstrapOverrideStoreOf,
+} from './volumes/bootstrap-files.ts';
+import {writeBuildContext} from './volumes/build-context.ts';
+import {volumeRewriteOf} from './volumes/volume-rewrite.ts';
+import {containerCliHost} from './cli/container-cli-host.ts';
+import {ownText} from './surfaces/own-strings.ts';
+import {cloneText} from './volumes/clone-strings.ts';
+import type {ClonePromptSurface} from './volumes/git-prompts.ts';
+import {runHostProgram} from './volumes/host-program.ts';
+import {precheck} from './volumes/precheck.ts';
+import {sourceRowsOf} from './volumes/source-pick.ts';
+import {volumeTargetOf} from './volumes/volume-payload.ts';
 import {composeRouteOf} from './engine/compose-route.ts';
 import {effectiveEngineKey} from './engine/engine-key.ts';
 import {engineWatchOf} from './engine/engine-watch.ts';
@@ -573,6 +608,10 @@ export async function activate(
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
+    volume?: {
+      configText: string;
+      rewrite: (configText: string) => string | undefined;
+    },
   ): CliBridge {
     return cliBridgeOf(
       nodeCliHost(
@@ -583,10 +622,13 @@ export async function activate(
         environment,
         systemCliPorts,
       ),
-      {readText: file => readFile(file, 'utf8')},
+      volume === undefined
+        ? {readText: file => readFile(file, 'utf8')}
+        : {readText: () => Promise.resolve(volume.configText)},
       overrideStoreOf(context.globalStorageUri.fsPath),
       environment,
       logger,
+      ...(volume === undefined ? [] : [volume.rewrite]),
     );
   }
   /** Offers to reopen the window's folder in its container, over what the window holds now. */
@@ -707,6 +749,181 @@ export async function activate(
     handlers: served => {
       function firstFolder(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      }
+      /** The engine a window opened from here is pinned to: the settings' and the current context's. */
+      async function windowPinnedEngine(): Promise<PinnedEngine> {
+        return pinnedEngineOf(
+          withAmbientContext(
+            engineEnvironment(engineSources()),
+            await currentContext(
+              served.preflight,
+              engineBaseOf({
+                folder: firstFolder(),
+                trusted: vscode.workspace.isTrusted,
+              }),
+              new AbortController().signal,
+            ),
+          ),
+        );
+      }
+      /** Clone Repository in Container Volume's command, over the editor and this machine. */
+      function cloneCommand(): CommandHandler {
+        let engine: PinnedEngine = {};
+        return {
+          execute: async () => {
+            engine = await windowPinnedEngine();
+            await cloneInUniqueVolume(
+              {
+                trust: {
+                  accepted: () =>
+                    context.globalState.get(CLONE_TRUST_KEY) === true,
+                  confirm: async () => {
+                    const learnMore = cloneText('learnMore', translate);
+                    const gotIt = cloneText('gotIt', translate);
+                    const answer = await vscode.window.showWarningMessage(
+                      cloneText('S075', translate),
+                      {modal: true, detail: cloneText('S252', translate)},
+                      learnMore,
+                      gotIt,
+                    );
+                    if (answer === gotIt) {
+                      return 'gotIt';
+                    }
+                    return answer === learnMore ? 'learnMore' : 'cancel';
+                  },
+                  remember: async () => {
+                    await context.globalState.update(CLONE_TRUST_KEY, true);
+                  },
+                  learnMore: () => {
+                    void vscode.env.openExternal(
+                      vscode.Uri.parse(CLONE_TRUST_PAGE),
+                    );
+                  },
+                },
+                engineReady: async () =>
+                  (await firstCheck(
+                    served.preflight,
+                    engineBaseOf({
+                      folder: firstFolder(),
+                      trusted: vscode.workspace.isTrusted,
+                    }),
+                    new AbortController().signal,
+                  )) === 'proceed',
+                pickSource: () => pickCloneSource(),
+                precheck: (source, cancellation) =>
+                  precheck(
+                    source,
+                    'typed',
+                    {
+                      openRelay: () => openCloneRelay(),
+                      runGit: (gitArguments, environment, signal) =>
+                        runHostProgram(
+                          'git',
+                          gitArguments,
+                          environment,
+                          signal,
+                        ),
+                    },
+                    cancellation,
+                  ),
+                cannotAccess: async repository => {
+                  await vscode.window.showErrorMessage(
+                    cloneText('S052', translate, [repository]),
+                    {modal: true},
+                  );
+                },
+                currentRepository: () => {
+                  const authority = vscode.env.remoteAuthority ?? '';
+                  return authority.startsWith('dev-container+')
+                    ? volumeTargetOf(authority.slice('dev-container+'.length))
+                        ?.repositoryPath
+                    : undefined;
+                },
+                engine: () => engine,
+                recordTyped: payload =>
+                  storeTypedSource(context.globalState, payload, Date.now()),
+                reload: async uri => {
+                  await vscode.commands.executeCommand(
+                    'vscode.openFolder',
+                    vscode.Uri.parse(uri),
+                    {forceReuseWindow: true},
+                  );
+                },
+                logger: served.logger,
+              },
+              new AbortController().signal,
+            );
+          },
+        };
+      }
+      /** The source pick: one row that clones the typed text, once there is text; the text, or nothing for Escape. */
+      function pickCloneSource(): Promise<string | undefined> {
+        const picker = vscode.window.createQuickPick();
+        picker.placeholder = cloneText('sourcePlaceholder', translate);
+        picker.onDidChangeValue(value => {
+          picker.items = sourceRowsOf(value, translate);
+        });
+        return new Promise(resolve => {
+          picker.onDidAccept(() => {
+            const chosen = picker.selectedItems[0] ?? picker.items[0];
+            resolve(chosen?.description);
+            picker.dispose();
+          });
+          picker.onDidHide(() => {
+            resolve(undefined);
+            picker.dispose();
+          });
+          picker.show();
+        });
+      }
+      /** The askpass relay of a clone's check, its endpoint in this user's runtime folder. */
+      function openCloneRelay(): Promise<AskpassRelay> {
+        const folder = runtimeFolder(
+          process.platform,
+          process.env,
+          os.tmpdir(),
+        );
+        const nonce = randomBytes(16).toString('hex');
+        return openAskpassRelay({
+          port: nodeEndpointPort(process.platform),
+          files: nodeLauncherFiles,
+          scheduler: {setTimer: nodeTimer},
+          places: {
+            endpoint: askpassEndpointPath(
+              process.platform,
+              folder,
+              'clone',
+              nonce,
+            ),
+            runtimeFolder: folder,
+            runtime: process.execPath,
+            program: path.join(context.extensionPath, 'dist', 'askpass.js'),
+          },
+          newNonce: () => nonce,
+          askUser: question => askCloneQuestion(question),
+          logLine: line => {
+            served.logger.info(line);
+          },
+        });
+      }
+      /** One question of a clone's check, shown as its kind says; the answer, or nothing when dismissed. */
+      async function askCloneQuestion(question: {
+        surface: ClonePromptSurface;
+        text: string;
+      }): Promise<string | undefined> {
+        if (question.surface === 'hostKeyPick') {
+          const proceed = cloneText('hostKeyContinue', translate);
+          const picked = await vscode.window.showQuickPick([proceed], {
+            placeHolder: question.text,
+            ignoreFocusOut: false,
+          });
+          return picked === proceed ? 'yes' : undefined;
+        }
+        return vscode.window.showInputBox({
+          prompt: question.text,
+          password: question.surface === 'maskedInput',
+          ignoreFocusOut: true,
+        });
       }
       function rebuildHandler(buildNoCache: boolean): () => Promise<void> {
         return rebuildContainer(
@@ -1009,20 +1226,7 @@ export async function activate(
               base,
               cancellation ?? new AbortController().signal,
             ),
-          pinnedEngine: async () =>
-            pinnedEngineOf(
-              withAmbientContext(
-                engineEnvironment(engineSources()),
-                await currentContext(
-                  served.preflight,
-                  engineBaseOf({
-                    folder: firstFolder(),
-                    trusted: vscode.workspace.isTrusted,
-                  }),
-                  new AbortController().signal,
-                ),
-              ),
-            ),
+          pinnedEngine: windowPinnedEngine,
         },
         dialogs: served.preflight.dialogs,
         progress: {
@@ -1336,6 +1540,7 @@ export async function activate(
         openFolderInContainerInNewWindow: {
           execute: argument => rowOpen.inNewWindow(argument),
         },
+        openRepositoryInUniqueVolume: cloneCommand(),
         showReopenInContainerNotificationReset: {
           execute: () =>
             resetReopenNotification(context.globalState, Date.now()),
@@ -1430,7 +1635,78 @@ export async function activate(
       newConnectionId: randomUUID,
       engineFor: nodeEngineHost,
       cliFor: environment => bridgeFor(environment, logger),
-      lifecycleFor: (engine, bridge, presenter) =>
+      volumes: {
+        bootstrapSettings: () => {
+          const configuration = vscode.workspace.getConfiguration();
+          return bootstrapSettingsOf({
+            image: configuration.get(settings.bootstrapImage.id),
+            pull: configuration.get(settings.bootstrapImagePull.id),
+            socketPath: configuration.get(settings.dockerSocketPath.id),
+          });
+        },
+        buildContext: () => {
+          const cliFiles = cliPathsOf(
+            context.extensionPath,
+            vscode.env.appRoot,
+          );
+          return writeBuildContext(
+            {
+              dockerfile: path.join(
+                context.extensionPath,
+                'resources',
+                'volume-bootstrap',
+                'Dockerfile',
+              ),
+              cliFolder: path.dirname(cliFiles.entry),
+              preload: cliFiles.preload,
+            },
+            os.tmpdir(),
+          );
+        },
+        typed: payload =>
+          typedSourceRecorded(context.globalState, payload, Date.now()),
+        clearTyped: payload =>
+          clearTypedSource(context.globalState, payload, Date.now()),
+        bootstrapBridge: (bootstrap, workspace, environment, engine) => {
+          const steps = {
+            engine: engine.host,
+            options: {cancellation: new AbortController().signal},
+          };
+          return cliBridgeOf(
+            containerCliHost(
+              engine.dockerPath,
+              bootstrap,
+              environment,
+              systemCliPorts,
+            ),
+            bootstrapFilesOf(steps, bootstrap),
+            bootstrapOverrideStoreOf(steps, bootstrap),
+            environment,
+            logger,
+            volumeRewriteOf(environment, workspace, logger),
+          );
+        },
+        hostBridge: (configText, workspace, environment) =>
+          bridgeFor(environment, logger, {
+            configText,
+            rewrite: volumeRewriteOf(environment, workspace, logger),
+          }),
+        standIn: async () => {
+          const folder = await mkdtemp(
+            path.join(os.tmpdir(), 'remote-containers-stand-in-'),
+          );
+          return {
+            folder,
+            dispose: () => rm(folder, {recursive: true, force: true}),
+          };
+        },
+        showShallow: repository => {
+          void vscode.window.showWarningMessage(
+            ownText('historyNotFetched', [repository], translate),
+          );
+        },
+      },
+      lifecycleFor: (engine, bridge, presenter, backgroundStage) =>
         containerLifecycleOf({
           engine,
           // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
@@ -1439,32 +1715,44 @@ export async function activate(
           presenter,
           clock: Date.now,
           userDataFolder: path.join(context.globalStorageUri.fsPath, 'data'),
-          compose: composeResolverOf({
-            route: (base, cancellation) =>
-              composeRouteOf(
-                {
-                  docker: engine,
-                  engineFor: nodeEngineHost,
-                  composePath: () =>
-                    vscode.workspace
-                      .getConfiguration()
-                      .get(settings.dockerComposePath.id),
-                  base: engineBaseOf({
-                    folder: base,
-                    trusted: vscode.workspace.isTrusted,
-                  }),
+          ...(backgroundStage === undefined
+            ? {
+                compose: composeResolverOf({
+                  route: (base, cancellation) =>
+                    composeRouteOf(
+                      {
+                        docker: engine,
+                        engineFor: nodeEngineHost,
+                        composePath: () =>
+                          vscode.workspace
+                            .getConfiguration()
+                            .get(settings.dockerComposePath.id),
+                        base: engineBaseOf({
+                          folder: base,
+                          trusted: vscode.workspace.isTrusted,
+                        }),
+                        logger: logger.child('compose'),
+                      },
+                      cancellation,
+                    ),
+                  runVia: (route, argv, options) =>
+                    route.kind === 'plugin'
+                      ? engine.run(
+                          ['compose', ...argv],
+                          {kind: 'none'},
+                          options,
+                        )
+                      : nodeEngineHost(route.file).run(
+                          argv,
+                          {kind: 'none'},
+                          options,
+                        ),
+                  readText: file => readFile(file, 'utf8'),
+                  environment: process.env,
                   logger: logger.child('compose'),
-                },
-                cancellation,
-              ),
-            runVia: (route, argv, options) =>
-              route.kind === 'plugin'
-                ? engine.run(['compose', ...argv], {kind: 'none'}, options)
-                : nodeEngineHost(route.file).run(argv, {kind: 'none'}, options),
-            readText: file => readFile(file, 'utf8'),
-            environment: process.env,
-            logger: logger.child('compose'),
-          }),
+                }),
+              }
+            : {backgroundStage}),
         }),
       lifecyclePresenter: lifecyclePresenterOf(
         terminalPortOf(),
