@@ -73,7 +73,7 @@ async function failedSetup(folder: string): Promise<string> {
 describe('F-0502 the failures of the resolution (card containers-43)', function () {
   this.timeout(900_000);
 
-  it('F-0410 AC-21 (c149-read-config): a configuration the CLI cannot read fails the connect with S420 and the CLI’s description, in F-0410’s dialog, and no container is made', async () => {
+  it('F-0410 AC-21 (c149-read-config): a configuration the CLI cannot read, though it exists, fails the connect with S420 and the CLI’s description, in F-0410’s dialog', async () => {
     const folder = devContainerFolder('c149-read-config', {name: 'Unreadable'});
     const configuration = path.join(
       folder,
@@ -82,22 +82,21 @@ describe('F-0502 the failures of the resolution (card containers-43)', function 
     );
     const name = await openFolderWindow(folder);
     try {
-      // The window found the file while it could be read; the connect's own read of it fails.
+      await reopenInContainer(name);
+      // The connected window reloads; its connect's read of the configuration now fails while the file is there.
       chmodSync(configuration, 0o000);
-      await reopenStarted(name);
+      await reloadWindow(name);
       const dialog = await waitForDialog(name, 180_000);
       deepStrictEqual(
         [
           dialog.details.startsWith('devcontainer command failed: '),
           dialog.details.includes('devcontainer.json'),
           dialog.buttons,
-          await devContainersOf(folder),
         ],
         [
           true,
           true,
           ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
-          [],
         ],
       );
     } finally {

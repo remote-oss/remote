@@ -189,8 +189,8 @@ export interface ContainerConnector extends Connector {
 
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
-  /** Whether a folder exists on this machine. */
-  folderExists(folder: string): Promise<boolean>;
+  /** Whether a file or a folder exists on this machine. */
+  pathExists(place: string): Promise<boolean>;
   /** The program a read before the trust answer is given (see `noEngineProgramOf`). */
   noEngineProgram: string;
   /** The client's platform, as `process.platform` names it. */
@@ -933,7 +933,7 @@ export function containerConnectorOf(
     if (target.kind === 'folder') {
       return target;
     }
-    if (!(await dependencies.folderExists(target.hostPath))) {
+    if (!(await dependencies.pathExists(target.hostPath))) {
       logger.info(`the folder ${target.hostPath} doesn't exist`);
       return undefined;
     }
@@ -1051,7 +1051,7 @@ export function containerConnectorOf(
     const cancellation = controller.signal;
     failedContainer = undefined;
     attemptIdentity = undefined;
-    if (!(await dependencies.folderExists(folder.hostPath))) {
+    if (!(await dependencies.pathExists(folder.hostPath))) {
       logger.info(`the folder ${folder.hostPath} doesn't exist`);
       return containerSetupFailed();
     }
@@ -1081,13 +1081,16 @@ export function containerConnectorOf(
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
     }
-    // A read that failed with the engine answering is the CLI's own failure; one that ran out of time is not.
+    // A read that failed with the engine answering is the CLI's own failure, unless its configuration is gone; one
+    // that ran out of time is not.
     if (
       reading !== undefined &&
       reading.kind !== 'configuration' &&
       reading.kind !== 'cancelled'
     ) {
-      return commandFailed(cliDescriptionOf(reading));
+      return (await dependencies.pathExists(configFile))
+        ? commandFailed(cliDescriptionOf(reading))
+        : containerSetupFailed();
     }
     if (read !== undefined && !sourceTypesValid(read.configuration)) {
       // The next attempt reads the file again, so a fix the user saves is seen by Retry.

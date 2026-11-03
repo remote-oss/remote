@@ -121,6 +121,8 @@ interface EngineCall {
 export interface Scene {
   /** Whether the folder the payload names exists on the machine. */
   folderExists: boolean;
+  /** Whether the configuration file exists on this machine. */
+  configurationExists: boolean;
   /** The configuration files discovery finds in a folder, in the picker's order. */
   candidates: Array<{file: string}>;
   connector: ContainerConnector;
@@ -251,6 +253,7 @@ export function sceneOf(
   const scene: Scene = {
     connector: undefined as unknown as ContainerConnector,
     folderExists: true,
+    configurationExists: true,
     candidates: [],
     attemptsBegun: 0,
     engineCalls: [],
@@ -439,7 +442,12 @@ export function sceneOf(
   const dependencies: ContainerConnectorDependencies = {
     noEngineProgram: noEngineProgramOf(FIXTURE_STORAGE),
     clientPlatform: 'linux',
-    folderExists: () => Promise.resolve(scene.folderExists),
+    pathExists: place =>
+      Promise.resolve(
+        place.endsWith('.json')
+          ? scene.configurationExists
+          : scene.folderExists,
+      ),
     discoverConfigurations: () => Promise.resolve(scene.candidates),
     shutdown: {
       send: request => {

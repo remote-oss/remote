@@ -307,6 +307,16 @@ describe('the container connector: the connect (card containers-08)', () => {
     });
   });
 
+  it('F-0410 AC-27: a read that failed because the configuration is gone gives S034, not S420', async () => {
+    const scene = sceneOf();
+    scene.configuration = {kind: 'configurationFailed', message: 'x'};
+    scene.configurationExists = false;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual('reason' in result ? result.reason : undefined, {
+      id: 'S034',
+    });
+  });
+
   it('F-0410 AC-21: a read before the start that was cancelled is no command failure', async () => {
     const scene = sceneOf();
     scene.configuration = {kind: 'cancelled'};
