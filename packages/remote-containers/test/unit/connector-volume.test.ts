@@ -1,0 +1,204 @@
+import {deepStrictEqual} from 'node:assert';
+import type {CliTarget} from '../../src/cli/cli-arguments.ts';
+import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
+import {volumePayloadOf} from '../../src/volumes/volume-payload.ts';
+import {inputOf, type Scene, sceneOf} from './connector.fixture.ts';
+
+const VOLUME_PAYLOAD = volumePayloadOf({
+  kind: 'volume',
+  repositoryPath: 'https://github.com/o/r',
+  volumeName: '__UNIQUE__',
+  folder: 'r',
+  cloneInfo: {urlToClone: 'https://github.com/o/r'},
+  inspectVolume: false,
+});
+
+/** An engine answer that exited with `status`. */
+function exited(status: number, stdout = ''): EngineRunOutcome {
+  return {kind: 'ran', status, stdout, stderr: ''};
+}
+
+/** The bootstrap's answers of a plain pass, with `changes` first: a new volume, the container boot1, an empty folder. */
+function plainPass(
+  changes: (argv: readonly string[]) => EngineRunOutcome | undefined = () =>
+    undefined,
+): (argv: readonly string[]) => EngineRunOutcome | undefined {
+  return argv => {
+    const changed = changes(argv);
+    if (changed !== undefined) {
+      return changed;
+    }
+    const line = argv.join(' ');
+    if (line.startsWith('volume inspect') || line.includes('ls -A')) {
+      return exited(1);
+    }
+    if (argv[0] === 'run') {
+      return exited(0, 'boot1\n');
+    }
+    return argv.includes('cat') ? exited(0, '{"image": "alpine"}') : undefined;
+  };
+}
+
+/** A scene with the volume dependencies, its bootstrap answering by `answer`. */
+function volumeScene(
+  answer = plainPass(),
+  overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
+): Scene {
+  const scene = sceneOf(overrides, {volumes: true});
+  scene.bootstrapAnswer = answer;
+  return scene;
+}
+
+/** The engine calls of a scene, as command lines. */
+function linesOf(scene: Scene): string[] {
+  return scene.engineCalls.map(call => call.argv.join(' '));
+}
+
+describe('the connector of a clone in a volume (card containers-151)', () => {
+  it('F-0701 5.0, ADR-0009: a typed source clones in the bootstrap, reads on the host CLI, connects trusted, and removes the bootstrap', async () => {
+    const scene = volumeScene();
+    const connected = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    await new Promise(setImmediate);
+    const stage = scene.backgroundStages[0];
+    const upTarget: CliTarget = {
+      workspaceFolder: '/workspaces/r',
+      configFile: '/workspaces/r/.devcontainer/devcontainer.json',
+      dockerPath: 'docker',
+      idLabels: [],
+      mountWorkspaceGitRoot: true,
+      mountGitWorktreeCommonDir: false,
+      features: {defaultFeatures: {}, lockfile: true},
+      mounts: [],
+      logLevel: 'info',
+    };
+    stage?.ended();
+    deepStrictEqual(
+      {
+        trusted: 'trusted' in connected && connected.trusted,
+        calls: scene.volumeCalls.map(call =>
+          call.replace(/source=r-[0-9a-f]+/, 'source=VOLUME'),
+        ),
+        prepared: scene.prepared.map(request => [
+          request.folder,
+          request.configFile,
+          request.dockerPath,
+          request.idLabels?.length,
+        ]),
+        read: scene.configurationReads.map(read => [
+          read.target.workspaceFolder,
+          read.target.configFile,
+          read.target.dockerPath,
+        ]),
+        background: stage?.targetOf(upTarget).workspaceFolder,
+        removed: linesOf(scene).includes('rm --force -- boot1'),
+        shutdown: scene.shutdownSent,
+      },
+      {
+        trusted: true,
+        calls: [
+          'standIn',
+          'typed 7b227265',
+          'buildContext',
+          'clearTyped',
+          'hostBridge {"image": "alpine"} type=volume,source=VOLUME,target=/workspaces',
+          'bootstrapBridge boot1 /workspaces/r docker',
+          'hostBridge {"image": "alpine"} type=volume,source=VOLUME,target=/workspaces',
+          'standIn disposed',
+        ],
+        prepared: [
+          [
+            '/workspaces/r',
+            '/workspaces/r/.devcontainer/devcontainer.json',
+            'docker',
+            4,
+          ],
+        ],
+        read: [
+          [
+            '/tmp/stand-in',
+            '/tmp/stand-in/.devcontainer/devcontainer.json',
+            'docker',
+          ],
+        ],
+        background: '/tmp/stand-in',
+        removed: true,
+        shutdown: [],
+      },
+    );
+  });
+
+  it('F-0704 7.E2: a resolve that fails ends with its failure and disposes of the stand-in, with no lifecycle made', async () => {
+    const scene = volumeScene(
+      plainPass(argv => (argv.at(-1) === 'git' ? exited(1) : undefined)),
+    );
+    const failed = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual(
+      [
+        'reason' in failed ? failed.reason : undefined,
+        scene.volumeCalls.at(-1),
+        scene.backgroundStages.length,
+      ],
+      [{id: 'S345'}, 'standIn disposed', 0],
+    );
+  });
+
+  it('a container that isn’t ready fails as a folder’s does, and the bootstrap is removed', async () => {
+    const scene = volumeScene();
+    scene.outcome = {
+      kind: 'setupFailed',
+      message: 'm',
+      description: 'd',
+      containerId: undefined,
+    };
+    const failed = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual(
+      [
+        'reason' in failed ? failed.reason : undefined,
+        linesOf(scene).includes('rm --force -- boot1'),
+        scene.volumeCalls.at(-1),
+      ],
+      [{id: 'S034'}, true, 'standIn disposed'],
+    );
+  });
+
+  it('a clone whose history wasn’t fetched connects, and says so once; the preparation’s steps are logged', async () => {
+    const scene = volumeScene(
+      plainPass(argv => (argv.includes('--tags') ? exited(128) : undefined)),
+    );
+    scene.steps = ['startingContainer', 'containerReady'];
+    await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    const logged = scene.sink.lines.map(line => line.message);
+    deepStrictEqual(
+      [
+        scene.volumeCalls.filter(call => call.startsWith('showShallow')),
+        logged.includes('Starting container') &&
+          logged.includes('containerReady'),
+      ],
+      [['showShallow https://github.com/o/r'], true],
+    );
+  });
+
+  it('F-0201: a Docker program the setting can’t name, or a second check that fails, ends before the bootstrap', async () => {
+    const unnamed = volumeScene(plainPass(), {dockerPath: './docker'});
+    const unchecked = volumeScene();
+    unchecked.version = {status: 1, stderr: 'permission denied'};
+    const results = [
+      await unnamed.connector.connect(inputOf(VOLUME_PAYLOAD)),
+      await unchecked.connector.connect(inputOf(VOLUME_PAYLOAD)),
+    ];
+    deepStrictEqual(
+      [
+        results.map(result => ('kind' in result ? result.kind : 'connected')),
+        unnamed.volumeCalls,
+        unchecked.volumeCalls,
+      ],
+      [['engineCheckFailed', 'engineCheckFailed'], [], []],
+    );
+  });
+
+  it('without the volume dependencies a volume payload is no authority the connector reads', async () => {
+    const scene = sceneOf();
+    const failed = await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual('kind' in failed && failed.kind, 'malformedAuthority');
+  });
+});

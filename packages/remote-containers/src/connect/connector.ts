@@ -1188,9 +1188,7 @@ export function containerConnectorOf(
           ? {}
           : {rebuild: {buildNoCache: rebuild.buildNoCache}}),
       },
-      (step: ContainerStep) => {
-        logger.info(step === 'startingContainer' ? 'Starting container' : step);
-      },
+      logStep,
       logCliEvent,
       cancellation,
     );
@@ -1428,6 +1426,11 @@ export function containerConnectorOf(
     return connected;
   }
 
+  /** Logs a step of the container's preparation. */
+  function logStep(step: ContainerStep): void {
+    logger.info(step === 'startingContainer' ? 'Starting container' : step);
+  }
+
   /** The options of `up` a clone in a volume gives the lifecycle, beyond its folder, file and labels. */
   function volumeRequestOf(
     request: VolumeContainerRequest,
@@ -1568,11 +1571,7 @@ export function containerConnectorOf(
           );
           return lifecycle.prepare(
             volumeRequestOf(request, settings, rebuild),
-            (step: ContainerStep) => {
-              logger.info(
-                step === 'startingContainer' ? 'Starting container' : step,
-              );
-            },
+            logStep,
             logCliEvent,
             cancellation,
           );
