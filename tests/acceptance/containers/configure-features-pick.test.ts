@@ -157,7 +157,7 @@ describe('Configure Container Features: the pick and the write (card containers-
     });
   });
 
-  it('F-0807 AC-9, AC-10, AC-11, F-0804 AC-1, AC-14 (c150-checked, reading-1971-picker-is-f0804s): the pick has a checkbox for every item, Finish and OK and no Back, checks the Features the file lists under any version form, counts them, and checks none for another registry, a bare id or a digest-pinned reference', async () => {
+  it('F-0807 AC-9, AC-11, F-0804 AC-1, AC-14 (c150-checked): the pick has a checkbox for every item, Finish and OK and no Back, checks the Features the file lists under any version form, counts them, and checks none for another registry, a bare id or a digest-pinned reference', async () => {
     const gitId = idOf(GIT_LABEL);
     const commonId = idOf(COMMON);
     const listed = JSON.stringify({
@@ -215,8 +215,13 @@ describe('Configure Container Features: the pick and the write (card containers-
     );
   });
 
-  it('F-0807 AC-12 (reading-1971-picker-is-f0804s): typing narrows the list to the items whose label matches, and a text that only the raw reference holds matches no item', async () => {
-    await withPick('c150-filter', '{}', async window => {
+  it('F-0807 AC-10, AC-12 (reading-1971-picker-is-f0804s): the pre-checked item is checked and counted, typing narrows the list to the items whose label matches, and a text that only the raw reference holds matches no item', async () => {
+    const listed = JSON.stringify({
+      features: {[`${idOf(GIT_LABEL)}:1.2`]: {}},
+    });
+    await withPick('c150-filter', listed, async window => {
+      const checks = await quickPickChecks(window);
+      const counter = (await quickPickChrome(window)).counter;
       await typeInQuickPick(window, 'common');
       await new Promise(resolve => setTimeout(resolve, 700));
       const narrowed = (await quickPickRows(window)).map(each => each.label);
@@ -225,7 +230,15 @@ describe('Configure Container Features: the pick and the write (card containers-
       await new Promise(resolve => setTimeout(resolve, 700));
       const byReference = (await quickPickRows(window)).map(each => each.label);
       await pressEscape(window);
-      deepStrictEqual([narrowed, byReference], [[COMMON], []]);
+      deepStrictEqual(
+        [
+          checks.filter(each => each.checked).map(each => labelOf(each.label)),
+          counter,
+          narrowed,
+          byReference,
+        ],
+        [[GIT_LABEL], '1 Selected', [COMMON], []],
+      );
     });
   });
 
