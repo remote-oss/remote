@@ -94,8 +94,8 @@ tagged `later (Compose)`. Decisions: D-105, ADR-0002 rule 8, ADR-0005, ADR-0009,
    - the result is resolved again on every attempt, so a fix needs no restart (AC-30, AC-33).
 2. **The pre-flight dialogs** (C2):
    - **Neither route found:** STR:S134 with "Cancel" | "Documentation" (primary). The detail is STR:S079 for a
-     non-default path, and absent for the default `docker-compose` (AC-6, AC-44). "Documentation" opens our own page
-     (R-31).
+     non-default path, and absent for the default `docker-compose` (AC-6, AC-44). "Documentation" opens the vendor's
+     install page for Compose, as the engine dialogs do, never a Microsoft link (AC-6, R-31).
    - **The setting's program exists but can't run** (no execute permission, or it fails every call): STR:S135 with
      "Cancel" | "Show Log" (AC-45).
    - **Reading, `(reading-1908-s135)`:** F-0413's rule that S135 is never shown covers the conditions F-0413
