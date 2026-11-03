@@ -66,6 +66,8 @@ describe('the engine of an editor that starts with a DOCKER_HOST and a DOCKER_CO
 
   before(async () => {
     saved = readUserSettings();
+    // Made here so that the folder is the user's: the daemon's container would create it as root.
+    mkdirSync(shared, {recursive: true});
     editorHost = await secondEngine({
       hostPort: Number(new URL(ENGINE_HOST_ADDRESS).port),
       shared,
