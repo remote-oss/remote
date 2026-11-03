@@ -194,5 +194,6 @@
   "Workspace contains an absolute folder path '{0}'.": "Workspace contains an absolute folder path '{0}'.",
   "Workspace contains folder '{0}' not on the local file system.": "Workspace contains folder '{0}' not on the local file system.",
   "Workspace does not define any folders": "Workspace does not define any folders",
-  "Continue": "Continue"
+  "Continue": "Continue",
+  "Select a service": "Select a service"
 }

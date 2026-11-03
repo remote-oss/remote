@@ -141,7 +141,7 @@ function titleButtonsOf(
 }
 
 /** A screen that ends when its answer is given, Back is pressed or it is hidden. */
-function shown<Answer extends {kind: string}>(
+export function shown<Answer extends {kind: string}>(
   ports: QuickInputPorts,
   cancellation: AbortSignal,
   ends: {

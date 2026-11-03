@@ -4,6 +4,8 @@
  * Features, the optional paths) change only that list and the initial state's defaults.
  */
 
+import path from 'node:path';
+import {decodeConfiguration} from '../config/configuration-text.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {
   type CatalogueDialogs,
@@ -22,7 +24,12 @@ import type {WalkFiles} from './folder-facts.ts';
 import {copyStored, type CopyStoredPorts} from './copy-stored.ts';
 import {askLocation, type LocationPorts} from './location.ts';
 import type {QuickInputPorts} from './option-screens.ts';
-import {pickTemplate, type TemplatePickPorts} from './template-pick.ts';
+import {
+  pickTemplate,
+  type ReuseFamily,
+  type TemplatePickPorts,
+} from './template-pick.ts';
+import {askService, composeServicesOf} from './compose-service.ts';
 import {askFeatureOptions} from './feature-options.ts';
 import {askOptionalPaths} from './optional-paths.ts';
 import {
@@ -53,8 +60,12 @@ export interface WizardState {
   readonly omitPaths: readonly string[];
   /** Whether the template is a custom id whose metadata could not be read, so that it declares nothing. */
   readonly metadataMissing: boolean;
-  /** The Dockerfile-family entry the user asked to refer to, which the written configuration must name. */
+  /** The Dockerfile- or Compose-family entry the user asked to refer to, which the written configuration must name. */
   readonly reuseEntry?: string;
+  /** The family of `reuseEntry`. */
+  readonly reuseFamily?: ReuseFamily;
+  /** The service of a Compose entry the configuration uses: the one picked, the only one, or `''` for none. */
+  readonly composeService: string;
 }
 
 /** How the wizard ends. */
@@ -171,7 +182,7 @@ export const NO_TEMPLATE: CatalogueTemplate = customTemplateOf('', undefined);
 function withTemplate(
   state: WizardState,
   template: CatalogueTemplate,
-  reuseEntry?: string,
+  reuse?: {entry: string; family: ReuseFamily},
 ): WizardState {
   return {
     ...state,
@@ -179,8 +190,23 @@ function withTemplate(
     templateArgs: {},
     omitPaths: [],
     metadataMissing: false,
-    ...(reuseEntry === undefined ? {} : {reuseEntry}),
+    ...(reuse === undefined
+      ? {}
+      : {reuseEntry: reuse.entry, reuseFamily: reuse.family}),
   };
+}
+
+/** A stage's result from its screen's answer: a choice goes on as `next` says, Back goes back with nothing kept, and anything else cancels. */
+function answered<Answer extends {kind: string}>(
+  answer: Answer,
+  next: (chosen: Extract<Answer, {kind: 'chosen'}>) => StageResult,
+): StageResult {
+  if (answer.kind === 'chosen') {
+    return next(answer as Extract<Answer, {kind: 'chosen'}>);
+  }
+  return answer.kind === 'back'
+    ? {kind: 'back', keep: false}
+    : {kind: 'cancelled'};
 }
 
 /** The stage that asks which template the configuration starts from. */
@@ -230,7 +256,10 @@ function templatePickStage(
         case 'reuse':
           return {
             kind: 'next',
-            state: withTemplate(state, choice.template, choice.entry),
+            state: withTemplate(state, choice.template, {
+              entry: choice.entry,
+              family: choice.family,
+            }),
             shown: true,
           };
         case 'copyStored':
@@ -295,6 +324,41 @@ function locationStage(
   };
 }
 
+/**
+ * The stage that asks which service of a Compose entry the configuration uses. It shows nothing for any
+ * other choice, and for a file with one service or none. A file that isn't YAML ends the wizard with its error.
+ */
+function composeServiceStage(ports: StagePorts): WizardStage {
+  return {
+    name: 'composeService',
+    execute: async (state, previous, cancellation) => {
+      const entry =
+        state.reuseFamily === 'compose' ? state.reuseEntry : undefined;
+      if (entry === undefined) {
+        return {kind: 'next', state, shown: false};
+      }
+      const services = composeServicesOf(
+        decodeConfiguration(
+          await ports.files.read(path.join(state.folder, entry)),
+        ),
+      );
+      const answer = await askService(
+        services,
+        {
+          title: ports.title,
+          quick: {...ports.options, translate: ports.translate},
+        },
+        cancellation,
+      );
+      return answered(answer, chosen => ({
+        kind: 'next',
+        state: {...state, composeService: chosen.service},
+        shown: chosen.shown,
+      }));
+    },
+  };
+}
+
 /** The stage that asks for the template's options. */
 function templateOptionsStage(ports: StagePorts): WizardStage {
   return {
@@ -308,18 +372,11 @@ function templateOptionsStage(ports: StagePorts): WizardStage {
         },
         cancellation,
       );
-      switch (answer.kind) {
-        case 'chosen':
-          return {
-            kind: 'next',
-            state: {...state, templateArgs: answer.templateArgs},
-            shown: answer.shown,
-          };
-        case 'back':
-          return {kind: 'back', keep: false};
-        default:
-          return {kind: 'cancelled'};
-      }
+      return answered(answer, chosen => ({
+        kind: 'next',
+        state: {...state, templateArgs: chosen.templateArgs},
+        shown: chosen.shown,
+      }));
     },
   };
 }
@@ -439,6 +496,7 @@ export function stagesOf(
 ): readonly WizardStage[] {
   const rest = [
     templatePickStage(catalogue.templates, ports),
+    composeServiceStage(ports),
     templateOptionsStage(ports),
     selectFeaturesStage(catalogue.features, ports),
     featureOptionsStage(catalogue.features, ports),

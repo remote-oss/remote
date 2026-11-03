@@ -669,3 +669,79 @@ describe('the chooser that offers the stored configuration (card containers-92)'
     );
   });
 });
+
+describe('the chooser’s Compose-family entries (card containers-145)', () => {
+  const WITH_COMPOSE = [
+    ...CATALOGUE,
+    templateOf('docker-existing-dockerfile', 'Existing Dockerfile'),
+    templateOf('docker-existing-docker-compose', 'Existing Docker Compose'),
+  ];
+
+  /** A folder whose root holds `names`, each a file. */
+  function folderOf(...names: string[]): FolderFacts {
+    return {
+      rootEntries: names.map(name => ({name, kind: 'file' as const})),
+      files: [],
+      truncated: false,
+    };
+  }
+
+  it('F-0802 AC-36, F-0801 AC-32: the Compose family follows the Dockerfile family: a name holding compose and ending in .yml or .yaml, in any case, by character code, and a name of both families in each', () => {
+    const {picker} = started(
+      sceneOf(),
+      folderOf(
+        'docker-compose.override.yml',
+        'DOCKERFILE',
+        'compose.yml',
+        'COMPOSE.YAML',
+        'compose.json',
+        'Containerfile',
+        'dockerfile-compose.yml',
+      ),
+      WITH_COMPOSE,
+    );
+    deepStrictEqual(labels(picker), [
+      'From a predefined container configuration template...',
+      "From 'DOCKERFILE'",
+      "From 'dockerfile-compose.yml'",
+      "From 'COMPOSE.YAML'",
+      "From 'compose.yml'",
+      "From 'docker-compose.override.yml'",
+      "From 'dockerfile-compose.yml'",
+      'Learn More',
+    ]);
+  });
+
+  it('F-0801 AC-11: a Compose row gives the existing-Compose template, the entry and its family', async () => {
+    const {picker, result} = started(
+      sceneOf(),
+      folderOf('docker-compose.yml'),
+      WITH_COMPOSE,
+    );
+    picker.accept("From 'docker-compose.yml'");
+    const choice = await result;
+    deepStrictEqual(
+      choice.kind === 'reuse'
+        ? [choice.template.id, choice.entry, choice.family]
+        : choice,
+      [
+        `${PREFIX}docker-existing-docker-compose`,
+        'docker-compose.yml',
+        'compose',
+      ],
+    );
+  });
+
+  it('F-0801 AC-11: a Compose row with no existing-Compose template in the catalogue fails the pick with the cause', async () => {
+    const {picker, result} = started(
+      sceneOf(),
+      folderOf('compose.yaml'),
+      CATALOGUE,
+    );
+    picker.accept("From 'compose.yaml'");
+    deepStrictEqual(await result, {
+      kind: 'failed',
+      cause: 'the catalogue has no docker-existing-docker-compose template',
+    });
+  });
+});

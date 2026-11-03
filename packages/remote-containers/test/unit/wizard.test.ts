@@ -42,6 +42,7 @@ const INITIAL: WizardState = {
   featureMode: 'defaults',
   omitPaths: [],
   metadataMissing: false,
+  composeService: '',
 };
 
 interface Entry {
@@ -623,13 +624,14 @@ describe('the wizard (card containers-80)', () => {
     );
   });
 
-  it('F-0801 BR-5: the stage list is the template pick, the template’s options, Select Features, the Features’ options and the optional paths', () => {
+  it('F-0801 BR-5, F-0413 6.2: the stage list is the template pick, the Compose service, the template’s options, Select Features, the Features’ options and the optional paths', () => {
     const scene = sceneOf();
     const stages = stagesWithoutFeatures(scene);
     deepStrictEqual(
       stages.map(each => each.name),
       [
         'templatePick',
+        'composeService',
         'templateOptions',
         'selectFeatures',
         'featureOptions',
@@ -661,7 +663,7 @@ describe('the wizard (card containers-80)', () => {
         facts: {rootEntries: [], files: [], truncated: false},
       } satisfies StagePorts,
     );
-    return stages[2];
+    return stages.find(stage => stage.name === 'selectFeatures');
   }
 
   it('F-0804 BR-7, AC-16: Back from Select Features goes back with nothing kept, and Escape cancels the wizard', async () => {
@@ -810,15 +812,17 @@ describe('the wizard (card containers-80)', () => {
     const input = scriptedInput([]);
     scene.ports.options = input.ports;
     const stages = stagesWithoutFeatures(scene);
-    const result = await stages[3]?.execute(
-      {
-        ...INITIAL,
-        features: [{id: 'ghcr.io/x/features/gone:1', options: {}}],
-        featureMode: 'configure',
-      },
-      undefined,
-      NEVER,
-    );
+    const result = await stages
+      .find(stage => stage.name === 'featureOptions')
+      ?.execute(
+        {
+          ...INITIAL,
+          features: [{id: 'ghcr.io/x/features/gone:1', options: {}}],
+          featureMode: 'configure',
+        },
+        undefined,
+        NEVER,
+      );
     deepStrictEqual(
       [result?.kind === 'next' && result.state.features, input.pickers.length],
       [[{id: 'ghcr.io/x/features/gone:1', options: {}}], 0],
@@ -835,16 +839,18 @@ describe('the wizard (card containers-80)', () => {
     const input = scriptedInput(steps);
     scene.ports.options = input.ports;
     const stages = stagesWithoutFeatures(scene);
-    const result = await stages[4]?.execute(
-      {
-        ...INITIAL,
-        template: {...NO_TEMPLATE, id: 'a/b/c', optionalPaths: paths},
-        omitPaths: ['stale'],
-        ...extra,
-      },
-      undefined,
-      NEVER,
-    );
+    const result = await stages
+      .find(stage => stage.name === 'optionalPaths')
+      ?.execute(
+        {
+          ...INITIAL,
+          template: {...NO_TEMPLATE, id: 'a/b/c', optionalPaths: paths},
+          omitPaths: ['stale'],
+          ...extra,
+        },
+        undefined,
+        NEVER,
+      );
     return {scene, input, result};
   }
 
@@ -909,6 +915,7 @@ describe('the wizard (card containers-80)', () => {
       [
         'location',
         'templatePick',
+        'composeService',
         'templateOptions',
         'selectFeatures',
         'featureOptions',
@@ -1194,5 +1201,205 @@ describe('the wizard (card containers-80)', () => {
       [picker?.title, (await result).kind, scene.written.length],
       ['Add Dev Container Configuration Files', 'written', 1],
     );
+  });
+});
+
+describe('the wizard’s Compose path (card containers-145)', () => {
+  const COMPOSE_INDEX = JSON.stringify({
+    collections: [
+      {
+        sourceInformation: {repository: SPECIFICATION},
+        templates: [
+          {
+            id: `${PREFIX}docker-existing-docker-compose`,
+            version: '1',
+            name: 'Existing Docker Compose (Extend)',
+            optionalPaths: ['.github/dependabot.yml'],
+          },
+        ],
+      },
+    ],
+  });
+
+  /** The configuration the existing-Compose template writes. */
+  const TEMPLATE_CONFIGURATION =
+    '{\n\t"name": "Existing Docker Compose (Extend)",\n\t"dockerComposeFile": [\n\t\t"../docker-compose.yml",\n\t\t"docker-compose.yml"\n\t],\n\t"service": "your-service-name-here"\n}\n';
+
+  /** The compose file the existing-Compose template writes beside it. */
+  const TEMPLATE_COMPOSE =
+    "version: '3.8'\nservices:\n  # Update this to the name of the service\n  your-service-name-here:\n    command: sleep infinity\n";
+
+  /** A scene whose root holds `entry` with `text`, the template's two files written in the scratch folder, and the screens played by `steps`. */
+  function composeScene(entry: string, text: string, steps: Step[]) {
+    const scene = sceneOf(() => Promise.resolve(COMPOSE_INDEX));
+    scene.root = [{name: entry, kind: 'file'}];
+    scene.files.set(`/work/ws/${entry}`, text);
+    scene.files.set(
+      '/scratch/.devcontainer/devcontainer.json',
+      TEMPLATE_CONFIGURATION,
+    );
+    scene.files.set(
+      '/scratch/.devcontainer/docker-compose.yml',
+      TEMPLATE_COMPOSE,
+    );
+    const input = scriptedInput([
+      ...steps,
+      takeDefaults,
+      takeDefaults,
+      takeDefaults,
+      takeDefaults,
+    ]);
+    scene.ports.options = input.ports;
+    return {scene, input};
+  }
+
+  /** The written text of `file`, the last write of it. */
+  function writtenText(scene: Scene, file: string): string | undefined {
+    return scene.writes.filter(([name]) => name === file).at(-1)?.[1];
+  }
+
+  it('F-0413 AC-3, F-0801 AC-21, F-0802 AC-32: two services give the service pick, and the picked one is the service of both written files', async () => {
+    const {scene, input} = composeScene(
+      'docker-compose.yml',
+      'services:\n  web: {}\n  db: {}\n',
+      [pick('db')],
+    );
+    const {picker, result} = await started(scene);
+    picker.accept("From 'docker-compose.yml'");
+    await result;
+    const configuration = JSON.parse(
+      writtenText(scene, '/scratch/.devcontainer/devcontainer.json') ?? '{}',
+    ) as Record<string, unknown>;
+    deepStrictEqual(
+      [
+        input.pickers[0]?.placeholder,
+        configuration.dockerComposeFile,
+        configuration.service,
+        writtenText(scene, '/scratch/.devcontainer/docker-compose.yml')?.split(
+          '\n',
+        )[3],
+        scene.written.map(request => request.templateId),
+      ],
+      [
+        'Select a service',
+        ['../docker-compose.yml', 'docker-compose.yml'],
+        'db',
+        '  db:',
+        [`${PREFIX}docker-existing-docker-compose`],
+      ],
+    );
+  });
+
+  it('F-0413 AC-54, F-0801 AC-33: one service in compose.yaml is used with no pick, and the picked file comes first', async () => {
+    const {scene, input} = composeScene(
+      'compose.yaml',
+      'services:\n  app: {}\n',
+      [],
+    );
+    const {picker, result} = await started(scene);
+    picker.accept("From 'compose.yaml'");
+    await result;
+    const configuration = JSON.parse(
+      writtenText(scene, '/scratch/.devcontainer/devcontainer.json') ?? '{}',
+    ) as Record<string, unknown>;
+    deepStrictEqual(
+      [
+        input.pickers.some(each => each.placeholder === 'Select a service'),
+        configuration.dockerComposeFile,
+        configuration.service,
+      ],
+      [false, ['../compose.yaml', 'docker-compose.yml'], 'app'],
+    );
+  });
+
+  it('F-0413 AC-4, AC-27: no service gives "service": "" and the nameless placeholder in the generated file', async () => {
+    const {scene} = composeScene('docker-compose.yml', 'services:\n', []);
+    const {picker, result} = await started(scene);
+    picker.accept("From 'docker-compose.yml'");
+    await result;
+    deepStrictEqual(
+      [
+        (
+          JSON.parse(
+            writtenText(scene, '/scratch/.devcontainer/devcontainer.json') ??
+              '{}',
+          ) as Record<string, unknown>
+        ).service,
+        writtenText(scene, '/scratch/.devcontainer/docker-compose.yml')?.split(
+          '\n',
+        )[3],
+      ],
+      ['', '  :'],
+    );
+  });
+
+  it('F-0801 AC-11: a written configuration that is no object is rewritten as one that names the file and the service', async () => {
+    const {scene} = composeScene(
+      'docker-compose.yml',
+      'services:\n  app: {}\n',
+      [],
+    );
+    scene.files.set('/scratch/.devcontainer/devcontainer.json', '[1]');
+    const {picker, result} = await started(scene);
+    picker.accept("From 'docker-compose.yml'");
+    await result;
+    deepStrictEqual(
+      JSON.parse(
+        writtenText(scene, '/scratch/.devcontainer/devcontainer.json') ?? '{}',
+      ),
+      {
+        dockerComposeFile: ['../docker-compose.yml', 'docker-compose.yml'],
+        service: 'app',
+      },
+    );
+  });
+
+  it('F-0413 AC-61: Back from the service pick shows the chooser again, and nothing is written', async () => {
+    const {scene} = composeScene(
+      'docker-compose.yml',
+      'services:\n  web: {}\n  db: {}\n',
+      [pressBack],
+    );
+    const {picker, result} = await started(scene);
+    picker.accept("From 'docker-compose.yml'");
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const again = scene.pickers[1];
+    const shownAgain = [again?.placeholder, again?.items.length];
+    again?.hide();
+    await result;
+    deepStrictEqual(
+      [shownAgain, scene.written],
+      [['How would you like to create your container configuration?', 3], []],
+    );
+  });
+
+  it('F-0413 AC-26: Escape at the service pick ends the wizard silently with nothing written', async () => {
+    const {scene} = composeScene(
+      'docker-compose.yml',
+      'services:\n  web: {}\n  db: {}\n',
+      [pressEscape],
+    );
+    const {picker, result} = await started(scene);
+    picker.accept("From 'docker-compose.yml'");
+    deepStrictEqual(
+      [await result, scene.written, scene.failures],
+      [{kind: 'cancelled'}, [], []],
+    );
+  });
+
+  it('F-0413 7.E2: a compose file that isn’t YAML fails the command with its error, and nothing is written', async () => {
+    const {scene} = composeScene(
+      'docker-compose.yml',
+      'services:\n  web: [\n',
+      [],
+    );
+    const {picker, result} = await started(scene);
+    picker.accept("From 'docker-compose.yml'");
+    const failure = await result.then(
+      () => 'resolved',
+      (caught: unknown) => (caught instanceof Error ? 'error' : 'other'),
+    );
+    deepStrictEqual([failure, scene.written], ['error', []]);
   });
 });
