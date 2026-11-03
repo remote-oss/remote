@@ -4,6 +4,7 @@
  * loopback into it, and holds the connection until the window ends or connects again.
  */
 
+import {join} from 'node:path';
 import type {
   ConnectInput,
   ConnectPhase,
@@ -186,6 +187,8 @@ export interface ContainerConnector extends Connector {
 export interface ContainerConnectorDependencies {
   /** Whether a folder exists on this machine. */
   folderExists(folder: string): Promise<boolean>;
+  /** The program a read before the trust answer is given (see `noEngineProgramOf`). */
+  noEngineProgram: string;
   /** The configuration files of a folder, in the order of the picker. */
   discoverConfigurations(
     folder: string,
@@ -297,8 +300,14 @@ function mappedPath(
     : undefined;
 }
 
-/** The program a read before the trust answer is given: it does not exist, and the CLI's preload answers its spawns. */
-const NO_ENGINE_PROGRAM = '/remote-oss-no-engine';
+/**
+ * The program a read before the trust answer is given: a path in a folder of the extension's own that nothing creates,
+ * so that no program is ever there to run, and the CLI's preload answers its spawns. A fixed path at a drive's root
+ * would let another user plant a program where the preload does not reach.
+ */
+export function noEngineProgramOf(storageFolder: string): string {
+  return join(storageFolder, 'no-engine', 'absent');
+}
 
 /** The settings, the program, the engine and the CLI of one folder. */
 interface Tools {
@@ -839,11 +848,11 @@ export function containerConnectorOf(
       ).kind === 'notFound'
       ? {
           ...tools,
-          dockerPath: NO_ENGINE_PROGRAM,
+          dockerPath: dependencies.noEngineProgram,
           bridge: dependencies.cliFor({
             ...dependencies.editorEnvironment,
             ...environmentOfPinned(folder),
-            REMOTE_OSS_NO_ENGINE: NO_ENGINE_PROGRAM,
+            REMOTE_OSS_NO_ENGINE: dependencies.noEngineProgram,
           }),
         }
       : tools;

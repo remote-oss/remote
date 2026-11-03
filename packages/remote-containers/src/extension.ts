@@ -60,7 +60,7 @@ import {cliPathsOf} from './cli/cli-paths.ts';
 import {nodeCliHost} from './cli/node-cli-host.ts';
 import {systemCliPorts} from './cli/node-cli-ports.ts';
 import {overrideStoreOf} from './cli/override-files.ts';
-import {containerConnectorOf} from './connect/connector.ts';
+import {containerConnectorOf, noEngineProgramOf} from './connect/connector.ts';
 import {openHostRelay} from './connect/host-relay.ts';
 import {recentLabelPortsOf} from './connect/recent-editor.ts';
 import {
@@ -1291,6 +1291,7 @@ export async function activate(
       },
       discoverConfigurations: folder =>
         discoverConfigurations(folder, configFiles, collate),
+      noEngineProgram: noEngineProgramOf(context.globalStorageUri.fsPath),
       folderExists: async folder => {
         try {
           await vscode.workspace.fs.stat(vscode.Uri.file(folder));
