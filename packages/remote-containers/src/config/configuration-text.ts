@@ -123,6 +123,19 @@ export function namesContainerSource(configuration: unknown): boolean {
   );
 }
 
+/** The Dockerfile value as written: `build.dockerfile` when `build` is an object whose `dockerfile` is a string, else a string top-level `dockerFile`. */
+export function dockerfileValueOf(
+  parsed: Record<string, unknown>,
+): string | undefined {
+  const {build} = parsed;
+  const named =
+    typeof build === 'object' && build !== null && !Array.isArray(build)
+      ? (build as Record<string, unknown>).dockerfile
+      : undefined;
+  const value = typeof named === 'string' ? named : parsed.dockerFile;
+  return typeof value === 'string' ? value : undefined;
+}
+
 /**
  * The absolute path of the Dockerfile the configuration names: `build.dockerfile`, else the legacy `dockerFile`, read
  * against the folder of the configuration file. None when it names no Dockerfile, or when its text holds a variable
@@ -132,13 +145,8 @@ export function dockerfileOf(
   parsed: Record<string, unknown>,
   configFile: string,
 ): string | undefined {
-  const {build} = parsed;
-  const named =
-    typeof build === 'object' && build !== null && !Array.isArray(build)
-      ? (build as Record<string, unknown>).dockerfile
-      : undefined;
-  const value = typeof named === 'string' ? named : parsed.dockerFile;
-  return typeof value === 'string' && !value.includes('${')
+  const value = dockerfileValueOf(parsed);
+  return value !== undefined && !value.includes('${')
     ? path.resolve(path.dirname(configFile), value)
     : undefined;
 }
