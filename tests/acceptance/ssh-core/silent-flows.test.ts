@@ -9,6 +9,7 @@ import {
   inWindow,
   onHost,
   openWindow,
+  runShellTask,
   terminalNames,
   variable,
   waitFor,
@@ -18,9 +19,9 @@ import {
   notificationCentre,
   notifications,
   pageText,
-  pressEscape,
+  paletteRows,
+  toastFacts,
   typeInTerminal,
-  waitForQuickPick,
 } from '../windows/renderer.ts';
 
 /** The prefixes of the commands that the extension registers. */
@@ -34,6 +35,8 @@ interface Footprint {
   storage: string[];
   commands: string[];
   settings: string[];
+  /** The palette titles of the extension, by the category its commands show. */
+  palette: string[];
 }
 
 /** The titles of the extension's settings that the Settings editor of `window` lists. */
@@ -52,6 +55,8 @@ async function settingTitles(window: string): Promise<string[]> {
 }
 
 async function footprintOf(window: string): Promise<Footprint> {
+  // The palette is read first: the notification centre, once open, keeps the keyboard.
+  const palette = (await paletteRows(window, 'Remote-SSH:')).sort();
   return {
     toasts: await notifications(window),
     centre: await notificationCentre(window),
@@ -65,18 +70,25 @@ async function footprintOf(window: string): Promise<Footprint> {
       )
     ).flat(),
     settings: await settingTitles(window),
+    palette,
   };
 }
 
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
-  it('F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, the debug and task pickers and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before', async () => {
+  it('F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before', async () => {
     const folder = 'c125-silent';
     await onHost(
       'sh',
       '-c',
       `mkdir -p /home/harness/${folder} && echo note > /home/harness/${folder}/note.txt`,
+    );
+    const host = (await onHost('hostname')).trim();
+    await onHost(
+      'sh',
+      '-c',
+      `cat > /home/harness/${folder}/app.js <<'EOF'\nconsole.log('c125-ran-on-' + require('os').hostname());\nEOF\nmkdir -p /home/harness/${folder}/.vscode && cat > /home/harness/${folder}/.vscode/launch.json <<'EOF'\n{"version":"0.2.0","configurations":[{"type":"node","request":"launch","name":"Run app","program":"\${workspaceFolder}/app.js"}]}\nEOF`,
     );
     await openWindow('harness', folder);
     try {
@@ -108,23 +120,39 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         'Preferences: Open Remote Settings (JSON) (SSH: harness)',
       );
       await new Promise(resolve => setTimeout(resolve, 3000));
-      // 5.4 and 5.5: the debug and task pickers, left with Escape.
-      for (const command of [
-        'workbench.action.debug.selectandstart',
-        'workbench.action.tasks.runTask',
-      ]) {
-        void inWindow(folder, command).catch(() => undefined);
-        await waitForQuickPick(folder, 30_000).catch(() => undefined);
-        await pressEscape(folder).catch(() => undefined);
-      }
+      // 5.4: a node program is debugged to its end.
+      await inWindow(folder, 'workbench.action.debug.start');
+      await waitFor(
+        'the program to print in the Debug Console',
+        async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
+        90_000,
+      );
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      await inWindow(folder, 'workbench.action.debug.stop').catch(
+        () => undefined,
+      );
+      // 5.5: a shell task runs to its end.
+      const taskExit = await runShellTask(folder, 'echo c125-task');
       // 5.6: the Extensions view.
       await inWindow(folder, 'workbench.view.extensions');
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       const after = await footprintOf(folder);
+      // The toasts and the centre are read together, with the centre open, and none is the extension's.
+      await notificationCentre(folder);
+      const ours = (await toastFacts(folder)).filter(each =>
+        each.source.includes('Remote - SSH'),
+      );
       deepStrictEqual(
-        [after, before.settings.length > 0, before.commands.length > 0],
-        [before, true, true],
+        [
+          after,
+          before.settings.length > 0,
+          before.commands.length > 0,
+          before.palette.length > 0,
+          ours,
+          taskExit,
+        ],
+        [before, true, true, true, [], 0],
       );
     } finally {
       await closeWindow(folder).catch(() => undefined);
