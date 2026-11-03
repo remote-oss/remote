@@ -437,6 +437,7 @@ describe('containerLifecycleOf', () => {
           remoteWorkspaceFolder: '/workspaces/a',
           volumeMounted: true,
           created: true,
+          started: true,
         },
         ups: [
           {
@@ -482,6 +483,7 @@ describe('containerLifecycleOf', () => {
       remoteWorkspaceFolder: '/workspaces/a',
       volumeMounted: false,
       created: false,
+      started: false,
     });
   });
 
@@ -697,6 +699,43 @@ describe('containerLifecycleOf', () => {
       exited: started,
       none: started,
       rebuild: started,
+    });
+  });
+
+  it('F-0405 AC-12: a container found running is not started by the connect, and one found exited, one created and one rebuilt are', async () => {
+    const startedFor: Record<string, boolean | undefined> = {};
+    for (const status of ['running', 'exited']) {
+      const result = await prepared(
+        scriptedEngine({
+          [LISTING]: [ran(`${NEW}\n`)],
+          [LEGACY_LISTING]: [ran('')],
+          [`inspect --type container ${NEW}`]: [
+            ran(inspected([[NEW, status]], false)),
+            ran(inspected([[NEW, 'running']], false)),
+          ],
+        }),
+      );
+      startedFor[status] =
+        result.outcome.kind === 'ready' ? result.outcome.started : undefined;
+    }
+    const made = await prepared(
+      scriptedEngine({
+        ...EMPTY_LISTING,
+        [`inspect --type container ${NEW}`]: [
+          ran(inspected([[NEW, 'running']])),
+        ],
+      }),
+    );
+    startedFor.created =
+      made.outcome.kind === 'ready' ? made.outcome.started : undefined;
+    const rebuilt = await rebuiltFrom('running');
+    startedFor.rebuilt =
+      rebuilt.outcome.kind === 'ready' ? rebuilt.outcome.started : undefined;
+    deepStrictEqual(startedFor, {
+      running: false,
+      exited: true,
+      created: true,
+      rebuilt: true,
     });
   });
 
@@ -1243,6 +1282,7 @@ describe('containerLifecycleOf', () => {
           remoteWorkspaceFolder: '/workspaces/a',
           volumeMounted: true,
           created: false,
+          started: false,
         },
         idLabels: legacyIdLabels(FOLDER),
       },

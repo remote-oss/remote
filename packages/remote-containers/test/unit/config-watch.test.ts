@@ -240,8 +240,9 @@ function failingWatch(scene: Scene, reason: unknown): ConfigWatch {
   });
 }
 
-const FOUND = {configFile: CONFIG, created: false};
-const CREATED = {configFile: CONFIG, created: true};
+const FOUND = {configFile: CONFIG, created: false, started: false};
+const STARTED = {configFile: CONFIG, created: false, started: true};
+const CREATED = {configFile: CONFIG, created: true, started: true};
 
 describe('the rebuild prompt when the configuration changes (card containers-141)', () => {
   it('F-0303 AC-12: a created container seeds every existing watched file and shows nothing', async () => {
@@ -289,6 +290,21 @@ describe('the rebuild prompt when the configuration changes (card containers-141
     );
     await scene.watch.activate(CREATED);
     deepStrictEqual(scene.hashes(), [['devcontainer.json', configHash(IMAGE)]]);
+  });
+
+  it('F-0405 AC-12: a container this connect started from a stopped state seeds the edited content and shows nothing, where a container found running tells the edit', async () => {
+    const stopped = sceneOf({[CONFIG]: IMAGE}, {'devcontainer.json': 'old'});
+    await stopped.watch.activate(STARTED);
+    const running = sceneOf({[CONFIG]: IMAGE}, {'devcontainer.json': 'old'});
+    await running.watch.activate(FOUND);
+    deepStrictEqual(
+      [stopped.hashes(), stopped.messages(), running.messages()],
+      [
+        [['devcontainer.json', configHash(IMAGE)]],
+        [],
+        [MESSAGE('devcontainer.json')],
+      ],
+    );
   });
 
   it('F-0303 AC-19: a missing configuration shows nothing and writes nothing, and the watch still runs', async () => {
@@ -669,6 +685,7 @@ describe('the rebuild prompt when the configuration changes (card containers-141
     await scene.watch.activate({
       configFile: '/w/.devcontainer.json',
       created: false,
+      started: false,
     });
     deepStrictEqual(scene.messages(), [
       MESSAGE('.devcontainer.json, Dockerfile'),

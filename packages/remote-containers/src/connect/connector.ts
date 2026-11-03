@@ -180,6 +180,8 @@ export interface HeldConnection {
   configFile: string;
   /** Whether this connection created the container: a first build, a rebuild, or a build after it was removed. */
   created: boolean;
+  /** Whether the container was not running before this connect, so that it was created or started by it. */
+  started: boolean;
   /** The Dockerfile the primary service of a Compose configuration builds from, absolute; none otherwise. */
   serviceDockerfile?: string;
 }
@@ -403,6 +405,8 @@ interface Held {
   configFile: string;
   /** Whether the connect that made the connection created the container. */
   created: boolean;
+  /** Whether the container was not running before the connect that made the connection. */
+  started: boolean;
   serviceDockerfile: string | undefined;
   channel: HostChannel;
   server: StartedContainerServer;
@@ -1468,6 +1472,7 @@ export function containerConnectorOf(
       engine,
       configFile: context.configFile,
       created: prepared.created,
+      started: prepared.started,
       serviceDockerfile: prepared.serviceDockerfile,
       channel,
       server,
@@ -1780,6 +1785,7 @@ export function containerConnectorOf(
             engine: held.engine,
             configFile: held.configFile,
             created: held.created,
+            started: held.started,
             ...(held.serviceDockerfile === undefined
               ? {}
               : {serviceDockerfile: held.serviceDockerfile}),

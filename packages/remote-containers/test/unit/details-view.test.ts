@@ -106,6 +106,7 @@ function connectionOf(scene: Scene): HeldConnection {
     engine: engineOf(scene),
     configFile: '/tmp/c33w/.devcontainer/devcontainer.json',
     created: false,
+    started: false,
   };
 }
 

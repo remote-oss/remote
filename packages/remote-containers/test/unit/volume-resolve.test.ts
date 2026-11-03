@@ -22,6 +22,7 @@ const READY: ContainerOutcome = {
   remoteWorkspaceFolder: '/workspaces/r',
   volumeMounted: true,
   created: true,
+  started: true,
 };
 
 const TARGET: DevContainerVolume = {

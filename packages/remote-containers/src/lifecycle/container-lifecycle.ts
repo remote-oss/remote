@@ -91,6 +91,8 @@ export type ContainerOutcome =
       remoteWorkspaceFolder: string;
       volumeMounted: boolean;
       created: boolean;
+      /** Whether the container was not running before this connect: created now, or started from a stopped state. */
+      started: boolean;
       /** The Dockerfile the primary service of a Compose project builds from, absolute; none otherwise. */
       serviceDockerfile?: string;
     }
@@ -832,6 +834,9 @@ export function containerLifecycleOf(dependencies: {
         `the dev container CLI used ${upResult.containerId.slice(0, IDENTIFIER_LENGTH)} where ${decision.containerId.slice(0, IDENTIFIER_LENGTH)} was chosen`,
       );
     }
+    const created = !discovery.containers.some(
+      container => container.id === upResult.containerId,
+    );
     const mounted = await volumeMounted(upResult.containerId, cancellation);
     startBackground(target, upResult.containerId, relayEvent);
     onStep('containerReady');
@@ -841,9 +846,9 @@ export function containerLifecycleOf(dependencies: {
       remoteUser: upResult.remoteUser,
       remoteWorkspaceFolder: upResult.remoteWorkspaceFolder,
       volumeMounted: mounted,
-      created: !discovery.containers.some(
-        container => container.id === upResult.containerId,
-      ),
+      created,
+      started:
+        created || (decision.kind === 'use' && decision.status !== 'running'),
       ...(composeResolution.kind === 'ready' &&
       composeResolution.serviceDockerfile !== undefined
         ? {serviceDockerfile: composeResolution.serviceDockerfile}

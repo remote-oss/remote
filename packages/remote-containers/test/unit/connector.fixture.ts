@@ -237,6 +237,7 @@ export const READY: Extract<ContainerOutcome, {kind: 'ready'}> = {
   remoteWorkspaceFolder: '/workspaces/proj',
   volumeMounted: false,
   created: true,
+  started: true,
 };
 
 /** A server that started. */

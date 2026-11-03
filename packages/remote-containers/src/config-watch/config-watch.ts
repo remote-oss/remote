@@ -58,6 +58,8 @@ export interface ConfigWatch {
   activate(connection: {
     configFile: string;
     created: boolean;
+    /** Whether the container was not running before this connect: a restart seeds the acknowledgment like a creation. */
+    started: boolean;
     serviceDockerfile?: string;
   }): Promise<void>;
   /** The window holds no connection: no evaluation runs until the next activate. */
@@ -301,7 +303,7 @@ export function configWatchOf(ports: ConfigWatchPorts): ConfigWatch {
   }
 
   return {
-    activate({configFile, created, serviceDockerfile}) {
+    activate({configFile, created, started, serviceDockerfile}) {
       end(session);
       const active: Session = {
         configFile,
@@ -323,7 +325,7 @@ export function configWatchOf(ports: ConfigWatchPorts): ConfigWatch {
         }
         active.polled = configurationFingerprint(bytes);
         const {watched, current} = await currentOf(active, bytes, true);
-        if (created || readAcknowledgment(state) === undefined) {
+        if (created || started || readAcknowledgment(state) === undefined) {
           await writeAcknowledgment(state, current);
           logger.info(
             `seeded the acknowledgment of ${String(current.size)} configuration files`,
