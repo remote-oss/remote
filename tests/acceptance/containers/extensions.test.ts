@@ -42,7 +42,7 @@ const YAML_PREFIX = `${YAML_ID}-`;
 /** The newest stable version of the YAML extension on Open VSX when this row was written; its pre-releases are newer. */
 const STABLE_YAML = '2.0.0';
 
-/** What the editor appends to the folder of an extension that is not built for a platform. */
+/** The suffix the server gives the folder of a universal extension it installs from the gallery, which one it installs from a package file lacks. */
 const UNIVERSAL = '-universal';
 
 describe('the configuration’s extensions in the container (card containers-16)', function () {
@@ -275,8 +275,15 @@ describe('the configuration’s extensions in the container (card containers-16)
       const notices = await notificationCentre(name);
       await closeWindow(name);
       deepStrictEqual(
-        [startingWith(installed, DRACULA_PREFIX), notices],
-        [[`${DRACULA_PREFIX}${latest}${UNIVERSAL}`], []],
+        [
+          startingWith(installed, DRACULA_PREFIX).map(folder =>
+            folder.endsWith(UNIVERSAL)
+              ? folder.slice(0, -UNIVERSAL.length)
+              : folder,
+          ),
+          notices,
+        ],
+        [[`${DRACULA_PREFIX}${latest}`], []],
       );
     } finally {
       await setUserSetting('dev.containers.defaultExtensions', undefined);
