@@ -207,7 +207,7 @@ export async function removeComposeContainers(): Promise<void> {
 }
 
 /** Writes the executable `<run>/c143-bin/<name>` with `lines`, and gives its path. */
-export function programFile(name: string, lines: readonly string[]): string {
+function programFile(name: string, lines: readonly string[]): string {
   return scriptAt(
     path.join(variable('HARNESS_RUN_FOLDER'), 'c143-bin', name),
     lines,
