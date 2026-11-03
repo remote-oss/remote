@@ -677,7 +677,18 @@ export function containerLifecycleOf(dependencies: {
       }
     }
     const upResult = await bridge.up(
-      {...target, terminalSize: presenter.terminalSize()},
+      {
+        ...target,
+        terminalSize: presenter.terminalSize(),
+        ...(composeResolution.kind === 'ready'
+          ? {
+              environment: {
+                ...target.environment,
+                ...composeResolution.upEnvironment,
+              },
+            }
+          : {}),
+      },
       {
         removeExistingContainer: rebuilding && !composeRebuild,
         buildNoCache: request.rebuild?.buildNoCache ?? false,

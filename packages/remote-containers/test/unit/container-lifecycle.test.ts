@@ -1939,6 +1939,7 @@ describe('containerLifecycleOf', () => {
       service: 'app',
       scope: ['app', 'db'],
       composeFile: undefined,
+      upEnvironment: {BUILDX_BAKE_ENTITLEMENTS_FS: '0'},
       model: {
         resolvedName: undefined,
         declaredName: undefined,
@@ -1961,9 +1962,32 @@ describe('containerLifecycleOf', () => {
       ],
       [
         'ready',
-        {COMPOSE_PROJECT_NAME: 'proj'},
+        {COMPOSE_PROJECT_NAME: 'proj', BUILDX_BAKE_ENTITLEMENTS_FS: '0'},
         '/storage/data',
         {COMPOSE_PROJECT_NAME: 'proj'},
+      ],
+    );
+  });
+
+  it('F-0413 AC-17: the entitlement variable reaches the environment of up for a Compose project, and neither the background commands nor an image configuration', async () => {
+    const compose = fakeBridge();
+    const image = fakeBridge();
+    await prepareOf(composeLifecycle(composeReady('proj'), compose).lifecycle);
+    await prepareOf(composeLifecycle({kind: 'none'}, image).lifecycle);
+    await settle();
+    deepStrictEqual(
+      [
+        compose.ups[0]?.target.environment,
+        compose.runs[0]?.target.environment,
+        image.ups[0]?.target.environment,
+      ],
+      [
+        {
+          COMPOSE_PROJECT_NAME: 'proj',
+          BUILDX_BAKE_ENTITLEMENTS_FS: '0',
+        },
+        {COMPOSE_PROJECT_NAME: 'proj'},
+        undefined,
       ],
     );
   });
