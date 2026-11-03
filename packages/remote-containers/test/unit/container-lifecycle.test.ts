@@ -31,7 +31,9 @@ import {
   composeDiscoveryArguments,
   discoveryArguments,
   idLabels,
+  labelsDiscoveryArguments,
   legacyDiscoveryArguments,
+  volumeIdLabels,
   legacyIdLabels,
 } from '../../src/lifecycle/labels.ts';
 
@@ -76,22 +78,21 @@ const APP_LOOKUP = composeDiscoveryArguments('proj', 'app').join(' ');
 const DB_LOOKUP = composeDiscoveryArguments('proj', 'db').join(' ');
 const LEGACY_LISTING = legacyDiscoveryArguments(FOLDER).join(' ');
 
-/** The `inspect` output of the containers, each `[id, status]`, with the volume mounted when `mounted`. */
+/** The `inspect` output of the containers, each `[id, status]`, with the volume mounted when `mounted`, labelled `labels`. */
 function inspected(
   containers: ReadonlyArray<readonly [string, string]>,
   mounted = true,
+  labels: Readonly<Record<string, string>> = {
+    'devcontainer.local_folder': FOLDER,
+    'devcontainer.config_file': CONFIG,
+  },
 ): string {
   return JSON.stringify(
     containers.map(([containerId, status]) => ({
       Id: containerId,
       Created: '2026-10-14T03:00:28.1Z',
       State: {Status: status},
-      Config: {
-        Labels: {
-          'devcontainer.local_folder': FOLDER,
-          'devcontainer.config_file': CONFIG,
-        },
-      },
+      Config: {Labels: labels},
       Mounts: mounted
         ? [{Type: 'volume', Name: 'vscode', Destination: '/vscode'}]
         : [],
@@ -2510,5 +2511,70 @@ describe('containerLifecycleOf', () => {
       field: 'containerId',
       foundContainerId: OLD,
     });
+  });
+});
+
+describe('the container of a clone in a volume (card containers-151)', () => {
+  const VOLUME_CONFIG = '/workspaces/r/.devcontainer/devcontainer.json';
+  const VOLUME_LABELS = volumeIdLabels({
+    repositoryPath: 'https://github.com/o/r',
+    volumeName: 'r-1',
+    folder: 'r',
+    configFile: VOLUME_CONFIG,
+  });
+  const VOLUME_LISTING = labelsDiscoveryArguments(VOLUME_LABELS).join(' ');
+  const VOLUME_REQUEST: ContainerRequest = {
+    ...REQUEST,
+    folder: '/workspaces/r',
+    configFile: VOLUME_CONFIG,
+    idLabels: VOLUME_LABELS,
+  };
+
+  /** The discovery queries a run made. */
+  function queriesOf(engine: {commands: string[]}): string[] {
+    return engine.commands.filter(command => command.startsWith('ps '));
+  }
+
+  it('F-0701 BR-3: with no container, discovery asks by the volume’s labels alone, and up gets them', async () => {
+    const engine = scriptedEngine({
+      [VOLUME_LISTING]: [ran('')],
+      'volume create vscode': [ran('vscode')],
+    });
+    const result = await prepared(
+      engine,
+      fakeBridge(),
+      new AbortController().signal,
+      VOLUME_REQUEST,
+    );
+    deepStrictEqual(
+      [queriesOf(engine), targetIdLabels(result), result.outcome.kind],
+      [[VOLUME_LISTING], VOLUME_LABELS, 'ready'],
+    );
+  });
+
+  it('F-0701 BR-3: a running container with the volume’s labels is used as it is', async () => {
+    const labels = Object.fromEntries(
+      VOLUME_LABELS.map(label => label.split('=', 2)),
+    ) as Record<string, string>;
+    const engine = scriptedEngine({
+      [VOLUME_LISTING]: [ran(`${NEW}\n`)],
+      [`inspect --type container ${NEW}`]: [
+        ran(inspected([[NEW, 'running']], false, labels)),
+      ],
+    });
+    const result = await prepared(
+      engine,
+      fakeBridge(),
+      new AbortController().signal,
+      VOLUME_REQUEST,
+    );
+    deepStrictEqual(
+      [
+        result.outcome.kind === 'ready' && result.outcome.created,
+        result.outcome.kind === 'ready' && result.outcome.containerId,
+        targetIdLabels(result),
+      ],
+      [false, NEW, VOLUME_LABELS],
+    );
   });
 });

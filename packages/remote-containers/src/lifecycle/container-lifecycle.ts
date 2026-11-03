@@ -28,8 +28,10 @@ import {
   decide,
   decideCompose,
   discoveryArguments,
+  decideByLabels,
   idLabels,
   isLegacy,
+  labelsDiscoveryArguments,
   legacyDiscoveryArguments,
   legacyIdLabels,
   type ContainerFacts,
@@ -51,6 +53,8 @@ export type ContainerStep =
 export interface ContainerRequest {
   folder: string;
   configFile: string;
+  /** The labels that find and name the container instead of the folder's, for a clone in a volume. */
+  idLabels?: readonly string[];
   dockerPath: string;
   logLevel: 'info' | 'debug' | 'trace';
   /** Set when the window asked for a rebuild: the existing container is replaced, whatever its state. */
@@ -390,9 +394,14 @@ export function containerLifecycleOf(dependencies: {
     request: ContainerRequest,
     resolution: ComposeResolution,
   ): string[][] {
-    return resolution.kind === 'ready'
-      ? [composeDiscoveryArguments(resolution.projectName, resolution.service)]
-      : folderQueries(request.folder);
+    if (resolution.kind === 'ready') {
+      return [
+        composeDiscoveryArguments(resolution.projectName, resolution.service),
+      ];
+    }
+    return request.idLabels === undefined
+      ? folderQueries(request.folder)
+      : [labelsDiscoveryArguments(request.idLabels)];
   }
 
   /** The choice among the containers found: by the Compose labels for a Compose project, else by the folder's. */
@@ -401,9 +410,12 @@ export function containerLifecycleOf(dependencies: {
     resolution: ComposeResolution,
     containers: readonly ContainerFacts[],
   ): Decision {
-    return resolution.kind === 'ready'
-      ? decideCompose(request.folder, request.configFile, containers)
-      : decide(request.folder, request.configFile, containers);
+    if (resolution.kind === 'ready') {
+      return decideCompose(request.folder, request.configFile, containers);
+    }
+    return request.idLabels === undefined
+      ? decide(request.folder, request.configFile, containers)
+      : decideByLabels(request.idLabels, containers);
   }
 
   /** The container the engine holds for the folder after a failed `up`, found again: one the connect kept, or made. */
@@ -628,11 +640,11 @@ export function containerLifecycleOf(dependencies: {
     }
     const rebuilding = request.rebuild !== undefined;
     // a rebuild replaces the container with the current labels; a use keeps the labels its tier chose
-    const targetIdLabels = rebuilding
-      ? idLabels(folder, configFile)
-      : decision.kind === 'use'
+    const ownLabels = request.idLabels ?? idLabels(folder, configFile);
+    const targetIdLabels =
+      !rebuilding && decision.kind === 'use'
         ? decision.idLabels
-        : idLabels(folder, configFile);
+        : [...ownLabels];
     const target: CliTarget = {
       workspaceFolder: folder,
       configFile,
