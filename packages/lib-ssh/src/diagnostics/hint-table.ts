@@ -21,9 +21,12 @@ export interface HintTableHeaders {
   resources: string;
 }
 
+/** The header of the Status column in English; a constant of its own, so a scan for hint statuses does not take it for one. */
+const STATUS_HEADER = 'Status';
+
 /** The column headers in English. */
 const HEADERS: HintTableHeaders = {
-  status: 'Status',
+  status: STATUS_HEADER,
   message: 'Message',
   mitigations: 'Mitigations',
   resources: 'Resources',
