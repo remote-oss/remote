@@ -1,6 +1,11 @@
 import {deepStrictEqual, throws} from 'node:assert';
 import {READ_BOUND_MILLISECONDS} from '../../src/forwarding/default-forwards-timing.ts';
-import type {ConnectPhase, DecodedTarget, Failed} from 'lib-authority';
+import type {
+  ConnectPhase,
+  DecodedTarget,
+  Failed,
+  FailureHint,
+} from 'lib-authority';
 import {FakeProber} from 'lib-forwarding/testing/fake-prober';
 import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
@@ -462,6 +467,7 @@ describe("the assembled ports' settings", () => {
           record: hint => {
             kept.push(hint.status);
           },
+          end: () => undefined,
         },
       },
       machine,
@@ -470,6 +476,37 @@ describe("the assembled ports' settings", () => {
     ports.server.onHostDownloadRefused('downloadFailed');
     ports.server.onHostDownloadRefused('noDownloader');
     deepStrictEqual(kept, ['ServerDownloadFailed', 'NoDownloaderAvailable']);
+  });
+
+  it('connect-135: the end of a resolve step gives the failure’s hints to the recorder, and then ends the record', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({});
+    const events: string[] = [];
+    let ended: ((hints: readonly FailureHint[]) => void) | undefined;
+    connectAssemblyOf(
+      {
+        ...surfaces,
+        hints: {
+          begin: () => undefined,
+          record: hint => {
+            events.push(`record ${hint.status}`);
+          },
+          end: () => {
+            events.push('end');
+          },
+        },
+      },
+      machine,
+      loggerOf(recorded),
+      dependencies => {
+        ended = dependencies.resolveEnded;
+        return connectorOf(dependencies);
+      },
+    );
+    ended?.([
+      {status: 'OfflineError', message: 'm', mitigations: [], resources: []},
+    ]);
+    ended?.([]);
+    deepStrictEqual(events, ['record OfflineError', 'end', 'end']);
   });
 
   it('F-2403: remote.SSH.useExecServer is read as a switch', () => {

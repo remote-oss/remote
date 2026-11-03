@@ -26,6 +26,10 @@ export interface LogChannel {
   readonly logger: Logger;
   /** Shows the panel with the channel selected and the focus in it, as often as asked. */
   reveal(): void;
+  /** How many lines the channel has been given so far. */
+  mark(): number;
+  /** The lines the channel was given from the `from`-th on (from the first by default), one to a line. */
+  text(from?: number): string;
   dispose(): void;
 }
 
@@ -67,10 +71,13 @@ export function openLogChannel(
   clock: () => number,
 ): LogChannel {
   const channel = port.createOutputChannel(CHANNEL_NAME);
+  const written: string[] = [];
   const logger = createLogger(
     {
       write: line => {
-        channel.appendLine(formatted(line));
+        const text = formatted(line);
+        written.push(text);
+        channel.appendLine(text);
       },
     },
     {minimumLevel: readLevel, clock},
@@ -84,6 +91,8 @@ export function openLogChannel(
     reveal: () => {
       channel.show(false);
     },
+    mark: () => written.length,
+    text: (from = 0) => written.slice(from).join('\n'),
     dispose: () => {
       channel.dispose();
     },

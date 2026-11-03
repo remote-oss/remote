@@ -10,6 +10,7 @@ import type {
   Connected,
   Connector,
   Failed,
+  FailureHint,
 } from 'lib-authority';
 import {forwardingEnvironment} from '../environment/forwarding.ts';
 import {
@@ -36,6 +37,8 @@ export interface ConnectorDependencies {
   revealLog(): void;
   /** Makes these the only variables the window's terminals get from the extension, for the connect that worked. */
   applyTerminalEnvironment(variables: Readonly<Record<string, string>>): void;
+  /** Told when a connect's resolve step has ended, with the hints of its failure, none when it worked. */
+  resolveEnded?: (hints: readonly FailureHint[]) => void;
 }
 
 /** A set of listeners that each hear an event; one that throws does not keep it from the others. */
@@ -201,11 +204,18 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           told = phaseOf(event, terminalMode);
           phases.tell(told);
         }
-        const result = await connect(input, dependencies.stepsFor(onPhase), {
-          ...dependencies.options,
-          cancellation: controller.signal,
-          onPhase,
-        });
+        let result: Awaited<ReturnType<typeof connect>>;
+        try {
+          result = await connect(input, dependencies.stepsFor(onPhase), {
+            ...dependencies.options,
+            cancellation: controller.signal,
+            onPhase,
+          });
+        } catch (caught) {
+          dependencies.resolveEnded?.([]);
+          throw caught;
+        }
+        dependencies.resolveEnded?.(isConnection(result) ? [] : result.hints);
         if (!isConnection(result)) {
           return result;
         }

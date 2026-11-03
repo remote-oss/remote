@@ -159,7 +159,7 @@ Records are built by one helper `recordAt(started, hints)` with a default hint l
 | F-2605.BR-10 | add A, B, C, D | `[C, D]` |
 | F-2605.BR-10 (provisional) | add a record with `started` `2026-10-08T10:00:00Z` after one with `2026-10-08T11:00:00Z` | the later call is the newest: order by call, not by `started` |
 | F-2605.BR-10 | a store frozen with two records, `addHint` of a third | the returned store is a different object; the argument still holds its two original records |
-| F-2605.AC-17 | a record with 23 environment hints, three more (editor version, extension version, platform), one error hint (`OfflineError`, message, details) and one log hint | `addHint` keeps all 28 hints, in the given order, each field equal |
+| F-2605.AC-17 | a record with 22 environment hints for settings and three more (editor version, extension version, platform), 25 in all, one error hint (`OfflineError`, a numeric status, message, details) and one log hint | `addHint` keeps all 27 hints, in the given order, each field equal |
 | F-2605.AC-17 | an error hint with `mitigations ['m1', 'm2']` and `resources ['r1']` and no details | stored with both lists and no `details` |
 | F-2605.BR-9 | a log hint of 30,000 characters | stored with the same length (not truncated) |
 | F-2605.AC-17 | a record of an attempt whose resolve never ended: environment and error hints, no log hint | stored as given; no log hint is added |

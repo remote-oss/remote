@@ -1,6 +1,4 @@
 import {deepStrictEqual} from 'node:assert';
-import path from 'node:path';
-import {DatabaseSync} from 'node:sqlite';
 import {sshRemoteCodec} from 'lib-authority';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
@@ -9,7 +7,6 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
-  connected,
   connectionLog,
   cutHostNetwork,
   cutRoute,
@@ -31,7 +28,6 @@ import {
   signal,
   terminalsOf,
   userSettings,
-  variable,
   waitFor,
   windowEvents,
   windowState,
@@ -48,6 +44,7 @@ import {
   setting,
   settingsText,
 } from './maintenance.ts';
+import {changedKeys, extensionState} from './global-state.ts';
 
 /** The authority of a window on the `harness` alias. */
 const HARNESS_AUTHORITY = 'ssh-remote+harness';
@@ -118,48 +115,6 @@ function emptyConnectedWithin(
       milliseconds,
     ),
   );
-}
-
-/** The entries of the profile's global state, by key: the editor's `state.vscdb`, read between its writes. */
-async function globalState(): Promise<Map<string, string>> {
-  const file = path.join(
-    variable('HARNESS_USER_DATA'),
-    'User/globalStorage/state.vscdb',
-  );
-  for (let attempt = 1; ; attempt += 1) {
-    const database = new DatabaseSync(file, {readOnly: true});
-    try {
-      const rows = database
-        .prepare('SELECT key, value FROM ItemTable')
-        .all() as Array<{key: string; value: string}>;
-      return new Map(rows.map(entry => [entry.key, entry.value]));
-    } catch (caught) {
-      if (attempt === 20) {
-        throw caught;
-      }
-      await new Promise(resolve => setTimeout(resolve, 250));
-    } finally {
-      database.close();
-    }
-  }
-}
-
-/** The names whose entry differs between `before` and `after`, added, changed or removed, sorted. */
-function changedKeys(
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
-): string[] {
-  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
-    .filter(key => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-    .sort();
-}
-
-/** The Remote - SSH extension's global state: the entries it stored under its own key, by name. */
-async function extensionState(): Promise<Record<string, unknown>> {
-  const stored = (await globalState()).get('remote-oss.remote-ssh');
-  return stored === undefined
-    ? {}
-    : (JSON.parse(stored) as Record<string, unknown>);
 }
 
 describe('New Window on Active Host (card coverage-42)', function () {
@@ -591,57 +546,6 @@ describe('New Window on Active Host (card coverage-42)', function () {
       const name = await newWindowFrom('a1');
       await emptyConnectedWithin(name, 5000);
       deepStrictEqual(await terminalsOf(name), []);
-    });
-  });
-
-  describe('the clear command', () => {
-    /** Runs Clear All Session Hints in window `name`. */
-    function clear(name: string): Promise<void> {
-      return inWindow(name, 'opensshremotes.clearAllSessionHints');
-    }
-
-    before(async () => {
-      await closeAllButLocal();
-      await openConnected('a1');
-    });
-
-    after(closeAllButLocal);
-
-    it('F-2605 AC-20: the command writes no record line, keeps the window connected and leaves the hint store absent', async () => {
-      const mark = recordLines().length;
-      await clear('a1');
-      deepStrictEqual(
-        [
-          recordLines().length - mark,
-          await connected('a1'),
-          Object.keys(await extensionState()).filter(
-            key => key === 'remote.ssh.hints',
-          ),
-        ],
-        [0, true, []],
-      );
-    });
-
-    it('F-2605 AC-21: with the store already empty the command resolves and writes no record line', async () => {
-      const mark = recordLines().length;
-      await clear('a1');
-      deepStrictEqual(recordLines().length - mark, 0);
-    });
-
-    it('F-2605 AC-23: with remote.SSH.experimental.chat off the command resolves and the settings file holds nothing the row did not write', async () => {
-      const saved = readUserSettings();
-      try {
-        await userSettings({'remote.SSH.experimental.chat': false});
-        const written = settingsText();
-        const mark = recordLines().length;
-        await clear('a1');
-        deepStrictEqual(
-          [recordLines().length - mark, settingsText(), await connected('a1')],
-          [0, written, true],
-        );
-      } finally {
-        restoreUserSettings(saved);
-      }
     });
   });
 

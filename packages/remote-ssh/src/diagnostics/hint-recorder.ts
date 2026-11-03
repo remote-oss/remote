@@ -3,7 +3,8 @@
  * in the hint store of the extension's global state.
  */
 
-import type {FailureHint, FailureReason, FilledString} from 'lib-ssh';
+import type {FailureHint, FailureReason, FilledString} from 'lib-authority';
+import {type EnvironmentHint, statusNumberOf} from 'lib-ssh';
 import {isFailureStringId, textOfId} from '../surfaces/failure-strings.ts';
 import {ownText} from '../surfaces/own-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
@@ -12,7 +13,7 @@ import {
   emptyHintStore,
   HINT_STORE_KEY,
   type HintStore,
-  type SessionRecord,
+  type SessionHint,
 } from './hint-store.ts';
 
 /** The global-state port the recorder reads and writes through. */
@@ -28,14 +29,22 @@ export interface HintRecorderEnvironment {
   documentation: () => string;
   /** The time a connect starts, as the record names it. */
   now: () => Date;
+  /** The environment hints a new record starts with, read as the settings are then. */
+  environmentHints: () => readonly EnvironmentHint[];
+  /** How many lines the log holds now: where the log text of a resolve that begins now starts. */
+  logMark: () => number;
+  /** The log's text from its `from`-th line on, as the log hint keeps it. */
+  logText: (from: number) => string;
 }
 
 /** The recorder of one window's hints. */
 export interface HintRecorder {
-  /** Starts the record of a connect; the hints that follow belong to it. */
+  /** Starts the record of a connect, with its environment hints; the hints that follow belong to it. */
   begin(): void;
   /** Keeps `hint` in the record of the connect that is running. */
   record(hint: FailureHint): void;
+  /** The connect's resolve step has ended: its record gets the log hint, once. */
+  end(): void;
 }
 
 /**
@@ -44,10 +53,13 @@ export interface HintRecorder {
  */
 function idText(reference: FilledString, translate: Translate): string {
   if (isFailureStringId(reference.id)) {
-    return textOfId(reference.id, translate, reference.values);
+    return textOfId(reference.id, translate, [...reference.values]);
   }
   try {
-    return ownText(reference, translate);
+    return ownText(
+      {id: reference.id, values: [...reference.values]},
+      translate,
+    );
   } catch {
     return reference.id;
   }
@@ -65,25 +77,71 @@ function reasonText(reason: FailureReason, translate: Translate): string {
     : idText({id: reason.id, values: []}, translate);
 }
 
+/** Whether two hints are the same error: the same status, message and details. */
+function sameError(left: SessionHint, right: SessionHint): boolean {
+  return (
+    left.kind === 'error' &&
+    right.kind === 'error' &&
+    left.status === right.status &&
+    left.message === right.message &&
+    left.details === right.details
+  );
+}
+
 /** The recorder over `state`. */
 export function hintRecorderOf(
   state: HintRecorderState,
   environment: HintRecorderEnvironment,
 ): HintRecorder {
   let started = environment.now().toISOString();
+  let begun = false;
+  let logFrom = 0;
+  let open = false;
   let writing: PromiseLike<void> = Promise.resolve();
+  /**
+   * Adds `hints` after those the record that started at `mine` already holds. An error hint the record already holds,
+   * the same status, message and details, is not added again: one connect can meet the same error from two places.
+   * A record that was begun and is gone, cleared or dropped as the oldest, does not come back with the hints that
+   * follow it.
+   */
+  function append(mine: string, hints: SessionHint[], starts: boolean): void {
+    const gone = begun && !starts;
+    writing = writing.then(() => {
+      const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
+      const existing = store.records.find(each => each.started === mine);
+      if (existing === undefined && gone) {
+        return undefined;
+      }
+      const kept = existing?.hints ?? [];
+      const fresh = hints.filter(
+        hint =>
+          hint.kind !== 'error' || !kept.some(each => sameError(each, hint)),
+      );
+      return state.update(
+        HINT_STORE_KEY,
+        addHint(store, {started: mine, hints: [...kept, ...fresh]}),
+      );
+    });
+    // A write the state refuses does not end the writes after it, and is no unhandled rejection.
+    writing = writing.then(undefined, () => undefined);
+  }
   return {
     begin: () => {
       started = environment.now().toISOString();
+      begun = true;
+      open = true;
+      logFrom = environment.logMark();
+      append(started, [...environment.environmentHints()], true);
     },
     record: hint => {
-      const mine = started;
-      const entry: SessionRecord = {
-        started: mine,
-        hints: [
+      const statusNumber = statusNumberOf(hint.status);
+      append(
+        started,
+        [
           {
             kind: 'error',
             status: hint.status,
+            ...(statusNumber === undefined ? {} : {statusNumber}),
             message: textOf(hint.message, environment.translate),
             ...(hint.details === undefined
               ? {}
@@ -94,20 +152,18 @@ export function hintRecorderOf(
             resources: hint.resources.map(() => environment.documentation()),
           },
         ],
-      };
-      writing = writing.then(() => {
-        const store = state.get(HINT_STORE_KEY) ?? emptyHintStore();
-        const same = store.records.find(each => each.started === mine);
-        return state.update(
-          HINT_STORE_KEY,
-          addHint(store, {
-            started: mine,
-            hints: [...(same?.hints ?? []), ...entry.hints],
-          }),
+        false,
+      );
+    },
+    end: () => {
+      if (open) {
+        open = false;
+        append(
+          started,
+          [{kind: 'log', text: environment.logText(logFrom)}],
+          false,
         );
-      });
-      // A write the state refuses does not end the writes after it, and is no unhandled rejection.
-      writing = writing.then(undefined, () => undefined);
+      }
     },
   };
 }

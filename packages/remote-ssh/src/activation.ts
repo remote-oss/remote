@@ -116,6 +116,10 @@ export type ActivationResult =
       logger: Logger;
       /** Reveals the log channel, as Show Log does. */
       revealLog(): void;
+      /** How many lines the log channel holds now. */
+      logMark(): number;
+      /** The log channel's text from its `from`-th line on. */
+      logText(from: number): string;
       proposals: ProposalGrants;
       setup: SetupRun['interaction'];
       dispose(): void;
@@ -196,6 +200,8 @@ export async function activateRemoteSsh(
     revealLog: () => {
       logChannel.reveal();
     },
+    logMark: () => logChannel.mark(),
+    logText: from => logChannel.text(from),
     proposals: probed.proposals,
     setup: probed.setupRun.interaction,
     dispose: () => {

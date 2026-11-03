@@ -10,7 +10,7 @@ import type {AcceptanceStore} from 'lib-server';
 import type {FilePickPort} from './config/file-choice.ts';
 import type {DownloadProgressPort} from './cli/server-download-progress.ts';
 import type {HostPickPort} from './surfaces/host-pick.ts';
-import type {HostListResult, LoginTerminals} from 'lib-ssh';
+import type {EnvironmentHint, HostListResult, LoginTerminals} from 'lib-ssh';
 import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {
   pickRemotePlatform,
@@ -108,6 +108,12 @@ export interface SurfaceContext {
   hintState: HintRecorderState;
   /** The address of the documentation a hint points to. */
   documentation: () => string;
+  /** The environment hints a new record starts with, read as the settings are now. */
+  environmentHints: () => readonly EnvironmentHint[];
+  /** How many lines the window's log holds now: where a resolve's own text begins. */
+  logMark: () => number;
+  /** The text of the window's log from its `from`-th line on, which a record keeps when its resolve step ends. */
+  logText: (from: number) => string;
   /** The window's log, where a notice that could not be shown is noted. */
   logger: Logger;
   /** Makes these the only variables the window's terminals get from the extension. */
@@ -184,6 +190,9 @@ export function editorSurfacesOf(
       translate,
       documentation: context.documentation,
       now: () => new Date(),
+      environmentHints: context.environmentHints,
+      logMark: context.logMark,
+      logText: context.logText,
     }),
     licenceModal: licenceModalOf(
       adapters.licenceDialog,

@@ -235,7 +235,11 @@ export function surfacesOf(
       showError: () => Promise.resolve(undefined),
     },
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
-    hints: {begin: () => undefined, record: () => undefined},
+    hints: {
+      begin: () => undefined,
+      record: () => undefined,
+      end: () => undefined,
+    },
     licenceModal: modalAnswering('accept', []),
     acceptances: storeOf(),
     preconnectDialog: {askUser: () => Promise.resolve('skip')},

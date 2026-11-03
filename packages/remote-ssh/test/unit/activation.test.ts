@@ -348,6 +348,20 @@ describe('the activation', () => {
     deepStrictEqual(seen.events.at(-1), 'channel shown');
   });
 
+  it('the serving result gives the log text from the first line', async () => {
+    const {inputs} = surroundings({otherRuns: false});
+    const result = await activateRemoteSsh(inputs);
+    deepStrictEqual(
+      result.kind === 'serving'
+        ? [
+            result.logText(0).split('\n')[0]?.endsWith('Log level: debug'),
+            result.logText(result.logMark()),
+          ]
+        : undefined,
+      [true, ''],
+    );
+  });
+
   it('serves the help commands over the editor', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     await activateRemoteSsh(inputs);
