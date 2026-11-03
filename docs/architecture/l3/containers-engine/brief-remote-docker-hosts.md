@@ -37,12 +37,14 @@ The design is the **SSH questions** that `ssh` asks through the Docker CLI, and 
   masked, a host-key question as text.
   - **The box** stays until answered, dismissed or blurred (BR-15). A user's answer isn't an R-79 wait: R-79 bounds
     our waits on programs, not on the person.
-  - **The prompt book:** lib-helper's `prompt-book`, one per window, keyed by the exact question text (BR-14):
-    - it remembers each answer, or the decline, for the window's life;
-    - it answers a repeated question without a box;
-    - one answer serves all of one operation's SSH connections (BR-4).
-  - **Secrets** (R-26): answers live only in that in-memory book. They're never written, logged or put in an
-    environment.
+  - **Open questions:** lib-helper's `PromptBook` tracks the questions not yet answered, as for remote-ssh.
+  - **Remembered answers:** BR-14's memory is new, ours, in C2, one per window, keyed by the exact question text.
+    lib-helper's book keeps no answer.
+    - It remembers each answer, or the decline, for the window's life.
+    - It answers a repeated question without a box.
+    - One answer serves all of one operation's SSH connections (BR-4).
+  - **Secrets** (R-26): answers live only in that in-memory map, which is dropped with the window. They're never
+    written, logged or put in an environment.
 - **While an explicit command waits for an answer,** F-0202's "Starting Docker (show log)" (S332) shows beside the box
   (BR-10). A fast success shows nothing.
 - **The passive check** (the Dev Containers view, BR-6) uses the same relay and the same book. It never shows a dialog,
