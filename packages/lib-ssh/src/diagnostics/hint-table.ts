@@ -47,7 +47,10 @@ export function messageCellOf(
 
 /** The pieces of `word` a line may end after: each ends with `/`, `.`, `_` or `-`, but the last. */
 function piecesOf(word: string): string[] {
-  return word.match(/[^/._-]*[/._-]?/gu)?.filter(piece => piece !== '') ?? [];
+  return Array.from(
+    word.matchAll(/[^/._-]*[/._-]?/gu),
+    found => found[0],
+  ).filter(piece => piece !== '');
 }
 
 /** `word` broken into lines of at most `width` characters, after `/`, `.`, `_` or `-` where it can, anywhere else. */
@@ -67,7 +70,7 @@ function brokenWord(word: string, width: number): string[] {
     }
     line += rest;
   }
-  return line === '' ? lines : [...lines, line];
+  return [...lines, line];
 }
 
 /** `text` wrapped to lines of at most `width` characters: at spaces, and inside a word longer than a line. */
@@ -86,12 +89,14 @@ export function wrappedText(text: string, width: number): string[] {
       if (line !== '') {
         lines.push(line);
       }
-      const parts = brokenWord(word, width);
-      lines.push(...parts.slice(0, -1));
-      line = parts.at(-1) ?? '';
+      lines.push(...brokenWord(word, width));
+      line = '';
     }
   }
-  return line === '' && lines.length > 0 ? lines : [...lines, line];
+  if (line !== '' || lines.length === 0) {
+    lines.push(line);
+  }
+  return lines;
 }
 
 /**
@@ -126,12 +131,17 @@ function centred(text: string, width: number): string {
   return padded(' '.repeat(left) + text, width);
 }
 
-/** One column: its header, its alignment and the lines of each row. */
+/** One column: its header, its alignment and its width. */
 interface Column {
   header: string;
   centre: boolean;
   width: number;
-  cells: string[][];
+}
+
+/** The lines of one cell, and the column it is in. */
+interface Cell {
+  column: Column;
+  lines: readonly string[];
 }
 
 /** The lines of a horizontal rule: its left, fill, join and right characters over the columns' widths. */
@@ -146,15 +156,11 @@ function rule(
 }
 
 /** The lines of one row of cells, as tall as its tallest cell. */
-function rowLines(
-  columns: readonly Column[],
-  cells: ReadonlyArray<readonly string[]>,
-  header: boolean,
-): string[] {
-  const height = Math.max(1, ...cells.map(cell => cell.length));
+function rowLines(cells: readonly Cell[], header: boolean): string[] {
+  const height = Math.max(1, ...cells.map(cell => cell.lines.length));
   return Array.from({length: height}, (unused, index) => {
-    const parts = columns.map((column, position) => {
-      const text = cells[position]?.[index] ?? '';
+    const parts = cells.map(({column, lines}) => {
+      const text = lines[index] ?? '';
       return ` ${header && column.centre ? centred(text, column.width) : padded(text, column.width)} `;
     });
     return `║${parts.join('│')}║`;
@@ -189,39 +195,37 @@ export function hintTable(
     width - borders - padding - statusWidth,
   );
   const each = Math.floor(rest / flexible);
-  function widthOf(name: (typeof names)[number]): number {
-    return name === 'status' ? statusWidth : each;
-  }
+  type Name = (typeof names)[number];
+  const spec: Record<Name, Column> = {
+    status: {header: headers.status, centre: true, width: statusWidth},
+    message: {header: headers.message, centre: false, width: each},
+    mitigations: {header: headers.mitigations, centre: false, width: each},
+    resources: {header: headers.resources, centre: false, width: each},
+  };
+  const all = names.map(name => spec[name]);
   const dataRows = rows.map(entry => {
-    const lines: Record<(typeof names)[number], string[]> = {
+    const lines: Record<Name, string[]> = {
       status: [entry.status],
-      message: wrappedText(entry.message, widthOf('message')),
+      message: wrappedText(entry.message, each),
       mitigations: listLines(entry.mitigations, each),
       resources: listLines(entry.resources, each),
     };
-    return names.map(name => lines[name]);
+    return names.map(name => ({column: spec[name], lines: lines[name]}));
   });
-  const columns: Column[] = names.map((name, position) => ({
-    header: headers[name],
-    centre: name === 'status',
-    width: widthOf(name),
-    cells: dataRows.map(cells => cells[position] ?? []),
-  }));
   const lines = [
-    rule(columns, '╔', '═', '╤', '╗'),
+    rule(all, '╔', '═', '╤', '╗'),
     ...rowLines(
-      columns,
-      columns.map(column => [column.header]),
+      all.map(column => ({column, lines: [column.header]})),
       true,
     ),
-    rule(columns, '╟', '─', '┼', '╢'),
+    rule(all, '╟', '─', '┼', '╢'),
   ];
   dataRows.forEach((cells, index) => {
     if (index > 0) {
-      lines.push(rule(columns, '╟', '─', '┼', '╢'));
+      lines.push(rule(all, '╟', '─', '┼', '╢'));
     }
-    lines.push(...rowLines(columns, cells, false));
+    lines.push(...rowLines(cells, false));
   });
-  lines.push(rule(columns, '╚', '═', '╧', '╝'));
+  lines.push(rule(all, '╚', '═', '╧', '╝'));
   return lines;
 }

@@ -127,12 +127,14 @@ describe('the table of the session troubleshooting terminal (card connect-136, F
         wrappedText('one two three', 7),
         wrappedText('a/very/long/path.ext', 8),
         wrappedText('abcdefghij', 4),
+        wrappedText('ab abcdefghij', 4),
         wrappedText('', 5),
       ],
       [
         ['one two', 'three'],
         ['a/very/', 'long/', 'path.ext'],
         ['abcd', 'efgh', 'ij'],
+        ['ab', 'abcd', 'efgh', 'ij'],
         [''],
       ],
     );

@@ -169,6 +169,15 @@ describe('the session troubleshooting terminal (card connect-136, F-2605)', () =
   });
 });
 
+describe('the rows of the table (card connect-136)', () => {
+  it('an error hint without lists has none in its row', () => {
+    deepStrictEqual(
+      rowsOf([{kind: 'error', status: 'Bare', message: 'prose'}]),
+      [{status: 'Bare', message: 'prose', mitigations: [], resources: []}],
+    );
+  });
+});
+
 describe('the pseudoterminal of the table (card connect-136)', () => {
   function makePty(rows = rowsOf([OFFLINE])): {
     made: TablePty;

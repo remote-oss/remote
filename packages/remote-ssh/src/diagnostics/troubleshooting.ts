@@ -19,7 +19,7 @@ import {DISABLED_LINE, NO_HINTS_LINE, summaryLines} from './session-summary.ts';
 export const TERMINAL_NAME = 'Remote - SSH: Session Troubleshooting';
 
 /** The text of the link at the end of the terminal, which is the same in every display language. */
-export const OUTPUT_LOG_LINK = 'Output Log...';
+const OUTPUT_LOG_LINK = 'Output Log...';
 
 /** The width a terminal is drawn for until the editor says its own. */
 const DEFAULT_COLUMNS = 80;
