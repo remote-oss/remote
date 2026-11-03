@@ -536,6 +536,8 @@ describe('the run network (card tooling-47)', () => {
   });
 
   it("the network age format is one the daemon formats, and its creation time reads back as now's", function () {
+    // A real daemon's first calls can take seconds on a busy hosted runner, past mocha's 10 s.
+    this.timeout(60_000);
     if (runCommand('docker', ['info', '--format', '{{.ID}}']).status !== 0) {
       this.skip();
     }
@@ -567,6 +569,8 @@ describe('the run network (card tooling-47)', () => {
   });
 
   it("tooling-76: on the daemon the sweep removes a plain container that another run left, from the container's own inspect line", function () {
+    // A real daemon's first calls can take seconds on a busy hosted runner, past mocha's 10 s.
+    this.timeout(60_000);
     if (runCommand('docker', ['info', '--format', '{{.ID}}']).status !== 0) {
       this.skip();
     }
