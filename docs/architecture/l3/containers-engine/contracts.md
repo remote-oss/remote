@@ -94,6 +94,7 @@ its content:
 | `TrustPort` (C5) | `isTrusted()`, `request(message) → granted or not` | `vscode.workspace` (proposal `workspaceTrust`) |
 | `ConfigFiles` (C4) | `exists`, `read`, `list` over workspace URIs | `vscode.workspace.fs` |
 | notices and dialogs | as remote-ssh's surfaces: an adapter per surface, scripted in the harness | `vscode.window` |
+| `ResolverHandle` (lib-authority, existing) | `lastResolve() → 'none' \| 'succeeded' \| 'failed'`: how this window's last settled resolve ended. C6's Switch Container shows S240 with no discovery on `'failed'` (F-0407 AC-23, `brief-views-and-commands.md` §1) | lib-authority's resolver registration (`resolver/host.ts`) |
 
 ## 5. Additions to other areas' contracts
 
