@@ -1,3 +1,4 @@
+import {readShutdownRequest} from '../../src/shutdown/protocol.ts';
 import {deepStrictEqual} from 'node:assert';
 import {spawn} from 'node:child_process';
 import {existsSync, mkdtempSync, rmSync} from 'node:fs';
@@ -854,6 +855,28 @@ describe('the container connector: the connect (card containers-08)', () => {
         environment: {DOCKER_HOST: 'unix:///run/docker.sock'},
       },
     });
+  });
+
+  it('F-0417 BR-4: the project the lifecycle identifies reaches the shutdown helper under the connection’s id', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf(devContainerPayloadOf(FOLDER)));
+    scene.prepared[0]?.composeIdentified?.({
+      project: 'proj',
+      service: 'app',
+      scope: ['app', 'db'],
+    });
+    const sent = scene.shutdownSent.at(-1);
+    deepStrictEqual(
+      [sent, readShutdownRequest(sent)],
+      [
+        {
+          type: 'compose',
+          connectionId: 'connection-1',
+          compose: {project: 'proj', service: 'app', scope: ['app', 'db']},
+        },
+        {kind: 'request', request: sent},
+      ],
+    );
   });
 
   it('F-0417 BR-13: a Docker context in the authority reaches the helper as DOCKER_CONTEXT, and no host is no variable', async () => {

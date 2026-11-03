@@ -2197,6 +2197,28 @@ describe('containerLifecycleOf', () => {
     return {compose, image};
   }
 
+  it('F-0417 BR-4: a Compose connect tells the project, the service and the scope before the CLI is called, and an image connect tells nothing', async () => {
+    const told: unknown[] = [];
+    const compose = fakeBridge();
+    await prepareOf(
+      composeLifecycle(composeReady('proj'), compose).lifecycle,
+      new AbortController().signal,
+      {
+        ...REQUEST,
+        composeIdentified: membership =>
+          told.push([membership, compose.ups.length]),
+      },
+    );
+    await prepareOf(
+      composeLifecycle({kind: 'none'}).lifecycle,
+      new AbortController().signal,
+      {...REQUEST, composeIdentified: membership => told.push(membership)},
+    );
+    deepStrictEqual(told, [
+      [{project: 'proj', service: 'app', scope: ['app', 'db']}, 0],
+    ]);
+  });
+
   it('F-0419 AC-8: a Compose project mounts the shared vscode volume as an external one, and an image configuration as before', async () => {
     const {compose, image} = await preparedBoth();
     deepStrictEqual(

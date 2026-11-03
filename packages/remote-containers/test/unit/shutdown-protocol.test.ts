@@ -79,6 +79,46 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
     );
   });
 
+  it('F-0417 BR-4: a compose message carries the project, the primary service and the scope', () => {
+    deepStrictEqual(
+      readShutdownRequest({
+        type: 'compose',
+        connectionId: 'c1',
+        compose: {project: 'proj', service: 'app', scope: ['app', 'db']},
+      }),
+      {
+        kind: 'request',
+        request: {
+          type: 'compose',
+          connectionId: 'c1',
+          compose: {project: 'proj', service: 'app', scope: ['app', 'db']},
+        },
+      },
+    );
+  });
+
+  it('F-0417 BR-11: a compose message without its project, its service or a scope of names gives its problem', () => {
+    const member = {project: 'proj', service: 'app', scope: ['app']};
+    const compose = {type: 'compose', connectionId: 'c1', compose: member};
+    const problem = {
+      kind: 'malformed',
+      problem:
+        'compose needs a project, a service and a scope of service names',
+    };
+    deepStrictEqual(
+      [
+        {...compose, compose: {...member, project: ''}},
+        {...compose, compose: {...member, service: undefined}},
+        {...compose, compose: {...member, scope: 'app'}},
+        {...compose, compose: {...member, scope: ['app', '']}},
+        {...compose, compose: {...member, scope: [1]}},
+        {...compose, compose: 'proj'},
+        {type: 'compose', connectionId: 'c1'},
+      ].map(readShutdownRequest),
+      Array(7).fill(problem),
+    );
+  });
+
   it('F-0417 BR-11: a message that is none of these gives its problem', () => {
     const register = {
       type: 'register',

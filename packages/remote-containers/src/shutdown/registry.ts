@@ -7,6 +7,7 @@
  */
 
 import {
+  type ComposeMembership,
   type ContainerIdentity,
   type EngineCoordinates,
   identityFilters,
@@ -46,6 +47,10 @@ export interface ShutdownRegistry {
     leaseId: number,
     request: Extract<ShutdownRequest, {type: 'register'}>,
   ): ShutdownReply;
+  /** Records the Compose project the connection started, before its services are. */
+  setCompose(
+    request: Extract<ShutdownRequest, {type: 'compose'}>,
+  ): ShutdownReply;
   /** Records the container of a connection and the action its recorded value gives. */
   setContainer(
     request: Extract<ShutdownRequest, {type: 'container'}>,
@@ -63,14 +68,28 @@ interface Connection {
   leaseId: number;
   identity: ContainerIdentity;
   engine: EngineCoordinates;
+  compose: ComposeMembership | undefined;
   containerId: string | undefined;
   action: 'stop' | 'none' | undefined;
   live: boolean;
 }
 
+const PROJECT_LABEL = 'com.docker.compose.project';
+const SERVICE_LABEL = 'com.docker.compose.service';
+
+/** The engine a connection used, as one text: connections to the same engine give the same one. */
+function engineKeyOf(engine: EngineCoordinates): string {
+  return JSON.stringify([
+    engine.dockerPath,
+    Object.entries(engine.environment).sort(),
+  ]);
+}
+
 /** The registry over `ports`. */
 export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
   const connections = new Map<string, Connection>();
+  // The services that a close left running because a connection used them, by engine and project, for the helper's life.
+  const skipped = new Map<string, Set<string>>();
   const pending = new Set<Promise<void>>();
   const unknown: ShutdownReply = {
     accepted: false,
@@ -125,6 +144,134 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     }
   }
 
+  /** Whether another live connection of the project holds the service's container, by its id or by naming the service. */
+  function composeInUse(
+    connection: Connection,
+    compose: ComposeMembership,
+    container: {id: string; service: string},
+  ): boolean {
+    const key = engineKeyOf(connection.engine);
+    return [...connections.values()].some(
+      other =>
+        other !== connection &&
+        other.live &&
+        (other.containerId === container.id ||
+          (engineKeyOf(other.engine) === key &&
+            (sameIdentity(other.identity, connection.identity) ||
+              (other.compose?.project === compose.project &&
+                other.compose.scope.includes(container.service))))),
+    );
+  }
+
+  /** The running containers of the project, each with its service; undefined when the engine did not answer. */
+  async function runningOfProject(
+    connection: Connection,
+    project: string,
+  ): Promise<Array<{id: string; service: string}> | undefined> {
+    const result = await ports.runDocker(connection.engine, [
+      'ps',
+      '--filter',
+      `label=${PROJECT_LABEL}=${project}`,
+      '--format',
+      `{{.ID}}\t{{.Label "${SERVICE_LABEL}"}}`,
+    ]);
+    if (result.status !== 0) {
+      ports.logLine(
+        `docker ps for the project ${project} failed with status ${String(result.status)}`,
+      );
+      return undefined;
+    }
+    return result.stdout
+      .split('\n')
+      .map(line => line.split('\t'))
+      .filter(
+        ([container, service]) => container !== '' && service !== undefined,
+      )
+      .map(([container = '', service = '']) => ({id: container, service}));
+  }
+
+  /** Whether no other live connection of the instance has a configuration of the project on the same engine. */
+  function lastOfProject(
+    connection: Connection,
+    compose: ComposeMembership,
+  ): boolean {
+    const key = engineKeyOf(connection.engine);
+    return ![...connections.values()].some(
+      other =>
+        other !== connection &&
+        other.live &&
+        engineKeyOf(other.engine) === key &&
+        (sameIdentity(other.identity, connection.identity) ||
+          other.compose?.project === compose.project),
+    );
+  }
+
+  /**
+   * Kills the running containers of the connection's scope that no other live connection uses, and at the last close of
+   * the project those of the services that earlier closes left running. When another live connection is connected to the
+   * primary service's container (an attach window, or a window on the same primary service), nothing of the scope is
+   * killed and its running services count as skipped. A failure is one line and is not retried.
+   */
+  async function stopComposeScope(
+    connection: Connection,
+    compose: ComposeMembership,
+  ): Promise<void> {
+    const running = await runningOfProject(connection, compose.project);
+    if (running === undefined) {
+      return;
+    }
+    const memory = `${engineKeyOf(connection.engine)} ${compose.project}`;
+    const remembered = skipped.get(memory) ?? new Set<string>();
+    const last = lastOfProject(connection, compose);
+    const primaryInUse = running.some(
+      container =>
+        container.service === compose.service &&
+        [...connections.values()].some(
+          other =>
+            other !== connection &&
+            other.live &&
+            other.containerId === container.id,
+        ),
+    );
+    if (primaryInUse) {
+      ports.logLine(
+        `the primary service ${compose.service} of ${compose.project} is in use: nothing of its scope is stopped`,
+      );
+      for (const container of running) {
+        if (compose.scope.includes(container.service)) {
+          remembered.add(container.service);
+        }
+      }
+      skipped.set(memory, remembered);
+      return;
+    }
+    for (const container of running) {
+      const inScope = compose.scope.includes(container.service);
+      if (!inScope && !(last && remembered.has(container.service))) {
+        continue;
+      }
+      if (composeInUse(connection, compose, container)) {
+        ports.logLine(
+          `container ${container.id} of ${container.service} is in use and stays running`,
+        );
+        remembered.add(container.service);
+        continue;
+      }
+      const result = await ports.runDocker(connection.engine, [
+        'kill',
+        container.id,
+      ]);
+      if (result.status === 0) {
+        remembered.delete(container.service);
+      } else {
+        ports.logLine(
+          `docker kill ${container.id} failed with status ${String(result.status)}`,
+        );
+      }
+    }
+    skipped.set(memory, remembered);
+  }
+
   /** Looks for the running container of the connection's identity; looks again until it gives up. */
   async function lookUp(
     connection: Connection,
@@ -167,7 +314,13 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     if (connection.action === 'none') {
       return;
     }
-    const {containerId} = connection;
+    const {containerId, compose} = connection;
+    if (compose !== undefined) {
+      void later(CHECK_MILLISECONDS, () =>
+        stopComposeScope(connection, compose),
+      );
+      return;
+    }
     void later(CHECK_MILLISECONDS, () =>
       containerId === undefined
         ? lookUp(connection, 1)
@@ -184,10 +337,19 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
         leaseId,
         identity: request.identity,
         engine: request.engine,
+        compose: undefined,
         containerId: undefined,
         action: undefined,
         live: true,
       });
+      return {accepted: true};
+    },
+    setCompose: request => {
+      const connection = connections.get(request.connectionId);
+      if (connection === undefined) {
+        return unknown;
+      }
+      connection.compose = request.compose;
       return {accepted: true};
     },
     setContainer: request => {

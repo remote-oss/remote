@@ -23,7 +23,7 @@ import {
   removeComposeContainers,
   runningServicesOf,
   serviceContainerOf,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 /** The parent row and its folder row share the folder's name, so a row is told by its place in the view. */
 const PARENT = {index: 0, count: 2} as const;

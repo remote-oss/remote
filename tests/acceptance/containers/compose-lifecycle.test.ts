@@ -20,7 +20,7 @@ import {
   printedIn,
   removeComposeContainers,
   serviceContainerOf,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 /** How long a rebuild may take. */
 const REBUILD_MILLISECONDS = 240_000;

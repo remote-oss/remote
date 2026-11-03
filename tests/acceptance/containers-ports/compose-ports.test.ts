@@ -8,7 +8,7 @@ import {
   removeComposeContainers,
   serviceContainerOf,
   serviceLines,
-} from '../containers/compose-support.ts';
+} from '../windows/compose-support.ts';
 import {
   echoes,
   freePort,

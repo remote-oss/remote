@@ -1236,6 +1236,13 @@ export function containerConnectorOf(
           ? read.configuration.runArgs
           : [],
         workspaceMount: read?.configuration.workspaceMount,
+        composeIdentified: compose => {
+          void dependencies.shutdown.send({
+            type: 'compose',
+            connectionId,
+            compose,
+          });
+        },
         pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}

@@ -21,7 +21,7 @@ import {
   composeFolder,
   openedCompose,
   removeComposeContainers,
-} from './compose-support.ts';
+} from '../windows/compose-support.ts';
 
 /** The Dockerfile of the rows: the run's dev container image, nothing more. */
 function dockerfileText(): string {

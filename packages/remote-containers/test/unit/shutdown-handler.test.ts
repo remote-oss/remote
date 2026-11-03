@@ -21,6 +21,10 @@ function recordingRegistry(): {registry: ShutdownRegistry; calls: unknown[]} {
       calls.push(['register', leaseId, request.connectionId]);
       return {accepted: true};
     },
+    setCompose: request => {
+      calls.push(['compose', request.connectionId, request.compose.project]);
+      return {accepted: true};
+    },
     setContainer: request => {
       calls.push(['container', request.connectionId, request.action]);
       return {accepted: true};
@@ -81,6 +85,22 @@ describe('the shutdown handler (card containers-68)', () => {
           ['leave', 'a'],
         ],
       ],
+    );
+  });
+
+  it('F-0417 BR-4: a compose message reaches the registry with the project', async () => {
+    const {registry, calls} = recordingRegistry();
+    const reply = await createShutdownHandler(registry).onRequest(
+      {
+        type: 'compose',
+        connectionId: 'a',
+        compose: {project: 'proj', service: 'app', scope: ['app']},
+      },
+      CONTEXT,
+    );
+    deepStrictEqual(
+      [reply, calls],
+      [{accepted: true}, [['compose', 'a', 'proj']]],
     );
   });
 

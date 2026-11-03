@@ -13,9 +13,9 @@ import {
   reopenInContainer,
   variable,
   withLogTail,
-} from '../windows/harness.ts';
-import {dialogOf} from '../windows/renderer.ts';
-import {openFolderWindow} from '../windows/folder-windows.ts';
+} from './harness.ts';
+import {dialogOf} from './renderer.ts';
+import {openFolderWindow} from './folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
 
