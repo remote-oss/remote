@@ -1,6 +1,7 @@
 /**
  * @fileoverview The two commands of the "SSH" group row that hand over to Remote - SSH: open the configuration file,
- * and add a host. Each runs the companion's command with no argument, and nothing shows when it fails.
+ * and add a host. Each runs the companion's command with no argument, and nothing shows when it fails. Opening the
+ * configuration file needs no row, so its key hands over too; adding a host runs only from the group row.
  */
 
 import {SSH_HAND_OVERS} from 'lib-companion';
@@ -12,20 +13,10 @@ export interface HandOverHost {
   executeCommand(commandId: string): PromiseLike<unknown>;
 }
 
-/**
- * A handler that runs `commandId` when it is given the "SSH" group row of a view whose companion is present, and does
- * nothing for any other argument. A rejection of the command ends here.
- */
-function handOver(
-  session: () => ViewSession | undefined,
-  host: HandOverHost,
-  commandId: string,
-): CommandHandler {
+/** A handler that runs `commandId`, whatever it is given; a rejection of the command ends here. */
+function handOver(host: HandOverHost, commandId: string): CommandHandler {
   return {
-    execute: async argument => {
-      if (session()?.targets.groupOf(argument) === undefined) {
-        return undefined;
-      }
+    execute: async () => {
       try {
         await host.executeCommand(commandId);
       } catch {
@@ -33,6 +24,25 @@ function handOver(
       }
       return undefined;
     },
+  };
+}
+
+/**
+ * A handler that runs `commandId` when it is given the "SSH" group row of a view whose companion is present, and does
+ * nothing for any other argument: the command writes to the user's SSH configuration, which a key pressed with no row
+ * must not do.
+ */
+function handOverFromRow(
+  session: () => ViewSession | undefined,
+  host: HandOverHost,
+  commandId: string,
+): CommandHandler {
+  const handler = handOver(host, commandId);
+  return {
+    execute: argument =>
+      session()?.targets.groupOf(argument) === undefined
+        ? undefined
+        : handler.execute(argument),
   };
 }
 
@@ -45,7 +55,11 @@ export function handOverHandlers(
   readonly remoteExplorerAdd: CommandHandler;
 } {
   return {
-    configureSsh: handOver(session, host, SSH_HAND_OVERS.openConfigFile),
-    remoteExplorerAdd: handOver(session, host, SSH_HAND_OVERS.addNewSshHost),
+    configureSsh: handOver(host, SSH_HAND_OVERS.openConfigFile),
+    remoteExplorerAdd: handOverFromRow(
+      session,
+      host,
+      SSH_HAND_OVERS.addNewSshHost,
+    ),
   };
 }
