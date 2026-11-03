@@ -14,6 +14,7 @@ import {
   agentEnvironment,
   agentSocketPath,
   changedKeyHostsFile,
+  checkProtected,
   controlFolderOf,
   SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
@@ -24,6 +25,7 @@ import {
   sshConfigPath,
   startRunAgent,
   WINDOWS_AGENT_PIPE,
+  writeAskpass,
 } from './acceptance-keys.ts';
 import {type CommandRunner, runCommand} from './command-runner.ts';
 
@@ -51,6 +53,11 @@ function recording(
 ): ReturnType<CommandRunner> {
   commandLines.push([program, ...programArguments].join(' '));
   return runCommand(program, programArguments);
+}
+
+/** A command runner whose every command exits with `status` and prints nothing. */
+function exitingWith(status: number): CommandRunner {
+  return () => ({status, stdout: '', stderr: ''});
 }
 
 describe('makeRunKeys', function () {
@@ -382,6 +389,45 @@ describe('the run agent', function () {
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+
+  it('tooling-118: the askpass is a shell script elsewhere and a batch file on Windows, each printing the passphrase file', () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'askpass-'));
+    try {
+      const script = writeAskpass(folder, '/run/passphrase', 'linux');
+      const batch = writeAskpass(folder, 'C:\\run\\passphrase', 'win32');
+      deepStrictEqual(
+        [
+          path.basename(script),
+          readFileSync(script, 'utf8'),
+          statSync(script).mode & 0o777,
+          path.basename(batch),
+          readFileSync(batch, 'utf8'),
+        ],
+        [
+          'askpass-passphrase',
+          "#!/bin/sh\ncat '/run/passphrase'\n",
+          0o700,
+          'askpass-passphrase.cmd',
+          '@type "C:\\run\\passphrase"\r\n',
+        ],
+      );
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
+  });
+
+  it('tooling-118: a key that opens with an empty passphrase stops the run, and one that needs its passphrase passes', () => {
+    checkProtected(exitingWith(1), '/run/id_passphrase');
+    throws(
+      () => {
+        checkProtected(exitingWith(0), '/run/id_passphrase');
+      },
+      {
+        message:
+          "ssh-keygen wrote /run/id_passphrase without the run's passphrase: it did not use the askpass",
+      },
+    );
   });
 
   it('tooling-29: the agent sees no variable through which it could ask', () => {
