@@ -13,8 +13,14 @@ import {
 } from '../windows/harness.ts';
 import {openMemoryWindow} from '../windows/folder-windows.ts';
 import {
+  ALPINE_OPTION,
+  takeFeatureScreen,
+  takeOptionScreen,
+} from '../windows/authoring-support.ts';
+import {
   acceptQuickPick,
   answerDialog,
+  chooseQuickPickRow,
   dialogOf,
   pressEscape,
   quickPickOf,
@@ -338,5 +344,31 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
       },
     );
     await closeWindow(left);
+  });
+
+  it('F-0701 AC-8 (c151-template-part): a template picked for a clone with no configuration is written into the clone, and the window connects to its container', async () => {
+    await removeClone(BARE);
+    await startClone(BARE);
+    await waitForQuickPick(BARE_FOLDER, 900_000);
+    await chooseQuickPickRow(BARE_FOLDER, 'Alpine');
+    await takeOptionScreen(BARE_FOLDER, ALPINE_OPTION);
+    await takeFeatureScreen(BARE_FOLDER);
+    await connectedToContainer(BARE_FOLDER, 900_000);
+    const volume = String((await clonedVolumes(BARE))[0]?.split(' ')[0]);
+    deepStrictEqual(
+      {
+        readme: (await folderOfVolume(volume, BARE_FOLDER))
+          .split(' ')
+          .includes('README'),
+        configuration: (
+          await folderOfVolume(volume, `${BARE_FOLDER}/.devcontainer`)
+        )
+          .split(' ')
+          .includes('devcontainer.json'),
+        remoteName: (await windowState(BARE_FOLDER)).remoteName,
+      },
+      {readme: true, configuration: true, remoteName: 'dev-container'},
+    );
+    await closeWindow(BARE_FOLDER);
   });
 });
