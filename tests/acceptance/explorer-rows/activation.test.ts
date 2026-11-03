@@ -13,6 +13,7 @@ import {
   closeWindow,
   commandsOf,
   editorLogsFolder,
+  companionCallRecord,
   extensionActive,
   hostAliases,
   inWindow,
@@ -85,7 +86,7 @@ function explorerStateKeys(userData: string): string[] {
 describe('when the explorer activates, and what it leaves (card coverage-25c, part b)', function () {
   this.timeout(240_000);
 
-  it('F-5001 AC-1, AC-2, F-5101 AC-3, F-5901 AC-6, F-5902 AC-30 (fresh-window): a fresh folder window leaves the explorer and the SSH companion inactive for 30 s, and showing the Remote Explorer activates it with the SSH group and its hosts within 5 s and no notification', async () => {
+  it('F-5001 AC-1, AC-2, F-5101 AC-3, F-5901 AC-6, F-5902 AC-30 (fresh-window): a fresh folder window leaves the explorer and the SSH companion inactive for 30 s, and showing the Remote Explorer activates it with the SSH group and its hosts within 5 s and no notification, the first call it makes to the companion being the pull of the active remote', async () => {
     const name = await folderWindow('activation-fresh');
     try {
       await untouched();
@@ -94,6 +95,7 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
         await extensionActive(name, SSH_COMPANION),
         await notifications(name),
       ];
+      const callsBefore = companionCallRecord().length;
       const shown = Date.now();
       await inWindow(name, SHOW_REMOTE_EXPLORER);
       await rendering(name, rows => rows[0]?.label === HOSTS[0]);
@@ -105,8 +107,15 @@ describe('when the explorer activates, and what it leaves (card coverage-25c, pa
           shownSeconds <= 5,
           await extensionActive(name, EXPLORER),
           await notifications(name),
+          companionCallRecord()[callsBefore]?.commandId,
         ],
-        [[false, false, []], true, true, []],
+        [
+          [false, false, []],
+          true,
+          true,
+          [],
+          'remote-internal.getActiveSshRemote',
+        ],
       );
     } finally {
       await closeWindow(name);

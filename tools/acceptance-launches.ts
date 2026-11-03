@@ -187,6 +187,9 @@ const EXPLORER_LAUNCH = {
   // The explorer appends each push its inbox receives from Remote - SSH to this file, which `companionCalls` reads.
   environment: {
     REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD: '<run>/companion-record.jsonl',
+    // And each call it makes to the companion, by command id and time, which `companionCallRecord` reads.
+    REMOTE_OSS_ACCEPTANCE_COMPANION_CALL_RECORD:
+      '<run>/companion-call-record.jsonl',
     // The file the stand-in companion reads, at each call, for how that call ends (`setStandInModes`).
     REMOTE_OSS_ACCEPTANCE_STAND_IN_MODE: '<run>/stand-in-mode.json',
   },

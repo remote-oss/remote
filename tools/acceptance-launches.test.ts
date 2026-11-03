@@ -764,6 +764,23 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('explorer-13: the launches that record the pushes also record the calls the explorer makes, in a file of the run', () => {
+    deepStrictEqual(
+      launchesOf(REPOSITORY_ROOT)
+        .filter(
+          launch =>
+            launch.environment?.REMOTE_OSS_ACCEPTANCE_COMPANION_RECORD !==
+            undefined,
+        )
+        .map(launch => [
+          launch.label,
+          launch.environment?.REMOTE_OSS_ACCEPTANCE_COMPANION_CALL_RECORD,
+        ])
+        .filter(([, file]) => file !== '<run>/companion-call-record.jsonl'),
+      [],
+    );
+  });
+
   it('tooling-121: the explorer-stand-in launch carries the code stand-in of Remote - SSH, names the mode file in the run, and draws core’s dialogs in the window; no other launch has a code stand-in', () => {
     const launch = launchesOf(REPOSITORY_ROOT).find(
       each => each.label === 'explorer-stand-in',

@@ -306,6 +306,23 @@ export function setStandInModes(
   );
 }
 
+/** One call the explorer made to the companion, as the explorer records it: when, and which command; never its argument. */
+export interface CompanionCallMade {
+  time: number;
+  commandId: string;
+}
+
+/** The calls the explorer made to the companion in this launch, in order; none before the first. */
+export function companionCallRecord(): CompanionCallMade[] {
+  const file = variable('REMOTE_OSS_ACCEPTANCE_COMPANION_CALL_RECORD');
+  return existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(line => line !== '')
+        .map(line => JSON.parse(line) as CompanionCallMade)
+    : [];
+}
+
 /**
  * The pushes the explorer's inbox received in this launch, in order, of the command `commandId` when given; none before
  * the first. Only the launches with the explorer record them.
