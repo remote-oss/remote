@@ -78,7 +78,7 @@ import {
   withEnvironment,
 } from './engine/effective-engine.ts';
 import {configWatchOf} from './config-watch/config-watch.ts';
-import {executableOf} from './engine/executable.ts';
+import {engineBaseOf, executableOf} from './engine/executable.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {currentContext, firstCheck} from './engine/preflight.ts';
 import {effectiveEngineKey} from './engine/engine-key.ts';
@@ -959,7 +959,10 @@ export async function activate(
                 engineEnvironment(engineSources()),
                 await currentContext(
                   served.preflight,
-                  firstFolder(),
+                  engineBaseOf({
+                    folder: firstFolder(),
+                    trusted: vscode.workspace.isTrusted,
+                  }),
                   new AbortController().signal,
                 ),
               ),
@@ -1577,7 +1580,10 @@ export async function activate(
         effectiveEngineKey(
           engineSources(),
           served.preflight,
-          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          {
+            folder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            trusted: vscode.workspace.isTrusted,
+          },
           new AbortController().signal,
         ),
       setTimer: (milliseconds, callback) =>

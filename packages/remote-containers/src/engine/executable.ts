@@ -12,6 +12,20 @@ function isShellForm(value: string): boolean {
   return /^[~$%]/.test(value);
 }
 
+/** What a window says of its folder: the first one, and whether the window is trusted. */
+export interface WindowFolder {
+  folder: string | undefined;
+  trusted: boolean;
+}
+
+/**
+ * The base a relative `dev.containers.dockerPath` is resolved against: the window's first folder only once the window
+ * is trusted, none before, since a relative value is a file of the folder and nothing of an untrusted folder runs.
+ */
+export function engineBaseOf(window: WindowFolder): string | undefined {
+  return window.trusted ? window.folder : undefined;
+}
+
 /**
  * The program that `dev.containers.dockerPath` names. The value is literal: nothing is expanded or split, and no
  * shell reads it. An absolute or bare name is spawned as written (a bare name is searched for on the PATH by the
