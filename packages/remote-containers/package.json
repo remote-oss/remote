@@ -585,6 +585,15 @@
           "default": true,
           "scope": "application",
           "description": "%setting.Lockfile.description%"
+        },
+        "dev.containers.repositoryConfigurationPaths": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "string"
+          },
+          "description": "%setting.RepositoryConfigurationPaths.description%"
         }
       }
     }
