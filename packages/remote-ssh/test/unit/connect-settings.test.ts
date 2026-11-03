@@ -4,6 +4,7 @@ import {
   agentForwardingOf,
   defaultForwardsOf,
   localDownloadModeOf,
+  termsSettingsOf,
   x11ForwardingOf,
 } from '../../src/pipeline/connect-settings.ts';
 
@@ -120,5 +121,43 @@ describe('the default forwarded ports of a connect (card connect-40)', () => {
       requests: [],
       skipped: [],
     });
+  });
+});
+
+describe('the RemoteCommand switch of a connect (F-2107 BR-10)', () => {
+  const SETTING = 'remote.SSH.enableRemoteCommand';
+  const USE_LOCAL = 'remote.SSH.useLocalServer';
+
+  it('F-2107 BR-10: true, "true", "false" and 1 leave the switch on, and false, 0, "" and an absent value leave it off', () => {
+    deepStrictEqual(
+      [
+        termsSettingsOf(hostWith({[SETTING]: true})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: 'true'})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: 'false'})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: 1})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: false})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: 0})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: ''})).enableRemoteCommand,
+        termsSettingsOf(hostWith({})).enableRemoteCommand,
+      ],
+      [true, true, true, true, false, false, false, false],
+    );
+  });
+
+  it('F-2107 BR-10: any other non-empty string and any other non-zero number follow the rule, as "no" and 2 show', () => {
+    deepStrictEqual(
+      [
+        termsSettingsOf(hostWith({[SETTING]: 'no'})).enableRemoteCommand,
+        termsSettingsOf(hostWith({[SETTING]: 2})).enableRemoteCommand,
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-2107 BR-10: the other switches stay strict: useLocalServer gives false for "true"', () => {
+    deepStrictEqual(
+      termsSettingsOf(hostWith({[USE_LOCAL]: 'true'})).useLocalServerSetting,
+      false,
+    );
   });
 });
