@@ -16,9 +16,11 @@ import {
   acceptQuickPick,
   answerDialog,
   dialogOf,
+  pressEscape,
   quickPickOf,
   typeInQuickPick,
   waitForDialog,
+  waitForQuickPick,
 } from '../windows/renderer.ts';
 
 const execFileAsync = promisify(execFile);
@@ -31,6 +33,10 @@ const FOLDER = 'vscode-remote-try-node';
 
 /** A branch URL of the repository whose branch doesn't exist: it passes the pre-check, and the clone fails. */
 const NO_BRANCH = `${REPOSITORY}/tree/no-such-branch-c151`;
+
+/** A public repository with no dev container configuration, and its folder. */
+const BARE = 'https://github.com/octocat/Hello-World';
+const BARE_FOLDER = 'Hello-World';
 
 /** The text of the clone warning, which shows once in the profile. */
 const CLONE_WARNING =
@@ -139,11 +145,13 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
   before(async () => {
     await removeClone(REPOSITORY);
     await removeClone(NO_BRANCH);
+    await removeClone(BARE);
   });
 
   after(async () => {
     await removeClone(REPOSITORY);
     await removeClone(NO_BRANCH);
+    await removeClone(BARE);
   });
 
   it('F-0106 AC-17 (c171-crafted-part): a clone window opened from a link, in a profile that never gave the warning, asks it before any Docker object; Cancel leaves an empty local window with nothing cloned', async () => {
@@ -289,5 +297,46 @@ describe('Clone Repository in Container Volume (card containers-151)', function 
       [volumesBefore, containersBefore],
     );
     await closeWindow(FOLDER);
+  });
+
+  it('F-0701 AC-9 (c151-no-config-part): a clone with no configuration opens the template picker; Escape shows S414, and Cancel leaves an empty local window, the volume kept with no configuration', async () => {
+    const known = openEmptyWindows();
+    await startClone(BARE);
+    await waitForQuickPick(BARE_FOLDER, 900_000);
+    await pressEscape(BARE_FOLDER);
+    const dialog = await waitForDialog(BARE_FOLDER);
+    await answerDialog(BARE_FOLDER, 'Cancel');
+    let left = '';
+    await waitFor(
+      'an empty local window',
+      () => {
+        left = openEmptyWindows().find(each => !known.includes(each)) ?? '';
+        return left !== '';
+      },
+      60_000,
+    );
+    const volume = String((await clonedVolumes(BARE))[0]?.split(' ')[0]);
+    const folder = await folderOfVolume(volume, BARE_FOLDER);
+    deepStrictEqual(
+      {
+        mustSelect: `${dialog.message} ${dialog.details}`.includes(
+          'You must select a container configuration since the repository does not contain a dev container configuration.',
+        ),
+        buttons: dialog.buttons,
+        readme: folder.split(' ').includes('README'),
+        configuration: folder.includes('.devcontainer'),
+        bootstraps: (await bootstrapContainers()).length,
+        remoteName: (await windowState(left)).remoteName,
+      },
+      {
+        mustSelect: true,
+        buttons: ['Cancel', 'Select Configuration'],
+        readme: true,
+        configuration: false,
+        bootstraps: 0,
+        remoteName: null,
+      },
+    );
+    await closeWindow(left);
   });
 });
