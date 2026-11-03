@@ -237,3 +237,8 @@ export type FeaturesOutcome =
   is asked about too), where Keep Defaults writes as Finish does and Configure Options walks F-0803's screens for each checked
   Feature in catalogue order, from the schema's defaults and never the file's values. Escape on the question goes into the walk,
   a second Escape or Back on its first screen ends the run with nothing written, and OK with nothing checked asks nothing.
+- After a write, `versionCheckOf` (F-0807 5.0 step 8) puts the written text in a scratch folder of this machine and runs the CLI's
+  `outdated` on it through C3's `outdated` (`CliBridge.outdated`: `--output-format json`, no Docker program, as it reads
+  registries and not the engine), then removes the folder. What it finds is one line in the Dev Containers log; a failure of
+  any step is one line too and reaches no dialog. The run does not wait for it, and a run that wrote nothing starts none. A
+  window attached to a dev container needs nothing here for the rebuild prompt: C20's watch of the configuration shows it.

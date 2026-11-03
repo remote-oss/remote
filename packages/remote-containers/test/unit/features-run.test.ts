@@ -57,6 +57,7 @@ interface Scene {
   written: string[];
   opened: string[];
   errors: string[];
+  versionChecks: string[];
   screens: FakeOptionPicker[];
   runWith(
     text: string,
@@ -74,6 +75,7 @@ function sceneOf(): Scene {
     written: [],
     opened: [],
     errors: [],
+    versionChecks: [],
     screens: [],
     runWith: async (text, steps, options = {}) => {
       const input = scriptedInput(steps);
@@ -111,6 +113,10 @@ function sceneOf(): Scene {
         },
         openPreview: file => {
           scene.opened.push(file);
+          return Promise.resolve();
+        },
+        versionCheck: (text, relative) => {
+          scene.versionChecks.push(`${relative}\n${text}`);
           return Promise.resolve();
         },
         translate: template => template,
@@ -325,6 +331,30 @@ describe('the pick and write of Configure Container Features (card containers-15
     deepStrictEqual(
       [outcome, scene.written, scene.opened],
       [{kind: 'cancelled'}, [], []],
+    );
+  });
+
+  it('F-0807 AC-25: a write is followed by the version check of the text written, and no other end is', async () => {
+    const written = sceneOf();
+    await written.runWith('{}', [finishWith(['Git'])]);
+    const untouched = sceneOf();
+    await untouched.runWith('{"image": "x"}', [finishWith([])]);
+    const cancelled = sceneOf();
+    await cancelled.runWith('{}', [pressEscape]);
+    const refused = sceneOf();
+    await refused.runWith('{"features": []}', [finishWith(['Git'])]);
+    const failed = sceneOf();
+    await failed.runWith('{}', [finishWith(['Git'])], {writeFails: 'error'});
+    deepStrictEqual(
+      [
+        written.versionChecks.map(each => each.split('\n')[0]),
+        written.versionChecks.length === written.written.length,
+        untouched.versionChecks,
+        cancelled.versionChecks,
+        refused.versionChecks,
+        failed.versionChecks,
+      ],
+      [['.devcontainer/devcontainer.json'], true, [], [], [], []],
     );
   });
 

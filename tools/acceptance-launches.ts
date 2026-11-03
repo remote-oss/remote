@@ -354,6 +354,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'configuration-errors.test.ts',
   'configuration-open.test.ts',
   'configuration-picker.test.ts',
+  'configure-features-after.test.ts',
   'configure-features-pick.test.ts',
   'configure-features.test.ts',
   'connect-progress.test.ts',
