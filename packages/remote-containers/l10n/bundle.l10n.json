@@ -227,5 +227,10 @@
   "OK": "OK",
   "Container {0} ({1}){2}": "Container {0} ({1}){2}",
   "Container": "Container",
-  "Select the container to attach VS Code": "Select the container to attach VS Code"
+  "Select the container to attach VS Code": "Select the container to attach VS Code",
+  "An error occurred attaching to the container.": "An error occurred attaching to the container.",
+  "Cannot attach to the container with name/id {0}, it no longer exists.": "Cannot attach to the container with name/id {0}, it no longer exists.",
+  "Cannot attach to the container {0} ({1}){2}, it is not running.": "Cannot attach to the container {0} ({1}){2}, it is not running.",
+  "Start Container": "Start Container",
+  "Choose Container": "Choose Container"
 }

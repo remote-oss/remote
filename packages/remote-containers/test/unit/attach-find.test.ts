@@ -18,6 +18,7 @@ const PAYLOAD = '7b7d';
 function inspectedJson(name: string, containerId: string, state = 'running') {
   return JSON.stringify([
     {
+      // eslint-disable-next-line id-length -- the engine's own member is named Id
       Id: containerId,
       Name: `/${name}`,
       Created: '2026-11-03T10:00:00Z',
@@ -27,7 +28,7 @@ function inspectedJson(name: string, containerId: string, state = 'running') {
   ]);
 }
 
-function ran(status: number, stdout = ''): EngineRunOutcome {
+function exits(status: number, stdout = ''): EngineRunOutcome {
   return {kind: 'ran', status, stdout, stderr: ''};
 }
 
@@ -45,9 +46,8 @@ function engineOf(answers: Record<string, EngineRunOutcome>): {
         const command = argv.join(' ');
         commands.push(command);
         const key = Object.keys(answers).find(each => command.startsWith(each));
-        return Promise.resolve(
-          key === undefined ? ran(1) : (answers[key] as EngineRunOutcome),
-        );
+        const answer = key === undefined ? undefined : answers[key];
+        return Promise.resolve(answer ?? exits(1));
       },
       spawn: () => Promise.reject(new Error('never spawned')),
     },
@@ -70,7 +70,7 @@ function recordOf(recorded?: string): IdRecord & {written: string[]} {
 describe('finding the container of an attached payload (card containers-163, steps 1 and 2)', () => {
   it('F-0601 BR-8: the name that resolves wins, with the slash taken off, and the record is not read', async () => {
     const {engine, commands} = engineOf({
-      'inspect --type container web': ran(0, inspectedJson('web', 'a1')),
+      'inspect --type container web': exits(0, inspectedJson('web', 'a1')),
     });
     const found = await findAttachedContainer(
       engine,
@@ -90,8 +90,8 @@ describe('finding the container of an attached payload (card containers-163, ste
 
   it('F-0601 AC-61: a name that does not resolve falls back on the recorded id, which finds the renamed container', async () => {
     const {engine, commands} = engineOf({
-      'inspect --type container web': ran(1),
-      'inspect --type container a1': ran(0, inspectedJson('renamed', 'a1')),
+      'inspect --type container web': exits(1),
+      'inspect --type container a1': exits(0, inspectedJson('renamed', 'a1')),
     });
     const found = await findAttachedContainer(
       engine,
@@ -131,14 +131,16 @@ describe('finding the container of an attached payload (card containers-163, ste
 
   it('F-0601 7.E6: a paused container is unpaused and any other is started, and a failing command says so', async () => {
     const paused = await findAttachedContainer(
-      engineOf({inspect: ran(0, inspectedJson('web', 'a1', 'paused'))}).engine,
+      engineOf({inspect: exits(0, inspectedJson('web', 'a1', 'paused'))})
+        .engine,
       recordOf(),
       PAYLOAD,
       '/web',
       NEVER,
     );
     const exited = await findAttachedContainer(
-      engineOf({inspect: ran(0, inspectedJson('web', 'a1', 'exited'))}).engine,
+      engineOf({inspect: exits(0, inspectedJson('web', 'a1', 'exited'))})
+        .engine,
       recordOf(),
       PAYLOAD,
       '/web',
@@ -147,7 +149,7 @@ describe('finding the container of an attached payload (card containers-163, ste
     if (paused.kind !== 'found' || exited.kind !== 'found') {
       throw new Error('the containers were found');
     }
-    const works = engineOf({'unpause a1': ran(0), 'start a1': ran(0)});
+    const works = engineOf({'unpause a1': exits(0), 'start a1': exits(0)});
     const broken = engineOf({
       'start a1': {kind: 'failed', detail: 'no engine'},
     });
@@ -159,7 +161,7 @@ describe('finding the container of an attached payload (card containers-163, ste
         await startAttachedContainer(works.engine, exited.container, NEVER),
         await startAttachedContainer(broken.engine, exited.container, NEVER),
         await startAttachedContainer(
-          engineOf({'start a1': ran(1)}).engine,
+          engineOf({'start a1': exits(1)}).engine,
           exited.container,
           NEVER,
         ),
@@ -175,8 +177,8 @@ describe('the Alpine step of an attached connect (card containers-163, step 4)',
   const INFO = 'exec --user root c1 apk info -e libstdc++';
 
   it('F-0601 AC-50: a container that is not Alpine, or has no os-release, is left alone with one command', async () => {
-    const plain = engineOf({[RELEASE]: ran(1)});
-    const absent = engineOf({[RELEASE]: ran(2)});
+    const plain = engineOf({[RELEASE]: exits(1)});
+    const absent = engineOf({[RELEASE]: exits(2)});
     deepStrictEqual(
       [
         await alpineStep(plain.engine, 'c1', NEVER),
@@ -188,7 +190,10 @@ describe('the Alpine step of an attached connect (card containers-163, step 4)',
   });
 
   it('F-0601 AC-50: an Alpine container that has libstdc++ gets nothing more', async () => {
-    const {engine, commands} = engineOf({[RELEASE]: ran(0), [INFO]: ran(0)});
+    const {engine, commands} = engineOf({
+      [RELEASE]: exits(0),
+      [INFO]: exits(0),
+    });
     deepStrictEqual(
       [await alpineStep(engine, 'c1', NEVER), commands.length],
       ['present', 2],
@@ -197,10 +202,10 @@ describe('the Alpine step of an attached connect (card containers-163, step 4)',
 
   it('F-0601 AC-50: an Alpine container without it gets apk update and apk add, as root, in that order', async () => {
     const {engine, commands} = engineOf({
-      [RELEASE]: ran(0),
-      [INFO]: ran(1),
-      'exec --user root c1 apk update': ran(0),
-      'exec --user root c1 apk add libstdc++': ran(0),
+      [RELEASE]: exits(0),
+      [INFO]: exits(1),
+      'exec --user root c1 apk update': exits(0),
+      'exec --user root c1 apk add libstdc++': exits(0),
     });
     deepStrictEqual(
       [await alpineStep(engine, 'c1', NEVER), commands.slice(2)],
@@ -215,19 +220,20 @@ describe('the Alpine step of an attached connect (card containers-163, step 4)',
   });
 
   it('F-0601 AC-52: a failing update or add, and an engine that cannot run a command, fail the step', async () => {
-    const base = {[RELEASE]: ran(0), [INFO]: ran(1)};
+    const base = {[RELEASE]: exits(0), [INFO]: exits(1)};
     deepStrictEqual(
       [
         await alpineStep(
-          engineOf({...base, 'exec --user root c1 apk update': ran(1)}).engine,
+          engineOf({...base, 'exec --user root c1 apk update': exits(1)})
+            .engine,
           'c1',
           NEVER,
         ),
         await alpineStep(
           engineOf({
             ...base,
-            'exec --user root c1 apk update': ran(0),
-            'exec --user root c1 apk add': ran(1),
+            'exec --user root c1 apk update': exits(0),
+            'exec --user root c1 apk add': exits(1),
           }).engine,
           'c1',
           NEVER,
