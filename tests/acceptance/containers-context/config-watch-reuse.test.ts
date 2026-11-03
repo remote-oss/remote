@@ -1,4 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
+import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   changed,
   connectedWindow,
@@ -6,6 +9,7 @@ import {
   noticesAfter,
   noticesWhen,
   rewriteConfiguration,
+  storedHashes,
 } from '../windows/config-watch-support.ts';
 import {
   closeWindow,
@@ -31,6 +35,8 @@ describe('the rebuild prompt on a reconnect to an existing container (card cover
       'host=unix:///var/run/docker.sock',
     );
     let name = await connectedWindow(folder);
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    const built = storedHashes(folder, {without: context});
     const [container = ''] = await devContainersOf(folder);
     const containers: string[] = [];
     const seen: string[][] = [];
@@ -41,6 +47,7 @@ describe('the rebuild prompt on a reconnect to an existing container (card cover
       name = await connectedWindow(folder);
       containers.push(...(await devContainersOf(folder)));
       seen.push(await noticesWhen(name, 1));
+      const kept = storedHashes(folder, {without: context});
       await reloadWindow(name);
       await connectedToContainer(name, 300_000);
       seen.push(await noticesWhen(name, 1));
@@ -50,6 +57,12 @@ describe('the rebuild prompt on a reconnect to an existing container (card cover
       name = await connectedWindow(folder);
       containers.push(...(await devContainersOf(folder)));
       seen.push(await noticesAfter(name, 8));
+      const seeded = storedHashes(folder, {context});
+      const edited = createHash('sha256')
+        .update(
+          readFileSync(path.join(folder, '.devcontainer', 'devcontainer.json')),
+        )
+        .digest('hex');
       await reloadWindow(name);
       await connectedToContainer(name, 300_000);
       seen.push(await noticesAfter(name, 8));
@@ -66,6 +79,9 @@ describe('the rebuild prompt on a reconnect to an existing container (card cover
           seen,
           sameContainer: containers.every(each => each === container),
           applied: environment.includes('R9_CE'),
+          builtHashes: Object.keys(built ?? {}),
+          unchanged: kept,
+          seeded: seeded?.['devcontainer.json'],
         },
         {
           seen: [
@@ -77,6 +93,9 @@ describe('the rebuild prompt on a reconnect to an existing container (card cover
           ],
           sameContainer: true,
           applied: false,
+          builtHashes: ['devcontainer.json'],
+          unchanged: built,
+          seeded: edited,
         },
       );
     } finally {

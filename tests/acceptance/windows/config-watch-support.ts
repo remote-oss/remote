@@ -10,7 +10,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {inWindow, reopenInContainer, variable, waitFor} from './harness.ts';
 import {openFolderWindow} from './folder-windows.ts';
-import {notificationCentre} from './renderer.ts';
+import {notificationCentre, statusBarText, toastFacts} from './renderer.ts';
 
 /** The words of the notification for the files `names`. */
 export function changed(names: string): string {
@@ -102,9 +102,13 @@ export async function dockerInLaunch(...parameters: string[]): Promise<string> {
 /** The key under which the editor keeps the workspace state of our extension. */
 const STATE_KEY = 'remote-oss.remote-containers';
 
-/** The fingerprints the dev container window of `folder` has stored, as its workspace storage holds them; none when it holds none. */
+/**
+ * The fingerprints the dev container window of `folder` has stored, as its workspace storage holds them; none when it
+ * holds none. `context` picks the window opened through that Docker context, `without` skips the one opened through it.
+ */
 export function storedHashes(
   folder: string,
+  identity: {context?: string; without?: string} = {},
 ): Record<string, string> | undefined {
   const root = path.join(
     variable('HARNESS_USER_DATA'),
@@ -119,7 +123,15 @@ export function storedHashes(
       !existsSync(marker) ||
       !existsSync(database) ||
       !readFileSync(marker, 'utf8').includes(`dev-container%2B`) ||
-      !readFileSync(marker, 'utf8').includes(needle)
+      !readFileSync(marker, 'utf8').includes(needle) ||
+      (identity.context !== undefined &&
+        !readFileSync(marker, 'utf8').includes(
+          Buffer.from(identity.context).toString('hex'),
+        )) ||
+      (identity.without !== undefined &&
+        readFileSync(marker, 'utf8').includes(
+          Buffer.from(identity.without).toString('hex'),
+        ))
     ) {
       continue;
     }
@@ -143,4 +155,49 @@ export function storedHashes(
     }
   }
   return undefined;
+}
+
+/** How long a change may take to be told, in seconds: the criterion says about 3, the watch settles for 0.5 s, and the harness needs room. */
+export const PROMPT_SECONDS = 8;
+
+/** The facts of the toast about changed files of window `name`, once it shows; fails after {@link PROMPT_SECONDS} seconds. */
+export async function toastWhen(
+  name: string,
+): Promise<Awaited<ReturnType<typeof toastFacts>>[number]> {
+  let found: Awaited<ReturnType<typeof toastFacts>>[number] | undefined;
+  await waitFor(
+    `the toast about changed files in window ${name}`,
+    async () => {
+      found = (await toastFacts(name)).find(each =>
+        each.message.startsWith(CHANGED_START),
+      );
+      return found !== undefined;
+    },
+    PROMPT_SECONDS * 1000,
+  );
+  if (found === undefined) {
+    throw new Error(`no toast about changed files in window ${name}`);
+  }
+  return found;
+}
+
+/** Samples the remote indicator of window `name` until stopped, and gives the distinct texts it showed, in order. */
+export function sampledIndicator(name: string): {stop(): string[]} {
+  const texts: string[] = [];
+  const timer = setInterval(() => {
+    statusBarText(name, 'status.host').then(
+      text => {
+        if (text !== '' && texts.at(-1) !== text) {
+          texts.push(text);
+        }
+      },
+      () => undefined,
+    );
+  }, 200);
+  return {
+    stop: () => {
+      clearInterval(timer);
+      return texts;
+    },
+  };
 }

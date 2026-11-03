@@ -17,12 +17,14 @@ import {
   runLabelArguments,
   variable,
   waitFor,
+  windowNames,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
   answerNotification,
   notificationButtons,
+  notificationProgress,
   paletteRows,
   waitForDialog,
 } from '../windows/renderer.ts';
@@ -35,8 +37,11 @@ import {
   connectedWindow,
   noticesAfter,
   noticesWhen,
+  PROMPT_SECONDS,
   rewriteConfiguration,
+  sampledIndicator,
   storedHashes,
+  toastWhen,
 } from '../windows/config-watch-support.ts';
 import {storeRoot} from '../windows/authoring-support.ts';
 
@@ -72,11 +77,15 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
     try {
       await reopenInContainer(name);
       const [first = ''] = await devContainersOf(folder);
+      const windowsBefore = windowNames().length;
       const startedAt = Date.now();
       rewriteConfiguration(folder, {containerEnv: {C106: 'new'}});
-      const shown = await noticesWhen(name, 1);
+      const toast = await toastWhen(name);
       const seconds = (Date.now() - startedAt) / 1000;
+      const progress = await notificationProgress(name, CHANGED_START);
+      const shown = await noticesWhen(name, 1);
       const buttons = await notificationButtons(name, CHANGED_START);
+      const indicators = sampledIndicator(name);
       await answerNotification(name, CHANGED_START, 'Rebuild');
       await waitFor(
         'the rebuilt container',
@@ -87,6 +96,7 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
         300_000,
       );
       await connectedToContainer(name, 300_000);
+      const sequence = indicators.stop();
       const [second = ''] = await devContainersOf(folder);
       const environment = await docker(
         'inspect',
@@ -101,7 +111,12 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
         {
           shown,
           buttons,
-          prompt: seconds < 3 + 25,
+          within: seconds < PROMPT_SECONDS,
+          chrome: [toast.severity, toast.buttons],
+          progress: progress?.progress,
+          opening: sequence.some(text => text.includes('Opening Remote')),
+          returned: sequence.at(-1),
+          windows: windowNames().length === windowsBefore,
           replaced: second !== first,
           environment: environment.includes('C106=new'),
           afterReload: await changedNotices(name),
@@ -109,7 +124,18 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
         {
           shown: [changed('devcontainer.json')],
           buttons: ['Rebuild', 'Ignore'],
-          prompt: true,
+          within: true,
+          chrome: [
+            'info',
+            [
+              {label: 'Rebuild', primary: true},
+              {label: 'Ignore', primary: false},
+            ],
+          ],
+          progress: 'none',
+          opening: true,
+          returned: 'Dev Container: C106 Image',
+          windows: true,
           replaced: true,
           environment: true,
           afterReload: [],
@@ -416,10 +442,13 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
     writeFileSync(path.join(folder, 'Dockerfile'), dockerfileText());
     const name = await connectedWindow(folder);
     try {
+      const startedAt = Date.now();
       writeFileSync(
         file,
         JSON.stringify({...config, containerEnv: {C106: 'x'}}),
       );
+      await toastWhen(name);
+      const seconds = (Date.now() - startedAt) / 1000;
       const first = await noticesWhen(name, 1);
       appendFileSync(path.join(folder, 'Dockerfile'), 'LABEL c106=dot\n');
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -427,9 +456,10 @@ describe('the rebuild prompt when the configuration changes (card coverage-106)'
       await connectedToContainer(name, 300_000);
       const second = await noticesWhen(name, 1);
       deepStrictEqual(
-        [first, second],
+        [first, seconds < PROMPT_SECONDS, second],
         [
           [changed('.devcontainer.json')],
+          true,
           [changed('.devcontainer.json, Dockerfile')],
         ],
       );
