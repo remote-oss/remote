@@ -64,6 +64,36 @@ describe('the four Reopen Folder commands over the window origin (card container
     );
   });
 
+  it('F-0406 AC-30: Reopen Locally reopens a workspace window as its workspace file', async () => {
+    const {ports, calls, texts} = windowOf(
+      {
+        kind: 'local',
+        folder: '/home/u/project',
+        workspaceFile: '/home/u/project/proj.code-workspace',
+      },
+      true,
+    );
+    await reopenOriginHandlersOf(ports).reopenLocally();
+    await settled();
+    deepStrictEqual(
+      [calls, texts],
+      [
+        [
+          [
+            'vscode.openFolder',
+            {scheme: 'file', path: '/home/u/project/proj.code-workspace'},
+            {
+              forceNewWindow: false,
+              forceReuseWindow: true,
+              forceLocalWindow: true,
+            },
+          ],
+        ],
+        [],
+      ],
+    );
+  });
+
   it('F-0406 AC-8: Reopen Locally does nothing with no folder open, even with an origin', async () => {
     const {ports, calls, texts} = windowOf(LOCAL, false);
     await reopenOriginHandlersOf(ports).reopenLocally();

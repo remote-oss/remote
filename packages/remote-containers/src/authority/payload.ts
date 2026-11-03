@@ -3,6 +3,7 @@
  * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
+import path from 'node:path';
 import {type DecodedTarget, decodeAuthority} from 'lib-authority';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import {recordOf} from '../json-record.ts';
@@ -203,14 +204,51 @@ export interface ReopenOrigin {
   kind: 'local';
   /** The host folder the container was opened from. */
   folder: string;
+  /** The host file the window's workspace file maps to, when it lies under the folder's mount. */
+  workspaceFile?: string;
+}
+
+/** The host side of a path, read with the client platform's separators: `path.win32` on a win32 client, `path.posix` on every other. */
+function hostPathsOf(platform: string): typeof path.posix {
+  return platform === 'win32' ? path.win32 : path.posix;
 }
 
 /**
- * The origin a dev container window can be reopened at: the payload's host folder, whatever folder the window shows
- * now. None for a window that isn't a dev container, or whose payload names no folder on this machine.
+ * The host file a workspace file under the folder's mount maps to, or none: the container path stays posix, the host
+ * side takes the client platform's separators, and the containment test is case-insensitive on a win32 client.
+ */
+function workspaceFileOf(
+  hostPath: string,
+  platform: string,
+  workspaceFile: string | undefined,
+): string | undefined {
+  if (workspaceFile === undefined) {
+    return undefined;
+  }
+  const hostPaths = hostPathsOf(platform);
+  const normalized = path.posix.normalize(workspaceFile);
+  const mountTarget = `/workspaces/${hostPaths.basename(hostPath)}/`;
+  if (normalized.startsWith('..') || !normalized.startsWith(mountTarget)) {
+    return undefined;
+  }
+  const mapped = hostPaths.join(hostPath, normalized.slice(mountTarget.length));
+  const prefix = hostPath + hostPaths.sep;
+  const staysUnder =
+    platform === 'win32'
+      ? mapped.toLowerCase().startsWith(prefix.toLowerCase())
+      : mapped.startsWith(prefix);
+  return staysUnder ? mapped : undefined;
+}
+
+/**
+ * The origin a dev container window can be reopened at, on the client `platform`: the payload's host folder, whatever
+ * folder the window shows now, plus the host file the window's workspace file maps to when it lies under the folder's
+ * mount. None for a window that isn't a dev container, or whose payload names no folder on this machine.
  */
 export function windowOriginOf(
   authority: string | undefined,
+  platform: string,
+  workspaceFile?: string,
 ): ReopenOrigin | undefined {
   if (authority === undefined) {
     return undefined;
@@ -230,5 +268,7 @@ export function windowOriginOf(
   ) {
     return undefined;
   }
-  return {kind: 'local', folder: target.hostPath};
+  const origin: ReopenOrigin = {kind: 'local', folder: target.hostPath};
+  const file = workspaceFileOf(target.hostPath, platform, workspaceFile);
+  return file === undefined ? origin : {...origin, workspaceFile: file};
 }

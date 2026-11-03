@@ -1119,7 +1119,11 @@ export async function activate(
         origin: () =>
           served.missing.includes('resolvers')
             ? undefined
-            : windowOriginOf(vscode.env.remoteAuthority),
+            : windowOriginOf(
+                vscode.env.remoteAuthority,
+                process.platform,
+                vscode.workspace.workspaceFile?.path,
+              ),
         folderOpen: () => (vscode.workspace.workspaceFolders ?? []).length > 0,
         opener: reopenPorts.opener,
         inform: text => {
@@ -1611,7 +1615,7 @@ export async function activate(
     // `env.remoteAuthority` belongs to the resolvers proposal: reading it without the grant throws.
     const windowOrigin = served.missing.includes('resolvers')
       ? undefined
-      : windowOriginOf(vscode.env.remoteAuthority);
+      : windowOriginOf(vscode.env.remoteAuthority, process.platform);
     connector.announceShutdown(
       served.missing.includes('resolvers')
         ? undefined
