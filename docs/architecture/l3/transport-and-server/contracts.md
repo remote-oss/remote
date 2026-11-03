@@ -818,6 +818,30 @@ detail, as text the presenter shows through S031 (contracts R1: no other library
 `.locks/`, and `<Quality>-<commit>/{log.txt, pid.txt, server/}`. The server is in `server/`, and its launcher is
 `server/bin/<serverApplicationName>` (F-3902 rule 10's reuse).
 
+#### V7b. The exec server over the control connection (server-30, #2069; brief-remote-ssh-engines.md §2)
+
+Read from `[cli]` at 1.139.1 (`cli/src/rpc.rs`, `cli/src/tunnels/control_server.rs`, `protocol.rs`).
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `execServerOf` | an authenticated `CliControl` | `ExecServer`: `spawn`, `kill`, `env`, `tcpConnect`, `fs` | each call throws `ExecServerFailure`, which carries the `CliControlFailure`: `closed`, `callFailed` (the CLI's error with the method), `malformedReply` |
+
+**Streams.** A method that opens streams (`spawn` 3, `net_connect`, `fs_read`, `fs_write`, `fs_connect` 1 each) is
+answered in this order: a `streams_started` notification (`for_request_id`, `stream_ids`), then `stream_data`
+(`stream`, `segment`) and `stream_ended` (`stream`) notifications both ways, then the reply when the method has
+finished (`spawn`: after the process exits). The client sends `stream_data` and `stream_ended` with the same names.
+`spawn`'s ids are stdin, stdout, stderr in that order. A stream's end closes our side; closing ours sends the end;
+the connection's end closes every open stream. A reply that is an error before the announcement is the call's failure.
+
+**Environment.** `spawn`'s `env` is its own parameter and merges onto the CLI's environment; it is never in `args` (R-26).
+
+**Reconnect (measured, `[oss] extHostExtensionService.ts` at 1.139.1).** Core asks the resolver for an exec server
+again: `$resolveAuthority` calls `resolveExecServer(authority, {resolveAttempt, execServer})` for each outer authority
+of the chain on every resolve attempt (lines 899 to 915), and `getRemoteExecServer` calls it afresh on every use (lines
+831 to 834). Core keeps no `ExecServer` of its own. So the adapter does not reconnect: once the control connection has
+ended, every use fails with `closed`, and the owner (remote-ssh) returns a new adapter from its next
+`resolveExecServer`. An extension that kept an old `ExecServer` across a loss gets `closed` until it asks again.
+
 ### V8 server-maintenance
 
 | Operation | Inputs | Output | Failures |

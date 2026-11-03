@@ -6,30 +6,26 @@
 
 import {createHash} from 'node:crypto';
 import {encode} from '@msgpack/msgpack';
+import {parseCliServeError} from '../cli-path/cli-output.ts';
+import type {ByteStream, CliControlFailure} from './control-types.ts';
 import {
-  type CliServeError,
-  parseCliServeError,
-} from '../cli-path/cli-output.ts';
-import {classify, isMap, messageReader, type Reply} from './rpc.ts';
+  methodsOf,
+  type CliMethods,
+  type StreamedCall,
+} from './control-methods.ts';
+import {
+  classify,
+  isMap,
+  messageReader,
+  type Reply,
+  streamDataMessage,
+  streamDataOf,
+  streamEndedMessage,
+  streamEndedOf,
+  streamsStartedOf,
+} from './rpc.ts';
 
-/** A connection that carries bytes both ways. */
-export interface ByteStream {
-  send(chunk: Uint8Array): boolean;
-  onData(listener: (chunk: Uint8Array) => void): void;
-  onClose(listener: () => void): void;
-  close(): void;
-}
-
-/** Why a step of the control connection did not go through. */
-export type CliControlFailure =
-  | {kind: 'challengeRefused'; message: string}
-  | {
-      kind: 'serveFailed';
-      error: CliServeError;
-      message: string;
-      errorLine: string | undefined;
-    }
-  | {kind: 'closed'};
+export type {ByteStream, CliControlFailure} from './control-types.ts';
 
 /** One `serverlog` line. */
 export interface ServerLogLine {
@@ -56,7 +52,7 @@ export interface CliSocket {
 }
 
 /** The control connection to the command-line program. */
-export interface CliControl {
+export interface CliControl extends CliMethods {
   /** Runs the challenge with the token. */
   authenticate(
     token: string,
@@ -88,6 +84,15 @@ function responseTo(challenge: string): string {
   return createHash('sha256').update(challenge, 'utf8').digest('base64url');
 }
 
+/** The state of one duplex stream a method opened. */
+interface StreamState {
+  dataListeners: Array<(chunk: Uint8Array) => void>;
+  closeListeners: Array<() => void>;
+  /** What arrived before the first listener, handed to it when it comes. */
+  backlog: Uint8Array[];
+  closed: boolean;
+}
+
 /** The state of one socket on the connection. */
 interface SocketState {
   dataListeners: Array<(chunk: Uint8Array) => void>;
@@ -99,6 +104,8 @@ interface SocketState {
 export function openCliControl(stream: ByteStream): CliControl {
   const pending = new Map<number, (reply: Reply | undefined) => void>();
   const sockets = new Map<number, SocketState>();
+  const streams = new Map<number, StreamState>();
+  const starts = new Map<number, (streamIds: number[]) => void>();
   let nextId = 1;
   let ended = false;
   let streamClosed = false;
@@ -118,8 +125,48 @@ export function openCliControl(stream: ByteStream): CliControl {
       settle(undefined);
     }
     pending.clear();
+    starts.clear();
     for (const socket of sockets.values()) {
       closeSocket(socket);
+    }
+    for (const state of streams.values()) {
+      closeStream(state);
+    }
+  }
+
+  function closeStream(state: StreamState): void {
+    if (state.closed) {
+      return;
+    }
+    state.closed = true;
+    for (const listener of state.closeListeners) {
+      listener();
+    }
+  }
+
+  /** Tells the listeners of the stream `params` names about its bytes, or keeps them for the first listener. */
+  function handleStreamData(params: Readonly<Record<string, unknown>>): void {
+    const data = streamDataOf(params);
+    const state = data === undefined ? undefined : streams.get(data.stream);
+    if (data === undefined || state === undefined || state.closed) {
+      return;
+    }
+    if (state.dataListeners.length === 0) {
+      state.backlog.push(data.segment);
+    }
+    for (const listener of state.dataListeners) {
+      listener(data.segment);
+    }
+  }
+
+  /** Hands the streams of a duplex request to the call that waits for them. */
+  function handleStreamsStarted(
+    params: Readonly<Record<string, unknown>>,
+  ): void {
+    const started = streamsStartedOf(params);
+    if (started !== undefined) {
+      starts.get(started.requestId)?.(started.streamIds);
+      starts.delete(started.requestId);
     }
   }
 
@@ -155,6 +202,16 @@ export function openCliControl(stream: ByteStream): CliControl {
       }
     } else if (method === 'serverclose' && socket !== undefined) {
       closeSocket(socket);
+    } else if (method === 'streams_started') {
+      handleStreamsStarted(params);
+    } else if (method === 'stream_data') {
+      handleStreamData(params);
+    } else if (method === 'stream_ended') {
+      const ended = streamEndedOf(params);
+      const state = ended === undefined ? undefined : streams.get(ended);
+      if (state !== undefined) {
+        closeStream(state);
+      }
     }
   }
 
@@ -189,6 +246,83 @@ export function openCliControl(stream: ByteStream): CliControl {
       pending.set(requestId, resolve);
       stream.send(encode({id: requestId, method, params}));
     });
+  }
+
+  /** The stream `streamId` as the caller holds it. */
+  function byteStreamOf(streamId: number, state: StreamState): ByteStream {
+    return {
+      send: chunk => {
+        if (ended || state.closed) {
+          return false;
+        }
+        return stream.send(streamDataMessage(streamId, chunk));
+      },
+      onData: listener => {
+        state.dataListeners.push(listener);
+        for (const chunk of state.backlog.splice(0)) {
+          listener(chunk);
+        }
+      },
+      onClose: listener => {
+        if (state.closed) {
+          listener();
+        } else {
+          state.closeListeners.push(listener);
+        }
+      },
+      close: () => {
+        if (!ended && !state.closed) {
+          stream.send(streamEndedMessage(streamId));
+        }
+        closeStream(state);
+      },
+    };
+  }
+
+  /**
+   * Sends a request whose reply follows `streamCount` duplex streams. The CLI announces the stream ids before it runs
+   * the method, and replies when the method has finished; an error before the announcement comes as the reply alone.
+   */
+  function requestStreamed(
+    method: string,
+    params: Record<string, unknown>,
+    streamCount: number,
+  ): Promise<StreamedCall> {
+    if (ended) {
+      return Promise.resolve({kind: 'replied', reply: undefined});
+    }
+    const requestId = nextId;
+    nextId += 1;
+    const reply = new Promise<Reply | undefined>(resolve => {
+      pending.set(requestId, resolve);
+    });
+    const announced = new Promise<StreamedCall>(resolve => {
+      starts.set(requestId, streamIds => {
+        if (streamIds.length !== streamCount) {
+          resolve({kind: 'malformed'});
+          return;
+        }
+        const opened = streamIds.map(streamId => {
+          const state: StreamState = {
+            dataListeners: [],
+            closeListeners: [],
+            backlog: [],
+            closed: false,
+          };
+          streams.set(streamId, state);
+          return byteStreamOf(streamId, state);
+        });
+        resolve({kind: 'started', streams: opened, reply});
+      });
+    });
+    stream.send(encode({id: requestId, method, params}));
+    return Promise.race([
+      announced,
+      reply.then((settled): StreamedCall => ({
+        kind: 'replied',
+        reply: settled,
+      })),
+    ]);
   }
 
   /** One step of the challenge: its result map, or the failure. */
@@ -275,6 +409,7 @@ export function openCliControl(stream: ByteStream): CliControl {
   }
 
   return {
+    ...methodsOf({request, requestStreamed}),
     authenticate: async token => {
       const issued = await challengeStep('challenge_issue', {token});
       if ('kind' in issued) {
