@@ -216,10 +216,15 @@ export async function viewWindow(label: string): Promise<string> {
   return window;
 }
 
+/** The field of a keybinding in `keybindings.json` that holds the argument the key passes. */
+const ARGUMENT_FIELD = 'args';
+
 /** A user keybinding: the key and the command it runs. */
 export interface Binding {
   key: string;
   command: string;
+  /** The argument the key passes to the command; none when absent. */
+  argument?: unknown;
 }
 
 /**
@@ -234,7 +239,16 @@ export async function bindKeys(
     'User/keybindings.json',
   );
   const before = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
-  writeFileSync(file, JSON.stringify(bindings));
+  writeFileSync(
+    file,
+    JSON.stringify(
+      bindings.map(({key, command, argument}) => ({
+        key,
+        command,
+        ...(argument === undefined ? {} : {[ARGUMENT_FIELD]: argument}),
+      })),
+    ),
+  );
   await new Promise(resolve => setTimeout(resolve, 3_000));
   return () => {
     if (before === undefined) {
