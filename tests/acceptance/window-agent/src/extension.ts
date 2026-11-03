@@ -420,6 +420,58 @@ export function activate(context: vscode.ExtensionContext): void {
         });
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.execSpawn',
+      async (
+        command: string,
+        argumentList: string[],
+        environment: Record<string, string>,
+      ) => {
+        // The exec server is a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
+        const workspace = vscode.workspace as unknown as {
+          getRemoteExecServer(authority: string): PromiseLike<
+            | {
+                spawn(
+                  command: string,
+                  argumentList: string[],
+                  options: {env: Record<string, string>},
+                ): PromiseLike<{
+                  stdout: {
+                    onDidReceiveMessage(
+                      listener: (chunk: Uint8Array) => void,
+                    ): unknown;
+                    onEnd: PromiseLike<void>;
+                  };
+                  onExit: PromiseLike<{status: number}>;
+                }>;
+              }
+            | undefined
+          >;
+        };
+        const authority = authorityOf(agentFolder, process.pid);
+        if (authority === null) {
+          throw new Error('the window has no remote authority');
+        }
+        const server = await workspace.getRemoteExecServer(authority);
+        if (server === undefined) {
+          throw new Error('the authority gave no exec server');
+        }
+        const spawned = await server.spawn(command, argumentList, {
+          env: environment,
+        });
+        const chunks: Buffer[] = [];
+        spawned.stdout.onDidReceiveMessage(chunk => {
+          chunks.push(Buffer.from(chunk));
+        });
+        const exit = await spawned.onExit;
+        await spawned.stdout.onEnd;
+        report(agentFolder, name, {
+          event: 'execSpawned',
+          text: Buffer.concat(chunks).toString('utf8'),
+          exitCode: exit.status,
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.tunnels', async () => {
       // The tunnels are a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
       const workspace = vscode.workspace as unknown as {

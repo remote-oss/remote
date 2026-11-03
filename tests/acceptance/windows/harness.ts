@@ -66,6 +66,7 @@ export interface AgentEvent {
     | 'terminalNames'
     | 'untitledDocuments'
     | 'tunnels'
+    | 'execSpawned'
     | 'environment'
     | 'called'
     | 'editorText'
@@ -1469,6 +1470,24 @@ export async function openLink(name: string, text: string): Promise<string> {
       .filter(each => each.event === 'linkOpened')
       .at(-1)?.value,
   );
+}
+
+/** What a process spawned through the exec server of window `name`'s authority printed, and its exit code. */
+export async function execSpawnedIn(
+  name: string,
+  command: string,
+  argumentList: string[],
+  environment: Record<string, string>,
+): Promise<{text: string; exitCode: number | null}> {
+  const event = await reported(
+    name,
+    'execSpawned',
+    'acceptance.agent.execSpawn',
+    command,
+    argumentList,
+    environment,
+  );
+  return {text: event?.text ?? '', exitCode: event?.exitCode ?? null};
 }
 
 /** The value of the environment variable `variableName` in the extension host of window `name`, or null when it has none. */
