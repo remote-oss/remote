@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, rmSync, writeFileSync} from 'node:fs';
+import {chmodSync, existsSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   activeEditorOf,
@@ -72,6 +72,40 @@ async function failedSetup(folder: string): Promise<string> {
 
 describe('F-0502 the failures of the resolution (card containers-43)', function () {
   this.timeout(900_000);
+
+  it('F-0410 AC-21 (c149-read-config): a configuration the CLI cannot read fails the connect with S420 and the CLI’s description, in F-0410’s dialog, and no container is made', async () => {
+    const folder = devContainerFolder('c149-read-config', {name: 'Unreadable'});
+    const configuration = path.join(
+      folder,
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    const name = await openFolderWindow(folder);
+    try {
+      // The window found the file while it could be read; the connect's own read of it fails.
+      chmodSync(configuration, 0o000);
+      await reopenStarted(name);
+      const dialog = await waitForDialog(name, 180_000);
+      deepStrictEqual(
+        [
+          dialog.details.startsWith('devcontainer command failed: '),
+          dialog.details.includes('devcontainer.json'),
+          dialog.buttons,
+          await devContainersOf(folder),
+        ],
+        [
+          true,
+          true,
+          ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+          [],
+        ],
+      );
+    } finally {
+      chmodSync(configuration, 0o644);
+      await closeWindow(name).catch(() => undefined);
+      await removeContainers(folder);
+    }
+  });
 
   it('F-0502 AC-18 (c43-no-daemon): Reopen in Container with a Docker endpoint that does not answer shows the engine error with Cancel and Show Log, and either leaves the local folder window and creates no container', async () => {
     await setUserSetting('dev.containers.dockerPath', noDaemonDocker());
