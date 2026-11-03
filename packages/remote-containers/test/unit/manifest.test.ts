@@ -89,9 +89,9 @@ function reopenWhen(key: string): string {
   return `${key} && !hideConnectCommands && !remote-containers:standingDown`;
 }
 
-/** The row-menu form of it: the window's own dev container row first. */
+/** The row-menu form of it: the window's own dev container row first, and the folder row a Compose dev container has. */
 function reopenRowWhen(key: string): string {
-  return `view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && ${reopenWhen(key)}`;
+  return `view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )(dev|folder)( |$)/ && ${reopenWhen(key)}`;
 }
 
 /** The entries slice B adds to the row menu, in the manifest's order; every entry carries the clauses of its token and none is staged any more. */

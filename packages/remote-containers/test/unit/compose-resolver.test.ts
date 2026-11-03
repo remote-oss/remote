@@ -79,6 +79,35 @@ describe('what a connect knows of a Compose configuration (F-0413, brief-compose
     );
   });
 
+  it('F-0303 AC-26, AC-27: the primary service’s Dockerfile is the dockerfile against the build context, the default Dockerfile for the short form, and none for an image service', async () => {
+    const outputs = [
+      'services:\n  app:\n    build:\n      context: /w\n      dockerfile: .devcontainer/Df.app\n',
+      'services:\n  app:\n    build:\n      context: /w\n',
+      'services:\n  app:\n    build:\n      context: .\n      dockerfile: /abs/Df\n',
+      'services:\n  app:\n    image: a\n',
+      'services:\n  db: {}\n',
+    ];
+    const found: Array<string | undefined> = [];
+    for (const stdout of outputs) {
+      const {resolution} = await resolve({
+        configuration: COMPOSE_CONFIGURATION,
+        compose: {kind: 'ran', status: 0, stdout, stderr: ''},
+      });
+      found.push(
+        resolution.kind === 'ready'
+          ? resolution.serviceDockerfile
+          : 'not ready',
+      );
+    }
+    deepStrictEqual(found, [
+      '/w/.devcontainer/Df.app',
+      '/w/Dockerfile',
+      '/abs/Df',
+      undefined,
+      undefined,
+    ]);
+  });
+
   it('F-0413 AC-5: runServices narrows the scope to the services it names', async () => {
     const {resolution} = await resolve({
       configuration:

@@ -71,10 +71,30 @@ function runLabels(): string {
 }
 
 /** A service that does nothing, from the run's image, with the run's labels. */
-function serviceLines(name: string, extra: readonly string[] = []): string[] {
+export function serviceLines(
+  name: string,
+  extra: readonly string[] = [],
+): string[] {
   return [
     `  ${name}:`,
     `    image: ${variable('HARNESS_DEVCONTAINER_IMAGE')}`,
+    '    command: sleep infinity',
+    ...extra,
+    '    labels:',
+    runLabels(),
+  ];
+}
+
+/** A service that builds from `buildLines` (the lines below its `build:`), does nothing and has the run's labels. */
+export function builtServiceLines(
+  name: string,
+  buildLines: readonly string[],
+  extra: readonly string[] = [],
+): string[] {
+  return [
+    `  ${name}:`,
+    '    build:',
+    ...buildLines,
     '    command: sleep infinity',
     ...extra,
     '    labels:',

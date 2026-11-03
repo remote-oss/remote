@@ -4,7 +4,12 @@
  * welcome key come out. No editor, no engine and no file is touched here.
  */
 
-import {devContainerFolderOf, isDevContainer} from '../lifecycle/labels.ts';
+import {
+  devContainerFolderOf,
+  isComposeContainer,
+  isDevContainer,
+  localFolderOf,
+} from '../lifecycle/labels.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {ListedContainer} from './listed-containers.ts';
@@ -14,15 +19,19 @@ import {elapsedPhraseOf} from './relative-time.ts';
 const EXPLORER_TEMPLATES = {
   viewName: 'Dev Containers',
   S267: 'Other Containers',
+  S022: 'Active Folder {0}',
   S429: '{0} ago',
 } as const;
 
 /** The icon of a row, by its name in the icon table. */
-export type RowIcon = 'vmActive' | 'vmRunning' | 'vm' | 'vmOutline';
+export type RowIcon =
+  'vmActive' | 'vmRunning' | 'vm' | 'vmOutline' | 'folder' | 'folderActive';
 
-/** One row; in 0.4 every row is a container with no children. */
+/** One row: a container, or the folder a Docker Compose dev container's window opens, which is its only child. */
 export interface TargetRow {
   id: string;
+  /** The container a folder row belongs to; none for a container row, whose id it is. */
+  containerId?: string;
   label: string;
   description: string;
   tooltip: string;
@@ -166,6 +175,41 @@ function actionTokensOf(
   ];
 }
 
+/** The folder a Compose dev container opens in the container: where the container mounts its host folder, if it does. */
+function workspaceFolderOf(container: ListedContainer): string | undefined {
+  const folder = localFolderOf(container.labels);
+  return container.binds.find(bind => bind.source === folder)?.destination;
+}
+
+/** The row of the folder a Compose dev container's window opens, under the row of its primary container. */
+function folderRowOf(
+  container: ListedContainer,
+  workspace: string,
+  input: TargetsInput,
+  openable: boolean,
+): TargetRow {
+  const own = input.window.connection?.containerId === container.id;
+  const label = folderNameOf(workspace);
+  const active = own && input.window.folderOpen;
+  return {
+    id: `${container.id}/folder`,
+    containerId: container.id,
+    label,
+    description: workspace,
+    tooltip: active
+      ? filled(input.translate, EXPLORER_TEMPLATES.S022, [label])
+      : label,
+    icon: active ? 'folderActive' : 'folder',
+    viewItem: [
+      'folder',
+      ...(own ? ['own'] : []),
+      ...(active ? ['activeFolder'] : []),
+      ...(openable && !own ? ['openFolder'] : []),
+    ].join(' '),
+    children: [],
+  };
+}
+
 /** The row of one container. */
 function rowOf(container: ListedContainer, input: TargetsInput): TargetRow {
   const {labels, id: containerId, name, image, state} = container;
@@ -178,14 +222,21 @@ function rowOf(container: ListedContainer, input: TargetsInput): TargetRow {
     ? undefined
     : clauseOf(container, input.now, input.translate);
   const configured = devContainer && input.withConfiguration.has(containerId);
+  const workspace =
+    devContainer && isComposeContainer(labels)
+      ? workspaceFolderOf(container)
+      : undefined;
+  const compose = devContainer && isComposeContainer(labels);
   const tokens = [
     'container',
     devContainer ? 'dev' : 'other',
     ...(STATE_TOKENS.includes(state) ? [state] : []),
     ...(own ? ['own'] : []),
-    ...(own && devContainer && input.window.folderOpen ? ['activeFolder'] : []),
+    ...(own && devContainer && !compose && input.window.folderOpen
+      ? ['activeFolder']
+      : []),
     ...(configured ? ['configuration'] : []),
-    ...actionTokensOf(state, own, configured),
+    ...actionTokensOf(state, own, configured && !compose),
   ];
   return {
     id: containerId,
@@ -194,7 +245,10 @@ function rowOf(container: ListedContainer, input: TargetsInput): TargetRow {
     tooltip: `${label} (${name}) ${status}${clause === undefined ? '' : ` ${clause}`}`,
     icon: own ? 'vmActive' : iconOf(state),
     viewItem: tokens.join(' '),
-    children: [],
+    children:
+      workspace === undefined
+        ? []
+        : [folderRowOf(container, workspace, input, configured)],
   };
 }
 

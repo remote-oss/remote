@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   appPortOf,
   engineIsLocal,
+  publishedForwards,
   staticForwards,
 } from '../../src/ports/static-forwards.ts';
 
@@ -82,6 +83,61 @@ describe('the Statically Forwarded rows of appPort (card containers-74)', () => 
         engineIsLocal({context: 'desktop-linux', dockerHost: undefined}),
       ],
       [false, false, false],
+    );
+  });
+});
+
+describe('the rows of the ports a container publishes (card containers-146)', () => {
+  it('F-1101 AC-27: a published tcp port is a row of its container port with the host port on the loopback, one for each pair and in port order', () => {
+    deepStrictEqual(
+      publishedForwards(
+        {
+          '9000/tcp': [{HostIp: '0.0.0.0', HostPort: '9001'}],
+          '80/tcp': [
+            {HostIp: '0.0.0.0', HostPort: '8081'},
+            {HostIp: '::', HostPort: '8081'},
+          ],
+        },
+        true,
+      ),
+      [
+        {
+          remoteAddress: {host: '0.0.0.0', port: 80},
+          localAddress: '[::1]:8081',
+        },
+        {
+          remoteAddress: {host: '0.0.0.0', port: 9000},
+          localAddress: '[::1]:9001',
+        },
+      ],
+    );
+  });
+
+  it('F-1101 AC-27: a port with no host binding, an udp port, an unusable binding and an unusable port give no row', () => {
+    deepStrictEqual(
+      publishedForwards(
+        {
+          '80/tcp': null,
+          '53/udp': [{HostIp: '0.0.0.0', HostPort: '5353'}],
+          '81/tcp': [null, {HostPort: ''}, {HostPort: '70000'}],
+          '70000/tcp': [{HostPort: '1'}],
+          '82/tcp': 'x',
+        },
+        true,
+      ),
+      [],
+    );
+  });
+
+  it('F-1101 AC-27: an engine that is not local, and anything that is not a record of ports, give none', () => {
+    deepStrictEqual(
+      [
+        publishedForwards({'80/tcp': [{HostPort: '8081'}]}, false),
+        publishedForwards(null, true),
+        publishedForwards('x', true),
+        publishedForwards(undefined, true),
+      ],
+      [[], [], [], []],
     );
   });
 });

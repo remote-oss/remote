@@ -119,6 +119,30 @@ describe('the open commands of the Dev Containers rows (card containers-103)', (
     );
   });
 
+  it('F-0901 AC-37: the folder row of a Compose dev container opens the window of its container, and a folder row without a container or without the folder token does nothing', async () => {
+    const state = setup();
+    const {commands, asked} = commandsOf(state, inspected(LABELS));
+    const folderRow = {
+      ...OPEN_ROW,
+      id: 'target/folder',
+      containerId: 'target',
+      viewItem: 'folder openFolder',
+    };
+    await commands.current(folderRow);
+    await commands.current({...folderRow, containerId: 3});
+    await commands.current({...folderRow, viewItem: 'other'});
+    await commands.current({...folderRow, viewItem: 3});
+    await commands.current(null);
+    await settled();
+    deepStrictEqual(
+      [asked, openedOf(state)],
+      [
+        [['inspect', '--type', 'container', 'target']],
+        [{forceNewWindow: false, forceReuseWindow: true}],
+      ],
+    );
+  });
+
   it('F-0902 AC-6: New Window opens another window and leaves the issuing window as it is: the shutdown helper is not told', async () => {
     const state = setup();
     const {commands} = commandsOf(state, inspected(LABELS));
