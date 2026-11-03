@@ -67,6 +67,10 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
           "DOCKER_HOST=tcp://127.0.0.1:2375" >> $env:GITHUB_ENV
+      # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
+      # to Node on that adapter only
+      - name: The download host is reached from the WSL distro
+        run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
       - name: The launches
         run: pnpm test:acceptance:vscodium --launches $env:LAUNCHES
       - if: always()
