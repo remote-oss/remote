@@ -356,6 +356,56 @@ describe('what the window tunnel through the relay logs (card connect-131)', () 
     ]);
   });
 
+  /** A relay with its first window connection accepted and opened to the host, the lines logged so far dropped. */
+  async function withOneConnection(lines: string[]): Promise<{
+    client: FakeConnection | undefined;
+    host: FakeConnection | undefined;
+  }> {
+    const {open, local, dialer} = logged(['work'], lines);
+    await open();
+    lines.length = 0;
+    const client = local.accept(50000);
+    await settled();
+    return {client, host: dialer.connections[1]};
+  }
+
+  it('says a window connection was opened to the host, and that the host closed it with the bytes each way', async () => {
+    const lines: string[] = [];
+    const {client, host} = await withOneConnection(lines);
+    client?.receive(Uint8Array.of(1, 2, 3));
+    host?.receive(Uint8Array.of(4, 5));
+    host?.close();
+    deepStrictEqual(lines, [
+      "a connection to the window port was opened to the host's port 4321",
+      'a window connection ended: the host closed it, after 3 bytes to the host and 2 bytes to the client',
+    ]);
+  });
+
+  it('says that the client closed a window connection, once, with the bytes each way', async () => {
+    const lines: string[] = [];
+    const {client, host} = await withOneConnection(lines);
+    client?.receive(Uint8Array.of(1));
+    client?.close();
+    host?.close();
+    deepStrictEqual(lines.slice(1), [
+      'a window connection ended: the client closed it, after 1 bytes to the host and 0 bytes to the client',
+    ]);
+  });
+
+  it('says that a client left before the host side opened, and that one sent more than the relay holds', async () => {
+    const lines: string[] = [];
+    const {open, local} = logged(['work', 'later', 'later'], lines);
+    await open();
+    lines.length = 0;
+    local.accept(50000)?.close();
+    local.accept(50000)?.receive(new Uint8Array(LIMITS.heldBytesMaximum + 1));
+    await settled();
+    deepStrictEqual(lines, [
+      'a window connection ended before the host side opened',
+      'a window connection was closed: it sent more than the relay holds before the host side opened',
+    ]);
+  });
+
   it('says that the window port stopped listening by itself, with the reason', async () => {
     const lines: string[] = [];
     const {open, local} = logged(['work'], lines);
