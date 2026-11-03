@@ -311,6 +311,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-containers',
         'no-proposals',
         'cli-path',
         ...labelsFromExplorer(),
@@ -407,6 +408,7 @@ describe('the launches of the VSCodium run', () => {
         ['agent-notmp', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
+        ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
           'explorer-alone',
@@ -774,6 +776,7 @@ describe('the launches of the VSCodium run', () => {
     deepStrictEqual(
       launches.filter(needsDevContainerImage).map(launch => launch.label),
       [
+        'ssh-containers',
         'containers-a',
         'containers-b',
         'containers-standdown',
@@ -1174,6 +1177,7 @@ describe('the launches of the VSCodium run', () => {
         'agent-notmp',
         'default-ports',
         'ssh-core',
+        'ssh-containers',
         ...labelsFromExplorer(),
       ],
     );
@@ -1940,12 +1944,13 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-59, tooling-56, tooling-74: only the containers launch, containers-trust, containers-ports, containers-features and containers-view ask for the run’s registry', () => {
+  it('containers-59, tooling-56, tooling-74: only ssh-containers, the containers launch, containers-trust, containers-ports, containers-features and containers-view ask for the run’s registry', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.registry === true)
         .map(launch => launch.label),
       [
+        'ssh-containers',
         'containers-a',
         'containers-b',
         'containers-trust',
@@ -1956,12 +1961,13 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('tooling-57, containers-80: only the containers launch, containers-trust, containers-features and the two index launches ask for the run’s templates', () => {
+  it('tooling-57, containers-80: only ssh-containers, the containers launch, containers-trust, containers-features and the two index launches ask for the run’s templates', () => {
     deepStrictEqual(
       launchesOf(REPOSITORY_ROOT)
         .filter(launch => launch.templates === true)
         .map(launch => launch.label),
       [
+        'ssh-containers',
         'containers-a',
         'containers-b',
         'containers-trust',

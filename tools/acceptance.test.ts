@@ -461,6 +461,7 @@ const LAUNCH_ORDER = [
   'agent-notmp',
   'default-ports',
   'ssh-core',
+  'ssh-containers',
   'no-proposals',
   'explorer',
   'explorer-alone',
@@ -1426,6 +1427,7 @@ describe('acceptance', () => {
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
             client: 'vscodium',
           },
+          containersOnly('ssh-containers'),
           ...[
             'explorer',
             'explorer-alone',
