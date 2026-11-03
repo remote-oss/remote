@@ -163,6 +163,15 @@ jobs:
       - name: Fixtures (built once per runner; a fixture the local catalogue verifies is kept)
         run: |
           display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
+          # bin/conformance copies the suite's fixture definitions into the work folder only on a runner's first run, and the
+          # work folder is kept: a later suite's new or changed definitions are copied over here, and the runner's own
+          # catalogue of built fixtures stays, so verify rebuilds exactly the fixtures whose definition changed
+          fixtures="$CONFORMANCE_WORK/fixtures"
+          if [ -f "$fixtures/CATALOG.json" ]; then
+            cp "$fixtures/CATALOG.json" "$RUNNER_TEMP/local-catalog.json"
+            cp -r "$CONFORMANCE_SUITE/fixtures/." "$fixtures/"
+            mv "$RUNNER_TEMP/local-catalog.json" "$fixtures/CATALOG.json"
+          fi
           # the environment bin/conformance gives fixture.py, for its verify (bin/conformance runs only build and run)
           verified() {
             ( cd tests/conformance/runner/encode && ENCODE_ROOT="$CONFORMANCE_WORK" ENCODE_TESTS="$CONFORMANCE_SUITE/suite" ENCODE_FIXTURES="$CONFORMANCE_WORK/fixtures" \
