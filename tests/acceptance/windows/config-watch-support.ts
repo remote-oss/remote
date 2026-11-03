@@ -125,13 +125,13 @@ export function storedHashes(
     }
     const connection = new DatabaseSync(database, {readOnly: true});
     try {
-      const row = connection
+      const found = connection
         .prepare('SELECT value FROM ItemTable WHERE key = ?')
         .get(STATE_KEY) as {value: string} | undefined;
       const state =
-        row === undefined
+        found === undefined
           ? undefined
-          : (JSON.parse(row.value) as Record<string, unknown>);
+          : (JSON.parse(found.value) as Record<string, unknown>);
       const stored = state?.[
         'remote-oss.remote-containers.configurationWatch'
       ] as
