@@ -6,7 +6,7 @@
  * that uses its connection are allowed so; every other question is refused.
  */
 
-import type {EndpointPort} from 'lib-helper';
+import type {EndpointPort} from '../endpoint/protocol.ts';
 import {readAskReply} from './messages.ts';
 
 /** The variable that names the helper's askpass endpoint. */

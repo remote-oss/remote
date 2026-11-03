@@ -304,6 +304,7 @@ F-2305, F-2306 and F-2307 Q1 (D-60).
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `askpassEnvironment` | lease or session, `remote.SSH.externalSSH_ASKPASS` | variables that make `ssh` call our askpass endpoint; none when the external askpass applies (F-2309) | none |
+| `AskpassEndpoint` | the nonce, the scheduler, the first-message bound, and `classify(text)`: the caller's classifier of a question's text (ssh's for S7, git's for remote-containers' clone) | the open questions with their surface; `answer`, `refuse`, `closeAll` | `cancelled` |
 | `answer` | S6's surface, owner or mirror | the answer | `cancelled` |
 
 Rules:
@@ -313,6 +314,10 @@ Rules:
 - In shared mode, a re-prompt carries ssh's "Permission denied, please try again." line (F-2306 BR-4).
 
 Never: store or log an answer or its length.
+
+The askpass relay (the endpoint, launcher, program, environment and the pending-question book) lives in `lib-helper`
+since group 13 (2026-11-03), so remote-containers uses it for git's prompts without importing lib-ssh. ssh's
+classifier stays in lib-ssh and is passed in.
 
 ### S8 login-terminal
 

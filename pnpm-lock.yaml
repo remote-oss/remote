@@ -241,7 +241,11 @@ importers:
         specifier: workspace:*
         version: link:../lib-helper
 
-  packages/lib-helper: {}
+  packages/lib-helper:
+    dependencies:
+      lib-host:
+        specifier: workspace:*
+        version: link:../lib-host
 
   packages/lib-host: {}
 

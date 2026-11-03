@@ -11,10 +11,11 @@ import {
   type Scheduler,
   serve,
   type ServeEnd,
+  askpassEnvironment,
+  installLauncher,
+  type LauncherFiles,
+  askpassEndpointPath,
 } from 'lib-helper';
-import {askpassEnvironment} from '../askpass/environment.ts';
-import {installLauncher, type LauncherFiles} from '../askpass/launcher.ts';
-import {askpassEndpointPath} from '../askpass/paths.ts';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
