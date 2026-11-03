@@ -854,6 +854,38 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0601 BR-1, F-0906 AC-5: Attach to Running Container has its title and category, the one condition in the palette and in the remote indicator, in the actions group at place 2', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.attachToRunningContainer';
+    const when =
+      '!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown';
+    deepStrictEqual(
+      [
+        contributes.commands.find(entry => entry.command === command),
+        readJson('package.nls.json')['commands.attachToRunningContainer.title'],
+        contributes.menus.commandPalette?.find(
+          entry => entry.command === command,
+        ),
+        contributes.menus['statusBar/remoteIndicator']?.find(
+          entry => entry.command === command,
+        ),
+      ],
+      [
+        {
+          command,
+          title: '%commands.attachToRunningContainer.title%',
+          category: 'Dev Containers',
+        },
+        'Attach to Running Container...',
+        {command, when},
+        {command, group: 'remote_30_dev-container_2_actions@2', when},
+      ],
+    );
+  });
+
   it('F-0402 3.1: the reset command is contributed under Dev Containers, with no entry in the palette that hides it', () => {
     const contributes = MANIFEST.contributes as {
       commands: Array<{command: string}>;

@@ -19,7 +19,9 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
+  openRemote,
   PORTS_VIEW_KEY,
+  registerAuthorityLabel,
   resolverEditorOf,
 } from 'lib-authority';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
@@ -105,6 +107,8 @@ import {
 } from './engine/effective-engine.ts';
 import {configWatchOf} from './config-watch/config-watch.ts';
 import {engineBaseOf, executableOf} from './engine/executable.ts';
+import type {EngineHost} from './engine/engine-host.ts';
+import type {TargetsViewPorts} from './explorer/targets-view.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {composeCheck, currentContext, firstCheck} from './engine/preflight.ts';
 import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
@@ -135,6 +139,15 @@ import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
 import {sourceRowsOf} from './volumes/source-pick.ts';
 import {volumeTargetOf} from './volumes/volume-payload.ts';
+import {
+  type AttachPicker,
+  attachToRunningContainer,
+} from './attach/attach-command.ts';
+import type {AttachItem} from './attach/containers.ts';
+import {attachConfigFilesOf} from './attach/config-files.ts';
+import {attachWarningAccepted} from './attach/warning.ts';
+import {wslRootOf} from './attach/payload.ts';
+import type {Translate} from './surfaces/engine-dialogs.ts';
 import {composeRouteOf} from './engine/compose-route.ts';
 import {effectiveEngineKey} from './engine/engine-key.ts';
 import {engineWatchOf} from './engine/engine-watch.ts';
@@ -560,6 +573,53 @@ function engineSources(): EngineSources {
     certPath: configuration.get('docker.certPath'),
     tlsVerify: configuration.get('docker.tlsVerify'),
     processEnvironment: process.env,
+  };
+}
+
+/** What the window's engine is made from: the Docker program the settings name, the folders and their trust. */
+function windowEnginePortsOf(preflight: {
+  engineFor(file: string): EngineHost;
+}): Pick<TargetsViewPorts, 'dockerPath' | 'folders' | 'engineFor' | 'trusted'> {
+  return {
+    dockerPath: () =>
+      vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+    trusted: () => vscode.workspace.isTrusted,
+    folders: () =>
+      (vscode.workspace.workspaceFolders ?? []).map(
+        folder => folder.uri.fsPath,
+      ),
+    engineFor: file => preflight.engineFor(file),
+  };
+}
+
+/** The picker over the running containers: empty and busy until it is filled, no title, its filter on the label alone. */
+function attachPickerOf(translate: Translate): AttachPicker {
+  const picker = vscode.window.createQuickPick<
+    AttachItem & vscode.QuickPickItem
+  >();
+  picker.placeholder = translate('Select the container to attach VS Code');
+  picker.matchOnDescription = false;
+  picker.busy = true;
+  const chosen = new Promise<AttachItem | undefined>(resolve => {
+    picker.onDidAccept(() => {
+      resolve(picker.selectedItems[0]);
+      picker.hide();
+    });
+    picker.onDidHide(() => {
+      resolve(undefined);
+      picker.dispose();
+    });
+  });
+  picker.show();
+  return {
+    fill: items => {
+      picker.items = items;
+      picker.busy = false;
+    },
+    chosen,
+    close: () => {
+      picker.hide();
+    },
   };
 }
 
@@ -1546,6 +1606,81 @@ export async function activate(
             );
           },
         },
+        attachToRunningContainer: {
+          execute: () =>
+            attachToRunningContainer({
+              warning: () =>
+                attachWarningAccepted({
+                  global: context.globalState,
+                  show: (message, detail, buttons) =>
+                    vscode.window.showWarningMessage(
+                      message,
+                      {modal: true, detail},
+                      ...buttons,
+                    ),
+                  openExternal: address =>
+                    vscode.env.openExternal(vscode.Uri.parse(address)),
+                  translate,
+                }),
+              engine: () =>
+                engineOfWindow(
+                  windowEnginePortsOf(served.preflight),
+                  undefined,
+                ),
+              checks: cancellation =>
+                firstCheck(
+                  served.preflight,
+                  engineBaseOf({
+                    folder: firstFolder(),
+                    trusted: vscode.workspace.isTrusted,
+                  }),
+                  cancellation,
+                ),
+              openPicker: () => attachPickerOf(translate),
+              showModal: (message, detail, button) =>
+                vscode.window.showErrorMessage(
+                  message,
+                  {modal: true, detail},
+                  {title: button, isCloseAffordance: true},
+                ),
+              configFiles: (image, name) =>
+                attachConfigFilesOf(
+                  context.globalStorageUri.fsPath,
+                  image,
+                  name,
+                ),
+              exists: file =>
+                stat(file).then(
+                  () => true,
+                  () => false,
+                ),
+              readText: file => readFile(file, 'utf8'),
+              pinnedEngine: () => windowPinnedEngine(),
+              wslRoot: () => wslRootOf(vscode.env.remoteAuthority),
+              registerLabel: (decoded, suffix) => {
+                context.subscriptions.push(
+                  registerAuthorityLabel(vscode.workspace, decoded, suffix),
+                );
+              },
+              openWindow: (authority, folder) =>
+                openRemote(
+                  {
+                    executeCommand: (command, ...parameters) =>
+                      vscode.commands.executeCommand(command, ...parameters),
+                    addressOf: parts => vscode.Uri.from(parts),
+                  },
+                  authority,
+                  {
+                    ...(folder === undefined ? {} : {path: folder}),
+                    pathKind: 'folder',
+                    target: 'new',
+                  },
+                ),
+              translate,
+              logger: served.logger,
+              cancellation: new AbortController().signal,
+            }),
+        },
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
         },
@@ -2093,16 +2228,7 @@ export async function activate(
       createTreeView: <Node>(viewId: string, provider: TreeProvider<Node>) =>
         treeViewOf(viewId, provider, context.extensionUri),
     };
-    const windowEngine = {
-      dockerPath: () =>
-        vscode.workspace.getConfiguration().get(settings.dockerPath.id),
-      trusted: () => vscode.workspace.isTrusted,
-      folders: () =>
-        (vscode.workspace.workspaceFolders ?? []).map(
-          folder => folder.uri.fsPath,
-        ),
-      engineFor: (file: string) => served.preflight.engineFor(file),
-    };
+    const windowEngine = windowEnginePortsOf(served.preflight);
     const containerEvents = sharedContainerEvents({
       engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
       setTimer: (milliseconds, callback) =>

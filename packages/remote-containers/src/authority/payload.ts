@@ -174,24 +174,37 @@ export function folderTargetOf(
       };
 }
 
+/** The text a payload holds, or the refusal for a payload that is not lowercase hex. */
+export function payloadTextOf(payload: string): string | PayloadMalformed {
+  return /^(?:[0-9a-f]{2})+$/.test(payload)
+    ? Buffer.from(payload, 'hex').toString('utf8')
+    : {malformed: 'hex'};
+}
+
+/** The JSON a payload's text holds, or the refusal for a text that is not JSON. */
+export function payloadJsonOf(
+  text: string,
+): {json: unknown} | PayloadMalformed {
+  try {
+    return {json: JSON.parse(text)};
+  } catch {
+    return {malformed: 'json'};
+  }
+}
+
 /** Reads a payload: a folder target, the legacy host path, or why it is neither. */
 export function devContainerTargetOf(
   payload: string,
 ): DevContainerTarget | PayloadMalformed {
-  if (!/^(?:[0-9a-f]{2})+$/.test(payload)) {
-    return {malformed: 'hex'};
+  const text = payloadTextOf(payload);
+  if (typeof text !== 'string') {
+    return text;
   }
-  const text = Buffer.from(payload, 'hex').toString('utf8');
   if (!text.trimStart().startsWith('{')) {
     return {kind: 'legacy', hostPath: text};
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return {malformed: 'json'};
-  }
-  return folderOf(parsed);
+  const parsed = payloadJsonOf(text);
+  return 'malformed' in parsed ? parsed : folderOf(parsed.json);
 }
 
 /** The folder a window's decoded target names, or none when it has no target yet or the target names no folder. */

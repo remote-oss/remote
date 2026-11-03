@@ -118,3 +118,14 @@ headline. Its detail says why, and it has three buttons.
 
 Run **Dev Containers: Show Log** from the Command Palette. It holds the output of the dev container CLI and of each
 step of the connect.
+
+## Attaching to a running container
+
+Attach to Running Container opens a new window inside a container that is already running, whatever started it. The
+window runs the editor's server in that container and, like a dev container window, runs code there: the files of the
+container, its processes and its tools. The first time in a profile the command asks you to confirm that you trust the
+container's origin; it does not ask again in that profile.
+
+Attach only to containers whose image and contents you trust, because the window will run what they hold. Choosing
+**Learn More** in the warning opens this section and leaves the command without attaching; run the command again and
+choose **Got It** to go on.

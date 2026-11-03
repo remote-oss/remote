@@ -100,6 +100,19 @@ its content:
   takes the source as one argument after `--`, with `GIT_TERMINAL_PROMPT=0`, and a call for a source from a link
   pins `protocol.allow=never` with those four allowed.
 
+### The `attached-container` payload (F-0601 BR-8, F-0205 BR-19)
+
+lib-authority's `containerCodec('attached-container', …)` carries it the same way, as an opaque string.
+- **The text:** lowercase hex of the UTF-8 JSON `{"containerName": "/<name>"}`, with the container's name as Docker
+  keeps it, slash included. The name is the only identity: no container id is kept, so the Open Recent entries and the
+  storage keys interoperate.
+- **The engine:** a `"settings"` member follows `"containerName"` exactly as the dev-container payload's does:
+  `"context"`, then `"host"`, `"certPath"` and `"tlsVerify"`, from the effective engine of §2; it is absent for the
+  default engine.
+- **A WSL window:** a last member `"cwd"` holds the distro's UNC root, `\\wsl.localhost\<distro>`.
+- **The codec functions:** `attachedPayloadOf(target) → string` and `attachedTargetOf(payload) → target | malformed`
+  are pure, with rows for every member and a malformed hex, JSON and shape (`src/attach/payload.ts`).
+
 ## 4. Ports C1–C8 use (all faked in unit rows)
 
 | Port | Operations | Real adapter |

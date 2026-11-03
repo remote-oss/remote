@@ -102,7 +102,7 @@ const REMOVE_STATES: readonly string[] = ['running', 'exited'];
  * hyphen before a letter, lower case before upper case, and an accented letter after the plain ones, and compares
  * digits as characters (AC-48).
  */
-const LABEL_COLLATOR = new Intl.Collator('en');
+export const LABEL_COLLATOR = new Intl.Collator('en');
 
 /** The last segment of a folder label's value with its trailing slashes dropped (BR-3 on a Linux UI); the value when nothing is left. */
 export function folderNameOf(value: string): string {
