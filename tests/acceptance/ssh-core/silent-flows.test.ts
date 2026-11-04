@@ -75,6 +75,20 @@ async function footprintOf(window: string): Promise<Footprint> {
   };
 }
 
+/** The footprint once two reads 3 s apart agree, so that an activation still finishing is not mistaken for the flows' doing. */
+async function settledFootprint(window: string): Promise<Footprint> {
+  let last = await footprintOf(window);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const next = await footprintOf(window);
+    if (JSON.stringify(next) === JSON.stringify(last)) {
+      return next;
+    }
+    last = next;
+  }
+  return last;
+}
+
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
@@ -99,8 +113,7 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         async () => (await terminalNames(folder)).length === 1,
         30_000,
       );
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const before = await footprintOf(folder);
+      const before = await settledFootprint(folder);
 
       // 5.1: a second terminal.
       await inWindow(folder, 'workbench.action.terminal.new');
