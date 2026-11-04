@@ -6,6 +6,19 @@
 import {type Node, parseTree} from 'jsonc-parser';
 import {appendToArray, NotAnObjectError} from '../config/jsonc-edit.ts';
 
+/** The longest id the command accepts: far beyond any publisher and name the Marketplace holds. */
+const LONGEST_EXTENSION_ID = 256;
+
+/** The shape of an extension id, as the Marketplace names them: a publisher and a name, joined by a dot. */
+const EXTENSION_ID = /^[a-z0-9A-Z][a-z0-9A-Z-]*\.[a-z0-9A-Z][a-z0-9A-Z-]*$/;
+
+/** Whether `candidate` is an extension id; anything else, such as a `${localEnv:NAME}` reference, is never written. */
+export function isExtensionId(candidate: string): boolean {
+  return (
+    candidate.length <= LONGEST_EXTENSION_ID && EXTENSION_ID.test(candidate)
+  );
+}
+
 /** A list the edit has to append to is something other than an array. */
 export class NotAnArrayError extends Error {
   readonly list: string;

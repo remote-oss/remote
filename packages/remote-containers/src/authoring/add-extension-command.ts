@@ -21,7 +21,11 @@ import {
 import {editTargetOf} from '../config/edit-target.ts';
 import {setProperty} from '../config/jsonc-edit.ts';
 import {filled} from '../surfaces/filled.ts';
-import {addExtensionEdit, NotAnArrayError} from './add-extension.ts';
+import {
+  addExtensionEdit,
+  isExtensionId,
+  NotAnArrayError,
+} from './add-extension.ts';
 import {
   chosenAmong,
   type ConfigureFeaturesPorts,
@@ -41,6 +45,7 @@ const ADD_TEMPLATES = {
   notArray:
     '{0} in the configuration is not an array, so the extension was not added.',
   failed: 'The extension could not be added: {0}',
+  notAnId: 'it is not an extension id',
 } as const;
 
 /** The command that opens the configuration; S174 and S175 link to it. */
@@ -271,6 +276,13 @@ export function addExtensionCommandOf(
   }
 
   return async extensionId => {
+    if (!isExtensionId(extensionId)) {
+      logger.info(
+        'Add to devcontainer.json got a value that is no extension id',
+      );
+      ports.notifyError(text(ADD_TEMPLATES.failed, [ADD_TEMPLATES.notAnId]));
+      return {kind: 'failed'};
+    }
     const outcome = await attempt(extensionId);
     logger.info(`Add to devcontainer.json ended: ${outcome.kind}`);
     return outcome;

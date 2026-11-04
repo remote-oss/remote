@@ -31,7 +31,7 @@ interface Scene {
   seen: string[];
   /** The calls of the editor and the file system. */
   calls: string[];
-  start(): Promise<AddExtensionOutcome>;
+  start(value?: string): Promise<AddExtensionOutcome>;
 }
 
 /** The command over a window of `folders` whose disk holds `contents`; `editor` steers the editor's documents. */
@@ -110,7 +110,7 @@ function sceneOf(
     ports,
     seen,
     calls: editor.calls,
-    start: () => addExtensionCommandOf(ports)('ms.tool'),
+    start: (value = 'ms.tool') => addExtensionCommandOf(ports)(value),
   };
 }
 
@@ -364,5 +364,41 @@ describe('Add to devcontainer.json (card containers-207, brief-authoring-edits Â
         [],
       ],
     );
+  });
+
+  it('F-0809 AC-1 (c207-id-shape): a value that is no extension id, such as a variable reference, an empty text or one past the length cap, is refused with an error and edits nothing, and a good id is added', async () => {
+    const results: unknown[] = [];
+    for (const value of [
+      '${localEnv:SECRET}',
+      '',
+      `a.${'b'.repeat(256)}`,
+      'ms.tool',
+    ]) {
+      const scene = sceneOf({[MAIN]: EMPTY});
+      const outcome = await scene.start(value);
+      results.push([
+        outcome.kind,
+        scene.calls.filter(line => /^(write|rename|save|apply)/.test(line)),
+        scene.seen.filter(line => line.startsWith('error')),
+      ]);
+    }
+    deepStrictEqual(results, [
+      [
+        'failed',
+        [],
+        ['error The extension could not be added: it is not an extension id'],
+      ],
+      [
+        'failed',
+        [],
+        ['error The extension could not be added: it is not an extension id'],
+      ],
+      [
+        'failed',
+        [],
+        ['error The extension could not be added: it is not an extension id'],
+      ],
+      ['added', [], []],
+    ]);
   });
 });
