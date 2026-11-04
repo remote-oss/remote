@@ -110,6 +110,7 @@
   "GitHub release feature id contains invalid characters": "GitHub release feature id contains invalid characters",
   "OCI Feature id contains invalid characters": "OCI Feature id contains invalid characters",
   "Legacy feature not supported. Please check https://containers.dev/features for replacements.": "Legacy feature not supported. Please check https://containers.dev/features for replacements.",
+"Replace the reference to the discontinued `devcontainers-contrib` with `devcontainers-extra`": "Replace the reference to the discontinued `devcontainers-contrib` with `devcontainers-extra`",
   "Adding Dev Container Configuration Files...": "Adding Dev Container Configuration Files...",
   "Application of the template failed.": "Application of the template failed.",
   "File '{0}' already exists, overwrite?": "File '{0}' already exists, overwrite?",
