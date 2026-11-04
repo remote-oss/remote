@@ -5,6 +5,7 @@ import {
   closeWindow,
   inWindow,
   isTrusted,
+  reloadingAction,
   trustSettled,
   variable,
   waitFor,
@@ -290,12 +291,12 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
         ),
       30_000,
     );
-    await clickButton(window, 'Trust');
-    const settled = await trustSettled(window, true);
+    // The grant of trust reloads the window, so the window is read again only once its agent has activated again.
+    await reloadingAction(window, 'the workspace trust grant', async () => {
+      await clickButton(window, 'Trust');
+      await trustSettled(window, true);
+    });
     const remaining = await problemsSettled(window, 0, 90_000);
-    deepStrictEqual(
-      [settled, remaining.length, await isTrusted(window)],
-      [true, 0, true],
-    );
+    deepStrictEqual([remaining.length, await isTrusted(window)], [0, true]);
   });
 });

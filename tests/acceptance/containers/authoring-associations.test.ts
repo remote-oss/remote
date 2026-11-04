@@ -71,16 +71,18 @@ function folderWithFile(name: string, file: string, text: string): string {
 async function editorHoverOf(name: string, needle: string): Promise<string> {
   // The cursor rests on the token read from the model, so a line the editor has not rendered yet is no obstacle.
   await inWindow(name, 'acceptance.agent.cursorOn', needle);
-  await inWindow(name, 'editor.action.showHover');
   let hover = '';
-  for (let tries = 0; tries < 40 && hover === ''; tries += 1) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    hover = (
-      await evaluate<string>(
-        name,
-        `(document.querySelector('.monaco-hover:not(.hidden) .monaco-hover-content')?.textContent ?? '')`,
-      )
-    ).trim();
+  for (let tries = 0; tries < 3 && hover === ''; tries += 1) {
+    await inWindow(name, 'editor.action.showHover');
+    for (let polls = 0; polls < 50 && hover === ''; polls += 1) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      hover = (
+        await evaluate<string>(
+          name,
+          `(document.querySelector('.monaco-hover:not(.hidden) .monaco-hover-content')?.textContent ?? '')`,
+        )
+      ).trim();
+    }
   }
   await evaluate<boolean>(name, CLOSE_HOVERS);
   return hover;
@@ -251,6 +253,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
         (await problemsOf(window)).length,
       ],
       ['JSON with Comments', true, true, 0],
+      `the hover ${JSON.stringify(hover)} at ${JSON.stringify(window)}`,
     );
   });
 
@@ -395,7 +398,24 @@ describe('the associations and the discontinued namespace of the authoring aids 
         '-c',
         `mkdir -p /tmp/c208-only && printf '%s' '${text}' > ${inContainer}`,
       );
-      await inWindow(name, 'acceptance.agent.openUri', `file://${inContainer}`);
+      // The container's own paths are the window's remote paths: the file is addressed by the window's authority,
+      // the scheme and authority of the folder the window opened, not by a bare file uri.
+      const folder = (await windowState(name)).folders[0];
+      if (folder === undefined) {
+        throw new Error(
+          `window ${name} reports no folder to address ${inContainer} from`,
+        );
+      }
+      const scheme = folder.slice(0, folder.indexOf('://'));
+      const authority = folder.slice(
+        folder.indexOf('://') + 3,
+        folder.indexOf('/', folder.indexOf('://') + 3),
+      );
+      await inWindow(
+        name,
+        'acceptance.agent.openUri',
+        `${scheme}://${authority}${inContainer}`,
+      );
       problems = await problemsSettled(name, 1, 120_000);
     } catch (caught) {
       const state = await windowState(name);
@@ -417,7 +437,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
           'exec',
           containerId,
           'ls',
-          'la',
+          '-la',
           '/tmp/c208-only',
         );
       } catch (listingFailure) {
