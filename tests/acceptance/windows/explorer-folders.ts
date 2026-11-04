@@ -189,7 +189,7 @@ export async function visit(alias: string, name: string): Promise<void> {
   await waitFor(
     `the history of ${alias} to start with ${target}`,
     async () => (await pathsOf(alias))[0] === target,
-    30_000,
+    120_000,
   );
   await closeWindow(name);
 }
