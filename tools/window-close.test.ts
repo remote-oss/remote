@@ -15,6 +15,12 @@ import path from 'node:path';
 /** The part of the windows harness these rows call, from its bundle (the tools' project can't import its sources). */
 interface Harness {
   closeWindow(name: string, milliseconds?: number): Promise<void>;
+  closeContained(
+    name: string,
+    dismiss: (window: string) => Promise<void>,
+    milliseconds?: number,
+  ): Promise<'closed' | 'dismissed' | 'killed'>;
+  isOpen(name: string): boolean;
 }
 
 const NAME = 'w1';
@@ -139,6 +145,60 @@ describe('closeWindow (card tooling-84, #1505)', () => {
     deepStrictEqual(
       [outcome, commandLines(folder).at(-1)?.withdrawn],
       ['timed out', true],
+    );
+  });
+
+  it('a close that works is the first outcome and dismisses nothing', async () => {
+    let dismissed = 0;
+    setTimeout(() => {
+      appendFileSync(
+        path.join(folder, `${NAME}.events.jsonl`),
+        `${JSON.stringify({event: 'deactivated'})}\n`,
+      );
+    }, 300);
+    const outcome = await harness.closeContained(
+      NAME,
+      () => {
+        dismissed += 1;
+        return Promise.resolve();
+      },
+      3_000,
+    );
+    deepStrictEqual([outcome, dismissed], ['closed', 0]);
+  });
+
+  it('a window that closes once its dialog is dismissed is closed by the second close', async () => {
+    const outcome = await harness.closeContained(
+      NAME,
+      () => {
+        extensionHost.kill('SIGKILL');
+        return Promise.resolve();
+      },
+      1_000,
+    );
+    strictEqual(outcome, 'dismissed');
+  });
+
+  it('a window that closes neither way has its extension host ended and is recorded as deactivated', async () => {
+    appendFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      `${JSON.stringify({event: 'activated'})}\n`,
+    );
+    const outcome = await harness.closeContained(
+      NAME,
+      () => Promise.resolve(),
+      500,
+    );
+    const events = readFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      'utf8',
+    )
+      .split('\n')
+      .filter(line => line !== '')
+      .map(line => (JSON.parse(line) as {event: string}).event);
+    deepStrictEqual(
+      [outcome, events.at(-1), harness.isOpen(NAME)],
+      ['killed', 'deactivated', false],
     );
   });
 });

@@ -1342,6 +1342,59 @@ export async function closeWindow(
   }
 }
 
+/** How `closeContained` ended: the first close worked, a dismissed dialog and a second close did, or the host was ended. */
+export type ContainedClose = 'closed' | 'dismissed' | 'killed';
+
+/**
+ * Closes window `name` so that one that will not close cannot fail the rows after it. A close that times out is tried
+ * again after `dismiss` (Escape on a dialog the window shows); a second timeout ends the window's extension host, which
+ * is recorded as its deactivation, and a line on stderr names the window and why. Nothing here throws for a window that
+ * stays open; a window that is not open is left alone.
+ */
+export async function closeContained(
+  name: string,
+  dismiss: (window: string) => Promise<void>,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<ContainedClose> {
+  try {
+    await closeWindow(name, milliseconds);
+    return 'closed';
+  } catch (first) {
+    process.stderr.write(
+      `closing window ${name} failed (${String(first)}); dismissing its dialog and closing it again\n`,
+    );
+  }
+  await dismiss(name).catch(() => undefined);
+  try {
+    await closeWindow(name, milliseconds);
+    return 'dismissed';
+  } catch (second) {
+    process.stderr.write(
+      `closing window ${name} failed again (${String(second)}); ending its extension host\n`,
+    );
+  }
+  const host = liveProcessIdOf(name);
+  if (host !== undefined) {
+    try {
+      process.kill(host, 'SIGKILL');
+    } catch {
+      // The host ended between the look and the signal, which is what is wanted.
+    }
+    await waitUntil(
+      () => `the extension host ${String(host)} of window ${name} to end`,
+      () => processIsGone(host),
+      WAIT_MILLISECONDS,
+    ).catch(() => undefined);
+  }
+  if (isOpen(name)) {
+    appendFileSync(
+      agentFile(name, 'events'),
+      `${JSON.stringify({event: 'deactivated', time: Date.now()})}\n`,
+    );
+  }
+  return 'killed';
+}
+
 /**
  * Takes back the command `commandId` of window `name` when no start of the window accepted it: the window it was meant
  * for has gone, and a window that later starts under the same name must not run it.
