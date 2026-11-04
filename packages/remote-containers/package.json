@@ -208,6 +208,11 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "remote-containers.inspectVolume",
+        "title": "%commands.inspectVolume.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.pruneVolumes",
         "title": "%commands.pruneVolumes.title%",
         "category": "Dev Containers",
@@ -346,6 +351,10 @@
         },
         {
           "command": "remote-containers.pruneVolumes",
+          "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.inspectVolume",
           "when": "!remote-containers:standingDown"
         },
         {

@@ -12,18 +12,7 @@ import {
   pruneVolumes,
 } from './clean-up.ts';
 import {containerRowsOf, volumeRowsOf} from './clean-up-scans.ts';
-import {
-  inspectArguments,
-  LIST_ARGUMENTS,
-  listedContainersOf,
-  type ListedContainer,
-} from './listed-containers.ts';
-import {
-  listedVolumesOf,
-  VOLUME_LIST_ARGUMENTS,
-  volumeInspectArguments,
-  type ListedVolume,
-} from './listed-volumes.ts';
+import {engineListingOf} from './engine-listing.ts';
 
 /** The English template of each text of Clean Up, by its string id. */
 const CLEAN_UP_TEMPLATES = {
@@ -61,59 +50,7 @@ export interface CleanUpCommands {
 
 /** The commands over `host`. */
 export function cleanUpCommandsOf(host: CleanUpHost): CleanUpCommands {
-  const options = {cancellation: host.cancellation};
-
-  /** The stdout of `argv` on the engine; a run that doesn't end with 0 rejects with the text of a failed command. */
-  async function printed(argv: readonly string[]): Promise<string> {
-    const outcome = await host.engine()?.run(argv, {kind: 'none'}, options);
-    if (outcome?.kind === 'failed') {
-      throw new Error(outcome.detail);
-    }
-    if (outcome?.kind !== 'ran' || outcome.status !== 0) {
-      throw new Error(`Command failed: ${[host.program(), ...argv].join(' ')}`);
-    }
-    return outcome.stdout;
-  }
-
-  /** The names or ids a listing printed, one on a line. */
-  function linesOf(stdout: string): string[] {
-    return stdout
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line !== '');
-  }
-
-  async function containers(): Promise<ListedContainer[]> {
-    const identifiers = linesOf(await printed(LIST_ARGUMENTS));
-    if (identifiers.length === 0) {
-      return [];
-    }
-    const listed = listedContainersOf(
-      await printed(inspectArguments(identifiers)),
-    );
-    if (listed === undefined) {
-      throw new Error(
-        `Command failed: ${[host.program(), ...inspectArguments(identifiers)].join(' ')}`,
-      );
-    }
-    return listed;
-  }
-
-  async function volumes(): Promise<ListedVolume[]> {
-    const names = linesOf(await printed(VOLUME_LIST_ARGUMENTS));
-    if (names.length === 0) {
-      return [];
-    }
-    const listed = listedVolumesOf(
-      await printed(volumeInspectArguments(names)),
-    );
-    if (listed === undefined) {
-      throw new Error(
-        `Command failed: ${[host.program(), ...volumeInspectArguments(names)].join(' ')}`,
-      );
-    }
-    return listed;
-  }
+  const {printed, containers, volumes} = engineListingOf(host);
 
   const ports: CleanUpPorts = {
     scanContainers: async () => containerRowsOf(await containers()),

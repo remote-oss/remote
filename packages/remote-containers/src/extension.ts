@@ -163,6 +163,7 @@ import {attachConfigFilesOf} from './attach/config-files.ts';
 import {attachWarningAccepted} from './attach/warning.ts';
 import {wslRootOf} from './attach/payload.ts';
 import type {Translate} from './surfaces/engine-dialogs.ts';
+import {filled} from './surfaces/filled.ts';
 import {composeRouteOf} from './engine/compose-route.ts';
 import {effectiveEngineKey, endpointInEffect} from './engine/engine-key.ts';
 import {dashHostOf} from './engine/ssh-endpoint.ts';
@@ -206,6 +207,11 @@ import {
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
 import {mountPerformanceHintApplies} from './explorer/details-model.ts';
+import {INSPECT_TEMPLATES, inspectVolume} from './volumes/inspect-volume.ts';
+import {
+  engineListingOf,
+  type EngineListing,
+} from './explorer/engine-listing.ts';
 import {
   type CleanUpCommands,
   cleanUpCommandsOf,
@@ -723,6 +729,7 @@ export async function activate(
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
   let cleanUp: CleanUpCommands | undefined;
+  let volumeListing: EngineListing | undefined;
   let inspectRow: ((argument: unknown) => Promise<void>) | undefined;
   let showContainerLog: ((argument: unknown) => Promise<void>) | undefined;
   function bridgeFor(
@@ -1125,6 +1132,43 @@ export async function activate(
           },
           logger: served.logger,
         };
+      }
+      /** Explore a Volume in a Dev Container: the picker of the daemon's volumes, and the window of the one picked. */
+      async function exploreVolume(): Promise<void> {
+        const engine = await windowPinnedEngine();
+        await inspectVolume({
+          engineReady: async () =>
+            (await firstCheck(
+              served.preflight,
+              engineBaseOf({
+                folder: firstFolder(),
+                trusted: vscode.workspace.isTrusted,
+              }),
+              new AbortController().signal,
+            )) === 'proceed',
+          volumes: () =>
+            volumeListing?.volumes() ??
+            Promise.reject(new Error('the engine is not ready')),
+          pick: async rows => {
+            const picked = await vscode.window.showQuickPick(
+              rows.map(entry => ({...entry})),
+              {placeHolder: translate(INSPECT_TEMPLATES.S319)},
+            );
+            return rows.find(entry => entry.volumeName === picked?.volumeName);
+          },
+          createdAt: date => filled(translate, INSPECT_TEMPLATES.S419, [date]),
+          engine: () => engine,
+          reload: async address => {
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(address),
+              {forceReuseWindow: true},
+            );
+          },
+          report: line => {
+            served.logger.info(line);
+          },
+        });
       }
       /** Clone Repository in Container Volume's command, over the editor and this machine. */
       function cloneCommand(): CommandHandler {
@@ -1891,6 +1935,7 @@ export async function activate(
         removeContainer: {execute: argument => rowActions?.remove(argument)},
         cleanUpDevContainers: {execute: () => cleanUp?.devContainers()},
         pruneVolumes: {execute: () => cleanUp?.volumes()},
+        inspectVolume: {execute: () => exploreVolume()},
         showDetails: {
           execute: async argument => {
             const target = containerRowOf(argument);
@@ -2560,6 +2605,11 @@ export async function activate(
         await targetsView?.refresh();
       },
       translate,
+      cancellation: rowActionsStop.signal,
+    });
+    volumeListing = engineListingOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
       cancellation: rowActionsStop.signal,
     });
     cleanUp = cleanUpCommandsOf({
