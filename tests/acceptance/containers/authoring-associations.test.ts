@@ -257,12 +257,13 @@ describe('the associations and the discontinued namespace of the authoring aids 
       0,
     );
     // The hover names the schema's description only once the schema the file points at has loaded, and a valid
-    // file holds no problem until then, so the read retries for the description; the status bar's hover opens
-    // only after the read, since its hover holds the window's hover slot and the editor's hover then shows none.
+    // file holds no problem until then, so the read retries for the description. The cursor rests at the end of
+    // the word, since the end of its selection is where the editor shows the hover, and a quote past the word
+    // lands on the separator, which holds no hover.
     let hover = '';
     const began = Date.now();
     for (;;) {
-      hover = await editorHoverOf(window, '"id"');
+      hover = await editorHoverOf(window, 'id');
       if (hover.includes(ID_DESCRIPTION) || Date.now() - began > 90_000) {
         break;
       }
@@ -282,18 +283,16 @@ describe('the associations and the discontinued namespace of the authoring aids 
         `the hover ${JSON.stringify(hover)} at ${JSON.stringify(window)}`,
       );
     } catch (caught) {
-      // Name what the window holds when the hover stops short: its open hovers, the cursor the agent
-      // reports, and a second probe that rests the cursor on the word without its quotes.
+      // Name what the window holds when the hover stops short: its open hovers and the tab it shows.
       const hovers = await evaluate<string>(
         window,
         `(() => JSON.stringify([...document.querySelectorAll('.monaco-hover:not(.hidden)')].map(
           each => [each.className, (each.textContent ?? '').slice(0, 120)],
         )))()`,
       );
-      const plain = await editorHoverOf(window, 'id');
       throw new Error(
-        `${String(caught)}; hovers ${hovers}; the hover on the word ${JSON.stringify(plain)}; ` +
-          `the window: ${(await windowState(window)).activeTab?.uri ?? 'no tab'}`,
+        `${String(caught)}; hovers ${hovers}; the window: ` +
+          `${(await windowState(window)).activeTab?.uri ?? 'no tab'}`,
         {cause: caught},
       );
     }
