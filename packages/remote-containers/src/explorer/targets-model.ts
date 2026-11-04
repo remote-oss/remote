@@ -50,6 +50,7 @@ export interface TargetGroup {
 /** The welcome text the view shows in place of, or beside, its groups. */
 export type WelcomeKey =
   | 'needsDockerStartOrInstall'
+  | 'needsSSHCredentials'
   | 'noContainersWithFolder'
   | 'noContainersWithoutFolder';
 
@@ -63,6 +64,8 @@ export interface TargetsTree {
 export interface TargetsInput {
   /** The engine's containers, or `unreachable` when it couldn't be asked. */
   containers: readonly ListedContainer[] | 'unreachable';
+  /** The welcome that an unreachable engine shows instead of the generic one; none shows the generic one. */
+  failureWelcome?: WelcomeKey;
   window: {
     folderOpen: boolean;
     /** The connection the window holds; none in a window that isn't a dev container's. */
@@ -272,7 +275,10 @@ function sortedRows(
 export function targetsTreeOf(input: TargetsInput): TargetsTree {
   const {containers, translate} = input;
   if (containers === 'unreachable') {
-    return {welcome: 'needsDockerStartOrInstall', groups: []};
+    return {
+      welcome: input.failureWelcome ?? 'needsDockerStartOrInstall',
+      groups: [],
+    };
   }
   if (containers.length === 0) {
     return {

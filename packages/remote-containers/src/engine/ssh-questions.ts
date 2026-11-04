@@ -15,7 +15,7 @@ export type QuestionMode = 'command' | 'view' | 'automatic';
 type Remembered = {kind: 'answer'; text: string} | {kind: 'declined'};
 
 /** What an operation's questions came to, for the one that shows its result. */
-interface QuestionOutcome {
+export interface QuestionOutcome {
   /** A box of the operation was answered or dismissed. */
   boxClosed: boolean;
   /** A question was refused for lack of an answer, or by a remembered decline. */
