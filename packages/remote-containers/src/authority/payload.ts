@@ -175,14 +175,14 @@ export function folderTargetOf(
 }
 
 /** The text a payload holds, or the refusal for a payload that is not lowercase hex. */
-export function payloadTextOf(payload: string): string | PayloadMalformed {
+function payloadTextOf(payload: string): string | PayloadMalformed {
   return /^(?:[0-9a-f]{2})+$/.test(payload)
     ? Buffer.from(payload, 'hex').toString('utf8')
     : {malformed: 'hex'};
 }
 
 /** The JSON a payload's text holds, or the refusal for a text that is not JSON. */
-export function payloadJsonOf(
+function payloadJsonOf(
   text: string,
 ): {json: unknown} | PayloadMalformed {
   try {
