@@ -270,5 +270,6 @@
   "Dev Container configuration": "Dev Container configuration",
   "The configuration {0} is not a JSON object, so the extension was not added.": "The configuration {0} is not a JSON object, so the extension was not added.",
   "{0} in the configuration is not an array, so the extension was not added.": "{0} in the configuration is not an array, so the extension was not added.",
-  "The extension could not be added: {0}": "The extension could not be added: {0}"
+  "The extension could not be added: {0}": "The extension could not be added: {0}",
+  "it is not an extension id": "it is not an extension id"
 }
