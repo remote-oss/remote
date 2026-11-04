@@ -114,7 +114,12 @@ import {engineBaseOf, executableOf} from './engine/executable.ts';
 import type {EngineHost} from './engine/engine-host.ts';
 import type {TargetsViewPorts} from './explorer/targets-view.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
-import {composeCheck, currentContext, firstCheck} from './engine/preflight.ts';
+import {
+  composeCheck,
+  currentContext,
+  firstCheck,
+  type PreflightDependencies,
+} from './engine/preflight.ts';
 import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
 import {
   CLONE_TRUST_KEY,
@@ -156,7 +161,8 @@ import {attachWarningAccepted} from './attach/warning.ts';
 import {wslRootOf} from './attach/payload.ts';
 import type {Translate} from './surfaces/engine-dialogs.ts';
 import {composeRouteOf} from './engine/compose-route.ts';
-import {effectiveEngineKey} from './engine/engine-key.ts';
+import {effectiveEngineKey, endpointInEffect} from './engine/engine-key.ts';
+import {dashHostOf} from './engine/ssh-endpoint.ts';
 import {engineWatchOf} from './engine/engine-watch.ts';
 import {
   commands,
@@ -1003,39 +1009,46 @@ export async function activate(
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
-    preflight: logger => ({
-      engineFor: file =>
-        withEnvironment(nodeEngineHost(file), () =>
-          engineEnvironment(engineSources()),
-        ),
-      dockerPath: () =>
-        vscode.workspace.getConfiguration().get(settings.dockerPath.id),
-      dialogs: {
-        showError: (message, detail, items) =>
-          Promise.resolve(
-            vscode.window.showErrorMessage(
-              message,
-              {modal: true, detail},
-              ...items,
-            ),
+    preflight: logger => {
+      const dependencies: PreflightDependencies = {
+        engineFor: file =>
+          withEnvironment(nodeEngineHost(file), () =>
+            engineEnvironment(engineSources()),
           ),
-        openExternal: address =>
-          Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
-        revealLog: () => {
-          logChannel?.show(true);
+        dockerPath: () =>
+          vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+        dialogs: {
+          showError: (message, detail, items) =>
+            Promise.resolve(
+              vscode.window.showErrorMessage(
+                message,
+                {modal: true, detail},
+                ...items,
+              ),
+            ),
+          openExternal: address =>
+            Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
+          revealLog: () => {
+            logChannel?.show(true);
+          },
         },
-      },
-      translate,
-      setTimer: (milliseconds, callback) => {
-        const timer = setTimeout(callback, milliseconds);
-        return () => {
-          clearTimeout(timer);
-        };
-      },
-      clock: Date.now,
-      logger,
-      searchPath: () => process.env.PATH ?? '',
-    }),
+        translate,
+        setTimer: (milliseconds, callback) => {
+          const timer = setTimeout(callback, milliseconds);
+          return () => {
+            clearTimeout(timer);
+          };
+        },
+        clock: Date.now,
+        logger,
+        searchPath: () => process.env.PATH ?? '',
+      };
+      return {
+        ...dependencies,
+        endpoint: (base, cancellation) =>
+          endpointInEffect(engineSources(), dependencies, base, cancellation),
+      };
+    },
     handlers: served => {
       // The two edit-session commands are registered and hidden; no proposal is requested, so the editor never offers them.
       const dormantCommand = {execute: () => Promise.resolve()};
@@ -2443,6 +2456,16 @@ export async function activate(
     });
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
+      dashHost: async () =>
+        dashHostOf(
+          await served.preflight.endpoint?.(
+            engineBaseOf({
+              folder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+              trusted: vscode.workspace.isTrusted,
+            }),
+            new AbortController().signal,
+          ),
+        ) !== undefined,
       loaded: () => {
         result.registerDeferred();
       },

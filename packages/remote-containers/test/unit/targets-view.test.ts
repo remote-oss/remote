@@ -76,6 +76,8 @@ function inspectJson(containers: readonly FakeContainer[]): string {
 interface Scene {
   /** How many times the view said its data had loaded. */
   loads: number;
+  /** Whether the Docker host in effect is an ssh host whose name starts with a dash. */
+  dashHost: boolean;
   commands: string[];
   /** What the view asked the clock for, and how many of those waits were stopped. */
   timers: Array<{milliseconds: number; callback: () => void}>;
@@ -115,6 +117,7 @@ interface Scene {
 function sceneOf(): Scene {
   return {
     loads: 0,
+    dashHost: false,
     commands: [`${views.targetsContainers}.focus`],
     timers: [],
     stopped: 0,
@@ -183,6 +186,7 @@ function portsOf(scene: Scene): TargetsViewPorts {
     loaded: () => {
       scene.loads += 1;
     },
+    dashHost: () => Promise.resolve(scene.dashHost),
     editor: {
       commandIds: () =>
         scene.commandFailure === undefined
@@ -579,6 +583,27 @@ describe('the Dev Containers view (card containers-30)', () => {
         ],
       ],
     );
+  });
+
+  it('F-0205 AC-12a, AC-10: with an ssh host that starts with a dash the view lists nothing, shows the Docker welcome and starts no Docker process', async () => {
+    const scene = sceneOf();
+    scene.dashHost = true;
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    await view.refresh();
+    deepStrictEqual(
+      [Object.keys(scene.docker), scene.runs, scene.contexts.slice(-3)],
+      [
+        [],
+        [],
+        [
+          ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:noContainersWithFolder', false],
+          ['remote-containers:noContainersWithoutFolder', false],
+        ],
+      ],
+    );
+    view.dispose();
   });
 
   it('F-0901 6.21: in a local window a dockerPath change to a program that starts restarts the events process on the new engine', async () => {

@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   BUTTON_LINKS,
+  dashHostDialogOf,
   dialogOf,
   ENGINE_LINKS,
   ENGINE_TEMPLATES,
@@ -106,5 +107,38 @@ describe('the dialogs of the first check', () => {
       openPermission: ENGINE_LINKS.permission,
       openCompose: ENGINE_LINKS.compose,
     });
+  });
+});
+
+describe('the dialogs of an ssh Docker host (card containers-173)', () => {
+  it('F-0205 AC-7, AC-44, AC-12a: each has its message, its detail and Show Log', () => {
+    deepStrictEqual(
+      [
+        dialogOf('sshDenied', 'docker', identity),
+        dialogOf('sshTooMany', 'docker', identity),
+        dashHostDialogOf('-badhost', identity),
+      ].map(dialog => [
+        dialog.message,
+        dialog.detail,
+        dialog.buttons.map(button => [button.label, button.action]),
+      ]),
+      [
+        [
+          "Cannot connect to Docker daemon using 'ssh'.",
+          'Make sure public/private keys are set up for connecting without keyboard interaction.',
+          [['Show Log', 'showLog']],
+        ],
+        [
+          "Cannot connect to Docker daemon using 'ssh'. Make sure public/private keys are set up for connecting without keyboard interaction.",
+          '',
+          [['Show Log', 'showLog']],
+        ],
+        [
+          'Hostname must not start with a dash: -badhost',
+          '',
+          [['Show Log', 'showLog']],
+        ],
+      ],
+    );
   });
 });

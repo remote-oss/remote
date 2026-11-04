@@ -83,6 +83,13 @@ describe('Open Folder in Container', () => {
     );
   });
 
+  it('F-0205 AC-2a: the engine check stops the command before the folder picker is asked', async () => {
+    const state = setup();
+    state.check = 'stopped';
+    await commandOf(state).handler();
+    deepStrictEqual(state.calls.includes('pickFolder'), false);
+  });
+
   it('F-0201 AC-55, BR-1: a relative dockerPath is the window folder’s file, so the engine check gets the folder as its base only once the window is trusted', async () => {
     const calls = [];
     for (const trust of ['trusted', 'declined'] as const) {

@@ -320,3 +320,74 @@ describe('the classification reads the Docker CLI’s own forms only (card conta
     );
   });
 });
+
+describe('the classification of the first check over an ssh endpoint (card containers-173)', () => {
+  const DENIED =
+    'error during connect: Get "http://docker.example.com/v1.51/version": command [ssh -o ConnectTimeout=30 -T -- box docker system dial-stdio] has exited with exit status 255, make sure the URL is valid, and Docker 18.09 or later is installed on the remote host: stderr=user@box: Permission denied (publickey).';
+  const TOO_MANY =
+    'error during connect: command [ssh -- box docker system dial-stdio] has exited with exit status 255: stderr=Received disconnect from 10.0.0.1 port 22:2: Too many authentication failures';
+  const NO_SSH =
+    'error during connect: Get "http://docker.example.com/v1.51/version": exec: "ssh": executable file not found in $PATH';
+
+  function outcome(stderr: string, overSsh: boolean): string {
+    return firstCheckOutcomeOf(SPAWN, [exited(1, stderr)], overSsh);
+  }
+
+  it('F-0205 AC-7, AC-44, AC-40, AC-13: over ssh, Permission denied in the ssh part is sshDenied, Too many authentication failures alone is sshTooMany, a missing ssh is notFound and anything else is engineError', () => {
+    deepStrictEqual(
+      [
+        outcome(DENIED, true),
+        outcome(TOO_MANY, true),
+        outcome(`${TOO_MANY} Permission denied`, true),
+        outcome(NO_SSH, true),
+        outcome('ssh: connect to host box port 22: Connection refused', true),
+        outcome('Permission denied (publickey).', true),
+        outcome('', true),
+      ],
+      [
+        'sshDenied',
+        'sshTooMany',
+        'sshDenied',
+        'notFound',
+        'engineError',
+        'sshDenied',
+        'engineError',
+      ],
+    );
+  });
+
+  it('F-0205 7.E1: the ssh part is what follows the first stderr=, so words before it do not decide', () => {
+    deepStrictEqual(
+      [
+        outcome('Permission denied elsewhere: stderr=Connection refused', true),
+        outcome('x stderr=Connection refused stderr=Permission denied', true),
+      ],
+      ['engineError', 'sshDenied'],
+    );
+  });
+
+  it('F-0205 BR-5: a program that is not ssh keeps today’s mapping, and so do a timeout, a failed spawn and a pass', () => {
+    deepStrictEqual(
+      [
+        outcome(DENIED, false),
+        outcome('Permission denied (publickey).', false),
+        outcome(TOO_MANY, false),
+        firstCheckOutcomeOf(SPAWN, [exited(undefined, '', '', true)], true),
+        firstCheckOutcomeOf(
+          SPAWN,
+          [{kind: 'failed', detail: 'spawn ENOENT'}],
+          true,
+        ),
+        firstCheckOutcomeOf(SPAWN, [GOOD, GOOD_STRUCTURED], true),
+      ],
+      [
+        'engineError',
+        'permission',
+        'engineError',
+        'engineError',
+        'notFound',
+        'passed',
+      ],
+    );
+  });
+});
