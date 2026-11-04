@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {docker} from './resolve-support.ts';
 import path from 'node:path';
 import {closeWindow, inWindow, waitFor} from '../windows/harness.ts';
 import {
@@ -150,6 +151,10 @@ describe('a Docker Compose dev container in the Dev Containers view (card contai
       async () =>
         (await stateOf(await serviceContainerOf(project, 'app'))) === 'exited',
       60_000,
+    );
+    console.log(
+      'MEASURE c146 ps after stop',
+      (await docker('ps', '-a', '--format', '{{.Names}}|{{.Status}}', '--filter', `label=com.docker.compose.project=${project}`)).replace(/\n/g, ' ; '),
     );
     const afterStop = [
       await runningServicesOf(project),

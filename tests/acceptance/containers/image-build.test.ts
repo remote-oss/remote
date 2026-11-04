@@ -469,6 +469,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       const name = await openFolderWindow(folder);
       const shown = await shownDuring(name, () => reopenInContainer(name));
       const lines = containersLogSince(mark);
+      console.log('MEASURE i9 lines', JSON.stringify(lines.filter(line => /never-pushed|cache importer|cache manifest/.test(line))));
       const [containerId = ''] = await devContainersOf(folder);
       deepStrictEqual(
         [
@@ -730,6 +731,7 @@ describe('F-0412 the image and Dockerfile paths (card containers-52)', function 
       const name = await openFolderWindow(folder);
       await reopenInContainer(name);
       const lines = containersLogSince(mark);
+      console.log('MEASURE cache lines', JSON.stringify(lines.filter(line => /cache|CACHED|importing|inferred/.test(line))));
       const containers = (await devContainersOf(folder)).length;
       await closeWindow(name);
       return {

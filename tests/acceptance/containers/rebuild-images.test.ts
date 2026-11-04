@@ -126,6 +126,8 @@ describe('F-0405 the rebuild of the images (card coverage-67)', function () {
           )
         );
       }
+      console.log('MEASURE c67 first', JSON.stringify(first.images), 'cached', JSON.stringify(cached.images), 'uncached', JSON.stringify(uncached.images), 'dangling', JSON.stringify(await danglingImages()), 'before', JSON.stringify(danglingBefore));
+      console.log('MEASURE c67 images -a', (await docker('images', '-a', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}')).replace(/\n/g, ' ; '));
       deepStrictEqual(
         {
           twoImages: first.images.length,
