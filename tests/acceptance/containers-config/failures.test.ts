@@ -44,6 +44,23 @@ async function failedOn(
 describe('The image label that cannot be used, and the one that is odd (card coverage-112)', function () {
   this.timeout(1_200_000);
 
+  it('F-0306 AC-30 (c112-bad-mount): a label whose only mount is a {type, src, dst} object ends in the generic setup dialog and leaves no container', async () => {
+    const mount = JSON.parse(
+      '{"type": "bind", "src": "/c112-source", "dst": "/c112-target"}',
+    ) as unknown;
+    const image = await imageWithLabel('c112-bad-mount', [{mounts: [mount]}]);
+    const {name, folder, dialog} = await failedOn('c112-bad-mount', image);
+    try {
+      deepStrictEqual(
+        [dialog, await devContainersOf(folder)],
+        [FAILED_SETUP, []],
+      );
+    } finally {
+      await closeWindow(name).catch(() => undefined);
+      await docker('rmi', '--force', image).catch(() => undefined);
+    }
+  });
+
   it('F-0306 AC-44 (c112-container-user): a containerUser the image lacks ends in the setup dialog and leaves the container in the state created', async () => {
     const image = await imageWithLabel('c112-container-user', [
       {containerUser: 'c112nobody'},
