@@ -15,10 +15,17 @@ export interface LogFilePorts {
   failed(reason: string): void;
 }
 
+/** Gets every line written from now on, as the file holds it. */
+export type LineListener = (text: string) => void;
+
 /** The sink of one log file, and the wait for everything written so far to reach it. */
 export interface LogFileSink extends Sink {
   /** Resolves when every line written before the call has been appended, or has failed. */
   flushed(): Promise<void>;
+  /** How many bytes the file holds once everything written so far has been appended. */
+  bytes(): number;
+  /** Calls `listener` for every line written after this; the result stops it. */
+  subscribe(listener: LineListener): () => void;
 }
 
 /** The sink that appends the lines it is given, as `format` writes them, to `file` in `folder`. */
@@ -36,11 +43,25 @@ export function logFileSinkOf(
     }
   }
   let tail: Promise<void> = ports.makeFolder(folder).catch(report);
+  let size = 0;
+  const listeners = new Set<LineListener>();
   return {
     write: line => {
-      const text = `${format(line)}\n`;
+      const rendered = format(line);
+      const text = `${rendered}\n`;
       tail = tail.then(() => ports.append(file, text)).catch(report);
+      size += Buffer.byteLength(text, 'utf8');
+      for (const listener of listeners) {
+        listener(rendered);
+      }
     },
     flushed: () => tail,
+    bytes: () => size,
+    subscribe: listener => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   };
 }

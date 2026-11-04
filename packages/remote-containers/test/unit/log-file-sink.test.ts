@@ -87,3 +87,23 @@ describe('the sink of the activation’s log file (card containers-186, F-0104 B
     deepStrictEqual(reasons, ['Error: no folder']);
   });
 });
+
+describe('the live feed of the activation’s log file (card containers-186, F-0104 BR-1)', () => {
+  it('F-0104 BR-1: a listener gets each line after its subscription until it stops, and the size counts every line written', async () => {
+    const seen = portsOf();
+    const sink = logFileSinkOf(seen.ports, '/logs', '/logs/a.log');
+    sink.write(LINE);
+    const heard: string[] = [];
+    const stop = sink.subscribe(text => {
+      heard.push(text);
+    });
+    sink.write({...LINE, scope: [], message: 'second'});
+    stop();
+    sink.write({...LINE, scope: [], message: 'third'});
+    await sink.flushed();
+    deepStrictEqual(
+      [heard, sink.bytes()],
+      [['2026-11-03T12:34:56.789Z [info] second'], 47 + 39 + 38],
+    );
+  });
+});
