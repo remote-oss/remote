@@ -36,7 +36,8 @@ are the specs'.
 
 Rules:
 - `exec` always names the distro with `-d` and runs the program with `--exec`. No shell sits between `wsl.exe` and
-  the program, so arguments are never re-split. Area D's scripts are `sh -s` with the script on standard input.
+  the program, so arguments are never re-split. Area D's scripts run through lib-host's prelude
+  (`sh -c <preludeCommand(n)>`, the script ahead of the input), D4's `runScript`.
 - The empty distro name never reaches D1. D2 resolves it first (F-6201 BR-1).
 - A process is never retried, and no output is interpreted beyond the kind classification.
 - `interopDisabled` comes with the first card whose `exec` runs a program that starts Windows binaries (D8's
