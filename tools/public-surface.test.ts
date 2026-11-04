@@ -159,6 +159,40 @@ describe('public-surface', () => {
     );
   });
 
+  it('lets an address the specification fixes verbatim pass in the manifest (ruling-2165-schema-url)', () => {
+    workspace.write(
+      'packages/remote-x/package.json',
+      '{\n  "url": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainerFeature.schema.json"\n}\n',
+    );
+    deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
+  it('still flags the bare word in the manifest beside the allowed address', () => {
+    workspace.write(
+      'packages/remote-x/package.json',
+      '{\n  "url": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainerFeature.schema.json",\n  "note": "an open spec question"\n}\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      ["packages/remote-x/package.json:3: 'spec'"],
+    );
+  });
+
+  it('still flags the word in another address with a /spec/ segment', () => {
+    workspace.write(
+      'packages/remote-x/README.md',
+      'See https://example.com/spec/main/schema.json.\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      ["packages/remote-x/README.md:1: 'spec'"],
+    );
+  });
+
   it('leaves the licence texts of third parties alone', () => {
     workspace.write(
       'packages/remote-x/ThirdPartyNotices.txt',

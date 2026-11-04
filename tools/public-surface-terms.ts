@@ -52,6 +52,32 @@ const PROCESS_SENSES_UI: readonly RegExp[] = [
   ...OTHER_PROCESS_SENSES,
 ];
 
+/**
+ * The exact external addresses a specification fixes verbatim. A match inside one of them is not reported
+ * (ruling-2165-schema-url); every other occurrence keeps the full list.
+ */
+const ALLOWED_ADDRESSES: ReadonlyArray<{address: string; reason: string}> = [
+  {
+    address:
+      'https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainerFeature.schema.json',
+    reason:
+      "F-0810 AC-2's schema association, the specification project's own address (D-14)",
+  },
+];
+
+/** The spans of the allowed addresses in `text`. */
+function allowedSpans(text: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const {address} of ALLOWED_ADDRESSES) {
+    let start = text.indexOf(address);
+    while (start !== -1) {
+      spans.push([start, start + address.length]);
+      start = text.indexOf(address, start + 1);
+    }
+  }
+  return spans;
+}
+
 /** One forbidden word or phrase found in a text. */
 export interface TermMatch {
   term: string;
@@ -61,12 +87,14 @@ export interface TermMatch {
 
 /**
  * The forbidden words and phrases in a text, in the order they appear. In UI string values the plain sense of an
- * occurrence followed by ` to ` passes (ruling-2165-plain-reference); every other surface keeps the full list.
+ * occurrence followed by ` to ` passes (ruling-2165-plain-reference); a match inside an allowed address is not
+ * reported (ruling-2165-schema-url); every other surface keeps the full list.
  */
 export function forbiddenMatches(
   text: string,
   uiStringValues = false,
 ): TermMatch[] {
+  const spans = allowedSpans(text);
   const found = [
     ...BARE_TERMS,
     ...(uiStringValues ? PROCESS_SENSES_UI : PROCESS_SENSES),
@@ -78,11 +106,14 @@ export function forbiddenMatches(
     })),
   );
   found.sort((left, right) => left.index - right.index);
-  // A phrase inside the span of an earlier one is the same finding.
+  // A phrase inside the span of an earlier finding is the same finding; one inside an allowed address is none.
   let reached = 0;
   const matches: TermMatch[] = [];
   for (const {term, index, end} of found) {
-    if (index >= reached) {
+    const insideAddress = spans.some(
+      ([start, stop]) => index >= start && end <= stop,
+    );
+    if (index >= reached && !insideAddress) {
       matches.push({term, index});
       reached = end;
     }

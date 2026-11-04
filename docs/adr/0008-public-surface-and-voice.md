@@ -39,7 +39,9 @@ leaks. The repository is private while this is built; it becomes public with the
    (a fresh initial commit or a rewritten history, decided at that time by the user).
 5. **A public-surface lint** runs in CI over every shipped prose surface and over code comments: it fails on the
    forbidden framing words and on internal ids in prose, with one allow-list for code and data that must name
-   products (`lib-product`'s table, licence hosts) and for third-party licence texts (`ThirdPartyNotices`). The
+   products (`lib-product`'s table, licence hosts), and the exact third-party addresses a specification fixes
+   verbatim, such as F-0810's schema URL (ruled 2026-11-04, #2165) and for third-party licence texts
+   (`ThirdPartyNotices`). The
    grep of the first review (reference, Microsoft, ms-vscode, clean-room, reimplement, spec, F-/R-/D- ids,
    session, worker, lab, dirty, orchestrat) is its starting list; "session" does not apply to UI string values (`package.nls*.json`, `l10n`), where the reused strings say "previous session" (ruled 2026-10-09); likewise "the reference to", the plain sense of a reused UI string such as STR:S294, does not apply to UI string values (ruled 2026-11-04, #2165), and "conformance" is not on the list.
 6. **Trademark and third-party notices** live in `NOTICE` or `ThirdPartyNotices.txt`, never in a README; whether a
