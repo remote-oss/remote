@@ -34,6 +34,32 @@ const PLUS = 'New Remote';
 const GROUP = 'SSH';
 const ADDED = 'c102-written-locally';
 
+/** How long one command on the SSH host may take, in milliseconds. */
+const HOST_COMMAND_MILLISECONDS = 120_000;
+
+/** The output of the shell script `script` run on the SSH host as `user`, or the error that names `step` once it takes too long. */
+async function onSshHost(
+  step: string,
+  user: string,
+  script: string,
+): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new Error(
+          `${step} took more than ${String(HOST_COMMAND_MILLISECONDS)} ms on the SSH host`,
+        ),
+      );
+    }, HOST_COMMAND_MILLISECONDS);
+  });
+  try {
+    return await Promise.race([onHostAs(user, 'sh', '-c', script), expiry]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 describe('the SSH group in a window connected through Remote - SSH (card coverage-102, part 2)', function () {
   this.timeout(600_000);
   let configText = '';
@@ -50,17 +76,15 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
     const window = 'c102-g1';
     const config = variable('HARNESS_SSH_CONFIG');
     const remoteFile = '/home/harness/.ssh/config';
-    const before = await onHostAs(
+    const before = await onSshHost(
+      'reading the SSH account’s config',
       'harness',
-      'sh',
-      '-c',
       `cat ${remoteFile} 2>/dev/null; true`,
     );
     try {
-      await onHostAs(
+      await onSshHost(
+        'adding the remote-only host',
         'harness',
-        'sh',
-        '-c',
         `mkdir -p /home/harness/.ssh && printf 'Host c102-remote-only\\n' >> ${remoteFile}`,
       );
       await inWindow('local', 'workbench.view.remote');
@@ -108,11 +132,10 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
           opened?.includes(`Host ${HOST}`),
           readFileSync(config, 'utf8').includes(`Host ${ADDED}`),
           (
-            await onHostAs(
+            await onSshHost(
+              'searching the SSH host for the added host',
               'root',
-              'sh',
-              '-c',
-              `grep -rl ${ADDED} /home /root /etc/ssh 2>/dev/null; true`,
+              `timeout 90 grep -rlD skip ${ADDED} /home /root /etc/ssh 2>/dev/null; true`,
             )
           ).trim(),
           await notifications(window),
@@ -122,10 +145,9 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
     } finally {
       await closeIfOpen(window);
       await closeWindow(window).catch(() => undefined);
-      await onHostAs(
+      await onSshHost(
+        'restoring the SSH account’s config',
         'harness',
-        'sh',
-        '-c',
         before === ''
           ? `rm -f ${remoteFile}`
           : `printf '%s' '${before.replaceAll("'", "'\\''")}' > ${remoteFile}`,
