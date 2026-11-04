@@ -36,9 +36,12 @@ are the specs'.
 
 Rules:
 - `exec` always names the distro with `-d` and runs the program with `--exec`. No shell sits between `wsl.exe` and
-  the program, so arguments are never re-split. Area D's scripts are `sh -s` with the script on standard input.
+  the program, so arguments are never re-split. Area D's scripts run through lib-host's prelude
+  (`sh -c <preludeCommand(n)>`, the script ahead of the input), D4's `runScript`.
 - The empty distro name never reaches D1. D2 resolves it first (F-6201 BR-1).
 - A process is never retried, and no output is interpreted beyond the kind classification.
+- `interopDisabled` comes with the first card whose `exec` runs a program that starts Windows binaries (D8's
+  handoff); until then `exec` has no such caller (2026-11-04, #2209).
 - `--status` and `--list` outputs are decoded by D1 and parsed by D1a. Nothing else parses `wsl.exe` text.
 
 Never: spawn `wsl.exe` through a shell, spawn `ssh`, or log the environment values passed to `exec`.
@@ -95,7 +98,7 @@ Rules:
 
 | H1 operation | Over D1 |
 |---|---|
-| `runScript(posixShell, env, input)` | `exec(distro, '~', 'sh', ['-s'], env, script + input)`; output lines streamed; the exit status returned |
+| `runScript(posixShell, env, input)` | `exec(distro, '~', 'sh', ['-c', preludeCommand(n)], env, script + input)`: lib-host's prelude, as lib-ssh's remote program and remote-containers' `docker exec` use it, which evaluates the script's `n` bytes and leaves the rest of the input to it (amended 2026-11-04, #2209); output lines streamed; the exit status returned |
 | `runScript(powershell, …)` | `spawnFailed` (a programming error: V1 chooses the interpreter from `platformHint`) |
 | `copyToHost(local, remote)` | `exec(distro, '~', 'sh', ['-c', 'cat > "$1"', 'sh', remote], {}, streamed local file)` |
 | `clientPathOnHost(local)` | D3 `toDistro` of the local file, or `none` when the distro's automount is off or the path is not on a fixed drive |
@@ -103,7 +106,8 @@ Rules:
 | `platformHint` | `linux` |
 
 Failure mapping (A's six kinds, WSL kind kept in the detail): `distroUnknown`, `distroUnregistered` and `startFailed`
-→ `channelClosed`; `wslMissing` and `spawnFailed` → `spawnFailed`; `cancelled` → `cancelled`. The channel adds no
+→ `channelClosed`; `wslMissing` and `spawnFailed` → `spawnFailed`, except that `copyToHost` reports a `spawnFailed` as
+`copyFailed`, as lib-ssh does for `scp` (amended 2026-11-04, #2209); `cancelled` → `cancelled`. The channel adds no
 timeout of its own.
 
 Rule: D4 passes A's shared H1 contract suite on the D4f fake.

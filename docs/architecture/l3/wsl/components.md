@@ -39,7 +39,7 @@ an injected spawner, so its tests run on a recorded fake.
 | D1a | wsl-output-parser | Parse the outputs of `--status`, `--version` and `--list --verbose`/`--online` into records; tolerate the column and marker variants the specs list | pure |
 | D2 | distro-inventory | WSL presence and version; the Windows build (`os.release()`'s third part, F-6103 §16); distros with state, version and default flag; case-insensitive matching returning the registered spelling; the empty name as the default distro; `docker-desktop*` filtering; the online catalogue sorted as F-6102 BR-2; set-default (the pre-1903 route through `wslconfig.exe`); install command line; a change event on refresh | process over D1 |
 | D3 | path-mapper | Windows→distro and distro→Windows translation, the `\\wsl.localhost\` and `\\wsl$\` forms, `vscode-remote://wsl+<d>/…` URIs, the `/mnt/<letter>/` shape test. Drive paths go through `wslpath` in the target distro (automount root honoured); share paths are pure | pure core plus one D1 call |
-| D4 | wsl-host-channel | `lib-host` H1 over D1: `runScript` (`sh -s` with input text or a streamed file), `copyToHost` (`cat >`), `clientPathOnHost` (D3's translation of the local file, or none when automount is off), `identity`, `platformHint` | process over D1 |
+| D4 | wsl-host-channel | `lib-host` H1 over D1: `runScript` (lib-host's prelude, `sh -c <preludeCommand(n)>`, with input text or a streamed file), `copyToHost` (`cat >`), `clientPathOnHost` (D3's translation of the local file, or none when automount is off), `identity`, `platformHint` | process over D1 |
 | D4f | wsl-fake | The recorded spawner fake for D1 and the H1 contract suite run against D4 (A's shared channel tests) | test fixture |
 
 ## remote-wsl, engine part
