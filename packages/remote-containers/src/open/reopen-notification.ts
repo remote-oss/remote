@@ -4,6 +4,7 @@
  * is suppressed is kept in the extension's own storage, as the time of the choice against the time of the last reset.
  */
 
+import {externalSourcesApply} from '../config/external-sources.ts';
 import type {Logger} from 'lib-log';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
@@ -52,8 +53,11 @@ export interface ReopenNotificationPorts {
   window: NotificationWindow;
   global: IntentMemento;
   workspace: IntentMemento;
-  /** Where the folder's configuration is: none, the folder's own, or a stored one (which wins when both exist). */
-  configurationKind(folder: string): Promise<'none' | 'folder' | 'stored'>;
+  /** Where the folder's configuration is: none, the folder's own, or an external one (stored or mirrored), which wins when both exist. */
+  configurationKind(
+    folder: string,
+    external: boolean,
+  ): Promise<'none' | 'folder' | 'external'>;
   /**
    * The clone in a volume that the notification offers a folder with a Git remote, on a host that is not Linux; none on
    * a Linux host. It names the remote a folder can be cloned from, and starts the clone of that remote.
@@ -143,7 +147,7 @@ interface Offer {
 /** The offer a window gets over the configuration kind of each of its roots, or none when nothing is to be shown. */
 function offerFor(
   workspace: NotificationWindow['workspace'],
-  kinds: ReadonlyArray<'none' | 'folder' | 'stored'>,
+  kinds: ReadonlyArray<'none' | 'folder' | 'external'>,
 ): Offer | undefined {
   if (kinds.every(kind => kind === 'none')) {
     return undefined;
@@ -201,9 +205,14 @@ export async function offerReopen(
   }
   const kinds =
     variant === 'userData'
-      ? ['stored' as const]
+      ? ['external' as const]
       : await Promise.all(
-          roots.map(root => ports.configurationKind(root.fsPath)),
+          roots.map(root =>
+            ports.configurationKind(
+              root.fsPath,
+              externalSourcesApply(roots.length),
+            ),
+          ),
         );
   const offer = offerFor(window.workspace, kinds);
   if (offer === undefined) {

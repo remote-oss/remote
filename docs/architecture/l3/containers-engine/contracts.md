@@ -123,6 +123,7 @@ lib-authority's `containerCodec('attached-container', …)` carries it the same 
 | `CliHost` (C3) | `run(arguments, onJsonLine, cancellation, onStdin?) → {kind: 'ran', result: <the first stdout line, or undefined>, status: <the exit status, or null after an abort>}`, or `{kind: 'spawnFailed', message}` when the process can't start; `onStdin`, when given, gets the writer for the CLI's stdin and the run's `StdinPresentation` once the host knows it, from the preload's `remote-oss-cli-preload` marker: `echoed` when the preload loaded `node-pty` (the run's reader is a pty, which echoes), `plain` when it didn't or no marker came (amended 2026-10-14 on #764, 2026-10-15 on remote-containers#124, 2026-10-16 for ADR-0011) | spawns `process.execPath` with `ELECTRON_RUN_AS_NODE=1` and `REMOTE_OSS_EDITOR_MODULES=<appRoot>/node_modules.asar` on the bundled CLI's entry script, after the preload, which removes both variables and resolves `node-pty` from the editor's folder for this process alone (ADR-0009, ADR-0011); the CLI's stdin is piped |
 | `TrustPort` (C5) | `isTrusted()`, `request(message) → granted or not` | `vscode.workspace` (proposal `workspaceTrust`) |
 | `ConfigFiles` (C4) | `exists`, `read`, `list` over workspace URIs | `vscode.workspace.fs` |
+| `git` remotes (C4, F-0302) | the one-shot `run` of `EngineHost` over the `git` program: `git -C <folder> config --get-regexp '^remote\..*\.url$'`, arguments apart, no shell, a failure or an empty answer read as no remotes (`gitRemotesOf`) | `nodeEngineHost('git')` |
 | notices and dialogs | as remote-ssh's surfaces: an adapter per surface, scripted in the harness | `vscode.window` |
 | `ResolverHandle` (lib-authority, existing) | `lastResolve() → 'none' \| 'succeeded' \| 'failed'`: how this window's last settled resolve ended. C6's Switch Container shows S240 with no discovery on `'failed'` (F-0407 AC-23, `brief-views-and-commands.md` §1) | lib-authority's resolver registration (`resolver/host.ts`) |
 
@@ -273,3 +274,23 @@ export type FeaturesOutcome =
   registries and not the engine), then removes the folder. What it finds is one line in the Dev Containers log; a failure of
   any step is one line too and reaches no dialog. The run does not wait for it, and a run that wrote nothing starts none. A
   window attached to a dev container needs nothing here for the rebuild prompt: C20's watch of the configuration shows it.
+
+## 8. C4 external sources (card containers-161, F-0302; brief-repository-configurations.md)
+
+```ts
+export function mirroredPathsOf(url: string): string[];
+export function mirroredCandidatesOf(ports: MirroredLookupPorts, folder: string): Promise<Candidate[]>;
+export function joinedCandidates(local: readonly Candidate[], external: readonly Candidate[]): Candidate[];
+```
+
+- `mirroredPathsOf` applies BR-1's table to a remote's URL as text and refuses any path that could leave its root;
+  `mirroredCandidatesOf` reads the opened folder's remotes (nothing before the folder is trusted, `git` included), finds F-0301's
+  three file shapes under each root of `dev.containers.repositoryConfigurationPaths` and gives each candidate its `~`-relative path
+  as its description. Its log lines name a remote's URL and the folder without the URL's userinfo (R-26).
+- `joinedCandidates` is the candidate list of an opening command and of Configure Container Features: with no external candidate
+  the folder's own order stands; with one, every candidate is ordered by absolute file path whatever its source, a file found twice
+  counts once, and one candidate is used without a picker. A window that opens a multi-root workspace consults neither external
+  source (BR-12): `ConfigurationRequest.external` is false for it, and Configure Container Features looks outside the folder only
+  in a local window of one folder.
+- The chosen candidate's own path is the payload's `configFile`; the reopen notification (F-0402) uses S368 whenever the folder's
+  configuration is external, a stored one or a mirrored one, even when the folder has its own.

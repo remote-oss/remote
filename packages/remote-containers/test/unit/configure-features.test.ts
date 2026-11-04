@@ -77,6 +77,7 @@ function sceneOf(
     error?: string;
     remoteName?: string;
     stored?: Candidate;
+    mirrored?: Candidate[];
     stray?: Record<string, string>;
   } = {},
 ): Scene {
@@ -96,6 +97,9 @@ function sceneOf(
       ...(answers.stored === undefined
         ? {}
         : {stored: () => Promise.resolve(answers.stored)}),
+      ...(answers.mirrored === undefined
+        ? {}
+        : {mirrored: () => Promise.resolve(answers.mirrored ?? [])}),
       surfaces: {
         pick: (rows, placeholder) => {
           calls.push(
@@ -292,6 +296,66 @@ describe('the Configure Container Features command: its file (card containers-15
     );
     await runCommand(scene);
     deepStrictEqual(scene.chosen, []);
+  });
+
+  const MIRRORED = '/roots/one/github.com/o/n/.devcontainer/devcontainer.json';
+
+  it('F-0807 AC-66, AC-67, BR-21: a configuration only under a root of repositoryConfigurationPaths is the one used, read from this machine, with no modal', async () => {
+    const scene = sceneOf(
+      [LOCAL],
+      {},
+      {
+        mirrored: [{file: MIRRORED, relative: MIRRORED, place: {kind: 'main'}}],
+        stray: {[MIRRORED]: '{"mirrored": true}'},
+      },
+    );
+    await runCommand(scene);
+    deepStrictEqual(
+      [scene.chosen.map(each => [each.file, each.text]), scene.calls],
+      [[[MIRRORED, '{"mirrored": true}']], []],
+    );
+  });
+
+  it('F-0807 AC-68, BR-21: a mirrored file beside the folder’s own gives the pick, the mirrored one first with its path and the folder’s own with its relative path; the one picked is the one written', async () => {
+    const scene = sceneOf(
+      [LOCAL],
+      {[MAIN]: '{"own": true}'},
+      {
+        mirrored: [{file: MIRRORED, relative: MIRRORED, place: {kind: 'main'}}],
+        stray: {[MIRRORED]: '{"mirrored": true}'},
+        pick: {kind: 'picked', index: 1},
+      },
+    );
+    await runCommand(scene);
+    deepStrictEqual(
+      [scene.calls[0], scene.chosen.map(each => each.file)],
+      [
+        `pick Select a devcontainer.json file.: Main (${MIRRORED}), Main (.devcontainer/devcontainer.json)`,
+        [MAIN],
+      ],
+    );
+  });
+
+  it('F-0302 BR-12: a window of several folders, and a remote window, look up no mirrored file', async () => {
+    const asked: string[] = [];
+    const mirrored = [
+      {file: MIRRORED, relative: MIRRORED, place: {kind: 'main' as const}},
+    ];
+    const several = sceneOf(
+      [LOCAL, {...LOCAL, fsPath: '/w/q', path: '/w/q'}],
+      {},
+      {mirrored, stray: {[MIRRORED]: '{}'}},
+    );
+    const remote = sceneOf(
+      [REMOTE],
+      {},
+      {remoteName: 'ssh-remote', mirrored, stray: {[MIRRORED]: '{}'}},
+    );
+    for (const scene of [several, remote]) {
+      await runCommand(scene);
+      asked.push(...scene.chosen.map(each => each.file));
+    }
+    deepStrictEqual(asked, []);
   });
 
   it('F-0807 AC-58, AC-60, BR-19: a configuration only on a virtual root is never read: the modal shows', async () => {

@@ -6,6 +6,7 @@
  */
 
 import type {Logger} from 'lib-log';
+import {tildePath} from '../authoring/user-data-store.ts';
 import {type Candidate, discoverConfigurations} from './discovery.ts';
 import path from 'node:path';
 import {
@@ -28,6 +29,8 @@ export interface MirroredLookupPorts {
   list: Parameters<typeof discoverConfigurations>[1]['list'];
   /** Orders the names of subfolders. */
   compare: (left: string, right: string) => number;
+  /** The user's home folder, which the pick writes as `~`. */
+  home: string;
   logger: Logger;
 }
 
@@ -71,7 +74,10 @@ export async function mirroredCandidatesOf(
         ports,
         ports.compare,
       )) {
-        found.set(candidate.file, candidate);
+        found.set(candidate.file, {
+          ...candidate,
+          relative: tildePath(candidate.file, ports.home),
+        });
       }
     }
   }

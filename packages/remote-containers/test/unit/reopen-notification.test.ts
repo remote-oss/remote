@@ -47,9 +47,11 @@ interface Scene {
   global: RecordingMemento;
   workspace: RecordingMemento;
   window: ReopenNotificationPorts['window'];
-  configuration: 'none' | 'folder' | 'stored';
+  configuration: 'none' | 'folder' | 'external';
   /** The kind of a root that differs from `configuration`, by path. */
-  rootKinds: Record<string, 'none' | 'folder' | 'stored'>;
+  rootKinds: Record<string, 'none' | 'folder' | 'external'>;
+  /** Whether each lookup was allowed to look outside the folder, in the order asked. */
+  askedExternal: boolean[];
   /** What each `show` answers, in order. */
   answers: Array<string | undefined>;
   shown: Array<[string, readonly string[]]>;
@@ -73,6 +75,7 @@ function sceneOf(): Scene {
     },
     configuration: 'folder',
     rootKinds: {},
+    askedExternal: [],
     answers: [],
     shown: [],
     reopened: 0,
@@ -107,9 +110,14 @@ async function offered(
               },
             },
           }),
-      configurationKind: folder => {
+      configurationKind: (folder, external) => {
         scene.asked.push(folder);
-        return Promise.resolve(scene.rootKinds[folder] ?? scene.configuration);
+        scene.askedExternal.push(external);
+        const kind = scene.rootKinds[folder] ?? scene.configuration;
+        // A lookup that may not look outside the folder finds no external configuration.
+        return Promise.resolve(
+          kind === 'external' && !external ? 'none' : kind,
+        );
       },
       show: (message, buttons) => {
         scene.shown.push([message, buttons]);
@@ -203,7 +211,7 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
 
   it('F-0302 BR-4: a folder with a stored configuration shows the S368 variant, whether or not its own files hold one too', async () => {
     const scene = sceneOf();
-    scene.configuration = 'stored';
+    scene.configuration = 'external';
     await offered(scene);
     deepStrictEqual(
       [scene.shown, scene.asked],
@@ -424,12 +432,47 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     ]);
   });
 
-  it('F-0402 BR-1: a saved workspace whose only configuration is a stored one shows S427 with S368', async () => {
-    const scene = workspaceScene('saved', 2);
+  it('F-0402 BR-1: a saved workspace of one folder whose only configuration is a stored or mirrored one shows S427 with S368, and its root is asked to look outside the folder', async () => {
+    const scene = workspaceScene('saved', 1);
     scene.configuration = 'none';
-    scene.rootKinds = {'/w/q': 'stored'};
+    scene.rootKinds = {'/w/p': 'external'};
     await offered(scene);
-    deepStrictEqual(scene.shown, [[S427_S368, [REOPEN, SUPPRESS]]]);
+    deepStrictEqual(
+      [scene.shown, scene.askedExternal],
+      [[[S427_S368, [REOPEN, SUPPRESS]]], [true]],
+    );
+  });
+
+  /** What a workspace of two folders shows and is asked when its second folder would have an external configuration. */
+  async function twoFoldersWithExternal(
+    workspace: 'saved' | 'untitled',
+  ): Promise<[unknown, boolean[]]> {
+    const scene = workspaceScene(workspace, 2);
+    scene.configuration = 'none';
+    scene.rootKinds = {'/w/q': 'external'};
+    await offered(scene);
+    return [scene.shown, scene.askedExternal];
+  }
+
+  it('F-0302 BR-12, AC-26: a saved workspace of two folders whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
+    deepStrictEqual(await twoFoldersWithExternal('saved'), [
+      [],
+      [false, false],
+    ]);
+  });
+
+  it('F-0302 BR-12: an unsaved workspace of two folders is not asked to look outside its folders either', async () => {
+    deepStrictEqual(await twoFoldersWithExternal('untitled'), [
+      [],
+      [false, false],
+    ]);
+  });
+
+  it('F-0302 AC-3: a window with one folder is asked to look outside it, and an external configuration gives S368', async () => {
+    const scene = sceneOf();
+    scene.configuration = 'external';
+    await offered(scene);
+    deepStrictEqual(scene.askedExternal, [true]);
   });
 
   it('F-0301 6.5 step 4: a saved workspace with no root that has a configuration shows nothing, whatever sits beside its file', async () => {
