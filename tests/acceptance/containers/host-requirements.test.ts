@@ -98,7 +98,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     await closeWindow(name);
   });
 
-  it('F-0206 AC-4, BR-4 (c202-continue): Continue creates the container and connects, with no CPU or memory limit applied', async () => {
+  it('F-0206 AC-4 (c202-continue): Continue creates the container and connects, with no CPU or memory limit applied', async () => {
     const folder = devContainerFolder('c202-continue', {
       name: 'C202 Continue',
       hostRequirements: {cpus: 4096},
@@ -144,7 +144,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     await closeWindow(name);
   });
 
-  it('F-0206 AC-20, AC-34 (c202-ignored): a value the format does not read and a key it does not know ask nothing: no dialog, and the container is created', async () => {
+  it('F-0206 AC-20 (c202-ignored): a CPU count and a GPU setting the format does not read ask nothing: no dialog, and the container is created', async () => {
     const folder = devContainerFolder('c202-ignored', {
       name: 'C202 Ignored',
       hostRequirements: {
