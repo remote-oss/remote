@@ -5,7 +5,7 @@
  */
 
 import {createHash} from 'node:crypto';
-import type {HostChannel} from 'lib-host';
+import {type HostChannel, posixQuote} from 'lib-host';
 import {writeHostFile} from './host-file.ts';
 
 /** The script, in CommonJS for the server's `node`: stdin to the socket, the socket to stdout, and its end ends it. */

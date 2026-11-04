@@ -1,8 +1,8 @@
 /**
  * @fileoverview The relay host: a Node program of ours that runs in the container, for one connection, with the
  * installed server's own `node`. It listens on the Unix sockets its arguments name (`<kind>=<path>`), each mode 0600,
- * and carries every connection to them as a numbered stream of frames on its standard streams. It ends when its
- * standard input does.
+ * and carries every connection to them as a numbered stream of frames on its standard streams. Once every socket
+ * listens it sends a `ready` frame. It ends when its standard input does.
  */
 
 import type {HostChannel} from 'lib-host';
@@ -36,7 +36,7 @@ function send(bytes) {
     });
   }
 }
-function serve(kind, socketPath) {
+function serve(kind, socketPath, onListening) {
   try { fs.unlinkSync(socketPath); } catch (error) {}
   const server = net.createServer(socket => {
     const stream = next++;
@@ -52,12 +52,20 @@ function serve(kind, socketPath) {
     });
     socket.on('error', () => {});
   });
-  const previous = process.umask(0o177);
-  server.listen(socketPath, () => process.umask(previous));
+  server.listen(socketPath, onListening);
 }
-for (const pair of process.argv.slice(2)) {
+const pairs = process.argv.slice(2);
+const previous = process.umask(0o177);
+let listening = 0;
+for (const pair of pairs) {
   const separator = pair.indexOf('=');
-  serve(pair.slice(0, separator), pair.slice(separator + 1));
+  serve(pair.slice(0, separator), pair.slice(separator + 1), () => {
+    listening += 1;
+    if (listening === pairs.length) {
+      process.umask(previous);
+      send(frame(4, 0, Buffer.alloc(0)));
+    }
+  });
 }
 let pending = Buffer.alloc(0);
 process.stdin.on('data', chunk => {

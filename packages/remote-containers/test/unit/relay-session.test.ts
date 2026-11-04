@@ -74,11 +74,18 @@ function sessionScene(kinds: readonly string[] = ['ssh-agent']) {
   }> = [];
   const timers: Array<() => void> = [];
   const session = relaySession({
-    kinds: new Set(kinds),
-    connect: (kind, signal) =>
-      new Promise((resolve, reject) => {
-        connects.push({kind, signal, resolve, reject});
-      }),
+    connectors: new Map(
+      kinds.map(
+        kind =>
+          [
+            kind,
+            (signal: AbortSignal) =>
+              new Promise<HostEnd>((resolve, reject) => {
+                connects.push({kind, signal, resolve, reject});
+              }),
+          ] as const,
+      ),
+    ),
     send: bytes => {
       sent.push(...reader.push(bytes).frames);
     },
@@ -90,6 +97,9 @@ function sessionScene(kinds: readonly string[] = ['ssh-agent']) {
     },
     endHost: () => {
       events.push('endHost');
+    },
+    ready: () => {
+      events.push('ready');
     },
     setTimer: (milliseconds, callback) => {
       events.push(`timer ${String(milliseconds)}`);
@@ -123,6 +133,24 @@ function settle(): Promise<void> {
 }
 
 describe('the extension’s side of a relay host (card containers-179)', () => {
+  it('a host end that tells its close after the container closed the stream sends nothing more', async () => {
+    const scene = sessionScene();
+    scene.frame('open', 1, 'ssh-agent');
+    const host = fakeHostEnd();
+    scene.connects[0]?.resolve(host);
+    await settle();
+    scene.frame('close', 1);
+    host.emitClose();
+    deepStrictEqual(scene.sent(), []);
+  });
+
+  it('the first ready frame is told once; a second is ignored', () => {
+    const scene = sessionScene();
+    scene.frame('ready', 0);
+    scene.frame('ready', 0);
+    deepStrictEqual(scene.events, ['ready']);
+  });
+
   it('a stream opens its host end lazily; bytes before it connects wait, with the input paused; then both ways and its close', async () => {
     const scene = sessionScene();
     scene.frame('open', 1, 'ssh-agent');

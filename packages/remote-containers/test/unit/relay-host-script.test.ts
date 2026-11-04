@@ -40,6 +40,7 @@ describe('the relay host in the container (card containers-179)', function () {
     host = spawn(process.execPath, [
       path.join(folder, 'relay-host.js'),
       `ssh-agent=${path.join(folder, 'agent.sock')}`,
+      `gpg=${path.join(folder, 'gpg.sock')}`,
     ]);
     host.stdout?.on('data', (chunk: Buffer) => {
       frames.push(...reader.push(new Uint8Array(chunk)).frames);
@@ -51,58 +52,47 @@ describe('the relay host in the container (card containers-179)', function () {
     rmSync(folder, {recursive: true, force: true});
   });
 
-  it('a connection to its socket is a stream of frames both ways, its socket is mode 0600, and its end closes the stream', async () => {
+  it('once both its sockets listen, mode 0600, it says ready; a connection to one is a stream of frames both ways, and its end closes the stream', async () => {
     const socketPath = path.join(folder, 'agent.sock');
-    await until(() => {
-      try {
-        return statSync(socketPath).isSocket();
-      } catch {
-        return false;
-      }
-    });
-    const mode = statSync(socketPath).mode & 0o777;
+    await until(() => frames.length >= 1);
+    const modes = ['agent.sock', 'gpg.sock'].map(name =>
+      (statSync(path.join(folder, name)).mode & 0o777).toString(8),
+    );
     const client: Socket = connect(socketPath);
     const received: string[] = [];
     client.on('data', (chunk: Buffer) => received.push(chunk.toString()));
     client.write('question');
-    await until(() => frames.length >= 2);
+    await until(() => frames.length >= 3);
     host.stdin?.write(
       encodeFrame({type: 'data', stream: 1, payload: TEXT.encode('answer')}),
     );
     await until(() => received.length > 0);
     client.end();
-    await until(() => frames.length >= 3);
+    await until(() => frames.length >= 4);
     deepStrictEqual(
       {
-        mode: mode.toString(8),
+        modes,
         frames: frames.map(each =>
           `${each.type} ${String(each.stream)} ${new TextDecoder().decode(each.payload)}`.trim(),
         ),
         received,
       },
       {
-        mode: '600',
-        frames: ['open 1 ssh-agent', 'data 1 question', 'close 1'],
+        modes: ['600', '600'],
+        frames: ['ready 0', 'open 1 ssh-agent', 'data 1 question', 'close 1'],
         received: ['answer'],
       },
     );
   });
 
   it('the extension’s close ends the connection, and the end of its input ends the relay host', async () => {
-    const socketPath = path.join(folder, 'agent.sock');
-    await until(() => {
-      try {
-        return statSync(socketPath).isSocket();
-      } catch {
-        return false;
-      }
-    });
-    const client = connect(socketPath);
+    await until(() => frames.length >= 1);
+    const client = connect(path.join(folder, 'agent.sock'));
     let closed = false;
     client.on('close', () => {
       closed = true;
     });
-    await until(() => frames.length >= 1);
+    await until(() => frames.length >= 2);
     host.stdin?.write(
       encodeFrame({type: 'close', stream: 1, payload: new Uint8Array(0)}),
     );

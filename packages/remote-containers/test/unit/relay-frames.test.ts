@@ -26,6 +26,7 @@ function faultOf(bytes: Uint8Array): string | undefined {
 describe('the relay host’s frames (card containers-179)', () => {
   it('frames go through whole, split anywhere and joined in one chunk', () => {
     const frames: Frame[] = [
+      {type: 'ready', stream: 0, payload: new Uint8Array(0)},
       {type: 'open', stream: 1, payload: BYTES.encode('ssh-agent')},
       {type: 'data', stream: 1, payload: new Uint8Array([0, 255, 10])},
       {type: 'close', stream: 1, payload: new Uint8Array(0)},
@@ -36,8 +37,8 @@ describe('the relay host’s frames (card containers-179)', () => {
     const split = new FrameReader();
     const read = [
       split.push(wire.slice(0, 5)),
-      split.push(wire.slice(5, 20)),
-      split.push(wire.slice(20)),
+      split.push(wire.slice(5, 29)),
+      split.push(wire.slice(29)),
     ];
     deepStrictEqual(
       [read.flatMap(each => each.frames), new FrameReader().push(wire)],
@@ -66,6 +67,17 @@ describe('the relay host’s frames (card containers-179)', () => {
         'malformed',
         [],
       ],
+    );
+  });
+
+  it('a ready with a payload, a ready off stream 0 and a stream frame on stream 0 are each malformed', () => {
+    deepStrictEqual(
+      [
+        faultOf(header(4, 0, 1)),
+        faultOf(header(4, 1, 0)),
+        faultOf(header(2, 0, 0)),
+      ],
+      ['malformed', 'malformed', 'malformed'],
     );
   });
 });
