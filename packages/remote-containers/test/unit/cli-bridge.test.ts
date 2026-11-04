@@ -29,6 +29,7 @@ const UP_OPTIONS = {
   removeExistingContainer: false,
   buildNoCache: false,
   workspaceMountConsistency: 'cached',
+  gpuAvailability: 'detect',
 };
 
 const UP_LINE =

@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import type {WizardOutcome} from '../authoring/wizard-stages.ts';
+import type {HostRequirementsCheck} from './host-requirements-step.ts';
 import {type CommandChecksPorts, commandBeforeReload} from './pre-reload.ts';
 
 /** The wizard, for the commands that author a configuration first. */
@@ -31,9 +32,11 @@ export async function chooseOrAuthor(
     dockerPath: string;
     /** False for a multi-root workspace, whose configuration is never looked up outside its folder (BR-12). */
     external?: boolean;
+    /** Which reading of the host requirements the command checks after the choice; none for a command that checks none. */
+    hostRequirements?: HostRequirementsCheck;
   },
 ): ReturnType<typeof commandBeforeReload> {
-  const {title, folder, dockerPath, external} = request;
+  const {title, folder, dockerPath, external, hostRequirements} = request;
   const first = await commandBeforeReload(
     ports,
     firstCheck,
@@ -42,6 +45,7 @@ export async function chooseOrAuthor(
     undefined,
     undefined,
     external,
+    hostRequirements,
   );
   if (first.choice.kind !== 'noConfiguration') {
     return first;
@@ -66,5 +70,6 @@ export async function chooseOrAuthor(
       : undefined,
     undefined,
     external,
+    hostRequirements,
   );
 }

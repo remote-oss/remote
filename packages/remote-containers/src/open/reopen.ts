@@ -136,6 +136,11 @@ export function reopenHandlersOf(
         folder,
         dockerPath: executable.file,
         external: externalSourcesApply(window.folders().length),
+        hostRequirements: {
+          stage: 'merged',
+          ports: ports.requirements,
+          base: folder,
+        },
       },
     );
     try {

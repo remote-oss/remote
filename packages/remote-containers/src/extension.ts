@@ -121,7 +121,9 @@ import {desktopPortsOf} from './engine/desktop-host.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {
   composeCheck,
+  containerRequirements,
   currentContext,
+  daemonFigures,
   firstCheck,
   type PreflightDependencies,
 } from './engine/preflight.ts';
@@ -1507,6 +1509,30 @@ export async function activate(
         served.logger,
       );
       const reopenPorts: ReopenPorts = {
+        requirements: {
+          daemonFigures: (base, cancellation) =>
+            daemonFigures(served.preflight, base, cancellation),
+          containerRequirements: (base, identity, cancellation) =>
+            containerRequirements(
+              served.preflight,
+              base,
+              identity,
+              cancellation,
+            ),
+          readText: file =>
+            readFile(file, 'utf8').then(
+              text => text,
+              () => undefined,
+            ),
+          confirm: async (message, detail, acceptLabel) =>
+            (await vscode.window.showWarningMessage(
+              message,
+              {modal: true, detail},
+              acceptLabel,
+            )) === acceptLabel,
+          translate,
+          logger: served.logger,
+        },
         authoring,
         gate: {
           missing: served.missing,
@@ -2409,6 +2435,7 @@ export async function activate(
           legacyWorkspaceMountConsistency: configuration.inspect(
             settings.workspaceMountConsistency.legacyId,
           )?.globalValue,
+          gpuAvailability: configuration.get(settings.gpuAvailability.id),
           mountGitWorktreeCommonDir: configuration.inspect(
             settings.experimentalMountGitWorktreeCommonDir.id,
           )?.globalValue,
