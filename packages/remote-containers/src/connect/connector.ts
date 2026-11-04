@@ -1726,7 +1726,7 @@ export function containerConnectorOf(
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
     const dockerFile = executable.file;
     const rebuild = await takenRebuild(input);
-    if (target.inspectVolume) {
+    if (target.inspectVolume && target.recovery !== true) {
       return connectExplored(
         {volumes, payload, target, settings, engine, dockerFile},
         {environment, cliEnvironment, rebuild, cancellation},
