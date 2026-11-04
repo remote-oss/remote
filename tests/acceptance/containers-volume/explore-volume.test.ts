@@ -59,8 +59,8 @@ describe('Explore a Volume in a Dev Container (card containers-155)', function (
   afterEach(async () => {
     await closeWindow(WINDOW).catch(() => undefined);
     for (const name of volumes.splice(0)) {
-      for (const id of await explorersOf(name)) {
-        await docker('rm', '-f', id).catch(() => undefined);
+      for (const container of await explorersOf(name)) {
+        await docker('rm', '-f', container).catch(() => undefined);
       }
       await docker('volume', 'rm', '-f', name).catch(() => undefined);
     }
@@ -157,8 +157,8 @@ describe('Explore a Volume in a Dev Container (card containers-155)', function (
       );
     } finally {
       await closeWindow(WINDOW).catch(() => undefined);
-      for (const id of await explorersOf('vscode')) {
-        await docker('rm', '-f', id).catch(() => undefined);
+      for (const container of await explorersOf('vscode')) {
+        await docker('rm', '-f', container).catch(() => undefined);
       }
     }
   });
