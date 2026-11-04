@@ -100,12 +100,16 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     await visit(HOST_A, 'c102-a1');
     await titleAction('local', VIEW, 'Refresh');
     await foldersSettled('local', HOST_A, [first, second], scope);
-    // The launch's first row: the history holds these two hosts and nothing else.
+    // The history holds these two hosts' entries of this row, whatever other rows of the launch visited.
     deepStrictEqual(
-      Object.entries(await historyOf()).map(([host, entries]) => [
-        host,
-        entries.map(entry => entry.path),
-      ]),
+      Object.entries(await historyOf())
+        .map(([host, entries]) => [
+          host,
+          entries
+            .map(entry => entry.path)
+            .filter(entryPath => entryPath.startsWith(`${HOME}/c102-`)),
+        ])
+        .filter(([, paths]) => (paths?.length ?? 0) > 0),
       [
         [HOST_B, [other]],
         [HOST_A, [first, second]],
