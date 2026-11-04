@@ -137,7 +137,12 @@ describe('a Docker Compose dev container in the Dev Containers view (card contai
 
   it('F-0902 AC-31 (c146-removal): Stop Container and Remove Container act on the primary container alone; their dialogs name no other service, and the other service keeps running', async () => {
     const label = 'c146-removal';
-    const folder = composeFolder({name: label, place: 'devcontainer'});
+    // Closing the window stops the project's services by default; the row needs them running afterwards.
+    const folder = composeFolder({
+      name: label,
+      place: 'devcontainer',
+      configuration: {shutdownAction: 'none'},
+    });
     const {name, project} = await openedCompose(folder);
     await closeWindow(name);
     await viewed(label);
