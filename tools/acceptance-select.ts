@@ -53,13 +53,23 @@ function reachedBy(
   }
   // only a suite's own tests map to it: other files in a suite folder can be the harness several suites import
   // (tests/acceptance/windows/renderer.ts), so they reach every launch
-  const folder = /^tests\/acceptance\/([^/]+)\/.*\.test\.ts$/.exec(
+  const suiteTest = /^tests\/acceptance\/([^/]+)\/(.*\.test\.ts)$/.exec(
     changed,
-  )?.[1];
-  const bySuite = launches.filter(launch => launch.suite === folder);
-  return folder !== undefined && bySuite.length > 0
-    ? bySuite.map(launch => launch.label)
-    : undefined;
+  );
+  const bySuite = launches.filter(launch => launch.suite === suiteTest?.[1]);
+  if (suiteTest === null || bySuite.length === 0) {
+    return undefined;
+  }
+  // a suite run in parts by its files (containers-a and containers-b): a test reaches the parts that list it, and
+  // every part when none does
+  const testFile = path.basename(String(suiteTest[2]));
+  const byFile = bySuite.filter(
+    launch =>
+      launch.kind !== 'plain' ||
+      launch.files === undefined ||
+      launch.files.includes(testFile),
+  );
+  return (byFile.length > 0 ? byFile : bySuite).map(launch => launch.label);
 }
 
 /**
