@@ -539,6 +539,19 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0202 AC-39: a second check that fails has taken the intent already, so a Retry after it reconnects without a rebuild', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    scene.version = {status: 1, stderr: 'Cannot connect to the Docker daemon'};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    scene.version = {status: 0, stderr: ''};
+    await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    deepStrictEqual(
+      [scene.intentStore, scene.prepared.map(request => request.rebuild)],
+      [{}, [undefined]],
+    );
+  });
+
   it('F-0502: a reconnection never takes the intent', async () => {
     const scene = sceneOf();
     await leaveRebuildIntent(scene, PAYLOAD);
