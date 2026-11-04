@@ -3483,12 +3483,14 @@ async function keyInFolderDialog(
         );
   }
   if (waiting !== undefined && typed !== undefined) {
+    let lastReading: FolderDialogReading | undefined;
     await settled(
-      () => `the folder dialog of window ${name} to show ${typed}`,
+      () =>
+        `the folder dialog of window ${name} to show ${typed}; it last read ${JSON.stringify(lastReading)}`,
       async () => {
-        const reading = await read();
-        return reading.value.replace(/\/$/, '') === typed.replace(/\/$/, '') &&
-          reading.rows[0] === '..'
+        lastReading = await read();
+        return lastReading.value.replace(/\/$/, '') ===
+          typed.replace(/\/$/, '') && lastReading.rows[0] === '..'
           ? true
           : undefined;
       },
