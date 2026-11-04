@@ -1,5 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {createWslRunner, type ExecRequest} from '../../src/runner.ts';
+import {
+  createWslRunner,
+  type ExecRequest,
+  type StartRequest,
+} from '../../src/runner.ts';
 import {
   type FakeRun,
   fakeWsl,
@@ -557,5 +561,234 @@ describe('D1: exec', () => {
       },
     );
     deepStrictEqual([kindOf(outcome), lines], ['cancelled', ['up']]);
+  });
+});
+
+/** A request to start `program` in a distro, with what a test changes. */
+function startRequestOf(changes: Partial<StartRequest> = {}): StartRequest {
+  return {
+    distro: 'Ubuntu',
+    program: 'echo',
+    programArguments: ['hi'],
+    environment: {},
+    cancellation: new AbortController().signal,
+    ...changes,
+  };
+}
+
+/** A runner whose processes are counted when they are killed. */
+function countingRunner(behaviour: FakeRun, session = {}) {
+  const fake = fakeWsl(() => behaviour, session);
+  const counted = {kills: 0};
+  const runner = createWslRunner({
+    ...fake,
+    spawner: async specification => {
+      const handle = await fake.spawner(specification);
+      return {
+        ...handle,
+        kill: () => {
+          counted.kills += 1;
+          handle.kill();
+        },
+      };
+    },
+  });
+  return {fake, runner, counted};
+}
+
+/** The text of a failure's kind, or `exited` with its status. */
+function endedAs(outcome: {
+  kind: string;
+  status?: number;
+  failure?: {kind: string};
+}): string {
+  return outcome.kind === 'failed'
+    ? `failed ${outcome.failure?.kind ?? ''}`
+    : `exited ${String(outcome.status)}`;
+}
+
+describe('start, the live process of a program in a distro (card containers-203, ruling-2156-d1-start)', () => {
+  it('cw02 start: the argument list and the environment are exec’s', async () => {
+    const viaExec = runnerOver(EXITS_ZERO);
+    await viaExec.runner.exec(
+      requestOf({
+        user: 'root',
+        folder: '~',
+        environment: {ALPHA: '1'},
+        programArguments: ['a b', '"q"'],
+      }),
+      () => undefined,
+    );
+    const viaStart = runnerOver(EXITS_ZERO);
+    const started = await viaStart.runner.start(
+      startRequestOf({
+        user: 'root',
+        folder: '~',
+        environment: {ALPHA: '1'},
+        programArguments: ['a b', '"q"'],
+      }),
+    );
+    if (started.kind === 'started') {
+      await started.process.exited;
+    }
+    deepStrictEqual(viaStart.fake.started, viaExec.fake.started);
+  });
+
+  it('cw02 start: a request cancelled already, a bad variable name, a missing wsl.exe and a program that cannot start are typed failures before any process runs', async () => {
+    const aborted = new AbortController();
+    aborted.abort();
+    const missing = runnerOver(EXITS_ZERO, {
+      systemRoot: undefined,
+      environment: {},
+    });
+    const broken = runnerOver({
+      kind: 'failsToStart',
+      error: {message: 'denied'},
+    });
+    deepStrictEqual(
+      [
+        endedAs(
+          await runnerOver(EXITS_ZERO).runner.start(
+            startRequestOf({cancellation: aborted.signal}),
+          ),
+        ),
+        endedAs(
+          await runnerOver(EXITS_ZERO).runner.start(
+            startRequestOf({environment: {'BAD-NAME': 'x'}}),
+          ),
+        ),
+        endedAs(await missing.runner.start(startRequestOf())),
+        endedAs(await broken.runner.start(startRequestOf())),
+      ],
+      [
+        'failed cancelled',
+        'failed spawnFailed',
+        'failed wslMissing',
+        'failed spawnFailed',
+      ],
+    );
+  });
+
+  it('cw02 start: standard output passes byte for byte, also what is no UTF-8, and a chunk that came before the listener is kept for it', async () => {
+    const bytes = Uint8Array.from([0xff, 0x00, 0xfe, 0x0d, 0x0a, 0xc3, 0x28]);
+    const {runner} = runnerOver({kind: 'exits', stdout: bytes, status: 0});
+    const started = await runner.start(startRequestOf());
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    const heard: number[][] = [];
+    started.process.onOutput(chunk => {
+      heard.push([...chunk]);
+    });
+    deepStrictEqual(
+      [heard, endedAs(await started.process.exited)],
+      [[[...bytes]], 'exited 0'],
+    );
+  });
+
+  it('cw02 start: standard input written after the start reaches the program unchanged', async () => {
+    const {fake, runner} = runnerOver({kind: 'writesInput'});
+    const started = await runner.start(
+      startRequestOf({programArguments: ['/tmp/out']}),
+    );
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    await started.process.write(Uint8Array.from([0, 255, 10, 13]));
+    await started.process.write(Uint8Array.from([7]));
+    started.process.endInput();
+    deepStrictEqual(
+      [
+        [...(fake.written.get('/tmp/out') ?? [])],
+        endedAs(await started.process.exited),
+      ],
+      [[0, 255, 10, 13, 7], 'exited 0'],
+    );
+  });
+
+  it('cw02 start: standard error is passed on as it comes', async () => {
+    const {runner} = runnerOver({
+      kind: 'exits',
+      stderr: utf8Output('warning\n'),
+      status: 3,
+    });
+    const started = await runner.start(startRequestOf());
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    const heard: string[] = [];
+    started.process.onError(chunk => {
+      heard.push(new TextDecoder().decode(chunk));
+    });
+    deepStrictEqual(
+      [heard, endedAs(await started.process.exited)],
+      [['warning\n'], 'exited 3'],
+    );
+  });
+
+  it('cw02 start: a wsl.exe failure after the start settles exited with its kind, and the output before it still passed in full', async () => {
+    const bulk = new Uint8Array(20_000).fill(65);
+    const text = utf8Output(
+      'There is no distribution with the supplied name.\n',
+    );
+    const {runner} = runnerOver({
+      kind: 'exits',
+      stdout: Uint8Array.from([...text, ...bulk]),
+      status: -1,
+    });
+    const started = await runner.start(startRequestOf());
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    let total = 0;
+    started.process.onOutput(chunk => {
+      total += chunk.length;
+    });
+    deepStrictEqual(
+      [endedAs(await started.process.exited), total],
+      ['failed distroUnknown', text.length + bulk.length],
+    );
+  });
+
+  it('cw02 start: kill ends the process and exited says so, a second kill does nothing, and a kill after exited does nothing', async () => {
+    const live = countingRunner({kind: 'printsUntilKilled', lines: ['x']});
+    const started = await live.runner.start(startRequestOf());
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    started.process.kill();
+    started.process.kill();
+    const afterKill = endedAs(await started.process.exited);
+    started.process.kill();
+    const done = countingRunner(EXITS_ZERO);
+    const finished = await done.runner.start(startRequestOf());
+    if (finished.kind !== 'started') {
+      throw new Error('not started');
+    }
+    await finished.process.exited;
+    finished.process.kill();
+    deepStrictEqual(
+      [afterKill, live.counted.kills, done.counted.kills],
+      ['failed cancelled', 1, 0],
+    );
+  });
+
+  it('cw02 start: cancelling the request ends the process once and exited says cancelled', async () => {
+    const cancel = new AbortController();
+    const live = countingRunner({kind: 'printsUntilKilled', lines: ['x']});
+    const started = await live.runner.start(
+      startRequestOf({cancellation: cancel.signal}),
+    );
+    if (started.kind !== 'started') {
+      throw new Error('not started');
+    }
+    cancel.abort();
+    started.process.kill();
+    deepStrictEqual(
+      [endedAs(await started.process.exited), live.counted.kills],
+      ['failed cancelled', 1],
+    );
   });
 });

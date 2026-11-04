@@ -207,6 +207,12 @@ const ENGLISH = {
   'commands.Rebuildwithoutcacheandreopenincontainer.title':
     'Rebuild Without Cache and Reopen in Container',
   'commands.Settings.title': 'Settings',
+  'setting.Executeinwsl.description':
+    'Controls whether CLI commands should always be executed in WSL. The default is to only execute in WSL for workspace folders in WSL. This setting has no effect on other platforms than Windows.',
+  'setting.Executeinwsldistro.markdownDescription':
+    'WSL distro to use when not reopening a WSL folder. The default is to use the default WSL distro (see `wsl -l`). This setting has no effect when `#dev.containers.executeInWSL#` is not enabled or on other platforms than Windows.',
+  'setting.Forwardwslservices.description':
+    'Controls whether services in WSL (SSH agent, GPG agent, X display, Wayland display) are forwarded into the container. This setting has no effect on other platforms than Windows.',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -1824,6 +1830,54 @@ describe('where Switch Container is offered (F-0407 AC-1)', () => {
         },
         false,
       ],
+    );
+  });
+});
+
+describe('the WSL settings (card containers-203, F-0207 AC-1, AC-2)', () => {
+  const properties = (
+    MANIFEST.contributes as {
+      configuration: {properties: Record<string, Record<string, unknown>>};
+    }
+  ).configuration.properties;
+  const wslKeys = Object.keys(properties).filter(key => key.includes('WSL'));
+
+  it('F-0207 AC-1: the three settings come in this order, each of application scope, with the texts the nls table holds', () => {
+    deepStrictEqual(
+      wslKeys.map(key => [
+        key,
+        properties[key]?.scope,
+        properties[key]?.description ?? properties[key]?.markdownDescription,
+      ]),
+      [
+        [
+          'dev.containers.executeInWSL',
+          'application',
+          '%setting.Executeinwsl.description%',
+        ],
+        [
+          'dev.containers.executeInWSLDistro',
+          'application',
+          '%setting.Executeinwsldistro.markdownDescription%',
+        ],
+        [
+          'dev.containers.forwardWSLServices',
+          'application',
+          '%setting.Forwardwslservices.description%',
+        ],
+      ],
+    );
+  });
+
+  it('F-0207 AC-2: executeInWSL is off, forwardWSLServices is on, and the distro declares no default so core reads it as empty', () => {
+    deepStrictEqual(
+      [
+        wslKeys.map(key => properties[key]?.type),
+        properties['dev.containers.executeInWSL']?.default,
+        properties['dev.containers.forwardWSLServices']?.default,
+        'default' in (properties['dev.containers.executeInWSLDistro'] ?? {}),
+      ],
+      [['boolean', 'string', 'boolean'], false, true, false],
     );
   });
 });

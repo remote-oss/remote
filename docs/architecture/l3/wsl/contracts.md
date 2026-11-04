@@ -32,9 +32,15 @@ are the specs'.
 |---|---|---|---|
 | `locate` | the spawner | the `wsl.exe` path: `%SystemRoot%\System32\wsl.exe`, else PATH | `wslMissing` |
 | `manage` | verb (`status`, `version`, `list`, `listOnline`, `install`, `setDefault`), operands, cancellation | decoded text (UTF-16LE; UTF-8 when the output carries no byte-order evidence of UTF-16), exit status | `wslMissing`, `wslNeedsUpdate` (the inbox WSL that lacks a verb, F-6203 Q1/F-6204 Q1), `spawnFailed`, `cancelled` |
+| `start` | the request of `exec` without its input, and the cancellation (amended 2026-11-04, ruling-2156-d1-start, for remote-containers' engine host) | the live process: standard output and error byte for byte, `write` and `endInput` for standard input, an idempotent `kill`, and `exited`, which settles once with the exit status | the failures `exec` has before and after a start, typed: `spawnFailed` (a bad variable name, a program that cannot start, a signal), `wslMissing`, `distroUnknown`, `distroUnregistered`, `startFailed`, `cancelled` |
 | `exec` | distro (registered spelling), user (optional: `-u <user>`; amended 2026-11-04 for remote-containers' Install Docker in WSL, brief-wsl-engine §6; otherwise the distro's default user), working folder (`~` or a path), program and arguments, environment additions (passed through `WSLENV`), input (text or a streamed local file), cancellation | output lines as a stream (UTF-8), then the exit status | `distroUnknown`, `distroUnregistered` (during the run), `interopDisabled` (only from programs that start Windows binaries), `startFailed` (the distro did not start), `spawnFailed`, `cancelled` |
 
 Rules:
+- `start` is the primitive: it applies `exec`'s checks and argument list exactly. `exec` is `start` with its input fed
+  and its standard output decoded as UTF-8 lines. The callers bound their own waits (R-79).
+- `start` passes standard output and error unchanged; only a copy of the first 8 KiB is kept, to classify a `wsl.exe`
+  failure (a status of -1) into the kind `exited` carries. It takes the cancellation: cancelling it, or `kill()`, ends
+  `wsl.exe`; `kill()` is idempotent and safe after `exited`.
 - `exec` always names the distro with `-d` and runs the program with `--exec`. No shell sits between `wsl.exe` and
   the program, so arguments are never re-split. Area D's scripts run through lib-host's prelude
   (`sh -c <preludeCommand(n)>`, the script ahead of the input), D4's `runScript`.
@@ -44,7 +50,7 @@ Rules:
   handoff); until then `exec` has no such caller (2026-11-04, #2209).
 - `--status` and `--list` outputs are decoded by D1 and parsed by D1a. Nothing else parses `wsl.exe` text.
 
-Never: spawn `wsl.exe` through a shell, spawn `ssh`, or log the environment values passed to `exec`.
+Never: spawn `wsl.exe` through a shell, spawn `ssh`, or log the environment values passed to `exec` or `start`.
 
 ### D1a wsl-output-parser
 

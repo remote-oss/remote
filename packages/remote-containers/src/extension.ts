@@ -3077,8 +3077,8 @@ export async function activate(
           platform: process.platform,
           executeInWSL:
             vscode.workspace
-              .getConfiguration('dev.containers')
-              .get('executeInWSL') === true,
+              .getConfiguration()
+              .get(settings.executeInWSL.id) === true,
           remoteName: vscode.env.remoteName,
         }),
       editor: {
