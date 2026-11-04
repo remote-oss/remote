@@ -1965,8 +1965,8 @@ F-1201.AC-36	todo
 F-1201.AC-37	todo	
 F-1201.AC-38	todo	
 F-1201.AC-39	todo	
-F-1201.AC-40	todo	
-F-1201.AC-41	todo	
+F-1201.AC-40	deferred	host: windows (the launcher on a Windows client, from PowerShell and cmd; the hosted windows-2025 rows run it without Docker Desktop)
+F-1201.AC-41	deferred	host: macOS (the launcher on a macOS client)
 F-1201.AC-42	todo	
 F-1201.AC-43	todo	
 F-1201.AC-44	todo	
@@ -1975,7 +1975,7 @@ F-1201.AC-46	todo
 F-1201.AC-47	todo	
 F-1201.AC-48	todo	
 F-1201.AC-49	todo	
-F-1201.AC-50	todo	
+F-1201.AC-50	deferred	host: windows (the launcher on a Windows client, from PowerShell and cmd; the hosted windows-2025 rows run it without Docker Desktop)
 F-1201.AC-51	todo	
 F-1201.AC-52	todo	
 F-1201.AC-53	todo	

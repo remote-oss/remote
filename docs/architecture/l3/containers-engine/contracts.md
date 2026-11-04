@@ -100,7 +100,8 @@ lib-authority's `containerCodec('dev-container', …)` carries the payload as an
 its content:
 - **The text:** lowercase hex of the UTF-8 JSON `{"hostPath": <folder>, "localDocker": false, "configFile": {"$mid": 1,
   "fsPath", "external", "path", "scheme"}}`, with `"settings": {"context": <name>}` when a non-default Docker context
-  is current. Field order and spelling are F-0501's. The same member also holds `"host"`, `"certPath"` and
+  is current. Field order and spelling are F-0501's. A payload without `localDocker` reads as `false`: that's the form
+  `devcontainer open --config` writes (F-1201 BR-17). The same member also holds `"host"`, `"certPath"` and
   `"tlsVerify"` (in that order, after `"context"`) when the effective engine of §2 names a host: the window is pinned
   to the engine it was opened on, and a reload, a rebuild and the window's title use it whatever the settings say then
   (F-0205 BR-19; containers-133, #1811).
