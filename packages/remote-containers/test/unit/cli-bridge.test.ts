@@ -565,6 +565,31 @@ describe('the CLI bridge (card containers-04)', () => {
     );
   });
 
+  it('F-0601 BR-13: set-up runs with its arguments and the engine in the environment, reads the attach file for secrets only, and makes no override file', async () => {
+    const {bridge, calls, environments, written} = setup(
+      ending('{"outcome":"success","mergedConfiguration":{}}'),
+    );
+    const result = await bridge.setUp(
+      {
+        containerId: 'abc',
+        dockerPath: 'docker',
+        logLevel: 'info',
+        environment: {DOCKER_HOST: 'tcp://far'},
+      },
+      () => undefined,
+      NEVER,
+    );
+    deepStrictEqual(
+      [result, calls[0]?.slice(0, 3), environments[0], written],
+      [
+        {kind: 'setUp', mergedConfiguration: {}},
+        ['set-up', '--container-id', 'abc'],
+        {DOCKER_HOST: 'tcp://far'},
+        [],
+      ],
+    );
+  });
+
   it('C3: a host that cannot start the CLI is spawnFailed', async () => {
     const {bridge} = setup(() =>
       Promise.resolve({kind: 'spawnFailed', message: 'ENOENT'}),
@@ -1012,5 +1037,54 @@ describe('the CLI bridge: templates (card containers-76)', () => {
     });
     await bridge.templateMetadata('x', controller.signal);
     deepStrictEqual(seen, true);
+  });
+
+  it('F-0601 AC-17 (c163-bridge-set-up): set-up runs for the container with its attach file read for secrets, the editor’s environment and the target’s own, and gives the merged configuration; without a file it reads nothing', async () => {
+    const withFile = setup(
+      ending(
+        '{"outcome":"success","mergedConfiguration":{"remoteUser":"node"}}',
+      ),
+      {configText: '{"a": 1}'},
+    );
+    const without = setup(
+      ending('{"outcome":"success","mergedConfiguration":{}}'),
+    );
+    const target = {
+      containerId: 'c1',
+      configFile: '/s/names/web.json',
+      dockerPath: 'docker',
+      logLevel: 'info' as const,
+      environment: {DOCKER_CONTEXT: 'remote'},
+    };
+    const results = [
+      await withFile.bridge.setUp(target, () => undefined, NEVER),
+      await without.bridge.setUp(
+        {
+          containerId: target.containerId,
+          dockerPath: target.dockerPath,
+          logLevel: target.logLevel,
+          environment: target.environment,
+        },
+        () => undefined,
+        NEVER,
+      ),
+    ];
+    deepStrictEqual(
+      [
+        results,
+        withFile.calls[0]?.slice(0, 3),
+        withFile.environments[0],
+        without.calls[0]?.includes('--config'),
+      ],
+      [
+        [
+          {kind: 'setUp', mergedConfiguration: {remoteUser: 'node'}},
+          {kind: 'setUp', mergedConfiguration: {}},
+        ],
+        ['set-up', '--container-id', 'c1'],
+        {DOCKER_CONTEXT: 'remote'},
+        false,
+      ],
+    );
   });
 });

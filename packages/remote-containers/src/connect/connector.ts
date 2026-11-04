@@ -29,6 +29,11 @@ import {
   type BootstrapSettings,
 } from '../volumes/bootstrap.ts';
 import type {BuildContext} from '../volumes/bootstrap-start.ts';
+import {attachedContainerStep} from '../attach/connect-step.ts';
+import {attachPickKeyOf} from '../attach/pick-record.ts';
+import {type IdRecord, startAttachedContainer} from '../attach/find.ts';
+import {type AttachedTarget, attachedTargetOf} from '../attach/payload.ts';
+import type {ListedContainer} from '../explorer/listed-containers.ts';
 import {k8sExecCommands, k8sDialer} from '../attach/k8s-exec.ts';
 import {type K8sTarget, k8sTargetOf} from '../attach/k8s-payload.ts';
 import {inspectedPod} from '../attach/k8s-state.ts';
@@ -119,6 +124,8 @@ import {
 } from './remote-environment.ts';
 import {
   cancelled,
+  attachFailed,
+  attachWarningRefused,
   cloneConsentRefused,
   configurationInvalid,
   containerGone,
@@ -202,6 +209,10 @@ export interface HeldConnection {
 export interface ContainerConnector extends Connector {
   /** The container the window's last connect found and ended without a connection; nothing once a connect succeeds. */
   failedContainer(): FailedContainer | undefined;
+  /** The container the window's last attach found, running or not; nothing before one was found. */
+  attachedContainer(): ListedContainer | undefined;
+  /** Starts or unpauses the container the last attach found, through the engine it was found with; whether it did. */
+  startAttachedContainer(): Promise<boolean>;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
   /**
@@ -278,6 +289,21 @@ export interface VolumeConnectDependencies {
   ): Promise<'written' | 'left'>;
 }
 
+/** What a connect to an attached container needs beyond a folder's. */
+interface AttachedConnectDependencies {
+  /** The ids recorded at successful attaches. */
+  record: IdRecord;
+  /** The attach configuration file that applies to the container; none when there is none. */
+  configFileOf: (container: ListedContainer) => Promise<string | undefined>;
+  /** The targets the user picked: the attach command records one before it opens its window. */
+  picks: {
+    includes: (key: string) => boolean;
+    record: (key: string) => Promise<void>;
+  };
+  /** The attach warning, asked whatever was answered before; whether the user confirmed. */
+  confirm: () => Promise<boolean>;
+}
+
 /** What a connect to a Kubernetes pod needs beyond a folder's. */
 interface PodConnectDependencies {
   /** `kubectl` as an engine with the login shell's environment. */
@@ -286,6 +312,8 @@ interface PodConnectDependencies {
 
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
+  /** What an attach to a running container needs; without it, an attached payload is no authority the connector reads. */
+  attached?: AttachedConnectDependencies;
   /** What an attach to a Kubernetes pod needs; without it, a pod payload is no authority the connector reads. */
   pods?: PodConnectDependencies;
   /** What a clone in a volume needs; without it, a volume payload is no authority the connector reads. */
@@ -670,6 +698,10 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
+  /** The container the latest attach found, running or not. */
+  let attachedFound: ListedContainer | undefined;
+  /** The engine the latest attach found its container with. */
+  let attachedEngine: EngineHost | undefined;
   /**
    * The identity the latest attempt read from its configuration, kept once the attempt's container was ready; nothing
    * while the container isn't, and nothing once the next attempt begins.
@@ -1843,23 +1875,23 @@ export function containerConnectorOf(
   }
 
   /**
-   * Connects a clone in a volume: the bootstrap container clones and runs `up`, and the CLI on the host, given a stand-in
-   * folder, does the reads and the background commands after it, so that the bootstrap can go once connected.
+   * The engine a clone or an attached container is pinned to, after the checks that come before any container is
+   * touched: the settings, the program, the pinned environment and the engine wearing it; or the failure.
    */
-  async function connectVolume(
-    volumes: VolumeConnectDependencies,
-    payload: string,
-    target: DevContainerVolume,
-    controller: AbortController,
+  async function pinnedEngineChecked(
+    target: PinnedEngine,
     input: ConnectInput,
-  ): Promise<Connected | Failed> {
-    const cancellation = controller.signal;
-    failedContainer = undefined;
-    attemptIdentity = undefined;
-    if (!target.inspectVolume && !(await volumes.consent())) {
-      logger.info("the clone's trust confirmation was refused");
-      return cloneConsentRefused();
-    }
+    cancellation: AbortSignal,
+  ): Promise<
+    | Failed
+    | {
+        settings: ReturnType<typeof dependencies.settings>;
+        dockerFile: string;
+        environment: Readonly<Record<string, string>>;
+        engine: EngineHost;
+        rebuild: {buildNoCache: boolean} | undefined;
+      }
+  > {
     const settings = dependencies.settings();
     const executable = executableOf(settings.dockerPath, undefined);
     if (executable.kind !== 'spawn') {
@@ -1881,8 +1913,39 @@ export function containerConnectorOf(
     if (failure !== undefined) {
       return failure;
     }
+    return {
+      settings,
+      dockerFile: executable.file,
+      environment,
+      engine,
+      rebuild,
+    };
+  }
+
+  /**
+   * Connects a clone in a volume: the bootstrap container clones and runs `up`, and the CLI on the host, given a stand-in
+   * folder, does the reads and the background commands after it, so that the bootstrap can go once connected.
+   */
+  async function connectVolume(
+    volumes: VolumeConnectDependencies,
+    payload: string,
+    target: DevContainerVolume,
+    controller: AbortController,
+    input: ConnectInput,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    if (!target.inspectVolume && !(await volumes.consent())) {
+      logger.info("the clone's trust confirmation was refused");
+      return cloneConsentRefused();
+    }
+    const prepared = await pinnedEngineChecked(target, input, cancellation);
+    if ('kind' in prepared) {
+      return prepared;
+    }
+    const {settings, environment, engine, dockerFile, rebuild} = prepared;
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
-    const dockerFile = executable.file;
     if (target.inspectVolume && target.recovery !== true) {
       return connectExplored(
         {volumes, payload, target, settings, engine, dockerFile},
@@ -2042,6 +2105,70 @@ export function containerConnectorOf(
     return connected;
   }
 
+  /**
+   * Connects an attached container: the warning, the engine checks, then C12's container step. The server and the
+   * connection that follow a container that is ready are not made here yet, so a ready container ends as a failure.
+   */
+  async function connectAttached(
+    attached: AttachedConnectDependencies,
+    payload: string,
+    target: AttachedTarget,
+    controller: AbortController,
+    input: ConnectInput,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    attachedFound = undefined;
+    const pickKey = attachPickKeyOf(target);
+    if (!attached.picks.includes(pickKey)) {
+      if (!(await attached.confirm())) {
+        logger.info('the attach warning was not confirmed');
+        return attachWarningRefused();
+      }
+      await attached.picks.record(pickKey);
+    }
+    const prepared = await pinnedEngineChecked(target, input, cancellation);
+    if ('kind' in prepared) {
+      return prepared;
+    }
+    const {environment, engine, dockerFile} = prepared;
+    const step = await attachedContainerStep(
+      {
+        engine,
+        bridge: dependencies.cliFor({
+          ...dependencies.editorEnvironment,
+          ...environment,
+        }),
+        record: attached.record,
+        configFileOf: attached.configFileOf,
+        cliTarget: {
+          dockerPath: dockerFile,
+          logLevel: 'info',
+          environment,
+        },
+        engineCoordinates: target,
+        logger,
+        onCliEvent: logCliEvent,
+      },
+      payload,
+      target,
+      cancellation,
+    );
+    if (step.kind === 'cancelled') {
+      return cancelled();
+    }
+    attachedFound = step.container;
+    attachedEngine = engine;
+    if (step.kind === 'failed') {
+      return step.failure;
+    }
+    logger.info(
+      `container ${shortId(step.container.id)} is set up; the server is not connected here yet`,
+    );
+    return attachFailed();
+  }
+
   /** The user the pod's container runs as: its name, else its numeric id; none when it cannot be told. */
   async function podUserOf(
     channel: HostChannel,
@@ -2170,6 +2297,23 @@ export function containerConnectorOf(
           }
           return result;
         }
+        const attachedTarget =
+          dependencies.attached === undefined
+            ? undefined
+            : attachedTargetOf(target.payload);
+        if (
+          dependencies.attached !== undefined &&
+          attachedTarget !== undefined &&
+          !('malformed' in attachedTarget)
+        ) {
+          return await connectAttached(
+            dependencies.attached,
+            target.payload,
+            attachedTarget,
+            controller,
+            input,
+          );
+        }
         if (dependencies.pods !== undefined) {
           const podTarget = k8sTargetOf(target.payload);
           if (!('malformed' in podTarget)) {
@@ -2220,6 +2364,15 @@ export function containerConnectorOf(
       dependencies.revealLog();
     },
     failedContainer: () => failedContainer,
+    attachedContainer: () => attachedFound,
+    startAttachedContainer: () =>
+      attachedFound === undefined || attachedEngine === undefined
+        ? Promise.resolve(false)
+        : startAttachedContainer(
+            attachedEngine,
+            attachedFound,
+            new AbortController().signal,
+          ),
     heldIdentity: () => held?.identity,
     attemptIdentity: () => attemptIdentity,
     heldPorts: () => held?.ports,

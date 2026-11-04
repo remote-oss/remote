@@ -13,7 +13,7 @@ import {
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
 import type {BackgroundStage} from '../../src/lifecycle/container-lifecycle.ts';
-import type {CliEvent} from '../../src/cli/cli-lines.ts';
+import type {CliEvent, SetUpResult} from '../../src/cli/cli-lines.ts';
 import {
   type ContainerConnector,
   type ContainerConnectorDependencies,
@@ -230,6 +230,15 @@ export interface Scene {
   consentGiven: boolean;
   /** The background stages the lifecycles were made with, in order. */
   backgroundStages: Array<BackgroundStage | undefined>;
+  /** What the CLI's set-up gives, and the containers it was asked to set up. */
+  setUpResult: SetUpResult;
+  setUps: string[];
+  /** The ids the attached record holds, by payload. */
+  attachedIds: Record<string, string>;
+  /** The targets the user picked, how many times the attach warning was asked, and what it is answered. */
+  attachPicks: string[];
+  confirmations: number;
+  confirmAnswer: boolean;
 }
 
 /** What a probe that worked prints: noise, the markers and two variables. */
@@ -348,7 +357,7 @@ function volumeDependenciesOf(
 /** The connector over fakes, and the knobs that steer them. */
 export function sceneOf(
   overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
-  options: {volumes?: boolean; pods?: EngineHost} = {},
+  options: {volumes?: boolean; attached?: boolean; pods?: EngineHost} = {},
 ): Scene {
   const sink = new MemorySink();
   const scene: Scene = {
@@ -424,6 +433,12 @@ export function sceneOf(
     recoveryPicks: [],
     consentGiven: true,
     backgroundStages: [],
+    setUpResult: {kind: 'setUp', mergedConfiguration: {}},
+    setUps: [],
+    attachedIds: {},
+    attachPicks: [],
+    confirmations: 0,
+    confirmAnswer: true,
     ...overrides,
   };
   const kills = fakeEngine(
@@ -544,6 +559,10 @@ export function sceneOf(
         ? scene.configuration()
         : Promise.resolve(scene.configuration);
     },
+    setUp: target => {
+      scene.setUps.push(target.containerId);
+      return Promise.resolve(scene.setUpResult);
+    },
     applyTemplate: () =>
       Promise.reject(new Error('the connector never applies a template')),
     outdated: () =>
@@ -614,6 +633,31 @@ export function sceneOf(
     ...(options.pods === undefined ? {} : {pods: {kubectl: options.pods}}),
     ...(options.volumes === true
       ? {volumes: volumeDependenciesOf(scene, bridge)}
+      : {}),
+    ...(options.attached === true
+      ? {
+          attached: {
+            picks: {
+              includes: key => scene.attachPicks.includes(key),
+              record: key => {
+                scene.attachPicks.push(key);
+                return Promise.resolve();
+              },
+            },
+            confirm: () => {
+              scene.confirmations += 1;
+              return Promise.resolve(scene.confirmAnswer);
+            },
+            record: {
+              read: payload => scene.attachedIds[payload],
+              write: (payload, containerId) => {
+                scene.attachedIds[payload] = containerId;
+                return Promise.resolve();
+              },
+            },
+            configFileOf: () => Promise.resolve(undefined),
+          },
+        }
       : {}),
     lifecyclePresenter: {
       output: () => undefined,

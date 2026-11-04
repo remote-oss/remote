@@ -6,6 +6,8 @@ import type {Translate} from './engine-dialogs.ts';
 import {filled} from './filled.ts';
 
 const OWN_TEMPLATES = {
+  startContainer: 'Start Container',
+  chooseContainer: 'Choose Container',
   errorPrefixed: 'Error: {0}',
   historyNotFetched:
     "Only the latest commits of {0} were cloned: fetching the repository's full history and tags failed. Run 'git fetch --unshallow --tags' in the container to try again.",

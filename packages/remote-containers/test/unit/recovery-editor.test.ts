@@ -109,14 +109,16 @@ describe('the editor adapters of the failure presenter (card containers-11)', ()
     ]);
   });
 
-  it('F-0202 AC-18, AC-9, F-0503 7.E1: reload, recent, an address and a setting run the editor’s own commands', async () => {
+  it('F-0202 AC-18, AC-9, F-0503 7.E1: reload, close remote, recent, an address and a setting run the editor’s own commands', async () => {
     const {ports, calls} = editor();
     await ports.reloadWindow();
+    await ports.closeRemote();
     await ports.openRecent();
     await ports.openExternal('https://example.org/x');
     await ports.openSetting('remote.serverDownloadBaseUrl');
     deepStrictEqual(calls, [
       ['executeCommand', 'workbench.action.reloadWindow'],
+      ['executeCommand', 'workbench.action.remote.close'],
       ['executeCommand', 'workbench.action.openRecent'],
       ['openExternal', {parsed: 'https://example.org/x'}],
       [

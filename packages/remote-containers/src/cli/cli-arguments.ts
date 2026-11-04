@@ -47,6 +47,20 @@ export interface UpOptions {
   workspaceMountConsistency: string;
 }
 
+/** The size of the terminal a run's lifecycle commands show in, as arguments; none when the size is not known. */
+function terminalArguments(
+  size: {rows: number; columns: number} | undefined,
+): string[] {
+  return size === undefined
+    ? []
+    : [
+        '--terminal-rows',
+        String(size.rows),
+        '--terminal-columns',
+        String(size.columns),
+      ];
+}
+
 /** The arguments every subcommand starts with, up to the log format and the terminal size. */
 function commonArguments(subcommand: string, target: CliTarget): string[] {
   return [
@@ -77,14 +91,7 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     target.logLevel,
     '--log-format',
     'json',
-    ...(target.terminalSize === undefined
-      ? []
-      : [
-          '--terminal-rows',
-          String(target.terminalSize.rows),
-          '--terminal-columns',
-          String(target.terminalSize.columns),
-        ]),
+    ...terminalArguments(target.terminalSize),
   ];
 }
 
@@ -256,4 +263,51 @@ export function applyTemplateArguments(request: TemplateRequest): string[] {
 /** Reads a template's metadata from its registry. */
 export function templateMetadataArguments(templateId: string): string[] {
   return ['templates', 'metadata', templateId, '--log-level', 'info'];
+}
+
+/** What the CLI is told about an attached container: no folder and no id labels, only the container and its attach file. */
+export interface AttachedCliTarget {
+  containerId: string;
+  /** The attach configuration file that applies, absolute; none when there is none. */
+  configFile?: string;
+  dockerPath: string;
+  logLevel: 'info' | 'debug' | 'trace';
+  /** The size of the terminal the run's lifecycle commands show in, whole rows and columns of at least one. */
+  terminalSize?: {rows: number; columns: number};
+  /** Where the CLI keeps its data (`--user-data-folder`). */
+  userDataFolder?: string;
+  /** Variables added to the editor's environment for the CLI's process, such as the engine coordinate. */
+  environment?: Readonly<Record<string, string>>;
+}
+
+/** The arguments an attached container's runs share, after the subcommand and the container. */
+function attachedCommonArguments(target: AttachedCliTarget): string[] {
+  return [
+    '--container-id',
+    target.containerId,
+    ...(target.configFile === undefined ? [] : ['--config', target.configFile]),
+    '--docker-path',
+    target.dockerPath,
+    ...(target.userDataFolder === undefined
+      ? []
+      : ['--user-data-folder', target.userDataFolder]),
+    '--log-level',
+    target.logLevel,
+    '--log-format',
+    'json',
+    ...terminalArguments(target.terminalSize),
+  ];
+}
+
+/**
+ * Sets up a running container the CLI did not create: it merges the container's metadata with the attach file, patches
+ * `/etc/environment` and `/etc/profile`, and gives the merged configuration.
+ */
+export function setUpArguments(target: AttachedCliTarget): string[] {
+  return [
+    'set-up',
+    ...attachedCommonArguments(target),
+    '--skip-non-blocking-commands',
+    '--include-merged-configuration',
+  ];
 }

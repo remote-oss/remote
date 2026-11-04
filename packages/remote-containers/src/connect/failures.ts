@@ -241,3 +241,34 @@ export function containerGone(): Failed {
 export function transportLost(): Failed {
   return failure('transportLost', {retryable: true});
 }
+
+/** The attached container is neither found by its name nor by the id recorded for it; `name` keeps its slash. */
+export function attachedNotFound(name: string): Failed {
+  return failure('attachedNotFound', {}, {id: 'S053', values: [name]});
+}
+
+/** The attached container is not running; `suffix` is the label's " @ <engine>" part, empty for the default engine. */
+export function attachedNotRunning(
+  image: string,
+  name: string,
+  suffix: string,
+): Failed {
+  return failure(
+    'attachedNotRunning',
+    {},
+    {id: 'S054', values: [image, name, suffix]},
+  );
+}
+
+/** The set-up, the Alpine step or anything after them in an attach failed. */
+export function attachFailed(): Failed {
+  return failure('attachFailed', {}, {id: 'S033'});
+}
+
+/** The profile did not accept the attach warning; the window goes back to a local one, and nothing is shown. */
+export function attachWarningRefused(): Failed {
+  return {
+    ...failure('attachWarningRefused', {silent: true}),
+    userAlreadyNotified: true,
+  };
+}
