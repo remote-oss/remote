@@ -66,6 +66,8 @@ export interface Setup {
   /** What the worktree setting's user value is. */
   mountGitWorktreeCommonDir: unknown;
   waitOnCheck: Promise<void>;
+  /** What the first reading of a configuration waits for; later readings do not wait. */
+  waitOnRead: Promise<void>;
   /** How the wizard ends, and the configuration files it leaves in the folder when it runs. */
   wizard: WizardOutcome;
   wizardLeaves: string[];
@@ -114,6 +116,7 @@ export function setup(): Setup {
     dockerPath: 'docker',
     mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
+    waitOnRead: Promise.resolve(),
     cancels: [],
     wizard: {kind: 'cancelled'},
     wizardLeaves: [],
@@ -280,10 +283,13 @@ export function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       translate: template => template,
     },
     bridge: {
-      readConfiguration: target => {
+      readConfiguration: async target => {
         state.targets.push(target);
         state.calls.push(`readConfiguration ${target.workspaceFolder}`);
-        return Promise.resolve(state.read);
+        const hold = state.waitOnRead;
+        state.waitOnRead = Promise.resolve();
+        await hold;
+        return state.read;
       },
     },
     problematic: {

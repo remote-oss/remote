@@ -177,6 +177,7 @@
   "Include the following optional files/directories": "Include the following optional files/directories",
   "Optional Files/Directories": "Optional Files/Directories",
   "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)": "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)",
+  "[Starting Docker (show log)](command:remote-containers.revealLogTerminal)": "[Starting Docker (show log)](command:remote-containers.revealLogTerminal)",
   "'Reopen in SSH' not possible in current context.": "'Reopen in SSH' not possible in current context.",
   "'Reopen in Tunnel' not possible in current context.": "'Reopen in Tunnel' not possible in current context.",
   "'Reopen in WSL' not possible in current context.": "'Reopen in WSL' not possible in current context.",
