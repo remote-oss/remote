@@ -5,6 +5,7 @@ import {closeWindow} from '../windows/harness.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 import {statusItemText, windowTitle} from '../windows/renderer.ts';
 import {docker} from '../windows/dev-containers-view.ts';
+import {noWindowLeft} from './support.ts';
 
 /** The shortest time the indicator is given to follow a connect, in milliseconds. */
 const INDICATOR_MILLISECONDS = 30_000;
@@ -39,6 +40,8 @@ function devcontainerIdOf(labels: Readonly<Record<string, string>>): string {
 
 describe('Variable substitution in a connected dev container (card coverage-112)', function () {
   this.timeout(900_000);
+
+  beforeEach(noWindowLeft);
 
   it('F-0304 AC-1, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-20, AC-21, AC-24, AC-41, AC-47, AC-48, AC-51, AC-59, AC-66 (c112-env): the references of containerEnv, mounts and name resolve as the spec gives them, and the resolved values reach Config.Env, the mounts, the title and the indicator', async () => {
     const label = 'c112-env';

@@ -2,7 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import path from 'node:path';
 import {closeWindow, runScopedName} from '../windows/harness.ts';
 import {docker} from '../windows/dev-containers-view.ts';
-import {imageWithLabel, textOfFile} from './support.ts';
+import {imageWithLabel, noWindowLeft, textOfFile} from './support.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 
 /** The parts of `docker inspect` that the rows read. */
@@ -28,6 +28,8 @@ async function inspected(container: string): Promise<Inspected> {
 
 describe('The image’s metadata label merged into the container (card coverage-112)', function () {
   this.timeout(1_200_000);
+
+  beforeEach(noWindowLeft);
   const first = runScopedName('c112-first');
   const second = runScopedName('c112-second');
   const own = runScopedName('c112-own');
