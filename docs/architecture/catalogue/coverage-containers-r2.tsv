@@ -386,17 +386,17 @@ F-0303.AC-25	acceptance
 F-0303.AC-26	acceptance	
 F-0303.AC-27	acceptance	
 F-0303.AC-28	acceptance	
-F-0304.AC-1	todo	
-F-0304.AC-2	todo	
-F-0304.AC-3	todo	
-F-0304.AC-4	todo	
-F-0304.AC-5	todo	
-F-0304.AC-6	todo	
-F-0304.AC-7	todo	
-F-0304.AC-8	todo	
-F-0304.AC-9	todo	
-F-0304.AC-10	todo	
-F-0304.AC-11	todo	
+F-0304.AC-1	acceptance	
+F-0304.AC-2	acceptance	
+F-0304.AC-3	acceptance	
+F-0304.AC-4	acceptance	
+F-0304.AC-5	acceptance	
+F-0304.AC-6	acceptance	
+F-0304.AC-7	acceptance	
+F-0304.AC-8	acceptance	
+F-0304.AC-9	acceptance	
+F-0304.AC-10	acceptance	
+F-0304.AC-11	acceptance	
 F-0304.AC-12	todo	
 F-0304.AC-13	todo	
 F-0304.AC-14	todo	
@@ -405,19 +405,19 @@ F-0304.AC-16	todo
 F-0304.AC-17	todo	
 F-0304.AC-18	todo	
 F-0304.AC-19	todo	
-F-0304.AC-20	todo	
-F-0304.AC-21	todo	
+F-0304.AC-20	acceptance	
+F-0304.AC-21	acceptance	
 F-0304.AC-22	todo	
 F-0304.AC-23	todo	
-F-0304.AC-24	todo	
-F-0304.AC-25	todo	
+F-0304.AC-24	acceptance	
+F-0304.AC-25	acceptance	
 F-0304.AC-26	todo	
 F-0304.AC-27	todo	
-F-0304.AC-28	todo	
+F-0304.AC-28	acceptance	
 F-0304.AC-29	todo	
 F-0304.AC-30	todo	
 F-0304.AC-31	todo	
-F-0304.AC-32	todo	
+F-0304.AC-32	core	core: the resolver hands the editor remoteEnv as the extension host's environment (F-0306 AC-27's row shows it in a terminal); the editor alone applies that environment to tasks, new terminals and debug sessions, whatever terminal.integrated.inheritEnv says
 F-0304.AC-33	todo	
 F-0304.AC-34	todo	
 F-0304.AC-35	todo	
@@ -426,105 +426,105 @@ F-0304.AC-37	todo
 F-0304.AC-38	todo	
 F-0304.AC-39	todo	
 F-0304.AC-40	todo	
-F-0304.AC-41	todo	
+F-0304.AC-41	acceptance	
 F-0304.AC-42	todo	
 F-0304.AC-43	todo	
 F-0304.AC-44	todo	
-F-0304.AC-45	todo	
+F-0304.AC-45	acceptance	
 F-0304.AC-46	todo	
-F-0304.AC-47	todo	
-F-0304.AC-48	todo	
+F-0304.AC-47	acceptance	
+F-0304.AC-48	acceptance	
 F-0304.AC-49	todo	
 F-0304.AC-50	todo	
-F-0304.AC-51	todo	
-F-0304.AC-52	todo	
+F-0304.AC-51	acceptance	
+F-0304.AC-52	acceptance	
 F-0304.AC-53	todo	
 F-0304.AC-54	todo	
 F-0304.AC-55	todo	
 F-0304.AC-56	todo	
 F-0304.AC-57	todo	
 F-0304.AC-58	todo	
-F-0304.AC-59	todo	
-F-0304.AC-60	todo	
+F-0304.AC-59	acceptance	
+F-0304.AC-60	core	core: the editor resolves its own shell environment from the login-shell profile before any extension runs, and the substitution reads that environment
 F-0304.AC-61	todo	
 F-0304.AC-62	todo	
 F-0304.AC-63	todo	
 F-0304.AC-64	todo	
 F-0304.AC-65	todo	
-F-0304.AC-66	todo	
-F-0304.AC-67	todo	
-F-0305.AC-1	todo	
-F-0305.AC-2	todo	
-F-0305.AC-3	todo	
-F-0305.AC-4	todo	
+F-0304.AC-66	acceptance	
+F-0304.AC-67	acceptance	
+F-0305.AC-1	acceptance	
+F-0305.AC-2	acceptance	
+F-0305.AC-3	core	core: the unknown-property warning comes from the editor's built-in configuration-editing schema, which we neither extend nor read; the build ignores unknown keys, which the label rows of F-0305 AC-17 show
+F-0305.AC-4	core	core: the legacy-property warnings are the editor's schema diagnostics; we contribute no schema or diagnostic for them
 F-0305.AC-5	todo	
 F-0305.AC-6	todo	
-F-0305.AC-7	todo	
+F-0305.AC-7	acceptance	
 F-0305.AC-8	todo	
 F-0305.AC-9	todo	
-F-0305.AC-10	todo	
+F-0305.AC-10	core	core: the devcontainer.json schema, hover and diagnostics belong to the editor's built-in configuration-editing extension; our manifest contributes no jsonValidation, so disabling us changes none of them
 F-0305.AC-11	todo	
-F-0305.AC-12	todo	
+F-0305.AC-12	core	core: the hover text is the editor's rendering of the built-in schema's descriptions; we contribute no hover provider
 F-0305.AC-13	todo	
-F-0305.AC-14	todo	
-F-0305.AC-15	todo	
-F-0305.AC-16	todo	
-F-0305.AC-17	todo	
+F-0305.AC-14	acceptance	
+F-0305.AC-15	core	core: the association of devcontainer.json files with the merged schema is the editor's built-in jsonValidation; we contribute none
+F-0305.AC-16	acceptance	
+F-0305.AC-17	acceptance	
 F-0305.AC-18	todo	
-F-0305.AC-19	todo	
-F-0305.AC-20	todo	
-F-0305.AC-21	todo	
-F-0305.AC-22	todo	
-F-0305.AC-23	todo	
+F-0305.AC-19	core	core: the schema download and its failure Problem are the editor's JSON language service; the build never reads the schema, which no row of ours needs to show
+F-0305.AC-20	core	core: the Problem for a top-level key is the editor's schema diagnostic; we contribute none
+F-0305.AC-21	core	core: the suggestions come from the editor's JSON language service over its built-in schema; we register no completion provider
+F-0305.AC-22	core	core: the editor offers no quick fix for schema diagnostics; we register no code action provider
+F-0305.AC-23	core	core: the editor re-resolves the schema when the folder becomes trusted; nothing of ours takes part
 F-0305.AC-24	todo	
 F-0305.AC-25	todo	
 F-0305.AC-26	todo	
 F-0305.AC-27	todo	
 F-0305.AC-28	todo	
 F-0306.AC-1	todo	
-F-0306.AC-2	todo	
-F-0306.AC-3	todo	
+F-0306.AC-2	acceptance	
+F-0306.AC-3	acceptance	
 F-0306.AC-4	todo	
-F-0306.AC-5	todo	
-F-0306.AC-6	todo	
+F-0306.AC-5	acceptance	
+F-0306.AC-6	acceptance	
 F-0306.AC-7	todo	
 F-0306.AC-8	todo	
 F-0306.AC-9	todo	
 F-0306.AC-10	todo	
 F-0306.AC-11	todo	
 F-0306.AC-12	todo	
-F-0306.AC-13	todo	
-F-0306.AC-14	todo	
+F-0306.AC-13	acceptance	
+F-0306.AC-14	acceptance	
 F-0306.AC-15	todo	
 F-0306.AC-16	todo	
-F-0306.AC-17	todo	
+F-0306.AC-17	acceptance	
 F-0306.AC-18	todo	
-F-0306.AC-19	todo	
-F-0306.AC-20	todo	
+F-0306.AC-19	acceptance	
+F-0306.AC-20	acceptance	
 F-0306.AC-21	todo	
-F-0306.AC-22	todo	
-F-0306.AC-23	todo	
+F-0306.AC-22	acceptance	
+F-0306.AC-23	acceptance	
 F-0306.AC-24	todo	
 F-0306.AC-25	todo	
 F-0306.AC-26	todo	
 F-0306.AC-27	todo	
 F-0306.AC-28	todo	
-F-0306.AC-29	todo	
-F-0306.AC-30	todo	
+F-0306.AC-29	acceptance	
+F-0306.AC-30	acceptance	
 F-0306.AC-31	todo	
 F-0306.AC-32	todo	
 F-0306.AC-33	todo	
 F-0306.AC-34	todo	
-F-0306.AC-35	todo	
+F-0306.AC-35	acceptance	
 F-0306.AC-36	todo	
 F-0306.AC-37	todo	
 F-0306.AC-38	todo	
 F-0306.AC-39	todo	
-F-0306.AC-40	todo	
+F-0306.AC-40	acceptance	
 F-0306.AC-41	todo	
 F-0306.AC-42	todo	
 F-0306.AC-43	todo	
-F-0306.AC-44	todo	
+F-0306.AC-44	acceptance	
 F-0306.AC-45	todo	
 F-0306.AC-46	todo	
 F-0306.AC-47	todo	
@@ -752,42 +752,42 @@ F-0506.AC-12	todo
 F-0506.AC-13	todo	
 F-0506.AC-14	todo	
 F-0506.AC-15	todo	
-F-0507.AC-1	todo	
+F-0507.AC-1	core	core: the editor opens the Extension Development Host window on the initiating window's remote authority; our resolver only answers for that authority, as it does for any window
 F-0507.AC-2	todo	
-F-0507.AC-3	todo	
-F-0507.AC-4	todo	
-F-0507.AC-5	todo	
-F-0507.AC-6	todo	
-F-0507.AC-7	todo	
+F-0507.AC-3	core	core: our resolver offers no tunnel factory, so the editor's own port forwarding serves the debug port
+F-0507.AC-4	core	core: a plain local window: none of our code runs in the session
+F-0507.AC-5	core	core: the workspace trust dialog before the Extension Development Host opens is the editor's, in a local window
+F-0507.AC-6	core	core: the 10-second warning is the editor's local extension host warning; we add no notification to a debug session
+F-0507.AC-7	core	core: the welcome text of a remote window with no folder is the editor's
 F-0507.AC-8	todo	
 F-0507.AC-9	todo	
 F-0507.AC-10	todo	
-F-0507.AC-11	todo	
+F-0507.AC-11	core	core: the new window resolves through the same path as any other, with no debug branch of ours; the forwarded port in the initiating window is the editor's
 F-0507.AC-12	todo	
-F-0507.AC-13	todo	
+F-0507.AC-13	core	core: the debug status item is the editor's
 F-0507.AC-14	todo	
-F-0507.AC-15	todo	
-F-0507.AC-16	todo	
+F-0507.AC-15	core	core: the reuse of the window, the second forwarded port and the reload notification are the editor's
+F-0507.AC-16	core	core: the welcome text of a folder-less local window is the editor's
 F-0507.AC-17	todo	
 F-0507.AC-18	todo	
 F-0507.AC-19	todo	
 F-0507.AC-20	todo	
 F-0507.AC-21	todo	
 F-0507.AC-22	todo	
-F-0507.AC-23	todo	
+F-0507.AC-23	core	core: we forward no port of our own for the debug session, and the editor honours remote.autoForwardPorts
 F-0507.AC-24	todo	
 F-0507.AC-25	todo	
 F-0507.AC-26	todo	
-F-0507.AC-27	todo	
+F-0507.AC-27	core	core: our registry keeps the container for the Extension Development Host window's connection; restoring the initiating window's ports on reload is the editor's
 F-0507.AC-28	todo	
-F-0507.AC-29	todo	
-F-0507.AC-30	todo	
-F-0507.AC-31	todo	
+F-0507.AC-29	core	core: the editor opens a new Extension Development Host window and forwards its port
+F-0507.AC-30	core	core: Debug: Restart is the editor's command and behaviour
+F-0507.AC-31	core	core: the editor decides how a third session reuses the window; the initiating window's held connection is not touched
 F-0507.AC-32	todo	
-F-0507.AC-33	todo	
-F-0507.AC-34	todo	
-F-0507.AC-35	todo	
-F-0507.AC-36	todo	
+F-0507.AC-33	core	core: the editor holds the start while the initiating extension host is frozen; after the unpause our resolver finds the running container as it does for any window
+F-0507.AC-34	core	core: a disconnected initiating window cannot start the session, which is the editor's; a reconnect of ours never starts or recreates a container
+F-0507.AC-35	core	core: the resolver ignores the folder of the address; the editor shows the folder-less window
+F-0507.AC-36	core	core: the attach of the debugger to the extension host is the editor's
 F-0601.AC-1	acceptance	
 F-0601.AC-2	acceptance	
 F-0601.AC-3	acceptance	
@@ -918,7 +918,7 @@ F-0603.AC-4	todo
 F-0603.AC-5	todo	
 F-0603.AC-6	todo	
 F-0603.AC-7	todo	
-F-0603.AC-8	todo	
+F-0603.AC-8	core	core: we register no handler for remote-containers.cloneInVolumeFromViewlet, so a keybinding bound to it gets the editor's own message that the command is not found; no menu of ours offers it
 F-0603.AC-9	todo	
 F-0603.AC-10	todo	
 F-0603.AC-11	todo	

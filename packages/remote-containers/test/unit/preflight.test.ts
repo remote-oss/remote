@@ -475,6 +475,51 @@ describe('the second check', () => {
     );
   });
 
+  it('F-0202 AC-39: a daemon that is down starts Docker Desktop, and the repeated query passes with no dialog', async () => {
+    const answers: Record<string, Answer> = {
+      version: finished(
+        1,
+        '',
+        'failed to connect to the docker API at npipe:////./pipe/docker_engine',
+      ),
+    };
+    const scene = sceneOf(answers);
+    const started: string[] = [];
+    scene.dependencies.desktop = {
+      data: {
+        application: 'C:/Docker.exe',
+        start: {program: 'Docker.exe', parameters: []},
+        listing: {
+          program: 'tasklist',
+          parameters: [],
+          processName: 'Docker.exe',
+        },
+        recheckIntervalMilliseconds: 1,
+        rechecks: {
+          running: {kind: 'count', limit: 2},
+          started: {kind: 'count', limit: 2},
+        },
+      },
+      installed: () => Promise.resolve(true),
+      running: () => Promise.resolve(false),
+      start: () => {
+        started.push('start');
+        answers.version = finished(0);
+        return Promise.resolve();
+      },
+      wait: () => Promise.resolve(),
+      now: () => 0,
+    };
+    deepStrictEqual(
+      [
+        await secondCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        started,
+        scene.dialogs,
+      ],
+      [{kind: 'passed'}, ['start'], []],
+    );
+  });
+
   it('F-0201 BR-1: a relative value with no base fails with S339 and runs nothing', async () => {
     const scene = sceneOf({}, {values: ['tools/dk']});
     deepStrictEqual(
@@ -483,6 +528,125 @@ describe('the second check', () => {
         scene.argvs,
       ],
       [{kind: 'failed', detail: 'S339'}, []],
+    );
+  });
+});
+
+describe('the first check, when Docker Desktop is started (card containers-200)', () => {
+  /** Start data for a host whose application is installed, with the given bound. */
+  function desktopOf(
+    started: () => void,
+    waits: number[],
+    options: {running?: boolean; limit?: number} = {},
+  ): NonNullable<PreflightDependencies['desktop']> {
+    return {
+      data: {
+        application: 'C:/Docker.exe',
+        start: {program: 'Docker.exe', parameters: []},
+        listing: {
+          program: 'tasklist',
+          parameters: [],
+          processName: 'Docker.exe',
+        },
+        recheckIntervalMilliseconds: 5,
+        rechecks: {
+          running: {kind: 'count', limit: options.limit ?? 2},
+          started: {kind: 'count', limit: options.limit ?? 2},
+        },
+      },
+      installed: () => Promise.resolve(true),
+      running: () => Promise.resolve(options.running ?? false),
+      start: () => {
+        started();
+        return Promise.resolve();
+      },
+      wait: milliseconds => {
+        waits.push(milliseconds);
+        return Promise.resolve();
+      },
+      now: () => 0,
+    };
+  }
+
+  const DOWN = finished(
+    1,
+    '',
+    'failed to connect to the docker API at npipe:////./pipe/docker_engine',
+  );
+
+  it('F-0202 AC-23, AC-24: a structured query that finds the daemon down starts Docker Desktop, and the re-check passes with no dialog', async () => {
+    const answers: Record<string, Answer> = {
+      ...PASSING,
+      [STRUCTURED.join(' ')]: DOWN,
+    };
+    const scene = sceneOf(answers);
+    const waits: number[] = [];
+    scene.dependencies.desktop = desktopOf(() => {
+      answers[STRUCTURED.join(' ')] = finished(0, GOOD_REPLY);
+    }, waits);
+    deepStrictEqual(
+      [
+        await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        waits,
+        scene.dialogs,
+      ],
+      ['proceed', [5], []],
+    );
+  });
+
+  it('F-0202 AC-24: a daemon that stays down after the re-checks shows the check’s own dialog once', async () => {
+    const scene = sceneOf({...PASSING, [STRUCTURED.join(' ')]: DOWN});
+    const waits: number[] = [];
+    let starts = 0;
+    scene.dependencies.desktop = desktopOf(
+      () => {
+        starts += 1;
+      },
+      waits,
+      {limit: 2},
+    );
+    deepStrictEqual(
+      [
+        await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+        starts,
+        waits,
+        scene.dialogs.length,
+      ],
+      ['stopped', 1, [5, 5], 1],
+    );
+  });
+
+  it('F-0202 AC-44: a Docker Desktop that already runs is not started again', async () => {
+    const scene = sceneOf({...PASSING, [STRUCTURED.join(' ')]: DOWN});
+    let starts = 0;
+    scene.dependencies.desktop = desktopOf(
+      () => {
+        starts += 1;
+      },
+      [],
+      {running: true, limit: 1},
+    );
+    await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+    deepStrictEqual(starts, 0);
+  });
+
+  it('F-0202 AC-32: a check cancelled during the re-checks ends stopped with no dialog', async () => {
+    const scene = sceneOf({...PASSING, [STRUCTURED.join(' ')]: DOWN});
+    const controller = new AbortController();
+    const desktop = desktopOf(() => undefined, []);
+    scene.dependencies.desktop = {
+      ...desktop,
+      wait: () => {
+        controller.abort();
+        return Promise.resolve();
+      },
+    };
+    deepStrictEqual(
+      [
+        await firstCheck(scene.dependencies, undefined, controller.signal),
+        scene.dialogs,
+      ],
+      ['stopped', []],
     );
   });
 });

@@ -636,6 +636,12 @@
           "scope": "application",
           "description": "%setting.Dockerpath.description%"
         },
+        "dev.containers.optimisticallyLaunchDocker": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.Optimisticallylaunchdocker.description%"
+        },
         "dev.containers.dockerComposePath": {
           "type": "string",
           "default": "docker-compose",

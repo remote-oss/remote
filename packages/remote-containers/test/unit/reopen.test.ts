@@ -40,14 +40,14 @@ async function reopened(state: Setup, rebuild?: RebuildOptions) {
   return {lines: linesOf(sink)};
 }
 
-/** Runs the command with the progress shown while the first check waits, and gives the order of what followed. */
+/** Runs the command with the progress shown while the configuration is read, and gives the order of what followed. */
 async function reopenedSlowly(state: Setup): Promise<string[]> {
   const release = pendingOf<undefined>();
-  state.waitOnCheck = release.promise;
+  state.waitOnRead = release.promise;
   const {ports} = portsOf(state);
   const running = handlerOf(ports)();
   await settled();
-  state.timers[0]?.callback();
+  state.timers[1]?.callback();
   release.resolve(undefined);
   await running;
   await settled();
@@ -60,7 +60,7 @@ async function reopenedSlowly(state: Setup): Promise<string[]> {
  */
 async function reentered(
   state: Setup,
-  hold: 'waitOnCheck' | 'waitOnTrust',
+  hold: 'waitOnRead',
   rebuild?: RebuildOptions,
 ): Promise<{during: string[]; lines: string[]}> {
   const release = pendingOf<undefined>();
@@ -499,7 +499,7 @@ describe('Reopen in Container', () => {
     await reopened(state);
     deepStrictEqual(
       [state.calls, state.commands],
-      [['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'], []],
+      [['ensureTrusted', 'firstCheck /w/p'], []],
     );
   });
 
@@ -510,18 +510,21 @@ describe('Reopen in Container', () => {
         await reopenedSlowly(state),
         state.timers.map(timer => timer.milliseconds),
       ],
-      [[`progress shown ${START}`, 'leave', 'progress closed', 'open'], [500]],
+      [
+        [`progress shown ${START}`, 'leave', 'progress closed', 'open'],
+        [2000, 500],
+      ],
     );
   });
 
   it('F-0408 AC-7: Cancel on the progress ends Reopen with no reload, no other notification and a line in the log', async () => {
     const state = setup();
     const release = pendingOf<undefined>();
-    state.waitOnCheck = release.promise;
+    state.waitOnRead = release.promise;
     const {ports, sink} = portsOf(state);
     const running = handlerOf(ports)();
     await settled();
-    state.timers[0]?.callback();
+    state.timers[1]?.callback();
     state.cancels[0]?.();
     release.resolve(undefined);
     await running;
@@ -560,10 +563,11 @@ describe('Reopen in Container', () => {
       answer(state);
       seen.push(await reopenedSlowly(state));
     }
-    deepStrictEqual(
-      seen,
-      answers.map(() => [`progress shown ${START}`, 'progress closed']),
-    );
+    deepStrictEqual(seen, [
+      [],
+      [`progress shown ${START}`, 'progress closed'],
+      [`progress shown ${START}`, 'progress closed'],
+    ]);
   });
 
   it('F-0301 6.2: no configuration opens nothing, runs the wizard once after the trust check, and says so in the log', async () => {
@@ -720,9 +724,9 @@ describe('Reopen in Container', () => {
     ]);
   });
 
-  it('F-0401 BR-7a: a call while another waits on the first check returns at once, and a call after the first ends runs again', async () => {
+  it('F-0202 AC-45, AC-51: a call while another is past its check runs its own check and is absorbed, and a call after the first ends runs again', async () => {
     const state = setup();
-    const {during, lines} = await reentered(state, 'waitOnCheck');
+    const {during, lines} = await reentered(state, 'waitOnRead');
     deepStrictEqual(
       [
         during,
@@ -730,28 +734,34 @@ describe('Reopen in Container', () => {
         state.commands.length,
       ],
       [
-        ['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'],
+        [
+          'ensureTrusted',
+          'ensureTrusted',
+          'firstCheck /w/p',
+          'firstCheck /w/p',
+          'readConfiguration /w/p',
+        ],
         ['info: Reopen in Container is already running'],
         2,
       ],
     );
   });
 
-  it('F-0401 BR-7a: a call while the trust request is open calls nothing, and after a decline a third call asks again', async () => {
+  it('F-0202 AC-45: a call while the trust request is open asks again, as the check has not passed', async () => {
     const state = setup();
     state.trust = 'declined';
-    const {during, lines} = await reentered(state, 'waitOnTrust');
+    const release = pendingOf<undefined>();
+    state.waitOnTrust = release.promise;
+    const {ports, sink} = portsOf(state);
+    const handler = handlerOf(ports);
+    const calls = [handler(), handler()];
+    await settled();
+    const during = [...state.calls];
+    release.resolve(undefined);
+    await Promise.all(calls);
     deepStrictEqual(
-      [
-        during,
-        state.calls,
-        lines.filter(line => line.includes('already running')),
-      ],
-      [
-        ['ensureTrusted'],
-        ['ensureTrusted', 'ensureTrusted'],
-        ['info: Reopen in Container is already running'],
-      ],
+      [during, linesOf(sink).filter(line => line.includes('already running'))],
+      [['ensureTrusted', 'ensureTrusted'], []],
     );
   });
 
@@ -866,7 +876,7 @@ describe('Reopen in Container', () => {
     away.remoteName = 'dev-container';
     const {lines: awayLines} = await reopened(away, {buildNoCache: false});
     const state = setup();
-    const {lines} = await reentered(state, 'waitOnCheck', {buildNoCache: true});
+    const {lines} = await reentered(state, 'waitOnRead', {buildNoCache: true});
     deepStrictEqual(
       [awayLines, lines.filter(line => line.includes('already running'))],
       [
@@ -881,7 +891,7 @@ describe('Reopen in Container', () => {
   it('F-0405 BR-1: a Reopen and a rebuild and reopen never run at once in one window', async () => {
     const state = setup();
     const release = pendingOf<undefined>();
-    state.waitOnCheck = release.promise;
+    state.waitOnRead = release.promise;
     const {ports, sink} = portsOf(state);
     const handlers = reopenHandlersOf(ports);
     const first = handlers()();

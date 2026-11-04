@@ -177,6 +177,7 @@
   "Include the following optional files/directories": "Include the following optional files/directories",
   "Optional Files/Directories": "Optional Files/Directories",
   "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)": "[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)",
+  "[Starting Docker (show log)](command:remote-containers.revealLogTerminal)": "[Starting Docker (show log)](command:remote-containers.revealLogTerminal)",
   "'Reopen in SSH' not possible in current context.": "'Reopen in SSH' not possible in current context.",
   "'Reopen in Tunnel' not possible in current context.": "'Reopen in Tunnel' not possible in current context.",
   "'Reopen in WSL' not possible in current context.": "'Reopen in WSL' not possible in current context.",
@@ -263,5 +264,6 @@
   "Cannot attach to the container with name/id {0}, it no longer exists.": "Cannot attach to the container with name/id {0}, it no longer exists.",
   "Cannot attach to the container {0} ({1}){2}, it is not running.": "Cannot attach to the container {0} ({1}){2}, it is not running.",
   "Start Container": "Start Container",
-  "Choose Container": "Choose Container"
+  "Choose Container": "Choose Container",
+  "{0} in {1} ({2})": "{0} in {1} ({2})"
 }

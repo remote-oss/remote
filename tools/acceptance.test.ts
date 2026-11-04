@@ -488,7 +488,12 @@ const LAUNCH_ORDER = [
   'web-ui-trust',
   ...['containers-a', 'containers-b', 'containers-standdown'],
   'containers-no-proposals',
-  ...['containers-trust', 'containers-nodocker', 'containers-volume'],
+  ...[
+    'containers-trust',
+    'containers-nodocker',
+    'containers-volume',
+    'containers-config',
+  ],
   'containers-explorer',
   ...['containers-ports', 'containers-features', 'containers-shutdown'],
   ...['containers-index-broken', 'containers-index-down'],
@@ -1140,13 +1145,14 @@ describe('acceptance', () => {
     );
   });
 
-  it('coverage-84: Host x11-untrusted forwards X11 without the trusted request', () => {
+  it('coverage-84: Host x11-untrusted forwards X11 and refuses the trusted request in so many words, since Debian’s OpenSSH makes ForwardX11 alone trusted', () => {
     strictEqual(
       accountBlock('x11-untrusted'),
       [
         ...sharedLines('x11-untrusted', 'harness'),
         ...KEY_ALIAS_LINES,
         '  ForwardX11 yes',
+        '  ForwardX11Trusted no',
       ].join('\n'),
     );
   });
@@ -1166,6 +1172,7 @@ describe('acceptance', () => {
           ...sharedLines('x11-noauth', 'harness'),
           ...KEY_ALIAS_LINES,
           '  ForwardX11 yes',
+          '  ForwardX11Trusted no',
           '  XAuthLocation /nonexistent/xauth',
         ].join('\n'),
       ].join('\n---\n'),
@@ -1521,6 +1528,7 @@ describe('acceptance', () => {
             'containers-trust',
             'containers-nodocker',
             'containers-volume',
+            'containers-config',
           ].map(containersOnly),
           {
             folder: path.join('/run', 'extensions-containers-explorer'),
