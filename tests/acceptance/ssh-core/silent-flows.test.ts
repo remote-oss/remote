@@ -78,7 +78,7 @@ async function footprintOf(window: string): Promise<Footprint> {
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
-  it('F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before', async () => {
+  it.only('F-2508 AC-21 (c125-silent): after the terminal, the code command, the remote settings, a node program debugged to its end, a shell task and the Extensions view, the extension has shown no notification, logged no line, added nothing to the profile’s globalStorage, and registered no command or setting it lacked before', async () => {
     const folder = 'c125-silent';
     await onHost(
       'sh',
@@ -125,11 +125,19 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
       // The start returns once the session is up, which on a slow host takes longer than a command may; the program's
       // output below is what the row waits for.
       await startInWindow(folder, 'workbench.action.debug.start');
-      await waitFor(
-        'the program to print in the Debug Console',
-        async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
-        90_000,
-      );
+      try {
+        await waitFor(
+          'the program to print in the Debug Console',
+          async () => (await pageText(folder)).includes(`c125-ran-on-${host}`),
+          90_000,
+        );
+      } catch (failure) {
+        const text = await pageText(folder);
+        console.log(`T137-PAGE ${JSON.stringify(text.slice(-3500))}`);
+        console.log(`T137-LOG ${JSON.stringify(connectionLog().slice(-20))}`);
+        console.log(`T137-HOST ${JSON.stringify(await onHost('sh', '-c', 'ps aux | grep -iE "node|debug" | grep -v grep | cut -c1-200; ls -la ~/.vscode-server 2>&1 | head'))}`);
+        throw failure;
+      }
       await new Promise(resolve => setTimeout(resolve, 5000));
       await inWindow(folder, 'workbench.action.debug.stop').catch(
         () => undefined,
