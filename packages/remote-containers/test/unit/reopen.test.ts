@@ -40,14 +40,14 @@ async function reopened(state: Setup, rebuild?: RebuildOptions) {
   return {lines: linesOf(sink)};
 }
 
-/** Runs the command with the progress shown while the first check waits, and gives the order of what followed. */
+/** Runs the command with the progress shown while the configuration is read, and gives the order of what followed. */
 async function reopenedSlowly(state: Setup): Promise<string[]> {
   const release = pendingOf<undefined>();
-  state.waitOnCheck = release.promise;
+  state.waitOnRead = release.promise;
   const {ports} = portsOf(state);
   const running = handlerOf(ports)();
   await settled();
-  state.timers[0]?.callback();
+  state.timers[1]?.callback();
   release.resolve(undefined);
   await running;
   await settled();
@@ -499,7 +499,7 @@ describe('Reopen in Container', () => {
     await reopened(state);
     deepStrictEqual(
       [state.calls, state.commands],
-      [['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'], []],
+      [['ensureTrusted', 'firstCheck /w/p'], []],
     );
   });
 
@@ -510,18 +510,21 @@ describe('Reopen in Container', () => {
         await reopenedSlowly(state),
         state.timers.map(timer => timer.milliseconds),
       ],
-      [[`progress shown ${START}`, 'leave', 'progress closed', 'open'], [500]],
+      [
+        [`progress shown ${START}`, 'leave', 'progress closed', 'open'],
+        [2000, 500],
+      ],
     );
   });
 
   it('F-0408 AC-7: Cancel on the progress ends Reopen with no reload, no other notification and a line in the log', async () => {
     const state = setup();
     const release = pendingOf<undefined>();
-    state.waitOnCheck = release.promise;
+    state.waitOnRead = release.promise;
     const {ports, sink} = portsOf(state);
     const running = handlerOf(ports)();
     await settled();
-    state.timers[0]?.callback();
+    state.timers[1]?.callback();
     state.cancels[0]?.();
     release.resolve(undefined);
     await running;
@@ -560,10 +563,11 @@ describe('Reopen in Container', () => {
       answer(state);
       seen.push(await reopenedSlowly(state));
     }
-    deepStrictEqual(
-      seen,
-      answers.map(() => [`progress shown ${START}`, 'progress closed']),
-    );
+    deepStrictEqual(seen, [
+      [],
+      [`progress shown ${START}`, 'progress closed'],
+      [`progress shown ${START}`, 'progress closed'],
+    ]);
   });
 
   it('F-0301 6.2: no configuration opens nothing, runs the wizard once after the trust check, and says so in the log', async () => {
@@ -735,7 +739,6 @@ describe('Reopen in Container', () => {
           'ensureTrusted',
           'firstCheck /w/p',
           'firstCheck /w/p',
-          'readConfiguration /w/p',
           'readConfiguration /w/p',
         ],
         ['info: Reopen in Container is already running'],

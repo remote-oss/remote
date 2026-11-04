@@ -20,6 +20,8 @@ const CONFIGURATION: ConfigurationResult = {
   workspaceMount: undefined,
   mergedConfiguration: undefined,
 };
+const STARTING =
+  '[Starting Docker (show log)](command:remote-containers.revealLogTerminal)';
 const START =
   '[Reading Dev Container Configuration (show log)](command:remote-containers.revealLogTerminal)';
 
@@ -39,6 +41,8 @@ interface Scene {
   contents: Record<string, string>;
   pick: PickerAnswer;
   read: Promise<ConfigurationResult | CliFailure>;
+  /** The read waits for this before it answers; settled unless a row slows the read. */
+  readHold: Pending<undefined>;
   /** The check waits for this before it answers. */
   hold: Pending<undefined>;
   /** What the check does once the hold is released. */
@@ -55,12 +59,20 @@ interface Scene {
   sink: MemorySink;
 }
 
+/** A hold that has been released. */
+function settledHold(): Pending<undefined> {
+  const hold = pendingOf<undefined>();
+  hold.resolve(undefined);
+  return hold;
+}
+
 function sceneOf(): Scene {
   return {
     tree: ONE_FILE,
     contents: {},
     pick: {kind: 'picked', index: 0},
     read: Promise.resolve(CONFIGURATION),
+    readHold: settledHold(),
     hold: pendingOf<undefined>(),
     check: () => Promise.resolve('proceed'),
     order: [],
@@ -97,13 +109,13 @@ function portsOf(scene: Scene): PreReloadPorts {
     },
     config: {
       files: {
-        list: folder =>
-          Promise.resolve(
-            (scene.tree[folder] ?? []).map(name => ({
-              name,
-              kind: name.endsWith('.json') ? 'file' : 'folder',
-            })),
-          ),
+        list: async folder => {
+          await scene.readHold.promise;
+          return (scene.tree[folder] ?? []).map(name => ({
+            name,
+            kind: name.endsWith('.json') ? 'file' : 'folder',
+          }));
+        },
         read: file =>
           Promise.resolve(Buffer.from(scene.contents[file] ?? '{"image":"i"}')),
         exists: () => Promise.resolve(true),
@@ -131,9 +143,10 @@ function portsOf(scene: Scene): PreReloadPorts {
       },
       // eslint-disable-next-line id-length -- the choice's dependency is named cli
       cli: {
-        readConfiguration: (input, stdin, onEvent, cancellation) => {
+        readConfiguration: async (input, stdin, onEvent, cancellation) => {
           scene.order.push('readConfiguration');
           scene.signals.push(cancellation);
+          await scene.readHold.promise;
           return scene.read;
         },
       },
@@ -170,26 +183,42 @@ const REQUEST = {
   features: {defaultFeatures: {}, lockfile: true},
 };
 
-/** Runs the checks with the timer fired while the check waits, and the progress closed by the end. */
-async function slowRun(scene: Scene) {
+/** Starts the checks with the read slow, passes the check, and fires the S283 timer while the read waits. */
+async function slowStarted(scene: Scene) {
+  scene.readHold = pendingOf<undefined>();
   const running = beforeReload(portsOf(scene), REQUEST);
   await settled();
-  scene.timers[0]?.();
   scene.hold.resolve(undefined);
+  await settled();
+  scene.timers[1]?.();
+  return {running};
+}
+
+/** Runs the checks with S283 shown while the read waits, and the progress closed by the end. */
+async function slowRun(scene: Scene) {
+  const {running} = await slowStarted(scene);
+  scene.readHold.resolve(undefined);
   const outcome = await running;
   outcome.progress.close();
   await settled();
   return outcome.choice;
 }
 
-/** Runs the checks, shows the progress, presses its Cancel while the check waits, and gives how they ended. */
+/** Runs the checks, shows S283, presses its Cancel while the read waits, and gives how they ended. */
 async function cancelledRun(scene: Scene) {
-  const running = beforeReload(portsOf(scene), REQUEST);
-  await settled();
-  scene.timers[0]?.();
+  const {running} = await slowStarted(scene);
   scene.cancels[0]?.();
-  scene.hold.resolve(undefined);
+  scene.readHold.resolve(undefined);
   return running;
+}
+
+/** Runs the checks with the check released at once. */
+async function fastRun(scene: Scene) {
+  scene.hold.resolve(undefined);
+  const outcome = await beforeReload(portsOf(scene), REQUEST);
+  outcome.progress.close();
+  await settled();
+  return outcome;
 }
 
 function lines(scene: Scene): string[] {
@@ -197,14 +226,17 @@ function lines(scene: Scene): string[] {
 }
 
 describe('the checks before a reload (card containers-24, ruling (c))', () => {
-  it('ruling (c): the engine check and the CLI read run concurrently', async () => {
+  it('F-0202 AC-17, F-0206 BR-19: the checks run in order: the configuration is read only after the engine check passed', async () => {
     const scene = sceneOf();
     const running = beforeReload(portsOf(scene), REQUEST);
     await settled();
     const during = [...scene.order];
     scene.hold.resolve(undefined);
     await running;
-    deepStrictEqual(during, [`firstCheck ${FOLDER}`, 'readConfiguration']);
+    deepStrictEqual(
+      [during, scene.order],
+      [[`firstCheck ${FOLDER}`], [`firstCheck ${FOLDER}`, 'readConfiguration']],
+    );
   });
 
   it('ruling (c): a chosen configuration waits for the check', async () => {
@@ -231,29 +263,22 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     );
   });
 
-  it('ruling (c): when both fail, only the check dialog shows, the answer is stopped, and the read is logged', async () => {
+  it('F-0202 AC-17: when the check fails, only its dialog shows, the answer is stopped, and the configuration is not read', async () => {
     const scene = sceneOf();
-    scene.read = Promise.resolve({kind: 'configurationFailed', message: 'bad'});
     scene.check = async dialogs => {
       await dialogs.showError('Docker is missing', '', []);
       return 'stopped';
     };
-    const choice = await slowRun(scene);
+    const {choice} = await fastRun(scene);
     deepStrictEqual(
       [
         choice,
-        scene.order.filter(entry => /dialog|error/.test(entry)),
+        scene.order.filter(entry =>
+          /dialog|error|readConfiguration/.test(entry),
+        ),
         lines(scene),
       ],
-      [
-        {kind: 'stopped'},
-        ['check dialog Docker is missing'],
-        [
-          'info: Reading configuration',
-          'info: Reading configuration: 5 ms',
-          'info: the configuration was read while the engine check failed: configurationFailed',
-        ],
-      ],
+      [{kind: 'stopped'}, ['check dialog Docker is missing'], []],
     );
   });
 
@@ -298,11 +323,6 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
   });
 
   it('ruling (c): a surface closes the progress before it shows, on every surface', async () => {
-    const dialog = sceneOf();
-    dialog.check = async dialogs => {
-      await dialogs.showError('Docker', '', []);
-      return 'stopped';
-    };
     const picker = sceneOf();
     picker.tree = TWO_FILES;
     const warned = sceneOf();
@@ -315,15 +335,17 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       workspaceFolder: 'src',
     });
     const seen: unknown[] = [];
-    for (const scene of [dialog, picker, warned, preview, refused]) {
+    for (const scene of [picker, warned, preview, refused]) {
       await slowRun(scene);
-      const from = scene.order.findIndex(entry =>
+      const surfaces = scene.order.filter(
+        entry => entry !== 'readConfiguration',
+      );
+      const from = surfaces.findIndex(entry =>
         entry.startsWith('progress shown'),
       );
-      seen.push(scene.order.slice(from, from + 3));
+      seen.push(surfaces.slice(from, from + 3));
     }
     deepStrictEqual(seen, [
-      [`progress shown ${START}`, 'progress closed', 'check dialog Docker'],
       [`progress shown ${START}`, 'progress closed', 'pick'],
       [`progress shown ${START}`, 'progress closed', 'warning'],
       [`progress shown ${START}`, 'progress closed', 'preview'],
@@ -335,12 +357,66 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     ]);
   });
 
-  it('ruling (c): a fast run never shows the progress', async () => {
+  it('F-0202 AC-31, AC-33: a check that takes two seconds shows S332, and a check dialog closes it before it shows; S283 never shows', async () => {
     const scene = sceneOf();
-    scene.hold.resolve(undefined);
-    const {choice, progress} = await beforeReload(portsOf(scene), REQUEST);
-    progress.close();
+    scene.check = async dialogs => {
+      await dialogs.showError('Docker is missing', '', []);
+      return 'stopped';
+    };
+    const running = beforeReload(portsOf(scene), REQUEST);
+    await settled();
     scene.timers[0]?.();
+    scene.hold.resolve(undefined);
+    const outcome = await running;
+    await settled();
+    deepStrictEqual(
+      [outcome.choice, scene.order, scene.timers.length],
+      [
+        {kind: 'stopped'},
+        [
+          `firstCheck ${FOLDER}`,
+          `progress shown ${STARTING}`,
+          'progress closed',
+          'check dialog Docker is missing',
+        ],
+        1,
+      ],
+    );
+  });
+
+  it('F-0202 AC-32: Cancel on S332 ends the command cancelled, aborts the check, and reads nothing, though the check had not failed', async () => {
+    const scene = sceneOf();
+    const running = beforeReload(portsOf(scene), REQUEST);
+    await settled();
+    scene.timers[0]?.();
+    scene.cancels[0]?.();
+    const outcome = await running;
+    outcome.progress.close();
+    await settled();
+    deepStrictEqual(
+      [
+        outcome.choice,
+        scene.signals.map(signal => signal.aborted),
+        outcome.cancellation.aborted,
+        scene.order.includes('readConfiguration'),
+        lines(scene),
+      ],
+      [
+        {kind: 'cancelled'},
+        [true],
+        true,
+        false,
+        ['info: the command was cancelled while the engine was checked'],
+      ],
+    );
+  });
+
+  it('ruling (c): a fast run never shows a progress', async () => {
+    const scene = sceneOf();
+    const {choice} = await fastRun(scene);
+    for (const timer of scene.timers) {
+      timer();
+    }
     await settled();
     deepStrictEqual(
       [choice.kind, scene.order.filter(entry => entry.startsWith('progress'))],
@@ -348,12 +424,12 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     );
   });
 
-  it('ruling (c): a check that rejects answers stopped, logs it, closes the progress, shows nothing and leaves no unhandled rejection', async () => {
+  it('ruling (c): a check that rejects answers stopped, logs it, shows nothing and leaves no unhandled rejection', async () => {
     const scene = sceneOf();
     scene.check = () => Promise.reject(new Error('boom'));
     let choice: unknown;
     const unhandled = await unhandledDuring(async () => {
-      choice = await slowRun(scene);
+      choice = (await fastRun(scene)).choice;
     });
     deepStrictEqual(
       [
@@ -361,22 +437,12 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
         unhandled,
         lines(scene),
         scene.order.filter(entry =>
-          /^(pick|error|warning|preview|information|check dialog)/.test(entry),
+          /^(pick|error|warning|preview|information|check dialog|progress)/.test(
+            entry,
+          ),
         ),
-        scene.order.slice(-1),
       ],
-      [
-        {kind: 'stopped'},
-        [],
-        [
-          'info: Reading configuration',
-          'error: the engine check failed: boom',
-          'info: Reading configuration: 5 ms',
-          'info: the configuration was read while the engine check failed: configuration',
-        ],
-        [],
-        ['progress closed'],
-      ],
+      [{kind: 'stopped'}, [], ['error: the engine check failed: boom'], []],
     );
   });
 
@@ -387,7 +453,7 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       failing.reject('plain');
       return failing.promise;
     };
-    await slowRun(scene);
+    await fastRun(scene);
     deepStrictEqual(
       lines(scene).filter(line => line.startsWith('error')),
       ['error: the engine check failed: plain'],
@@ -432,7 +498,9 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     await beforeReload(portsOf(scene), REQUEST).catch((caught: unknown) => {
       failure = caught;
     });
-    scene.timers[0]?.();
+    for (const timer of scene.timers) {
+      timer();
+    }
     await settled();
     deepStrictEqual(
       [
@@ -443,9 +511,8 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
     );
   });
 
-  it('F-0408 AC-7: Cancel aborts the one signal the engine check and the read share, and the choice is cancelled with nothing shown', async () => {
+  it('F-0408 AC-7: Cancel on S283 aborts the read’s signal, and the choice is cancelled with nothing shown', async () => {
     const scene = sceneOf();
-    scene.check = () => Promise.resolve('stopped');
     scene.read = Promise.resolve({kind: 'cancelled'});
     const outcome = await cancelledRun(scene);
     await settled();
@@ -459,7 +526,7 @@ describe('the checks before a reload (card containers-24, ruling (c))', () => {
       ],
       [
         'cancelled',
-        [true, true],
+        [false, true],
         true,
         [`firstCheck ${FOLDER}`, 'readConfiguration'],
         ['info: the command was cancelled while reading the configuration'],

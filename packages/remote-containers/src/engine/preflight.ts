@@ -15,6 +15,7 @@ import {
 } from '../surfaces/engine-dialogs.ts';
 import {
   firstCheckOutcomeOf,
+  type FirstCheckOutcome,
   type QueryResult,
   type SecondCheckOutcome,
   secondCheckOutcomeOf,
@@ -167,6 +168,47 @@ async function shown(
   );
 }
 
+/** Runs `check` once, or, on a host that can start Docker Desktop, as the check of the check-and-start step. */
+async function checkedOrStarted(
+  desktop: DesktopPorts | undefined,
+  check: (signal: AbortSignal) => Promise<CheckResult>,
+  cancellation: AbortSignal,
+): Promise<void> {
+  if (desktop === undefined) {
+    await check(cancellation);
+  } else {
+    await checkAndStart({...desktop, check}, cancellation);
+  }
+}
+
+/** The first check's queries: the client version, then, if it ran, the structured version. */
+async function firstQueries(
+  dependencies: PreflightDependencies,
+  executable: Executable,
+  cancellation: AbortSignal,
+): Promise<QueryResult[]> {
+  if (executable.kind !== 'spawn') {
+    return [];
+  }
+  const first = await query(
+    dependencies,
+    executable,
+    ['--version'],
+    cancellation,
+  );
+  return succeeded(first)
+    ? [
+        first,
+        await query(
+          dependencies,
+          executable,
+          ['version', '--format', '{{json .}}'],
+          cancellation,
+        ),
+      ]
+    : [first];
+}
+
 /**
  * The first check, before a reload or a picker: the client version, then the structured version. It shows one modal
  * error dialog for any outcome but a pass and resolves `proceed` for a pass and for the dialog's "Ignore", `stopped`
@@ -189,26 +231,18 @@ export async function firstCheck(
       dashHostDialogOf(dashHost, dependencies.translate),
     );
   }
-  const queries: QueryResult[] = [];
-  if (executable.kind === 'spawn') {
-    const first = await query(
-      dependencies,
-      executable,
-      ['--version'],
-      cancellation,
-    );
-    queries.push(first);
-    if (succeeded(first)) {
-      queries.push(
-        await query(
-          dependencies,
-          executable,
-          ['version', '--format', '{{json .}}'],
-          cancellation,
-        ),
-      );
-    }
-  }
+  const viaSsh = endpoint !== undefined && sshHostOf(endpoint) !== undefined;
+  let queries: QueryResult[] = [];
+  let outcome: FirstCheckOutcome = 'passed';
+  const check = async (signal: AbortSignal): Promise<CheckResult> => {
+    queries = await firstQueries(dependencies, executable, signal);
+    outcome = firstCheckOutcomeOf(executable, queries, viaSsh);
+    const last = queries.at(-1);
+    return outcome === 'passed'
+      ? {ok: true}
+      : {ok: false, errorText: last?.kind === 'ran' ? last.stderr : ''};
+  };
+  await checkedOrStarted(dependencies.desktop, check, cancellation);
   if (cancellation.aborted) {
     return 'stopped';
   }
@@ -220,11 +254,6 @@ export async function firstCheck(
   ) {
     dependencies.logger.info(API_CHECK_SKIPPED);
   }
-  const outcome = firstCheckOutcomeOf(
-    executable,
-    queries,
-    endpoint !== undefined && sshHostOf(endpoint) !== undefined,
-  );
   if (outcome === 'passed') {
     return 'proceed';
   }
@@ -253,11 +282,7 @@ export async function secondCheck(
       ? {ok: true}
       : {ok: false, errorText: result.kind === 'ran' ? result.stderr : ''};
   };
-  if (dependencies.desktop === undefined) {
-    await check(cancellation);
-  } else {
-    await checkAndStart({...dependencies.desktop, check}, cancellation);
-  }
+  await checkedOrStarted(dependencies.desktop, check, cancellation);
   return latest;
 }
 

@@ -83,14 +83,6 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/engine/starting-docker.ts",
-      "card": "#2064",
-      "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/explorer/credentials-welcome.ts",
       "card": "#2064",
       "slice": "part A",
