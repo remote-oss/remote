@@ -34,6 +34,17 @@ async function dialogOfReopen(name: string): Promise<{
   return {dialog: await waitForDialog(name, 120_000), running};
 }
 
+/** Waits until window `name` is on the dev container authority and the folder's container exists: the authority comes first, while the window still resolves. */
+async function waitForContainer(name: string, folder: string): Promise<void> {
+  await waitFor(
+    `the container of ${folder}`,
+    async () =>
+      (await windowState(name)).remoteName === 'dev-container' &&
+      (await devContainersOf(folder)).length === 1,
+    300_000,
+  );
+}
+
 /** The limits a container's host configuration holds, as the engine reports them. */
 async function limitsOf(containerId: string): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
@@ -65,7 +76,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
       {
         messages: shown.map(dialog => dialog.message),
         details: shown.map(dialog =>
-          /^Docker daemon: CPUs \d+, RAM [\d.]+gb(, GPU)?\ndevcontainer\.json: CPUs 4096$/.test(
+          /^Docker daemon: CPUs \d+, RAM [\d.]+gb(, GPU)?\s*devcontainer\.json: CPUs 4096$/.test(
             dialog.details,
           ),
         ),
@@ -97,11 +108,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
       const {running} = await dialogOfReopen(name);
       await answerDialog(name, 'Continue');
       await running;
-      await waitFor(
-        `window ${name} to connect`,
-        async () => (await windowState(name)).remoteName === 'dev-container',
-        300_000,
-      );
+      await waitForContainer(name, folder);
       const [containerId = ''] = await devContainersOf(folder);
       deepStrictEqual(
         {
@@ -131,8 +138,8 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
     await answerDialog(name, 'Cancel');
     await running;
     deepStrictEqual(
-      dialog.details.split('\n')[1],
-      'devcontainer.json: CPUs 4096, RAM 68.4gb, disk 68.4gb, GPU',
+      /devcontainer\.json: (.+)$/.exec(dialog.details)?.[1],
+      'CPUs 4096, RAM 68.4gb, disk 68.4gb, GPU',
     );
     await closeWindow(name);
   });
@@ -150,11 +157,7 @@ describe('Host requirements rows (card containers-202, F-0206)', function () {
       const name = await openFolderWindow(folder);
       const running = inWindow(name, 'remote-containers.reopenInContainer');
       running.catch(() => undefined);
-      await waitFor(
-        `window ${name} to connect`,
-        async () => (await windowState(name)).remoteName === 'dev-container',
-        300_000,
-      );
+      await waitForContainer(name, folder);
       await running;
       deepStrictEqual((await devContainersOf(folder)).length, 1);
       await closeWindow(name);
