@@ -443,20 +443,29 @@ describe('the reopen notification (card containers-23, F-0402)', () => {
     );
   });
 
-  it('F-0302 BR-12, AC-26: a saved workspace of two folders whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
-    const scene = workspaceScene('saved', 2);
+  /** What a workspace of two folders shows and is asked when its second folder would have an external configuration. */
+  async function twoFoldersWithExternal(
+    workspace: 'saved' | 'untitled',
+  ): Promise<[unknown, boolean[]]> {
+    const scene = workspaceScene(workspace, 2);
     scene.configuration = 'none';
     scene.rootKinds = {'/w/q': 'external'};
     await offered(scene);
-    deepStrictEqual([scene.shown, scene.askedExternal], [[], [false, false]]);
+    return [scene.shown, scene.askedExternal];
+  }
+
+  it('F-0302 BR-12, AC-26: a saved workspace of two folders whose only configuration would be a stored or mirrored one shows nothing, and no root is asked to look outside its folder', async () => {
+    deepStrictEqual(await twoFoldersWithExternal('saved'), [
+      [],
+      [false, false],
+    ]);
   });
 
   it('F-0302 BR-12: an unsaved workspace of two folders is not asked to look outside its folders either', async () => {
-    const scene = workspaceScene('untitled', 2);
-    scene.configuration = 'none';
-    scene.rootKinds = {'/w/q': 'external'};
-    await offered(scene);
-    deepStrictEqual([scene.shown, scene.askedExternal], [[], [false, false]]);
+    deepStrictEqual(await twoFoldersWithExternal('untitled'), [
+      [],
+      [false, false],
+    ]);
   });
 
   it('F-0302 AC-3: a window with one folder is asked to look outside it, and an external configuration gives S368', async () => {
