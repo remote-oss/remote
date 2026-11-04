@@ -1252,6 +1252,15 @@ function processIsGone(processId: number): boolean {
   }
 }
 
+/** The process and process group of the harness itself, which no kill may reach (tooling-67). */
+function harnessProcess(): {processId: number; group: number} {
+  return {
+    processId: process.pid,
+    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
+      .group,
+  };
+}
+
 /**
  * Kills window `name`'s processes at once (SIGKILL): its process group, its main process, or its whole
  * tree. The main process is the editor process the run started: the run is this test's own parent, so the
@@ -1266,11 +1275,7 @@ export async function killWindow(
 ): Promise<void> {
   const processId = windowProcessId(name);
   const tree = processTreeOf('/proc');
-  const own = {
-    processId: process.pid,
-    group: processStatOf(process.pid, readFileSync('/proc/self/stat', 'utf8'))
-      .group,
-  };
+  const own = harnessProcess();
   function refuse(
     target:
       | {kind: 'group'; group: number}
@@ -1375,6 +1380,14 @@ export async function closeContained(
   }
   const host = liveProcessIdOf(name);
   if (host !== undefined) {
+    // The same refusal as killWindow's: a host that is the harness itself or an ancestor of it is never killed.
+    const refused = refusedTargets(processTreeOf('/proc'), harnessProcess(), {
+      kind: 'processes',
+      processIds: [host],
+    });
+    if (refused.length > 0) {
+      throw new Error(`closeContained(${name}) refused: ${refused.join('; ')}`);
+    }
     try {
       process.kill(host, 'SIGKILL');
     } catch {
