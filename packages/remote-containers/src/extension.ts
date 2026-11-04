@@ -7,6 +7,8 @@ import {appendFileSync, readFileSync, watch} from 'node:fs';
 import {
   mkdir,
   mkdtemp,
+  appendFile,
+  mkdir,
   readdir,
   readFile,
   realpath,
@@ -38,11 +40,14 @@ import {
   runtimeFolder,
 } from 'lib-helper';
 import {type CommandHandler, identifierHost} from 'lib-identifiers';
-import type {Logger, RevealableChannel} from 'lib-log';
+import type {Logger, Sink} from 'lib-log';
 import {profileOf} from 'lib-product';
 import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
-import {containersChannelPortFor} from './acceptance-log.ts';
+import {containersLogMirrorOf} from './acceptance-log.ts';
+import {logFileNameOf} from './logging/log-files.ts';
+import {logFileSinkOf} from './logging/log-file-sink.ts';
+import {logTerminalOf} from './logging/log-terminal.ts';
 import {activateContainers} from './activation.ts';
 import {refreshCliBin} from './cli-bin/cli-bin.ts';
 import {nodeCliBinFs} from './cli-bin/node-cli-bin-fs.ts';
@@ -211,6 +216,7 @@ import {
   commands,
   contextKeys,
   enabledApiProposals,
+  runtimeCommands,
   settings,
   standDown,
   views,
@@ -811,7 +817,6 @@ export async function activate(
   const profile = profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
-  let logChannel: RevealableChannel | undefined;
   /** The lines of the connect attempt that is running or has failed, which a failure dialog writes to a file. */
   const attemptLog = createAttemptLog();
   /** What the window's connection says of its target, for the commands that edit its configuration; the connector gives it once it exists. */
@@ -826,12 +831,78 @@ export async function activate(
   };
   /** Tells the shutdown helper that this window leaves its container; the connector gives it once it exists. */
   const windowShutdown = {leave: (): Promise<void> => Promise.resolve()};
-  const channelPort = containersChannelPortFor(
-    process.env,
-    vscode.window,
-    (file, text) => {
-      appendFileSync(file, text);
+  /** The start of this activation, which names its log file and zeroes the log terminal's clock. */
+  const activationStart = new Date();
+  const logFolder = context.logUri.fsPath;
+  const logFilePath = path.join(
+    logFolder,
+    logFileNameOf('remoteContainers', activationStart),
+  );
+  const logFile = logFileSinkOf(
+    {
+      makeFolder: async folder => {
+        await mkdir(folder, {recursive: true});
+      },
+      append: (file, text) => appendFile(file, text),
+      failed: reason => {
+        console.error(
+          `The Dev Containers log file cannot be written: ${reason}`,
+        );
+      },
     },
+    logFolder,
+    logFilePath,
+  );
+  const logMirror = containersLogMirrorOf(process.env, (file, text) => {
+    appendFileSync(file, text);
+  });
+  /** The log lines the attempt log and the harness's file also get. */
+  const alsoLogged: Sink = {
+    write: line => {
+      attemptLog.write(line);
+      logMirror?.write(line);
+    },
+  };
+  let logTerminal: vscode.Terminal | undefined;
+  /** Shows the "Dev Containers" terminal, made on the first call and again after it was closed. */
+  function revealLogTerminal(): void {
+    if (logTerminal === undefined) {
+      const written = new vscode.EventEmitter<string>();
+      const terminal = logTerminalOf(
+        {
+          bytes: () => logFile.bytes(),
+          flushed: () => logFile.flushed(),
+          subscribe: listener => logFile.subscribe(listener),
+          read: () => readFile(logFilePath),
+        },
+        text => {
+          written.fire(text);
+        },
+        activationStart.getTime(),
+      );
+      logTerminal = vscode.window.createTerminal({
+        name: 'Dev Containers',
+        // eslint-disable-next-line id-length -- the editor's name for the option
+        pty: {
+          onDidWrite: written.event,
+          open: () => {
+            terminal.open();
+          },
+          close: () => {
+            terminal.close();
+            written.dispose();
+            logTerminal = undefined;
+          },
+        },
+      });
+    }
+    logTerminal.show();
+  }
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      runtimeCommands.revealLogTerminal,
+      revealLogTerminal,
+    ),
   );
   const configFiles = configFilesOf(
     {
@@ -1011,7 +1082,7 @@ export async function activate(
             dialogs: {
               show: modalShown,
               revealLog: () => {
-                logChannel?.show(true);
+                revealLogTerminal();
               },
             },
             hasUnsavedChanges: file =>
@@ -1152,13 +1223,8 @@ export async function activate(
     },
     standDown: standDownHost(vscode),
     commands: identifierHost(vscode, manifest),
-    channels: {
-      createOutputChannel: name => {
-        logChannel = channelPort.createOutputChannel(name);
-        return logChannel;
-      },
-    },
-    alsoLogTo: attemptLog,
+    logFile,
+    alsoLogTo: alsoLogged,
     clock: Date.now,
     banner: {
       displayName: manifest.displayName,
@@ -1204,7 +1270,7 @@ export async function activate(
           openExternal: address =>
             Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
           revealLog: () => {
-            logChannel?.show(true);
+            revealLogTerminal();
           },
         },
         translate,
@@ -1603,7 +1669,7 @@ export async function activate(
               ),
             ),
           revealLog: () => {
-            logChannel?.show(true);
+            revealLogTerminal();
           },
         },
         served.logger,
@@ -2055,7 +2121,7 @@ export async function activate(
             ...buttons,
           ),
         revealLog: () => {
-          logChannel?.show(true);
+          revealLogTerminal();
         },
         attach: k8sWindowOpenerOf({
           registerLabel: (decoded, suffix) => {
@@ -2694,7 +2760,7 @@ export async function activate(
       clock: Date.now,
       logger,
       revealLog: () => {
-        logChannel?.show(true);
+        revealLogTerminal();
       },
     });
     windowShutdown.leave = () => connector.leaveShutdown();
@@ -2787,7 +2853,7 @@ export async function activate(
     const registrationServed = {
       resolversGranted: !served.missing.includes('resolvers'),
       revealLog: () => {
-        logChannel?.show(true);
+        revealLogTerminal();
       },
       logger,
     };

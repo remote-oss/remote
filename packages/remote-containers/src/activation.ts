@@ -12,13 +12,7 @@ import {
   type CommandHost,
   registerCommands,
 } from 'lib-identifiers';
-import {
-  createChannelSink,
-  createLogger,
-  type EditorLogPort,
-  type Logger,
-  type Sink,
-} from 'lib-log';
+import {createLogger, type Logger, type Sink} from 'lib-log';
 import {standDownIfPresent, type StandDownHost} from 'lib-standdown';
 import type {PreflightDependencies} from './engine/preflight.ts';
 import type {TrustPort} from './trust/trust-gate.ts';
@@ -70,8 +64,9 @@ export interface ContainersActivationInputs<
   standDownTexts: {warning: string; button: string};
   standDown: StandDownHost;
   commands: CommandHost;
-  channels: Pick<EditorLogPort, 'createOutputChannel'>;
-  /** A second sink for the log's lines, which get it after they are masked, as the channel's do. */
+  /** The activation's log file: every line of the log is appended to it, after it is masked. */
+  logFile: Sink;
+  /** A second sink for the log's lines, which get it after they are masked, as the file's do. */
   alsoLogTo: Sink;
   clock: () => number;
   banner: BannerFacts;
@@ -99,13 +94,10 @@ export type ContainersActivation =
       dispose(): void;
     };
 
-/** The name of the log channel. */
-const CHANNEL_NAME = 'Dev Containers';
-
 /**
- * Runs the activation. On `standing` nothing has been opened or registered. On `serving` the log channel is open and
- * the commands are registered whatever the setup found; `dispose` undoes both. A failing setup or registration
- * closes the channel and fails the activation.
+ * Runs the activation. On `standing` nothing has been logged or registered. On `serving` the log has its first lines and
+ * the commands are registered whatever the setup found; `dispose` unregisters the commands. A failing setup or
+ * registration fails the activation.
  */
 export async function activateContainers<
   Commands extends Readonly<Record<string, CommandEntry>>,
@@ -122,11 +114,10 @@ export async function activateContainers<
   if (outcome === 'standing') {
     return {kind: 'standing'};
   }
-  const sink = createChannelSink(inputs.channels, CHANNEL_NAME);
   const logger = createLogger(
     {
       write: line => {
-        sink.write(line);
+        inputs.logFile.write(line);
         inputs.alsoLogTo.write(line);
       },
     },
@@ -140,51 +131,40 @@ export async function activateContainers<
   );
   logger.info('Initializing configuration support...');
   logger.info('Internal initialization of dev container support package...');
-  try {
-    const ports = inputs.gate(message => {
-      logger.error(message);
-    });
-    const setup = await runSetup(ports, true);
-    const missing = setup.decision.missing;
-    if (missing.length > 0) {
-      logger.info(`Missing proposed APIs: ${missing.join(', ')}`);
-    }
-    const served: ServedWindow = {
-      logger,
-      preflight: inputs.preflight(logger),
-      missing,
-      trust: inputs.trust,
-      setupAgain: () => runSetup(ports, false),
-    };
-    const handlers = inputs.handlers(served);
-    const registrations = [
-      registerCommands(inputs.commands, outcome, table.commands, handlers),
-    ];
-    return {
-      kind: 'serving',
-      served,
-      setup: setup.interaction,
-      registerDeferred: () => {
-        if (registrations.length === 1) {
-          registrations.push(
-            registerCommands(
-              inputs.commands,
-              outcome,
-              inputs.deferred,
-              handlers,
-            ),
-          );
-        }
-      },
-      dispose: () => {
-        registrations.forEach(registration => {
-          registration.dispose();
-        });
-        sink.dispose();
-      },
-    };
-  } catch (caught) {
-    sink.dispose();
-    throw caught;
+  const ports = inputs.gate(message => {
+    logger.error(message);
+  });
+  const setup = await runSetup(ports, true);
+  const missing = setup.decision.missing;
+  if (missing.length > 0) {
+    logger.info(`Missing proposed APIs: ${missing.join(', ')}`);
   }
+  const served: ServedWindow = {
+    logger,
+    preflight: inputs.preflight(logger),
+    missing,
+    trust: inputs.trust,
+    setupAgain: () => runSetup(ports, false),
+  };
+  const handlers = inputs.handlers(served);
+  const registrations = [
+    registerCommands(inputs.commands, outcome, table.commands, handlers),
+  ];
+  return {
+    kind: 'serving',
+    served,
+    setup: setup.interaction,
+    registerDeferred: () => {
+      if (registrations.length === 1) {
+        registrations.push(
+          registerCommands(inputs.commands, outcome, inputs.deferred, handlers),
+        );
+      }
+    },
+    dispose: () => {
+      registrations.forEach(registration => {
+        registration.dispose();
+      });
+    },
+  };
 }

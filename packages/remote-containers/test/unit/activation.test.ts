@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ProposalName} from 'lib-authority';
-import {createLogger} from 'lib-log';
+import {createLogger, defaultFormat} from 'lib-log';
 import {recordingSetupPorts} from 'lib-authority/testing/recording-setup-ports';
 import type {CommandEntry} from 'lib-identifiers';
 import type {StandDownHost} from 'lib-standdown';
@@ -124,17 +124,12 @@ function surroundings(options: Options): {
       },
       showOutOfContext: () => undefined,
     },
-    channels: {
-      createOutputChannel: name => {
-        seen.events.push(`channel ${name}`);
-        return {
-          appendLine: text => {
-            seen.channelLines.push(text);
-          },
-          dispose: () => {
-            seen.events.push('channel disposed');
-          },
-        };
+    logFile: {
+      write: line => {
+        if (seen.channelLines.length === 0) {
+          seen.events.push('log file');
+        }
+        seen.channelLines.push(defaultFormat(line));
       },
     },
     clock: () => new Date(2026, 9, 14, 0, 0, 0, 0).getTime(),
@@ -219,7 +214,7 @@ describe('the activation', () => {
         'serving',
         [
           'context remote-containers:standingDown=false',
-          'channel Dev Containers',
+          'log file',
           'gate',
           'probe',
           'preflight',
@@ -394,7 +389,7 @@ describe('the activation', () => {
     );
   });
 
-  it('F-0101.BR-9: a gate that throws fails the activation, closes the channel and registers nothing', async () => {
+  it('F-0101.BR-9: a gate that throws fails the activation and registers nothing', async () => {
     const {inputs, seen} = surroundings({otherRuns: false, gateThrows: true});
     const failure = await activateContainers(inputs).catch(
       (caught: unknown) => (caught as Error).message,
@@ -405,13 +400,7 @@ describe('the activation', () => {
     );
   });
 
-  it('F-0101.BR-9: a gate that throws closes the channel', async () => {
-    const {inputs, seen} = surroundings({otherRuns: false, gateThrows: true});
-    await activateContainers(inputs).catch(() => undefined);
-    deepStrictEqual(seen.events.at(-1), 'channel disposed');
-  });
-
-  it('F-0101.BR-10: a registration that throws fails the activation and closes the channel', async () => {
+  it('F-0101.BR-10: a registration that throws fails the activation', async () => {
     const {inputs, seen} = surroundings({
       otherRuns: false,
       registerThrows: true,
@@ -420,8 +409,8 @@ describe('the activation', () => {
       (caught: unknown) => (caught as Error).message,
     );
     deepStrictEqual(
-      [failure, seen.events.at(-1)],
-      ['cannot register', 'channel disposed'],
+      [failure, seen.events.filter(event => event.startsWith('register'))],
+      ['cannot register', []],
     );
   });
 
@@ -434,7 +423,7 @@ describe('the activation', () => {
     );
   });
 
-  it('containers-01: the served window gives the handlers a logger that writes to the channel', async () => {
+  it('containers-01: the served window gives the handlers a logger that writes to the log file', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     await activateContainers({
       ...inputs,
@@ -478,13 +467,12 @@ describe('the activation', () => {
           'unregister remote-containers.alpha',
           'unregister remote-containers.beta',
           'unregister remote-containers.gamma',
-          'channel disposed',
         ],
       ],
     );
   });
 
-  it('containers-01: disposing the result unregisters every command once, then closes the channel once', async () => {
+  it('containers-01: disposing the result unregisters every command once', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     const result = await activateContainers(inputs);
     seen.events.length = 0;
@@ -494,7 +482,6 @@ describe('the activation', () => {
     deepStrictEqual(seen.events, [
       'unregister remote-containers.alpha',
       'unregister remote-containers.beta',
-      'channel disposed',
     ]);
   });
 });
