@@ -23,6 +23,7 @@ export {multiDistroAllowed, windowsBuildFromRelease} from './windows-build.ts';
 export {
   distroToShare,
   isWindowsMountShape,
+  mountToWindows,
   parseWslpathOutput,
   shareToDistro,
   type ShareResult,

@@ -103,6 +103,14 @@
       "card": "#2163",
       "slice": "authoring release 2",
       "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/engine-host-of.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-18 (2026-11-04): the engine host choice per command; the adapter and the wiring in the next commits of the card consume it"
     }
   ]
 }

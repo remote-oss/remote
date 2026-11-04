@@ -322,6 +322,9 @@ importers:
       lib-standdown:
         specifier: workspace:*
         version: link:../lib-standdown
+      lib-wsl:
+        specifier: workspace:*
+        version: link:../lib-wsl
       yaml:
         specifier: 2.9.1
         version: 2.9.1

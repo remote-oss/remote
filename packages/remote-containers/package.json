@@ -801,6 +801,7 @@
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-standdown": "workspace:*",
+    "lib-wsl": "workspace:*",
     "yaml": "2.9.1"
   }
 }
