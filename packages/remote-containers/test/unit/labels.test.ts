@@ -166,6 +166,21 @@ describe('how a folder is labelled and its container chosen', () => {
     );
   });
 
+  it('F-0507 AC-24 (reading-2140-twin): a running container with an exited twin of the same pair that is older is the one used, and no container is created', () => {
+    deepStrictEqual(
+      decide(FOLDER, CONFIG, [
+        container('running', 'running', LATER),
+        container('exited', 'exited', EARLIER),
+      ]),
+      {
+        kind: 'use',
+        containerId: 'running',
+        status: 'running',
+        idLabels: STANDARD,
+      },
+    );
+  });
+
   it('F-0409 AC-25: a container being removed is not a candidate', () => {
     deepStrictEqual(
       [

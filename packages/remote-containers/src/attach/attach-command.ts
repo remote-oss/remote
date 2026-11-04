@@ -17,7 +17,11 @@ import {
   type AttachConfigFiles,
   workspaceFolderOf,
 } from './config-files.ts';
-import {type AttachItem, runningItemsOf} from './containers.ts';
+import {
+  inspectArguments,
+  listedContainersOf,
+} from '../explorer/listed-containers.ts';
+import {type AttachItem, itemOf, runningItemsOf} from './containers.ts';
 import {attachedSuffixOf} from './label.ts';
 import {attachPickKeyOf} from './pick-record.ts';
 import {type AttachedTarget, attachedPayloadOf} from './payload.ts';
@@ -25,6 +29,7 @@ import {type AttachedTarget, attachedPayloadOf} from './payload.ts';
 /** The English templates of the dialogs this command shows. */
 const COMMAND_TEMPLATES = {
   S365: 'There are no running containers to attach to.',
+  S034: 'An error occurred setting up the container.',
   S143: 'Docker returned an error.',
   confirm: 'OK',
 } as const;
@@ -97,19 +102,12 @@ async function folderOf(
   }
 }
 
-/** Runs the command. */
-export async function attachToRunningContainer(
+/** The item the user picks from the running containers, none when the list failed, is empty or the picker is dismissed. */
+async function pickedItem(
   ports: AttachPorts,
-): Promise<void> {
+  engine: EngineHost,
+): Promise<AttachItem | undefined> {
   const {translate, logger} = ports;
-  if (!(await ports.warning())) {
-    return;
-  }
-  const engine = ports.engine();
-  const checked = await ports.checks(ports.cancellation);
-  if (engine === undefined || checked === 'stopped') {
-    return;
-  }
   const picker = ports.openPicker();
   const items = await runningItemsOf(engine, ports.cancellation);
   if ('failed' in items) {
@@ -120,7 +118,7 @@ export async function attachToRunningContainer(
       items.failed,
       translate(COMMAND_TEMPLATES.confirm),
     );
-    return;
+    return undefined;
   }
   if (items.length === 0) {
     picker.close();
@@ -129,10 +127,63 @@ export async function attachToRunningContainer(
       translate(COMMAND_TEMPLATES.S365),
       translate(COMMAND_TEMPLATES.confirm),
     );
-    return;
+    return undefined;
   }
   picker.fill(items);
-  const item = await picker.chosen;
+  return picker.chosen;
+}
+
+/**
+ * The item of the container `containerId` a row stands for, whatever its state: a container that is not running is
+ * attached to as well, and its own window says so. A container that is gone is told in a dialog, and gives none.
+ */
+async function rowItem(
+  ports: AttachPorts,
+  engine: EngineHost,
+  containerId: string,
+): Promise<AttachItem | undefined> {
+  const inspected = await engine.run(
+    inspectArguments([containerId]),
+    {kind: 'none'},
+    {cancellation: ports.cancellation},
+  );
+  const found =
+    inspected.kind === 'ran'
+      ? listedContainersOf(inspected.stdout)?.[0]
+      : undefined;
+  if (found === undefined) {
+    ports.logger.warn(`the container of the row is gone: ${containerId}`);
+    await ports.showModal(
+      '',
+      ports.translate(COMMAND_TEMPLATES.S034),
+      ports.translate(COMMAND_TEMPLATES.confirm),
+    );
+    return undefined;
+  }
+  return itemOf(found);
+}
+
+/**
+ * Runs the command: on the container a row of another extension's view stands for when `rowContainer` is given, else
+ * on the container the user picks.
+ */
+export async function attachToRunningContainer(
+  ports: AttachPorts,
+  rowContainer?: string,
+): Promise<void> {
+  const {translate, logger} = ports;
+  if (!(await ports.warning())) {
+    return;
+  }
+  const engine = ports.engine();
+  const checked = await ports.checks(ports.cancellation);
+  if (engine === undefined || checked === 'stopped') {
+    return;
+  }
+  const item =
+    rowContainer === undefined
+      ? await pickedItem(ports, engine)
+      : await rowItem(ports, engine, rowContainer);
   if (item === undefined) {
     return;
   }

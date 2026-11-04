@@ -130,11 +130,20 @@ export interface InspectVolumePorts {
 
 /**
  * "Explore a Volume in a Dev Container": the picker over every volume, once the listing is in, and the window of the
- * volume that was picked. A dismissed picker changes nothing; an engine that cannot list is logged and shows nothing
+ * volume that was picked, or of the volume a row of another extension's view stands for when `rowVolume` is given. A dismissed picker changes nothing; an engine that cannot list is logged and shows nothing
  * of ours.
  */
-export async function inspectVolume(ports: InspectVolumePorts): Promise<void> {
+export async function inspectVolume(
+  ports: InspectVolumePorts,
+  rowVolume?: string,
+): Promise<void> {
   if (!(await ports.engineReady())) {
+    return;
+  }
+  if (rowVolume !== undefined) {
+    await ports.reload(
+      inspectWindowUriOf(inspectTargetOf(rowVolume, ports.engine())),
+    );
     return;
   }
   let volumes: ListedVolume[];

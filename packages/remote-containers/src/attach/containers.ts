@@ -36,7 +36,7 @@ export interface ListingFailed {
 }
 
 /** The item of a container. */
-function itemOf(container: ListedContainer): AttachItem {
+export function itemOf(container: ListedContainer): AttachItem {
   return {
     label: `/${container.name}`,
     description: `${container.image} ${container.id}`,

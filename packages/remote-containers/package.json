@@ -42,6 +42,7 @@
     "onResolveRemoteAuthority:dev-container",
     "onResolveRemoteAuthority:attached-container",
     "onResolveRemoteAuthority:k8s-container",
+    "onDebugResolve:extensionHost",
     "onStartupFinished"
   ],
   "enabledApiProposals": [
@@ -237,6 +238,16 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.attachToRunningContainerFromViewlet",
+        "title": "%commands.attachToRunningContainerFromViewlet.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.inspectVolumeFromViewlet",
+        "title": "%commands.inspectVolumeFromViewlet.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.attachToK8sContainer",
         "title": "%commands.attachToK8sContainer.title%",
         "category": "Dev Containers"
@@ -386,6 +397,14 @@
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.attachToRunningContainerFromViewlet",
+          "when": "false"
+        },
+        {
+          "command": "remote-containers.inspectVolumeFromViewlet",
+          "when": "false"
+        },
+        {
           "command": "remote-containers.attachToK8sContainerFromViewlet",
           "when": "false"
         },
@@ -515,6 +534,16 @@
           "command": "remote-containers.openInformationAboutMountPerformance",
           "group": "inline@1",
           "when": "view == detailsContainers && viewItem == mountPerformance && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToRunningContainerFromViewlet",
+          "group": "containers_1_general@2",
+          "when": "viewItem =~ /runningContainer/i && (view == dockerContainers || view == vscode-containers.views.containers) && !hideConnectCommands && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.inspectVolumeFromViewlet",
+          "group": "volumes_1_general@2",
+          "when": "viewItem == volume && (view == dockerVolumes || view == vscode-containers.views.volumes) && !hideConnectCommands && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.attachToK8sContainerFromViewlet",

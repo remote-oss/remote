@@ -165,8 +165,10 @@ import {
   recoveryTargetOf,
 } from './volumes/recovery-container.ts';
 import {volumeTargetOf} from './volumes/volume-payload.ts';
+import {viewletContainerOf, viewletVolumeOf} from './explorer/viewlet-row.ts';
 import {
   type AttachPicker,
+  type AttachPorts,
   attachToRunningContainer,
 } from './attach/attach-command.ts';
 import type {AttachItem} from './attach/containers.ts';
@@ -1213,42 +1215,105 @@ export async function activate(
           logger: served.logger,
         };
       }
-      /** Explore a Volume in a Dev Container: the picker of the daemon's volumes, and the window of the one picked. */
-      async function exploreVolume(): Promise<void> {
-        const engine = await windowPinnedEngine();
-        await inspectVolume({
-          engineReady: async () =>
-            (await firstCheck(
+      /** Attach to Running Container's ports, over the editor and this machine. */
+      function attachPortsOf(): AttachPorts {
+        return {
+          warning: () => attachWarningAsked(context.globalState),
+          recordPick: key => recordAttachPick(context.globalState, key),
+          engine: () =>
+            engineOfWindow(windowEnginePortsOf(served.preflight), undefined),
+          checks: cancellation =>
+            firstCheck(
               served.preflight,
               engineBaseOf({
                 folder: firstFolder(),
                 trusted: vscode.workspace.isTrusted,
               }),
-              new AbortController().signal,
-            )) === 'proceed',
-          volumes: () =>
-            volumeListing?.volumes() ??
-            Promise.reject(new Error('the engine is not ready')),
-          pick: async rows => {
-            const picked = await vscode.window.showQuickPick(
-              rows.map(entry => ({...entry})),
-              {placeHolder: translate(INSPECT_TEMPLATES.S319)},
+              cancellation,
+            ),
+          openPicker: () => attachPickerOf(translate),
+          showModal: (message, detail, button) =>
+            vscode.window.showErrorMessage(
+              message,
+              {modal: true, detail},
+              {title: button, isCloseAffordance: true},
+            ),
+          configFiles: (image, name) =>
+            attachConfigFilesOf(context.globalStorageUri.fsPath, image, name),
+          exists: file =>
+            stat(file).then(
+              () => true,
+              () => false,
+            ),
+          readText: file => readFile(file, 'utf8'),
+          pinnedEngine: () => windowPinnedEngine(),
+          wslRoot: () => wslRootOf(vscode.env.remoteAuthority),
+          registerLabel: (decoded, suffix) => {
+            context.subscriptions.push(
+              registerAuthorityLabel(vscode.workspace, decoded, suffix),
             );
-            return rows.find(entry => entry.volumeName === picked?.volumeName);
           },
-          createdAt: date => filled(translate, INSPECT_TEMPLATES.S419, [date]),
-          engine: () => engine,
-          reload: async address => {
-            await vscode.commands.executeCommand(
-              'vscode.openFolder',
-              vscode.Uri.parse(address),
-              {forceReuseWindow: true},
-            );
+          openWindow: (authority, folder) =>
+            openRemote(
+              {
+                executeCommand: (command, ...parameters) =>
+                  vscode.commands.executeCommand(command, ...parameters),
+                addressOf: parts => vscode.Uri.from(parts),
+              },
+              authority,
+              {
+                ...(folder === undefined ? {} : {path: folder}),
+                pathKind: 'folder',
+                target: 'new',
+              },
+            ),
+          translate,
+          logger: served.logger,
+          cancellation: new AbortController().signal,
+        };
+      }
+      /** Explore a Volume in a Dev Container: the picker of the daemon's volumes, and the window of the one picked. */
+      async function exploreVolume(rowVolume?: string): Promise<void> {
+        const engine = await windowPinnedEngine();
+        await inspectVolume(
+          {
+            engineReady: async () =>
+              (await firstCheck(
+                served.preflight,
+                engineBaseOf({
+                  folder: firstFolder(),
+                  trusted: vscode.workspace.isTrusted,
+                }),
+                new AbortController().signal,
+              )) === 'proceed',
+            volumes: () =>
+              volumeListing?.volumes() ??
+              Promise.reject(new Error('the engine is not ready')),
+            pick: async rows => {
+              const picked = await vscode.window.showQuickPick(
+                rows.map(entry => ({...entry})),
+                {placeHolder: translate(INSPECT_TEMPLATES.S319)},
+              );
+              return rows.find(
+                entry => entry.volumeName === picked?.volumeName,
+              );
+            },
+            createdAt: date =>
+              filled(translate, INSPECT_TEMPLATES.S419, [date]),
+            engine: () => engine,
+            reload: async address => {
+              await vscode.commands.executeCommand(
+                'vscode.openFolder',
+                vscode.Uri.parse(address),
+                {forceReuseWindow: true},
+              );
+            },
+            report: line => {
+              served.logger.info(line);
+            },
           },
-          report: line => {
-            served.logger.info(line);
-          },
-        });
+          rowVolume,
+        );
       }
       /** Clone Repository in Container Volume's command, over the editor and this machine. */
       function cloneCommand(): CommandHandler {
@@ -1967,68 +2032,14 @@ export async function activate(
           },
         },
         attachToRunningContainer: {
-          execute: () =>
-            attachToRunningContainer({
-              warning: () => attachWarningAsked(context.globalState),
-              recordPick: key => recordAttachPick(context.globalState, key),
-              engine: () =>
-                engineOfWindow(
-                  windowEnginePortsOf(served.preflight),
-                  undefined,
-                ),
-              checks: cancellation =>
-                firstCheck(
-                  served.preflight,
-                  engineBaseOf({
-                    folder: firstFolder(),
-                    trusted: vscode.workspace.isTrusted,
-                  }),
-                  cancellation,
-                ),
-              openPicker: () => attachPickerOf(translate),
-              showModal: (message, detail, button) =>
-                vscode.window.showErrorMessage(
-                  message,
-                  {modal: true, detail},
-                  {title: button, isCloseAffordance: true},
-                ),
-              configFiles: (image, name) =>
-                attachConfigFilesOf(
-                  context.globalStorageUri.fsPath,
-                  image,
-                  name,
-                ),
-              exists: file =>
-                stat(file).then(
-                  () => true,
-                  () => false,
-                ),
-              readText: file => readFile(file, 'utf8'),
-              pinnedEngine: () => windowPinnedEngine(),
-              wslRoot: () => wslRootOf(vscode.env.remoteAuthority),
-              registerLabel: (decoded, suffix) => {
-                context.subscriptions.push(
-                  registerAuthorityLabel(vscode.workspace, decoded, suffix),
-                );
-              },
-              openWindow: (authority, folder) =>
-                openRemote(
-                  {
-                    executeCommand: (command, ...parameters) =>
-                      vscode.commands.executeCommand(command, ...parameters),
-                    addressOf: parts => vscode.Uri.from(parts),
-                  },
-                  authority,
-                  {
-                    ...(folder === undefined ? {} : {path: folder}),
-                    pathKind: 'folder',
-                    target: 'new',
-                  },
-                ),
-              translate,
-              logger: served.logger,
-              cancellation: new AbortController().signal,
-            }),
+          execute: () => attachToRunningContainer(attachPortsOf()),
+        },
+        attachToRunningContainerFromViewlet: {
+          execute: (argument?: unknown) =>
+            attachToRunningContainer(
+              attachPortsOf(),
+              viewletContainerOf(argument),
+            ),
         },
         attachToK8sContainer: {execute: () => kubernetes.fromPalette()},
         attachToK8sContainerFromViewlet: {
@@ -2052,6 +2063,10 @@ export async function activate(
         cleanUpDevContainers: {execute: () => cleanUp?.devContainers()},
         pruneVolumes: {execute: () => cleanUp?.volumes()},
         inspectVolume: {execute: () => exploreVolume()},
+        inspectVolumeFromViewlet: {
+          execute: (argument?: unknown) =>
+            exploreVolume(viewletVolumeOf(argument)),
+        },
         showDetails: {
           execute: async argument => {
             const target = containerRowOf(argument);

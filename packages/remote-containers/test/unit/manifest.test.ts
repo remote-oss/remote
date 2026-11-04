@@ -816,11 +816,12 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0501 3.x (athena on #2197): the activation events are the resolve of the dev-container, attached-container and k8s-container authorities and the end of the startup', () => {
+  it('F-0501 3.x (athena on #2197): the activation events are the resolve of the dev-container, attached-container and k8s-container authorities, the resolve of a debug session of an extension host and the end of the startup', () => {
     deepStrictEqual(MANIFEST.activationEvents, [
       'onResolveRemoteAuthority:dev-container',
       'onResolveRemoteAuthority:attached-container',
       'onResolveRemoteAuthority:k8s-container',
+      'onDebugResolve:extensionHost',
       'onStartupFinished',
     ]);
   });
@@ -962,6 +963,70 @@ describe('the manifest', () => {
           },
         ],
         true,
+      ],
+    );
+  });
+
+  it('F-0603 BR-1, BR-2, AC-1, AC-2, AC-4: the two row commands have the reference titles, a palette entry that hides each, and a row menu entry in the group and for the views and rows of the spec; the clone command is neither declared nor titled', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const attach = 'remote-containers.attachToRunningContainerFromViewlet';
+    const explore = 'remote-containers.inspectVolumeFromViewlet';
+    const clone = 'remote-containers.cloneInVolumeFromViewlet';
+    deepStrictEqual(
+      [
+        contributes.commands.filter(entry =>
+          [attach, explore, clone].includes(String(entry.command)),
+        ),
+        [
+          readJson('package.nls.json')[
+            'commands.attachToRunningContainerFromViewlet.title'
+          ],
+          readJson('package.nls.json')[
+            'commands.inspectVolumeFromViewlet.title'
+          ],
+        ],
+        contributes.menus.commandPalette?.filter(entry =>
+          [attach, explore, clone].includes(String(entry.command)),
+        ),
+        contributes.menus['view/item/context']?.filter(entry =>
+          [attach, explore, clone].includes(String(entry.command)),
+        ),
+        JSON.stringify(MANIFEST).includes('cloneInVolumeFromViewlet'),
+      ],
+      [
+        [
+          {
+            command: attach,
+            title: '%commands.attachToRunningContainerFromViewlet.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: explore,
+            title: '%commands.inspectVolumeFromViewlet.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        ['Attach Visual Studio Code', 'Explore in a Dev Container'],
+        [
+          {command: attach, when: 'false'},
+          {command: explore, when: 'false'},
+        ],
+        [
+          {
+            command: attach,
+            group: 'containers_1_general@2',
+            when: 'viewItem =~ /runningContainer/i && (view == dockerContainers || view == vscode-containers.views.containers) && !hideConnectCommands && !remote-containers:standingDown',
+          },
+          {
+            command: explore,
+            group: 'volumes_1_general@2',
+            when: 'viewItem == volume && (view == dockerVolumes || view == vscode-containers.views.volumes) && !hideConnectCommands && !remote-containers:standingDown',
+          },
+        ],
+        false,
       ],
     );
   });
@@ -1335,7 +1400,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [28, true, false],
+      [30, true, false],
     );
   });
 
@@ -1472,7 +1537,7 @@ describe('the manifest', () => {
   it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
-        VIEW_PARTS.menus['view/item/context']?.slice(2, -3),
+        VIEW_PARTS.menus['view/item/context']?.slice(2, -5),
         VIEW_PARTS.commands
           .map(entry => entry.command)
           .filter(command =>

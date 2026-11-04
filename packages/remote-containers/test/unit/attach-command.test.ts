@@ -320,6 +320,7 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
     scene: Scene,
     pinned: Record<string, string> = {},
     distroRoot?: string,
+    rowContainer?: string,
   ): Promise<void> {
     const sink = new MemorySink();
     const ports: AttachPorts = {
@@ -380,7 +381,7 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
       cancellation: SIGNAL,
     };
-    await attachToRunningContainer(ports);
+    await attachToRunningContainer(ports, rowContainer);
   }
 
   it('F-0601 5.0: the warning comes first, then the checks, and only then the picker opens, busy until the list fills it', async () => {
@@ -434,6 +435,67 @@ describe('the attach command (card containers-162, brief-attach §2)', () => {
     deepStrictEqual(scene.modals, [
       ['Docker returned an error.', 'denied', 'OK'],
     ]);
+  });
+
+  it('F-0603 BR-5 (a), AC-3: a row’s container is attached with no picker, after the warning and the checks, in a new window on that container', async () => {
+    const scene = sceneOf([NGINX]);
+    await attach(scene, {}, undefined, fullId('a'));
+    const [authority = ''] = scene.opened[0] ?? [];
+    const decoded = decodeAuthority(authority);
+    deepStrictEqual(
+      [
+        scene.events,
+        'malformed' in decoded ? decoded : decoded.family,
+        scene.labels.map(each => each[1]),
+      ],
+      [
+        ['warning', 'checks', 'record', 'open'],
+        'attached-container',
+        ['Container nginx:1 (web)'],
+      ],
+    );
+  });
+
+  it('F-0603 7.E7, AC-21: a row’s container that is not running is attached to as well, and its own window tells it', async () => {
+    const scene = sceneOf([]);
+    scene.engine = engineOf(
+      [],
+      [inspected('web', 'nginx:1', fullId('a'), 'exited')],
+    ).engine;
+    await attach(scene, {}, undefined, fullId('a'));
+    deepStrictEqual(scene.opened.length, 1);
+  });
+
+  it('F-0603 BR-5 (c), 7.E5 route A, AC-18: a row’s container that is gone shows S034 in a modal and opens nothing', async () => {
+    const scene = sceneOf([]);
+    scene.engine = engineOf([], []).engine;
+    await attach(scene, {}, undefined, fullId('a'));
+    deepStrictEqual(
+      [scene.opened, scene.modals],
+      [[], [['', 'An error occurred setting up the container.', 'OK']]],
+    );
+  });
+
+  it('F-0603 BR-5 (c): a row’s container that the engine cannot be asked about is told as gone too', async () => {
+    const scene = sceneOf([]);
+    scene.engine = engineOf([], [], {
+      inspection: {kind: 'failed', detail: 'no docker'},
+    }).engine;
+    await attach(scene, {}, undefined, fullId('a'));
+    deepStrictEqual([scene.opened, scene.modals.length], [[], 1]);
+  });
+
+  it('F-0603 7.E8, BR-5: the warning and the checks come before the row is asked about, and a refusal of either ends the command', async () => {
+    const warned = sceneOf([NGINX]);
+    warned.warning = false;
+    const stopped = sceneOf([NGINX]);
+    stopped.check = 'stopped';
+    await attach(warned, {}, undefined, fullId('a'));
+    await attach(stopped, {}, undefined, fullId('a'));
+    deepStrictEqual(
+      [warned.events, stopped.events, warned.opened, stopped.opened],
+      [['warning'], ['warning', 'checks'], [], []],
+    );
   });
 
   it('F-0601 POST-2, BR-5: a dismissed picker opens nothing, and a pick opens a new window on the attached authority, registers the label first, and opens folderless without a file', async () => {

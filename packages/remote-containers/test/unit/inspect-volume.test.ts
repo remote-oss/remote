@@ -114,6 +114,8 @@ interface Scenario {
   listing?: unknown;
   /** The volume the user picks; none for a picker that closes without a pick. */
   pick?: string;
+  /** The volume a row of another extension's view stands for. */
+  volumeRow?: string;
 }
 
 /** Runs the command over ports that answer as the scenario says, and gives what it did in order. */
@@ -151,7 +153,7 @@ async function stepsOf(scenario: Scenario = {}): Promise<string[]> {
       steps.push(`log ${line}`);
     },
   };
-  await inspectVolume(ports);
+  await inspectVolume(ports, scenario.volumeRow);
   return steps;
 }
 
@@ -163,6 +165,17 @@ describe('Explore a Volume in a Dev Container (card containers-155)', () => {
       'pick one,two',
       'reload true',
     ]);
+  });
+
+  it('F-0603 BR-5 (a), AC-5: a row’s volume opens its window in this one after the engine check, with no listing and no picker', async () => {
+    deepStrictEqual(await stepsOf({volumeRow: 'one'}), [
+      'check',
+      'reload true',
+    ]);
+  });
+
+  it('F-0603 7.E8, AC-22: an engine that is not ready ends the command before the row’s volume is used', async () => {
+    deepStrictEqual(await stepsOf({volumeRow: 'one', ready: false}), ['check']);
   });
 
   it('F-0705 AC-4, AC-33: a picker that closes without a pick changes nothing', async () => {
