@@ -1,5 +1,5 @@
 /**
- * @fileoverview Which configuration an edit from the editor changes (F-0809 BR-7), decided from the facts of the
+ * @fileoverview Which configuration an edit from the editor changes, decided from the facts of the
  * window alone: an attached container's attach file, the window's own configuration, a Recovery Container's session
  * file, then the configurations of the folder, picked from when there are several.
  */
@@ -43,7 +43,7 @@ function policyOf(candidate: Candidate, facts: WindowEditFacts): EditPolicy {
     : 'buffer';
 }
 
-/** The configuration an edit changes, in the order of F-0809 BR-7. */
+/** The configuration an edit changes, in the order the editor's edits follow. */
 export function editTargetOf(facts: WindowEditFacts): EditTarget {
   if (facts.attached !== undefined) {
     return {kind: 'attach', files: facts.attached};

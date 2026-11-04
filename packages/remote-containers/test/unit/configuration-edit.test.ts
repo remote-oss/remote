@@ -19,31 +19,35 @@ const OBJECT = '{\n  "a": 1\n}';
 
 interface Scene {
   ports: ConfigurationEditPorts;
-  log: string[];
+  calls: string[];
 }
 
-/** Fake editor ports. `tab` is the document some tab holds for the file, and `disk` what the file system holds. */
+/** Fake editor ports. `editorTab` is the document some editorTab holds for the file, and `disk` what the file system holds. */
 function sceneOf(
   options: Omit<FakeEditor, 'files' | 'tabs'> & {
-    tab?: {text: string; dirty: boolean};
+    editorTab?: {text: string; dirty: boolean};
     disk?: string;
   } = {},
 ): Scene {
   return fakePortsOf({
     ...options,
     files: options.disk === undefined ? {} : {[FILE.fsPath]: options.disk},
-    tabs: options.tab === undefined ? {} : {[FILE.fsPath]: options.tab},
+    tabs:
+      options.editorTab === undefined ? {} : {[FILE.fsPath]: options.editorTab},
   });
 }
 
-const APPEND: TextChange = current => `${current}!`;
+/** The change most rows make: the text with an exclamation mark. */
+function appendBang(current: string): string {
+  return `${current}!`;
+}
 
 async function resultsOf(
   policy: EditPolicy,
   options: Parameters<typeof sceneOf>[0],
-  change: TextChange = APPEND,
+  change: TextChange = appendBang,
   file: ConfigUri = FILE,
-): Promise<{result: EditResult; log: string[]}> {
+): Promise<{result: EditResult; calls: string[]}> {
   const scene = sceneOf(options);
   const result = await applyConfigurationEdit(
     file,
@@ -51,32 +55,34 @@ async function resultsOf(
     policy,
     scene.ports,
   );
-  return {result, log: scene.log};
+  return {result, calls: scene.calls};
 }
 
 describe('the document-edit seam (card containers-206, brief-authoring-edits §2)', () => {
   it('F-0809 BR-6 (c206-buffer): the buffer policy opens a document nobody holds and edits it, and edits an open one, and never saves', async () => {
     const closed = await resultsOf('buffer', {disk: OBJECT});
-    const open = await resultsOf('buffer', {tab: {text: OBJECT, dirty: true}});
+    const open = await resultsOf('buffer', {
+      editorTab: {text: OBJECT, dirty: true},
+    });
     deepStrictEqual(
       [closed, open],
       [
         {
           result: {kind: 'inBuffer', durable: false},
-          log: [
+          calls: [
             `open ${FILE.fsPath}`,
             `edit ${FILE.fsPath} ${JSON.stringify(`${OBJECT}!`)}`,
           ],
         },
         {
           result: {kind: 'inBuffer', durable: false},
-          log: [`edit ${FILE.fsPath} ${JSON.stringify(`${OBJECT}!`)}`],
+          calls: [`edit ${FILE.fsPath} ${JSON.stringify(`${OBJECT}!`)}`],
         },
       ],
     );
   });
 
-  it('F-0809 BR-3 (c206-current-text): the change reads the open buffer’s text when a tab holds the file, and the disk’s when none does', async () => {
+  it('F-0809 BR-3 (c206-current-text): the change reads the open buffer’s text when a editorTab holds the file, and the disk’s when none does', async () => {
     const seen: string[] = [];
     function note(current: string): undefined {
       seen.push(current);
@@ -84,31 +90,33 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     }
     await resultsOf(
       'buffer',
-      {tab: {text: 'buffer', dirty: true}, disk: 'disk'},
+      {editorTab: {text: 'buffer', dirty: true}, disk: 'disk'},
       note,
     );
     await resultsOf(
       'diskUnlessOpen',
-      {tab: {text: 'buffer', dirty: true}, disk: 'disk'},
+      {editorTab: {text: 'buffer', dirty: true}, disk: 'disk'},
       note,
     );
     await resultsOf('diskUnlessOpen', {disk: 'disk'}, note);
     await resultsOf(
       'diskOrSaveIfClean',
-      {tab: {text: '{}', dirty: true}, disk: 'disk'},
+      {editorTab: {text: '{}', dirty: true}, disk: 'disk'},
       note,
     );
     deepStrictEqual(seen, ['buffer', 'buffer', 'disk', '{}']);
   });
 
   it('F-0809 BR-6 (c206-unchanged): a change that gives no text is unchanged for every policy, and nothing is edited, written or saved', async () => {
-    const nothing: TextChange = () => undefined;
+    function nothing(): undefined {
+      return undefined;
+    }
     const outcomes = [
       await resultsOf('buffer', {disk: OBJECT}, nothing),
       await resultsOf('diskUnlessOpen', {disk: OBJECT}, nothing),
       await resultsOf(
         'diskUnlessOpen',
-        {tab: {text: OBJECT, dirty: false}},
+        {editorTab: {text: OBJECT, dirty: false}},
         nothing,
       ),
       await resultsOf('diskOrSaveIfClean', {disk: OBJECT}, nothing),
@@ -116,16 +124,16 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     deepStrictEqual(
       outcomes.map(outcome => [
         outcome.result,
-        outcome.log.filter(line => /^(edit|save|write|rename)/.test(line)),
+        outcome.calls.filter(line => /^(edit|save|write|rename)/.test(line)),
       ]),
       Array<unknown>(4).fill([{kind: 'unchanged'}, []]),
     );
   });
 
-  it('F-0809 BR-7 (c206-disk-unless-open): a file no tab holds is written under a temporary name in its own folder and renamed over it; a tab holding it is edited in the buffer', async () => {
+  it('F-0809 BR-7 (c206-disk-unless-open): a file no editorTab holds is written under a temporary name in its own folder and renamed over it; a editorTab holding it is edited in the buffer', async () => {
     const closed = await resultsOf('diskUnlessOpen', {disk: OBJECT});
     const open = await resultsOf('diskUnlessOpen', {
-      tab: {text: OBJECT, dirty: false},
+      editorTab: {text: OBJECT, dirty: false},
     });
     const folder = '/work/proj/.devcontainer';
     deepStrictEqual(
@@ -133,7 +141,7 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
       [
         {
           result: {kind: 'written', durable: true},
-          log: [
+          calls: [
             `read ${FILE.fsPath}`,
             `write ${folder}/.u1.tmp ${JSON.stringify(`${OBJECT}!`)}`,
             `rename ${folder}/.u1.tmp ${FILE.fsPath}`,
@@ -141,7 +149,7 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
         },
         {
           result: {kind: 'inBuffer', durable: false},
-          log: [`edit ${FILE.fsPath} ${JSON.stringify(`${OBJECT}!`)}`],
+          calls: [`edit ${FILE.fsPath} ${JSON.stringify(`${OBJECT}!`)}`],
         },
       ],
     );
@@ -156,12 +164,17 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     let failure = '';
     const scene = sceneOf({disk: OBJECT, renameFails: true});
     try {
-      await applyConfigurationEdit(FILE, APPEND, 'diskUnlessOpen', scene.ports);
+      await applyConfigurationEdit(
+        FILE,
+        appendBang,
+        'diskUnlessOpen',
+        scene.ports,
+      );
     } catch (caught) {
       failure = (caught as Error).message;
     }
     deepStrictEqual(
-      [fresh.result, fresh.log[0], failure, scene.log.at(-1)],
+      [fresh.result, fresh.calls[0], failure, scene.calls.at(-1)],
       [
         {kind: 'written', durable: true},
         'write /work/proj/.devcontainer/.u1.tmp "[]"',
@@ -171,40 +184,40 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     );
   });
 
-  it('F-1103 AC-24, AC-25 (c206-save-if-clean): a dirty tab is edited in the buffer and not saved; a clean tab, and a file no tab holds, are edited through the editor and saved', async () => {
+  it('F-1103 AC-24, AC-25 (c206-save-if-clean): a dirty editorTab is edited in the buffer and not saved; a clean editorTab, and a file no editorTab holds, are edited through the editor and saved', async () => {
     const dirty = await resultsOf('diskOrSaveIfClean', {
-      tab: {text: OBJECT, dirty: true},
+      editorTab: {text: OBJECT, dirty: true},
     });
     const clean = await resultsOf('diskOrSaveIfClean', {
-      tab: {text: OBJECT, dirty: false},
+      editorTab: {text: OBJECT, dirty: false},
     });
     const none = await resultsOf('diskOrSaveIfClean', {disk: OBJECT});
     const edit = `edit ${FILE.fsPath} ${JSON.stringify(`${OBJECT}!`)}`;
     deepStrictEqual(
       [dirty, clean, none],
       [
-        {result: {kind: 'inBuffer', durable: false}, log: [edit]},
+        {result: {kind: 'inBuffer', durable: false}, calls: [edit]},
         {
           result: {kind: 'saved', durable: true},
-          log: [edit, `save ${FILE.fsPath}`],
+          calls: [edit, `save ${FILE.fsPath}`],
         },
         {
           result: {kind: 'saved', durable: true},
-          log: [`open ${FILE.fsPath}`, edit, `save ${FILE.fsPath}`],
+          calls: [`open ${FILE.fsPath}`, edit, `save ${FILE.fsPath}`],
         },
       ],
     );
   });
 
-  it('F-1103 AC-24 (c206-never-rename): the save-if-clean policy writes no temporary file and renames nothing, in any tab state', async () => {
+  it('F-1103 AC-24 (c206-never-rename): the save-if-clean policy writes no temporary file and renames nothing, in any editorTab state', async () => {
     const states = [
-      {tab: {text: OBJECT, dirty: true}},
-      {tab: {text: OBJECT, dirty: false}},
+      {editorTab: {text: OBJECT, dirty: true}},
+      {editorTab: {text: OBJECT, dirty: false}},
       {disk: OBJECT},
     ];
     const logs: string[] = [];
     for (const state of states) {
-      logs.push(...(await resultsOf('diskOrSaveIfClean', state)).log);
+      logs.push(...(await resultsOf('diskOrSaveIfClean', state)).calls);
     }
     deepStrictEqual(
       logs.filter(line => /^(write|rename|delete)/.test(line)),
@@ -234,8 +247,8 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     });
     deepStrictEqual(
       [outside, inside.result, folderLinked.result, noFolders].map(each =>
-        'log' in each
-          ? [each.result, each.log.filter(line => /^(edit|save)/.test(line))]
+        'calls' in each
+          ? [each.result, each.calls.filter(line => /^(edit|save)/.test(line))]
           : each,
       ),
       [
@@ -255,13 +268,13 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     const linked = await resultsOf(
       'diskOrSaveIfClean',
       {disk: OBJECT, linkSchemes: true},
-      APPEND,
+      appendBang,
       uriOf(FILE.fsPath, 'vscode-remote'),
     );
     deepStrictEqual(
       [outside, linked].map(each => [
         each.result,
-        each.log.filter(line => /^(open|read)/.test(line)),
+        each.calls.filter(line => /^(open|read)/.test(line)),
       ]),
       [
         [{kind: 'refused', reason: 'outsideWorkspace'}, []],
@@ -277,7 +290,7 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
       logRealPaths: true,
     });
     deepStrictEqual(
-      [result.result, result.log.filter(line => line.startsWith('realPath'))],
+      [result.result, result.calls.filter(line => line.startsWith('realPath'))],
       [
         {kind: 'saved', durable: true},
         [`realPath file:${FILE.fsPath}`, 'realPath file:/work/proj'],
@@ -293,19 +306,19 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     const linked = await resultsOf(
       'diskOrSaveIfClean',
       {disk: OBJECT, linkSchemes: true},
-      APPEND,
+      appendBang,
       remote,
     );
     const plain = await resultsOf(
       'diskOrSaveIfClean',
       {disk: OBJECT},
-      APPEND,
+      appendBang,
       remote,
     );
     deepStrictEqual(
       [
         linked.result,
-        linked.log.filter(line => /^(edit|save)/.test(line)),
+        linked.calls.filter(line => /^(edit|save)/.test(line)),
         plain.result,
       ],
       [
@@ -332,7 +345,7 @@ describe('the document-edit seam (card containers-206, brief-authoring-edits §2
     deepStrictEqual(
       [array, broken, thrown, thrownOnDisk].map(each => [
         each.result,
-        each.log.filter(line => /^(edit|save|write|rename)/.test(line)),
+        each.calls.filter(line => /^(edit|save|write|rename)/.test(line)),
       ]),
       Array<unknown>(4).fill([{kind: 'refused', reason: 'notAnObject'}, []]),
     );

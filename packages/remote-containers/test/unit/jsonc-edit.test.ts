@@ -1,4 +1,4 @@
-import {deepStrictEqual, throws} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {
   appendToArray,
   indentStepOf,
@@ -93,7 +93,6 @@ describe('the JSONC writer (card containers-206, brief-authoring-edits §2)', ()
       ),
       Array<string>(4).fill('NotAnObjectError: the text is not a JSON object'),
     );
-    throws(() => setProperty('[]', ['a'], 1), NotAnObjectError);
   });
 
   it('F-0809 BR-5 (c206-detection): the line ends are CRLF when the text has one, and the step is the first indented line’s', () => {

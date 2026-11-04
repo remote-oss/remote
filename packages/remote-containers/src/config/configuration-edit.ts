@@ -38,7 +38,7 @@ export interface ConfigurationEditPorts {
   applyEdit(document: ConfigDocument, text: string): Promise<boolean>;
   /** Saves the document through the editor; whether it was saved. */
   save(document: ConfigDocument): Promise<boolean>;
-  fs: {
+  fileSystem: {
     stat(uri: ConfigUri): Promise<ConfigStat>;
     readFile(uri: ConfigUri): Promise<string>;
     writeFile(uri: ConfigUri, text: string): Promise<void>;
@@ -109,11 +109,11 @@ async function diskTextOf(
   ports: ConfigurationEditPorts,
 ): Promise<string> {
   try {
-    await ports.fs.stat(file);
+    await ports.fileSystem.stat(file);
   } catch {
     return '';
   }
-  return ports.fs.readFile(file);
+  return ports.fileSystem.readFile(file);
 }
 
 /**
@@ -127,11 +127,11 @@ async function replaceFile(
   ports: ConfigurationEditPorts,
 ): Promise<void> {
   const temporary = ports.sibling(file, `.${ports.unique()}.tmp`);
-  await ports.fs.writeFile(temporary, text);
+  await ports.fileSystem.writeFile(temporary, text);
   try {
-    await ports.fs.rename(temporary, file);
+    await ports.fileSystem.rename(temporary, file);
   } catch (failure) {
-    await ports.fs.delete(temporary);
+    await ports.fileSystem.delete(temporary);
     throw failure;
   }
 }
@@ -142,7 +142,7 @@ async function placeRefusal(
   ports: ConfigurationEditPorts,
 ): Promise<RefusalReason | undefined> {
   if (file.scheme !== 'file') {
-    return (await ports.fs.stat(file)).symbolicLink
+    return (await ports.fileSystem.stat(file)).symbolicLink
       ? 'symbolicLink'
       : undefined;
   }

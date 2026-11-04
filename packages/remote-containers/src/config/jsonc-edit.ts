@@ -14,6 +14,7 @@ import {
 
 /** The text does not parse as a JSON object, so there is nothing to edit. */
 export class NotAnObjectError extends Error {
+  /** An error that names what was wrong with the text. */
   constructor() {
     super('the text is not a JSON object');
     this.name = 'NotAnObjectError';
@@ -37,6 +38,7 @@ function formattingOf(text: string): FormattingOptions {
   return {
     insertSpaces: !step.startsWith('\t'),
     tabSize: step.length,
+    // eslint-disable-next-line id-length -- the option is named eol by jsonc-parser
     eol: lineEndsOf(text),
   };
 }

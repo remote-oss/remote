@@ -13,7 +13,7 @@ export function uriOf(text: string, scheme = 'file'): ConfigUri {
 export interface FakeEditor {
   /** The text of the files on disk, by path. */
   files?: Record<string, string>;
-  /** The documents some tab holds, by path. */
+  /** The documents some editorTab holds, by path. */
   tabs?: Record<string, {text: string; dirty: boolean}>;
   /** The real path of a path that is a link. */
   realPaths?: Record<string, string>;
@@ -25,24 +25,24 @@ export interface FakeEditor {
   logRealPaths?: boolean;
 }
 
-/** Editor ports over `editor`, with the calls they get, as lines, in `log`. */
+/** Editor ports over `editor`, with the calls they get, as lines, in `calls`. */
 export function fakePortsOf(editor: FakeEditor = {}): {
   ports: ConfigurationEditPorts;
-  log: string[];
+  calls: string[];
 } {
-  const log: string[] = [];
+  const calls: string[] = [];
   const files = editor.files ?? {};
   const documents: ConfigDocument[] = Object.entries(editor.tabs ?? {}).map(
-    ([file, tab]) => ({
+    ([file, editorTab]) => ({
       uri: uriOf(file),
-      isDirty: tab.dirty,
-      getText: () => tab.text,
+      isDirty: editorTab.dirty,
+      getText: () => editorTab.text,
     }),
   );
   const ports: ConfigurationEditPorts = {
     openDocuments: () => documents,
     openTextDocument: uri => {
-      log.push(`open ${uri.fsPath}`);
+      calls.push(`open ${uri.fsPath}`);
       return Promise.resolve({
         uri,
         isDirty: false,
@@ -50,14 +50,14 @@ export function fakePortsOf(editor: FakeEditor = {}): {
       });
     },
     applyEdit: (document, text) => {
-      log.push(`edit ${document.uri.fsPath} ${JSON.stringify(text)}`);
+      calls.push(`edit ${document.uri.fsPath} ${JSON.stringify(text)}`);
       return Promise.resolve(true);
     },
     save: document => {
-      log.push(`save ${document.uri.fsPath}`);
+      calls.push(`save ${document.uri.fsPath}`);
       return Promise.resolve(true);
     },
-    fs: {
+    fileSystem: {
       stat: uri =>
         uri.fsPath in files
           ? Promise.resolve({
@@ -66,27 +66,27 @@ export function fakePortsOf(editor: FakeEditor = {}): {
             })
           : Promise.reject(new Error('ENOENT')),
       readFile: uri => {
-        log.push(`read ${uri.fsPath}`);
+        calls.push(`read ${uri.fsPath}`);
         return Promise.resolve(files[uri.fsPath] ?? '');
       },
       writeFile: (uri, text) => {
-        log.push(`write ${uri.fsPath} ${JSON.stringify(text)}`);
+        calls.push(`write ${uri.fsPath} ${JSON.stringify(text)}`);
         return Promise.resolve();
       },
-      rename: (from, to) => {
-        log.push(`rename ${from.fsPath} ${to.fsPath}`);
+      rename: (from, target) => {
+        calls.push(`rename ${from.fsPath} ${target.fsPath}`);
         return editor.renameFails === true
           ? Promise.reject(new Error('EXDEV'))
           : Promise.resolve();
       },
       delete: uri => {
-        log.push(`delete ${uri.fsPath}`);
+        calls.push(`delete ${uri.fsPath}`);
         return Promise.resolve();
       },
     },
     realPath: uri => {
       if (editor.logRealPaths === true) {
-        log.push(`realPath ${uri.scheme}:${uri.fsPath}`);
+        calls.push(`realPath ${uri.scheme}:${uri.fsPath}`);
       }
       return Promise.resolve(editor.realPaths?.[uri.fsPath] ?? uri.fsPath);
     },
@@ -99,5 +99,5 @@ export function fakePortsOf(editor: FakeEditor = {}): {
       ),
     unique: () => 'u1',
   };
-  return {ports, log};
+  return {ports, calls};
 }

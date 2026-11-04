@@ -36,7 +36,7 @@ function nameIsSafe(
   file: string,
 ): boolean {
   const stem = stemOf(target);
-  const raw = 'image' in target ? target.image : target.name;
+  const written = 'image' in target ? target.image : target.name;
   const folder = path.dirname(
     attachFileOf(storage, 'image' in target ? {image: 'x'} : {name: 'x'}),
   );
@@ -46,7 +46,7 @@ function nameIsSafe(
     !/[/\\]/.test(stem) &&
     !stem.includes('\0') &&
     !('name' in target && target.name.includes(':')) &&
-    !/%2f/i.test(raw) &&
+    !/%2f/i.test(written) &&
     relative === path.basename(file)
   );
 }
