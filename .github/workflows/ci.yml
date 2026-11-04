@@ -48,12 +48,13 @@ on:
         description: Also run the genuine launches, VS Code 1.139.1 (the recorded version) and 1.125.0 (the floor), with our VSIX, on X64
         type: boolean
         default: false
-  # every six hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
+  # Every six hours the VSCodium job ran alone on main: the backstop that shows whether main's launches are green, which
   # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of the eight runners busy with it
-  # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select)
-  # and once a day the genuine VS Code job runs alone on main. Each job reads which of the two fired
+  # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select).
+  # The six-hourly backstop ('17 */6 * * *') is paused while the self-hosted pool is down to one runner (2026-11-04):
+  # its six parts would hold that runner for hours ahead of the pull requests' own launches. A dispatch with
+  # vscodium and launches all runs it by hand. Once a day the genuine VS Code job runs alone on main.
   schedule:
-    - cron: '17 */6 * * *'
     - cron: '43 4 * * *'
   # Each merge to main runs checks, unit and coverage, on GitHub's runners and not the self-hosted ones. Two pull
   # requests that pass alone can break each other once both are in: main shows it within minutes, not at the next pull
