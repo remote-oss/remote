@@ -101,8 +101,14 @@ spec). Most of C12 is reused:
 2. **The connect:** §4 and the label. Rows: F-0604's attach criteria, BR-20 to BR-23.
 3. **The pod-window lines:** §5.
 
-**Fixture** (proteus): a `kind` cluster in the lab, reached through a kubeconfig of the run's own (never the person's
-`~/.kube`, as the SSH host fixture of #2098). It holds:
+**Fixture** (proteus), **under the lab's memory rule** (the user via hermes, 2026-11-04: one heavy process per room, and
+no new memory-hungry fixture without telling hermes first):
+- proteus measures the cluster's memory before it's promised;
+- it runs only inside its own launch, never beside another heavy run, and is torn down when the launch ends;
+- the cards' unit rows don't need it.
+
+It's a `kind` cluster in the lab, reached through a kubeconfig of the run's own (never the person's `~/.kube`, as the
+SSH host fixture of #2098). It holds:
 - a single-container pod and a multi-container pod with init containers;
 - a pod as root and one with `runAsUser`;
 - a `Pending` pod.
