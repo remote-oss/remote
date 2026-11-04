@@ -694,7 +694,7 @@ describe('the checks an open command runs before its reload (card coverage-117)'
     const {scene, start} = commandOf();
     const running = start();
     await settled();
-    scene.timers[0]?.();
+    scene.timers[1]?.();
     scene.cancels[0]?.();
     scene.warn.reject(new Error('the dialog died'));
     scene.warn.promise.catch(() => undefined);
