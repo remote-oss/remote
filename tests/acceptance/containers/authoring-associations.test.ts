@@ -71,7 +71,7 @@ function folderWithFile(name: string, file: string, text: string): string {
 async function editorHoverOf(name: string, needle: string): Promise<string> {
   // The cursor rests on the token read from the model, so a line the editor has not rendered yet is no obstacle; the
   // editor is focused first, since the command acts on the editor a preceding read may have unfocused.
-  await inWindow(name, 'workbench.action.focusActiveEditor');
+  await inWindow(name, 'workbench.action.focusActiveEditorGroup');
   await inWindow(name, 'acceptance.agent.cursorOn', needle);
   let hover = '';
   for (let tries = 0; tries < 3 && hover === ''; tries += 1) {

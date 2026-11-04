@@ -2832,11 +2832,9 @@ export async function activate(
       translate,
       logger,
     });
-    if (vscode.env.remoteName === undefined) {
-      context.subscriptions.push(
-        featureDiagnosticsProviderOf(featureDiagnosticsHost(), translate),
-      );
-    }
+    context.subscriptions.push(
+      featureDiagnosticsProviderOf(featureDiagnosticsHost(), translate),
+    );
     context.subscriptions.push(
       {
         dispose: () => {
