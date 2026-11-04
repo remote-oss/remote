@@ -30,7 +30,7 @@ import {attachedTargetOf} from '../attach/payload.ts';
 import {k8sLabelOf} from '../attach/k8s-label.ts';
 import {k8sPickKeyOf} from '../attach/k8s-pick-record.ts';
 import {k8sTargetOf, podShaped} from '../attach/k8s-payload.ts';
-import {runtimeCommands} from '../identifiers.generated.ts';
+import {commands} from '../identifiers.generated.ts';
 import type {Forwarder} from '../ports/forwarder.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import {attachRecoveryPresenterOf} from '../surfaces/attach-recovery.ts';
@@ -56,7 +56,7 @@ const PROGRESS_DELAY_MILLISECONDS = 500;
  * serve the window.
  */
 export const RESOLVER_EDITOR_OPTIONS: ResolverEditorOptions = {
-  detailsCommand: runtimeCommands.revealLogTerminal,
+  detailsCommand: commands.revealLogTerminal.id,
 };
 
 /** What the registration needs of the editor. */
@@ -140,7 +140,7 @@ export async function registerContainerResolver(
   }
   // First, before anything that can fail: the command only shows the log, so it works without the proposals.
   const logCommand = host.commands.registerCommand(
-    runtimeCommands.revealLogTerminal,
+    commands.revealLogTerminal.id,
     () => {
       served.revealLog();
     },

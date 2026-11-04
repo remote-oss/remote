@@ -16,7 +16,7 @@ export interface LogFilePorts {
 }
 
 /** Gets every line written from now on, as the file holds it. */
-export type LineListener = (text: string) => void;
+type LineListener = (text: string) => void;
 
 /** The sink of one log file, and the wait for everything written so far to reach it. */
 export interface LogFileSink extends Sink {

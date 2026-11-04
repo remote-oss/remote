@@ -45,7 +45,13 @@ import {profileOf} from 'lib-product';
 import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {containersLogMirrorOf} from './acceptance-log.ts';
-import {logFileNameOf} from './logging/log-files.ts';
+import {logFileNameOf, logStartOf} from './logging/log-files.ts';
+import {logFilesOf} from './logging/log-discovery.ts';
+import {
+  type LogCommandPorts,
+  openLastLogFileOf,
+  openLogFileOf,
+} from './logging/log-commands.ts';
 import {logFileSinkOf} from './logging/log-file-sink.ts';
 import {logTerminalOf} from './logging/log-terminal.ts';
 import {activateContainers} from './activation.ts';
@@ -216,7 +222,6 @@ import {
   commands,
   contextKeys,
   enabledApiProposals,
-  runtimeCommands,
   settings,
   standDown,
   views,
@@ -898,12 +903,46 @@ export async function activate(
     }
     logTerminal.show();
   }
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      runtimeCommands.revealLogTerminal,
-      revealLogTerminal,
-    ),
-  );
+  const logCommandPorts: LogCommandPorts = {
+    files: () =>
+      logFilesOf(logFolder, {
+        names: folder =>
+          readdir(folder).then(
+            names => names,
+            () => [],
+          ),
+        sizeOf: file =>
+          stat(file).then(
+            found => found.size,
+            () => undefined,
+          ),
+      }),
+    pick: async (placeholder, rows) => {
+      const items = rows.map(entry => ({...entry}));
+      const chosen = await vscode.window.showQuickPick(items, {
+        placeHolder: placeholder,
+      });
+      return chosen === undefined ? undefined : items.indexOf(chosen);
+    },
+    open: async file => {
+      const document = await vscode.workspace.openTextDocument(
+        vscode.Uri.file(file),
+      );
+      await vscode.languages.setTextDocumentLanguage(document, 'log');
+      await vscode.window.showTextDocument(document, {preview: true});
+    },
+    tell: async detail => {
+      await vscode.window.showInformationMessage(
+        '',
+        {modal: true, detail},
+        translate('OK'),
+      );
+    },
+    currentStart: logStartOf(activationStart),
+    translate,
+  };
+  const openLogFile = openLogFileOf(logCommandPorts);
+  const openLastLogFile = openLastLogFileOf(logCommandPorts);
   const configFiles = configFilesOf(
     {
       readDirectory: folder =>
@@ -2300,6 +2339,14 @@ export async function activate(
         },
         inspectDockerResource: {execute: argument => inspectRow?.(argument)},
         showContainerLog: {execute: argument => showContainerLog?.(argument)},
+        revealLogTerminal: {
+          execute: () => {
+            revealLogTerminal();
+            return Promise.resolve();
+          },
+        },
+        openLogFile: {execute: () => openLogFile()},
+        openLastLogFile: {execute: () => openLastLogFile()},
         openFolderInContainerInCurrentWindow: {
           execute: argument => rowOpen.current(argument),
         },

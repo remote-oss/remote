@@ -389,29 +389,28 @@ describe('the activation', () => {
     );
   });
 
-  it('F-0101.BR-9: a gate that throws fails the activation and registers nothing', async () => {
-    const {inputs, seen} = surroundings({otherRuns: false, gateThrows: true});
-    const failure = await activateContainers(inputs).catch(
+  /** How an activation over `options` fails, and the commands it had registered by then. */
+  async function failureOf(options: Options): Promise<[string, string[]]> {
+    const {inputs, seen} = surroundings(options);
+    const failure = await activateContainers(inputs).then(
+      () => 'activated',
       (caught: unknown) => (caught as Error).message,
     );
-    deepStrictEqual(
-      [failure, seen.events.filter(event => event.startsWith('register'))],
-      ['no editor', []],
-    );
+    return [failure, seen.events.filter(event => event.startsWith('register'))];
+  }
+
+  it('F-0101.BR-9: a gate that throws fails the activation and registers nothing', async () => {
+    deepStrictEqual(await failureOf({otherRuns: false, gateThrows: true}), [
+      'no editor',
+      [],
+    ]);
   });
 
   it('F-0101.BR-10: a registration that throws fails the activation', async () => {
-    const {inputs, seen} = surroundings({
-      otherRuns: false,
-      registerThrows: true,
-    });
-    const failure = await activateContainers(inputs).catch(
-      (caught: unknown) => (caught as Error).message,
-    );
-    deepStrictEqual(
-      [failure, seen.events.filter(event => event.startsWith('register'))],
-      ['cannot register', []],
-    );
+    deepStrictEqual(await failureOf({otherRuns: false, registerThrows: true}), [
+      'cannot register',
+      [],
+    ]);
   });
 
   it('F-0101.BR-2: activation is silent: no notice of its own is shown', async () => {

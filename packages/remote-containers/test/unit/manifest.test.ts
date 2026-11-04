@@ -1700,13 +1700,7 @@ describe('the manifest', () => {
         {id: 'remote-containers:showDetails', setter: 'extension'},
       ],
       infoLineCommands: [],
-      runtimeCommands: [
-        {
-          id: 'remote-containers.revealLogTerminal',
-          purpose:
-            'the "(show log)" link of the connect progress, which reveals the Dev Containers log',
-        },
-      ],
+      runtimeCommands: [],
       internal: [{id: 'remote-oss.gate.claim', role: 'called', kind: 'query'}],
       invented: [
         {
@@ -1878,6 +1872,43 @@ describe('the WSL settings (card containers-203, F-0207 AC-1, AC-2)', () => {
         'default' in (properties['dev.containers.executeInWSLDistro'] ?? {}),
       ],
       [['boolean', 'string', 'boolean'], false, true, false],
+    );
+  });
+});
+
+describe('the log commands (card containers-186, F-0104)', () => {
+  const contributes = MANIFEST.contributes as {
+    commands: Array<{command: string; title: string; category?: string}>;
+    menus: {commandPalette: Array<{command: string; when?: string}>};
+  };
+  const logCommands = [
+    'remote-containers.revealLogTerminal',
+    'remote-containers.openLogFile',
+    'remote-containers.openLastLogFile',
+  ];
+
+  it('F-0104 AC-1, AC-4, AC-7: Show Container Log and Show Previous Log are Dev Containers commands and Show All Logs is a Dev Containers Developer one', () => {
+    deepStrictEqual(
+      logCommands.map(commandId => {
+        const found = contributes.commands.find(
+          each => each.command === commandId,
+        );
+        return [found?.category, found?.title];
+      }),
+      [
+        ['Dev Containers', '%commands.revealLogTerminal.title%'],
+        ['Dev Containers Developer', '%commands.openLogFile.title%'],
+        ['Dev Containers', '%commands.openLastLogFile.title%'],
+      ],
+    );
+  });
+
+  it('F-0104 BR-2: none of the three has a when clause of its own in the Command Palette', () => {
+    deepStrictEqual(
+      contributes.menus.commandPalette.filter(each =>
+        logCommands.includes(each.command),
+      ),
+      [],
     );
   });
 });

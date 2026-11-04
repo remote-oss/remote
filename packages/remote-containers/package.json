@@ -194,6 +194,21 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.revealLogTerminal",
+        "title": "%commands.revealLogTerminal.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.openLogFile",
+        "title": "%commands.openLogFile.title%",
+        "category": "Dev Containers Developer"
+      },
+      {
+        "command": "remote-containers.openLastLogFile",
+        "title": "%commands.openLastLogFile.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.explorerDetailsRefresh",
         "title": "%commands.explorerDetailsRefresh.title%",
         "category": "Dev Containers",

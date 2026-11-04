@@ -63,12 +63,7 @@
     }
   ],
   "infoLineCommands": [],
-  "runtimeCommands": [
-    {
-      "id": "remote-containers.revealLogTerminal",
-      "purpose": "the \"(show log)\" link of the connect progress, which reveals the Dev Containers log"
-    }
-  ],
+  "runtimeCommands": [],
   "internal": [
     {
       "id": "remote-oss.gate.claim",

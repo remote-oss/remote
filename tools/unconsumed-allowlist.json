@@ -127,22 +127,6 @@
       "card": "#2093",
       "slice": "containers release 1",
       "decision": "F-0104 BR-4, BR-6, BR-7 (2026-11-04): the names, the pick, the previous log and the level; the next commits of the card consume it"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/logging/log-discovery.ts",
-      "card": "#2093",
-      "slice": "containers release 1",
-      "decision": "F-0104 BR-5, BR-6 (2026-11-04): the log file pick and the previous log; the manifest entries and the wiring of the two commands are the next commit of the card"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/logging/log-commands.ts",
-      "card": "#2093",
-      "slice": "containers release 1",
-      "decision": "F-0104 BR-5, BR-6 (2026-11-04): the log file pick and the previous log; the manifest entries and the wiring of the two commands are the next commit of the card"
     }
   ]
 }
