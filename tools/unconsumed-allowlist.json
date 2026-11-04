@@ -143,6 +143,14 @@
       "card": "#2156",
       "slice": "containers release 2",
       "decision": "F-0207 BR-14 (2026-11-04): contributed; its effect belongs to the relays' cards (F-1003, F-1007, F-1008)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/wsl-host-resolve.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-17 (2026-11-04): the host a choice comes to, checked against WSL's list; the wiring into the commands is the next commit of the card"
     }
   ]
 }

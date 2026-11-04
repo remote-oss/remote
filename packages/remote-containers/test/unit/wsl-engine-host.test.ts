@@ -1,12 +1,16 @@
 import {deepStrictEqual} from 'node:assert';
 import {createWslRunner} from 'lib-wsl';
 import {type FakeRun, fakeWsl, utf8Output} from 'lib-wsl/testing/fake-wsl';
+import type {RegisteredDistro} from '../../src/engine/wsl-distro-check.ts';
 import {wslEngineHost} from '../../src/engine/wsl-engine-host.ts';
+
+/** The distro `Ubuntu` as the list holds it: a test says so, where the code gets it from `checkedDistroOf`. */
+const UBUNTU = 'Ubuntu' as RegisteredDistro;
 
 /** The engine host of the distro `Ubuntu` over a fake `wsl.exe` that gives every process `behaviour`. */
 function hostOver(behaviour: FakeRun, session = {}) {
   const fake = fakeWsl(() => behaviour, session);
-  return {fake, host: wslEngineHost(createWslRunner(fake), 'Ubuntu')};
+  return {fake, host: wslEngineHost(createWslRunner(fake), UBUNTU)};
 }
 
 const NEVER = new AbortController().signal;
@@ -156,7 +160,7 @@ describe('the engine host through WSL (card containers-203, F-0207 BR-15)', () =
               },
             }),
         },
-        'Ubuntu',
+        UBUNTU,
       );
       const spawned = await host.spawn(['x'], {cancellation: NEVER});
       if (spawned.kind !== 'spawned') {

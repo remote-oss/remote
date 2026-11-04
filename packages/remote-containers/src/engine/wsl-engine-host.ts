@@ -12,6 +12,7 @@ import type {
   EngineSpawn,
 } from './engine-host.ts';
 import {spawnedEngineHost} from './engine-runs.ts';
+import type {RegisteredDistro} from './wsl-distro-check.ts';
 
 /** The callback of a stream's write. */
 type Done = (error?: Error | null) => void;
@@ -68,8 +69,11 @@ function processOf(live: LiveProcess): EngineProcess {
   };
 }
 
-/** The `docker` of the distro `distro`, started in its home folder through `runner`. */
-export function wslEngineHost(runner: WslRunner, distro: string): EngineHost {
+/** The `docker` of the registered distro `distro`, started in its home folder through `runner`. */
+export function wslEngineHost(
+  runner: WslRunner,
+  distro: RegisteredDistro,
+): EngineHost {
   async function spawn(
     argv: readonly string[],
     options: EngineOptions,

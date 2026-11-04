@@ -35,15 +35,16 @@ describe('the check of a distro name against WSL’s list (card containers-203, 
     );
   });
 
-  it('F-0207 BR-17: a name the list does not hold is unknown, and a name that looks like an option is too', async () => {
+  it('F-0207 BR-17: a name the list does not hold is unknown, and a name that looks like an option is too, and only the list was run', async () => {
+    const results = [
+      await checked('Arch', LISTS),
+      await checked('--unregister', LISTS),
+    ];
     deepStrictEqual(
+      results.map(each => [each.outcome, each.started]),
       [
-        (await checked('Arch', LISTS)).outcome,
-        (await checked('--unregister', LISTS)).outcome,
-      ],
-      [
-        {kind: 'unknown', typed: 'Arch'},
-        {kind: 'unknown', typed: '--unregister'},
+        [{kind: 'unknown', typed: 'Arch'}, 1],
+        [{kind: 'unknown', typed: '--unregister'}, 1],
       ],
     );
   });

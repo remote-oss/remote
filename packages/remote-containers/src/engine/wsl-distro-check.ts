@@ -6,10 +6,18 @@
 
 import {matchDistro, parseList, type WslRunner} from 'lib-wsl';
 
+declare const REGISTERED: unique symbol;
+
+/**
+ * The name of a distro that WSL's list holds, in its registered spelling. Only {@link checkedDistroOf} makes one, so
+ * what starts a program in a distro cannot be given a name that was not checked.
+ */
+export type RegisteredDistro = string & {readonly [REGISTERED]: true};
+
 /** What the list says of a typed name. */
 export type DistroCheck =
   /** The distro is registered, under this spelling. */
-  | {kind: 'registered'; name: string}
+  | {kind: 'registered'; name: RegisteredDistro}
   /** No registered distro has this name. */
   | {kind: 'unknown'; typed: string}
   /** The name is empty and WSL has no default distro. */
@@ -46,7 +54,10 @@ export async function checkedDistroOf(
   }
   const matched = matchDistro(rows.rows, typed);
   if (matched.kind === 'match') {
-    return {kind: 'registered', name: matched.registeredName};
+    return {
+      kind: 'registered',
+      name: matched.registeredName as RegisteredDistro,
+    };
   }
   return matched.kind === 'noDistro'
     ? {kind: 'noDistro'}
