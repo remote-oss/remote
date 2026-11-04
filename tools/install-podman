@@ -97,3 +97,4 @@ echo "--- exec --interactive --tty=false"; printf hi | timeout 20 podman exec --
 echo "--- network"; podman exec dbg sh -c 'cat /etc/hosts; ip route'
 podman rm -f dbg
 set -e
+exit 1 # debug (hosted only): end the job here, so that the probe's lines can be read
