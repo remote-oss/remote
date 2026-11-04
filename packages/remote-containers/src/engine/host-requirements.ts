@@ -33,12 +33,8 @@ export interface DaemonFigures {
 /** The key the dev container format gives the GPU requirement; shorter than a name may be, so it is only read by this constant. */
 export const GPU_KEY = 'gpu';
 
-const BYTES_PER_UNIT: ReadonlyMap<string, number> = new Map([
-  ['kb', 1024],
-  ['mb', 1024 ** 2],
-  ['gb', 1024 ** 3],
-  ['tb', 1024 ** 4],
-]);
+/** The units of a size, each 1024 times the one before it, from the kilobyte. */
+const SIZE_UNITS: readonly string[] = ['kb', 'mb', 'gb', 'tb'];
 const SIZE_TEXT = /^(\d+)(kb|mb|gb|tb)?$/;
 const NUMBER_TEXT = /^\d+(?:\.\d+)?$/;
 const BYTES_PER_GIB = 1024 ** 3;
@@ -64,7 +60,8 @@ function bytesOf(value: unknown): number | undefined {
   }
   const [, digits = '', unit] = match;
   return (
-    Number(digits) * (unit === undefined ? 1 : (BYTES_PER_UNIT.get(unit) ?? 1))
+    Number(digits) *
+    (unit === undefined ? 1 : 1024 ** (SIZE_UNITS.indexOf(unit) + 1))
   );
 }
 

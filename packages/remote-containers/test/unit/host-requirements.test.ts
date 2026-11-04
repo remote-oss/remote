@@ -153,11 +153,19 @@ describe('what a configuration asks of the daemon (card containers-202, F-0206)'
       [
         mergedRequirements([
           {cpus: 2, needsGpu: false},
-          {memory: BYTES_PER_GIB, needsGpu: false},
+          {memory: BYTES_PER_GIB, storage: 2 * BYTES_PER_GIB, needsGpu: false},
         ]),
         mergedRequirements([]),
       ],
-      [{cpus: 2, memory: BYTES_PER_GIB, needsGpu: false}, {needsGpu: false}],
+      [
+        {
+          cpus: 2,
+          memory: BYTES_PER_GIB,
+          storage: 2 * BYTES_PER_GIB,
+          needsGpu: false,
+        },
+        {needsGpu: false},
+      ],
     );
   });
 });

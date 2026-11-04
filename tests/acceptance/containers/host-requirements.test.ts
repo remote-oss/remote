@@ -1,0 +1,165 @@
+import {deepStrictEqual} from 'node:assert';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {
+  closeWindow,
+  devContainerFolder,
+  devContainersOf,
+  inWindow,
+  waitFor,
+  windowState,
+} from '../windows/harness.ts';
+import {
+  answerDialog,
+  type ShownDialog,
+  waitForDialog,
+} from '../windows/renderer.ts';
+import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+
+const execFileAsync = promisify(execFile);
+
+/** The key the dev container format gives the GPU requirement, which is shorter than a name may be. */
+const GPU_KEY = 'gpu';
+
+const MESSAGE =
+  'Not all host requirements in devcontainer.json are met by the Docker daemon.';
+
+/** Starts Reopen in Container and gives the dialog the host requirements raise, with the command still pending. */
+async function dialogOfReopen(name: string): Promise<{
+  dialog: ShownDialog;
+  running: Promise<unknown>;
+}> {
+  const running = inWindow(name, 'remote-containers.reopenInContainer');
+  running.catch(() => undefined);
+  return {dialog: await waitForDialog(name, 120_000), running};
+}
+
+/** The limits a container's host configuration holds, as the engine reports them. */
+async function limitsOf(containerId: string): Promise<string> {
+  const {stdout} = await execFileAsync('docker', [
+    'inspect',
+    '--format',
+    '{{.HostConfig.NanoCpus}} {{.HostConfig.CpuQuota}} {{.HostConfig.Memory}}',
+    containerId,
+  ]);
+  return stdout.trim();
+}
+
+describe('Host requirements rows (card containers-202, F-0206)', function () {
+  this.timeout(600_000);
+
+  it('F-0206 AC-3, AC-5, AC-6 (c202-cancel): requirements no runner meets show the dialog with the daemon’s figures and the configuration’s CPUs, Cancel leaves the window local with no container, and the same command shows it again', async () => {
+    const folder = devContainerFolder('c202-cancel', {
+      name: 'C202 Cancel',
+      hostRequirements: {cpus: 4096},
+    });
+    const name = await openFolderWindow(folder);
+    const shown: ShownDialog[] = [];
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const {dialog, running} = await dialogOfReopen(name);
+      shown.push(dialog);
+      await answerDialog(name, 'Cancel');
+      await running;
+    }
+    deepStrictEqual(
+      {
+        messages: shown.map(dialog => dialog.message),
+        details: shown.map(dialog =>
+          /^Docker daemon: CPUs \d+, RAM [\d.]+gb(, GPU)?\ndevcontainer\.json: CPUs 4096$/.test(
+            dialog.details,
+          ),
+        ),
+        buttons: shown.map(dialog => [...dialog.buttons].sort()),
+        remoteName: (await windowState(name)).remoteName,
+        containers: await devContainersOf(folder),
+      },
+      {
+        messages: [MESSAGE, MESSAGE],
+        details: [true, true],
+        buttons: [
+          ['Cancel', 'Continue'],
+          ['Cancel', 'Continue'],
+        ],
+        remoteName: null,
+        containers: [],
+      },
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0206 AC-4, BR-4 (c202-continue): Continue creates the container and connects, with no CPU or memory limit applied', async () => {
+    const folder = devContainerFolder('c202-continue', {
+      name: 'C202 Continue',
+      hostRequirements: {cpus: 4096},
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      const {running} = await dialogOfReopen(name);
+      await answerDialog(name, 'Continue');
+      await running;
+      await waitFor(
+        `window ${name} to connect`,
+        async () => (await windowState(name)).remoteName === 'dev-container',
+        300_000,
+      );
+      const [containerId = ''] = await devContainersOf(folder);
+      deepStrictEqual(
+        {
+          containers: (await devContainersOf(folder)).length,
+          limits: await limitsOf(containerId),
+        },
+        {containers: 1, limits: '0 0 0'},
+      );
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0206 AC-9, AC-18, AC-35 (c202-lines): the configuration’s part lists CPUs, RAM, disk and GPU in that order, in gibibytes with one decimal', async () => {
+    const folder = devContainerFolder('c202-lines', {
+      name: 'C202 Lines',
+      hostRequirements: {
+        cpus: 4096,
+        memory: '70000mb',
+        storage: '70000mb',
+        [GPU_KEY]: true,
+      },
+    });
+    const name = await openFolderWindow(folder);
+    const {dialog, running} = await dialogOfReopen(name);
+    await answerDialog(name, 'Cancel');
+    await running;
+    deepStrictEqual(
+      dialog.details.split('\n')[1],
+      'devcontainer.json: CPUs 4096, RAM 68.4gb, disk 68.4gb, GPU',
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0206 AC-20, AC-34 (c202-ignored): a value the format does not read and a key it does not know ask nothing: no dialog, and the container is created', async () => {
+    const folder = devContainerFolder('c202-ignored', {
+      name: 'C202 Ignored',
+      hostRequirements: {
+        cpus: 'not-a-number',
+        [GPU_KEY]: 'sometimes',
+        bogusExtraKey: 'x',
+      },
+    });
+    try {
+      const name = await openFolderWindow(folder);
+      const running = inWindow(name, 'remote-containers.reopenInContainer');
+      running.catch(() => undefined);
+      await waitFor(
+        `window ${name} to connect`,
+        async () => (await windowState(name)).remoteName === 'dev-container',
+        300_000,
+      );
+      await running;
+      deepStrictEqual((await devContainersOf(folder)).length, 1);
+      await closeWindow(name);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+});
