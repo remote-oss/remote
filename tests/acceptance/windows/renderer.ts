@@ -3456,9 +3456,11 @@ async function keyInFolderDialog(
     () => `the folder dialog of window ${name}`,
     async () => ((await folderDialogOpen(name)) ? true : undefined),
   );
-  await evaluate<null>(
-    name,
-    `(() => {
+  /** Focuses the dialog's input and, when `typed` is given, sets its value as a user's typing would. */
+  function typeInto(): Promise<null> {
+    return evaluate<null>(
+      name,
+      `(() => {
       const input = ${FOLDER_DIALOG_INPUT};
       input.focus();
       if (${JSON.stringify(typed ?? null)} !== null) {
@@ -3468,7 +3470,9 @@ async function keyInFolderDialog(
       }
       return null;
     })()`,
-  );
+    );
+  }
+  await typeInto();
   // A key the dialog took can take the window to the folder, and then no page has its name: that reads as closed.
   async function read(): Promise<FolderDialogReading> {
     const address = await pageOf(name, PAGE_LOOKUP_MILLISECONDS).catch(
@@ -3489,10 +3493,15 @@ async function keyInFolderDialog(
         `the folder dialog of window ${name} to show ${typed}; it last read ${JSON.stringify(lastReading)}`,
       async () => {
         lastReading = await read();
-        return lastReading.value.replace(/\/$/, '') ===
-          typed.replace(/\/$/, '') && lastReading.rows[0] === '..'
-          ? true
-          : undefined;
+        const shown =
+          lastReading.value.replace(/\/$/, '') === typed.replace(/\/$/, '');
+        if (!shown) {
+          // The dialog fills its input with its own folder once its first listing is in, which can come after the typing:
+          // what was typed is typed again.
+          await typeInto();
+          return undefined;
+        }
+        return lastReading.rows[0] === '..' ? true : undefined;
       },
     );
   }
