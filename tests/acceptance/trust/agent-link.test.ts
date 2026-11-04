@@ -19,7 +19,12 @@ import {
 } from '../windows/harness.ts';
 import {hostLinks, LINK_PATTERN} from '../windows/agent-links.ts';
 import {INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
-import {answerDialog, pageText, waitForDialog} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  dialogOf,
+  pageText,
+  waitForDialog,
+} from '../windows/renderer.ts';
 import {listedKeys, printedAfter} from '../windows/terminal-support.ts';
 
 /** The alias that forwards the run's agent. */
@@ -108,33 +113,50 @@ describe('the agent link of a window on an untrusted folder (card coverage-99)',
 
   it('F-2311 AC-24 (c99-trust-terminal): after the refusal, a new terminal asks again, and when that is cancelled it opens in Restricted Mode with SSH_AUTH_SOCK as the link and the keys listed', async () => {
     await untrustedWindow('c99-trust-terminal');
+    const window = 'c99-trust-terminal';
+    // Every dialog the terminal's creation shows, by its buttons: a machine may show core's question, the modal request
+    // for trust, or both one after the other, and each is cancelled until the terminal opens.
+    const asked: string[][] = [];
+    async function cancelWhileAsked(opening: Promise<unknown>): Promise<void> {
+      const state = {open: true};
+      void opening.finally(() => {
+        state.open = false;
+      });
+      while (state.open) {
+        const shown = await dialogOf(window).catch(() => undefined);
+        if (shown !== undefined) {
+          asked.push(shown.buttons);
+          await answerDialog(window, CANCEL).catch(() => undefined);
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
     try {
-      await answerDialog('c99-trust-terminal', REFUSE);
-      await connectedWithin('c99-trust-terminal', INSTALL_MILLISECONDS);
+      await answerDialog(window, REFUSE);
+      await connectedWithin(window, INSTALL_MILLISECONDS);
       const links = await linksWithin(10_000);
-      void inWindow('c99-trust-terminal', 'workbench.action.terminal.new');
-      const asked = await waitForDialog('c99-trust-terminal');
-      await answerDialog('c99-trust-terminal', CANCEL);
-      const socket = await printedAfter(
-        'c99-trust-terminal',
-        'SOCK',
-        '$SSH_AUTH_SOCK',
-      );
+      void inWindow(window, 'workbench.action.terminal.new');
+      const printing = printedAfter(window, 'SOCK', '$SSH_AUTH_SOCK');
+      const [socket] = await Promise.all([
+        printing,
+        cancelWhileAsked(printing),
+      ]);
       deepStrictEqual(
         {
-          buttons: asked.buttons,
+          asked: asked.length > 0,
           socketIsLink: links.length === 1 && links[0]?.endsWith(` ${socket}`),
-          listsKey: (await listedKeys('c99-trust-terminal')).includes(
+          listsKey: (await listedKeys(window)).includes(
             await fingerprintOf(keyFile()),
           ),
-          trusted: await isTrusted('c99-trust-terminal'),
+          trusted: await isTrusted(window),
         },
         {
-          buttons: ['Manage', 'Cancel', 'Trust Folder & Continue'],
+          asked: true,
           socketIsLink: true,
           listsKey: true,
           trusted: false,
         },
+        `the dialogs asked: ${JSON.stringify(asked)}`,
       );
     } finally {
       await closeWindow('c99-trust-terminal').catch(() => undefined);

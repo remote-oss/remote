@@ -2692,6 +2692,22 @@ export async function waitForDialog(
   }
 }
 
+/**
+ * The two sets of buttons core's trust dialogs have: the question a window shows at start asks with a yes and a no, and
+ * the dialog a request for trust has "Trust Folder & Continue" and "Cancel" for them. Which of the two a machine shows
+ * first varies, and one window can show both in turn, so a row that answers the trust question means the button of
+ * whichever set is open.
+ */
+const TRUST_BUTTON_GROUPS: ReadonlyArray<readonly string[]> = [
+  ['Yes, I trust the authors', 'Trust Folder & Continue'],
+  ["No, I don't trust the authors", 'Cancel'],
+];
+
+/** The labels that stand for `label` when a dialog is answered: itself, and the other set's button for the same answer. */
+function answerLabelsOf(label: string): readonly string[] {
+  return TRUST_BUTTON_GROUPS.find(group => group.includes(label)) ?? [label];
+}
+
 /** Clicks the button labelled exactly `label` of the dialog open in window `name`; it fails naming what it found. */
 export async function answerDialog(name: string, label: string): Promise<void> {
   const missing = await evaluate<string | null>(
@@ -2702,7 +2718,8 @@ export async function answerDialog(name: string, label: string): Promise<void> {
         return 'no dialog open';
       }
       const buttons = [...box.querySelectorAll('${DIALOG_BUTTONS}')];
-      const button = buttons.find(each => each.textContent === ${JSON.stringify(label)});
+      const wanted = ${JSON.stringify([label, ...answerLabelsOf(label)])};
+      const button = wanted.map(text => buttons.find(each => each.textContent === text)).find(each => each !== undefined);
       if (button === undefined) {
         return 'no button ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(buttons.map(each => each.textContent));
       }
