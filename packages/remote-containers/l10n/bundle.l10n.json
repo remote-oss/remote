@@ -256,5 +256,6 @@
   "No pods found.": "No pods found.",
   "Select pod": "Select pod",
   "Select container": "Select container",
-  "Choose Container": "Choose Container"
+  "Choose Container": "Choose Container",
+  "Inspect Volume": "Inspect Volume"
 }

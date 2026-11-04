@@ -10,6 +10,8 @@ import {filled} from '../surfaces/filled.ts';
 const WINDOW_TEMPLATES = {
   S114: 'Dev Container: {0}{1}',
   S118: 'Dev Container{0}',
+  /** The label of a window that explores a volume; it has no string id of its own. */
+  explored: 'Inspect Volume',
 } as const;
 
 /** What the connection knows of its identity. */
@@ -17,6 +19,8 @@ export interface WindowIdentity {
   name: string | undefined;
   /** The engine's label: its host if the connection is pinned to one, else its Docker context. */
   context: string | undefined;
+  /** Whether the window explores a volume, which its label names in place of a configuration. */
+  explored?: boolean;
 }
 
 /** The suffix of the window's label; the name is kept as it is, spaces included. */
@@ -24,6 +28,9 @@ export function workspaceSuffixOf(
   identity: WindowIdentity | undefined,
   translate: Translate,
 ): string {
+  if (identity?.explored === true) {
+    return translate(WINDOW_TEMPLATES.explored);
+  }
   const context =
     identity?.context === undefined ? '' : ` @ ${identity.context}`;
   const name = identity?.name;

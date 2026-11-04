@@ -213,6 +213,7 @@ import {
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
 import {mountPerformanceHintApplies} from './explorer/details-model.ts';
+import {ensureExploreDefinition} from './volumes/explore-definition.ts';
 import {INSPECT_TEMPLATES, inspectVolume} from './volumes/inspect-volume.ts';
 import {
   engineListingOf,
@@ -2127,6 +2128,20 @@ export async function activate(
             socketPath: configuration.get(settings.dockerSocketPath.id),
           });
         },
+        exploreDefinition: () =>
+          ensureExploreDefinition({
+            storageFolder: context.globalStorageUri.fsPath,
+            join: (...parts) => path.join(...parts),
+            exists: file =>
+              stat(file).then(
+                () => true,
+                () => false,
+              ),
+            write: async (file, text) => {
+              await mkdir(path.dirname(file), {recursive: true});
+              await writeFile(file, text);
+            },
+          }),
         buildContext: () => {
           const cliFiles = cliPathsOf(
             context.extensionPath,
