@@ -4,13 +4,20 @@ import {
   connectedToContainer,
   containersLog,
   devContainersOf,
+  reloadingAction,
+  reloadingCommand,
   reloadWindow,
+  waitFor,
+  windowState,
 } from '../windows/harness.ts';
 import {removeContainers} from '../windows/folder-windows.ts';
 import {
   answerDialog,
+  answerNotification,
   dialogKindOf,
   dialogOf,
+  notificationCentre,
+  paletteRows,
   primaryButtonOf,
   statusBarText,
   toastDetails,
@@ -18,6 +25,7 @@ import {
 } from '../windows/renderer.ts';
 import {
   COUNTDOWN,
+  NOTICE_START,
   docker,
   eventually,
   logSince,
@@ -493,5 +501,80 @@ describe('F-0502 reconnection and the give-up rules (card containers-43)', funct
         containers: 1,
       })),
     );
+  });
+
+  it('F-0502 AC-7 (c110-removed): a removed container gives the terminal dialog, the log names it, and Reopen in Container is absent from the palette; Reopen Folder Locally reloads the window local with the offer again, and Reopen in Container creates a new container and connects', async () => {
+    const {name, containerId, folder} = await settledWindow('c110-removed');
+    try {
+      const mark = containersLog().length;
+      const began = Date.now();
+      await docker('rm', '-f', containerId);
+      const dialog = await waitForDialog(name, 30_000);
+      const seconds = (Date.now() - began) / 1000;
+      const indicator = await statusBarText(name, 'status.host');
+      await pause(20_000);
+      const lines = logSince(mark);
+      // The terminal dialog blocks the palette, so the resulting window is the one after it.
+      await answerDialog(name, 'Cancel');
+      const palette = await paletteRows(name, 'Reopen');
+      await reloadingCommand(name, 'remote-containers.reopenLocally');
+      await waitFor(
+        'the discovery offer in the local window',
+        async () =>
+          (await notificationCentre(name).catch(() => [])).some(text =>
+            text.startsWith(NOTICE_START),
+          ),
+        60_000,
+      );
+      const local = await windowState(name);
+      // The click reloads the window; it follows to the next activation, as the reload ends the
+      // extension host before it can answer.
+      await reloadingAction(
+        name,
+        'the reopen offer answered with Reopen in Container',
+        () => answerNotification(name, NOTICE_START, 'Reopen in Container'),
+      );
+      await eventually(
+        'the connected indicator',
+        async () =>
+          (await statusBarText(name, 'status.host')) ===
+          'Dev Container: c110-removed'
+            ? true
+            : undefined,
+        120_000,
+      );
+      const containers = await devContainersOf(folder);
+      const [fresh = ''] = containers;
+      const state = {
+        details: dialog.details,
+        buttons: [...dialog.buttons],
+        withinFifteenSeconds: seconds < 15,
+        indicator,
+        logNamesIt: lines.some(line => line.includes(containerId.slice(0, 12))),
+        palette: palette.filter(label => label.startsWith('Dev Containers:')),
+        local: [local.remoteName, local.folders.length],
+        freshCreated: fresh !== '',
+        count: containers.length,
+        host: await statusBarText(name, 'status.host'),
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        details: CANNOT_RECONNECT,
+        buttons: ['Cancel', 'Reload Window'],
+        withinFifteenSeconds: true,
+        indicator: `Disconnected from Dev Container: c110-removed`,
+        logNamesIt: true,
+        palette: [
+          'Dev Containers: Reopen Folder Locally',
+          "Dev Containers: Reset Don't Show Reopen Notification",
+        ],
+        local: [null, 1],
+        freshCreated: true,
+        count: 1,
+        host: 'Dev Container: c110-removed',
+      });
+    } finally {
+      await removeContainers(folder);
+    }
   });
 });
