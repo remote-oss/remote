@@ -1,17 +1,30 @@
 /**
- * @fileoverview check-ci-gate: ci.yml's ci-gate job needs every other job of the workflow (athena on #1076).
+ * @fileoverview check-ci-gate: ci.yml's ci-gate job needs every other job of the workflow (athena on #1076), and every
+ * job that can run on the organisation's pool keeps a fork's pull request off it.
  *
  * The main ruleset requires only `ci-gate`, which passes when every job it needs passed or was skipped. A job the gate
  * doesn't need could fail and still leave the gate green, so a job added later must join the gate's `needs`.
+ *
+ * A job whose `runs-on` reads a pool variable holds, in that expression, the same-repository guard (a fork's pull
+ * request takes GitHub's runner), asks for X64 and ephemeral (a fresh machine per job), and reads no secret (athena on
+ * #2219).
  */
 
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {parse as parseYaml} from 'yaml';
 import {isMainModule, REPOSITORY_ROOT} from './repository.ts';
 
-const WORKFLOW = '.github/workflows/ci.yml';
+const WORKFLOWS = '.github/workflows';
+const WORKFLOW = `${WORKFLOWS}/ci.yml`;
 const GATE = 'ci-gate';
+/** The repository variables that send a job to the organisation's pool. */
+const POOL_VARIABLES = ['vars.CI_POOL_RUNS_ON', 'vars.CI_CHECKS_RUNS_ON'];
+/** The guard a pool `runs-on` holds, so that a fork's pull request takes GitHub's runner. */
+export const SAME_REPOSITORY_GUARD =
+  "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)";
+/** The labels a pool `runs-on` asks for besides the pool's own. */
+const POOL_LABELS = '"X64","ephemeral"';
 
 /** What is wrong with the workflow text's gate: a job it doesn't need, a need that names no job, or no gate. */
 export function ciGateProblems(text: string): string[] {
@@ -42,10 +55,49 @@ export function ciGateProblems(text: string): string[] {
   return problems;
 }
 
+/** What is wrong with the pool jobs of the workflow `file`: a missing guard or labels, or a secret read. */
+export function poolJobProblems(file: string, text: string): string[] {
+  const workflow = parseYaml(text) as {
+    jobs?: Record<string, Record<string, unknown>>;
+  };
+  const problems: string[] = [];
+  for (const [name, definition] of Object.entries(workflow.jobs ?? {})) {
+    const runsOn = JSON.stringify(definition['runs-on'] ?? '');
+    if (!POOL_VARIABLES.some(variable => runsOn.includes(variable))) {
+      continue;
+    }
+    const expression = String(definition['runs-on']);
+    if (!expression.includes(SAME_REPOSITORY_GUARD)) {
+      problems.push(
+        `${file}: ${name} can run on the pool, and its runs-on lacks the same-repository guard`,
+      );
+    }
+    if (!expression.includes(POOL_LABELS)) {
+      problems.push(
+        `${file}: ${name} can run on the pool without asking for X64 and ephemeral`,
+      );
+    }
+    if (JSON.stringify(definition).includes('secrets.')) {
+      problems.push(`${file}: ${name} can run on the pool and reads a secret`);
+    }
+  }
+  return problems;
+}
+
 if (isMainModule(import.meta.url)) {
-  const problems = ciGateProblems(
-    readFileSync(path.join(REPOSITORY_ROOT, WORKFLOW), 'utf8'),
-  );
+  const problems = [
+    ...ciGateProblems(
+      readFileSync(path.join(REPOSITORY_ROOT, WORKFLOW), 'utf8'),
+    ),
+    ...readdirSync(path.join(REPOSITORY_ROOT, WORKFLOWS))
+      .filter(file => file.endsWith('.yml'))
+      .flatMap(file =>
+        poolJobProblems(
+          `${WORKFLOWS}/${file}`,
+          readFileSync(path.join(REPOSITORY_ROOT, WORKFLOWS, file), 'utf8'),
+        ),
+      ),
+  ];
   for (const problem of problems) {
     console.error(`check-ci-gate: ${problem}`);
   }

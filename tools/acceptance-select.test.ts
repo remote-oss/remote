@@ -327,7 +327,9 @@ describe('acceptance-select', () => {
           'containers-a',
           'containers-b',
           '@containers,!containers',
-          '@explorer,@hosts',
+          '@explorer,!explorer-folders',
+          'explorer-folders',
+          '@hosts',
         ],
       );
     });
@@ -336,7 +338,7 @@ describe('acceptance-select', () => {
       throws(() => workflowParts('jobs: {}'), /names no parts/);
     });
 
-    it("the repository's launches: the two containers parts stay two parts, and every launch needs ci.yml's six as written", () => {
+    it("the repository's launches: the two containers parts stay two parts, and every launch needs ci.yml's eight as written", () => {
       const launches = launchesOf(REPOSITORY_ROOT);
       const parts = workflowParts(
         readFileSync(
