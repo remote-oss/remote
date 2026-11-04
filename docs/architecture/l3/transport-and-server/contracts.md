@@ -842,6 +842,40 @@ of the chain on every resolve attempt (lines 899 to 915), and `getRemoteExecServ
 ended, every use fails with `closed`, and the owner (remote-ssh) returns a new adapter from its next
 `resolveExecServer`. An extension that kept an old `ExecServer` across a loss gets `closed` until it asks again.
 
+#### V7c. Remote - SSH serves `resolveExecServer` (connect-146, #2070; brief-remote-ssh-engines.md §2)
+
+lib-authority's `EditorResolver` gains the optional `resolveExecServer(authority, {resolveAttempt, execServer?})`, and
+its `Connector` the optional `execServer(input)`, which gives `{execServer}` or a `Failed`. The host registers
+`resolveExecServer` only for a connector that has `execServer`; it answers like a resolve (same queue, same progress
+for the stages of the connect), but shows no dialog. A `Failed` becomes the editor's `NotAvailable(message, false)`,
+whose message is `FailurePresenter.textOf(failed)` (the text the F-2601 dialog would show), so that core's own surface,
+or the extension that asked, shows the cause once.
+
+| Case | When | What serves it | Failure |
+|---|---|---|---|
+| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
+| A nested window | the connector holds none | its own connect, by `connectControl`: the same steps up to the authenticated control connection (host key, authentication with the window's prompts, install, start, tunnel to the control port, token check), then no `serve` and no window tunnel; the control connection is held for the window's life | the same refusals; `execServerUnavailable` with a reason when the program could not be set up; the failures of the steps |
+
+**Direct mode.** `remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the
+failure kind `execServerUnavailable` and a reason of its own (the setting, or the platform). No second route over plain
+ssh channels exists, and no direct install is made for an exec server.
+
+**The lost transport.** The returned exec server is a `WatchedExecServer`: `ExecServer` plus the owner's
+`onTransportLost(listener)`, which returns what stops it. An extension of the same host that was handed the object
+(remote-containers, through `context.execServer`) follows it; it is not part of the editor's API. In the SSH window it
+follows the window's `lost` and `closed` events; in a nested window, the end of the held control connection or its
+tunnel. The nested connection's loss does not tell the SSH resolver's own `onTransportLost`, because that resolver
+never resolved in that window.
+
+**Reconnect** (server-30 §4: core asks again). When the held connection of a nested window has ended, the next
+`execServer` request makes a new connect and gives the old connection back first; it never reuses an ended one. A
+consumer therefore takes `context.execServer` afresh on each resolve and does not keep one across a loss. A connect
+that is still under way when the window is cancelled is given back and fails as cancelled. The F-2605 record of a nested
+attempt is written as for a resolve: the connector tells `resolveEnded` the hints of the attempt, none when it worked.
+
+**Security.** Nothing is registered but the resolver member. The exec server answers only the window's own extension
+host through core's API. `spawn`'s environment is its own parameter, never in the arguments (R-26).
+
 ### V8 server-maintenance
 
 | Operation | Inputs | Output | Failures |

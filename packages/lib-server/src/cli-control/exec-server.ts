@@ -338,3 +338,17 @@ export function execServerOf(control: CliControl): ExecServer {
     },
   };
 }
+
+/** An exec server whose owner reports the loss of its transport, for an extension of the same host that was handed it. */
+export interface WatchedExecServer extends ExecServer {
+  /** Calls `listener` when the transport of the server is lost; the returned function stops it. */
+  onTransportLost(listener: () => void): () => void;
+}
+
+/** `server` with the owner's way to hear the loss of its transport. */
+export function watchedExecServer(
+  server: ExecServer,
+  onTransportLost: WatchedExecServer['onTransportLost'],
+): WatchedExecServer {
+  return {...server, onTransportLost};
+}

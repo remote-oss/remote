@@ -12,14 +12,27 @@ import type {
   Failed,
   FailureHint,
 } from 'lib-authority';
+import {
+  type ExecServer,
+  execServerOf,
+  type WatchedExecServer,
+  watchedExecServer,
+} from 'lib-server';
 import {forwardingEnvironment} from '../environment/forwarding.ts';
 import {
   connect,
+  connectControl,
   type Connection,
   type ConnectOptions,
+  type ControlConnection,
   type PhaseEvent,
 } from './connect.ts';
-import {failedWith} from './failure.ts';
+import {
+  EXEC_SERVER_LOST,
+  EXEC_SERVER_NO_CLI,
+  EXEC_SERVER_SETTING_OFF,
+  failedWith,
+} from './failure.ts';
 import type {CancelSource} from 'lib-authority';
 import type {SshTarget} from 'lib-ssh';
 import {sshTargetOf} from './host-settings.ts';
@@ -126,8 +139,18 @@ interface Held {
   lost: boolean;
 }
 
+/** The control connection a nested window holds for its exec server, and its exec server. */
+interface HeldExec {
+  connection: ControlConnection;
+  server: WatchedExecServer;
+  stop: () => void;
+  ended: boolean;
+}
+
 /** The connector of Remote - SSH, with what the window's commands read of its connection. */
 export interface SshConnector extends Connector {
+  /** The exec server of the window, which this connector always serves. */
+  execServer: NonNullable<Connector['execServer']>;
   /**
    * The TCP port of the server of the connection the window holds; `none` while it holds none or its transport was
    * lost, since a reconnection's server may listen elsewhere. It never throws.
@@ -166,6 +189,10 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   const closed = new Listeners<undefined>();
   let running: AbortController | undefined;
   let held: Held | undefined;
+  let heldExec: HeldExec | undefined;
+  /** The exec server of the window's own connection, made on the first request and dropped with the connection. */
+  let windowExec: {connection: Connection; server: ExecServer} | undefined;
+  const execEnded = new Listeners<undefined>();
 
   /** Gives back the connection the window holds, and stops hearing its transport; `reason` is the log's reason. */
   function releaseHeld(reason: string): void {
@@ -178,6 +205,122 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       current.stop();
       current.connection.release();
     }
+    windowExec = undefined;
+  }
+
+  /** Gives back the control connection a nested window holds. */
+  function releaseHeldExec(reason: string): void {
+    const current = heldExec;
+    heldExec = undefined;
+    if (current !== undefined) {
+      dependencies.options.logger.info(
+        `the held exec server connection is given back: ${reason}`,
+      );
+      current.stop();
+      current.connection.release();
+    }
+  }
+
+  /** The failure of an exec server that cannot be served, built as a connect's failure is. */
+  function refusal(
+    input: ConnectInput,
+    detail: Parameters<typeof failedWith>[0],
+  ): Failed {
+    return failedWith(detail, {
+      attempt: input.attempt,
+      isReconnection: input.isReconnection,
+      maximumReconnectionAttempts:
+        dependencies.options.maximumReconnectionAttempts,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    });
+  }
+
+  /** The exec server of the window's own connection, which its control connection serves. */
+  function windowExecServer(
+    input: ConnectInput,
+    current: Held,
+  ): {execServer: ExecServer} | Failed {
+    if (current.lost) {
+      return refusal(input, EXEC_SERVER_LOST);
+    }
+    const {control} = current.connection;
+    if (control === undefined) {
+      return refusal(
+        input,
+        dependencies.options.useExecServer
+          ? EXEC_SERVER_NO_CLI
+          : EXEC_SERVER_SETTING_OFF,
+      );
+    }
+    if (windowExec?.connection !== current.connection) {
+      windowExec = {
+        connection: current.connection,
+        server: watchedExecServer(execServerOf(control), listener => {
+          const stops = [lost.subscribe(listener), closed.subscribe(listener)];
+          return () => {
+            for (const stop of stops) {
+              stop();
+            }
+          };
+        }),
+      };
+    }
+    return {execServer: windowExec.server};
+  }
+
+  /**
+   * Runs one pipeline connect for `input` with the window's stages told, and tells `resolveEnded` how it ended. A
+   * connect that finished after the window was torn down is given back and answered with the cancelled failure.
+   */
+  async function pipelined<Result extends {release(): void}>(
+    input: ConnectInput,
+    terminalMode: boolean,
+    pipeline: (
+      steps: ConnectSteps,
+      options: ConnectOptions,
+    ) => Promise<Result | Failed>,
+  ): Promise<Result | Failed> {
+    const controller = new AbortController();
+    running = controller;
+    try {
+      let told: ConnectPhase = {name: 'initializing', details: true};
+      function onPhase(event: PhaseEvent): void {
+        if (event.kind === 'promptShown') {
+          phases.tell(promptedStage(told));
+          return;
+        }
+        if (event.kind !== 'initializing' || event.quiet !== true) {
+          // A quiet step shows no notification, so the log, which follows the notification, skips it too.
+          dependencies.options.logger.info(progressLine(event));
+        }
+        told = phaseOf(event, terminalMode);
+        phases.tell(told);
+      }
+      let result: Result | Failed;
+      try {
+        result = await pipeline(dependencies.stepsFor(onPhase), {
+          ...dependencies.options,
+          cancellation: controller.signal,
+          onPhase,
+        });
+      } catch (caught) {
+        dependencies.resolveEnded?.([]);
+        throw caught;
+      }
+      dependencies.resolveEnded?.('release' in result ? [] : result.hints);
+      if ('release' in result && controller.signal.aborted) {
+        // The window was torn down while the server started or the tunnel opened: give the connection back.
+        result.release();
+        return refusal(input, {kind: 'cancelled'});
+      }
+      return result;
+    } finally {
+      if (running === controller) {
+        running = undefined;
+      }
+    }
   }
 
   return {
@@ -187,79 +330,70 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       if (input === undefined) {
         return NOT_SSH_TARGET;
       }
-      const controller = new AbortController();
-      running = controller;
-      try {
-        const terminalMode = dependencies.terminalMode();
-        let told: ConnectPhase = {name: 'initializing', details: true};
-        function onPhase(event: PhaseEvent): void {
-          if (event.kind === 'promptShown') {
-            phases.tell(promptedStage(told));
-            return;
-          }
-          if (event.kind !== 'initializing' || event.quiet !== true) {
-            // A quiet step shows no notification, so the log, which follows the notification, skips it too.
-            dependencies.options.logger.info(progressLine(event));
-          }
-          told = phaseOf(event, terminalMode);
-          phases.tell(told);
-        }
-        let result: Awaited<ReturnType<typeof connect>>;
-        try {
-          result = await connect(input, dependencies.stepsFor(onPhase), {
-            ...dependencies.options,
-            cancellation: controller.signal,
-            onPhase,
-          });
-        } catch (caught) {
-          dependencies.resolveEnded?.([]);
-          throw caught;
-        }
-        dependencies.resolveEnded?.(isConnection(result) ? [] : result.hints);
-        if (!isConnection(result)) {
-          return result;
-        }
-        if (controller.signal.aborted) {
-          // The window was torn down while the server started or the tunnel opened: give the connection back.
-          result.release();
-          return failedWith(
-            {kind: 'cancelled'},
-            {
-              attempt: input.attempt,
-              isReconnection: input.isReconnection,
-              maximumReconnectionAttempts:
-                dependencies.options.maximumReconnectionAttempts,
-              userAlreadyNotified: false,
-              hints: [],
-              diagnostics: [],
-            },
-          );
-        }
-        const stop = result.onTransport(event => {
-          // A connection given back may still deliver an event already under way; only the held one counts.
-          if (held?.connection === result) {
-            if (event === 'lost') {
-              held.lost = true;
-            }
-            (event === 'lost' ? lost : closed).tell(undefined);
-          }
-        });
-        held = {
-          connection: result,
-          target: sshTargetOf(input.target),
-          terminalMode,
-          stop,
-          lost: false,
-        };
-        dependencies.applyTerminalEnvironment(
-          forwardingEnvironment(result.forwarding),
-        );
-        return result.connected;
-      } finally {
-        if (running === controller) {
-          running = undefined;
-        }
+      const terminalMode = dependencies.terminalMode();
+      const result = await pipelined(input, terminalMode, (steps, options) =>
+        connect(input, steps, options),
+      );
+      if (!isConnection(result)) {
+        return result;
       }
+      const stop = result.onTransport(event => {
+        // A connection given back may still deliver an event already under way; only the held one counts.
+        if (held?.connection === result) {
+          if (event === 'lost') {
+            held.lost = true;
+          }
+          (event === 'lost' ? lost : closed).tell(undefined);
+        }
+      });
+      held = {
+        connection: result,
+        target: sshTargetOf(input.target),
+        terminalMode,
+        stop,
+        lost: false,
+      };
+      dependencies.applyTerminalEnvironment(
+        forwardingEnvironment(result.forwarding),
+      );
+      return result.connected;
+    },
+    async execServer(hostInput): Promise<{execServer: ExecServer} | Failed> {
+      const input = pipelineInputOf(hostInput);
+      if (input === undefined) {
+        return NOT_SSH_TARGET;
+      }
+      if (held !== undefined) {
+        return windowExecServer(input, held);
+      }
+      if (heldExec !== undefined && !heldExec.ended) {
+        return {execServer: heldExec.server};
+      }
+      // The held connection ended or none was made: a nested window makes its own connect, and holds it.
+      releaseHeldExec('a new exec server connect starts');
+      const result = await pipelined(
+        input,
+        dependencies.terminalMode(),
+        (steps, options) => connectControl(input, steps, options),
+      );
+      if ('hints' in result) {
+        return result;
+      }
+      const entry: HeldExec = {
+        connection: result,
+        server: watchedExecServer(execServerOf(result.control), listener =>
+          execEnded.subscribe(listener),
+        ),
+        stop: result.onTransport(() => {
+          if (heldExec === entry) {
+            entry.ended = true;
+            execEnded.tell(undefined);
+          }
+        }),
+        ended: false,
+      };
+      heldExec = entry;
+      return {execServer: entry.server};
     },
     cancel(source) {
       dependencies.options.logger.info(
@@ -268,6 +402,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       running?.abort();
       running = undefined;
       releaseHeld('the connect is cancelled');
+      releaseHeldExec('the connect is cancelled');
     },
     revealDetails() {
       dependencies.revealLog();

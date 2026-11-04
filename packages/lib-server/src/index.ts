@@ -202,5 +202,7 @@ export {
   type ExecSpawnOptions,
   type ExecWriteStream,
   execServerOf,
+  type WatchedExecServer,
+  watchedExecServer,
 } from './cli-control/exec-server.ts';
 export {type S045Event, s045EventOf} from './cli-control/progress.ts';

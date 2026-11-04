@@ -118,13 +118,17 @@ export function failurePresenterOf(
     };
   }
 
+  function dialogOf(failed: Failed): Dialog {
+    return failed.kind === 'noServerSource' ||
+      failed.kind === 'invalidServerTemplate'
+      ? serverSourceDialog(failed)
+      : connectionDialog(failed);
+  }
+
   return {
+    textOf: failed => dialogOf(failed).text,
     present: failed => {
-      const shown =
-        failed.kind === 'noServerSource' ||
-        failed.kind === 'invalidServerTemplate'
-          ? serverSourceDialog(failed)
-          : connectionDialog(failed);
+      const shown = dialogOf(failed);
       // The buttons act later, and nothing they do or fail to do changes what the window was told.
       void Promise.resolve(
         dialog.showError(

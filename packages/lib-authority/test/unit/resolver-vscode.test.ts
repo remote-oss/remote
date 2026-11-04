@@ -544,4 +544,60 @@ describe('the editor behind the resolver host: getCanonicalURI (card containers-
       false,
     );
   });
+
+  it('brief-remote-ssh-engines §2: a host resolver with no exec server gives the editor none', () => {
+    const seen: Seen = {events: []};
+    resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+    }).registerRemoteAuthorityResolver('ssh-remote', hostResolver(CONNECTION));
+    deepStrictEqual('resolveExecServer' in (seen.registered ?? {}), false);
+  });
+
+  it('brief-remote-ssh-engines §2: the editor’s exec server request reaches the host with the attempt, and the answer is the exec server', async () => {
+    const seen: Seen = {events: []};
+    const asked: unknown[] = [];
+    resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+    }).registerRemoteAuthorityResolver('ssh-remote', {
+      ...hostResolver(CONNECTION),
+      resolveExecServer: (authority, context) => {
+        asked.push([authority, context]);
+        return Promise.resolve({name: 'exec'});
+      },
+    });
+    const answer = await seen.registered?.resolveExecServer?.(
+      'ssh-remote+box',
+      {
+        resolveAttempt: 2,
+      },
+    );
+    deepStrictEqual(
+      [asked, answer],
+      [[['ssh-remote+box', {resolveAttempt: 2}]], {name: 'exec'}],
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: the exec server the editor passes down is passed to the host', async () => {
+    const seen: Seen = {events: []};
+    const asked: unknown[] = [];
+    const outer = {name: 'outer'} as unknown as vscode.ExecServer;
+    resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+    }).registerRemoteAuthorityResolver('ssh-remote', {
+      ...hostResolver(CONNECTION),
+      resolveExecServer: (authority, context) => {
+        asked.push(authority);
+        asked.push(context);
+        return Promise.resolve({});
+      },
+    });
+    await seen.registered?.resolveExecServer?.('ssh-remote+box', {
+      resolveAttempt: 2,
+      execServer: outer,
+    });
+    deepStrictEqual(asked, [
+      'ssh-remote+box',
+      {resolveAttempt: 2, execServer: outer},
+    ]);
+  });
 });
