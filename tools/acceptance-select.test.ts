@@ -97,6 +97,65 @@ describe('acceptance-select', () => {
     );
   });
 
+  it('a suite run in parts by its files: a test reaches the parts that list it, and every part when none does', () => {
+    const parts: Launch[] = [
+      {
+        label: 'part-a',
+        kind: 'plain',
+        suite: 'suite-parts',
+        files: ['alpha.test.ts'],
+      },
+      {
+        label: 'part-b',
+        kind: 'plain',
+        suite: 'suite-parts',
+        files: ['beta.test.ts'],
+      },
+    ];
+    deepStrictEqual(
+      [
+        'tests/acceptance/suite-parts/alpha.test.ts',
+        'tests/acceptance/suite-parts/nested/beta.test.ts',
+        'tests/acceptance/suite-parts/gamma.test.ts',
+      ].map(changed => selectLaunches([changed], parts).labels),
+      [['part-a'], ['part-b'], ['part-a', 'part-b']],
+    );
+  });
+
+  it('a launch of the suite that runs all its files is reached by every test of it, beside the part that lists the test', () => {
+    const launches: Launch[] = [
+      {
+        label: 'part-a',
+        kind: 'plain',
+        suite: 'suite-parts',
+        files: ['alpha.test.ts'],
+      },
+      {label: 'whole', kind: 'plain', suite: 'suite-parts'},
+      {label: 'runner-whole', runner: 'runner', suite: 'suite-parts'},
+    ];
+    deepStrictEqual(
+      [
+        'tests/acceptance/suite-parts/alpha.test.ts',
+        'tests/acceptance/suite-parts/gamma.test.ts',
+      ].map(changed => selectLaunches([changed], launches).labels),
+      [
+        ['part-a', 'whole', 'runner-whole'],
+        ['whole', 'runner-whole'],
+      ],
+    );
+  });
+
+  it("the containers suite's two parts in the real table: a test of either part selects that part alone", () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [
+        'tests/acceptance/containers/attach-command.test.ts',
+        'tests/acceptance/containers/reuse.test.ts',
+      ].map(changed => selectLaunches([changed], launches).labels),
+      [['containers-a'], ['containers-b']],
+    );
+  });
+
   it('a helper in a suite folder (the shared windows harness) reaches every launch', () => {
     deepStrictEqual(labelsFor('tests/acceptance/windows/renderer.ts'), EVERY);
   });
