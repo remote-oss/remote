@@ -137,10 +137,12 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   const record = recordOf(parsed);
   const engine = engineOf(record?.settings);
   const configFile = configFileOf(record?.configFile);
+  // `devcontainer open --config` writes no `localDocker` (F-1201 BR-17): a payload without it is a local engine.
+  const localDocker = record?.localDocker ?? false;
   if (
     typeof record?.hostPath !== 'string' ||
     record.hostPath === '' ||
-    typeof record.localDocker !== 'boolean' ||
+    typeof localDocker !== 'boolean' ||
     engine === false ||
     configFile === undefined
   ) {
@@ -149,7 +151,7 @@ function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
   return {
     kind: 'folder',
     hostPath: record.hostPath,
-    localDocker: record.localDocker,
+    localDocker,
     ...engine,
     configFile,
   };

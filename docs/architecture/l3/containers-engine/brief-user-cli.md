@@ -64,7 +64,7 @@ macOS or Windows lines. Some parts are reusable:
   4. **The authority:** `dev-container+<hex>`.
      - **Without `--config`:** the hex of the folder path.
      - **With `--config`:** the hex of the compact `{"hostPath", "configFile": {"$mid": 1, "path", "scheme": "file"}}`.
-       F-0501's connector accepts both (built).
+       F-0501's connector accepts both (contracts §3, as amended for this card).
      - **A `.code-workspace` argument:** the hex holds the file's path (6.10).
      - **Characters:** spaces, `$` and quotes are kept intact, the spec's preferred behaviour (BR-21 marks the
        reference's losses as not preferred).
