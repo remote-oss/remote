@@ -175,21 +175,31 @@ export function folderTargetOf(
 }
 
 /** The text a payload holds, or the refusal for a payload that is not lowercase hex. */
-export function payloadTextOf(payload: string): string | PayloadMalformed {
+function payloadTextOf(payload: string): string | PayloadMalformed {
   return /^(?:[0-9a-f]{2})+$/.test(payload)
     ? Buffer.from(payload, 'hex').toString('utf8')
     : {malformed: 'hex'};
 }
 
 /** The JSON a payload's text holds, or the refusal for a text that is not JSON. */
-export function payloadJsonOf(
-  text: string,
-): {json: unknown} | PayloadMalformed {
+function payloadJsonOf(text: string): {json: unknown} | PayloadMalformed {
   try {
     return {json: JSON.parse(text)};
   } catch {
     return {malformed: 'json'};
   }
+}
+
+/** The record a payload's JSON holds, none when the JSON is another kind of value; or the refusal at the step that failed. */
+export function payloadRecordOf(
+  payload: string,
+): {record: Record<string, unknown> | undefined} | PayloadMalformed {
+  const text = payloadTextOf(payload);
+  if (typeof text !== 'string') {
+    return text;
+  }
+  const parsed = payloadJsonOf(text);
+  return 'malformed' in parsed ? parsed : {record: recordOf(parsed.json)};
 }
 
 /** Reads a payload: a folder target, the legacy host path, or why it is neither. */

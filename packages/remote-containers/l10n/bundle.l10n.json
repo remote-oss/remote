@@ -258,5 +258,6 @@
   "Select container": "Select container",
   "Choose Container": "Choose Container",
   "Inspect Volume": "Inspect Volume",
-  "Edit devcontainer.json in Recovery Container": "Edit devcontainer.json in Recovery Container"
+  "Edit devcontainer.json in Recovery Container": "Edit devcontainer.json in Recovery Container",
+  "{0} in {1} ({2})": "{0} in {1} ({2})"
 }

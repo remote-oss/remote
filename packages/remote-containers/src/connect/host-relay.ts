@@ -35,6 +35,8 @@ export interface RelayRequest {
   nodePath: string;
   relayPath: string;
   containerPort: number;
+  /** The dialer to the server's port, for a target the Docker exec dialer does not reach; none uses the Docker one. */
+  dialer?: Dialer;
   /** Told each time a relayed connection ends, once the relay is open. */
   onConnectionClosed: () => void;
 }
@@ -89,13 +91,14 @@ export async function openHostRelay(
   let armed = false;
   const outcome = await openRelayTunnel({
     dialer: watchedDialer(
-      execDialer(
-        request.engine,
-        request.containerId,
-        request.remoteUser,
-        request.nodePath,
-        request.relayPath,
-      ),
+      request.dialer ??
+        execDialer(
+          request.engine,
+          request.containerId,
+          request.remoteUser,
+          request.nodePath,
+          request.relayPath,
+        ),
       () => armed,
       request.onConnectionClosed,
     ),
