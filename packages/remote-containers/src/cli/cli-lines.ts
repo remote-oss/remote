@@ -9,7 +9,7 @@ export type DaemonRefusal = 'invalidMount' | 'portAllocated';
 const INVALID_MOUNT =
   /^(?:docker: )?Error response from daemon: invalid mount config for type "[^"]*": (?:bind source path does not exist: |field Source must not be empty$)/u;
 const PORT_ALLOCATED =
-  /^(?:docker: )?Error response from daemon: .*: Bind for \S+ failed: port is already allocated$/u;
+  /^(?:docker: )?Error response from daemon: .*: (?:Bind for \S+ failed: port is already allocated|failed to bind host port for \S+: address already in use)$/u;
 
 /** The refusal one line of the Docker client says, or undefined; the line has no colour codes and no CR. */
 export function daemonRefusalOf(line: string): DaemonRefusal | undefined {
