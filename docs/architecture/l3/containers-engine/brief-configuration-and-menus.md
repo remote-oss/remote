@@ -122,7 +122,7 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
 
 - **The activation event:** `onDebugResolve:extensionHost` joins the manifest's `activationEvents` (BR-1). It isn't
   there today.
-- **`(reading-NNNN-twin)`, F-0507 AC-24 with F-0409 AC-24:**
+- **`(reading-2140-twin)`, F-0507 AC-24 with F-0409 AC-24:**
   - **The conflict:** F-0507 AC-24 has the Extension Development Host connect to the running container when an
     exited twin exists, and it doesn't say which twin is newer. F-0409 AC-24, the owner of the matching (C7's
     `decide()`), starts and uses the **newer** twin, even when the older one is running.
@@ -153,7 +153,7 @@ extensions; the generated Copilot instructions), `brief-attach.md` (C12), `brief
 - **The flows** are the existing ones:
   - the attach (C12, `brief-attach.md`) opens a new window;
   - Explore a Volume (`brief-volumes.md`) reuses the window (BR-3).
-- **`(question-NNNN-row-shape)`:** the spec doesn't say which property of the partner's element holds the container
+- **`(question-2140-row-shape)`:** the spec doesn't say which property of the partner's element holds the container
   id or volume name ("can't be told apart from outside").
   - **Why it's a question:** the clean side may not run the partner, and its source isn't an admitted source.
   - **The question:** it goes to metis with this PR, asking that F-0603 name the element's properties.
