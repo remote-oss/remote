@@ -23,18 +23,18 @@ function requestOf(changes: Partial<ExecRequest> = {}): ExecRequest {
 }
 
 /** A runner over a fake that gives every process `run`. */
-function runnerOver(run: FakeRun, session = {}) {
-  const fake = fakeWsl(() => run, session);
+function runnerOver(behaviour: FakeRun, session = {}) {
+  const fake = fakeWsl(() => behaviour, session);
   return {fake, runner: createWslRunner(fake)};
 }
 
 /** The lines `exec` delivered and its outcome. */
 async function executed(
-  run: FakeRun,
+  behaviour: FakeRun,
   changes: Partial<ExecRequest> = {},
   session = {},
 ) {
-  const {fake, runner} = runnerOver(run, session);
+  const {fake, runner} = runnerOver(behaviour, session);
   const lines: string[] = [];
   const outcome = await runner.exec(requestOf(changes), line => {
     lines.push(line);
@@ -67,7 +67,7 @@ describe('D1: where wsl.exe is', () => {
   it('cw01 locate: finds wsl.exe on the PATH when System32 has none', async () => {
     const {fake, runner} = runnerOver(EXITS_ZERO, {
       systemRoot: undefined,
-      environment: {PATH: 'D:\\tools\;E:\\bin'},
+      environment: {PATH: 'D:\\tools;E:\\bin'},
     });
     fake.local.set('E:\\bin\\wsl.exe', new Uint8Array(0));
     deepStrictEqual(await runner.locate(), {

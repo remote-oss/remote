@@ -5,8 +5,8 @@ import {createWslRunner} from '../../src/runner.ts';
 import {type FakeRun, fakeWsl, utf8Output} from '../../src/testing/fake-wsl.ts';
 
 /** The mapper over a fake whose every process gives `run`, with the fake. */
-function mapperOver(run: FakeRun) {
-  const fake = fakeWsl(() => run);
+function mapperOver(behaviour: FakeRun) {
+  const fake = fakeWsl(() => behaviour);
   const runner = createWslRunner(fake);
   return {fake, runner, mapper: createPathMapper(runner)};
 }
@@ -149,8 +149,8 @@ describe('D1: -u appears only on the root install’s path', () => {
 
 describe('D4: the channel’s own rules', () => {
   /** A channel over a fake whose processes all give `run`. */
-  function channelOver(run: FakeRun) {
-    const {fake, runner, mapper} = mapperOver(run);
+  function channelOver(behaviour: FakeRun) {
+    const {fake, runner, mapper} = mapperOver(behaviour);
     return {
       fake,
       channel: createWslHostChannel({runner, mapper, distro: 'Ubuntu'}),

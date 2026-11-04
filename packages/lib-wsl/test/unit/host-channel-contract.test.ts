@@ -69,9 +69,9 @@ function copyRun(kind: ChannelFailureKind): FakeRun {
 function inOrder(...runs: FakeRun[]): () => FakeRun {
   let index = 0;
   return () => {
-    const run = runs[Math.min(index, runs.length - 1)] ?? runs[0];
+    const next = runs[Math.min(index, runs.length - 1)] ?? runs[0];
     index += 1;
-    return run ?? prints([], 0);
+    return next ?? prints([], 0);
   };
 }
 

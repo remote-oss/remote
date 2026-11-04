@@ -81,7 +81,7 @@ export function fakeWsl(
     return Number(/count=(\d+)/.exec(command ?? '')?.[1] ?? 0);
   }
 
-  function run(
+  function startProcess(
     specification: WslProcessSpecification,
     behaviour: FakeRun,
   ): WslProcess {
@@ -98,7 +98,7 @@ export function fakeWsl(
         }
       }
     }
-    function say(
+    function emit(
       stdout: Uint8Array | undefined,
       stderr: Uint8Array | undefined,
       status: number | undefined,
@@ -121,7 +121,7 @@ export function fakeWsl(
       return Buffer.concat(input);
     }
     if (behaviour.kind === 'exits') {
-      say(behaviour.stdout, behaviour.stderr, behaviour.status);
+      emit(behaviour.stdout, behaviour.stderr, behaviour.status);
     } else if (behaviour.kind === 'printsUntilKilled') {
       setImmediate(() => {
         for (const listener of outputs) {
@@ -140,7 +140,7 @@ export function fakeWsl(
       endInput: () => {
         if (behaviour.kind === 'digestsInput') {
           const content = allInput().subarray(preludeBytes(specification));
-          say(
+          emit(
             utf8Output(
               `${createHash('sha256').update(content).digest('hex')}\n`,
             ),
@@ -152,9 +152,9 @@ export function fakeWsl(
             String(specification.programArguments.at(-1)),
             allInput(),
           );
-          say(undefined, undefined, 0);
+          emit(undefined, undefined, 0);
         } else if (behaviour.kind === 'afterInput') {
-          say(
+          emit(
             behaviour.then.stdout,
             behaviour.then.stderr,
             behaviour.then.status,
@@ -180,7 +180,7 @@ export function fakeWsl(
           }),
         );
       }
-      return Promise.resolve(run(specification, behaviour));
+      return Promise.resolve(startProcess(specification, behaviour));
     },
     files: {
       exists: file => Promise.resolve(local.has(file)),

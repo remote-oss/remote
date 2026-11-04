@@ -325,9 +325,9 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     handle.endInput();
   }
 
-  /** The failure `wsl.exe` itself reported in `raw`, if the text names one. */
-  function reportedFailure(raw: Uint8Array): RunFailed | undefined {
-    const text = decodeManagementOutput(raw);
+  /** The failure `wsl.exe` itself reported in `rawOutput`, if the text names one. */
+  function reportedFailure(rawOutput: Uint8Array): RunFailed | undefined {
+    const text = decodeManagementOutput(rawOutput);
     const match = EXEC_ERRORS.find(([pattern]) => pattern.test(text));
     return match === undefined ? undefined : failed(match[1], text.trim());
   }
