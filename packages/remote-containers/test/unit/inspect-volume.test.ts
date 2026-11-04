@@ -131,7 +131,8 @@ async function stepsOf(scenario: Scenario = {}): Promise<string[]> {
             {name: 'one', labels: {}},
             {name: 'two', labels: {}},
           ])
-        : Promise.reject(scenario.listing);
+        : // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a listing that rejects with a non-Error, on purpose
+          Promise.reject(scenario.listing);
     },
     pick: rows => {
       steps.push(`pick ${rows.map(entry => entry.volumeName).join(',')}`);
