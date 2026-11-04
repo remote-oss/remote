@@ -119,6 +119,14 @@
       "card": "#2156",
       "slice": "containers release 2",
       "decision": "F-0207 BR-15 (2026-11-04): the WSL adapter of the engine host; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/wsl-distro-check.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-3, BR-17 (2026-11-04): the check of a typed distro against WSL's list; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
     }
   ]
 }
