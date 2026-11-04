@@ -16,6 +16,7 @@ import {
   FOLDER,
   containerReadsFail,
   inputOf,
+  leaveRebuildIntent,
   PAYLOAD,
   READY,
   sceneOf,
@@ -24,10 +25,7 @@ import {
   type Scene,
 } from './connector.fixture.ts';
 import {noEngineProgramOf} from '../../src/connect/connector.ts';
-import {
-  REBUILD_INTENTS_KEY,
-  storeRebuildIntent,
-} from '../../src/open/rebuild-intent.ts';
+import {REBUILD_INTENTS_KEY} from '../../src/open/rebuild-intent.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
@@ -468,6 +466,26 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it('contracts §2 step 3: the mounts and the runArgs the first read of the configuration holds go to the preparation as they are', async () => {
+    const scene = sceneOf();
+    scene.configuration = {
+      kind: 'configuration',
+      configuration: {
+        name: 'Proj',
+        mounts: ['type=volume,source=data,target=/data'],
+        runArgs: ['--init'],
+      },
+      workspaceFolder: '/workspaces/proj',
+      workspaceMount: undefined,
+      mergedConfiguration: undefined,
+    };
+    await connected(scene);
+    deepStrictEqual(
+      [scene.prepared[0]?.mounts, scene.prepared[0]?.runArgs],
+      [['type=volume,source=data,target=/data'], ['--init']],
+    );
+  });
+
   it('F-0419 AC-20: a reserved mount ends the connect with the setup failure and the detail that names the property and the target', async () => {
     const scene = sceneOf();
     scene.outcome = {
@@ -505,25 +523,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
-  /** Leaves a no-cache rebuild intent for the payload, as the reload of a rebuild command does. */
-  async function withIntent(scene: Scene): Promise<void> {
-    await storeRebuildIntent(
-      {
-        get: () => scene.intentStore,
-        update: (key, value) => {
-          scene.intentStore = value;
-          return Promise.resolve();
-        },
-      },
-      PAYLOAD,
-      {buildNoCache: true},
-      0,
-    );
-  }
-
   it('contracts §3: the first attempt takes the intent and hands it to C7', async () => {
     const scene = sceneOf();
-    await withIntent(scene);
+    await leaveRebuildIntent(scene, PAYLOAD);
     await connected(scene);
     deepStrictEqual(
       [
@@ -539,7 +541,7 @@ describe('the container connector: the connect (card containers-08)', () => {
 
   it('F-0502: a reconnection never takes the intent', async () => {
     const scene = sceneOf();
-    await withIntent(scene);
+    await leaveRebuildIntent(scene, PAYLOAD);
     await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
     deepStrictEqual(
       [
@@ -553,7 +555,7 @@ describe('the container connector: the connect (card containers-08)', () => {
 
   it('contracts §3: a later attempt never takes the intent', async () => {
     const scene = sceneOf();
-    await withIntent(scene);
+    await leaveRebuildIntent(scene, PAYLOAD);
     await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
     deepStrictEqual(scene.prepared[0]?.rebuild, undefined);
   });
@@ -1953,41 +1955,71 @@ describe('the container connector: cancelling (card containers-08)', () => {
     );
   });
 
+  /** What a held step lets go of once the connect is cancelled. */
+  interface Gate {
+    release?: () => void;
+  }
+
+  /** Starts a connect, lets it run for `ticks` turns, cancels it, lets the held step go and gives the connect's end. */
+  async function cancelledConnect(
+    scene: Scene,
+    gate: Gate,
+    ticks: number,
+  ): Promise<Connected | Failed> {
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    for (let turn = 0; turn < ticks; turn += 1) {
+      await tick();
+    }
+    scene.connector.cancel();
+    gate.release?.();
+    return connecting;
+  }
+
   it('contracts §2 cancel: a cancel while the server starts ends the connect as cancelled and opens no relay', async () => {
     const scene = sceneOf();
-    let release: (() => void) | undefined;
+    const gate: Gate = {};
     scene.server = () =>
       new Promise(resolve => {
-        release = () => {
+        gate.release = () => {
           resolve(STARTED_SERVER);
         };
       });
-    const connecting = scene.connector.connect(inputOf(PAYLOAD));
-    await tick();
-    await tick();
-    scene.connector.cancel();
-    release?.();
-    const result = await connecting;
+    const result = await cancelledConnect(scene, gate, 2);
     deepStrictEqual(
       [failedKind(result), scene.relayRequests.length],
       ['cancelled', 0],
     );
   });
 
+  it('contracts §2 cancel: a cancel while the environment probe runs ends the connect as cancelled and opens no relay', async () => {
+    const scene = sceneOf();
+    const gate: Gate = {};
+    scene.probe = process =>
+      new Promise(resolve => {
+        gate.release = () => {
+          process.exit(0);
+          resolve();
+        };
+      });
+    const result = await cancelledConnect(scene, gate, 8);
+    deepStrictEqual(
+      [
+        failedKind(result),
+        scene.probeScripts.length,
+        scene.relayRequests.length,
+      ],
+      ['cancelled', 1, 0],
+    );
+  });
+
   it('contracts §2 cancel: a cancel while the relay opens gives back the relay that opened, and the connect is cancelled', async () => {
     const scene = sceneOf();
-    let release: (() => void) | undefined;
+    const gate: Gate = {};
     scene.relayGate = () =>
       new Promise(resolve => {
-        release = resolve;
+        gate.release = resolve;
       });
-    const connecting = scene.connector.connect(inputOf(PAYLOAD));
-    for (let ticks = 0; ticks < 8; ticks += 1) {
-      await tick();
-    }
-    scene.connector.cancel();
-    release?.();
-    const result = await connecting;
+    const result = await cancelledConnect(scene, gate, 8);
     deepStrictEqual(
       [failedKind(result), scene.relays.map(relay => relay.closed)],
       ['cancelled', [1]],
@@ -2034,6 +2066,16 @@ describe('the container connector: cancelling (card containers-08)', () => {
         ['/work/proj/.devcontainer/devcontainer.json', true],
         ['/work/proj/.devcontainer/devcontainer.json', false],
       ],
+    );
+  });
+
+  it('F-0901 6.21 step 4: the held connection of a compose service built from a Dockerfile names that Dockerfile', async () => {
+    const scene = sceneOf();
+    scene.outcome = {...READY, serviceDockerfile: '/work/proj/Dockerfile'};
+    await connected(scene);
+    deepStrictEqual(
+      scene.connector.heldConnection()?.serviceDockerfile,
+      '/work/proj/Dockerfile',
     );
   });
 
@@ -2596,38 +2638,48 @@ describe('the container connector: the remote environment (card containers-45)',
     );
   });
 
-  it('F-0416 BR-11b: a probe that fails, exits 1, prints no end marker or never answers is dropped, once each, and the connect goes on', async () => {
+  it('F-0416 BR-11b: a probe that fails, exits 1, prints no end marker or never answers is dropped, once each with its reason, and the connect goes on', async () => {
     const results: unknown[] = [];
-    const probes: Array<Scene['probe']> = [
-      process => {
-        process.exit(undefined);
+    const probes: Array<{probe: Scene['probe']; expires: boolean}> = [
+      {
+        probe: process => {
+          process.exit(undefined);
+        },
+        expires: false,
       },
-      process => {
-        process.print('motd\n');
-        process.exit(1);
+      {
+        probe: process => {
+          process.print('motd\n');
+          process.exit(1);
+        },
+        expires: false,
       },
-      process => {
-        process.print('remote-oss-env-probe-begin\nA=probe\0');
-        process.exit(0);
+      {
+        probe: process => {
+          process.print('remote-oss-env-probe-begin\nA=probe\0');
+          process.exit(0);
+        },
+        expires: false,
       },
-      () => undefined,
+      {probe: () => undefined, expires: true},
     ];
-    for (const probe of probes) {
+    for (const {probe, expires} of probes) {
       const scene = sceneOf();
       scene.configuration = withMergedConfiguration(MERGED);
       scene.probe = probe;
-      const timeout = mock.method(AbortSignal, 'timeout', () =>
-        AbortSignal.abort(),
-      );
+      const timeout = expires
+        ? mock.method(AbortSignal, 'timeout', () => AbortSignal.abort())
+        : undefined;
       const result = await connected(scene);
-      timeout.mock.restore();
-      results.push([result.extensionHostEnv, dropLines(scene).length]);
+      timeout?.mock.restore();
+      results.push([result.extensionHostEnv, dropLines(scene)]);
     }
+    const remote = {ALPHA: 'remote', CHARLIE: null};
     deepStrictEqual(results, [
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
-      [{ALPHA: 'remote', CHARLIE: null}, 1],
+      [remote, ['the environment probe was dropped: channelClosed']],
+      [remote, ['the environment probe was dropped: exit status 1']],
+      [remote, ['the environment probe was dropped: no end marker']],
+      [remote, ['the environment probe was dropped: cancelled']],
     ]);
   });
 

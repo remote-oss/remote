@@ -40,6 +40,7 @@ import type {
   ContainerRequest,
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
+import {storeRebuildIntent} from '../../src/open/rebuild-intent.ts';
 import {fakeEngine, type ProcessScript, type SpawnPlan} from './fake-engine.ts';
 
 /** The extension's global storage folder of the fixture: nothing is ever created in it. */
@@ -762,4 +763,23 @@ export function sceneOf(
   };
   scene.connector = containerConnectorOf(dependencies);
   return scene;
+}
+
+/** Leaves a no-cache rebuild intent for the payload, as the reload of a rebuild command does. */
+export async function leaveRebuildIntent(
+  scene: Scene,
+  payload: string,
+): Promise<void> {
+  await storeRebuildIntent(
+    {
+      get: () => scene.intentStore,
+      update: (key, value) => {
+        scene.intentStore = value;
+        return Promise.resolve();
+      },
+    },
+    payload,
+    {buildNoCache: true},
+    0,
+  );
 }
