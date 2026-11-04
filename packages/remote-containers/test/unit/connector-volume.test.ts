@@ -2,7 +2,20 @@ import {deepStrictEqual} from 'node:assert';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {volumePayloadOf} from '../../src/volumes/volume-payload.ts';
-import {inputOf, type Scene, sceneOf} from './connector.fixture.ts';
+import {
+  inputOf,
+  leaveRebuildIntent,
+  type Scene,
+  sceneOf,
+} from './connector.fixture.ts';
+
+const EXPLORED_PAYLOAD = volumePayloadOf({
+  kind: 'volume',
+  repositoryPath: '',
+  volumeName: 'data',
+  folder: 'volume',
+  inspectVolume: true,
+});
 
 const VOLUME_PAYLOAD = volumePayloadOf({
   kind: 'volume',
@@ -216,6 +229,58 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         asked: ['volume inspect --format {{.Name}} -- data'],
       },
     );
+  });
+
+  it('F-0705 5.0 (card containers-155): an explored volume that exists is said to exist, and one that does not is said to be created by the mount', async () => {
+    const present = volumeScene(
+      plainPass(argv =>
+        argv.join(' ').startsWith('volume inspect') ? exited(0) : undefined,
+      ),
+    );
+    const absent = volumeScene();
+    for (const scene of [present, absent]) {
+      await scene.connector.connect(inputOf(EXPLORED_PAYLOAD));
+    }
+    deepStrictEqual(
+      [present, absent].map(scene =>
+        scene.sink.lines
+          .map(line => line.message)
+          .filter(message => message.startsWith('the volume data')),
+      ),
+      [
+        ['the volume data exists'],
+        ['the volume data does not exist yet, so the mount creates it'],
+      ],
+    );
+  });
+
+  it('F-0502 (card containers-155): the rebuild an explored volume’s window asked for goes to its preparation, and the same holds for a clone’s', async () => {
+    const explored = volumeScene();
+    const cloned = volumeScene();
+    await leaveRebuildIntent(explored, EXPLORED_PAYLOAD);
+    await leaveRebuildIntent(cloned, VOLUME_PAYLOAD);
+    await explored.connector.connect(inputOf(EXPLORED_PAYLOAD));
+    await cloned.connector.connect(inputOf(VOLUME_PAYLOAD));
+    deepStrictEqual(
+      [explored, cloned].map(scene =>
+        scene.prepared.map(request => request.rebuild?.buildNoCache),
+      ),
+      [[true], [true]],
+    );
+  });
+
+  it('F-0705 5.0 (card containers-155): an explored volume whose container is not ready fails as a folder’s does', async () => {
+    const scene = volumeScene();
+    scene.outcome = {
+      kind: 'setupFailed',
+      message: 'm',
+      description: 'd',
+      containerId: undefined,
+    };
+    const failed = await scene.connector.connect(inputOf(EXPLORED_PAYLOAD));
+    deepStrictEqual('reason' in failed ? failed.reason : undefined, {
+      id: 'S034',
+    });
   });
 
   it('F-0705 AC-8b (card containers-155): an explored volume asks for the vscode volume whatever dev.containers.cacheVolume says', async () => {

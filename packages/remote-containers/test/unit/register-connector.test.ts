@@ -60,8 +60,8 @@ async function registered(
     registerThrows?: boolean;
     /** What the profile's global state holds of the names it connected. */
     known?: Record<string, unknown>;
-    /** The state's update fails. */
-    updateFails?: boolean;
+    /** What the state's update rejects with. */
+    updateRejection?: unknown;
   } = {},
 ) {
   const warned: string[] = [];
@@ -159,8 +159,9 @@ async function registered(
       knownNames: {
         get: key => memento[key],
         update: (key, value) => {
-          if (options.updateFails === true) {
-            return Promise.reject(new Error('the state is read-only'));
+          if ('updateRejection' in options) {
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a row rejects with a text on purpose, as a port of the editor may
+            return Promise.reject(options.updateRejection);
           }
           memento[key] = value;
           return Promise.resolve();
@@ -227,7 +228,11 @@ async function registered(
     },
   ).catch((caught: unknown) => {
     thrown.push(caught instanceof Error ? caught.message : String(caught));
-    return {registration: 'proposalMissing' as const, dispose: () => undefined};
+    return {
+      registration: 'proposalMissing' as const,
+      lastResolve: () => 'none' as const,
+      dispose: () => undefined,
+    };
   });
   return {
     thrown,
@@ -352,6 +357,26 @@ describe('the registration of the container connector (card containers-08)', () 
     deepStrictEqual(
       [seen.result.registration, seen.events],
       ['registered', ['register dev-container']],
+    );
+  });
+
+  it('contracts §3.2: the registration says how the last resolve ended: none before one and without a resolver, then succeeded or failed', async () => {
+    const connected = await registered();
+    const before = connected.result.lastResolve();
+    await settledResolve(connected, 1);
+    const failing = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(failing, 1);
+    deepStrictEqual(
+      [
+        before,
+        connected.result.lastResolve(),
+        failing.result.lastResolve(),
+        (await registered({resolversGranted: false})).result.lastResolve(),
+      ],
+      ['none', 'succeeded', 'failed', 'none'],
     );
   });
 
@@ -596,7 +621,7 @@ describe('the registration of the container connector (card containers-08)', () 
     await settledResolve(recorded, 1, FOLDER_AUTHORITY);
     const readOnly = await registered({
       identity: {name: 'Proj', context: undefined},
-      updateFails: true,
+      updateRejection: new Error('the state is read-only'),
     });
     await settledResolve(readOnly, 1, FOLDER_AUTHORITY);
     await new Promise(resolve => setImmediate(resolve));
@@ -617,6 +642,18 @@ describe('the registration of the container connector (card containers-08)', () 
         ],
       ],
     );
+  });
+
+  it('F-0409 BR-9: a state that rejects with a text is logged by that text', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+      updateRejection: 'read-only state',
+    });
+    await settledResolve(seen, 1, FOLDER_AUTHORITY);
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(seen.warned, [
+      'the name of the connection could not be kept: read-only state',
+    ]);
   });
 
   it('F-0409 BR-9: a connection with no identity yet records the unnamed one', async () => {
