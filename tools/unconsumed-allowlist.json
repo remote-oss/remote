@@ -62,7 +62,11 @@
       "key": "src/deferred.ts",
       "card": "#2064",
       "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)",
+      "key": "src/attach/config-writer.ts",
+      "card": "#2163",
+      "slice": "authoring release 2",
+      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
     },
     {
       "package": "remote-containers",
@@ -70,7 +74,11 @@
       "key": "src/engine/ssh-questions.ts",
       "card": "#2064",
       "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)",
+      "key": "src/config/configuration-edit.ts",
+      "card": "#2163",
+      "slice": "authoring release 2",
+      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
     },
     {
       "package": "remote-containers",
@@ -86,7 +94,11 @@
       "key": "src/explorer/credentials-welcome.ts",
       "card": "#2064",
       "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)",
+      "key": "src/config/edit-target.ts",
+      "card": "#2163",
+      "slice": "authoring release 2",
+      "decision": "contributed, consumed by #2164/#2167 (the first callers); the consuming card removes this entry"
     }
   ]
 }
