@@ -245,4 +245,60 @@ describe('the connector of an attached container (card containers-163, #2030)', 
       ['cancelled', 0],
     );
   });
+
+  it('F-0602 AC-11, F-0417 AC-14 (c163-connector-hooks): the blocking commands run on the container before the server starts and the rest after the connect, and the window registers as one that does not own, with nothing to stop', async () => {
+    const scene = attachedScene('running');
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        scene.lifecycleRuns,
+        scene.shutdownSent.map(request => ({...request, connectionId: ''})),
+      ],
+      [
+        [
+          `adopt ${CONTAINER_ID}`,
+          'server files',
+          'blocking {}',
+          'server start',
+          'background {}',
+        ],
+        [
+          {
+            type: 'register',
+            connectionId: '',
+            identity: {containerName: 'web'},
+            engine: {dockerPath: 'docker', environment: {}},
+            owning: false,
+          },
+          {
+            type: 'container',
+            connectionId: '',
+            containerId: CONTAINER_ID,
+            action: 'none',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-0602 AC-11, F-0417 AC-14 (c163-connector-hook-failed): a blocking command that fails ends the connect without a server, and the window’s connection leaves the shutdown helper', async () => {
+    const scene = attachedScene('running');
+    scene.blockingResult = {
+      kind: 'lifecycleFailed',
+      hook: 'postCreateCommand',
+      part: undefined,
+      message: 'exit 1',
+      containerId: CONTAINER_ID,
+      foundContainerId: CONTAINER_ID,
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        'connectionToken' in result,
+        scene.lifecycleRuns.includes('server start'),
+        scene.shutdownSent.map(request => request.type),
+      ],
+      [false, false, ['register', 'container', 'leave']],
+    );
+  });
 });

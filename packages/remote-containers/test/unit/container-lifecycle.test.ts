@@ -239,6 +239,7 @@ function fakeBridge(): FakeBridge {
       return Promise.resolve(bridge.configuration);
     },
     setUp: () => Promise.reject(new Error('never set up')),
+    runAttachedUserCommands: () => Promise.reject(new Error('never attached')),
     applyTemplate: () => Promise.reject(new Error('never applied')),
     outdated: () => Promise.reject(new Error('never read')),
     templateMetadata: () => Promise.reject(new Error('never read')),
@@ -2842,6 +2843,31 @@ describe('the container of a clone in a volume (card containers-151)', () => {
           [NEW, '/stand-in'],
         ],
         ['ended'],
+      ],
+    );
+  });
+
+  it('F-0602 AC-11 (c163-adopt): a container adopted from outside is the ready one: the blocking run goes to it with the target adopted', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle} = lifecycleOver(bridge);
+    const target: CliTarget = {
+      workspaceFolder: '',
+      configFile: '',
+      dockerPath: 'docker',
+      idLabels: [],
+      mountWorkspaceGitRoot: false,
+      mountGitWorktreeCommonDir: false,
+      features: {defaultFeatures: {}, lockfile: false},
+      mounts: [],
+      logLevel: 'info',
+    };
+    lifecycle.adopt('adopted', target, () => undefined);
+    const done = await lifecycle.runBlocking({}, new AbortController().signal);
+    deepStrictEqual(
+      [done, bridge.runs.map(run => [run.containerId, run.target])],
+      [
+        {kind: 'done'},
+        [['adopted', {...target, terminalSize: {rows: 30, columns: 100}}]],
       ],
     );
   });

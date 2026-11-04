@@ -12,6 +12,7 @@ import {
   outdatedArguments,
   readConfigurationArguments,
   runUserCommandsArguments,
+  attachedUserCommandsArguments,
   type RunUserCommandsOptions,
   setUpArguments,
   type TemplateRequest,
@@ -95,6 +96,14 @@ export interface CliBridge {
     cancellation: AbortSignal,
     onStdin?: StdinOf,
   ): Promise<SetUpResult | CliFailure>;
+  /** Runs the lifecycle commands of the attached container `target` names, the stages `options` choose. */
+  runAttachedUserCommands(
+    target: AttachedCliTarget,
+    options: RunUserCommandsOptions,
+    onEvent: (event: CliEvent) => void,
+    cancellation: AbortSignal,
+    onStdin?: StdinOf,
+  ): Promise<RunUserCommandsResult>;
   /** Applies a template into the request's folder; stderr lines go to `onLine` and are never read for meaning. */
   applyTemplate(
     request: TemplateRequest,
@@ -260,6 +269,30 @@ export function cliBridgeOf(
     }
   }
 
+  /** One run on an attached container: the secrets its attach file references are scrubbed, and no override is made. */
+  async function driveAttached<Result extends {kind: string}>(
+    target: AttachedCliTarget,
+    cliArguments: string[],
+    read: ResultReader<Result>,
+    onEvent: (event: CliEvent) => void,
+    cancellation: AbortSignal,
+    onStdin?: StdinOf,
+  ): Promise<Result | CliFailure> {
+    const configText =
+      target.configFile === undefined
+        ? ''
+        : await files.readText(target.configFile).catch(() => '');
+    return runCli(
+      cliArguments,
+      target.environment,
+      referencedSecrets(configText, editorEnvironment),
+      read,
+      onEvent,
+      cancellation,
+      onStdin,
+    );
+  }
+
   /** One run: prepares the target, runs the CLI, reads what it wrote, and removes the override file. */
   async function drive<Result extends {kind: string}>(
     target: CliTarget,
@@ -370,21 +403,30 @@ export function cliBridgeOf(
         cancellation,
         onStdin,
       ),
-    setUp: async (target, onEvent, cancellation, onStdin) => {
-      const configText =
-        target.configFile === undefined
-          ? ''
-          : await files.readText(target.configFile).catch(() => '');
-      return runCli(
+    setUp: (target, onEvent, cancellation, onStdin) =>
+      driveAttached(
+        target,
         setUpArguments(target),
-        target.environment,
-        referencedSecrets(configText, editorEnvironment),
         (result, status) => readSetUpResult(result, status),
         onEvent,
         cancellation,
         onStdin,
-      );
-    },
+      ),
+    runAttachedUserCommands: (
+      target,
+      options,
+      onEvent,
+      cancellation,
+      onStdin,
+    ) =>
+      driveAttached(
+        target,
+        attachedUserCommandsArguments(target, options),
+        readRunUserCommandsResult,
+        onEvent,
+        cancellation,
+        onStdin,
+      ),
     applyTemplate: (request, onLine, cancellation) =>
       driveTemplates(
         applyTemplateArguments(request),
