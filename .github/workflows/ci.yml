@@ -391,20 +391,19 @@ jobs:
     # with its editor and containers, ran it out (2026-11-03). A full run then takes three rounds of two parts.
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows,!cli-path","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-vscodium-main' || (github.event_name == 'push' && format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}-${{ matrix.launches }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","{1}"]', vars.CI_RUNS_ON, inputs.runner-arch || 'X64')) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
     # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01
     # (41252320561, 41264381137, 41279176317); its two parts take about an hour each, so the limit is 120 again
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -418,30 +417,16 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      # Podman 5 for the containers-podman launch, on a part that can choose it (the @containers group includes it): run
-      # as the job's user, rootless Podman needs newuidmap and newgidmap setuid, which the runners' image does not have,
-      # and subordinate ids for that user. A runner keeps what an earlier job installed.
-      - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
+      - if: contains(matrix.launches, 'containers')
         run: |
-          command -v podman >/dev/null || sudo dnf install -y -q podman
-          sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
-          grep -q "^$(id -un):" /etc/subuid || sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
-          podman --version
-          # a runner restarted since podman last ran keeps a run folder podman refuses ("boot ID differs from cached
-          # boot ID"): the two folders that error names are removed, and only for that error
-          if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}' 2>&1); then
-            printf '%s\n' "$out"
-            printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
-            rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
-          fi
-          podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / | tail -1
+      - if: contains(matrix.launches, '@containers') || contains(matrix.launches, 'containers-podman')
+        run: tools/install-podman
+      - run: tools/start-display
       # the part's launches: a group selection, or the launches a dispatch names
-      - run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          fi
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           LAUNCHES: ${{ matrix.launches }}
       - if: always()
@@ -479,7 +464,7 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'schedule' && 'acceptance-genuine-main' || (github.event_name == 'push' && format('acceptance-genuine-{0}', github.ref)) || 'acceptance-genuine' }}-${{ matrix.version }}
       cancel-in-progress: false
-    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(format('["{0}","X64"]', vars.CI_RUNS_ON)) || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     # Measured on the runners (2026-11-01): a leg takes about 3 minutes. One server from the publisher is 205 MiB at
     # 1.139.1 and 154 MiB at 1.125.0, and downloaded in 3 to 7 s on the runner or in a container on it. A fresh
     # profile downloads it once, and the planned launches have four such profiles at most, under a minute in all, so
@@ -498,12 +483,8 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "$LAUNCHES"
-          fi
+      - run: tools/start-display
+      - run: pnpm test:acceptance:vscodium --launches "$LAUNCHES"
         env:
           HARNESS_GENUINE_VERSION: ${{ matrix.version }}
           LAUNCHES: ${{ matrix.launches }}
