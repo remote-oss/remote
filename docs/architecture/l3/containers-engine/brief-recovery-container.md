@@ -26,7 +26,9 @@ ADR-0010. F-0410's setup-failure dialog itself is built (C8, release 1).
   - It has `git`, and a `docker` CLI with no daemon or socket (AC-16a).
   - No Microsoft registry.
 - **Its configuration is a synthetic file of ours on the host, one per volume:**
-  `<temp>/vsch-<user>/recovery-volume/<extension version>/<volume>/.devcontainer.json` (proteus on #2014).
+  `<globalStorageUri>/recovery-volume/<extension version>/<volume>/.devcontainer.json`, written under a temporary name
+  and renamed (proteus on #2014; athena on #2162, `ruling-2162-recovery-file`: a shared temporary folder lets another
+  local user pre-create the folder or swap the file before `up` reads it).
   - **Why per volume:** the file carries per-volume values (`workspaceMount`, `workspaceFolder`). One shared file would
     let two windows recovering different volumes at once race on it, and one `up` could mount the other's volume.
     BR-7's single path is reference data.

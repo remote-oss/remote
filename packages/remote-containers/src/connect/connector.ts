@@ -1867,7 +1867,7 @@ export function containerConnectorOf(
         connectionId,
         hostPath: '',
         configFile: resolution.request.configFile,
-        trusted: !target.inspectVolume,
+        trusted: !target.inspectVolume || target.recovery === true,
       },
       cancellation,
     );

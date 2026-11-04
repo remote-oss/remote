@@ -9,6 +9,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   stat,
   writeFile,
@@ -2248,14 +2249,15 @@ export async function activate(
         },
         recoveryConfigFile: volumeName =>
           recoveryConfigFileOf(
-            os.tmpdir(),
-            os.userInfo().username,
+            context.globalStorageUri.fsPath,
             manifest.version,
             volumeName,
           ),
         writeRecoveryFile: async (file, text) => {
           await mkdir(path.dirname(file), {recursive: true});
-          await writeFile(file, text);
+          const written = `${file}.${randomUUID()}.tmp`;
+          await writeFile(written, text, {flag: 'wx'});
+          await rename(written, file);
         },
         showShallow: repository => {
           void vscode.window.showWarningMessage(

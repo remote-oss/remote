@@ -12,6 +12,7 @@ import {type BuildContext, readyImage} from './bootstrap-start.ts';
 import {volumeInspectArguments} from './clone-volume.ts';
 import {VOLUME_ROOT} from './clone-steps.ts';
 import {type EngineStepPorts, stepOf} from './engine-step.ts';
+import {exploredVolumeNameValid} from './explore-definition.ts';
 import {
   recoveryConfigurationOf,
   recoveryIdLabels,
@@ -48,7 +49,11 @@ export async function resolveRecovery(
   target: DevContainerVolume,
 ): Promise<VolumeResolution> {
   const volumeName = target.volumeName;
-  if (volumeName === UNIQUE_VOLUME || !plainFolder(target.folder)) {
+  if (
+    volumeName === UNIQUE_VOLUME ||
+    !exploredVolumeNameValid(volumeName) ||
+    !plainFolder(target.folder)
+  ) {
     ports.logger.info('the recovery container has no volume or folder');
     return {kind: 'failed', failure: containerSetupFailed()};
   }

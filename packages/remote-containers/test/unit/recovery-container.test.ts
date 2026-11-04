@@ -67,24 +67,22 @@ describe('the recovery container of a volume (card containers-160, brief-recover
     );
   });
 
-  it('F-0410 BR-7: the synthetic file of a volume lies in a folder of its own below the extension’s version, one for each volume', () => {
+  it('F-0410 BR-7: the synthetic file of a volume lies in the extension’s storage, in a folder of its own below the extension’s version, one for each volume', () => {
     deepStrictEqual(
       [
-        recoveryConfigFileOf('/tmp', 'iris', '0.1.0', 'vol-a'),
-        recoveryConfigFileOf('/tmp', 'iris', '0.1.0', 'vol-b'),
+        recoveryConfigFileOf('/storage', '0.1.0', 'vol-a'),
+        recoveryConfigFileOf('/storage', '0.1.0', 'vol-b'),
       ],
       [
         path.join(
-          '/tmp',
-          'vsch-iris',
+          '/storage',
           'recovery-volume',
           '0.1.0',
           'vol-a',
           '.devcontainer.json',
         ),
         path.join(
-          '/tmp',
-          'vsch-iris',
+          '/storage',
           'recovery-volume',
           '0.1.0',
           'vol-b',

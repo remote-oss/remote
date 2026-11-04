@@ -44,16 +44,17 @@ export function recoveryTargetOf(
   return target;
 }
 
-/** Where the synthetic configuration of a volume lies: one file per volume, in a folder of its own. */
+/**
+ * Where the synthetic configuration of a volume lies: one file per volume, in a folder of its own, in the extension's
+ * storage for the user (`ruling-2162-recovery-file`), which no other local user can pre-create or swap.
+ */
 export function recoveryConfigFileOf(
-  temporaryFolder: string,
-  user: string,
+  storageFolder: string,
   extensionVersion: string,
   volumeName: string,
 ): string {
   return path.join(
-    temporaryFolder,
-    `vsch-${user}`,
+    storageFolder,
     'recovery-volume',
     extensionVersion,
     volumeName,

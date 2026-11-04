@@ -144,7 +144,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
-  it('F-0303 AC-14: a recovery window runs up on the host from the synthetic file, with no bootstrap and no clone, and is not forced trusted', async () => {
+  it('F-0303 AC-14: a recovery window runs up on the host from the synthetic file, with no bootstrap and no clone, and opens trusted', async () => {
     const recovery = volumePayloadOf({
       kind: 'volume',
       repositoryPath: 'https://github.com/o/r',
@@ -179,7 +179,7 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
         removed: linesOf(scene).some(line => line.startsWith('rm ')),
       },
       {
-        trusted: false,
+        trusted: true,
         prepared: [
           [
             '/tmp/stand-in',

@@ -137,7 +137,7 @@ describe('the resolve of a recovery container (card containers-160, #2017)', () 
     );
   });
 
-  it('F-0303 AC-14: a volume that is not there, a name that is not a volume and an image that fails are failures with nothing written', async () => {
+  it('F-0303 AC-14: a volume that is not there, a name that is not a volume (a path or a mount field) and an image that fails are failures with nothing written', async () => {
     const absent = await sceneOf({
       script: short => (short === 'volume inspect' ? exited(1) : undefined),
     });
@@ -145,17 +145,25 @@ describe('the resolve of a recovery container (card containers-160, #2017)', () 
       target: {...TARGET, volumeName: '__UNIQUE__'},
     });
     const folder = await sceneOf({target: {...TARGET, folder: '../x'}});
+    const traversal = await sceneOf({
+      target: {...TARGET, volumeName: '../../etc'},
+    });
+    const comma = await sceneOf({
+      target: {...TARGET, volumeName: 'a,source=/'},
+    });
     const image = await sceneOf({
       script: short =>
         short === 'build --tag' ? exited(1, '', 'no') : undefined,
     });
     deepStrictEqual(
-      [absent, unique, folder, image].map(scene => [
+      [absent, unique, folder, traversal, comma, image].map(scene => [
         scene.resolution.kind,
         scene.files.length,
         scene.requests.length,
       ]),
       [
+        ['failed', 0, 0],
+        ['failed', 0, 0],
         ['failed', 0, 0],
         ['failed', 0, 0],
         ['failed', 0, 0],
