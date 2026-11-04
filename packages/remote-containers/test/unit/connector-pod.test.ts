@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {k8sPayloadOf, type K8sTarget} from '../../src/attach/k8s-payload.ts';
+import {k8sPickKeyOf} from '../../src/attach/k8s-pick-record.ts';
 import {
   inputOf,
   PAYLOAD as FOLDER_PAYLOAD,
@@ -158,6 +159,44 @@ describe('the connect of a Kubernetes pod window (card containers-191, §4)', ()
         kubectl.runs.length,
       ],
       ['malformedAuthority', 0, 0],
+    );
+  });
+
+  it('F-0604 AC-35 (c191-gate-declined): a pod the user never picked asks for the attach warning first, and when it is declined nothing runs in the pod and nothing is recorded', async () => {
+    const kubectl = podEngine('webuser');
+    const scene = sceneOf({}, {pods: kubectl});
+    scene.confirmAnswer = false;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        'connectionToken' in result ? 'connected' : result.kind,
+        scene.confirmations,
+        scene.attachPicks,
+        kubectl.processes.length,
+        kubectl.runs.length,
+      ],
+      ['attachWarningRefused', 1, [], 0, 0],
+    );
+  });
+
+  it('F-0604 AC-35 (c191-gate-confirmed): confirming the warning records the pod by context, namespace, pod and container and connects', async () => {
+    const kubectl = podEngine('webuser');
+    const scene = sceneOf({}, {pods: kubectl});
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      ['connectionToken' in result, scene.confirmations, scene.attachPicks],
+      [true, 1, [k8sPickKeyOf(TARGET)]],
+    );
+  });
+
+  it('F-0604 AC-35 (c191-gate-recorded): a pod the command recorded connects with no question', async () => {
+    const kubectl = podEngine('webuser');
+    const scene = sceneOf({}, {pods: kubectl});
+    scene.attachPicks.push(k8sPickKeyOf(TARGET));
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      ['connectionToken' in result, scene.confirmations],
+      [true, 0],
     );
   });
 

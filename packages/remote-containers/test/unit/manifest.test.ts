@@ -327,6 +327,8 @@ describe('the manifest', () => {
       },
       activationEvents: [
         'onResolveRemoteAuthority:dev-container',
+        'onResolveRemoteAuthority:attached-container',
+        'onResolveRemoteAuthority:k8s-container',
         'onStartupFinished',
       ],
       enabledApiProposals: [
@@ -814,9 +816,11 @@ describe('the manifest', () => {
     );
   });
 
-  it('containers-11 (athena on #892): the activation events are the resolve of the dev-container authority and the end of the startup', () => {
+  it('F-0501 3.x (athena on #2197): the activation events are the resolve of the dev-container, attached-container and k8s-container authorities and the end of the startup', () => {
     deepStrictEqual(MANIFEST.activationEvents, [
       'onResolveRemoteAuthority:dev-container',
+      'onResolveRemoteAuthority:attached-container',
+      'onResolveRemoteAuthority:k8s-container',
       'onStartupFinished',
     ]);
   });

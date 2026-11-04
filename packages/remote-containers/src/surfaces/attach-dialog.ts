@@ -11,6 +11,7 @@ import {failureText, reasonText} from './failure-strings.ts';
 /** What choosing a button or an item does. */
 type AttachAction =
   | 'chooseContainer'
+  | 'learnMore'
   | 'startContainer'
   | 'retry'
   | 'closeRemote'
@@ -27,6 +28,8 @@ interface AttachChoice {
 
 /** A modal error dialog: its detail and its buttons. */
 export interface AttachDialog {
+  /** The message above the detail; empty for most failures. */
+  message: string;
   detail: string;
   buttons: readonly AttachChoice[];
 }
@@ -39,6 +42,9 @@ export interface AttachPick {
 
 /** The primary button of the failure: the choice that gets the attach going again. */
 function primaryOf(kind: string, translate: Translate): AttachChoice {
+  if (kind === 'requirementsNotMet') {
+    return {label: failureText('S218', [], translate), action: 'learnMore'};
+  }
   if (kind === 'attachedNotFound') {
     return {
       label: failureText('chooseContainer', [], translate),
@@ -59,6 +65,10 @@ export function attachDialogOf(
   translate: Translate,
 ): AttachDialog {
   return {
+    message:
+      failed.kind === 'requirementsNotMet'
+        ? failureText('S346', [], translate)
+        : '',
     detail: reasonText(failed.reason, translate),
     buttons: [
       primaryOf(failed.kind, translate),
