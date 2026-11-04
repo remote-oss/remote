@@ -235,6 +235,16 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.attachToK8sContainer",
+        "title": "%commands.attachToK8sContainer.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.attachToK8sContainerFromViewlet",
+        "title": "%commands.attachToK8sContainerFromViewlet.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
         "title": "%commands.openRepositoryFromRemoteHubWithEditSession.title%",
         "category": "Dev Containers",
@@ -370,6 +380,14 @@
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.attachToK8sContainer",
+          "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToK8sContainerFromViewlet",
+          "when": "false"
+        },
+        {
           "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession",
           "when": "false"
         },
@@ -495,6 +513,11 @@
           "command": "remote-containers.openInformationAboutMountPerformance",
           "group": "inline@1",
           "when": "view == detailsContainers && viewItem == mountPerformance && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.attachToK8sContainerFromViewlet",
+          "group": "2@4",
+          "when": "!hideConnectCommands && view == extension.vsKubernetesExplorer && viewItem =~ /vsKubernetes\\.resource\\.pod/i && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [

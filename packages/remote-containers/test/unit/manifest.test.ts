@@ -893,6 +893,68 @@ describe('the manifest', () => {
     );
   });
 
+  it('F-0604 AC-14, AC-15 (c190-manifest): Attach to Running Kubernetes Container has attach’s condition in the palette, and its explorer command is never in the palette and sits on the pod rows of the Kubernetes explorer', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<Record<string, unknown>>;
+      menus: Record<string, Array<Record<string, unknown>>>;
+    };
+    const command = 'remote-containers.attachToK8sContainer';
+    const viewlet = 'remote-containers.attachToK8sContainerFromViewlet';
+    const attachWhen = contributes.menus.commandPalette?.find(
+      entry => entry.command === 'remote-containers.attachToRunningContainer',
+    )?.when;
+    deepStrictEqual(
+      [
+        contributes.commands.filter(entry =>
+          [command, viewlet].includes(String(entry.command)),
+        ),
+        [
+          readJson('package.nls.json')['commands.attachToK8sContainer.title'],
+          readJson('package.nls.json')[
+            'commands.attachToK8sContainerFromViewlet.title'
+          ],
+        ],
+        contributes.menus.commandPalette?.filter(entry =>
+          [command, viewlet].includes(String(entry.command)),
+        ),
+        contributes.menus['view/item/context']?.filter(
+          entry => entry.command === viewlet,
+        ),
+        String(attachWhen).includes('!hideConnectCommands'),
+      ],
+      [
+        [
+          {
+            command,
+            title: '%commands.attachToK8sContainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: viewlet,
+            title: '%commands.attachToK8sContainerFromViewlet.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        [
+          'Attach to Running Kubernetes Container...',
+          'Attach Visual Studio Code',
+        ],
+        [
+          {command, when: attachWhen},
+          {command: viewlet, when: 'false'},
+        ],
+        [
+          {
+            command: viewlet,
+            group: '2@4',
+            when: '!hideConnectCommands && view == extension.vsKubernetesExplorer && viewItem =~ /vsKubernetes\\.resource\\.pod/i && !remote-containers:standingDown',
+          },
+        ],
+        true,
+      ],
+    );
+  });
+
   it('F-0707 BR-1, BR-2, AC-3: the two edit-session commands have the same title, the category and the icon, a palette entry that hides each, and no keybinding', () => {
     const contributes = MANIFEST.contributes as {
       commands: Array<Record<string, unknown>>;
@@ -1256,7 +1318,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [26, true, false],
+      [27, true, false],
     );
   });
 
@@ -1393,7 +1455,7 @@ describe('the manifest', () => {
   it('F-0902 3.1, 3.3: Start, Stop and Remove are out of the palette; the row menu and the inline bar carry the actions of the tokens in the groups of the reference, and the three commands of containers-104 stay shut with false', () => {
     deepStrictEqual(
       [
-        VIEW_PARTS.menus['view/item/context']?.slice(2, -2),
+        VIEW_PARTS.menus['view/item/context']?.slice(2, -3),
         VIEW_PARTS.commands
           .map(entry => entry.command)
           .filter(command =>

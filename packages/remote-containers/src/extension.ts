@@ -161,6 +161,12 @@ import {
 import type {AttachItem} from './attach/containers.ts';
 import {attachConfigFilesOf} from './attach/config-files.ts';
 import {attachWarningAccepted} from './attach/warning.ts';
+import {
+  k8sAttachCommandsOf,
+  type K8sPickItem,
+  type K8sPicker,
+} from './attach/k8s-command.ts';
+import {kubectlHostOf} from './engine/kubectl-host.ts';
 import {wslRootOf} from './attach/payload.ts';
 import type {Translate} from './surfaces/engine-dialogs.ts';
 import {filled} from './surfaces/filled.ts';
@@ -619,15 +625,20 @@ function windowEnginePortsOf(preflight: {
   };
 }
 
-/** The picker over the running containers: empty and busy until it is filled, no title, its filter on the label alone. */
-function attachPickerOf(translate: Translate): AttachPicker {
-  const picker = vscode.window.createQuickPick<
-    AttachItem & vscode.QuickPickItem
-  >();
-  picker.placeholder = translate('Select the container to attach VS Code');
+/** A quick pick that is empty and busy until it is filled, filtering on the label alone. */
+function quickPickerOf<Item extends vscode.QuickPickItem>(
+  placeholder: string,
+): {
+  fill: (items: readonly Item[]) => void;
+  chosen: Promise<Item | undefined>;
+  reveal: () => void;
+  close: () => void;
+} {
+  const picker = vscode.window.createQuickPick<Item>();
+  picker.placeholder = placeholder;
   picker.matchOnDescription = false;
   picker.busy = true;
-  const chosen = new Promise<AttachItem | undefined>(resolve => {
+  const chosen = new Promise<Item | undefined>(resolve => {
     picker.onDidAccept(() => {
       resolve(picker.selectedItems[0]);
       picker.hide();
@@ -640,13 +651,32 @@ function attachPickerOf(translate: Translate): AttachPicker {
   picker.show();
   return {
     fill: items => {
-      picker.items = items;
+      picker.items = [...items];
       picker.busy = false;
     },
     chosen,
+    reveal: () => {
+      picker.show();
+    },
     close: () => {
       picker.hide();
     },
+  };
+}
+
+/** The picker over the running containers, while it is open: no title. */
+function attachPickerOf(translate: Translate): AttachPicker {
+  return quickPickerOf<AttachItem>(
+    translate('Select the container to attach VS Code'),
+  );
+}
+
+/** The picker over the pods or the containers of a pod, while it is open. */
+function k8sPickerOf<Value>(placeholder: string): K8sPicker<Value> {
+  const picker = quickPickerOf<K8sPickItem<Value>>(placeholder);
+  return {
+    ...picker,
+    chosen: picker.chosen.then(item => item?.value),
   };
 }
 
@@ -1795,6 +1825,54 @@ export async function activate(
         translate,
         logger: served.logger,
       });
+      const attachWarning = (): Promise<boolean> =>
+        attachWarningAccepted({
+          global: context.globalState,
+          show: (message, detail, buttons) =>
+            vscode.window.showWarningMessage(
+              message,
+              {modal: true, detail},
+              ...buttons,
+            ),
+          openExternal: address =>
+            vscode.env.openExternal(vscode.Uri.parse(address)),
+          translate,
+        });
+      const kubectl = kubectlHostOf({
+        kubectl: nodeEngineHost('kubectl'),
+        shell: nodeEngineHost('/bin/sh'),
+        platform: process.platform,
+        environment: process.env,
+      });
+      const kubernetes = k8sAttachCommandsOf({
+        warning: attachWarning,
+        listPods: kubectl.listPods,
+        currentContext: kubectl.currentContext,
+        openPicker: placeholder => k8sPickerOf(placeholder),
+        showError: (message, detail, button) =>
+          vscode.window.showErrorMessage(
+            message,
+            {modal: true, detail},
+            {title: button, isCloseAffordance: true},
+          ),
+        showInformation: (detail, buttons) =>
+          vscode.window.showInformationMessage(
+            '',
+            {modal: true, detail},
+            ...buttons,
+          ),
+        revealLog: () => {
+          logChannel?.show(true);
+        },
+        attach: selection => {
+          served.logger.info(
+            `Kubernetes container picked: ${selection.container.name} in ${selection.pod} (${selection.namespace}, ${selection.context})`,
+          );
+          return Promise.resolve();
+        },
+        translate,
+        logger: served.logger,
+      });
       return {
         reopenInContainer: {execute: reopenHandler()},
         reopenLocally: {execute: reopenOrigin.reopenLocally},
@@ -1846,19 +1924,7 @@ export async function activate(
         attachToRunningContainer: {
           execute: () =>
             attachToRunningContainer({
-              warning: () =>
-                attachWarningAccepted({
-                  global: context.globalState,
-                  show: (message, detail, buttons) =>
-                    vscode.window.showWarningMessage(
-                      message,
-                      {modal: true, detail},
-                      ...buttons,
-                    ),
-                  openExternal: address =>
-                    vscode.env.openExternal(vscode.Uri.parse(address)),
-                  translate,
-                }),
+              warning: attachWarning,
               engine: () =>
                 engineOfWindow(
                   windowEnginePortsOf(served.preflight),
@@ -1917,6 +1983,10 @@ export async function activate(
               logger: served.logger,
               cancellation: new AbortController().signal,
             }),
+        },
+        attachToK8sContainer: {execute: () => kubernetes.fromPalette()},
+        attachToK8sContainerFromViewlet: {
+          execute: (argument?: unknown) => kubernetes.fromViewlet(argument),
         },
         openRepositoryFromRemoteHubWithEditSession: dormantCommand,
         openRepositoryFromGitWithEditSession: dormantCommand,
