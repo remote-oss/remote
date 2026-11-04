@@ -12,8 +12,8 @@
 # A version change here is the only way the pin moves.
 set -euo pipefail
 
-PODMAN_VERSION=5.8.8
-PODMAN_SHA256_AMD64=e0e12f9de61bdb054d19a77df0e84ddd51cadfee13688e0fb607d61b6833e8cd
+PODMAN_VERSION=6.1.4
+PODMAN_SHA256_AMD64=9dd51073fac5a1742f88cf3caff5554615cb4d67ba554d25e8807be635547af5
 PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
 
 # the major release of the podman on the PATH, or nothing when there is none
