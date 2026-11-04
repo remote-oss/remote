@@ -4,6 +4,7 @@ import {
   type CopyAnswer,
   type ScriptAnswer,
 } from 'lib-host/testing/recording-channel';
+import type {Failed} from 'lib-authority';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {OverrideValue, ProductProfile} from 'lib-product';
@@ -335,6 +336,7 @@ async function runSteps(
     created?: boolean;
     cancellation?: AbortSignal;
     root?: RecordingChannel;
+    beforeStart?: ServerRequest['beforeStart'];
   } = {},
 ): Promise<{result: ServerResult; seen: Seen}> {
   const seen: Seen = {
@@ -362,6 +364,9 @@ async function runSteps(
       seen.percents.push(percent);
     },
     cancellation: options.cancellation ?? NEVER,
+    ...(options.beforeStart === undefined
+      ? {}
+      : {beforeStart: options.beforeStart}),
   };
   return {
     result: await runServerSteps(dependenciesOf(seen, options), request),
@@ -446,6 +451,43 @@ describe('the server steps of a connect (card containers-08)', () => {
         },
         ['installing', 'startingServer'],
       ],
+    );
+  });
+
+  it('brief-personalization §1 step 4: the hook before the start runs after the server files are in place, and the server then starts', async () => {
+    const channel = channelOf();
+    const atHook: boolean[] = [];
+    const {result} = await runSteps(channel, {
+      beforeStart: () => {
+        atHook.push(
+          channel.calls.some(call => call.operation === 'copyToHost'),
+          scriptsOf(channel).some(isStart),
+        );
+        return Promise.resolve(undefined);
+      },
+    });
+    deepStrictEqual(
+      [result.kind, atHook, scriptsOf(channel).some(isStart)],
+      ['started', [true, false], true],
+    );
+  });
+
+  it('brief-personalization §1 step 4: a failure the hook before the start returns ends the steps with it, and the server never starts', async () => {
+    const channel = channelOf();
+    const failure: Failed = {
+      kind: 'containerSetupFailed',
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    };
+    const {result, seen} = await runSteps(channel, {
+      beforeStart: () => Promise.resolve(failure),
+    });
+    deepStrictEqual(
+      [result, seen.phases, scriptsOf(channel).some(isStart)],
+      [{kind: 'failed', failure}, ['installing'], false],
     );
   });
 
