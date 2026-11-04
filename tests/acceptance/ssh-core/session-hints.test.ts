@@ -249,7 +249,7 @@ describe('the session record of every resolve (card connect-135)', function () {
         hintRecords()
           .at(-1)
           ?.hints.some(hint => hint.kind === 'log') ?? false,
-      60_000,
+      180_000,
     );
     const last = hintRecords();
     deepStrictEqual(

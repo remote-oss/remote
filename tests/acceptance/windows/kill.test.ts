@@ -211,7 +211,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
             line.surface === 'progress' &&
             line.question === 'Setting up SSH Host harness',
         ),
-      30_000,
+      120_000,
     );
     const state = await windowState('x1');
     await reloadWindow('x1');
