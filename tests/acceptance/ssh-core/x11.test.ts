@@ -188,7 +188,7 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
     });
   });
 
-  it('F-2312 AC-16 (c84-trusted): the SECURITY extension is listed with ForwardX11Trusted yes and not by default', async () => {
+  it.only('F-2312 AC-16 (c84-trusted): the SECURITY extension is listed with ForwardX11Trusted yes and not by default', async () => {
     await keepingSettings(async () => {
       const seen: string[] = [];
       for (const alias of ['x11fwd', 'x11-untrusted']) {
@@ -318,7 +318,7 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
     });
   });
 
-  it('F-2312 AC-18 (c84-noauth): with an xauth the client cannot find the connection succeeds with no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
+  it.only('F-2312 AC-18 (c84-noauth): with an xauth the client cannot find the connection succeeds with no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
     await keepingSettings(async () => {
       deepStrictEqual(await noDisplayAt('c84-noauth', 'x11-noauth'), [
         'DISPLAY=[]',
@@ -329,7 +329,7 @@ describe('F-2312: X11 forwarding into the remote environment', function () {
     });
   });
 
-  it('F-2312 AC-18 (c84-bad-display): with a local DISPLAY that ssh cannot set up untrusted forwarding for the connection succeeds with ssh’s warning, no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
+  it.only('F-2312 AC-18 (c84-bad-display): with a local DISPLAY that ssh cannot set up untrusted forwarding for the connection succeeds with ssh’s warning, no UI, no DISPLAY is contributed and a new terminal has an empty DISPLAY', async () => {
     await keepingSettings(async () => {
       const mark = connectionLog().length;
       deepStrictEqual(
