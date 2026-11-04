@@ -45,7 +45,10 @@ describe('the files of the machine the extension runs on (card coverage-118)', (
     });
   });
 
-  it('coverage-118: a listing gives each entry with its kind, a broken link is other, and an unlistable folder gives none', async () => {
+  it('coverage-118: a listing gives each entry with its kind, a broken link is other, and an unlistable folder gives none (skipped when run as root)', async function () {
+    if (process.getuid?.() === 0) {
+      this.skip();
+    }
     await inFolder(async folder => {
       const files = hostFiles();
       const subdir = path.join(folder, 'sub');
@@ -95,7 +98,10 @@ describe('the files of the machine the extension runs on (card coverage-118)', (
     });
   });
 
-  it('coverage-118: creationProblem walks to the nearest existing ancestor, and a not-writable one gives the file system words', async () => {
+  it('coverage-118: creationProblem walks to the nearest existing ancestor, and a not-writable one gives the file system words (skipped when run as root)', async function () {
+    if (process.getuid?.() === 0) {
+      this.skip();
+    }
     await inFolder(async folder => {
       const files = hostFiles();
       const open = path.join(folder, 'open');
