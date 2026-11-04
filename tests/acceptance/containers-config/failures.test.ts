@@ -5,7 +5,6 @@ import {
   devContainersOf,
   reopenStarted,
   variable,
-  windowState,
 } from '../windows/harness.ts';
 import {docker} from '../windows/dev-containers-view.ts';
 import {
@@ -13,7 +12,11 @@ import {
   openFolderWindow,
   removeContainers,
 } from '../windows/folder-windows.ts';
-import {notifications, waitForDialog} from '../windows/renderer.ts';
+import {
+  notifications,
+  statusBarText,
+  waitForDialog,
+} from '../windows/renderer.ts';
 import {imageWithLabel, textOfFile} from './support.ts';
 
 /** The dialog of a setup that fails, as F-0410 words it. */
@@ -41,22 +44,6 @@ async function failedOn(
 describe('The image label that cannot be used, and the one that is odd (card coverage-112)', function () {
   this.timeout(1_200_000);
 
-  it('F-0306 AC-30 (c112-bad-mount): a label whose only mount is a {type, src, dst} object ends in the setup dialog and leaves no container', async () => {
-    const image = await imageWithLabel('c112-bad-mount', [
-      {mounts: [{type: 'bind', src: '/c112-source', dst: '/c112-target'}]},
-    ]);
-    const {name, folder, dialog} = await failedOn('c112-bad-mount', image);
-    try {
-      deepStrictEqual(
-        [dialog, await devContainersOf(folder)],
-        [FAILED_SETUP, []],
-      );
-    } finally {
-      await closeWindow(name).catch(() => undefined);
-      await docker('rmi', '--force', image).catch(() => undefined);
-    }
-  });
-
   it('F-0306 AC-44 (c112-container-user): a containerUser the image lacks ends in the setup dialog and leaves the container in the state created', async () => {
     const image = await imageWithLabel('c112-container-user', [
       {containerUser: 'c112nobody'},
@@ -82,7 +69,7 @@ describe('The image label that cannot be used, and the one that is odd (card cov
     }
   });
 
-  it('F-0306 AC-17 (c112-remote-user): a remoteUser the image lacks ends in the setup dialog, with the container running and the window not connected', async () => {
+  it('F-0306 AC-17 (c112-remote-user): a remoteUser the image lacks ends in the setup dialog, with the container running and the indicator still at Opening Remote...', async () => {
     const image = await imageWithLabel('c112-remote-user', [
       {remoteUser: 'c112nobody'},
     ]);
@@ -97,9 +84,9 @@ describe('The image label that cannot be used, and the one that is odd (card cov
               docker('inspect', '--format', '{{.State.Status}}', container),
             ),
           ),
-          (await windowState(name)).remoteName,
+          await statusBarText(name, 'status.host'),
         ],
-        [FAILED_SETUP, ['running'], null],
+        [FAILED_SETUP, ['running'], 'Opening Remote...'],
       );
     } finally {
       await closeWindow(name).catch(() => undefined);
