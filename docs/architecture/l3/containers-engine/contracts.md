@@ -88,6 +88,8 @@ its content:
   `"tlsVerify"` (in that order, after `"context"`) when the effective engine of §2 names a host: the window is pinned
   to the engine it was opened on, and a reload, a rebuild and the window's title use it whatever the settings say then
   (F-0205 BR-19; containers-133, #1811).
+  A window whose engine host is a WSL distro (brief-wsl-engine §2.4) records it as `"wslDistro": "<registered name>"`,
+  the last member of `settings`, with the same pinning. A payload without it is local.
 - **The rebuild intent** (C6 → C7) isn't part of the authority, which must stay stable (F-1102 §16). The reloaded
   window has another workspace identity, so its workspace state can't carry it. C6 stores it in the extension's
   `globalState` under a key of ours (R-27), keyed by the payload, with the time, before the reload. C10 takes it once at
