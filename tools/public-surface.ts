@@ -160,12 +160,23 @@ function lineOf(text: string, index: number): number {
   return text.slice(0, index).split('\n').length;
 }
 
+/**
+ * Whether the file is a UI string value, where a reused string keeps the plain sense of the word
+ * (ruling-2165-plain-reference): the localisation bundles and the `package.nls` tables.
+ */
+function isUiStringValues(file: string): boolean {
+  return (
+    file.includes('/l10n/') ||
+    /^package\.nls(\..+)?\.json$/.test(path.basename(file))
+  );
+}
+
 /** One line per forbidden word or phrase, and per short-link address of another vendor, in the shipped and user-facing files under `root`. */
 export function checkPublicSurface(root: string): string[] {
   const problems: string[] = [];
   for (const file of surfaceFiles(root)) {
     const text = readFileSync(path.join(root, file), 'utf8');
-    for (const match of forbiddenMatches(text)) {
+    for (const match of forbiddenMatches(text, isUiStringValues(file))) {
       problems.push(
         `${file}:${String(lineOf(text, match.index))}: '${match.term}' is wording of the process; shipped text presents the product (ADR-0008)`,
       );

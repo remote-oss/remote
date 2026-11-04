@@ -117,6 +117,48 @@ describe('public-surface', () => {
     );
   });
 
+  it('lets the plain sense of the word stand in a localisation bundle (ruling-2165-plain-reference)', () => {
+    workspace.write(
+      'packages/remote-x/l10n/bundle.l10n.json',
+      '{\n  "s294": "Replace the reference to the discontinued devcontainers-contrib."\n}\n',
+    );
+    deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
+  it('lets the plain sense of the word stand in the default nls table too', () => {
+    workspace.write(
+      'packages/remote-x/package.nls.json',
+      '{\n  "s294": "Replace the reference to the discontinued devcontainers-contrib."\n}\n',
+    );
+    deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
+  it('still flags the word in a localisation bundle when it names the process', () => {
+    workspace.write(
+      'packages/remote-x/l10n/bundle.l10n.json',
+      '{\n  "note": "the reference shows the setup problem."\n}\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      ["packages/remote-x/l10n/bundle.l10n.json:2: 'the reference'"],
+    );
+  });
+
+  it('still flags the word in a README, followed by " to "', () => {
+    workspace.write(
+      'packages/remote-x/README.md',
+      'Replace the reference to the old host.\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      ["packages/remote-x/README.md:1: 'the reference'"],
+    );
+  });
+
   it('leaves the licence texts of third parties alone', () => {
     workspace.write(
       'packages/remote-x/ThirdPartyNotices.txt',

@@ -1,8 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import {forbiddenMatches} from './public-surface-terms.ts';
 
-function termsIn(text: string): string[] {
-  return forbiddenMatches(text).map(match => match.term);
+function termsIn(text: string, uiStringValues = false): string[] {
+  return forbiddenMatches(text, uiStringValues).map(match => match.term);
 }
 
 describe('public-surface terms: words of the process, wherever they appear', () => {
@@ -51,6 +51,45 @@ describe('public-surface terms: words of the process, wherever they appear', () 
 
   it('flags a bare word that is joined to another by a hyphen', () => {
     deepStrictEqual(termsIn('A card-like layout'), ['card']);
+  });
+});
+
+describe('public-surface terms: the plain sense in UI string values (ruling-2165-plain-reference)', () => {
+  it('lets the word pass in a UI string value followed by " to "', () => {
+    deepStrictEqual(
+      termsIn(
+        'Replace the reference to the discontinued devcontainers-contrib.',
+        true,
+      ),
+      [],
+    );
+  });
+
+  it('still flags the word in a UI string value that is not followed by " to "', () => {
+    deepStrictEqual(
+      termsIn('the reference shows the setup problem.', true).includes(
+        'the reference',
+      ),
+      true,
+    );
+  });
+
+  it('keeps the word flagged on every other surface, followed by " to "', () => {
+    deepStrictEqual(
+      termsIn('Replace the reference to the old host.').includes(
+        'the reference',
+      ),
+      true,
+    );
+  });
+
+  it('keeps the word flagged on every other surface, not followed by " to "', () => {
+    deepStrictEqual(
+      termsIn('Interop with the reference is not a goal.').includes(
+        'the reference',
+      ),
+      true,
+    );
   });
 });
 

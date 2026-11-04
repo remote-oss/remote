@@ -123,6 +123,11 @@ ruleTester.run('public-surface', rules['public-surface'], {
       errors: [{messageId: 'processWording', data: {term: 'the reference'}}],
     },
     {
+      code: '// Replace the reference to the old host.\nrun();',
+      errors: [{messageId: 'processWording', data: {term: 'the reference'}}],
+    },
+
+    {
       code: '/** Decided in F-2105. */\nexport const done = 1;',
       errors: [{messageId: 'processWording', data: {term: 'F-2105'}}],
     },

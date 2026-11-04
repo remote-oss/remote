@@ -21,17 +21,35 @@ const BARE_TERMS: readonly RegExp[] = [
   /\b[DRF]-\d{2,4}\b/g,
 ];
 
+/** The forbidden word in the sense of the process: the extension the family stands down for. */
+const THE_REFERENCE = /\bthe\s+reference\b/gi;
+
+/**
+ * The same word in UI string values, where an occurrence immediately followed by ` to ` is plain vocabulary
+ * (ruling-2165-plain-reference): the reused text of STR:S294 speaks of a feature entry in the user's file.
+ */
+const THE_REFERENCE_UI = /\bthe\s+reference\b(?!\s+to\b)/gi;
+
 /**
  * Ordinary words that are plain technical vocabulary in most uses (a reference to a value, a process's
  * specification, an SSH session), forbidden only in the senses of the process.
  */
-const PROCESS_SENSES: readonly RegExp[] = [
-  /\bthe\s+reference\b/gi,
+const OTHER_PROCESS_SENSES: readonly RegExp[] = [
   /\breference's\b/gi,
   /\breference\s+(?:extension|implementation|behaviou?r|client|manifest|product)s?\b/gi,
   /\b(?:spec|specification)s?\s+issues?\b/gi,
   /\b(?:published|written)\s+specifications?\b/gi,
   /\b(?:coding|design|architecture|review|agent)\s+sessions?\b/gi,
+];
+
+const PROCESS_SENSES: readonly RegExp[] = [
+  THE_REFERENCE,
+  ...OTHER_PROCESS_SENSES,
+];
+
+const PROCESS_SENSES_UI: readonly RegExp[] = [
+  THE_REFERENCE_UI,
+  ...OTHER_PROCESS_SENSES,
 ];
 
 /** One forbidden word or phrase found in a text. */
@@ -41,9 +59,18 @@ export interface TermMatch {
   index: number;
 }
 
-/** The forbidden words and phrases in a text, in the order they appear. */
-export function forbiddenMatches(text: string): TermMatch[] {
-  const found = [...BARE_TERMS, ...PROCESS_SENSES].flatMap(pattern =>
+/**
+ * The forbidden words and phrases in a text, in the order they appear. In UI string values the plain sense of an
+ * occurrence followed by ` to ` passes (ruling-2165-plain-reference); every other surface keeps the full list.
+ */
+export function forbiddenMatches(
+  text: string,
+  uiStringValues = false,
+): TermMatch[] {
+  const found = [
+    ...BARE_TERMS,
+    ...(uiStringValues ? PROCESS_SENSES_UI : PROCESS_SENSES),
+  ].flatMap(pattern =>
     [...text.matchAll(pattern)].map(match => ({
       term: match[0].replace(/\s+/g, ' '),
       index: match.index,
