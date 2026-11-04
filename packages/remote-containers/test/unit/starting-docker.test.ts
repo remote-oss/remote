@@ -8,12 +8,13 @@ import {
 
 /** The ports over a clock the test moves, with what was shown and how it ended. */
 function sceneOf() {
-  const timers: Array<{due: number; callback: () => void; live: boolean}> = [];
+  const timers: Array<{dueAt: number; callback: () => void; live: boolean}> =
+    [];
   let now = 0;
   const shown: Array<{cancel: () => void; ended: boolean}> = [];
   const ports: StartingDockerPorts = {
     setTimer: (callback, milliseconds) => {
-      const timer = {due: now + milliseconds, callback, live: true};
+      const timer = {dueAt: now + milliseconds, callback, live: true};
       timers.push(timer);
       return () => {
         timer.live = false;
@@ -27,11 +28,11 @@ function sceneOf() {
       });
     },
   };
-  /** Moves the clock on and fires the timers due. */
+  /** Moves the clock on and fires the timers dueAt. */
   async function advance(milliseconds: number): Promise<void> {
     now += milliseconds;
     for (const timer of timers) {
-      if (timer.live && timer.due <= now) {
+      if (timer.live && timer.dueAt <= now) {
         timer.live = false;
         timer.callback();
       }
@@ -102,7 +103,7 @@ describe('the notice of the first check of a command (card containers-172, §3)'
     const scene = sceneOf();
     const outer = new AbortController();
     let seen: AbortSignal | undefined;
-    const finish = deferred<void>();
+    const finish = deferred<undefined>();
     const running = watchedCheck(
       scene.ports,
       cancellation => {
@@ -114,7 +115,7 @@ describe('the notice of the first check of a command (card containers-172, §3)'
     const before = seen?.aborted;
     outer.abort();
     const after = seen?.aborted;
-    finish.resolve();
+    finish.resolve(undefined);
     await running;
     const late = new AbortController();
     late.abort();

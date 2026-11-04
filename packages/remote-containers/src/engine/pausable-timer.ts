@@ -22,7 +22,7 @@ export function pausableTimer(
   boxes: BoxCounter | undefined,
 ): () => void {
   let cancel: (() => void) | undefined;
-  function arm(): void {
+  function startTimer(): void {
     cancel = setTimer(milliseconds, callback);
   }
   function disarm(): void {
@@ -30,13 +30,13 @@ export function pausableTimer(
     cancel = undefined;
   }
   if (boxes === undefined || boxes.openBoxes() === 0) {
-    arm();
+    startTimer();
   }
   const stopListening = boxes?.onBoxes(open => {
     if (open > 0) {
       disarm();
     } else if (cancel === undefined) {
-      arm();
+      startTimer();
     }
   });
   return () => {

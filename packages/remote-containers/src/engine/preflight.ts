@@ -88,7 +88,7 @@ async function query(
 ): Promise<QueryResult> {
   const timedOut = new AbortController();
   const cancelTimer = pausableTimer(
-    dependencies.setTimer,
+    (milliseconds, callback) => dependencies.setTimer(milliseconds, callback),
     QUERY_TIMEOUT_MILLISECONDS,
     () => {
       timedOut.abort();

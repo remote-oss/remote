@@ -71,7 +71,10 @@ export interface QuestionPorts {
 /** The router of one window's questions. */
 export interface QuestionRouter {
   /** Answers `question` for `operation`. */
-  ask(operation: QuestionOperation, question: string): Promise<QuestionResult>;
+  askQuestion(
+    operation: QuestionOperation,
+    question: string,
+  ): Promise<QuestionResult>;
   /** How many boxes are open now. */
   openBoxes(): number;
   /** Calls `listener` with the number of open boxes each time it changes; gives the way to stop. */
@@ -101,7 +104,7 @@ export function createQuestionRouter(ports: QuestionPorts): QuestionRouter {
   /** Opens the box of `question` under `key`, keeps its result and gives it. */
   function openBoxFor(key: string, question: string): Promise<Remembered> {
     const masked = !isHostKeyQuestion(question);
-    const closed = deferred<void>();
+    const closed = deferred<undefined>();
     if (!ports.windowFocused()) {
       ports.pointAtBox(closed.promise);
     }
@@ -113,7 +116,7 @@ export function createQuestionRouter(ports: QuestionPorts): QuestionRouter {
       .then(remembered => {
         memory.set(key, remembered);
         boxes.delete(key);
-        closed.resolve();
+        closed.resolve(undefined);
         changed();
         return remembered;
       });
@@ -145,7 +148,7 @@ export function createQuestionRouter(ports: QuestionPorts): QuestionRouter {
   }
 
   return {
-    ask: async (operation, question) => {
+    askQuestion: async (operation, question) => {
       const key = keyOf(operation.endpoint, question);
       const known = memory.get(key);
       if (known !== undefined) {

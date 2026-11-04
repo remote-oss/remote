@@ -7,7 +7,8 @@ import {
 /** A clock the test moves, and boxes it opens and closes. */
 function sceneOf() {
   let now = 0;
-  const timers: Array<{due: number; callback: () => void; live: boolean}> = [];
+  const timers: Array<{dueAt: number; callback: () => void; live: boolean}> =
+    [];
   const listeners = new Set<(open: number) => void>();
   const state = {open: 0};
   const boxes: BoxCounter = {
@@ -20,7 +21,7 @@ function sceneOf() {
     },
   };
   function setTimer(milliseconds: number, callback: () => void): () => void {
-    const timer = {due: now + milliseconds, callback, live: true};
+    const timer = {dueAt: now + milliseconds, callback, live: true};
     timers.push(timer);
     return () => {
       timer.live = false;
@@ -29,7 +30,7 @@ function sceneOf() {
   function advance(milliseconds: number): void {
     now += milliseconds;
     for (const timer of timers) {
-      if (timer.live && timer.due <= now) {
+      if (timer.live && timer.dueAt <= now) {
         timer.live = false;
         timer.callback();
       }

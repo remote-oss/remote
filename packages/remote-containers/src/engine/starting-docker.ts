@@ -38,7 +38,7 @@ export async function watchedCheck<Result>(
     forward();
   }
   outer.addEventListener('abort', forward, {once: true});
-  const ended = deferred<void>();
+  const ended = deferred<undefined>();
   const stopped = deferred<WatchedCheck<Result>>();
   const cancelTimer = ports.setTimer(() => {
     ports.show(ended.promise, () => {
@@ -56,7 +56,7 @@ export async function watchedCheck<Result>(
     ]);
   } finally {
     cancelTimer();
-    ended.resolve();
+    ended.resolve(undefined);
     outer.removeEventListener('abort', forward);
   }
 }
