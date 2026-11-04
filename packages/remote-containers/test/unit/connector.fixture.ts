@@ -348,7 +348,7 @@ function volumeDependenciesOf(
 /** The connector over fakes, and the knobs that steer them. */
 export function sceneOf(
   overrides: Partial<Pick<Scene, 'dockerPath'>> = {},
-  options: {volumes?: boolean} = {},
+  options: {volumes?: boolean; pods?: EngineHost} = {},
 ): Scene {
   const sink = new MemorySink();
   const scene: Scene = {
@@ -611,6 +611,7 @@ export function sceneOf(
       scene.backgroundStages.push(stage);
       return lifecycle;
     },
+    ...(options.pods === undefined ? {} : {pods: {kubectl: options.pods}}),
     ...(options.volumes === true
       ? {volumes: volumeDependenciesOf(scene, bridge)}
       : {}),

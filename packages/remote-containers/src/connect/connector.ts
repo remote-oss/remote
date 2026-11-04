@@ -29,6 +29,9 @@ import {
   type BootstrapSettings,
 } from '../volumes/bootstrap.ts';
 import type {BuildContext} from '../volumes/bootstrap-start.ts';
+import {k8sExecCommands, k8sDialer} from '../attach/k8s-exec.ts';
+import {type K8sTarget, k8sTargetOf} from '../attach/k8s-payload.ts';
+import {inspectedPod} from '../attach/k8s-state.ts';
 import {
   type DevContainerVolume,
   volumeTargetOf,
@@ -80,7 +83,7 @@ import {
 import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
-import {execChannelOf} from '../exec/exec-channel.ts';
+import {execChannelOf, execChannelOver} from '../exec/exec-channel.ts';
 import {
   type BackgroundStage,
   type ContainerLifecycle,
@@ -275,8 +278,16 @@ export interface VolumeConnectDependencies {
   ): Promise<'written' | 'left'>;
 }
 
+/** What a connect to a Kubernetes pod needs beyond a folder's. */
+interface PodConnectDependencies {
+  /** `kubectl` as an engine with the login shell's environment. */
+  kubectl: EngineHost;
+}
+
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
+  /** What an attach to a Kubernetes pod needs; without it, a pod payload is no authority the connector reads. */
+  pods?: PodConnectDependencies;
   /** What a clone in a volume needs; without it, a volume payload is no authority the connector reads. */
   volumes?: VolumeConnectDependencies;
   /** Whether a file or a folder exists on this machine. */
@@ -416,6 +427,58 @@ interface Tools {
   bridge: CliBridge;
 }
 
+/** What the last part of a connect needs once there is a channel into the target, whatever kind of target it is. */
+interface ChannelTarget {
+  /** The authority's payload the connection is made for. */
+  payload: string;
+  /** The target's channel, running as the user the window works as. */
+  channel: HostChannel;
+  /** The channel as root, for the shared folders of a mounted volume; used only where `volumeMounted` is true. */
+  rootChannel: HostChannel;
+  remoteUser: string;
+  /** Whether the target mounts the `vscode` volume. */
+  volumeMounted: boolean;
+  /** Whether this connect created the target, which is when a preview platform is told in the log. */
+  created: boolean;
+  /** The extensions the server installs when it starts. */
+  defaultExtensions: readonly string[];
+  /** The merged configuration that the probe, `remoteEnv`, the dev port and the ports read; none for a target with none. */
+  merged: Record<string, unknown> | undefined;
+  settings: ReturnType<ContainerConnectorDependencies['settings']>;
+  /** Whether the window is trusted by the connection itself. */
+  trusted: boolean;
+  /** The engine the window is pinned to, whose name the label shows. */
+  pinned: PinnedEngine;
+  /** The name the window's label shows. */
+  name: string | undefined;
+  /** Whether the window explores a volume, which its label says instead of a configuration's name. */
+  explored: boolean;
+  /** Runs once the server's files are in place and before it starts: the blocking commands; a failure ends the connect. */
+  beforeStart: () => Promise<Failed | undefined>;
+  /** Opens the relay of the server's port; `onConnectionClosed` is told each time a relayed connection ends. */
+  openRelay: (
+    server: StartedContainerServer,
+    onConnectionClosed: () => void,
+  ) => ReturnType<ContainerConnectorDependencies['openRelay']>;
+  /** Reads the state of the target. */
+  inspect: (cancellation: AbortSignal) => Promise<Inspected>;
+  /** The forwards the window declares, once the relay is open. */
+  tunnels: () => Promise<Connected['environmentTunnels']>;
+  /** What the connection the window holds keeps of the target. */
+  target: Pick<
+    Held,
+    | 'hostPath'
+    | 'remoteWorkspaceFolder'
+    | 'containerId'
+    | 'engine'
+    | 'configFile'
+    | 'created'
+    | 'serviceDockerfile'
+  >;
+  /** Runs once the connection is held: the background lifecycle commands. */
+  afterConnect: () => void;
+}
+
 /** The connection the window holds. */
 interface Held {
   /** The authority's payload the connection was made for. */
@@ -427,6 +490,8 @@ interface Held {
   containerId: string;
   startedAt: string;
   engine: EngineHost;
+  /** Reads the state of the target the connection holds: a container's, or a pod's. */
+  inspect: (cancellation: AbortSignal) => Promise<Inspected>;
   /** The local path of the configuration file the connection was made for. */
   configFile: string;
   /** Whether the connect that made the connection created the container. */
@@ -636,11 +701,7 @@ export function containerConnectorOf(
     }
     checking = true;
     try {
-      const state = await inspectedState(
-        connection.engine,
-        connection.containerId,
-        new AbortController().signal,
-      );
+      const state = await connection.inspect(new AbortController().signal);
       if (held !== connection || state === 'unreachable') {
         return;
       }
@@ -660,11 +721,7 @@ export function containerConnectorOf(
     connection: Held,
     cancellation: AbortSignal,
   ): Promise<Connected | Failed> {
-    const state = await inspectedState(
-      connection.engine,
-      connection.containerId,
-      cancellation,
-    );
+    const state = await connection.inspect(cancellation);
     if (state === 'unreachable') {
       logger.info(
         `reconnection: container ${shortId(connection.containerId)} is unreachable, no start, server not checked: transportLost`,
@@ -814,6 +871,40 @@ export function containerConnectorOf(
         : `extensions to install in the new container: ${list.join(', ')}`,
     );
     return list;
+  }
+
+  /**
+   * Takes the rebuild intent and then runs the resolve-time check of the engine. The intent is taken first, so a check
+   * that fails has dropped it and a Retry after it reconnects without a rebuild.
+   */
+  async function takenBeforeCheck(
+    input: ConnectInput,
+    engine: EngineHost,
+    settings: Tools['settings'],
+    base: string | undefined,
+    cancellation: AbortSignal,
+  ): Promise<{
+    rebuild: {buildNoCache: boolean} | undefined;
+    failure: Failed | undefined;
+  }> {
+    const rebuild = await takenRebuild(input);
+    phases.tell({name: 'initializing'});
+    const checked = await secondCheck(
+      {
+        ...dependencies.preflight,
+        engineFor: () => engine,
+        dockerPath: () => settings.dockerPath,
+      },
+      base,
+      cancellation,
+    );
+    return {
+      rebuild,
+      failure:
+        checked.kind === 'failed'
+          ? engineCheckFailed(checked.detail)
+          : undefined,
+    };
   }
 
   /** The rebuild the window asked for before its reload, taken once on the first attempt of a connect. */
@@ -1199,18 +1290,15 @@ export function containerConnectorOf(
       return trustDeclined();
     }
     const connectionId = registerWithShutdown(folder, tools);
-    phases.tell({name: 'initializing'});
-    const checked = await secondCheck(
-      {
-        ...dependencies.preflight,
-        engineFor: () => engine,
-        dockerPath: () => settings.dockerPath,
-      },
+    const {rebuild, failure} = await takenBeforeCheck(
+      input,
+      engine,
+      settings,
       folder.hostPath,
       cancellation,
     );
-    if (checked.kind === 'failed') {
-      return engineCheckFailed(checked.detail);
+    if (failure !== undefined) {
+      return failure;
     }
     // A read that failed with the engine answering is the CLI's own failure, unless its configuration is gone; one
     // that ran out of time is not.
@@ -1236,7 +1324,6 @@ export function containerConnectorOf(
       bridge,
       dependencies.lifecyclePresenter,
     );
-    const rebuild = await takenRebuild(input);
     const prepared = await lifecycle.prepare(
       {
         folder: folder.hostPath,
@@ -1399,25 +1486,101 @@ export function containerConnectorOf(
         `the configuration's name could not be read: ${cliFailureText(configuration)}`,
       );
     }
-    const channel = execChannelOf(
-      engine,
-      prepared.containerId,
-      prepared.remoteUser,
+    return connectChannel(
+      {
+        payload,
+        channel: execChannelOf(
+          engine,
+          prepared.containerId,
+          prepared.remoteUser,
+        ),
+        rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
+        remoteUser: prepared.remoteUser,
+        volumeMounted: prepared.volumeMounted,
+        created: prepared.created,
+        defaultExtensions,
+        merged,
+        settings,
+        trusted: context.trusted,
+        pinned: context.pinned,
+        name,
+        explored: context.explored === true,
+        beforeStart: () => blockingHooks(cancellation),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine,
+            containerId: prepared.containerId,
+            remoteUser: prepared.remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedState(engine, prepared.containerId, signal),
+        tunnels: async () => {
+          const local = engineIsLocal({
+            context: context.pinned.context,
+            dockerHost: context.pinned.host,
+          });
+          return configuration.kind === 'configuration' &&
+            isComposeConfiguration(configuration.configuration)
+            ? publishedForwards(
+                await publishedPortsOf(
+                  engine,
+                  prepared.containerId,
+                  cancellation,
+                ),
+                local,
+              )
+            : staticForwards(
+                configuration.kind === 'configuration'
+                  ? appPortOf(configuration.configuration)
+                  : undefined,
+                local,
+              );
+        },
+        target: {
+          hostPath: context.hostPath,
+          remoteWorkspaceFolder: prepared.remoteWorkspaceFolder,
+          containerId: prepared.containerId,
+          engine,
+          configFile: context.configFile,
+          created: prepared.created,
+          serviceDockerfile: prepared.serviceDockerfile,
+        },
+        afterConnect: () => {
+          lifecycle?.startBackground(RELAY_ENVIRONMENT, () =>
+            Promise.resolve(),
+          );
+        },
+      },
+      cancellation,
     );
+  }
+
+  /**
+   * The last part of every connect, once there is a channel into the target: the server's files and start, the
+   * environment, the relay of its port, and the connection the window holds.
+   */
+  async function connectChannel(
+    tail: ChannelTarget,
+    cancellation: AbortSignal,
+  ): Promise<Connected | Failed> {
+    const {channel, merged, settings} = tail;
     let startingServerTold = false;
     const server = await dependencies.runServer(
       {
         channel,
-        rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
-        remoteUser: prepared.remoteUser,
-        volumeMounted: prepared.volumeMounted,
-        defaultExtensions,
+        rootChannel: tail.rootChannel,
+        remoteUser: tail.remoteUser,
+        volumeMounted: tail.volumeMounted,
+        defaultExtensions: tail.defaultExtensions,
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
-        created: prepared.created,
+        created: tail.created,
         beforeStart: async () => {
           startingServerTold = true;
-          return blockingHooks(cancellation);
+          return tail.beforeStart();
         },
         onPhase: phase => {
           // The blocking commands run under "Starting server" already; the server's own start doesn't say it again.
@@ -1457,50 +1620,22 @@ export function containerConnectorOf(
       return cancelled();
     }
     const owner: {connection?: Held} = {};
-    const relay = await dependencies.openRelay({
-      engine,
-      containerId: prepared.containerId,
-      remoteUser: prepared.remoteUser,
-      nodePath: server.nodePath,
-      relayPath: server.relayPath,
-      containerPort: server.port,
-      onConnectionClosed: () => {
-        const {connection} = owner;
-        if (connection !== undefined && held === connection) {
-          void checkAfterClose(connection);
-        }
-      },
+    const relay = await tail.openRelay(server, () => {
+      const {connection} = owner;
+      if (connection !== undefined && held === connection) {
+        void checkAfterClose(connection);
+      }
     });
     if (relay.kind === 'failed') {
       return relay.failure;
     }
-    const started = await inspectedState(
-      engine,
-      prepared.containerId,
-      cancellation,
-    );
+    const started = await tail.inspect(cancellation);
     if (isAborted(cancellation)) {
       // The window was torn down while the connect finished: give the relay back.
       relay.close();
       return cancelled();
     }
-    const local = engineIsLocal({
-      context: context.pinned.context,
-      dockerHost: context.pinned.host,
-    });
-    const tunnels =
-      configuration.kind === 'configuration' &&
-      isComposeConfiguration(configuration.configuration)
-        ? publishedForwards(
-            await publishedPortsOf(engine, prepared.containerId, cancellation),
-            local,
-          )
-        : staticForwards(
-            configuration.kind === 'configuration'
-              ? appPortOf(configuration.configuration)
-              : undefined,
-            local,
-          );
+    const tunnels = await tail.tunnels();
     const connected: Connected = {
       address: {host: '127.0.0.1', port: relay.hostPort},
       connectionToken: server.connectionToken,
@@ -1510,28 +1645,23 @@ export function containerConnectorOf(
         remoteEnvironment.entries,
       ),
       environmentTunnels: tunnels,
-      trusted: context.trusted,
+      trusted: tail.trusted,
     };
     held = {
-      payload,
-      hostPath: context.hostPath,
-      remoteWorkspaceFolder: prepared.remoteWorkspaceFolder,
-      containerId: prepared.containerId,
+      payload: tail.payload,
+      ...tail.target,
       startedAt:
         started === 'missing' || started === 'unreachable'
           ? ''
           : started.startedAt,
-      engine,
-      configFile: context.configFile,
-      created: prepared.created,
-      serviceDockerfile: prepared.serviceDockerfile,
+      inspect: tail.inspect,
       channel,
       server,
       relay,
       identity: {
-        name,
-        context: engineLabelOf(context.pinned),
-        ...(context.explored === true ? {explored: true} : {}),
+        name: tail.name,
+        context: engineLabelOf(tail.pinned),
+        ...(tail.explored ? {explored: true} : {}),
       },
       connected,
       lifetime: new AbortController(),
@@ -1553,7 +1683,7 @@ export function containerConnectorOf(
         lost.tell();
       }
     });
-    lifecycle?.startBackground(RELAY_ENVIRONMENT, () => Promise.resolve());
+    tail.afterConnect();
     return connected;
   }
 
@@ -1741,22 +1871,18 @@ export function containerConnectorOf(
       dependencies.engineFor(executable.file),
       () => environment,
     );
-    phases.tell({name: 'initializing'});
-    const checked = await secondCheck(
-      {
-        ...dependencies.preflight,
-        engineFor: () => engine,
-        dockerPath: () => settings.dockerPath,
-      },
+    const {rebuild, failure} = await takenBeforeCheck(
+      input,
+      engine,
+      settings,
       undefined,
       cancellation,
     );
-    if (checked.kind === 'failed') {
-      return engineCheckFailed(checked.detail);
+    if (failure !== undefined) {
+      return failure;
     }
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
     const dockerFile = executable.file;
-    const rebuild = await takenRebuild(input);
     if (target.inspectVolume && target.recovery !== true) {
       return connectExplored(
         {volumes, payload, target, settings, engine, dockerFile},
@@ -1916,6 +2042,97 @@ export function containerConnectorOf(
     return connected;
   }
 
+  /** The user the pod's container runs as: its name, else its numeric id; none when it cannot be told. */
+  async function podUserOf(
+    channel: HostChannel,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const lines: string[] = [];
+    const outcome = await channel.runScript(
+      {
+        script: 'id -un 2>/dev/null || id -u\n',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation,
+      },
+      line => lines.push(line),
+    );
+    const [user] = lines.map(line => line.trim()).filter(line => line !== '');
+    return outcome.kind === 'exited' && outcome.status === 0 ? user : undefined;
+  }
+
+  /**
+   * Connects a pod's container: the channel is `kubectl exec`, everything runs as the container's own user, nothing is
+   * merged or set up, and nothing is registered with the shutdown helper, since a pod is not ours to stop.
+   */
+  async function connectPod(
+    pods: PodConnectDependencies,
+    payload: string,
+    target: K8sTarget,
+    controller: AbortController,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    const settings = dependencies.settings();
+    phases.tell({name: 'initializing'});
+    const channel = execChannelOver(pods.kubectl, k8sExecCommands(target));
+    const remoteUser = await podUserOf(channel, cancellation);
+    if (remoteUser === undefined) {
+      logger.info(`the user of ${target.podname} could not be told`);
+      return isAborted(cancellation) ? cancelled() : containerSetupFailed();
+    }
+    const identity = k8sExecCommands(target).identity;
+    return connectChannel(
+      {
+        payload,
+        channel,
+        rootChannel: channel,
+        remoteUser,
+        volumeMounted: false,
+        created: false,
+        defaultExtensions: newContainerExtensions(undefined, settings),
+        merged: undefined,
+        settings,
+        trusted: true,
+        pinned: {},
+        name: undefined,
+        explored: false,
+        beforeStart: () => Promise.resolve(undefined),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine: pods.kubectl,
+            containerId: identity,
+            remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            dialer: k8sDialer(
+              pods.kubectl,
+              target,
+              server.nodePath,
+              server.relayPath,
+            ),
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedPod(pods.kubectl, target, signal),
+        tunnels: () => Promise.resolve([]),
+        target: {
+          hostPath: '',
+          remoteWorkspaceFolder: '',
+          containerId: identity,
+          engine: pods.kubectl,
+          configFile: '',
+          created: false,
+          serviceDockerfile: undefined,
+        },
+        afterConnect: () => undefined,
+      },
+      cancellation,
+    );
+  }
+
   return {
     async connect(input: ConnectInput): Promise<Connected | Failed> {
       const controller = new AbortController();
@@ -1952,6 +2169,21 @@ export function containerConnectorOf(
             await leaveShutdown();
           }
           return result;
+        }
+        if (dependencies.pods !== undefined) {
+          const podTarget = k8sTargetOf(target.payload);
+          if (!('malformed' in podTarget)) {
+            return await connectPod(
+              dependencies.pods,
+              target.payload,
+              podTarget,
+              controller,
+            );
+          }
+          if (podTarget.malformed === 'invalid') {
+            logger.info(`the pod's ${podTarget.member} is not a valid name`);
+            return malformedAuthority();
+          }
         }
         if ('malformed' in stored) {
           return malformedAuthority();

@@ -114,6 +114,7 @@ import {configWatchOf} from './config-watch/config-watch.ts';
 import {engineBaseOf, executableOf} from './engine/executable.ts';
 import type {EngineHost} from './engine/engine-host.ts';
 import type {TargetsViewPorts} from './explorer/targets-view.ts';
+import {desktopPortsOf} from './engine/desktop-host.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {
   composeCheck,
@@ -1091,10 +1092,12 @@ export async function activate(
         logger,
         searchPath: () => process.env.PATH ?? '',
       };
+      const desktop = desktopPortsOf(process.platform);
       return {
         ...dependencies,
         endpoint: (base, cancellation) =>
           endpointInEffect(engineSources(), dependencies, base, cancellation),
+        ...(desktop === undefined ? {} : {desktop}),
       };
     },
     handlers: served => {

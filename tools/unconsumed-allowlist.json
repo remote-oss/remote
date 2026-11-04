@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "package": "remote-containers",
+      "kind": "settings",
+      "key": "optimisticallyLaunchDocker",
+      "card": "#2150",
+      "slice": "containers release 2",
+      "decision": "F-0202 BR-3: contributed, read by nothing"
+    },
+    {
       "package": "remote-ssh",
       "kind": "settings",
       "key": "enhancedSessionLogs",
@@ -59,23 +67,7 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/deferred.ts",
-      "card": "#2064",
-      "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/engine/ssh-questions.ts",
-      "card": "#2064",
-      "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/engine/starting-docker.ts",
       "card": "#2064",
       "slice": "part A",
       "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
@@ -87,6 +79,14 @@
       "card": "#2064",
       "slice": "part A",
       "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/attach/k8s-label.ts",
+      "card": "#2117",
+      "slice": "part A",
+      "decision": "part A of the Kubernetes attach: the label is reached by the pod window's registration in part B"
     },
     {
       "package": "remote-containers",

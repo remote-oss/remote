@@ -3,6 +3,7 @@
  * until the checks end or something else shows. It has a Cancel button, which ends the checks.
  */
 
+import {delayedNotice} from '../engine/starting-docker.ts';
 import {readTitleOf} from '../connect/progress-titles.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 
@@ -35,30 +36,18 @@ export function startPreReloadProgress(
   ports: PreReloadProgressPorts,
   onCancel: () => void,
 ): PreReloadProgress {
-  let closed = false;
-  let finish: (() => void) | undefined;
-  const stopTimer = ports.setTimer(PRE_RELOAD_PROGRESS_MILLISECONDS, () => {
-    if (closed) {
-      return;
-    }
-    ports.showProgress(
-      readTitleOf(ports.translate),
-      new Promise<void>(resolve => {
-        finish = resolve;
-      }),
-      () => {
-        close();
+  const notice = delayedNotice(
+    {
+      setTimer: (callback, milliseconds) =>
+        ports.setTimer(milliseconds, callback),
+    },
+    PRE_RELOAD_PROGRESS_MILLISECONDS,
+    ended => {
+      ports.showProgress(readTitleOf(ports.translate), ended, () => {
+        notice.close();
         onCancel();
-      },
-    );
-  });
-  function close(): void {
-    if (closed) {
-      return;
-    }
-    closed = true;
-    stopTimer();
-    finish?.();
-  }
-  return {close};
+      });
+    },
+  );
+  return notice;
 }

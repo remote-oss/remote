@@ -16,21 +16,24 @@ export function execDialer(
   nodePath: string,
   relayScriptPath: string,
 ): Dialer {
+  return execDialerOver(engine, port =>
+    dialArguments(containerId, user, nodePath, relayScriptPath, port),
+  );
+}
+
+/** The dialer that runs the relay with the arguments `relayArguments` gives for a port. */
+export function execDialerOver(
+  engine: EngineHost,
+  relayArguments: (port: number) => string[],
+): Dialer {
   return {
     dial: async target => {
       if (target.kind === 'socket') {
         throw new Error('a socket target is not available in a container');
       }
-      const spawned = await engine.spawn(
-        dialArguments(
-          containerId,
-          user,
-          nodePath,
-          relayScriptPath,
-          target.port,
-        ),
-        {cancellation: new AbortController().signal},
-      );
+      const spawned = await engine.spawn(relayArguments(target.port), {
+        cancellation: new AbortController().signal,
+      });
       if (spawned.kind === 'failed') {
         throw new Error(spawned.detail);
       }

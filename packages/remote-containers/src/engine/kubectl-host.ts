@@ -150,6 +150,8 @@ export function kubectlHostOf(ports: KubectlPorts): {
   ) => Promise<PodListing>;
   /** The kubeconfig's current context, or why `kubectl` doesn't give one. */
   currentContext: (cancellation: AbortSignal) => Promise<ContextAnswer>;
+  /** `kubectl` as an engine whose every run and spawn has the login shell's environment, probed once. */
+  engine: EngineHost;
 } {
   const bounds = ports.bounds ?? {
     listing: KUBECTL_BOUND_MILLISECONDS,
@@ -265,5 +267,24 @@ export function kubectlHostOf(ports: KubectlPorts): {
       : {kind: 'context', name};
   }
 
-  return {listPods, currentContext};
+  const engine: EngineHost = {
+    // eslint-disable-next-line id-length -- the port's method is named run
+    run: async (argv, input, options) =>
+      ports.kubectl.run(argv, input, {
+        ...options,
+        environment: {
+          ...definedEntries(await environmentOf()),
+          ...options.environment,
+        },
+      }),
+    spawn: async (argv, options) =>
+      ports.kubectl.spawn(argv, {
+        ...options,
+        environment: {
+          ...definedEntries(await environmentOf()),
+          ...options.environment,
+        },
+      }),
+  };
+  return {listPods, currentContext, engine};
 }
