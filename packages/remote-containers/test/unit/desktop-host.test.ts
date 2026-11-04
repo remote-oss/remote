@@ -8,10 +8,10 @@ import type {DesktopData} from '../../src/engine/docker-desktop.ts';
 /** Data whose programs are this Node, so that a listing finds a name and a start works on any host. */
 const NODE_DATA: DesktopData = {
   application: process.execPath,
-  start: {program: process.execPath, args: ['-e', '']},
+  start: {program: process.execPath, parameters: ['-e', '']},
   listing: {
     program: process.execPath,
-    args: ['-p', "'Docker Desktop is up'"],
+    parameters: ['-p', "'Docker Desktop is up'"],
     processName: 'Docker Desktop',
   },
   recheckIntervalMilliseconds: 1,
@@ -74,14 +74,15 @@ describe('Docker Desktop over child processes (card containers-200, §1)', () =>
   });
 
   it('F-0202 BR-9: a listing counts as running when it names the process, as pgrep -lx prints it, and not when it prints a bare pid', async () => {
-    const listing = (printed: string) =>
-      desktopPortsOver({
+    function listing(printed: string): Promise<boolean> {
+      return desktopPortsOver({
         ...NODE_DATA,
         listing: {
           ...NODE_DATA.listing,
-          args: ['-p', JSON.stringify(printed)],
+          parameters: ['-p', JSON.stringify(printed)],
         },
       }).running();
+    }
     deepStrictEqual(
       [await listing('4242 Docker Desktop\n'), await listing('4242\n')],
       [true, false],

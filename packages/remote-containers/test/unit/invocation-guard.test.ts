@@ -16,8 +16,8 @@ describe('the invocation guard (card containers-200, §2.3)', () => {
   it('F-0202 AC-45: an invocation that has not passed its check does not hold the others', async () => {
     const {guard} = guarded();
     const answers: boolean[] = [];
-    await guard.run('Open', () =>
-      guard.run('Open', second => {
+    await guard.invoke('Open', () =>
+      guard.invoke('Open', second => {
         answers.push(second());
         return Promise.resolve();
       }),
@@ -28,14 +28,14 @@ describe('the invocation guard (card containers-200, §2.3)', () => {
   it('F-0202 AC-51: the first to pass its check goes on, a later one is absorbed with a log line, and the guard is free once the first ends', async () => {
     const {guard, lines} = guarded();
     const answers: boolean[] = [];
-    await guard.run('Open', async pass => {
+    await guard.invoke('Open', async pass => {
       answers.push(pass());
-      await guard.run('Open', second => {
+      await guard.invoke('Open', second => {
         answers.push(second());
         return Promise.resolve();
       });
     });
-    await guard.run('Open', pass => {
+    await guard.invoke('Open', pass => {
       answers.push(pass());
       return Promise.resolve();
     });
@@ -49,9 +49,9 @@ describe('the invocation guard (card containers-200, §2.3)', () => {
     const {guard} = guarded();
     const answers: boolean[] = [];
     await guard
-      .run('Open', () => Promise.reject(new Error('stopped')))
+      .invoke('Open', () => Promise.reject(new Error('stopped')))
       .catch(() => undefined);
-    await guard.run('Open', pass => {
+    await guard.invoke('Open', pass => {
       answers.push(pass());
       return Promise.resolve();
     });

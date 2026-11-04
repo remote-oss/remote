@@ -31,11 +31,11 @@ describe('Docker Desktop on each host (card containers-200, §1)', () => {
         '/Applications/Docker.app',
         {
           program: '/usr/bin/open',
-          args: ['--background', '-a', 'Docker'],
+          parameters: ['--background', '-a', 'Docker'],
         },
         {
           program: '/usr/bin/pgrep',
-          args: ['-lx', 'Docker Desktop'],
+          parameters: ['-lx', 'Docker Desktop'],
           processName: 'Docker Desktop',
         },
         5000,
@@ -51,11 +51,17 @@ describe('Docker Desktop on each host (card containers-200, §1)', () => {
         'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
         {
           program: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
-          args: [],
+          parameters: [],
         },
         {
           program: 'C:\\Windows\\System32\\tasklist.exe',
-          args: ['/FI', 'IMAGENAME eq Docker Desktop.exe', '/FO', 'CSV', '/NH'],
+          parameters: [
+            '/FI',
+            'IMAGENAME eq Docker Desktop.exe',
+            '/FO',
+            'CSV',
+            '/NH',
+          ],
           processName: 'Docker Desktop.exe',
         },
       ],
@@ -98,12 +104,12 @@ describe('Docker Desktop on each host (card containers-200, §1)', () => {
   });
 
   it('F-0202 BR-13, AC-24, AC-56: macOS waits for six re-checks, and Windows for six when the application was running and for five minutes when this check started it', () => {
-    const mac = dataOf('darwin');
+    const macData = dataOf('darwin');
     const windows = dataOf('win32');
     deepStrictEqual(
       [
-        recheckBoundOf(mac, true),
-        recheckBoundOf(mac, false),
+        recheckBoundOf(macData, true),
+        recheckBoundOf(macData, false),
         recheckBoundOf(windows, false),
         recheckBoundOf(windows, true),
       ],
@@ -117,9 +123,9 @@ describe('Docker Desktop on each host (card containers-200, §1)', () => {
   });
 
   it('F-0202 6.2: a count allows exactly its limit of re-checks, whatever time has gone', () => {
-    const six = {kind: 'count', limit: 6} as const;
+    const sixChecks = {kind: 'count', limit: 6} as const;
     deepStrictEqual(
-      [0, 5, 6, 7].map(done => mayRecheck(six, done, 10_000_000)),
+      [0, 5, 6, 7].map(done => mayRecheck(sixChecks, done, 10_000_000)),
       [true, true, false, false],
     );
   });

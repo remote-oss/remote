@@ -28,7 +28,7 @@ export function desktopPortsOver(data: DesktopData): DesktopPorts {
       new Promise(resolve => {
         execFile(
           data.listing.program,
-          [...data.listing.args],
+          [...data.listing.parameters],
           {windowsHide: true},
           (error, stdout) => {
             resolve(
@@ -39,7 +39,7 @@ export function desktopPortsOver(data: DesktopData): DesktopPorts {
       }),
     start: () =>
       new Promise(resolve => {
-        const child = spawn(data.start.program, [...data.start.args], {
+        const child = spawn(data.start.program, [...data.start.parameters], {
           shell: false,
           detached: true,
           stdio: 'ignore',

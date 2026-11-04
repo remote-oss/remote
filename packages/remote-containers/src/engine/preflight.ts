@@ -232,21 +232,23 @@ export async function firstCheck(
     );
   }
   const viaSsh = endpoint !== undefined && sshHostOf(endpoint) !== undefined;
-  let queries: QueryResult[] = [];
-  let outcome: FirstCheckOutcome = 'passed';
-  const check = async (signal: AbortSignal): Promise<CheckResult> => {
-    queries = await firstQueries(dependencies, executable, signal);
-    outcome = firstCheckOutcomeOf(executable, queries, viaSsh);
-    const last = queries.at(-1);
-    return outcome === 'passed'
-      ? {ok: true}
-      : {ok: false, errorText: last?.kind === 'ran' ? last.stderr : ''};
+  const seen: {queries: QueryResult[]; outcome: FirstCheckOutcome} = {
+    queries: [],
+    outcome: 'passed',
   };
+  async function check(signal: AbortSignal): Promise<CheckResult> {
+    seen.queries = await firstQueries(dependencies, executable, signal);
+    seen.outcome = firstCheckOutcomeOf(executable, seen.queries, viaSsh);
+    const last = seen.queries.at(-1);
+    return seen.outcome === 'passed'
+      ? {passed: true}
+      : {passed: false, errorText: last?.kind === 'ran' ? last.stderr : ''};
+  }
   await checkedOrStarted(dependencies.desktop, check, cancellation);
   if (cancellation.aborted) {
     return 'stopped';
   }
-  const structured = queries[1];
+  const structured = seen.queries[1];
   if (
     structured?.kind === 'ran' &&
     succeeded(structured) &&
@@ -254,10 +256,14 @@ export async function firstCheck(
   ) {
     dependencies.logger.info(API_CHECK_SKIPPED);
   }
-  if (outcome === 'passed') {
+  if (seen.outcome === 'passed') {
     return 'proceed';
   }
-  const dialog = dialogOf(outcome, executable.written, dependencies.translate);
+  const dialog = dialogOf(
+    seen.outcome,
+    executable.written,
+    dependencies.translate,
+  );
   return shown(dependencies, dialog);
 }
 
@@ -274,14 +280,15 @@ export async function secondCheck(
   if (executable.kind === 'notFound') {
     return secondCheckOutcomeOf(executable, {kind: 'failed', detail: ''});
   }
+  const program = executable;
   let latest: SecondCheckOutcome = {kind: 'passed'};
-  const check = async (signal: AbortSignal): Promise<CheckResult> => {
-    const result = await query(dependencies, executable, ['version'], signal);
+  async function check(signal: AbortSignal): Promise<CheckResult> {
+    const result = await query(dependencies, program, ['version'], signal);
     latest = secondCheckOutcomeOf(executable, result);
     return latest.kind === 'passed'
-      ? {ok: true}
-      : {ok: false, errorText: result.kind === 'ran' ? result.stderr : ''};
-  };
+      ? {passed: true}
+      : {passed: false, errorText: result.kind === 'ran' ? result.stderr : ''};
+  }
   await checkedOrStarted(dependencies.desktop, check, cancellation);
   return latest;
 }

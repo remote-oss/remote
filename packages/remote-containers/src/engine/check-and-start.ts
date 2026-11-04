@@ -12,7 +12,7 @@ import {
 } from './docker-desktop.ts';
 
 /** What one run of the check came to. */
-export type CheckResult = {ok: true} | {ok: false; errorText: string};
+export type CheckResult = {passed: true} | {passed: false; errorText: string};
 
 /** What the step needs of its host to start Docker Desktop and wait for it. */
 export interface DesktopPorts {
@@ -51,7 +51,7 @@ export async function checkAndStart(
   cancellation: AbortSignal,
 ): Promise<CheckAndStartOutcome> {
   const first = await ports.check(cancellation);
-  if (first.ok) {
+  if (first.passed) {
     return {kind: 'ok'};
   }
   const {data} = ports;
@@ -74,7 +74,7 @@ export async function checkAndStart(
       return {kind: 'stopped'};
     }
     const again = await ports.check(cancellation);
-    if (again.ok) {
+    if (again.passed) {
       return {kind: 'ok'};
     }
     last = again.errorText;

@@ -488,8 +488,12 @@ describe('the second check', () => {
     scene.dependencies.desktop = {
       data: {
         application: 'C:/Docker.exe',
-        start: {program: 'Docker.exe', args: []},
-        listing: {program: 'tasklist', args: [], processName: 'Docker.exe'},
+        start: {program: 'Docker.exe', parameters: []},
+        listing: {
+          program: 'tasklist',
+          parameters: [],
+          processName: 'Docker.exe',
+        },
         recheckIntervalMilliseconds: 1,
         rechecks: {
           running: {kind: 'count', limit: 2},
@@ -500,7 +504,7 @@ describe('the second check', () => {
       running: () => Promise.resolve(false),
       start: () => {
         started.push('start');
-        answers['version'] = finished(0);
+        answers.version = finished(0);
         return Promise.resolve();
       },
       wait: () => Promise.resolve(),
@@ -538,8 +542,12 @@ describe('the first check, when Docker Desktop is started (card containers-200)'
     return {
       data: {
         application: 'C:/Docker.exe',
-        start: {program: 'Docker.exe', args: []},
-        listing: {program: 'tasklist', args: [], processName: 'Docker.exe'},
+        start: {program: 'Docker.exe', parameters: []},
+        listing: {
+          program: 'tasklist',
+          parameters: [],
+          processName: 'Docker.exe',
+        },
         recheckIntervalMilliseconds: 5,
         rechecks: {
           running: {kind: 'count', limit: options.limit ?? 2},

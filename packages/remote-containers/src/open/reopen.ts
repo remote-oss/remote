@@ -169,6 +169,6 @@ export function reopenHandlersOf(
 
   return rebuild => {
     const title = titleOf(rebuild);
-    return () => guard.run(title, pass => attempt(title, rebuild, pass));
+    return () => guard.invoke(title, pass => attempt(title, rebuild, pass));
   };
 }

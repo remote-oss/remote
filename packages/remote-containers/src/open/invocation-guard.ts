@@ -1,7 +1,7 @@
 /**
  * @fileoverview The guard of the commands that open a container window: a second invocation runs its own engine check,
  * and once one invocation has passed its check a later one is absorbed, so the window gets one connect and one
- * container (F-0202 AC-45 and AC-51 with F-0401 AC-20).
+ * container.
  */
 
 import type {Logger} from 'lib-log';
@@ -12,7 +12,7 @@ export interface InvocationGuard {
    * Runs `attempt`. It calls the `pass` it is given once its engine check has passed; `pass` answers false, and the
    * attempt must end, when another invocation has passed its check and is still running.
    */
-  run(
+  invoke(
     title: string,
     attempt: (pass: () => boolean) => Promise<void>,
   ): Promise<void>;
@@ -22,8 +22,8 @@ export interface InvocationGuard {
 export function invocationGuardOf(logger: Logger): InvocationGuard {
   let held = false;
   return {
-    run: async (title, attempt) => {
-      let mine = false;
+    invoke: async (title, attempt) => {
+      const claim = {mine: false};
       try {
         await attempt(() => {
           if (held) {
@@ -31,11 +31,11 @@ export function invocationGuardOf(logger: Logger): InvocationGuard {
             return false;
           }
           held = true;
-          mine = true;
+          claim.mine = true;
           return true;
         });
       } finally {
-        if (mine) {
+        if (claim.mine) {
           held = false;
         }
       }

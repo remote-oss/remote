@@ -91,7 +91,9 @@ export async function watchedCheck<Result>(
   );
   try {
     return await Promise.race([
-      check(own.signal, notice.close).then((result): WatchedCheck<Result> => ({
+      check(own.signal, () => {
+        notice.close();
+      }).then((result): WatchedCheck<Result> => ({
         kind: 'done',
         result,
       })),

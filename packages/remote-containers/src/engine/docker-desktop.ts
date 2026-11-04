@@ -14,9 +14,13 @@ export interface DesktopData {
   /** Where the application is installed. */
   application: string;
   /** The program that starts it in the background, and its arguments. */
-  start: {program: string; args: readonly string[]};
+  start: {program: string; parameters: readonly string[]};
   /** The program that lists its process, its arguments, and the name the listing holds when it runs. */
-  listing: {program: string; args: readonly string[]; processName: string};
+  listing: {
+    program: string;
+    parameters: readonly string[];
+    processName: string;
+  };
   /** How often a failed check is repeated, in milliseconds. */
   recheckIntervalMilliseconds: number;
   /** The bound of the re-checks when the application was already running, and when this check started it. */
@@ -39,11 +43,11 @@ const DESKTOP_DATA: Readonly<Record<string, DesktopData>> = {
     application: '/Applications/Docker.app',
     start: {
       program: '/usr/bin/open',
-      args: ['--background', '-a', 'Docker'],
+      parameters: ['--background', '-a', 'Docker'],
     },
     listing: {
       program: '/usr/bin/pgrep',
-      args: ['-lx', 'Docker Desktop'],
+      parameters: ['-lx', 'Docker Desktop'],
       processName: 'Docker Desktop',
     },
     recheckIntervalMilliseconds: INTERVAL,
@@ -53,11 +57,17 @@ const DESKTOP_DATA: Readonly<Record<string, DesktopData>> = {
     application: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
     start: {
       program: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
-      args: [],
+      parameters: [],
     },
     listing: {
       program: 'C:\\Windows\\System32\\tasklist.exe',
-      args: ['/FI', 'IMAGENAME eq Docker Desktop.exe', '/FO', 'CSV', '/NH'],
+      parameters: [
+        '/FI',
+        'IMAGENAME eq Docker Desktop.exe',
+        '/FO',
+        'CSV',
+        '/NH',
+      ],
       processName: 'Docker Desktop.exe',
     },
     recheckIntervalMilliseconds: INTERVAL,

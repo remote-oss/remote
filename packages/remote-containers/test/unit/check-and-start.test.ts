@@ -15,8 +15,12 @@ function dataOf(
 ): DesktopData {
   return {
     application: '/Applications/Docker.app',
-    start: {program: 'open', args: ['-g', '-a', 'Docker']},
-    listing: {program: 'pgrep', args: ['-x', 'Docker'], processName: 'Docker'},
+    start: {program: 'open', parameters: ['-g', '-a', 'Docker']},
+    listing: {
+      program: 'pgrep',
+      parameters: ['-x', 'Docker'],
+      processName: 'Docker',
+    },
     recheckIntervalMilliseconds: 10,
     rechecks: {running, started},
   };
@@ -38,7 +42,7 @@ function portsOf(setup: Setup) {
   const ports: CheckAndStartPorts = {
     check: () => {
       calls.push('check');
-      return Promise.resolve(setup.results.shift() ?? {ok: true});
+      return Promise.resolve(setup.results.shift() ?? {passed: true});
     },
     data: setup.data,
     installed: () => Promise.resolve(setup.installed ?? true),
@@ -61,100 +65,98 @@ function portsOf(setup: Setup) {
 }
 
 describe('check and start (card containers-200, §2)', () => {
-  it('F-0202 AC-39: a passing check ends the step at once', async () => {
-    const {ports, calls, signal} = portsOf({results: [{ok: true}]});
-    deepStrictEqual(await checkAndStart(ports, signal), {kind: 'ok'});
-    deepStrictEqual(calls, ['check']);
+  it('F-0202 AC-24, BR-13: a passing check ends the step at once', async () => {
+    const {ports, calls, signal} = portsOf({results: [{passed: true}]});
+    const outcome = await checkAndStart(ports, signal);
+    deepStrictEqual([outcome, calls], [{kind: 'ok'}, ['check']]);
   });
 
-  it('F-0202 AC-39: a host without start data keeps the first failure', async () => {
+  it('F-0202 AC-57, BR-12: a host without start data keeps the first failure', async () => {
     const {ports, calls, signal} = portsOf({
-      results: [{ok: false, errorText: DOWN}],
+      results: [{passed: false, errorText: DOWN}],
     });
-    deepStrictEqual(await checkAndStart(ports, signal), {
-      kind: 'failed',
-      errorText: DOWN,
-    });
-    deepStrictEqual(calls, ['check']);
+    const outcome = await checkAndStart(ports, signal);
+    deepStrictEqual(
+      [outcome, calls],
+      [{kind: 'failed', errorText: DOWN}, ['check']],
+    );
   });
 
-  it('F-0202 AC-39: an application that is not installed, or an error that is not the daemon being down, keeps the failure', async () => {
-    const data = dataOf({kind: 'count', limit: 2}, {kind: 'count', limit: 2});
-    const missing = portsOf({
-      data,
-      installed: false,
-      results: [{ok: false, errorText: DOWN}],
+  for (const [reason, installed, errorText] of [
+    ['an application that is not installed', false, DOWN],
+    ['an error that is not the daemon being down', true, 'denied'],
+  ] as const) {
+    it(`F-0202 AC-57, BR-12: ${reason} keeps the failure`, async () => {
+      const {ports, calls, signal} = portsOf({
+        data: dataOf({kind: 'count', limit: 2}, {kind: 'count', limit: 2}),
+        installed,
+        results: [{passed: false, errorText}],
+      });
+      const outcome = await checkAndStart(ports, signal);
+      deepStrictEqual(
+        [outcome, calls],
+        [{kind: 'failed', errorText}, ['check']],
+      );
     });
-    deepStrictEqual(await checkAndStart(missing.ports, missing.signal), {
-      kind: 'failed',
-      errorText: DOWN,
-    });
-    const other = portsOf({data, results: [{ok: false, errorText: 'denied'}]});
-    deepStrictEqual(await checkAndStart(other.ports, other.signal), {
-      kind: 'failed',
-      errorText: 'denied',
-    });
-    deepStrictEqual([missing.calls, other.calls], [['check'], ['check']]);
-  });
+  }
 
-  it('F-0202 AC-39: a daemon that is down starts the application and the repeated check passes', async () => {
+  it('F-0202 AC-24, BR-13: a daemon that is down starts the application and the repeated check passes', async () => {
     const {ports, calls, signal} = portsOf({
       data: dataOf({kind: 'count', limit: 2}, {kind: 'count', limit: 3}),
       results: [
-        {ok: false, errorText: DOWN},
-        {ok: false, errorText: DOWN},
-        {ok: true},
+        {passed: false, errorText: DOWN},
+        {passed: false, errorText: DOWN},
+        {passed: true},
       ],
     });
-    deepStrictEqual(await checkAndStart(ports, signal), {kind: 'ok'});
-    deepStrictEqual(calls, [
-      'check',
-      'start',
-      'wait',
-      'check',
-      'wait',
-      'check',
-    ]);
+    const outcome = await checkAndStart(ports, signal);
+    deepStrictEqual(
+      [outcome, calls],
+      [{kind: 'ok'}, ['check', 'start', 'wait', 'check', 'wait', 'check']],
+    );
   });
 
-  it('F-0202 AC-39: an application already running is not started again and uses the running bound', async () => {
+  it('F-0202 AC-44, BR-13: an application already running is not started again and uses the running bound', async () => {
     const {ports, calls, signal} = portsOf({
       data: dataOf({kind: 'count', limit: 1}, {kind: 'count', limit: 5}),
       running: true,
       results: [
-        {ok: false, errorText: DOWN},
-        {ok: false, errorText: 'still down'},
+        {passed: false, errorText: DOWN},
+        {passed: false, errorText: 'still down'},
       ],
     });
-    deepStrictEqual(await checkAndStart(ports, signal), {
-      kind: 'failed',
-      errorText: 'still down',
-    });
-    deepStrictEqual(calls, ['check', 'wait', 'check']);
+    const outcome = await checkAndStart(ports, signal);
+    deepStrictEqual(
+      [outcome, calls],
+      [{kind: 'failed', errorText: 'still down'}, ['check', 'wait', 'check']],
+    );
   });
 
-  it('F-0202 AC-39: a timed bound ends the repeats once the time since the start is over', async () => {
+  it('F-0202 AC-56: a timed bound ends the repeats once the time since the start is over', async () => {
     const {ports, calls, signal} = portsOf({
       data: dataOf({kind: 'count', limit: 1}, {kind: 'time', limit: 25}),
       results: Array.from({length: 10}, () => ({
-        ok: false as const,
+        passed: false as const,
         errorText: DOWN,
       })),
     });
-    deepStrictEqual(await checkAndStart(ports, signal), {
-      kind: 'failed',
-      errorText: DOWN,
-    });
-    deepStrictEqual(calls.filter(call => call === 'wait').length, 3);
+    const outcome = await checkAndStart(ports, signal);
+    deepStrictEqual(
+      [outcome, calls.filter(call => call === 'wait').length],
+      [{kind: 'failed', errorText: DOWN}, 3],
+    );
   });
 
-  it('F-0202 AC-39: cancelling during a wait ends the step without another check', async () => {
+  it('F-0202 AC-32: cancelling during a wait ends the step without another check', async () => {
     const {ports, calls, signal} = portsOf({
       data: dataOf({kind: 'count', limit: 3}, {kind: 'count', limit: 3}),
       abortOnWait: true,
-      results: [{ok: false, errorText: DOWN}],
+      results: [{passed: false, errorText: DOWN}],
     });
-    deepStrictEqual(await checkAndStart(ports, signal), {kind: 'stopped'});
-    deepStrictEqual(calls, ['check', 'start', 'wait']);
+    const outcome = await checkAndStart(ports, signal);
+    deepStrictEqual(
+      [outcome, calls],
+      [{kind: 'stopped'}, ['check', 'start', 'wait']],
+    );
   });
 });

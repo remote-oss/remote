@@ -122,5 +122,5 @@ export function openFolderInContainer(
     }
   }
 
-  return () => guard.run(TITLE, attempt);
+  return () => guard.invoke(TITLE, attempt);
 }
