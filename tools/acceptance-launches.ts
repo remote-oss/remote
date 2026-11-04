@@ -381,6 +381,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'extensions.test.ts',
   'gate.test.ts',
   'glibc-server.test.ts',
+  'host-requirements.test.ts',
   'image-build.test.ts',
   'initialize-input.test.ts',
   'launch.test.ts',

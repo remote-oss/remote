@@ -87,13 +87,14 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-0807 AC-62 and F-0404 7.E10 describe the reference's text; ruled on remote-oss/remote#1971 (spec question on
     remote-oss/remote-containers#132).
 
-- **Open Folder in Container... and Open Workspace in Container... show a host-requirements dialog caused only by the
-  image's own label after the trust dialog, not before it.** Requirements written in the configuration file, or
-  recorded on the folder's existing container, still show before trust, as the reference does.
+- **Open Folder in Container... and Open Workspace in Container... don't show a host-requirements dialog for a
+  requirement that only the image's own label records.** Requirements written in the configuration file, or recorded
+  on the folder's existing container, still show before trust, as the reference does.
   - F-0206 BR-17 has the whole check run before the target's trust dialog for these two commands. Reading the image's
     label means asking the registries that the untrusted configuration names, and fetching its Features, before the
-    user has trusted it (F-0106; F-0201 AC-55). Ours does that read only after trust (athena on #2146, after dike's
-    review; ruling `ruling-2146-trust-first`; spec question on remote-oss/remote-containers#133).
+    user has trusted it, and these two commands ask for trust only in the window they open (F-0106), so no point
+    before the reload is both safe and in time (athena on #2146 and #2152; ruling `ruling-2146-trust-first`; spec
+    question on remote-oss/remote-containers#133).
 
 - **The version lookups for Features in `devcontainer.json` run only in a trusted workspace.** In Restricted Mode the
   file shows no version CodeLenses; the Feature hover, the completions and the deprecated-namespace warning still work.
