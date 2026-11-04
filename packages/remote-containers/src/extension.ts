@@ -1178,7 +1178,12 @@ export async function activate(
       context.subscriptions.push(
         vscode.window.registerUriHandler({
           handleUri: uri => {
-            void openCloneLink(uri);
+            // The link's own text may carry a user and a password, so only the failure's kind is logged.
+            openCloneLink(uri).catch((caught: unknown) => {
+              served.logger.error(
+                `the link could not be handled: ${caught instanceof Error ? caught.name : 'unknown failure'}`,
+              );
+            });
           },
         }),
       );
