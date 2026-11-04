@@ -320,7 +320,9 @@ runners this way:
     node tools/acceptance.ts --editor vscodium --launches containers-a
     node tools/acceptance.ts --editor vscodium --launches containers-b
     node tools/acceptance.ts --editor vscodium --launches @containers,!containers
-    node tools/acceptance.ts --editor vscodium --launches @explorer,@hosts
+    node tools/acceptance.ts --editor vscodium --launches @explorer,!explorer-folders
+    node tools/acceptance.ts --editor vscodium --launches explorer-folders
+    node tools/acceptance.ts --editor vscodium --launches @hosts
 
 `@ssh,!terminal` is the ssh group without one launch.
 

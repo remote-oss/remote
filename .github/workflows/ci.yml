@@ -419,20 +419,17 @@ jobs:
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CI_POST_MERGE_VSCODIUM != 'off' &&
       needs.post-merge-select.result == 'success' && needs.post-merge-select.outputs.parts != '[]'))
-    # Every launch of the suite (`all`) runs as six parts on six runners at once: the ssh launches in two, ssh-core and
-    # windows (about 40 and 30 minutes) and the rest of the group (about an hour), since the group outgrew the job's 120
-    # minutes on 2026-11-02 (41428931974 was cancelled with three launches left); the two parts of the `containers`
-    # launch, containers-a and containers-b, about an hour each (half the suite's files each); the other containers
-    # launches; and the explorer and host-case launches together. Each runner has its own Docker daemon, so
-    # the containers parts never wait for each other's lock. The genuine group
-    # has its own job. A dispatch that names its launches runs them as one part; one whose launches input is empty runs
-    # all.
-    # Two parts at a time: the runners share one machine's memory with other work, and six VSCodium parts at once, each
-    # with its editor and containers, ran it out (2026-11-03). A full run then takes three rounds of two parts.
+    # Every launch of the suite (`all`) runs as eight parts on eight runners at once: the ssh launches in two, ssh-core
+    # and windows and the rest of the group, since the group outgrew the job's 120 minutes on 2026-11-02; the two parts
+    # of the `containers` launch, containers-a and containers-b (half the suite's files each); the other containers
+    # launches; the explorer launches but explorer-folders; explorer-folders alone, the longest of them (78 minutes on
+    # the pool, 2026-11-04); and the host-case launches. Each runner has its own Docker daemon, so the containers parts
+    # never wait for each other's lock. The genuine group has its own job. A dispatch that names its launches runs them
+    # as one part; one whose launches input is empty runs all.
     strategy:
       fail-fast: false
       matrix:
-        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows,!cli-path","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,@hosts"]') }}
+        launches: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.post-merge-select.outputs.parts || github.event_name == 'workflow_dispatch' && inputs.launches != 'all' && inputs.launches != '' && format('[{0}]', toJSON(inputs.launches)) || '["@ssh,!ssh-core,!windows,!cli-path","ssh-core,windows","containers-a","containers-b","@containers,!containers","@explorer,!explorer-folders","explorer-folders","@hosts"]') }}
     # GitHub keeps one pending job per group, and a newer one replaces it. The scheduled backstop has its own group per
     # part, where only the latest main matters; each release tag has a group of its own per part, so nothing displaces it;
     # dispatches keep theirs, fed one at a time per part, so the backstop never displaces them.
@@ -441,11 +438,12 @@ jobs:
       cancel-in-progress: false
     # GitHub's runners and the organisation's pool share the parts: with the repository variable CI_POOL_RUNS_ON set (a
     # pool label; the part also asks for X64 and ephemeral, a fresh machine per job), a part with no containers launch
-    # runs on the pool, and the containers parts stay on GitHub's runners, whose speed their 180 minutes need. Unset,
-    # every part runs on ubuntu-24.04.
+    # runs on the pool, and the containers parts and explorer-folders stay on GitHub's runners, whose speed their 180
+    # minutes need. Unset, every part runs on ubuntu-24.04.
     runs-on: >-
       ${{ inputs.runner-arch == 'ARM64' && 'ubuntu-24.04-arm' ||
-      (vars.CI_POOL_RUNS_ON && !contains(matrix.launches, 'containers') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (vars.CI_POOL_RUNS_ON && !contains(matrix.launches, 'containers') && matrix.launches != 'explorer-folders' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON))) || 'ubuntu-24.04' }}
     # the whole VSCodium suite outgrew 60 minutes on 2026-10-20 (the first scheduled backstop, 39387179525, was cancelled
     # at 60), so it runs in parts. The containers launch alone took 44 minutes then and 83 to 110 by 2026-11-01

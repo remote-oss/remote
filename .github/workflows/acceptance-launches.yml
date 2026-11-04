@@ -59,7 +59,8 @@ jobs:
     # a selection with no containers launch runs on the organisation's pool when the repository variable CI_POOL_RUNS_ON
     # names its label (with X64 and ephemeral, as ci.yml's VSCodium parts); otherwise on GitHub's ubuntu-24.04
     runs-on: >-
-      ${{ vars.CI_POOL_RUNS_ON && !contains(needs.select.outputs.launches, 'containers') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      ${{ vars.CI_POOL_RUNS_ON && !contains(needs.select.outputs.launches, 'containers') &&
+      !contains(needs.select.outputs.launches, 'explorer-folders') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       fromJSON(format('["{0}","X64","ephemeral"]', vars.CI_POOL_RUNS_ON)) || 'ubuntu-24.04' }}
     timeout-minutes: ${{ fromJSON(needs.select.outputs.minutes) }}
     steps:
