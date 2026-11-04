@@ -71,3 +71,8 @@ if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDrive
 fi
 podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
 podman info --format '{{.Host.OCIRuntime.Path}}'
+# debug (hosted only): does rootless `podman exec -i` pass stdin EOF, and what does a container see of the network
+podman run -d --name dbg docker.io/library/alpine:3.20 sleep 600 || true
+printf hi | timeout 20 podman exec -i dbg cat; echo "exec-i rc=$?"
+podman exec dbg sh -c 'cat /etc/hosts; ip route' || true
+podman rm -f dbg || true

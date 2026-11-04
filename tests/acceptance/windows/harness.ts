@@ -1019,7 +1019,7 @@ export async function reopenInContainer(
 }
 
 /** How many lines of the Dev Containers log a connect that times out carries. */
-const CONNECT_LOG_LINES = 40;
+const CONNECT_LOG_LINES = 400;
 
 /** `message`, then a line break and the last {@link CONNECT_LOG_LINES} of `lines`; the message alone when there are none. */
 export function withLogTail(message: string, lines: readonly string[]): string {
