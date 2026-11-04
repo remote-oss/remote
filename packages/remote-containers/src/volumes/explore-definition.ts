@@ -5,7 +5,7 @@
  */
 
 /** The version of the definition; a new version has its own folder, so an edit of an older one stays. */
-export const EXPLORE_DEFINITION_VERSION = '1';
+const EXPLORE_DEFINITION_VERSION = '1';
 
 /** The variable that carries the volume's name to the CLI for one run; the definition reads it and names no volume. */
 export const EXPLORE_VOLUME_VARIABLE = 'REMOTE_OSS_INSPECT_VOLUME';

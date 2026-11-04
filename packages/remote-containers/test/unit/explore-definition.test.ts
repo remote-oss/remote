@@ -9,17 +9,22 @@ import {
 
 describe('the definition Explore a Volume opens a volume in (card containers-155)', () => {
   it('F-0705 BR-4, BR-8: the definition is Alpine as root with the volume at /volume read from the variable of the run, naming no volume and no Docker socket', () => {
-    const definition: Record<string, unknown> = JSON.parse(
-      exploreDefinitionText(),
-    ) as Record<string, unknown>;
-    deepStrictEqual(definition, {
-      name: 'Inspect Volume',
-      image: 'alpine:3.20',
-      remoteUser: 'root',
-      workspaceMount: `source=\${localEnv:${EXPLORE_VOLUME_VARIABLE}},target=/volume,type=volume`,
-      workspaceFolder: '/volume',
-    });
-    deepStrictEqual(exploreDefinitionText().includes('docker.sock'), false);
+    deepStrictEqual(
+      [
+        JSON.parse(exploreDefinitionText()) as Record<string, unknown>,
+        exploreDefinitionText().includes('docker.sock'),
+      ],
+      [
+        {
+          name: 'Inspect Volume',
+          image: 'alpine:3.20',
+          remoteUser: 'root',
+          workspaceMount: `source=\${localEnv:${EXPLORE_VOLUME_VARIABLE}},target=/volume,type=volume`,
+          workspaceFolder: '/volume',
+        },
+        false,
+      ],
+    );
   });
 
   it('F-0705 BR-5: the labels of the reuse key are the volume and the definition’s configuration', () => {

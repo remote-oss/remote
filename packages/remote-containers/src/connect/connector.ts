@@ -1572,7 +1572,7 @@ export function containerConnectorOf(
       engine: EngineHost;
       dockerFile: string;
     },
-    run: {
+    launch: {
       environment: Readonly<Record<string, string>>;
       cliEnvironment: Readonly<Record<string, string | undefined>>;
       rebuild: {buildNoCache: boolean} | undefined;
@@ -1580,7 +1580,7 @@ export function containerConnectorOf(
     },
   ): Promise<Connected | Failed> {
     const {volumes, payload, target, settings, engine, dockerFile} = what;
-    const {environment, cliEnvironment, rebuild, cancellation} = run;
+    const {environment, cliEnvironment, rebuild, cancellation} = launch;
     if (!exploredVolumeNameValid(target.volumeName)) {
       logger.info('the volume to explore has no name Docker accepts');
       return containerSetupFailed();

@@ -88,6 +88,26 @@ function connect(
 
 const STOP = {containerId: 'c0ffee', action: 'stop'} as const;
 
+/** Every docker run answers that c0ffee runs. */
+function running(): DockerResult {
+  return {status: 0, stdout: 'c0ffee'};
+}
+
+/** A scene in which the only connection, to `identity`, has ended and the docker query has found c0ffee. */
+async function lookedUp(
+  identity: ContainerIdentity,
+): Promise<ReturnType<typeof scene>> {
+  const found = scene(argv =>
+    argv[0] === 'ps'
+      ? {status: 0, stdout: 'c0ffee\n'}
+      : {status: 0, stdout: ''},
+  );
+  connect(found.registry, 1, 'a', identity);
+  found.registry.leasesChanged([]);
+  await found.advance(CHECK_MILLISECONDS);
+  return found;
+}
+
 describe('the shutdown registry (card containers-68)', () => {
   it('F-0417 AC-1, BR-3: a connection that ends stops its container at exactly ten seconds, with one docker stop', async () => {
     const {registry, advance, runs} = scene();
@@ -259,18 +279,7 @@ describe('the shutdown registry (card containers-68)', () => {
 
   it('brief-volumes §7 (card containers-151): a clone in a volume is looked up by its volume and folder, held by a connection of the same volume, and never by a folder’s', async () => {
     const volume = {volumeName: 'r-1', folder: 'r'};
-    /** Every docker run answers that c0ffee runs. */
-    function running(): DockerResult {
-      return {status: 0, stdout: 'c0ffee'};
-    }
-    const found = scene(argv =>
-      argv[0] === 'ps'
-        ? {status: 0, stdout: 'c0ffee\n'}
-        : {status: 0, stdout: ''},
-    );
-    connect(found.registry, 1, 'a', volume);
-    found.registry.leasesChanged([]);
-    await found.advance(CHECK_MILLISECONDS);
+    const found = await lookedUp(volume);
     const held = scene(running);
     connect(held.registry, 1, 'a', volume);
     connect(held.registry, 2, 'b', volume);
@@ -308,17 +317,7 @@ describe('the shutdown registry (card containers-68)', () => {
   it('F-0705 BR-7 (card containers-155): an explored volume is looked up by its volume and the shared configuration, held by a connection of the same volume only, and never taken for another volume’s', async () => {
     const explored = {volumeName: 'data', configFile: '/t/devcontainer.json'};
     const other = {volumeName: 'more', configFile: '/t/devcontainer.json'};
-    function running(): DockerResult {
-      return {status: 0, stdout: 'c0ffee'};
-    }
-    const found = scene(argv =>
-      argv[0] === 'ps'
-        ? {status: 0, stdout: 'c0ffee\n'}
-        : {status: 0, stdout: ''},
-    );
-    connect(found.registry, 1, 'a', explored);
-    found.registry.leasesChanged([]);
-    await found.advance(CHECK_MILLISECONDS);
+    const found = await lookedUp(explored);
     const same = scene(running);
     connect(same.registry, 1, 'a', explored);
     connect(same.registry, 2, 'b', explored);
