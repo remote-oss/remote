@@ -571,13 +571,14 @@ describe('the Dev Containers view (card containers-30)', () => {
       [
         scene.docker.setting?.processes.map(each => each.killed),
         await provider.getChildren(undefined),
-        scene.contexts.slice(-3),
+        scene.contexts.slice(-4),
       ],
       [
         [true],
         [],
         [
           ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:needsSSHCredentials', false],
           ['remote-containers:noContainersWithFolder', false],
           ['remote-containers:noContainersWithoutFolder', false],
         ],
@@ -592,12 +593,13 @@ describe('the Dev Containers view (card containers-30)', () => {
     await settled();
     await view.refresh();
     deepStrictEqual(
-      [Object.keys(scene.docker), scene.runs, scene.contexts.slice(-3)],
+      [Object.keys(scene.docker), scene.runs, scene.contexts.slice(-4)],
       [
         [],
         [],
         [
           ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:needsSSHCredentials', false],
           ['remote-containers:noContainersWithFolder', false],
           ['remote-containers:noContainersWithoutFolder', false],
         ],
@@ -698,7 +700,7 @@ describe('the Dev Containers view (card containers-30)', () => {
         await provider.getChildren(undefined),
         scene.engineFiles,
         scene.runs,
-        scene.contexts.slice(-3),
+        scene.contexts.slice(-4),
       ],
       [
         [],
@@ -706,6 +708,7 @@ describe('the Dev Containers view (card containers-30)', () => {
         [],
         [
           ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:needsSSHCredentials', false],
           ['remote-containers:noContainersWithFolder', false],
           ['remote-containers:noContainersWithoutFolder', false],
         ],
@@ -991,21 +994,25 @@ describe('the Dev Containers view (card containers-30)', () => {
     deepStrictEqual(seen, [
       [
         ['remote-containers:needsDockerStartOrInstall', true],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', false],
         ['remote-containers:noContainersWithoutFolder', false],
       ],
       [
         ['remote-containers:needsDockerStartOrInstall', false],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', true],
         ['remote-containers:noContainersWithoutFolder', false],
       ],
       [
         ['remote-containers:needsDockerStartOrInstall', false],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', false],
         ['remote-containers:noContainersWithoutFolder', true],
       ],
       [
         ['remote-containers:needsDockerStartOrInstall', false],
+        ['remote-containers:needsSSHCredentials', false],
         ['remote-containers:noContainersWithFolder', false],
         ['remote-containers:noContainersWithoutFolder', false],
       ],

@@ -36,6 +36,7 @@ import {
 const WELCOME_CONTEXT_KEYS: Readonly<Record<WelcomeKey, string>> = {
   needsDockerStartOrInstall:
     contextKeys.remoteContainersNeedsDockerStartOrInstall.id,
+  needsSSHCredentials: contextKeys.remoteContainersNeedsSSHCredentials.id,
   noContainersWithFolder: contextKeys.remoteContainersNoContainersWithFolder.id,
   noContainersWithoutFolder:
     contextKeys.remoteContainersNoContainersWithoutFolder.id,

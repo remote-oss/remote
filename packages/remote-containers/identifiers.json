@@ -46,6 +46,10 @@
       "setter": "extension"
     },
     {
+      "id": "remote-containers:needsSSHCredentials",
+      "setter": "extension"
+    },
+    {
       "id": "remote-containers:noContainersWithFolder",
       "setter": "extension"
     },

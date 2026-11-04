@@ -22,6 +22,7 @@ import {
 import {type ComposeRoute, composeRouteOf} from './compose-route.ts';
 import {type Executable, executableOf} from './executable.ts';
 import type {EngineHost} from './engine-host.ts';
+import {type BoxCounter, pausableTimer} from './pausable-timer.ts';
 import {dashHostOf, sshHostOf} from './ssh-endpoint.ts';
 import {apiCheckSkipped} from './version-reply.ts';
 
@@ -58,6 +59,8 @@ export interface PreflightDependencies {
   logger: Logger;
   /** The PATH of the extension host, for the line that names where a program was looked for. */
   searchPath(): string;
+  /** The boxes an SSH endpoint's questions open; a query's timer waits while one is open. */
+  boxes?: BoxCounter;
   /** The address the Docker CLI will talk to now (`endpointInEffect`); a check that has none reads every endpoint as local. */
   endpoint?(
     base: string | undefined,
@@ -84,9 +87,14 @@ async function query(
   cancellation: AbortSignal,
 ): Promise<QueryResult> {
   const timedOut = new AbortController();
-  const cancelTimer = dependencies.setTimer(QUERY_TIMEOUT_MILLISECONDS, () => {
-    timedOut.abort();
-  });
+  const cancelTimer = pausableTimer(
+    (milliseconds, callback) => dependencies.setTimer(milliseconds, callback),
+    QUERY_TIMEOUT_MILLISECONDS,
+    () => {
+      timedOut.abort();
+    },
+    dependencies.boxes,
+  );
   const started = dependencies.clock();
   const outcome = await dependencies
     .engineFor(executable.file)

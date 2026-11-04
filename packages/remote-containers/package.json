@@ -400,12 +400,12 @@
         {
           "command": "remote-containers.explorerTargetsRefresh",
           "group": "navigation@3",
-          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.cleanUpDevContainers",
           "group": "navigation@2",
-          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -610,6 +610,11 @@
         "view": "targetsContainers",
         "contents": "%viewsWelcome.targetsContainers.needsDockerStartOrInstall%",
         "when": "remote-containers:needsDockerStartOrInstall && !remote-containers:standingDown"
+      },
+      {
+        "view": "targetsContainers",
+        "contents": "%viewsWelcome.targetsContainers.needsSSHCredentials%",
+        "when": "remote-containers:needsSSHCredentials && !remote-containers:standingDown"
       },
       {
         "view": "targetsContainers",

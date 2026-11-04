@@ -55,6 +55,38 @@
       "card": "#1830",
       "slice": "containers release 1",
       "decision": "F-0406 (2026-11-02): defined, never set yet (its family sets it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/deferred.ts",
+      "card": "#2064",
+      "slice": "part A",
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/ssh-questions.ts",
+      "card": "#2064",
+      "slice": "part A",
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/starting-docker.ts",
+      "card": "#2064",
+      "slice": "part A",
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/explorer/credentials-welcome.ts",
+      "card": "#2064",
+      "slice": "part A",
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
     }
   ]
 }

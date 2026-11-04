@@ -73,6 +73,8 @@ const STANDING_DOWN = '!remote-containers:standingDown';
 const WELCOME_TEXTS = {
   'viewsWelcome.targetsContainers.needsDockerStartOrInstall':
     'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
+  'viewsWelcome.targetsContainers.needsSSHCredentials':
+    '[Refresh](command:remote-containers.explorerTargetsRefresh) to provide SSH credentials.',
   'viewsWelcome.targetsContainers.noContainersWithFolder':
     "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
   'viewsWelcome.targetsContainers.noContainersWithoutFolder':
@@ -152,7 +154,7 @@ const DETAILS_MOUNT_PERFORMANCE = {
 };
 
 const TARGETS_TITLE_WHEN =
-  'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
+  'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:needsSSHCredentials && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
 
 const DETAILS_TITLE_WHEN =
   'view == detailsContainers && !remote-containers:standingDown';
@@ -633,6 +635,11 @@ describe('the manifest', () => {
             contents:
               '%viewsWelcome.targetsContainers.needsDockerStartOrInstall%',
             when: 'remote-containers:needsDockerStartOrInstall && !remote-containers:standingDown',
+          },
+          {
+            view: 'targetsContainers',
+            contents: '%viewsWelcome.targetsContainers.needsSSHCredentials%',
+            when: 'remote-containers:needsSSHCredentials && !remote-containers:standingDown',
           },
           {
             view: 'targetsContainers',
@@ -1297,11 +1304,17 @@ describe('the manifest', () => {
         [],
         [
           'remote-containers.explorerTargetsRefresh',
+          'remote-containers.explorerTargetsRefresh',
           'remote-containers.openFolder',
           'remote-containers.openFolder',
           'remote-containers.reopenInContainer',
         ],
-        ['targetsContainers', 'targetsContainers', 'targetsContainers'],
+        [
+          'targetsContainers',
+          'targetsContainers',
+          'targetsContainers',
+          'targetsContainers',
+        ],
       ],
     );
   });
@@ -1318,7 +1331,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [27, true, false],
+      [28, true, false],
     );
   });
 
@@ -1588,6 +1601,7 @@ describe('the manifest', () => {
           id: 'remote-containers:needsDockerStartOrInstall',
           setter: 'extension',
         },
+        {id: 'remote-containers:needsSSHCredentials', setter: 'extension'},
         {id: 'remote-containers:noContainersWithFolder', setter: 'extension'},
         {
           id: 'remote-containers:noContainersWithoutFolder',
