@@ -132,7 +132,7 @@ describe('The recovery container (card containers-160, part A)', function () {
       async () => (await quickPickOf(FIRST)) !== undefined,
       30_000,
     );
-    const labels = (await quickPickRows(FIRST)).map(row => row.label);
+    const labels = (await quickPickRows(FIRST)).map(entry => entry.label);
     deepStrictEqual(
       {buttons: dialog.buttons, items: labels},
       {
@@ -183,39 +183,40 @@ describe('The recovery container (card containers-160, part A)', function () {
       '{{range .Mounts}}{{.Name}} {{end}}',
     );
     const state = await windowState(FIRST);
-    deepStrictEqual(
-      {
-        count: (await recoveryContainers(volume)).length,
-        remoteName: state.remoteName,
-        image: await inspected(String(container), '{{.Config.Image}}'),
-        mounted: mounted.trim(),
-        git: tools.stdout.includes('git version'),
-        client: tools.stdout.includes('Client:'),
-        daemon: tools.stdout.includes(
-          'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?',
-        ),
-      },
-      {
-        count: 1,
-        remoteName: 'dev-container',
-        image: 'vsc-volume-bootstrap:latest',
-        mounted: volume,
-        git: true,
-        client: true,
-        daemon: true,
-      },
-    );
+    const first = {
+      count: (await recoveryContainers(volume)).length,
+      remoteName: state.remoteName,
+      image: await inspected(String(container), '{{.Config.Image}}'),
+      mounted: mounted.trim(),
+      hasGit: tools.stdout.includes('git version'),
+      hasClient: tools.stdout.includes('Client:'),
+      noDaemon: tools.stdout.includes(
+        'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?',
+      ),
+    };
     await closeWindow(FIRST);
     await execFileAsync('docker', ['stop', String(container)]);
     await reachRecovery(repository.url, FIRST);
-    deepStrictEqual(
-      [
-        await recoveryContainers(volume),
-        await inspected(String(container), '{{.State.Running}}'),
-      ],
-      [[container], 'true'],
-    );
+    const restarted = {
+      containers: await recoveryContainers(volume),
+      running: await inspected(String(container), '{{.State.Running}}'),
+    };
     await closeWindow(FIRST);
+    deepStrictEqual(
+      {first, restarted},
+      {
+        first: {
+          count: 1,
+          remoteName: 'dev-container',
+          image: 'vsc-volume-bootstrap:latest',
+          mounted: volume,
+          hasGit: true,
+          hasClient: true,
+          noDaemon: true,
+        },
+        restarted: {containers: [container], running: 'true'},
+      },
+    );
   });
 
   it('F-0410 AC-29: a stopped recovery container is restarted on its own image after the bootstrap image setting changed', async () => {
@@ -265,16 +266,16 @@ describe('The recovery container (card containers-160, part A)', function () {
       'sleep',
       '1d',
     ]);
-    const old = stdout.trim();
+    const stopped = stdout.trim();
     await reachRecovery(repository.url, FIRST);
     const containers = await recoveryContainers(volume);
     deepStrictEqual(
       {
         count: containers.length,
-        oldKept: containers.some(each => old.startsWith(each)),
-        oldRunning: await inspected(old, '{{.State.Running}}'),
+        oldKept: containers.some(each => stopped.startsWith(each)),
+        oldRunning: await inspected(stopped, '{{.State.Running}}'),
         oldLabel: await inspected(
-          old,
+          stopped,
           '{{index .Config.Labels "devcontainer.config_file"}}',
         ),
       },
