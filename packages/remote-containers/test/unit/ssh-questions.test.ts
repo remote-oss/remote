@@ -46,13 +46,21 @@ function settled(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
+/** Asks the password question for the first endpoint and answers its box with `secret`. */
+async function answeredOnce(
+  router: ReturnType<typeof sceneOf>['router'],
+  boxes: ReturnType<typeof sceneOf>['boxes'],
+): Promise<void> {
+  const first = router.ask(operationOf('command', ENDPOINT), PASSWORD);
+  await settled();
+  boxes[0]?.close('secret');
+  await first;
+}
+
 describe('the questions of an SSH Docker endpoint (card containers-172, §2)', () => {
   it('F-0205 AC-25, BR-14: an answer given once is given again at once with no box, for any mode, and the operation says it was replayed', async () => {
     const {router, boxes} = sceneOf();
-    const first = router.ask(operationOf('command', ENDPOINT), PASSWORD);
-    await settled();
-    boxes[0]?.close('secret');
-    await first;
+    await answeredOnce(router, boxes);
     const results = [];
     const operations = (['command', 'view', 'automatic'] as const).map(mode =>
       operationOf(mode, ENDPOINT),
@@ -258,10 +266,7 @@ describe('the questions of an SSH Docker endpoint (card containers-172, §2)', (
 
   it('F-0205 BR-14: an answer typed for one endpoint is not replayed to another endpoint that asks the same text, which opens its own box', async () => {
     const {router, boxes} = sceneOf();
-    const first = router.ask(operationOf('command', ENDPOINT), PASSWORD);
-    await settled();
-    boxes[0]?.close('secret');
-    await first;
+    await answeredOnce(router, boxes);
     const second = router.ask(operationOf('command', OTHER_ENDPOINT), PASSWORD);
     await settled();
     const opened = boxes.length;
