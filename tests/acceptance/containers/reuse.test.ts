@@ -94,8 +94,7 @@ async function reopened(folder: string): Promise<string> {
   return name;
 }
 
-/** Reopens `folder` in its container, closes the window, and gives the container it made. */
-/** The folder of the bundled CLI in the built package. */
+/** The entry file of the bundled CLI in the built package. */
 const CLI_ENTRY = path.join(
   import.meta.dirname,
   '..',
@@ -115,7 +114,7 @@ const CLI_ENTRY = path.join(
  */
 async function containerMadeByCli(folder: string): Promise<string> {
   const configFile = path.join(folder, '.devcontainer', 'devcontainer.json');
-  await execFileAsync('node', [
+  await execFileAsync(process.execPath, [
     CLI_ENTRY,
     'up',
     '--workspace-folder',
@@ -132,6 +131,7 @@ async function containerMadeByCli(folder: string): Promise<string> {
   return containerId;
 }
 
+/** Reopens `folder` in its container, closes the window, and gives the container it made. */
 async function containerLeftBy(folder: string): Promise<string> {
   const name = await reopened(folder);
   const containerId = await containerOf(folder);
@@ -1137,7 +1137,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-12 (r12) (reading-2099-r12-no-acknowledgment): a stopped container, of a profile that holds no acknowledgment, whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
+  it('F-0405 AC-12 (reading-2099-r12-no-acknowledgment): a stopped container, of a profile that holds no acknowledgment, whose configuration was edited is restarted as it is from the reopen notification: same id, the edit not applied, and no configuration-change notice', async () => {
     const folder = devContainerFolder('c54-stopped-edit', {
       name: 'Stopped Edit',
     });
