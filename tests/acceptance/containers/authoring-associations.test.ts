@@ -81,7 +81,19 @@ async function editorHoverOf(name: string, needle: string): Promise<string> {
       hover = (
         await evaluate<string>(
           name,
-          `(document.querySelector('.monaco-hover:not(.hidden) .monaco-hover-content')?.textContent ?? '')`,
+          `(() => {
+            for (const open of document.querySelectorAll('.monaco-hover:not(.hidden)')) {
+              // A hover the status bar holds, not the editor's: the editor's hover is the one that names its content.
+              if (open.querySelector('.hover-language-status') !== null) {
+                continue;
+              }
+              const text = open.querySelector('.monaco-hover-content')?.textContent ?? '';
+              if (text !== '') {
+                return text;
+              }
+            }
+            return '';
+          })()`,
         )
       ).trim();
     }
@@ -377,7 +389,27 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'acceptance.agent.openUri',
       'memfs:/devcontainer.json',
     );
-    const problems = await problemsSettled(window, 1, 120_000);
+    let problems: Problem[];
+    try {
+      problems = await problemsSettled(window, 1, 120_000);
+    } catch (caught) {
+      await inWindow(
+        window,
+        'acceptance.agent.extensionPresent',
+        'remote-oss.remote-containers',
+      );
+      const present = [...windowEvents(window)]
+        .reverse()
+        .find(
+          each =>
+            each.event === 'extension' &&
+            each.extensionId === 'remote-oss.remote-containers',
+        )?.present;
+      throw new Error(
+        `${String(caught)}; the Dev Containers extension present ${JSON.stringify(present)}`,
+        {cause: caught},
+      );
+    }
     deepStrictEqual(
       problems.map(each => [each.file, each.message, each.severity]),
       [['devcontainer.json', S294, 'warning']],
@@ -466,7 +498,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
           ),
         ),
       ],
-      [[['devcontainer.json', S294, 'warning']], false],
+      [[[inContainer, S294, 'warning']], false],
     );
   });
 

@@ -293,7 +293,33 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     // Granting trust takes effect in the window without a reload: the agent stays up, and the flip settles live.
     await clickButton(window, 'Trust');
     await trustSettled(window, true);
-    const remaining = await problemsSettled(window, 0, 90_000);
+    // The row reads the problems of the file, not of the trust editor, so the editor is closed again.
+    await inWindow(window, 'workbench.action.closeActiveEditor');
+    let remaining: Problem[];
+    try {
+      remaining = await problemsSettled(window, 0, 90_000);
+    } catch (caught) {
+      let state: string;
+      try {
+        state = await evaluate<string>(
+          window,
+          `(() => JSON.stringify({
+            quickInput: [...document.querySelectorAll('.quick-input-widget')].map(each => each.style.display ?? 'visible'),
+            dialogs: document.querySelectorAll('.monaco-dialog-box').length,
+            contextViews: document.querySelectorAll('.context-view').length,
+            hovers: document.querySelectorAll('.monaco-hover:not(.hidden)').length,
+            active: (document.activeElement?.tagName ?? '') + '.' + (document.activeElement?.className ?? ''),
+            title: document.title,
+          }))()`,
+        );
+      } catch (probe) {
+        state = `the probe failed: ${String(probe)}`;
+      }
+      throw new Error(
+        `${String(caught)}; the window: ${state}, trusted ${JSON.stringify(await isTrusted(window))}`,
+        {cause: caught},
+      );
+    }
     deepStrictEqual([remaining.length, await isTrusted(window)], [0, true]);
   });
 });
