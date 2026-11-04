@@ -100,6 +100,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
+      containers-cli: ${{ steps.diff.outputs.containers-cli }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -113,6 +114,13 @@ jobs:
             echo docs-only=true >> "$GITHUB_OUTPUT"
           else
             echo docs-only=false >> "$GITHUB_OUTPUT"
+          fi
+          # the containers-cli suite, its sources under test and the CLI's version
+          if printf '%s\n' "$files" | grep -qE \
+            '^(tests/acceptance/containers-cli/|packages/remote-containers/src/(cli|cli-bin)/|packages/remote-containers/package\.json$)'; then
+            echo containers-cli=true >> "$GITHUB_OUTPUT"
+          else
+            echo containers-cli=false >> "$GITHUB_OUTPUT"
           fi
 
   # After a merge to main: the parts of the VSCodium job that the merged change can reach (acceptance-select over the
@@ -385,6 +393,31 @@ jobs:
       - if: always()
         run: pnpm acceptance:clean
 
+  # The dev container CLI the package ships, its bridge and its launcher, against the runner's own Docker: the suite in
+  # tests/acceptance/containers-cli (no editor). A pull request runs it when its diff reaches that suite, the CLI code
+  # it drives or the package's CLI version; a dispatch that runs checks, and the tag of a release, always do.
+  acceptance-containers-cli:
+    name: acceptance (containers-cli)
+    needs: changes
+    if: >-
+      !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
+      needs.changes.outputs.containers-cli == 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15 # the suite takes seconds once built; a fresh runner also builds and pulls one image
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # the suite skips its container rows when Docker does not answer, so the job stops here instead
+      - run: docker version --format 'Docker {{.Server.Version}}'
+      - run: pnpm test:acceptance:containers-cli
+
   # A pull request from this repository runs the VSCodium launches its change selects, at most six, and a failing row
   # blocks its merge, since the gate needs this job. A larger selection gets a notice and runs by a dispatch at the head,
   # or under the acceptance-full label, here when the label is on the pull request and in acceptance-full.yml when it
@@ -569,6 +602,7 @@ jobs:
       - acceptance-server
       - acceptance-host-variants
       - acceptance-real-server
+      - acceptance-containers-cli
       - acceptance-vscodium
       - acceptance-vscodium-containers
       - acceptance-pr
@@ -581,7 +615,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server vscodium vscodium-containers pr-launches genuine: $RESULTS"
+          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server containers-cli vscodium vscodium-containers pr-launches genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
