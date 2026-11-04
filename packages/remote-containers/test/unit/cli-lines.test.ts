@@ -450,6 +450,19 @@ describe('the daemon refusal (card containers-11)', () => {
     );
   });
 
+  it('F-0306 7.E5, AC-30: a mount path that is undefined or relative is no refusal, with or without the docker prefix', () => {
+    const undefinedPath =
+      'Error response from daemon: invalid mount config for type "bind": invalid mount path: \'undefined\' mount path must be absolute';
+    deepStrictEqual(
+      [
+        undefinedPath,
+        `docker: ${undefinedPath}`,
+        'Error response from daemon: invalid mount config for type "bind": invalid mount path: \'rel\' mount path must be absolute',
+      ].map(daemonRefusalOf),
+      [undefined, undefined, undefined],
+    );
+  });
+
   it('F-0410 7.E2, AC-12: a port that is already allocated is portAllocated, with or without the docker prefix', () => {
     deepStrictEqual(
       [PORT_TAKEN, PORT_TAKEN.slice('docker: '.length)].map(daemonRefusalOf),
