@@ -34,6 +34,7 @@ import {
   waitFor,
   writeUserSetting,
   windowNames,
+  windowState,
 } from './harness.ts';
 
 /** The question of the host pick. */
@@ -147,6 +148,50 @@ export function linesSince(mark: number, window: string): RecordLine[] {
   return recordLines()
     .slice(mark)
     .filter(line => line.window === window);
+}
+
+/** The first line of `window` since `mark` that shows core resolving the authority of SSH host `host` again. */
+export function resolvedAgainSince(
+  mark: number,
+  window: string,
+  host: string,
+): RecordLine | undefined {
+  return linesSince(mark, window).find(
+    line =>
+      line.surface === 'progress' &&
+      line.question === `Setting up SSH Host ${host}`,
+  );
+}
+
+/**
+ * Waits `milliseconds` for core's reconnection of `window` to host `host` after its server went. When none comes it
+ * fails with what the window and the record showed, since a hosted run uploads neither.
+ */
+export async function waitForReconnection(
+  mark: number,
+  window: string,
+  host: string,
+  milliseconds: number,
+): Promise<void> {
+  try {
+    await waitFor(
+      `${window} to be resolved again by core’s reconnection`,
+      () => resolvedAgainSince(mark, window, host) !== undefined,
+      milliseconds,
+    );
+  } catch (error) {
+    const state = await windowState(window).catch(() => undefined);
+    throw new Error(
+      `${(error as Error).message}: ${JSON.stringify({
+        remoteName: state?.remoteName,
+        open: isOpen(window),
+        lines: linesSince(mark, window)
+          .slice(-12)
+          .map(line => [line.surface, line.question, line.answer]),
+      })}`,
+      {cause: error},
+    );
+  }
 }
 
 /**

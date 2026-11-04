@@ -33,6 +33,7 @@ import {
   HOST_QUESTION,
   INSTALL_MILLISECONDS,
   linesSince,
+  waitForReconnection,
   openConnected,
   openLocalWindow,
   password,
@@ -203,16 +204,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
 
   it('F-2411 AC-10: the window on the killed host stays where it is, core reconnects it, and a reload connects it', async () => {
     const mark = firstKill;
-    await waitFor(
-      'x1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'x1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
-      120_000,
-    );
+    await waitForReconnection(mark, 'x1', 'harness', 120_000);
     const state = await windowState('x1');
     await reloadWindow('x1');
     deepStrictEqual(
@@ -614,16 +606,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     const servers = await serverProcesses();
     const mark = await killWith('x1', [typeHost('harness@harness')]);
     await serversGoneWithin(servers, 10_000);
-    await waitFor(
-      'x1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'x1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
-      30_000,
-    );
+    await waitForReconnection(mark, 'x1', 'harness', 30_000);
     deepStrictEqual(
       [noticesSince(mark, 'x1'), (await windowState('x1')).remoteName],
       [[[killed('harness'), ['Open Logs']]], 'ssh-remote'],

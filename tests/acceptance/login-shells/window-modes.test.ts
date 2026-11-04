@@ -8,11 +8,11 @@ import {
   variable,
   reloadWindow,
   terminalNames,
-  waitFor,
 } from '../windows/harness.ts';
 import {
   INSTALL_MILLISECONDS,
-  linesSince,
+  resolvedAgainSince,
+  waitForReconnection,
   pickHost,
   runWith,
   serverProcesses,
@@ -52,22 +52,9 @@ describe('login shells in the window, by mode and by command (card coverage-49)'
           [pickHost('harness-bash')],
         );
         await serversGoneWithin(servers, 10_000);
-        await waitFor(
-          `${window} to be resolved again by core’s reconnection`,
-          () =>
-            linesSince(mark, window).some(
-              line =>
-                line.surface === 'progress' &&
-                line.question === 'Setting up SSH Host harness-bash',
-            ),
-          60_000,
-        );
+        await waitForReconnection(mark, window, 'harness-bash', 60_000);
         const reconnectedAt =
-          linesSince(mark, window).find(
-            line =>
-              line.surface === 'progress' &&
-              line.question === 'Setting up SSH Host harness-bash',
-          )?.time ?? Infinity;
+          resolvedAgainSince(mark, window, 'harness-bash')?.time ?? Infinity;
         await reloadWindow(window);
         await connectedWithin(window, INSTALL_MILLISECONDS);
         deepStrictEqual(
