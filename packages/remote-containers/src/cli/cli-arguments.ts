@@ -186,19 +186,21 @@ export function runUserCommandsArguments(
 }
 
 /**
- * Reads the configuration. With a container id it is merged with the container's metadata; without one the merge would
- * read the image's metadata and pull the image, which the read before a reload must not do.
+ * Reads the configuration. With a container id it is merged with the container's metadata. `includeMerged` asks for the
+ * merged configuration, which the CLI builds from the Features and the image's label, read from the registry when the
+ * image is not local and never pulled (measured on 0.89.0); a read before trust asks for no merge, since that fetches what
+ * the configuration names.
  */
 export function readConfigurationArguments(
   target: CliTarget,
   containerId?: string,
+  includeMerged = containerId !== undefined,
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
     ...additionalFeatures(target),
-    ...(containerId === undefined
-      ? []
-      : ['--container-id', containerId, '--include-merged-configuration']),
+    ...(containerId === undefined ? [] : ['--container-id', containerId]),
+    ...(includeMerged ? ['--include-merged-configuration'] : []),
   ];
 }
 

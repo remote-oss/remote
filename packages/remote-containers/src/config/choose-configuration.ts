@@ -19,6 +19,10 @@ import {ENGINE_TEMPLATES, type Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
+  type HostRequirements,
+  requirementsOf,
+} from '../engine/host-requirements.ts';
+import {
   decodeConfiguration,
   dockerfileOf,
   hasContainerSource,
@@ -142,6 +146,8 @@ export interface ConfigurationRequest {
    * window with no folder open, where every pick reconnects).
    */
   switching?: {current: string; reconnectCurrent: boolean};
+  /** Whether the read asks for the merged configuration, which the choice then reports the host requirements of. */
+  mergedRead?: boolean;
 }
 
 /** How choosing ended. */
@@ -153,6 +159,8 @@ export type ConfigurationChoice =
       workspaceFolder: string;
       /** The keys of the configuration's `features`, as written. */
       features: string[];
+      /** What the merged configuration asks of the daemon; present when the read was merged. */
+      hostRequirements?: HostRequirements;
     }
   /** The folder holds no configuration. */
   | {kind: 'noConfiguration'}
@@ -230,6 +238,8 @@ export async function chooseConfiguration(
         logger.debug(event.kind === 'log' ? event.text : event.name);
       },
       request.cancellation,
+      undefined,
+      request.mergedRead === true,
     );
     reading.catch(() => undefined);
     return reading;
@@ -426,5 +436,12 @@ export async function chooseConfiguration(
     configFile: candidate.file,
     workspaceFolder: read.workspaceFolder,
     features: requestedFeaturesOf(read.configuration.features, undefined),
+    ...(read.mergedConfiguration === undefined
+      ? {}
+      : {
+          hostRequirements: requirementsOf(
+            read.mergedConfiguration.hostRequirements,
+          ),
+        }),
   };
 }
