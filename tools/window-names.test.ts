@@ -1,8 +1,10 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  agentFileName,
   claimWindowName,
   folderWindowName,
   processRuns,
@@ -129,6 +131,55 @@ describe('window-names', () => {
     deepStrictEqual(
       [processRuns(process.pid), processRuns(1), processRuns(ended)],
       [true, true, false],
+    );
+  });
+});
+
+describe('agentFileName (card tooling-126)', () => {
+  /** The first 16 hex digits of `name`'s SHA-256. */
+  function digestOf(name: string): string {
+    return createHash('sha256').update(name).digest('hex').slice(0, 16);
+  }
+
+  it('tooling-126: a name whose file fits in 200 bytes keeps its file name, and a longer one is its first 100 characters and its digest', () => {
+    const long = 'x'.repeat(300);
+    deepStrictEqual(
+      [
+        agentFileName('c152-folder', 'events'),
+        agentFileName('y'.repeat(187), 'events'),
+        agentFileName('y'.repeat(188), 'events'),
+        agentFileName(long, 'commands'),
+      ],
+      [
+        'c152-folder.events.jsonl',
+        `${'y'.repeat(187)}.events.jsonl`,
+        `${'y'.repeat(100)}-${digestOf('y'.repeat(188))}.events.jsonl`,
+        `${'x'.repeat(100)}-${digestOf(long)}.commands.jsonl`,
+      ],
+    );
+  });
+
+  it('tooling-126: a multi-byte name is measured in bytes, and its kept beginning stays within 100 bytes', () => {
+    const fits = '€'.repeat(62);
+    const long = '€'.repeat(70);
+    deepStrictEqual(
+      [agentFileName(fits, 'events'), agentFileName(long, 'events')],
+      [
+        `${fits}.events.jsonl`,
+        `${'€'.repeat(33)}-${digestOf(long)}.events.jsonl`,
+      ],
+    );
+  });
+
+  it('tooling-126: two long names with the same first 100 characters get different files', () => {
+    const shared = 'z'.repeat(150);
+    const [first, second] = [
+      agentFileName(`${shared}-a`, 'events'),
+      agentFileName(`${shared}-b`, 'events'),
+    ];
+    deepStrictEqual(
+      [first === second, Buffer.byteLength(first) <= 255],
+      [false, true],
     );
   });
 });

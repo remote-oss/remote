@@ -3,6 +3,8 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import {MEMORY_SCHEME, MemoryFileSystem} from './memory-file-system.ts';
 import {
+  agentFileName,
+  type AgentFileKind,
   claimWindowName,
   folderWindowName,
   processRuns,
@@ -91,10 +93,10 @@ function authorityOf(agentFolder: string, processId: number): string | null {
 function agentFile(
   agentFolder: string,
   name: string,
-  kind: 'events' | 'commands',
+  kind: AgentFileKind,
 ): string {
   mkdirSync(agentFolder, {recursive: true});
-  return path.join(agentFolder, `${name}.${kind}.jsonl`);
+  return path.join(agentFolder, agentFileName(name, kind));
 }
 
 /** Appends one event as a single write, so that two windows never split a line. */
@@ -239,7 +241,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   const name = activationName(agentFolder);
   windowName = name;
-  report(agentFolder, name, {event: 'activated'});
+  // The full name, for the harness to read back from a file whose name is mapped.
+  report(agentFolder, name, {event: 'activated', window: name});
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'acceptance.agent.openWindow',

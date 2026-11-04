@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {
   closeSync,
   mkdirSync,
@@ -15,6 +16,45 @@ export function windowNameOf(firstFolderPath: string | undefined): string {
     .filter(part => part !== '')
     .at(-1);
   return segment ?? 'local';
+}
+
+/** The longest name of an agent file that is kept as it is, in bytes: well under the 255 of a file system's NAME_MAX. */
+const AGENT_FILE_NAME_LIMIT = 200;
+
+/** How much of a window name a mapped file name keeps: at most this many characters, and at most this many bytes. */
+const KEPT_PREFIX = 100;
+
+/** The ending of a mapped name: a dash and the first 16 hex digits of the full name's SHA-256. */
+const MAPPED_ENDING = /-[0-9a-f]{16}$/;
+
+/** The kinds of file a window's agent keeps. */
+export type AgentFileKind = 'events' | 'commands';
+
+/**
+ * The name of window `name`'s agent file of `kind`: `<name>.<kind>.jsonl` when that fits in 200 bytes. For a longer
+ * name, the name is replaced by its first 100 characters, cut further so they stay within 100 bytes, then a dash and
+ * the first 16 hex digits of its SHA-256. Every file of a name that fits keeps its name, and two long names with the
+ * same beginning stay apart.
+ */
+export function agentFileName(name: string, kind: AgentFileKind): string {
+  const plain = `${name}.${kind}.jsonl`;
+  if (Buffer.byteLength(plain) <= AGENT_FILE_NAME_LIMIT) {
+    return plain;
+  }
+  let prefix = '';
+  for (const character of [...name].slice(0, KEPT_PREFIX)) {
+    if (Buffer.byteLength(prefix + character) > KEPT_PREFIX) {
+      break;
+    }
+    prefix += character;
+  }
+  const digest = createHash('sha256').update(name).digest('hex').slice(0, 16);
+  return `${prefix}-${digest}.${kind}.jsonl`;
+}
+
+/** Whether the events file `fileName` may be a mapped one, whose window name only its `activated` event holds. */
+export function mayBeMapped(fileName: string): boolean {
+  return MAPPED_ENDING.test(fileName.slice(0, -'.events.jsonl'.length));
 }
 
 /** Creates the claim file exclusively: the name is claimed when the creation succeeds, taken when the file exists. */

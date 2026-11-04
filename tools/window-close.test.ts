@@ -11,10 +11,12 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {agentFileName} from '../tests/acceptance/window-agent/src/window-name.ts';
 
 /** The part of the windows harness these rows call, from its bundle (the tools' project can't import its sources). */
 interface Harness {
   closeWindow(name: string, milliseconds?: number): Promise<void>;
+  windowNames(): string[];
 }
 
 const NAME = 'w1';
@@ -140,5 +142,17 @@ describe('closeWindow (card tooling-84, #1505)', () => {
       [outcome, commandLines(folder).at(-1)?.withdrawn],
       ['timed out', true],
     );
+  });
+  it('tooling-126: windowNames gives the full name of a window whose events file is mapped, from its activated event', () => {
+    const long = 'x'.repeat(300);
+    writeFileSync(
+      path.join(folder, agentFileName(long, 'events')),
+      `${JSON.stringify({event: 'activated', window: long, time: 1})}\n`,
+    );
+    writeFileSync(
+      path.join(folder, `${NAME}.events.jsonl`),
+      `${JSON.stringify({event: 'activated', window: NAME, time: 1})}\n`,
+    );
+    deepStrictEqual(harness.windowNames().sort(), [NAME, long].sort());
   });
 });

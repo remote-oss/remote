@@ -26,6 +26,11 @@ import {
   type RouteCut,
 } from '../../../tools/acceptance-network.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
+import {
+  agentFileName,
+  type AgentFileKind,
+  mayBeMapped,
+} from '../window-agent/src/window-name.ts';
 import {oneTimeCode} from '../../../tools/one-time-code.ts';
 import {filesHolding} from '../../../tools/secret-search.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
@@ -223,8 +228,20 @@ function agentFolder(): string {
 }
 
 /** A file of a window's agent in the launch's folder: its `events` or its `commands`. */
-function agentFile(name: string, kind: 'events' | 'commands'): string {
-  return path.join(agentFolder(), `${name}.${kind}.jsonl`);
+function agentFile(name: string, kind: AgentFileKind): string {
+  return path.join(agentFolder(), agentFileName(name, kind));
+}
+
+/** The window name an events file is for: its `activated` event's for a file whose name may be mapped, else its own. */
+function windowNameIn(folder: string, file: string): string {
+  const named = file.slice(0, -'.events.jsonl'.length);
+  if (!mayBeMapped(file)) {
+    return named;
+  }
+  const activated = linesOf<AgentEvent & {window?: string}>(
+    path.join(folder, file),
+  ).find(each => each.event === 'activated' && each.window !== undefined);
+  return activated?.window ?? named;
 }
 
 /** The names of the windows whose agent has reported anything, in no particular order. */
@@ -232,7 +249,7 @@ export function windowNames(): string[] {
   const folder = agentFolder();
   return (existsSync(folder) ? readdirSync(folder) : [])
     .filter(file => file.endsWith('.events.jsonl'))
-    .map(file => file.slice(0, -'.events.jsonl'.length));
+    .map(file => windowNameIn(folder, file));
 }
 
 /** The events the agent of window `name` has reported, in order. */
