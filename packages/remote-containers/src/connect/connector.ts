@@ -29,6 +29,9 @@ import {
   type BootstrapSettings,
 } from '../volumes/bootstrap.ts';
 import type {BuildContext} from '../volumes/bootstrap-start.ts';
+import {k8sExecCommands, k8sDialer} from '../attach/k8s-exec.ts';
+import {type K8sTarget, k8sTargetOf} from '../attach/k8s-payload.ts';
+import {inspectedPod} from '../attach/k8s-state.ts';
 import {
   type DevContainerVolume,
   volumeTargetOf,
@@ -80,7 +83,7 @@ import {
 import type {ShutdownMessenger} from '../shutdown/window-lease.ts';
 import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
-import {execChannelOf} from '../exec/exec-channel.ts';
+import {execChannelOf, execChannelOver} from '../exec/exec-channel.ts';
 import {
   type BackgroundStage,
   type ContainerLifecycle,
@@ -275,8 +278,16 @@ export interface VolumeConnectDependencies {
   ): Promise<'written' | 'left'>;
 }
 
+/** What a connect to a Kubernetes pod needs beyond a folder's. */
+interface PodConnectDependencies {
+  /** `kubectl` as an engine with the login shell's environment. */
+  kubectl: EngineHost;
+}
+
 /** What the connector is made from. */
 export interface ContainerConnectorDependencies {
+  /** What an attach to a Kubernetes pod needs; without it, a pod payload is no authority the connector reads. */
+  pods?: PodConnectDependencies;
   /** What a clone in a volume needs; without it, a volume payload is no authority the connector reads. */
   volumes?: VolumeConnectDependencies;
   /** Whether a file or a folder exists on this machine. */
@@ -2005,6 +2016,97 @@ export function containerConnectorOf(
     return connected;
   }
 
+  /** The user the pod's container runs as: its name, else its numeric id; none when it cannot be told. */
+  async function podUserOf(
+    channel: HostChannel,
+    cancellation: AbortSignal,
+  ): Promise<string | undefined> {
+    const lines: string[] = [];
+    const outcome = await channel.runScript(
+      {
+        script: 'id -un 2>/dev/null || id -u\n',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation,
+      },
+      line => lines.push(line),
+    );
+    const [user] = lines.map(line => line.trim()).filter(line => line !== '');
+    return outcome.kind === 'exited' && outcome.status === 0 ? user : undefined;
+  }
+
+  /**
+   * Connects a pod's container: the channel is `kubectl exec`, everything runs as the container's own user, nothing is
+   * merged or set up, and nothing is registered with the shutdown helper, since a pod is not ours to stop.
+   */
+  async function connectPod(
+    pods: PodConnectDependencies,
+    payload: string,
+    target: K8sTarget,
+    controller: AbortController,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    failedContainer = undefined;
+    attemptIdentity = undefined;
+    const settings = dependencies.settings();
+    phases.tell({name: 'initializing'});
+    const channel = execChannelOver(pods.kubectl, k8sExecCommands(target));
+    const remoteUser = await podUserOf(channel, cancellation);
+    if (remoteUser === undefined) {
+      logger.info(`the user of ${target.podname} could not be told`);
+      return isAborted(cancellation) ? cancelled() : containerSetupFailed();
+    }
+    const identity = k8sExecCommands(target).identity;
+    return connectChannel(
+      {
+        payload,
+        channel,
+        rootChannel: channel,
+        remoteUser,
+        volumeMounted: false,
+        created: false,
+        defaultExtensions: newContainerExtensions(undefined, settings),
+        merged: undefined,
+        settings,
+        trusted: true,
+        pinned: {},
+        name: undefined,
+        explored: false,
+        beforeStart: () => Promise.resolve(undefined),
+        openRelay: (server, onConnectionClosed) =>
+          dependencies.openRelay({
+            engine: pods.kubectl,
+            containerId: identity,
+            remoteUser,
+            nodePath: server.nodePath,
+            relayPath: server.relayPath,
+            containerPort: server.port,
+            dialer: k8sDialer(
+              pods.kubectl,
+              target,
+              server.nodePath,
+              server.relayPath,
+            ),
+            onConnectionClosed,
+          }),
+        inspect: signal => inspectedPod(pods.kubectl, target, signal),
+        tunnels: () => Promise.resolve([]),
+        target: {
+          hostPath: '',
+          remoteWorkspaceFolder: '',
+          containerId: identity,
+          engine: pods.kubectl,
+          configFile: '',
+          created: false,
+          serviceDockerfile: undefined,
+        },
+        afterConnect: () => undefined,
+      },
+      cancellation,
+    );
+  }
+
   return {
     async connect(input: ConnectInput): Promise<Connected | Failed> {
       const controller = new AbortController();
@@ -2041,6 +2143,26 @@ export function containerConnectorOf(
             await leaveShutdown();
           }
           return result;
+        }
+        const pod =
+          dependencies.pods === undefined
+            ? undefined
+            : k8sTargetOf(target.payload);
+        if (dependencies.pods !== undefined && pod !== undefined) {
+          if (!('malformed' in pod)) {
+            return await connectPod(
+              dependencies.pods,
+              target.payload,
+              pod,
+              controller,
+            );
+          }
+          if (pod.malformed === 'invalid') {
+            logger.info(
+              `the pod's ${pod.member ?? 'name'} is not a valid name`,
+            );
+            return malformedAuthority();
+          }
         }
         if ('malformed' in stored) {
           return malformedAuthority();

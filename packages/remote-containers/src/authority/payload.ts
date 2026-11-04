@@ -182,9 +182,7 @@ function payloadTextOf(payload: string): string | PayloadMalformed {
 }
 
 /** The JSON a payload's text holds, or the refusal for a text that is not JSON. */
-function payloadJsonOf(
-  text: string,
-): {json: unknown} | PayloadMalformed {
+function payloadJsonOf(text: string): {json: unknown} | PayloadMalformed {
   try {
     return {json: JSON.parse(text)};
   } catch {
