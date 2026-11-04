@@ -16,7 +16,7 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
-import {pressEscape, rememberPage} from '../windows/renderer.ts';
+import {dialogOf, pressEscape, rememberPage} from '../windows/renderer.ts';
 
 const NAME = 'c163-connect';
 const MARKS = '/tmp/c163-marks';
@@ -43,7 +43,7 @@ describe('Attached connect (card containers-163, #2030)', function () {
     await setUserSetting('dev.containers.dockerPath', undefined);
   });
 
-  it('F-0601 AC-1, AC-12, F-0602 AC-11, F-0417 AC-14 (c163-connect): a picked container opens a window that connects as an attached container, its attach file’s blocking and background commands run in it, and closing the window leaves the container running', async () => {
+  it('F-0601 AC-6, AC-9, AC-15, BR-13, F-0417 AC-14 (c163-connect): a picked container opens a window that connects as an attached container, its attach file’s blocking and background commands run in it, and closing the window leaves the container running', async () => {
     await started(NAME, 'connect');
     mkdirSync(path.dirname(attachFile()), {recursive: true});
     writeFileSync(
@@ -58,6 +58,12 @@ describe('Attached connect (card containers-163, #2030)', function () {
       listingOnly(NAME, 'connect'),
     );
     const before = windowNames();
+    const untouched = await docker(
+      'inspect',
+      '--format',
+      '{{json .Config.Labels}} {{json .Mounts}}',
+      NAME,
+    );
     let added: string[] = [];
     try {
       await pickedContainer(`/${NAME}`);
@@ -84,12 +90,39 @@ describe('Attached connect (card containers-163, #2030)', function () {
           ) >= 2,
         120_000,
       );
+      const dialogs = await dialogOf(attached);
+      const markers = await docker(
+        'exec',
+        NAME,
+        'ls',
+        '-A',
+        '/var/devcontainer',
+      ).catch(() => '');
       await closeWindow(attached);
       added = [];
       await new Promise(resolve => setTimeout(resolve, 30_000));
       deepStrictEqual(
-        await docker('inspect', '--format', '{{.State.Running}}', NAME),
-        'true',
+        [
+          dialogs,
+          windowNames().includes('local'),
+          (await windowState('local')).remoteName,
+          markers.split('\n'),
+          await docker(
+            'inspect',
+            '--format',
+            '{{json .Config.Labels}} {{json .Mounts}}',
+            NAME,
+          ),
+          await docker('inspect', '--format', '{{.State.Running}}', NAME),
+        ],
+        [
+          undefined,
+          true,
+          null,
+          ['.patchEtcEnvironmentMarker', '.patchEtcProfileMarker'],
+          untouched,
+          'true',
+        ],
       );
     } finally {
       for (const name of added) {

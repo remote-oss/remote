@@ -75,8 +75,8 @@ export async function removeGroup(group: string): Promise<void> {
 /** The command that opens the picker of the running containers. */
 const ATTACH_COMMAND = 'remote-containers.attachToRunningContainer';
 
-/** Runs the attach command in the window `local`, accepts the warning when it comes, and picks the one row `label`. */
-export async function pickedContainer(label: string): Promise<void> {
+/** Runs the attach command in the window `local`, accepts the warning when it comes, and waits for the one row. */
+export async function openedPicker(): Promise<void> {
   await startInWindow('local', ATTACH_COMMAND);
   await waitForDialog('local', 60_000).then(
     () => answerDialog('local', 'Got It'),
@@ -88,5 +88,10 @@ export async function pickedContainer(label: string): Promise<void> {
     async () => (await quickPickRows('local')).length === 1,
     30_000,
   );
+}
+
+/** Opens the picker as above and picks the one row `label`. */
+export async function pickedContainer(label: string): Promise<void> {
+  await openedPicker();
   await chooseQuickPickRow('local', label);
 }
