@@ -32,7 +32,7 @@ are the specs'.
 |---|---|---|---|
 | `locate` | the spawner | the `wsl.exe` path: `%SystemRoot%\System32\wsl.exe`, else PATH | `wslMissing` |
 | `manage` | verb (`status`, `version`, `list`, `listOnline`, `install`, `setDefault`), operands, cancellation | decoded text (UTF-16LE; UTF-8 when the output carries no byte-order evidence of UTF-16), exit status | `wslMissing`, `wslNeedsUpdate` (the inbox WSL that lacks a verb, F-6203 Q1/F-6204 Q1), `spawnFailed`, `cancelled` |
-| `exec` | distro (registered spelling), working folder (`~` or a path), program and arguments, environment additions (passed through `WSLENV`), input (text or a streamed local file), cancellation | output lines as a stream (UTF-8), then the exit status | `distroUnknown`, `distroUnregistered` (during the run), `interopDisabled` (only from programs that start Windows binaries), `startFailed` (the distro did not start), `spawnFailed`, `cancelled` |
+| `exec` | distro (registered spelling), user (optional: `-u <user>`; amended 2026-11-04 for remote-containers' Install Docker in WSL, brief-wsl-engine §6; otherwise the distro's default user), working folder (`~` or a path), program and arguments, environment additions (passed through `WSLENV`), input (text or a streamed local file), cancellation | output lines as a stream (UTF-8), then the exit status | `distroUnknown`, `distroUnregistered` (during the run), `interopDisabled` (only from programs that start Windows binaries), `startFailed` (the distro did not start), `spawnFailed`, `cancelled` |
 
 Rules:
 - `exec` always names the distro with `-d` and runs the program with `--exec`. No shell sits between `wsl.exe` and

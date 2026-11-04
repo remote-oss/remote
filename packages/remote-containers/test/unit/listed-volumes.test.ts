@@ -21,7 +21,12 @@ describe('the volumes the engine lists (card containers-168)', () => {
       [
         listedVolumesOf(
           JSON.stringify([
-            {Name: 'a', Labels: {x: '1', y: 2}},
+            {
+              Name: 'a',
+              Labels: {x: '1', y: 2},
+              CreatedAt: '2026-01-01T00:00:00Z',
+            },
+            {Name: 'd', CreatedAt: 'not a time'},
             {Name: 'b', Labels: null},
             {Name: 'c'},
           ]),
@@ -33,7 +38,8 @@ describe('the volumes the engine lists (card containers-168)', () => {
       ],
       [
         [
-          {name: 'a', labels: {x: '1'}},
+          {name: 'a', labels: {x: '1'}, createdAt: 1767225600000},
+          {name: 'd', labels: {}},
           {name: 'b', labels: {}},
           {name: 'c', labels: {}},
         ],

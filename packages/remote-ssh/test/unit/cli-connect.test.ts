@@ -1,11 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
-import type {CliServeParams, Plan, ServerLogLine} from 'lib-server';
-import {
-  fakeCli,
-  type CliScript,
-  type Request,
-} from 'lib-server/testing/fake-cli';
+import type {CliScript} from 'lib-server/testing/fake-cli';
 import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import {TOKEN_NOT_REQUIRED} from '../../src/cli/cli-connect.ts';
 import {
@@ -15,102 +10,24 @@ import {
 } from '../../src/pipeline/connect.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
+  anyToken,
+  type Bridged,
   BRIDGE_ADDRESS,
+  CLI_INPUT,
+  CLI_PLAN,
+  type Changes,
+  cliSteps,
   CONTROL_TOKEN,
+  failing,
   leaseOf,
   LINKED,
-  type Recording,
   requiringToken,
   setup,
-  steps,
   tunnelOf,
 } from './pipeline.fixture.ts';
 
-/** A plan of the CLI path for the fixture's host. */
-const CLI_PLAN = {
-  kind: 'cli',
-  download: true,
-  cliDataFolder: '/home/dev/.server',
-  commit: 'c1',
-  notes: [],
-} as unknown as Plan;
-
-/** The direct install the fallback plans. */
-const DIRECT_PLAN = {
-  kind: 'download',
-  where: 'host',
-  clientFallback: true,
-  address: 'https://example.invalid/server.tar.gz',
-  installFolder: '/home/dev/.server/bin/abc',
-  dataFolder: '/home/dev/.server',
-  launcher: 'bin/launcher',
-  lockPlace: 'folder',
-  notes: [],
-} as unknown as Plan;
-
-/** A CLI that answers any token. */
-function anyToken(request: Request): readonly unknown[] {
-  return request.method === 'challenge_issue'
-    ? [{id: request.id, result: {challenge: 'challenge-text'}}]
-    : [{id: request.id, result: {}}];
-}
-
 /** A CLI that refuses every token, its own included. */
 const NO_TOKEN = requiringToken('a token nobody has');
-
-/** What the fixture's `openBridge` was given, and the events it can raise. */
-interface Bridged {
-  serveParams?: CliServeParams;
-  onServeLog?: (line: ServerLogLine) => void;
-  /** How often the end of the control connection reached the bridge. */
-  controlEndings: number;
-}
-
-/** Steps that replace some of the fixture's, made over the connect's recording. */
-type Changes = (recording: Recording) => Partial<ConnectSteps>;
-
-/** The input of every connect here: window 1's first connect to `dev`. */
-const CLI_INPUT = {
-  target: {kind: 'plain' as const, text: 'dev'},
-  rawHostString: 'dev',
-  attempt: 1,
-  isReconnection: false,
-  windowId: 'window-1',
-  windowWorkspace: undefined,
-};
-
-/** The steps of a connect that takes the CLI path, over a CLI answering `script`; `changes` replaces some steps. */
-function cliSteps(
-  recording: Recording,
-  bridged: Bridged,
-  script: CliScript = requiringToken(CONTROL_TOKEN),
-  changes: Changes = () => ({}),
-): ConnectSteps {
-  const base = steps(recording);
-  return steps(recording, {
-    plan: (input, host, options) => {
-      recording.calls.push(options?.direct === true ? 'plan direct' : 'plan');
-      return {plan: options?.direct === true ? DIRECT_PLAN : CLI_PLAN};
-    },
-    connectControl: () => {
-      const program = fakeCli(script);
-      recording.program = program;
-      recording.calls.push('connectControl');
-      return Promise.resolve(program.stream);
-    },
-    openBridge: async (control, serveParams, events) => {
-      bridged.serveParams = serveParams;
-      bridged.onServeLog = line => {
-        events.onServeLog(line);
-      };
-      events.onControlEnded(() => {
-        bridged.controlEndings += 1;
-      });
-      return base.openBridge(control, serveParams, events);
-    },
-    ...changes(recording),
-  });
-}
 
 /** Runs one connect over the CLI path, with what the fakes saw. */
 async function connectOverCli(script?: CliScript, changes?: Changes) {
@@ -159,19 +76,6 @@ async function resolved() {
       overCli.recording.bridgeLost?.(cause);
     },
   };
-}
-
-/** A step that fails `name`'s way, recording that it ran. */
-function failing<Name extends 'installCli' | 'startCli'>(
-  name: Name,
-  outcome: Awaited<ReturnType<ConnectSteps[Name]>>,
-): Changes {
-  return recording => ({
-    [name]: () => {
-      recording.calls.push(name);
-      return Promise.resolve(outcome);
-    },
-  });
 }
 
 const DOWNLOAD_404 = {

@@ -747,7 +747,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(phases, ['initializing', 'startingServer']);
   });
 
-  it('containers-55: the percents of the server download reach the listeners as serverDownloadPercent phases', async () => {
+  it('containers-55: the percents of the server download reach the listeners as serverDownloadPercent phases, before the blocking commands start the server', async () => {
     const scene = sceneOf();
     scene.phasesOfServer = ['installing'];
     scene.percentsOfServer = [0, 40, 100];
@@ -760,6 +760,7 @@ describe('the container connector: the connect (card containers-08)', () => {
       {name: 'serverDownloadPercent', percent: 0},
       {name: 'serverDownloadPercent', percent: 40},
       {name: 'serverDownloadPercent', percent: 100},
+      {name: 'startingServer'},
     ]);
   });
 
@@ -2885,6 +2886,34 @@ describe('the container connector: the extensions cache after the start (#1810)'
           ),
       ],
       [false, ['the extensions cache stopped: disk full']],
+    );
+  });
+
+  it('brief-personalization §1 steps 2 to 6: the server files, then the blocking commands with the relay variables, then the start; the background only once connected', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(scene.lifecycleRuns, [
+      'server files',
+      'blocking {}',
+      'server start',
+      'background {}',
+    ]);
+  });
+
+  it('F-0410 with brief-personalization §1 step 4: a failed blocking command ends the connect with the setup failure, and the server never starts', async () => {
+    const scene = sceneOf();
+    scene.blockingResult = {
+      kind: 'lifecycleFailed',
+      hook: 'onCreateCommand',
+      part: undefined,
+      message: 'exit 1',
+      containerId: 'c1',
+      foundContainerId: 'c1',
+    };
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [failedKind(result), scene.lifecycleRuns],
+      ['containerSetupFailed', ['server files', 'blocking {}']],
     );
   });
 });

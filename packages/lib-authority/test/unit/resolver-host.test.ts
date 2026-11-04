@@ -6,6 +6,7 @@ import {
   type ConnectPhase,
   type Connector,
   type EditorResolver,
+  type ExecServerHandle,
   type Failed,
   type FailurePresenter,
   type PresenterOutcome,
@@ -61,7 +62,7 @@ class FakeConnector implements Connector {
   reveals = 0;
   during: (() => void) | undefined;
   hold: Promise<void> = Promise.resolve();
-  private readonly phaseListeners = new Set<(phase: ConnectPhase) => void>();
+  protected readonly phaseListeners = new Set<(phase: ConnectPhase) => void>();
   private readonly lostListeners = new Set<() => void>();
   private readonly closedListeners = new Set<() => void>();
 
@@ -243,6 +244,7 @@ class FakeEditor implements ResolverEditor {
 /** A presenter that answers as told and records the failures it was asked about. */
 class FakePresenter implements FailurePresenter {
   outcome: PresenterOutcome = 'handled';
+  textOf?: (failed: Failed) => string;
   seen: Failed[] = [];
   gate: Promise<void> = Promise.resolve();
 
@@ -1552,5 +1554,189 @@ describe('the resolver host: the canonical mapping (card containers-22)', () => 
       ),
       '/late',
     );
+  });
+});
+
+/** A connector that serves an exec server, as the steered answer says. */
+class ExecConnector extends FakeConnector {
+  execAnswer: {execServer: ExecServerHandle} | Failed = {
+    execServer: {name: 'exec'},
+  };
+  execInputs: ConnectInput[] = [];
+  execFailure: Error | undefined;
+
+  execServer(
+    input: ConnectInput,
+  ): Promise<{execServer: ExecServerHandle} | Failed> {
+    this.execInputs.push(input);
+    for (const phase of this.phases) {
+      for (const listener of this.phaseListeners) {
+        listener(phase);
+      }
+    }
+    if (this.execFailure !== undefined) {
+      return Promise.reject(this.execFailure);
+    }
+    return Promise.resolve(this.execAnswer);
+  }
+}
+
+/** A promise and the function that settles it. */
+function releaseGate(): {promise: Promise<void>; release: () => void} {
+  const gate = {promise: Promise.resolve(), release: (): void => undefined};
+  gate.promise = new Promise<void>(resolveGate => {
+    gate.release = () => {
+      resolveGate();
+    };
+  });
+  return gate;
+}
+
+/** A host whose connector serves exec servers. */
+async function execScene(
+  changes: Partial<ResolverOptions> = {},
+): Promise<Setup & {served: ExecConnector}> {
+  const served = new ExecConnector();
+  const context = await setup({connector: served, ...changes});
+  return {...context, served};
+}
+
+async function execFailureOf(
+  context: Setup,
+  authority = AUTHORITY,
+): Promise<string> {
+  try {
+    await resolverOf(context.editor).resolveExecServer?.(authority, {
+      resolveAttempt: 0,
+    });
+    return 'served';
+  } catch (caught) {
+    return caught instanceof EditorError
+      ? `${caught.origin}: ${caught.message}`
+      : String(caught);
+  }
+}
+
+describe('the resolver host: exec servers', () => {
+  it('brief-remote-ssh-engines §2: a connector with no exec server registers a resolver with none', async () => {
+    const context = await setup();
+    deepStrictEqual(resolverOf(context.editor).resolveExecServer, undefined);
+  });
+
+  it('brief-remote-ssh-engines §2: the exec server the connector serves is the resolver’s answer', async () => {
+    const context = await execScene();
+    deepStrictEqual(
+      await resolverOf(context.editor).resolveExecServer?.(AUTHORITY, {
+        resolveAttempt: 3,
+      }),
+      {name: 'exec'},
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: the connector is asked with the decoded target and the attempt', async () => {
+    const context = await execScene();
+    await resolverOf(context.editor).resolveExecServer?.(AUTHORITY, {
+      resolveAttempt: 3,
+    });
+    deepStrictEqual(
+      context.served.execInputs.map(input => [
+        input.rawHostString,
+        input.attempt,
+        input.isReconnection,
+        input.windowId,
+      ]),
+      [['my-alias', 3, false, 'window-1']],
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: after a resolve that worked, the exec server’s connect is a reconnection', async () => {
+    const context = await execScene();
+    await resolve(context);
+    await resolverOf(context.editor).resolveExecServer?.(AUTHORITY, {
+      resolveAttempt: 4,
+    });
+    deepStrictEqual(
+      context.served.execInputs.map(input => input.isReconnection),
+      [true],
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: a failure is the editor’s unavailable error, not handled, with the failure’s text', async () => {
+    const context = await execScene();
+    context.served.execAnswer = FAILURE;
+    deepStrictEqual(
+      await execFailureOf(context),
+      'notAvailable(handled=false): Could not reach the host.',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: the presenter’s text for the failure is the error’s message', async () => {
+    const context = await execScene();
+    context.served.execAnswer = FAILURE;
+    context.presenter.textOf = () => 'The dialog’s text.';
+    deepStrictEqual(
+      await execFailureOf(context),
+      'notAvailable(handled=false): The dialog’s text.',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: a failure shows no dialog', async () => {
+    const context = await execScene();
+    context.served.execAnswer = FAILURE;
+    await execFailureOf(context);
+    deepStrictEqual(context.presenter.seen, []);
+  });
+
+  it('brief-remote-ssh-engines §2: a connector that throws becomes a failure of the unknown kind with its message', async () => {
+    const context = await execScene();
+    context.served.execFailure = new Error('the connector broke');
+    deepStrictEqual(
+      await execFailureOf(context),
+      'notAvailable(handled=false): the connector broke',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: an authority of another family is not available', async () => {
+    const context = await execScene();
+    deepStrictEqual(
+      await execFailureOf(context, 'wsl+Ubuntu'),
+      'notAvailable(handled=false): ',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: a window that is leaving gets a handled unavailable error', async () => {
+    const context = await execScene();
+    handleOf(context.registration).leave();
+    deepStrictEqual(
+      await execFailureOf(context),
+      'notAvailable(handled=true): ',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: the progress shows the stages of the connect made for the exec server', async () => {
+    const context = await execScene();
+    context.served.phases = [{name: 'initializing'}];
+    await resolverOf(context.editor).resolveExecServer?.(AUTHORITY, {
+      resolveAttempt: 1,
+    });
+    deepStrictEqual(
+      context.editor.progressRuns.map(entry => entry.updates),
+      [['phase initializing']],
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: an exec server is asked for after the resolve in front of it has ended', async () => {
+    const context = await execScene();
+    const gate = releaseGate();
+    context.served.hold = gate.promise;
+    const first = resolve(context);
+    const second = resolverOf(context.editor).resolveExecServer?.(AUTHORITY, {
+      resolveAttempt: 2,
+    });
+    await Promise.resolve();
+    const before = context.served.execInputs.length;
+    gate.release();
+    await Promise.all([first, second]);
+    deepStrictEqual([before, context.served.execInputs.length], [0, 1]);
   });
 });

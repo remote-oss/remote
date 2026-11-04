@@ -7,11 +7,19 @@ import type {Failed} from 'lib-authority';
 import type {ChannelFailure, HostChannel} from 'lib-host';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import type {Plan, ProbedHost, StartOutcome, TransferOutcome} from 'lib-server';
+import type {
+  CliServeParams,
+  Plan,
+  ProbedHost,
+  ServerLogLine,
+  StartOutcome,
+  TransferOutcome,
+} from 'lib-server';
 import {
   fakeCli,
   type CliScript,
   type FakeCli,
+  type Request,
 } from 'lib-server/testing/fake-cli';
 import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import type {DownloadProgressPort} from '../../src/cli/server-download-progress.ts';
@@ -149,16 +157,49 @@ const BAD_TOKEN = 'CodeError(AuthChallengeBadToken)';
 /** The control token of a connect over the fixture's steps: its first secret. */
 export const CONTROL_TOKEN = 'secret-1';
 
-/** A CLI that requires `token`: the challenge with any other is refused, and every `serve` succeeds. */
-export function requiringToken(token: string): CliScript {
+/** A CLI that accepts the tokens `accepts` says yes to: the challenge with any other is refused, and every `serve` succeeds. */
+function requiring(accepts: (token: string) => boolean): CliScript {
   return request => {
     if (request.method === 'challenge_issue') {
-      return (request.params as {token: string}).token === token
+      return accepts((request.params as {token: string}).token)
         ? [{id: request.id, result: {challenge: 'challenge-text'}}]
         : [{id: request.id, error: {code: -1, message: BAD_TOKEN}}];
     }
     return [{id: request.id, result: {}}];
   };
+}
+
+/** A CLI that requires `token`. */
+export function requiringToken(token: string): CliScript {
+  return requiring(given => given === token);
+}
+
+/**
+ * A CLI that requires the control token of any connect over the fixture's steps: each connect makes two secrets, its
+ * control token first and the token of its probe second, so the control tokens are the odd ones.
+ */
+export function requiringControlTokens(): CliScript {
+  return requiring(given => Number(given.replace('secret-', '')) % 2 === 1);
+}
+
+/** A CLI that answers any token. */
+export function anyToken(request: Request): readonly unknown[] {
+  return request.method === 'challenge_issue'
+    ? [{id: request.id, result: {challenge: 'challenge-text'}}]
+    : [{id: request.id, result: {}}];
+}
+
+/** A step that fails `name`'s way, recording that it ran. */
+export function failing<Name extends 'installCli' | 'startCli'>(
+  name: Name,
+  outcome: Awaited<ReturnType<ConnectSteps[Name]>>,
+): Changes {
+  return recording => ({
+    [name]: () => {
+      recording.calls.push(name);
+      return Promise.resolve(outcome);
+    },
+  });
 }
 
 /** The bridge the fixture's `openBridge` gives: its listener's address. */
@@ -420,3 +461,79 @@ export const SILENT_PROMPTS: PromptEditor = {
   maskedInput: () => Promise.resolve(undefined),
   translate: template => template,
 };
+
+/** A plan of the CLI path for the fixture's host. */
+export const CLI_PLAN = {
+  kind: 'cli',
+  download: true,
+  cliDataFolder: '/home/dev/.server',
+  commit: 'c1',
+  notes: [],
+} as unknown as Plan;
+
+/** The direct install the fallback plans. */
+export const DIRECT_PLAN = {
+  kind: 'download',
+  where: 'host',
+  clientFallback: true,
+  address: 'https://example.invalid/server.tar.gz',
+  installFolder: '/home/dev/.server/bin/abc',
+  dataFolder: '/home/dev/.server',
+  launcher: 'bin/launcher',
+  lockPlace: 'folder',
+  notes: [],
+} as unknown as Plan;
+
+/** What the fixture's `openBridge` was given, and the events it can raise. */
+export interface Bridged {
+  serveParams?: CliServeParams;
+  onServeLog?: (line: ServerLogLine) => void;
+  /** How often the end of the control connection reached the bridge. */
+  controlEndings: number;
+}
+
+/** Steps that replace some of the fixture's, made over the connect's recording. */
+export type Changes = (recording: Recording) => Partial<ConnectSteps>;
+
+/** The input of every connect here: window 1's first connect to `dev`. */
+export const CLI_INPUT = {
+  target: {kind: 'plain' as const, text: 'dev'},
+  rawHostString: 'dev',
+  attempt: 1,
+  isReconnection: false,
+  windowId: 'window-1',
+  windowWorkspace: undefined,
+};
+
+/** The steps of a connect that takes the CLI path, over a CLI answering `script`; `changes` replaces some steps. */
+export function cliSteps(
+  recording: Recording,
+  bridged: Bridged,
+  script: CliScript = requiringToken(CONTROL_TOKEN),
+  changes: Changes = () => ({}),
+): ConnectSteps {
+  const base = steps(recording);
+  return steps(recording, {
+    plan: (input, host, options) => {
+      recording.calls.push(options?.direct === true ? 'plan direct' : 'plan');
+      return {plan: options?.direct === true ? DIRECT_PLAN : CLI_PLAN};
+    },
+    connectControl: () => {
+      const program = fakeCli(script);
+      recording.program = program;
+      recording.calls.push('connectControl');
+      return Promise.resolve(program.stream);
+    },
+    openBridge: async (control, serveParams, events) => {
+      bridged.serveParams = serveParams;
+      bridged.onServeLog = line => {
+        events.onServeLog(line);
+      };
+      events.onControlEnded(() => {
+        bridged.controlEndings += 1;
+      });
+      return base.openBridge(control, serveParams, events);
+    },
+    ...changes(recording),
+  });
+}

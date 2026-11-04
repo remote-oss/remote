@@ -1,7 +1,13 @@
 # The VSCodium acceptance launches a pull request's change selects (main's push selection), as one part on one
+<<<<<<< HEAD
 # ubuntu-24.04 runner. Called by ci.yml's pull request job, which runs at most six of them in 60 minutes; with `full`
 # (the acceptance-full label, ci.yml or acceptance-full.yml) it runs the whole selection in 180 minutes. A larger
 # selection without `full` runs nothing and gets a notice naming its launches. The run's steps are those of ci.yml's
+=======
+# self-hosted X64 runner. Called by ci.yml's pull request job, which runs at most six of them; with `full` (the
+# acceptance-full label, ci.yml or acceptance-full.yml) it runs the whole selection. Either has 180 minutes, the plan's
+# time limit. A larger selection without `full` runs nothing and gets a notice naming its launches. The run's steps are those of ci.yml's
+>>>>>>> origin/main
 # VSCodium job.
 name: acceptance-launches
 

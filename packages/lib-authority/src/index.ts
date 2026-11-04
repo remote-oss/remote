@@ -96,6 +96,7 @@ export {
   type Connector,
   type EditorResolver,
   type FailurePresenter,
+  type ExecServerHandle,
   type PhaseName,
   type PresenterOutcome,
   type ProgressPort,

@@ -66,9 +66,11 @@ export interface AgentEvent {
     | 'terminalNames'
     | 'untitledDocuments'
     | 'tunnels'
+    | 'execSpawned'
     | 'environment'
     | 'called'
-    | 'editorText';
+    | 'editorText'
+    | 'linkOpened';
   time: number;
   id?: string;
   message?: string;
@@ -1450,6 +1452,42 @@ async function reported(
   return windowEvents(name)
     .filter(each => each.event === event)
     .at(-1);
+}
+
+/**
+ * Has window `name` open the link `text`, as a link a user clicks does, `{scheme}` standing for the editor's own scheme,
+ * and gives the link's whole text once it is handed to the editor, without waiting for the editor's own confirmation.
+ */
+export async function openLink(name: string, text: string): Promise<string> {
+  const before = countOf(name, 'linkOpened');
+  await startInWindow(name, 'acceptance.agent.openLink', text);
+  await waitUntil(
+    `window ${name} to open its link`,
+    () => countOf(name, 'linkOpened') > before,
+  );
+  return String(
+    windowEvents(name)
+      .filter(each => each.event === 'linkOpened')
+      .at(-1)?.value,
+  );
+}
+
+/** What a process spawned through the exec server of window `name`'s authority printed, and its exit code. */
+export async function execSpawnedIn(
+  name: string,
+  command: string,
+  argumentList: string[],
+  environment: Record<string, string>,
+): Promise<{text: string; exitCode: number | null}> {
+  const event = await reported(
+    name,
+    'execSpawned',
+    'acceptance.agent.execSpawn',
+    command,
+    argumentList,
+    environment,
+  );
+  return {text: event?.text ?? '', exitCode: event?.exitCode ?? null};
 }
 
 /** The value of the environment variable `variableName` in the extension host of window `name`, or null when it has none. */

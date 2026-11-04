@@ -33,6 +33,14 @@ import {
   type DevContainerVolume,
   volumeTargetOf,
 } from '../volumes/volume-payload.ts';
+import {volumeInspectArguments} from '../volumes/clone-volume.ts';
+import {
+  EXPLORE_WORKSPACE_MOUNT,
+  type ExploreDefinition,
+  EXPLORE_VOLUME_VARIABLE,
+  exploredVolumeNameValid,
+  exploreIdLabels,
+} from '../volumes/explore-definition.ts';
 import {
   resolveVolume,
   type VolumeContainerRequest,
@@ -150,6 +158,8 @@ import {
   staticForwards,
 } from '../ports/static-forwards.ts';
 
+/** The relay variables the lifecycle commands and the extension host get; the relays add theirs. */
+const RELAY_ENVIRONMENT: Readonly<Record<string, string>> = {};
 /** The CLI's levels for an info, a warning and an error event. */
 const CLI_INFO_LEVEL = 3;
 const CLI_WARNING_LEVEL = 4;
@@ -238,6 +248,8 @@ export interface VolumeConnectDependencies {
   ): CliBridge;
   /** A fresh, empty folder on the host that the CLI is given as its workspace folder there. */
   standIn(): Promise<{folder: string; dispose(): Promise<void>}>;
+  /** The definition Explore a Volume opens a volume in, written when it is not there. */
+  exploreDefinition(): Promise<ExploreDefinition>;
   /**
    * The clone's trust confirmation of the profile: given already, or asked now; when refused, the window goes back to
    * a local one.
@@ -1316,6 +1328,25 @@ export function containerConnectorOf(
     configFile: string;
     /** Whether the window is trusted by the connection itself. */
     trusted: boolean;
+    /** Whether the window explores a volume, which its label says instead of a configuration's name. */
+    explored?: boolean;
+  }
+
+  /**
+   * The steps between the server's files and its start: the early personalization (none yet) and the blocking lifecycle
+   * commands, under "Starting server". A failure of the commands is the connect's, as `up`'s was.
+   */
+  async function blockingHooks(
+    cancellation: AbortSignal,
+  ): Promise<Failed | undefined> {
+    phases.tell({name: 'startingServer'});
+    const blocking = await lifecycle?.runBlocking(
+      RELAY_ENVIRONMENT,
+      cancellation,
+    );
+    return blocking === undefined || blocking.kind === 'done'
+      ? undefined
+      : failureOf(blocking, []);
   }
 
   /** Reads the merged configuration, installs and starts the server, relays its port, and holds the connection. */
@@ -1366,6 +1397,7 @@ export function containerConnectorOf(
       prepared.containerId,
       prepared.remoteUser,
     );
+    let startingServerTold = false;
     const server = await dependencies.runServer(
       {
         channel,
@@ -1376,8 +1408,15 @@ export function containerConnectorOf(
         devPort: devPortOf(merged),
         machineSettings: portAttributeSettings(merged),
         created: prepared.created,
+        beforeStart: async () => {
+          startingServerTold = true;
+          return blockingHooks(cancellation);
+        },
         onPhase: phase => {
-          phases.tell({name: phase});
+          // The blocking commands run under "Starting server" already; the server's own start doesn't say it again.
+          if (phase !== 'startingServer' || !startingServerTold) {
+            phases.tell({name: phase});
+          }
         },
         onDownloadPercent: percent => {
           phases.tell({name: 'serverDownloadPercent', percent});
@@ -1460,6 +1499,7 @@ export function containerConnectorOf(
       connectionToken: server.connectionToken,
       extensionHostEnv: extensionHostEnvironmentOf(
         probed,
+        RELAY_ENVIRONMENT,
         remoteEnvironment.entries,
       ),
       environmentTunnels: tunnels,
@@ -1481,7 +1521,11 @@ export function containerConnectorOf(
       channel,
       server,
       relay,
-      identity: {name, context: engineLabelOf(context.pinned)},
+      identity: {
+        name,
+        context: engineLabelOf(context.pinned),
+        ...(context.explored === true ? {explored: true} : {}),
+      },
       connected,
       lifetime: new AbortController(),
       ports: {
@@ -1502,6 +1546,7 @@ export function containerConnectorOf(
         lost.tell();
       }
     });
+    lifecycle?.startBackground(RELAY_ENVIRONMENT, () => Promise.resolve());
     return connected;
   }
 
@@ -1540,6 +1585,124 @@ export function containerConnectorOf(
       pausedRetry: takenPausedRetry,
       ...(rebuild === undefined ? {} : {rebuild}),
     };
+  }
+
+  /**
+   * Connects an explored volume: the host CLI opens the one definition of ours with the volume added by the variable of
+   * this run, and the window is untrusted. There is no bootstrap, no clone and no stand-in; the container is found
+   * again by the volume and the definition's configuration, and left stopped, never removed, when the window ends.
+   */
+  async function connectExplored(
+    what: {
+      volumes: VolumeConnectDependencies;
+      payload: string;
+      target: DevContainerVolume;
+      settings: Tools['settings'];
+      engine: EngineHost;
+      dockerFile: string;
+    },
+    launch: {
+      environment: Readonly<Record<string, string>>;
+      cliEnvironment: Readonly<Record<string, string | undefined>>;
+      rebuild: {buildNoCache: boolean} | undefined;
+      cancellation: AbortSignal;
+    },
+  ): Promise<Connected | Failed> {
+    const {volumes, payload, target, settings, engine, dockerFile} = what;
+    const {environment, cliEnvironment, rebuild, cancellation} = launch;
+    if (!exploredVolumeNameValid(target.volumeName)) {
+      logger.info('the volume to explore has no name Docker accepts');
+      return containerSetupFailed();
+    }
+    const existing = await engine.run(
+      volumeInspectArguments(target.volumeName),
+      {kind: 'none'},
+      {cancellation},
+    );
+    logger.info(
+      existing.kind === 'ran' && existing.status === 0
+        ? `the volume ${target.volumeName} exists`
+        : `the volume ${target.volumeName} does not exist yet, so the mount creates it`,
+    );
+    const definition = await volumes.exploreDefinition();
+    const bridge = dependencies.cliFor({
+      ...cliEnvironment,
+      [EXPLORE_VOLUME_VARIABLE]: target.volumeName,
+    });
+    const idLabels = exploreIdLabels(target.volumeName, definition.configFile);
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      bridge,
+      dependencies.lifecyclePresenter,
+    );
+    const prepared = await lifecycle.prepare(
+      {
+        folder: definition.folder,
+        configFile: definition.configFile,
+        idLabels,
+        dockerPath: dockerFile,
+        logLevel: 'info',
+        // An explored volume always has the server's volume at /vscode, whatever `dev.containers.cacheVolume` says.
+        cacheVolume: true,
+        windowsClient: dependencies.clientPlatform === 'win32',
+        workspaceMountConsistency: workspaceMountConsistencyOf(
+          settings.workspaceMountConsistency,
+          settings.legacyWorkspaceMountConsistency,
+        ),
+        mountGitWorktreeCommonDir: false,
+        features: featureSettingsOf(
+          settings.defaultFeatures,
+          settings.lockfile,
+          undefined,
+        ),
+        mounts: [],
+        runArgs: [],
+        workspaceMount: EXPLORE_WORKSPACE_MOUNT,
+        pausedRetry: takenPausedRetry,
+        ...(rebuild === undefined ? {} : {rebuild}),
+      },
+      logStep,
+      logCliEvent,
+      cancellation,
+    );
+    if (prepared.kind !== 'ready') {
+      return failureOf(prepared, []);
+    }
+    failedContainer = {containerId: prepared.containerId, paused: false};
+    return connectPrepared(
+      {
+        payload,
+        prepared,
+        engine,
+        bridge,
+        cliTarget: {
+          workspaceFolder: definition.folder,
+          configFile: definition.configFile,
+          dockerPath: dockerFile,
+          idLabels,
+          mountWorkspaceGitRoot: false,
+          mountGitWorktreeCommonDir: false,
+          features: featureSettingsOf(
+            settings.defaultFeatures,
+            settings.lockfile,
+          ),
+          mounts: [],
+          logLevel: 'info',
+        },
+        settings,
+        pinned: target,
+        shutdownAction: undefined,
+        connectionId: registerConnection(
+          {volumeName: target.volumeName, configFile: definition.configFile},
+          {dockerPath: dockerFile, environment},
+        ),
+        hostPath: '',
+        configFile: definition.configFile,
+        trusted: false,
+        explored: true,
+      },
+      cancellation,
+    );
   }
 
   /**
@@ -1587,6 +1750,12 @@ export function containerConnectorOf(
     const cliEnvironment = {...dependencies.editorEnvironment, ...environment};
     const dockerFile = executable.file;
     const rebuild = await takenRebuild(input);
+    if (target.inspectVolume) {
+      return connectExplored(
+        {volumes, payload, target, settings, engine, dockerFile},
+        {environment, cliEnvironment, rebuild, cancellation},
+      );
+    }
     const standIn = await volumes.standIn();
     /** The CLI on the host and its target, for the runs after `up`: the stand-in folder, the host's Docker program. */
     function hostPassOf(

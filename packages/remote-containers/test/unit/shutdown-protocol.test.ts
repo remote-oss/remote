@@ -164,9 +164,9 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
         'the message has no connectionId',
         'the message has no connectionId',
         'the message type is unknown',
-        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
-        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
-        'register needs the identity with a hostPath and a configFile, or a volumeName and a folder',
+        'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
+        'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
+        'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
         'register needs the engine with a dockerPath and an environment of text',
         'register needs the engine with a dockerPath and an environment of text',
         'register needs the engine with a dockerPath and an environment of text',
@@ -194,6 +194,39 @@ describe('the shutdown helper’s messages (card containers-68)', () => {
           engine: {dockerPath: 'docker', environment: {}},
         },
       },
+    );
+  });
+
+  it('F-0705 BR-7 (card containers-155): a register for an explored volume names the volume and the shared definition’s configuration, and one with only a volume is malformed', () => {
+    const register = {
+      type: 'register',
+      connectionId: 'c1',
+      engine: {dockerPath: 'docker'},
+    };
+    deepStrictEqual(
+      [
+        readShutdownRequest({
+          ...register,
+          identity: {volumeName: 'data', configFile: '/t/devcontainer.json'},
+        }),
+        readShutdownRequest({...register, identity: {volumeName: 'data'}}),
+      ],
+      [
+        {
+          kind: 'request',
+          request: {
+            type: 'register',
+            connectionId: 'c1',
+            identity: {volumeName: 'data', configFile: '/t/devcontainer.json'},
+            engine: {dockerPath: 'docker', environment: {}},
+          },
+        },
+        {
+          kind: 'malformed',
+          problem:
+            'register needs the identity with a hostPath and a configFile, a volumeName and a folder, or a volumeName and a configFile',
+        },
+      ],
     );
   });
 });

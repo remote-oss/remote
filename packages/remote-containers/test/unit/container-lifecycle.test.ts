@@ -8,7 +8,11 @@ import type {ComposeResolution} from '../../src/compose/resolver.ts';
 /** A resolution of a Compose project that is ready. */
 type ComposeReady = Extract<ComposeResolution, {kind: 'ready'}>;
 import type {StdinOf} from '../../src/cli/cli-host.ts';
-import type {CliTarget, UpOptions} from '../../src/cli/cli-arguments.ts';
+import type {
+  CliTarget,
+  RunUserCommandsOptions,
+  UpOptions,
+} from '../../src/cli/cli-arguments.ts';
 import type {
   CliEvent,
   CliFailure,
@@ -26,6 +30,7 @@ import {
   type ContainerRequest,
   type ContainerStep,
   type LifecyclePresenter,
+  type ContainerLifecycle,
 } from '../../src/lifecycle/container-lifecycle.ts';
 import {
   composeDiscoveryArguments,
@@ -188,6 +193,7 @@ interface FakeBridge extends CliBridge {
     containerId: string;
     signal: AbortSignal;
     stdin: StdinOf | undefined;
+    options: RunUserCommandsOptions | undefined;
   }>;
   upResult: UpResult;
   /** What `read-configuration` gives, and how many times it was asked. */
@@ -215,8 +221,15 @@ function fakeBridge(): FakeBridge {
       bridge.upEvents.forEach(onEvent);
       return Promise.resolve(bridge.upResult);
     },
-    runUserCommands: (target, containerId, onEvent, signal, onStdin) => {
-      bridge.runs.push({target, containerId, signal, stdin: onStdin});
+    runUserCommands: (
+      target,
+      containerId,
+      onEvent,
+      signal,
+      onStdin,
+      options,
+    ) => {
+      bridge.runs.push({target, containerId, signal, stdin: onStdin, options});
       onStdin?.(() => undefined, 'plain');
       bridge.runEvents.forEach(onEvent);
       return bridge.runResult;
@@ -230,6 +243,21 @@ function fakeBridge(): FakeBridge {
     templateMetadata: () => Promise.reject(new Error('never read')),
   };
   return bridge;
+}
+
+/**
+ * Prepares as the connector does, and starts the background run once the container is ready, with no relay variables
+ * and nothing to personalize.
+ */
+async function prepareAndStart(
+  lifecycle: ContainerLifecycle,
+  ...given: Parameters<ContainerLifecycle['prepare']>
+): Promise<ContainerOutcome> {
+  const outcome = await lifecycle.prepare(...given);
+  if (outcome.kind === 'ready') {
+    lifecycle.startBackground({}, () => Promise.resolve());
+  }
+  return outcome;
 }
 
 const EMPTY_LISTING = {
@@ -284,19 +312,29 @@ function lifecycleOver(
   calls: string[];
   presenter: LifecyclePresenter;
   lifecycle: ReturnType<typeof containerLifecycleOf>;
+  sink: MemorySink;
 } {
   const {calls, presenter} = recordingPresenter();
+  const sink = new MemorySink();
   return {
     calls,
     presenter,
+    sink,
     lifecycle: containerLifecycleOf({
       engine: scriptedEngine(EMPTY_LISTING),
       cli: bridge,
-      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+      logger: createLogger(sink, {minimumLevel: () => 'info'}),
       presenter,
       clock,
     }),
   };
+}
+
+/** The messages `sink` holds at warn that say lifecycle commands were skipped. */
+function skipWarningsOf(sink: MemorySink): string[] {
+  return sink.lines
+    .filter(line => line.level === 'warn' && line.message.includes('skipped'))
+    .map(line => line.message);
 }
 
 /** A lifecycle over `bridge` after one `prepare` whose background run waits for `settleFirst`. */
@@ -312,7 +350,8 @@ async function preparedWithHeldRun(bridge: FakeBridge): Promise<{
   });
   const {calls, lifecycle} = lifecycleOver(bridge);
   async function prepareAgain(): Promise<ContainerOutcome> {
-    return lifecycle.prepare(
+    return prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -390,7 +429,8 @@ async function prepared(
   });
   const steps: ContainerStep[] = [];
   const events: CliEvent[] = [];
-  const outcome = await lifecycle.prepare(
+  const outcome = await prepareAndStart(
+    lifecycle,
     request,
     step => steps.push(step),
     event => events.push(event),
@@ -459,7 +499,7 @@ describe('containerLifecycleOf', () => {
             },
           },
         ],
-        runs: [NEW],
+        runs: [NEW, NEW],
         lines: ['info: the lifecycle commands finished'],
       },
     );
@@ -1148,13 +1188,15 @@ describe('containerLifecycleOf', () => {
     const {lifecycle} = lifecycleOver(bridge);
     const signal = new AbortController().signal;
     lifecycle.stopBackground();
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
       signal,
     );
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -1692,6 +1734,8 @@ describe('containerLifecycleOf', () => {
       'started',
       'attach-stdin',
       'output raw post-create from 5000',
+      'attach-stdin',
+      'output raw post-create from 5000',
       'ended',
     ]);
   });
@@ -1750,7 +1794,8 @@ describe('containerLifecycleOf', () => {
     const {calls, lifecycle} = lifecycleOver(bridge);
     lifecycle.stopBackground();
     const before = [...calls];
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -1788,7 +1833,8 @@ describe('containerLifecycleOf', () => {
     bridge.runEvents = [lifecycleEvent('raw', 'post-create', 'postCreate')];
     let now = 0;
     const {calls, lifecycle} = lifecycleOver(bridge, () => (now += 1000));
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -1797,14 +1843,19 @@ describe('containerLifecycleOf', () => {
     await settle();
     deepStrictEqual(
       calls.filter(call => call.startsWith('output')),
-      ['output raw on-create from 1000', 'output raw post-create from 1000'],
+      [
+        'output raw on-create from 1000',
+        'output raw post-create from 1000',
+        'output raw post-create from 1000',
+      ],
     );
   });
 
   it('F-0415 7.E6: a window torn down after the run ended adds no second end', async () => {
     const bridge = fakeBridge();
     const {calls, lifecycle} = lifecycleOver(bridge);
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -1815,6 +1866,7 @@ describe('containerLifecycleOf', () => {
     deepStrictEqual(calls, [
       'attach-stdin',
       'started',
+      'attach-stdin',
       'attach-stdin',
       'ended',
     ]);
@@ -1850,7 +1902,8 @@ describe('containerLifecycleOf', () => {
   it('F-0415 7.E6: up and run-user-commands hand their CLI stdin to the presenter, by its attachStdin', async () => {
     const bridge = fakeBridge();
     const {calls, presenter, lifecycle} = lifecycleOver(bridge);
-    const outcome = await lifecycle.prepare(
+    const outcome = await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -1864,14 +1917,15 @@ describe('containerLifecycleOf', () => {
         bridge.runs[0]?.stdin === presenter.attachStdin,
         calls.filter(call => call === 'attach-stdin'),
       ],
-      ['ready', true, true, ['attach-stdin', 'attach-stdin']],
+      ['ready', true, true, ['attach-stdin', 'attach-stdin', 'attach-stdin']],
     );
   });
 
   it("ADR-0011: up and run-user-commands carry the presenter's terminal size, read-configuration none", async () => {
     const bridge = fakeBridge();
     const {lifecycle} = lifecycleOver(bridge);
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -1893,7 +1947,8 @@ describe('containerLifecycleOf', () => {
     signal: AbortSignal = new AbortController().signal,
     request: ContainerRequest = REQUEST,
   ): Promise<ContainerOutcome> {
-    return lifecycle.prepare(
+    return prepareAndStart(
+      lifecycle,
       request,
       () => undefined,
       () => undefined,
@@ -2535,6 +2590,145 @@ describe('containerLifecycleOf', () => {
       foundContainerId: OLD,
     });
   });
+
+  it('brief-personalization §1 step 4: the blocking run takes the blocking stop and the relay variables, on the ready container; with none ready it is skipped at warn', async () => {
+    const bridge = fakeBridge();
+    const {lifecycle, sink} = lifecycleOver(bridge);
+    const before = await lifecycle.runBlocking(
+      {},
+      new AbortController().signal,
+    );
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    const done = await lifecycle.runBlocking(
+      {SSH_AUTH_SOCK: '/tmp/s.sock'},
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [
+        before.kind,
+        done,
+        bridge.runs.map(run => [run.containerId, run.options]),
+        skipWarningsOf(sink),
+      ],
+      [
+        'done',
+        {kind: 'done'},
+        [
+          [
+            NEW,
+            {
+              skipNonBlocking: true,
+              remoteEnvironment: {SSH_AUTH_SOCK: '/tmp/s.sock'},
+            },
+          ],
+        ],
+        ['the blocking lifecycle commands were skipped: no container is ready'],
+      ],
+    );
+  });
+
+  it('F-0410 with brief-personalization §1 step 4: a failed blocking run ends the run and names the container for the failure', async () => {
+    const bridge = fakeBridge();
+    const {calls, lifecycle} = lifecycleOver(bridge);
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    bridge.runResult = Promise.resolve({
+      kind: 'lifecycleFailed',
+      hook: 'onCreateCommand',
+      part: undefined,
+      message: 'exit 1',
+      containerId: NEW,
+    });
+    const failed = await lifecycle.runBlocking(
+      {},
+      new AbortController().signal,
+    );
+    bridge.runResult = Promise.resolve({kind: 'cancelled'});
+    const cancelled = await lifecycle.runBlocking(
+      {},
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [failed, cancelled, calls.filter(call => call === 'ended')],
+      [
+        {
+          kind: 'lifecycleFailed',
+          hook: 'onCreateCommand',
+          part: undefined,
+          message: 'exit 1',
+          containerId: NEW,
+          foundContainerId: NEW,
+        },
+        {kind: 'cancelled', foundContainerId: NEW},
+        ['ended'],
+      ],
+    );
+  });
+
+  it('brief-personalization §1 steps 6 to 8: the background stops for the personalization, then runs the rest; a failed first run skips both; nothing starts with no ready container, at warn', async () => {
+    const order: string[] = [];
+    const bridge = fakeBridge();
+    const {lifecycle, sink} = lifecycleOver(bridge);
+    lifecycle.startBackground({}, () => {
+      order.push('never');
+      return Promise.resolve();
+    });
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    lifecycle.startBackground({DISPLAY: ':1'}, () => {
+      order.push(`personalize after ${String(bridge.runs.length)}`);
+      return Promise.resolve();
+    });
+    await settle();
+    await settle();
+    const failing = fakeBridge();
+    failing.runResult = Promise.resolve({kind: 'cancelled'});
+    const second = lifecycleOver(failing);
+    await second.lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    second.lifecycle.startBackground({}, () => {
+      order.push('after a failure');
+      return Promise.resolve();
+    });
+    await settle();
+    await settle();
+    deepStrictEqual(
+      [
+        order,
+        bridge.runs.map(run => run.options),
+        failing.runs.length,
+        skipWarningsOf(sink),
+      ],
+      [
+        ['personalize after 1'],
+        [
+          {stopForPersonalization: true, remoteEnvironment: {DISPLAY: ':1'}},
+          {remoteEnvironment: {DISPLAY: ':1'}},
+        ],
+        1,
+        [
+          'the background lifecycle commands were skipped: no container is ready',
+        ],
+      ],
+    );
+  });
 });
 
 describe('the container of a clone in a volume (card containers-151)', () => {
@@ -2621,7 +2815,8 @@ describe('the container of a clone in a volume (card containers-151)', () => {
         ended: () => ended.push('ended'),
       },
     });
-    await lifecycle.prepare(
+    await prepareAndStart(
+      lifecycle,
       REQUEST,
       () => undefined,
       () => undefined,
@@ -2638,7 +2833,15 @@ describe('the container of a clone in a volume (card containers-151)', () => {
         ]),
         ended,
       ],
-      [1, 0, [[NEW, '/stand-in']], ['ended']],
+      [
+        1,
+        0,
+        [
+          [NEW, '/stand-in'],
+          [NEW, '/stand-in'],
+        ],
+        ['ended'],
+      ],
     );
   });
 });

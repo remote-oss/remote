@@ -359,4 +359,35 @@ describe('the failure presenter', () => {
     await settle();
     deepStrictEqual([cancel.seen.calls, closed.seen.calls], [[], []]);
   });
+
+  it('brief-remote-ssh-engines §2: textOf gives the text the connection dialog shows, and shows no dialog', () => {
+    const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      [
+        presenter.textOf?.(
+          failedWith({reason: {text: 'The exec server is off.'}}),
+        ),
+        seen.dialogs,
+      ],
+      ['Could not establish connection to "box": The exec server is off.', []],
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: textOf of a failure with no reason names the host alone', () => {
+    const {presenter} = surroundings(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      presenter.textOf?.(failedWith()),
+      'Could not establish connection to "box".',
+    );
+  });
+
+  it('brief-remote-ssh-engines §2: textOf of a missing server source gives the setting dialog’s text', () => {
+    const {presenter} = surroundings(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      presenter
+        .textOf?.(failedWith({kind: 'noServerSource'}))
+        .includes('remote.SSH.serverDownloadUrlTemplate'),
+      true,
+    );
+  });
 });

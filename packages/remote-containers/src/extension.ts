@@ -114,12 +114,19 @@ import {engineBaseOf, executableOf} from './engine/executable.ts';
 import type {EngineHost} from './engine/engine-host.ts';
 import type {TargetsViewPorts} from './explorer/targets-view.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
-import {composeCheck, currentContext, firstCheck} from './engine/preflight.ts';
+import {
+  composeCheck,
+  currentContext,
+  firstCheck,
+  type PreflightDependencies,
+} from './engine/preflight.ts';
 import {type AskpassRelay, openAskpassRelay} from './volumes/askpass-relay.ts';
 import {
   CLONE_TRUST_KEY,
   CLONE_TRUST_PAGE,
+  type CloneCommandPorts,
   cloneConsented,
+  cloneFromLink,
   cloneInUniqueVolume,
   type CloneTrustPorts,
 } from './volumes/clone-command.ts';
@@ -140,6 +147,7 @@ import {configurationAdded} from './volumes/volume-configuration.ts';
 import {containerCliHost} from './cli/container-cli-host.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import {cloneText} from './volumes/clone-strings.ts';
+import {linkRequestOf} from './volumes/clone-link.ts';
 import type {ClonePromptSurface} from './volumes/git-prompts.ts';
 import {runHostProgram} from './volumes/host-program.ts';
 import {precheck} from './volumes/precheck.ts';
@@ -153,10 +161,18 @@ import {
 import type {AttachItem} from './attach/containers.ts';
 import {attachConfigFilesOf} from './attach/config-files.ts';
 import {attachWarningAccepted} from './attach/warning.ts';
+import {
+  k8sAttachCommandsOf,
+  type K8sPickItem,
+  type K8sPicker,
+} from './attach/k8s-command.ts';
+import {kubectlHostOf} from './engine/kubectl-host.ts';
 import {wslRootOf} from './attach/payload.ts';
 import type {Translate} from './surfaces/engine-dialogs.ts';
+import {filled} from './surfaces/filled.ts';
 import {composeRouteOf} from './engine/compose-route.ts';
-import {effectiveEngineKey} from './engine/engine-key.ts';
+import {effectiveEngineKey, endpointInEffect} from './engine/engine-key.ts';
+import {dashHostOf} from './engine/ssh-endpoint.ts';
 import {engineWatchOf} from './engine/engine-watch.ts';
 import {
   commands,
@@ -197,6 +213,12 @@ import {
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
 import {mountPerformanceHintApplies} from './explorer/details-model.ts';
+import {ensureExploreDefinition} from './volumes/explore-definition.ts';
+import {INSPECT_TEMPLATES, inspectVolume} from './volumes/inspect-volume.ts';
+import {
+  engineListingOf,
+  type EngineListing,
+} from './explorer/engine-listing.ts';
 import {
   type CleanUpCommands,
   cleanUpCommandsOf,
@@ -604,15 +626,20 @@ function windowEnginePortsOf(preflight: {
   };
 }
 
-/** The picker over the running containers: empty and busy until it is filled, no title, its filter on the label alone. */
-function attachPickerOf(translate: Translate): AttachPicker {
-  const picker = vscode.window.createQuickPick<
-    AttachItem & vscode.QuickPickItem
-  >();
-  picker.placeholder = translate('Select the container to attach VS Code');
+/** A quick pick that is empty and busy until it is filled, filtering on the label alone. */
+function quickPickerOf<Item extends vscode.QuickPickItem>(
+  placeholder: string,
+): {
+  fill: (items: readonly Item[]) => void;
+  chosen: Promise<Item | undefined>;
+  reveal: () => void;
+  close: () => void;
+} {
+  const picker = vscode.window.createQuickPick<Item>();
+  picker.placeholder = placeholder;
   picker.matchOnDescription = false;
   picker.busy = true;
-  const chosen = new Promise<AttachItem | undefined>(resolve => {
+  const chosen = new Promise<Item | undefined>(resolve => {
     picker.onDidAccept(() => {
       resolve(picker.selectedItems[0]);
       picker.hide();
@@ -625,13 +652,32 @@ function attachPickerOf(translate: Translate): AttachPicker {
   picker.show();
   return {
     fill: items => {
-      picker.items = items;
+      picker.items = [...items];
       picker.busy = false;
     },
     chosen,
+    reveal: () => {
+      picker.show();
+    },
     close: () => {
       picker.hide();
     },
+  };
+}
+
+/** The picker over the running containers, while it is open: no title. */
+function attachPickerOf(translate: Translate): AttachPicker {
+  return quickPickerOf<AttachItem>(
+    translate('Select the container to attach VS Code'),
+  );
+}
+
+/** The picker over the pods or the containers of a pod, while it is open. */
+function k8sPickerOf<Value>(placeholder: string): K8sPicker<Value> {
+  const picker = quickPickerOf<K8sPickItem<Value>>(placeholder);
+  return {
+    ...picker,
+    chosen: picker.chosen.then(item => item?.value),
   };
 }
 
@@ -714,6 +760,7 @@ export async function activate(
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
   let cleanUp: CleanUpCommands | undefined;
+  let volumeListing: EngineListing | undefined;
   let inspectRow: ((argument: unknown) => Promise<void>) | undefined;
   let showContainerLog: ((argument: unknown) => Promise<void>) | undefined;
   function bridgeFor(
@@ -1003,39 +1050,46 @@ export async function activate(
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
-    preflight: logger => ({
-      engineFor: file =>
-        withEnvironment(nodeEngineHost(file), () =>
-          engineEnvironment(engineSources()),
-        ),
-      dockerPath: () =>
-        vscode.workspace.getConfiguration().get(settings.dockerPath.id),
-      dialogs: {
-        showError: (message, detail, items) =>
-          Promise.resolve(
-            vscode.window.showErrorMessage(
-              message,
-              {modal: true, detail},
-              ...items,
-            ),
+    preflight: logger => {
+      const dependencies: PreflightDependencies = {
+        engineFor: file =>
+          withEnvironment(nodeEngineHost(file), () =>
+            engineEnvironment(engineSources()),
           ),
-        openExternal: address =>
-          Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
-        revealLog: () => {
-          logChannel?.show(true);
+        dockerPath: () =>
+          vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+        dialogs: {
+          showError: (message, detail, items) =>
+            Promise.resolve(
+              vscode.window.showErrorMessage(
+                message,
+                {modal: true, detail},
+                ...items,
+              ),
+            ),
+          openExternal: address =>
+            Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
+          revealLog: () => {
+            logChannel?.show(true);
+          },
         },
-      },
-      translate,
-      setTimer: (milliseconds, callback) => {
-        const timer = setTimeout(callback, milliseconds);
-        return () => {
-          clearTimeout(timer);
-        };
-      },
-      clock: Date.now,
-      logger,
-      searchPath: () => process.env.PATH ?? '',
-    }),
+        translate,
+        setTimer: (milliseconds, callback) => {
+          const timer = setTimeout(callback, milliseconds);
+          return () => {
+            clearTimeout(timer);
+          };
+        },
+        clock: Date.now,
+        logger,
+        searchPath: () => process.env.PATH ?? '',
+      };
+      return {
+        ...dependencies,
+        endpoint: (base, cancellation) =>
+          endpointInEffect(engineSources(), dependencies, base, cancellation),
+      };
+    },
     handlers: served => {
       // The two edit-session commands are registered and hidden; no proposal is requested, so the editor never offers them.
       const dormantCommand = {execute: () => Promise.resolve()};
@@ -1058,6 +1112,95 @@ export async function activate(
           ),
         );
       }
+      /** What the clone needs of the editor and this machine; the window opens on the engine `engine` gives. */
+      function clonePortsOf(engine: () => PinnedEngine): CloneCommandPorts {
+        return {
+          trust: cloneTrustPorts(),
+          engineReady: async () =>
+            (await firstCheck(
+              served.preflight,
+              engineBaseOf({
+                folder: firstFolder(),
+                trusted: vscode.workspace.isTrusted,
+              }),
+              new AbortController().signal,
+            )) === 'proceed',
+          pickSource: () => pickCloneSource(),
+          pickGithub: () => pickGithubRepository(githubPorts, translate),
+          precheck: (source, origin, cancellation) =>
+            precheck(
+              source,
+              origin,
+              {
+                openRelay: () => openCloneRelay(),
+                runGit: (gitArguments, environment, signal) =>
+                  runHostProgram('git', gitArguments, environment, signal),
+              },
+              cancellation,
+            ),
+          cannotAccess: async repository => {
+            await vscode.window.showErrorMessage(
+              cloneText('S052', translate, [repository]),
+              {modal: true},
+            );
+          },
+          currentRepository: () => {
+            const authority = vscode.env.remoteAuthority ?? '';
+            return authority.startsWith('dev-container+')
+              ? volumeTargetOf(authority.slice('dev-container+'.length))
+                  ?.repositoryPath
+              : undefined;
+          },
+          engine,
+          recordTyped: payload =>
+            storeTypedSource(context.globalState, payload, Date.now()),
+          reload: async uri => {
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(uri),
+              {forceReuseWindow: true},
+            );
+          },
+          logger: served.logger,
+        };
+      }
+      /** Explore a Volume in a Dev Container: the picker of the daemon's volumes, and the window of the one picked. */
+      async function exploreVolume(): Promise<void> {
+        const engine = await windowPinnedEngine();
+        await inspectVolume({
+          engineReady: async () =>
+            (await firstCheck(
+              served.preflight,
+              engineBaseOf({
+                folder: firstFolder(),
+                trusted: vscode.workspace.isTrusted,
+              }),
+              new AbortController().signal,
+            )) === 'proceed',
+          volumes: () =>
+            volumeListing?.volumes() ??
+            Promise.reject(new Error('the engine is not ready')),
+          pick: async rows => {
+            const picked = await vscode.window.showQuickPick(
+              rows.map(entry => ({...entry})),
+              {placeHolder: translate(INSPECT_TEMPLATES.S319)},
+            );
+            return rows.find(entry => entry.volumeName === picked?.volumeName);
+          },
+          createdAt: date => filled(translate, INSPECT_TEMPLATES.S419, [date]),
+          engine: () => engine,
+          reload: async address => {
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.parse(address),
+              {forceReuseWindow: true},
+            );
+          },
+          report: line => {
+            served.logger.info(line);
+          },
+        });
+      }
       /** Clone Repository in Container Volume's command, over the editor and this machine. */
       function cloneCommand(): CommandHandler {
         let engine: PinnedEngine = {};
@@ -1065,66 +1208,60 @@ export async function activate(
           execute: async argument => {
             engine = await windowPinnedEngine();
             await cloneInUniqueVolume(
-              {
-                trust: cloneTrustPorts(),
-                engineReady: async () =>
-                  (await firstCheck(
-                    served.preflight,
-                    engineBaseOf({
-                      folder: firstFolder(),
-                      trusted: vscode.workspace.isTrusted,
-                    }),
-                    new AbortController().signal,
-                  )) === 'proceed',
-                pickSource: () => pickCloneSource(),
-                pickGithub: () => pickGithubRepository(githubPorts, translate),
-                precheck: (source, origin, cancellation) =>
-                  precheck(
-                    source,
-                    origin,
-                    {
-                      openRelay: () => openCloneRelay(),
-                      runGit: (gitArguments, environment, signal) =>
-                        runHostProgram(
-                          'git',
-                          gitArguments,
-                          environment,
-                          signal,
-                        ),
-                    },
-                    cancellation,
-                  ),
-                cannotAccess: async repository => {
-                  await vscode.window.showErrorMessage(
-                    cloneText('S052', translate, [repository]),
-                    {modal: true},
-                  );
-                },
-                currentRepository: () => {
-                  const authority = vscode.env.remoteAuthority ?? '';
-                  return authority.startsWith('dev-container+')
-                    ? volumeTargetOf(authority.slice('dev-container+'.length))
-                        ?.repositoryPath
-                    : undefined;
-                },
-                engine: () => engine,
-                recordTyped: payload =>
-                  storeTypedSource(context.globalState, payload, Date.now()),
-                reload: async uri => {
-                  await vscode.commands.executeCommand(
-                    'vscode.openFolder',
-                    vscode.Uri.parse(uri),
-                    {forceReuseWindow: true},
-                  );
-                },
-                logger: served.logger,
-              },
+              clonePortsOf(() => engine),
               new AbortController().signal,
               typeof argument === 'string' ? argument : undefined,
             );
           },
         };
       }
+      /** Opens the repository an "Open in Dev Containers" link names, or shows why the link can't be used. */
+      async function openCloneLink(uri: vscode.Uri): Promise<void> {
+        const text = uri.toString();
+        const request = linkRequestOf(
+          {scheme: uri.scheme, path: uri.path, query: uri.query, text},
+          {
+            editorScheme: vscode.env.uriScheme,
+            isUri: candidate => {
+              try {
+                vscode.Uri.parse(candidate, true);
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+        );
+        if (request.kind === 'ignored') {
+          return;
+        }
+        if (request.kind === 'refused') {
+          served.logger.info(`the link was refused: ${request.text}`);
+          await vscode.window.showErrorMessage(
+            cloneText(request.text, translate, [text]),
+            {modal: true},
+          );
+          return;
+        }
+        const engine = await windowPinnedEngine();
+        await cloneFromLink(
+          clonePortsOf(() => engine),
+          request.source,
+          new AbortController().signal,
+        );
+      }
+      context.subscriptions.push(
+        vscode.window.registerUriHandler({
+          handleUri: uri => {
+            // The link's own text may carry a user and a password, so only the failure's kind is logged.
+            openCloneLink(uri).catch((caught: unknown) => {
+              served.logger.error(
+                `the link could not be handled: ${caught instanceof Error ? caught.name : 'unknown failure'}`,
+              );
+            });
+          },
+        }),
+      );
       /** The ports of the GitHub source, over the installed extensions. */
       const githubPorts = {
         installed: (extensionId: string) =>
@@ -1689,6 +1826,55 @@ export async function activate(
         translate,
         logger: served.logger,
       });
+      function attachWarning(): Promise<boolean> {
+        return attachWarningAccepted({
+          global: context.globalState,
+          show: (message, detail, buttons) =>
+            vscode.window.showWarningMessage(
+              message,
+              {modal: true, detail},
+              ...buttons,
+            ),
+          openExternal: address =>
+            vscode.env.openExternal(vscode.Uri.parse(address)),
+          translate,
+        });
+      }
+      const kubectl = kubectlHostOf({
+        kubectl: nodeEngineHost('kubectl'),
+        shell: nodeEngineHost('/bin/sh'),
+        platform: process.platform,
+        environment: process.env,
+      });
+      const kubernetes = k8sAttachCommandsOf({
+        warning: attachWarning,
+        listPods: kubectl.listPods,
+        currentContext: kubectl.currentContext,
+        openPicker: placeholder => k8sPickerOf(placeholder),
+        showError: (message, detail, button) =>
+          vscode.window.showErrorMessage(
+            message,
+            {modal: true, detail},
+            {title: button, isCloseAffordance: true},
+          ),
+        showInformation: (detail, buttons) =>
+          vscode.window.showInformationMessage(
+            '',
+            {modal: true, detail},
+            ...buttons,
+          ),
+        revealLog: () => {
+          logChannel?.show(true);
+        },
+        attach: selection => {
+          served.logger.info(
+            `Kubernetes container picked: ${selection.container.name} in ${selection.podName} (${selection.namespace}, ${selection.context})`,
+          );
+          return Promise.resolve();
+        },
+        translate,
+        logger: served.logger,
+      });
       return {
         reopenInContainer: {execute: reopenHandler()},
         reopenLocally: {execute: reopenOrigin.reopenLocally},
@@ -1740,19 +1926,7 @@ export async function activate(
         attachToRunningContainer: {
           execute: () =>
             attachToRunningContainer({
-              warning: () =>
-                attachWarningAccepted({
-                  global: context.globalState,
-                  show: (message, detail, buttons) =>
-                    vscode.window.showWarningMessage(
-                      message,
-                      {modal: true, detail},
-                      ...buttons,
-                    ),
-                  openExternal: address =>
-                    vscode.env.openExternal(vscode.Uri.parse(address)),
-                  translate,
-                }),
+              warning: attachWarning,
               engine: () =>
                 engineOfWindow(
                   windowEnginePortsOf(served.preflight),
@@ -1812,6 +1986,10 @@ export async function activate(
               cancellation: new AbortController().signal,
             }),
         },
+        attachToK8sContainer: {execute: () => kubernetes.fromPalette()},
+        attachToK8sContainerFromViewlet: {
+          execute: (argument?: unknown) => kubernetes.fromViewlet(argument),
+        },
         openRepositoryFromRemoteHubWithEditSession: dormantCommand,
         openRepositoryFromGitWithEditSession: dormantCommand,
         rebuildAndReopenInContainer: {
@@ -1829,6 +2007,7 @@ export async function activate(
         removeContainer: {execute: argument => rowActions?.remove(argument)},
         cleanUpDevContainers: {execute: () => cleanUp?.devContainers()},
         pruneVolumes: {execute: () => cleanUp?.volumes()},
+        inspectVolume: {execute: () => exploreVolume()},
         showDetails: {
           execute: async argument => {
             const target = containerRowOf(argument);
@@ -1949,6 +2128,20 @@ export async function activate(
             socketPath: configuration.get(settings.dockerSocketPath.id),
           });
         },
+        exploreDefinition: () =>
+          ensureExploreDefinition({
+            storageFolder: context.globalStorageUri.fsPath,
+            join: (...parts) => path.join(...parts),
+            exists: file =>
+              stat(file).then(
+                () => true,
+                () => false,
+              ),
+            write: async (file, text) => {
+              await mkdir(path.dirname(file), {recursive: true});
+              await writeFile(file, text);
+            },
+          }),
         buildContext: () => {
           const cliFiles = cliPathsOf(
             context.extensionPath,
@@ -2443,6 +2636,16 @@ export async function activate(
     });
     targetsView = showTargetsWhenRegistered({
       editor: explorerEditor,
+      dashHost: async () =>
+        dashHostOf(
+          await served.preflight.endpoint?.(
+            engineBaseOf({
+              folder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+              trusted: vscode.workspace.isTrusted,
+            }),
+            new AbortController().signal,
+          ),
+        ) !== undefined,
       loaded: () => {
         result.registerDeferred();
       },
@@ -2488,6 +2691,11 @@ export async function activate(
         await targetsView?.refresh();
       },
       translate,
+      cancellation: rowActionsStop.signal,
+    });
+    volumeListing = engineListingOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
       cancellation: rowActionsStop.signal,
     });
     cleanUp = cleanUpCommandsOf({

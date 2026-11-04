@@ -45,6 +45,7 @@ const RECOVER: ReadonlyArray<readonly [FailedKind, boolean]> = [
   ['serverStart', true],
   ['invalidSetting', false],
   ['configFileUnparsable', false],
+  ['execServerUnavailable', false],
   ['preconnectFailed', false],
   ['lockTimeout', false],
   ['retriesExhausted', false],

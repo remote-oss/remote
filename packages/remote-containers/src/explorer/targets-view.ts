@@ -106,6 +106,8 @@ export interface TargetsViewPorts {
   editor: TargetsEditor;
   /** Called once, after the first time the view's data has loaded. */
   loaded(): void;
+  /** Whether the Docker host in effect is an `ssh://` one whose host name starts with a dash, which no process may be started for. */
+  dashHost?(): Promise<boolean>;
   /** The connection the window holds, from the connector. */
   held(): HeldConnection | undefined;
   /** `dev.containers.dockerPath` as the editor reports it now. */
@@ -225,6 +227,9 @@ export async function showTargets(
   ): Promise<readonly ListedContainer[] | 'unreachable'> {
     if (engine === undefined) {
       return unreachable('no Docker program is named');
+    }
+    if ((await ports.dashHost?.()) === true) {
+      return unreachable('the Docker host over ssh starts with a dash');
     }
     const options = {cancellation: stopping.signal};
     const listed = await engine.run(LIST_ARGUMENTS, {kind: 'none'}, options);

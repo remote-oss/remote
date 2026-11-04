@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {readdirSync, rmSync} from 'node:fs';
+import {existsSync, readdirSync, rmSync} from 'node:fs';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import {
@@ -43,7 +43,7 @@ const DISPLAY_LINE = /^DISPLAY=localhost:\d+\.0\n/;
 /** The X client's own report of its connection to the display. */
 const CONNECTED = /\nname of display: +localhost:\d+\.0\n/;
 
-/** The files of the client that are not logs, caches or the editor's own state, as kinds: ids and numbers become placeholders. */
+/** The files of the client that are not logs, caches or the editor's own state, as kinds: ids and numbers become placeholders. A root that doesn't exist has none. */
 function clientFileKinds(): string[] {
   const roots: Array<[string, string]> = [
     [variable('HARNESS_USER_DATA'), 'USER'],
@@ -53,6 +53,9 @@ function clientFileKinds(): string[] {
   const noise =
     /\/logs\/|\.log$|state\.vscdb|Cache|Local Storage|Session Storage|blob_storage|Network|Crashpad|WebStorage|Service Worker|Dictionaries|\.lock|Local State|Preferences|Cookies|DIPS|machineid|storage\.json|\.jsonl$|\/agent\/|-record|-log\.txt|workspace\.json/;
   function files(folder: string): string[] {
+    if (!existsSync(folder)) {
+      return [];
+    }
     return readdirSync(folder, {withFileTypes: true}).flatMap(entry => {
       const full = path.join(folder, entry.name);
       return entry.isDirectory() ? files(full) : [full];

@@ -165,6 +165,98 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
     );
   });
 
+  it('F-0705 5.0, BR-5, BR-7 (card containers-155): an explored volume runs the host CLI over the shared definition with the volume in the variable of the run, asks no consent and makes no bootstrap or stand-in, connects untrusted, and registers its volume and the definition with the shutdown helper', async () => {
+    const scene = volumeScene();
+    const connected = await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'data',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    const definition = '/t/inspect-volume/1/.devcontainer/devcontainer.json';
+    deepStrictEqual(
+      {
+        trusted: 'trusted' in connected && connected.trusted,
+        calls: scene.volumeCalls,
+        prepared: scene.prepared.map(request => [
+          request.folder,
+          request.configFile,
+          request.idLabels,
+          request.workspaceMount,
+        ]),
+        variable: scene.cliEnvironments.at(-1)?.REMOTE_OSS_INSPECT_VOLUME,
+        shutdown: scene.shutdownSent.map(each =>
+          'identity' in each ? each.identity : each.type,
+        ),
+        label: scene.connector.heldIdentity()?.explored,
+        asked: linesOf(scene).filter(line => line.startsWith('volume inspect')),
+      },
+      {
+        trusted: false,
+        calls: ['exploreDefinition'],
+        prepared: [
+          [
+            '/t/inspect-volume/1',
+            definition,
+            [
+              'vsch.local.volume=data',
+              `devcontainer.config_file=${definition}`,
+            ],
+            'source=${localEnv:REMOTE_OSS_INSPECT_VOLUME},target=/volume,type=volume',
+          ],
+        ],
+        variable: 'data',
+        shutdown: [{volumeName: 'data', configFile: definition}, 'container'],
+        label: true,
+        asked: ['volume inspect --format {{.Name}} -- data'],
+      },
+    );
+  });
+
+  it('F-0705 AC-8b (card containers-155): an explored volume asks for the vscode volume whatever dev.containers.cacheVolume says', async () => {
+    const scene = volumeScene();
+    scene.cacheVolumeInspect = {globalValue: false};
+    await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'vscode',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      scene.prepared.map(request => request.cacheVolume),
+      [true],
+    );
+  });
+
+  it('F-0705 BR-2 (card containers-155): an explored volume with a name Docker refuses is refused before the definition is touched', async () => {
+    const scene = volumeScene();
+    const refused = await scene.connector.connect(
+      inputOf(
+        volumePayloadOf({
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'a,b',
+          folder: 'volume',
+          inspectVolume: true,
+        }),
+      ),
+    );
+    deepStrictEqual(
+      ['kind' in refused && refused.kind, scene.volumeCalls, scene.prepared],
+      ['containerSetupFailed', [], []],
+    );
+  });
+
   it('F-0106 BR-13 (reading-1973-resolve-consent): a refused confirmation ends the resolve silently before any engine call; a crafted Inspect Volume payload isn’t asked, and never creates a volume, clones or starts anything', async () => {
     const refused = volumeScene();
     refused.consentGiven = false;

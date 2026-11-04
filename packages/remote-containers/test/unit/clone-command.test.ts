@@ -4,6 +4,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   type CloneCommandPorts,
   type CloneTrustAnswer,
+  cloneFromLink,
   cloneInUniqueVolume,
 } from '../../src/volumes/clone-command.ts';
 import type {PrecheckOutcome} from '../../src/volumes/precheck.ts';
@@ -25,6 +26,7 @@ interface Answers {
 async function runWith(
   changes: Partial<Answers> = {},
   link?: string,
+  entry: 'command' | 'linkHandler' = 'command',
 ): Promise<string[]> {
   const answers: Answers = {
     accepted: true,
@@ -98,7 +100,12 @@ async function runWith(
     },
     logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
   };
-  await cloneInUniqueVolume(ports, new AbortController().signal, link);
+  const cancellation = new AbortController().signal;
+  if (entry === 'linkHandler') {
+    await cloneFromLink(ports, String(link), cancellation);
+  } else {
+    await cloneInUniqueVolume(ports, cancellation, link);
+  }
   return calls;
 }
 
@@ -149,6 +156,14 @@ describe('Clone Repository in Container Volume, up to the reload (card container
 
   it('an engine that isn’t ready ends the attempt before the pick', async () => {
     deepStrictEqual(await runWith({engineReady: false}), ['engine']);
+  });
+
+  it('F-0205 AC-2a: the first confirmation comes first, then the engine check, and a check that stops shows no source pick', async () => {
+    deepStrictEqual(await runWith({accepted: false, engineReady: false}), [
+      'trust',
+      'remember',
+      'engine',
+    ]);
   });
 
   it('a dismissed pick ends the attempt', async () => {
@@ -231,6 +246,82 @@ describe('Clone Repository in Container Volume, up to the reload (card container
           'precheck https://github.com/o/r.git typed',
         ],
         ['engine', 'pick', 'github'],
+      ],
+    );
+  });
+});
+
+describe('an "Open in Dev Containers" link, up to the reload (card containers-154)', () => {
+  /** The link handler over a profile that never gave the warning, with `changes`. */
+  function linked(
+    link: string,
+    changes: Partial<Answers> = {},
+  ): Promise<string[]> {
+    return runWith({accepted: false, ...changes}, link, 'linkHandler');
+  }
+
+  it('F-0706 AC-5, BR-10: a reachable link is checked before the warning, then reloads with no pick and no typed record', async () => {
+    const calls = await linked('https://github.com/o/r.git');
+    deepStrictEqual(
+      [calls.slice(0, 4), calls.at(-1)?.startsWith('reload r '), calls.length],
+      [
+        [
+          'engine',
+          'precheck https://github.com/o/r.git link',
+          'trust',
+          'remember',
+        ],
+        true,
+        5,
+      ],
+    );
+  });
+
+  it('F-0706 AC-17: an unreachable link shows S052 with no warning', async () => {
+    deepStrictEqual(
+      await linked('https://github.com/o/r.git', {precheck: 'unreachable'}),
+      [
+        'engine',
+        'precheck https://github.com/o/r.git link',
+        'cannotAccess https://github.com/o/r.git',
+      ],
+    );
+  });
+
+  it('F-0706 AC-4, AC-10: a link the clone refuses shows S052 with the value as given, no check and no warning', async () => {
+    deepStrictEqual(await linked(' ftp://h/r '), [
+      'engine',
+      'cannotAccess ftp://h/r',
+    ]);
+  });
+
+  it('F-0706 AC-21: an owner/repo link is expanded before the check', async () => {
+    deepStrictEqual((await linked('o/r', {accepted: true})).slice(0, 2), [
+      'engine',
+      'precheck https://github.com/o/r link',
+    ]);
+  });
+
+  it('F-0706 AC-20: the link of the window’s own repository does nothing', async () => {
+    deepStrictEqual(
+      await linked('https://github.com/o/r', {
+        currentRepository: 'https://github.com/o/r',
+      }),
+      ['engine'],
+    );
+  });
+
+  it('an engine that isn’t ready, a cancelled check and a refused warning each end the attempt before the reload', async () => {
+    deepStrictEqual(
+      [
+        await linked('o/r', {engineReady: false}),
+        await linked('o/r', {precheck: 'cancelled'}),
+        await linked('o/r', {trust: 'cancel'}),
+      ],
+      [
+        ['engine'],
+        ['engine', 'precheck https://github.com/o/r link'],
+        ['engine', 'precheck https://github.com/o/r link', 'trust'],
       ],
     );
   });

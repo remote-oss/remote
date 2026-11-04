@@ -11,6 +11,8 @@ export interface ListedVolume {
   name: string;
   /** The volume's labels; empty for none. */
   labels: Readonly<Record<string, string>>;
+  /** When the volume was created, in epoch milliseconds; none when the engine gives no time. */
+  createdAt?: number;
 }
 
 /** `docker volume ls -q`: every volume's name. */
@@ -34,9 +36,16 @@ export function listedVolumesOf(stdout: string): ListedVolume[] | undefined {
   }
   const volumes = (parsed as unknown[]).map(element => {
     const volume = recordOf(element);
-    return typeof volume?.Name === 'string'
-      ? {name: volume.Name, labels: labelsOf(volume.Labels)}
-      : undefined;
+    if (typeof volume?.Name !== 'string') {
+      return undefined;
+    }
+    const created =
+      typeof volume.CreatedAt === 'string' ? Date.parse(volume.CreatedAt) : NaN;
+    return {
+      name: volume.Name,
+      labels: labelsOf(volume.Labels),
+      ...(Number.isNaN(created) ? {} : {createdAt: created}),
+    };
   });
   return volumes.every(volume => volume !== undefined) ? volumes : undefined;
 }

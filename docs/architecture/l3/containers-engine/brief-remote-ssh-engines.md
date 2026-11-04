@@ -172,7 +172,9 @@ after are cut against §3.
 4. **The host-side shutdown helper** (§3.6). Rows: F-0417 AC-29, AC-31, AC-32.
 5. **The views, attach and reopen lines** of §4. Rows: theirs.
 
-Fixtures (proteus): the lab's SSH host gets Docker (shared with part A) and a CLI build for its platform.
+Fixtures (proteus): the lab's SSH host gets Docker (shared with part A) and a CLI build for its platform. **They depend on
+the move to GitHub-hosted runners** (2026-11-04): they run in a hosted job's own Docker once proteus's workflow exists
+(`brief-kubernetes-attach.md` §7).
 
 **On CI,** F-1302's acceptance rows need the CLI archives, so they wait for the user's `REMOTE_OSS_CLI_ARCHIVES_TOKEN`
 secret.

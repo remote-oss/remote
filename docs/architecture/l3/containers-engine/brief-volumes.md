@@ -185,8 +185,9 @@ F-0705 (§5), F-0707 and F-0708 (§6) sit beside it.
   - `inspectInBasicDevContainer` on Dev Volumes rows (with F-0904, group 14);
   - the Container Tools hand-in (6.8).
 - **The picker:** S319 lists every volume, `vscode` included (BR-2), with dates in English (Q1).
-- **The container:** from one fixed definition of ours in `<temp>/inspect-volume/<version>/`, shared and editable
-  (BR-4).
+- **The container:** from one fixed definition of ours in `<the extension's global storage>/inspect-volume/<version>/`,
+  shared and editable (BR-4). It's not in `<temp>`: the definition is used as found, so it must not sit where another
+  local user could plant one (athena on #2126).
   - `remoteUser: root` (BR-8), the volume at `/volume`, the `vscode` volume at `/vscode`, and no Docker socket.
   - Its base is `alpine:3.20` (Docker Hub). The reference pins Microsoft's base image (Q2), and we don't pull from
     Microsoft's registry. If a content row needs something only that image has, the row stops and comes to me.

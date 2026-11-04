@@ -11,6 +11,7 @@ import {
   type ContainerIdentity,
   type EngineCoordinates,
   identityFilters,
+  identityLabel,
   sameIdentity,
   type ShutdownReply,
   type ShutdownRequest,
@@ -298,7 +299,7 @@ export function createShutdownRegistry(ports: RegistryPorts): ShutdownRegistry {
     }
     if (attempt >= LOOKUP_ATTEMPTS) {
       ports.logLine(
-        `no running container for ${'hostPath' in connection.identity ? connection.identity.hostPath : `the volume ${connection.identity.volumeName}`}; the lookup ends`,
+        `no running container for ${identityLabel(connection.identity)}; the lookup ends`,
       );
       return;
     }

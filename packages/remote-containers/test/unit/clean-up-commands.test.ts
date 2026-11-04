@@ -53,7 +53,10 @@ function hostWorld(world: World): EngineHost {
 }
 
 /** The scene: one stopped dev container, one unused clone volume, and the editor's answers. */
-function scene(overrides: Record<string, EngineRunOutcome> = {}): {
+function scene(
+  overrides: Record<string, EngineRunOutcome> = {},
+  dismissed = false,
+): {
   world: World;
   events: string[];
   commands: ReturnType<typeof cleanUpCommandsOf>;
@@ -88,7 +91,7 @@ function scene(overrides: Record<string, EngineRunOutcome> = {}): {
       events.push(
         `pick ${placeholder}: ${items.map(item => item.label).join(',')}`,
       );
-      return Promise.resolve([...items.keys()]);
+      return Promise.resolve(dismissed ? undefined : [...items.keys()]);
     },
     showDone: detail => {
       events.push(`done ${detail}`);
@@ -185,6 +188,20 @@ describe('the Clean Up commands over the engine (card containers-168)', () => {
     deepStrictEqual(events, [
       'done There are no stopped dev containers or unused dev volumes to delete.',
     ]);
+  });
+
+  it('F-0905 AC-2: a containers picker that closes without a pick removes nothing, scans no volume and shows no dialog', async () => {
+    const {world, events, commands} = scene({}, true);
+    await commands.devContainers();
+    deepStrictEqual(
+      [
+        events,
+        world.commands.some(
+          command => command.startsWith('rm') || command.startsWith('volume'),
+        ),
+      ],
+      [['pick Select stopped dev containers to delete: proj'], false],
+    );
   });
 
   it('F-0905 7.E2: output that is not a list of containers or of volumes is a failed command', async () => {

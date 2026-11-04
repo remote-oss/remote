@@ -98,14 +98,14 @@ function additionalFeatures(target: CliTarget): string[] {
       ];
 }
 
-/** Creates the container or finds it, runs the commands up to the one `waitFor` names, and gives its id. */
+/** Creates the container or finds it, runs no lifecycle command, and gives its id; the commands come after the server's files. */
 export function upArguments(target: CliTarget, options: UpOptions): string[] {
   return [
     ...commonArguments('up', target),
     ...target.mounts.flatMap(mount => ['--mount', mount]),
     ...additionalFeatures(target),
     ...(target.features.lockfile ? [] : ['--no-lockfile']),
-    '--skip-non-blocking-commands',
+    '--skip-post-create',
     '--workspace-mount-consistency',
     options.workspaceMountConsistency,
     ...(options.removeExistingContainer ? ['--remove-existing-container'] : []),
@@ -113,15 +113,61 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
   ];
 }
 
-/** Runs the commands `up` left for the background stage in the container. */
+/** The dotfiles a run clones into the container, from the three machine settings. */
+interface DotfilesOptions {
+  repository: string;
+  installCommand?: string;
+  targetPath?: string;
+}
+
+/** Which of the lifecycle commands a `run-user-commands` runs, and what it hands them. */
+export interface RunUserCommandsOptions {
+  /** Runs the commands up to the one `waitFor` names, and no further. */
+  skipNonBlocking?: boolean;
+  /** Stops after `postCreateCommand` and the dotfiles, for the personalization that follows. */
+  stopForPersonalization?: boolean;
+  /** Variables the commands see, after the probed environment and before the configuration's `remoteEnv`. */
+  remoteEnvironment?: Readonly<Record<string, string>>;
+  dotfiles?: DotfilesOptions;
+}
+
+/** The dotfiles options, when a repository is set. */
+function dotfilesArguments(dotfiles: DotfilesOptions | undefined): string[] {
+  if (dotfiles === undefined || dotfiles.repository === '') {
+    return [];
+  }
+  return [
+    '--dotfiles-repository',
+    dotfiles.repository,
+    ...(dotfiles.installCommand === undefined
+      ? []
+      : ['--dotfiles-install-command', dotfiles.installCommand]),
+    ...(dotfiles.targetPath === undefined
+      ? []
+      : ['--dotfiles-target-path', dotfiles.targetPath]),
+  ];
+}
+
+/** Runs lifecycle commands in the container: the blocking ones, or the rest in the background, as `options` say. */
 export function runUserCommandsArguments(
   target: CliTarget,
   containerId: string,
+  options: RunUserCommandsOptions = {},
 ): string[] {
   return [
     ...commonArguments('run-user-commands', target),
     '--container-id',
     containerId,
+    ...(options.skipNonBlocking === true
+      ? ['--skip-non-blocking-commands']
+      : []),
+    ...(options.stopForPersonalization === true
+      ? ['--stop-for-personalization']
+      : []),
+    ...Object.entries(options.remoteEnvironment ?? {}).flatMap(
+      ([name, value]) => ['--remote-env', `${name}=${value}`],
+    ),
+    ...dotfilesArguments(options.dotfiles),
   ];
 }
 

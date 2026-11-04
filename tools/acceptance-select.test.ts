@@ -10,6 +10,7 @@ import {
   launchesInput,
   partsOf,
   PULL_REQUEST_LAUNCHES,
+  PULL_REQUEST_MINUTES,
   pullRequestPlan,
   selectLaunches,
   workflowParts,
@@ -327,30 +328,29 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
   it('tooling-120: no selected launch runs nothing, with no notice', () => {
     deepStrictEqual(pullRequestPlan(selectionOf(), LAUNCHES, PARTS, false), {
       launches: '',
-      minutes: 60,
+      minutes: PULL_REQUEST_MINUTES,
     });
   });
 
   it('tooling-120: a launch in no part, as the genuine ones are, is left out', () => {
     deepStrictEqual(
       pullRequestPlan(selectionOf('windows', 'local'), LAUNCHES, PARTS, false),
-      {launches: 'local', minutes: 60},
+      {launches: 'local', minutes: PULL_REQUEST_MINUTES},
     );
   });
 
-  it('tooling-120: up to the limit, every selected launch runs in 60 minutes', () => {
+  it('tooling-120: up to the limit, every selected launch runs, with or without the full label, in the same 180 minutes', () => {
     const {launches, parts} = wideTable(PULL_REQUEST_LAUNCHES);
+    const selection = selectionOf(...launches.map(launch => launch.label));
+    const planned = {
+      launches: launches.map(launch => launch.label).join(','),
+      minutes: 180,
+    };
     deepStrictEqual(
-      pullRequestPlan(
-        selectionOf(...launches.map(launch => launch.label)),
-        launches,
-        parts,
-        false,
+      [true, false].map(full =>
+        pullRequestPlan(selection, launches, parts, full),
       ),
-      {
-        launches: launches.map(launch => launch.label).join(','),
-        minutes: 60,
-      },
+      [planned, planned],
     );
   });
 
@@ -361,7 +361,7 @@ describe('acceptance-select: the plan of a pull request (card tooling-120)', () 
       pullRequestPlan(selectionOf(...labels), launches, parts, false),
       {
         launches: '',
-        minutes: 60,
+        minutes: PULL_REQUEST_MINUTES,
         notice: `this change selects ${String(labels.length)} launches, more than the ${String(PULL_REQUEST_LAUNCHES)} a pull request runs by itself: ${labels.join(', ')}. Run them at this head with a dispatch, or with the acceptance-full label.`,
       },
     );

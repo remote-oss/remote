@@ -4,8 +4,14 @@
 # costly jobs (real server, the whole VSCodium suite, host variants) stay opt-in on a manual dispatch, and always run on
 # the tag of a release (`<package>-v<semver>`). A pull request runs the VSCodium launches its change selects, up to six
 # (acceptance-pr). Every push to main runs the VSCodium launches the merged change can reach (the post-merge run), and
+<<<<<<< HEAD
 # the schedule runs all of them: the backstops for main's launches. Every
 # job runs on GitHub's standard runners, which use no Actions minutes in a public repository.
+=======
+# the schedule runs all of them: the backstops for main's launches. The
+# VSCodium and genuine jobs run on the self-hosted runners, and every other job on GitHub's standard runners, which use
+# no Actions minutes in a public repository.
+>>>>>>> origin/main
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
@@ -19,8 +25,14 @@ on:
     inputs:
       runner-arch:
         description: >-
+<<<<<<< HEAD
           The architecture of slice 1, server lifecycle, host variants, real server and VSCodium in this dispatch:
           X64 runs on ubuntu-24.04, ARM64 on ubuntu-24.04-arm. A pull request and the genuine job run on X64
+=======
+          The architecture of the five acceptance jobs of this dispatch: slice 1, server lifecycle, host variants and
+          real server on ubuntu-24.04 (X64) or ubuntu-24.04-arm (ARM64), and VSCodium on the self-hosted runners of
+          that architecture. A pull request and the genuine job run on X64
+>>>>>>> origin/main
         type: choice
         options: [X64, ARM64]
         default: X64
@@ -46,12 +58,20 @@ on:
         description: Also run the genuine launches, VS Code 1.139.1 (the recorded version) and 1.125.0 (the floor), with our VSIX, on X64
         type: boolean
         default: false
+<<<<<<< HEAD
   # every six hours the VSCodium job runs alone on main: the backstop that shows whether main's launches are green, which
   # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of eight runners busy with it
   # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select)
   # and once a day the genuine VS Code job runs alone on main. Each job reads which of the two fired
+=======
+  # Every six hours the VSCodium job ran alone on main: the backstop that shows whether main's launches are green, which
+  # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of the eight runners busy with it
+  # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select).
+  # The six-hourly backstop ('17 */6 * * *') is paused while the self-hosted pool is down to one runner (2026-11-04):
+  # its six parts would hold that runner for hours ahead of the pull requests' own launches. A dispatch with
+  # vscodium and launches all runs it by hand. Once a day the genuine VS Code job runs alone on main.
+>>>>>>> origin/main
   schedule:
-    - cron: '17 */6 * * *'
     - cron: '43 4 * * *'
   # Each merge to main runs checks, unit and coverage. Two pull
   # requests that pass alone can break each other once both are in: main shows it within minutes, not at the next pull
@@ -66,9 +86,12 @@ permissions:
 # One run per ref (a branch, or a pull request's refs/pull/<n>/merge) and kind: a new dispatch or push cancels the
 # ref's older run of the same kind, so the runners do not spend their time on superseded heads. The kind (the
 # real-server, vscodium and variants inputs) is part of the key, so a plain and an opt-in dispatch on one branch
-# run side by side. The tag of a release is its own group and is never cancelled.
+# run side by side. The tag of a release is its own group and is never cancelled. A push has a group of its own per
+# commit (2026-11-04): with one group for main, a run whose VSCodium parts waited for a self-hosted runner held it, and
+# the newer merges' runs were replaced while pending, so their checks, unit and coverage never ran. The VSCodium parts
+# keep their own groups per part, so main's parts still don't pile up.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}-${{ inputs.genuine && 'genuine' || 'no-genuine' }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}${{ github.event_name == 'push' && format('-{0}', github.sha) || '' }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}-${{ inputs.genuine && 'genuine' || 'no-genuine' }}
   cancel-in-progress: ${{ github.event_name != 'push' && github.event_name != 'schedule' }}
 
 jobs:
@@ -227,8 +250,14 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }} # coverage runs the unit tests; see the unit job
 
+<<<<<<< HEAD
   # The acceptance jobs run on ubuntu-24.04, a fresh machine per job with 4 CPUs and 16 GB, or on ubuntu-24.04-arm when
   # a dispatch's runner-arch is ARM64 (not measured there). Slice 1 and server lifecycle are the two of a pull request.
+=======
+  # Slice 1, server lifecycle, host variants and real server run on GitHub's ubuntu-24.04, a fresh machine per job
+  # (ubuntu-24.04-arm when a dispatch's runner-arch is ARM64), where all four pass; the VSCodium launches and the genuine
+  # job stay on the self-hosted runners for now. Slice 1 and server lifecycle are the two of a pull request.
+>>>>>>> origin/main
   # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
   # and OpenSSH client are preinstalled, and xvfb.
   acceptance-slice-1:

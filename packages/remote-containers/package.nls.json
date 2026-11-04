@@ -28,6 +28,7 @@
   "commands.Settings.title": "Settings",
   "commands.cleanUpDevContainers.title": "Clean Up Dev Containers...",
   "commands.pruneVolumes.title": "Clean Up Dev Volumes...",
+  "commands.inspectVolume.title": "Explore a Volume in a Dev Container...",
   "setting.Dockerpath.description": "Docker (or Podman or WSLc) executable name or path.",
   "setting.Dockercomposepath.description": "Docker Compose executable name or path.",
   "setting.ServerDownloadBaseUrl.description": "Base URL for downloading the VS Code server. The path `/commit:{commit}/server-{platform}/{quality}` will be appended to this URL. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`.",
@@ -62,6 +63,8 @@
   "setting.BootstrapImagePull.description": "Automatically pull the bootstrap image before starting the bootstrap container. Only applies when a custom bootstrap image is configured.",
   "commands.openInformationAboutMountPerformance.title": "Clone repository in Docker volume for better I/O performance.",
   "commands.attachToRunningContainer.title": "Attach to Running Container...",
+  "commands.attachToK8sContainer.title": "Attach to Running Kubernetes Container...",
+  "commands.attachToK8sContainerFromViewlet.title": "Attach Visual Studio Code",
   "commands.openRepositoryFromRemoteHubWithEditSession.title": "Clone Repository in a Container Volume",
   "commands.openRepositoryFromGitWithEditSession.title": "Clone Repository in a Container Volume",
   "continueEditSession.qualifiedName": "Continue Working in Container Volume"

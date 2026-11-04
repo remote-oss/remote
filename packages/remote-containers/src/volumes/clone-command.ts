@@ -126,6 +126,33 @@ async function sourceTextOf(
 }
 
 /**
+ * The source `given` names once it is refused or found unreachable, each shown with S052, or found to be the window's
+ * own repository; undefined in all three cases, and when the check was cancelled.
+ */
+async function reachableSource(
+  ports: CloneCommandPorts,
+  given: string,
+  origin: CloneOrigin,
+  cancellation: AbortSignal,
+): Promise<CloneSource | undefined> {
+  const source = cloneSourceOf(given, origin);
+  if ('refused' in source) {
+    ports.logger.info(`the source was refused: ${source.refused}`);
+    await ports.cannotAccess(given.trim());
+    return undefined;
+  }
+  if (ports.currentRepository() === source.repositoryPath) {
+    ports.logger.info('the window is the clone of this repository already');
+    return undefined;
+  }
+  const checked = await ports.precheck(source, origin, cancellation);
+  if (checked === 'unreachable') {
+    await ports.cannotAccess(source.repositoryPath);
+  }
+  return checked === 'reachable' ? source : undefined;
+}
+
+/**
  * Runs the command once, up to the reload; every way it ends before then leaves the window as it was. A `link` is a
  * source the extension was handed, such as the remote of a repository: it is read as a link, not as the user's own
  * input, and nothing is asked for it.
@@ -143,22 +170,8 @@ export async function cloneInUniqueVolume(
   if (given === undefined) {
     return;
   }
-  const source = cloneSourceOf(given, origin);
-  if ('refused' in source) {
-    ports.logger.info(`the source was refused: ${source.refused}`);
-    await ports.cannotAccess(given.trim());
-    return;
-  }
-  if (ports.currentRepository() === source.repositoryPath) {
-    ports.logger.info('the window is the clone of this repository already');
-    return;
-  }
-  const checked = await ports.precheck(source, origin, cancellation);
-  if (checked === 'cancelled') {
-    return;
-  }
-  if (checked === 'unreachable') {
-    await ports.cannotAccess(source.repositoryPath);
+  const source = await reachableSource(ports, given, origin, cancellation);
+  if (source === undefined) {
     return;
   }
   const target = uniqueVolumeTargetOf(source, ports.engine());
@@ -166,4 +179,25 @@ export async function cloneInUniqueVolume(
     await ports.recordTyped(volumePayloadOf(target));
   }
   await ports.reload(volumeWindowUriOf(target));
+}
+
+/**
+ * Clones the repository an "Open in Dev Containers" link names, up to the reload. The engine and the repository are
+ * checked before the confirmation, so a link that can't be cloned shows S052 alone; nothing is picked or recorded.
+ */
+export async function cloneFromLink(
+  ports: CloneCommandPorts,
+  link: string,
+  cancellation: AbortSignal,
+): Promise<void> {
+  if (!(await ports.engineReady())) {
+    return;
+  }
+  const source = await reachableSource(ports, link, 'link', cancellation);
+  if (source === undefined || !(await cloneConsented(ports.trust))) {
+    return;
+  }
+  await ports.reload(
+    volumeWindowUriOf(uniqueVolumeTargetOf(source, ports.engine())),
+  );
 }

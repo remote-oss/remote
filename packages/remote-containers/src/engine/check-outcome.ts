@@ -15,7 +15,13 @@ export type QueryResult =
 
 /** How the first check ended. */
 export type FirstCheckOutcome =
-  'passed' | 'notFound' | 'permission' | 'tooOld' | 'engineError';
+  | 'passed'
+  | 'notFound'
+  | 'permission'
+  | 'tooOld'
+  | 'engineError'
+  | 'sshDenied'
+  | 'sshTooMany';
 
 /** The detail of a failed second check: the text id of the dialog's reason. */
 type SecondCheckFailure = 'S339' | 'S104' | 'S144';
@@ -65,9 +71,35 @@ function stderrOutcomeOf(stderr: string): StderrOutcome {
     : 'engineError';
 }
 
+/** The marker with which the Docker CLI's connection helper puts the output of `ssh` into its error. */
+const SSH_OUTPUT_MARKER = 'stderr=';
+
+/** What a failing query's stderr says of a Docker host reached over `ssh`. */
+type SshOutcome = 'sshDenied' | 'sshTooMany' | 'notFound' | 'engineError';
+
+/**
+ * What the stderr of a query against an `ssh://` endpoint says. The test is literal, on the text of `ssh`: what follows
+ * the first `stderr=`, or the whole of stderr when there is none.
+ */
+function sshOutcomeOf(stderr: string): SshOutcome {
+  const marked = stderr.indexOf(SSH_OUTPUT_MARKER);
+  const part =
+    marked < 0 ? stderr : stderr.slice(marked + SSH_OUTPUT_MARKER.length);
+  if (part.includes('Permission denied')) {
+    return 'sshDenied';
+  }
+  if (part.includes('Too many authentication failures')) {
+    return 'sshTooMany';
+  }
+  return stderr.includes('exec: "ssh": executable file not found')
+    ? 'notFound'
+    : 'engineError';
+}
+
 /** The outcome of one query that does not pass, or undefined when it exited 0 in time. */
 function failureOf(
   query: QueryResult,
+  overSsh: boolean,
 ): Exclude<FirstCheckOutcome, 'passed' | 'tooOld'> | undefined {
   if (query.kind === 'failed') {
     return /\bENOENT\b/.test(query.detail) ? 'notFound' : 'engineError';
@@ -78,22 +110,24 @@ function failureOf(
   if (query.status === 0) {
     return undefined;
   }
-  return stderrOutcomeOf(query.stderr);
+  return overSsh ? sshOutcomeOf(query.stderr) : stderrOutcomeOf(query.stderr);
 }
 
 /**
  * Classifies the first check from its queries in the order they ran: the client version, then the structured
- * version. Only the stderr of a failing query is read; the API version of the structured reply decides `tooOld`.
+ * version. Only the stderr of a failing query is read; the API version of the structured reply decides `tooOld`. Over an
+ * `ssh://` endpoint (`overSsh`) the stderr is read as the text of `ssh`.
  */
 export function firstCheckOutcomeOf(
   executable: Executable,
   queries: readonly QueryResult[],
+  overSsh = false,
 ): FirstCheckOutcome {
   if (executable.kind === 'notFound') {
     return 'notFound';
   }
   for (const query of queries) {
-    const failure = failureOf(query);
+    const failure = failureOf(query, overSsh);
     if (failure !== undefined) {
       return failure;
     }

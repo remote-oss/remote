@@ -15,7 +15,10 @@ import {
   type PreflightDependencies,
   secondCheck,
 } from '../../src/engine/preflight.ts';
-import {effectiveEngineKey} from '../../src/engine/engine-key.ts';
+import {
+  effectiveEngineKey,
+  endpointInEffect,
+} from '../../src/engine/engine-key.ts';
 import type {EngineSources} from '../../src/engine/effective-engine.ts';
 
 const NEVER_ABORTED = new AbortController().signal;
@@ -58,6 +61,8 @@ function sceneOf(
     values?: unknown[];
     choices?: Array<string | undefined>;
     environmentSecret?: string;
+    /** The endpoint in effect, when the scene has one. */
+    endpoint?: string;
   } = {},
 ): Scene {
   const sink = new MemorySink();
@@ -122,6 +127,9 @@ function sceneOf(
     clock: () => 0,
     logger: createLogger(sink, {minimumLevel: () => 'debug'}),
     searchPath: () => '/usr/bin:/bin',
+    ...(options.endpoint === undefined
+      ? {}
+      : {endpoint: () => Promise.resolve(options.endpoint)}),
   };
   Object.defineProperty(scene, 'lines', {
     get: () => sink.lines.map(line => `${line.level}: ${line.message}`),
@@ -793,5 +801,142 @@ describe('the key of the effective engine (card containers-142)', () => {
       ],
       [undefined, [], 'noContexts', true],
     );
+  });
+
+  describe('over an ssh Docker host (card containers-173)', () => {
+    const DENIED = finished(
+      1,
+      '',
+      'error during connect: stderr=user@box: Permission denied (publickey).',
+    );
+
+    it('F-0205 AC-12a, 7.E4: a host that starts with a dash shows the dialog with the host and runs no query', async () => {
+      const scene = sceneOf(PASSING, {
+        endpoint: 'ssh://user@-badhost:22',
+        choices: [undefined],
+      });
+      deepStrictEqual(
+        [
+          await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+          scene.dialogs,
+          scene.argvs,
+        ],
+        [
+          'stopped',
+          [['Hostname must not start with a dash: -badhost', '', ['Show Log']]],
+          [],
+        ],
+      );
+    });
+
+    it('F-0205 AC-7, AC-8: a refused key shows the S056 dialog, and Show Log reveals the log', async () => {
+      const scene = sceneOf(
+        {'--version': DENIED},
+        {endpoint: 'ssh://user@box', choices: ['Show Log']},
+      );
+      deepStrictEqual(
+        [
+          await firstCheck(scene.dependencies, undefined, NEVER_ABORTED),
+          scene.dialogs,
+          scene.logRevealed,
+        ],
+        [
+          'stopped',
+          [
+            [
+              "Cannot connect to Docker daemon using 'ssh'.",
+              'Make sure public/private keys are set up for connecting without keyboard interaction.',
+              ['Show Log'],
+            ],
+          ],
+          1,
+        ],
+      );
+    });
+
+    it('F-0205 BR-8: nothing of a failure is remembered, so the next check asks the engine again', async () => {
+      const scene = sceneOf(
+        {'--version': DENIED},
+        {endpoint: 'ssh://user@box', choices: [undefined, undefined]},
+      );
+      await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+      await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+      deepStrictEqual(
+        [scene.argvs, scene.dialogs.length],
+        [[VERSION, VERSION], 2],
+      );
+    });
+
+    it('F-0205 BR-5: a Permission denied from an engine that is not over ssh keeps the permission dialog', async () => {
+      const scene = sceneOf(
+        {'--version': finished(1, '', 'permission denied')},
+        {endpoint: 'unix:///var/run/docker.sock', choices: [undefined]},
+      );
+      await firstCheck(scene.dependencies, undefined, NEVER_ABORTED);
+      deepStrictEqual(
+        scene.dialogs[0]?.[0],
+        "Current user does not have permission to run 'docker'.",
+      );
+    });
+  });
+
+  describe('the endpoint in effect (card containers-173)', () => {
+    it('F-0205 BR-17: a host setting is the endpoint, a context from the environment is that context’s, and the current context is the last resort', async () => {
+      function inspect(name: string): string {
+        return `context inspect ${name} --format {{json .Endpoints.docker.Host}}`;
+      }
+      const scene = sceneOf({
+        'context show': finished(0, 'box\n'),
+        [inspect('box')]: finished(0, '"ssh://user@box"'),
+        [inspect('fixed')]: finished(0, '"tcp://far:2376"'),
+      });
+      deepStrictEqual(
+        [
+          await endpointInEffect(
+            {...NO_SETTINGS, dockerHost: 'ssh://h'},
+            scene.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+          await endpointInEffect(
+            {...NO_SETTINGS, processEnvironment: {DOCKER_CONTEXT: 'fixed'}},
+            scene.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+          await endpointInEffect(
+            NO_SETTINGS,
+            scene.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+        ],
+        ['ssh://h', 'tcp://far:2376', 'ssh://user@box'],
+      );
+    });
+
+    it('F-0205 BR-17: an engine without contexts, and one whose context cannot be read, have no endpoint', async () => {
+      const without = sceneOf({'context show': finished(125)});
+      const unreadable = sceneOf({
+        'context show': {kind: 'failed', detail: 'spawn ENOENT'},
+      });
+      deepStrictEqual(
+        [
+          await endpointInEffect(
+            NO_SETTINGS,
+            without.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+          await endpointInEffect(
+            NO_SETTINGS,
+            unreadable.dependencies,
+            undefined,
+            NEVER_ABORTED,
+          ),
+        ],
+        [undefined, undefined],
+      );
+    });
   });
 });

@@ -17,6 +17,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     `--additional-features` every default whose id equals a key of `features` ignoring case (athena on #1204;
     remote-oss/remote-containers#59, card containers-93).
 
+- **The pod listing of "Attach to Running Kubernetes Container" ends after 180 seconds with the listing's error.**
+  - F-0604 7.E6 has the listing wait exactly as long as `kubectl` does (about 160 s against a black hole, and for ever
+    with a broken kubeconfig). Ours shows the "Select pod" picker busy at once, lets Escape cancel it, and ends the
+    wait at 180 s with the dialog "Error while attaching to Kubernetes container." (athena on #2110; ruling
+    `ruling-2110-kubectl-bound`, card containers-190). A `kubectl` that answers in time is never cut.
+
 - **The notification that offers to reopen a folder in a container appears at once and does not wait for Docker.**
   - F-0101 AC-20 has the offer wait for the Docker CLI's answer (observed after 12.3 to 12.6 s with a CLI that waits
     12 s), while commands from the palette work meanwhile. Ours decides from the folder's files alone, so the offer shows
@@ -73,6 +79,27 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - Rows: `ruling-1971-workspace-check`.
   - F-0807 AC-62 and F-0404 7.E10 describe the reference's text; ruled on remote-oss/remote#1971 (spec question on
     remote-oss/remote-containers#132).
+
+- **Open Folder in Container... and Open Workspace in Container... show a host-requirements dialog caused only by the
+  image's own label after the trust dialog, not before it.** Requirements written in the configuration file, or
+  recorded on the folder's existing container, still show before trust, as the reference does.
+  - F-0206 BR-17 has the whole check run before the target's trust dialog for these two commands. Reading the image's
+    label means asking the registries that the untrusted configuration names, and fetching its Features, before the
+    user has trusted it (F-0106; F-0201 AC-55). Ours does that read only after trust (athena on #2146, after dike's
+    review; ruling `ruling-2146-trust-first`; spec question on remote-oss/remote-containers#133).
+
+- **The version lookups for Features in `devcontainer.json` run only in a trusted workspace.** In Restricted Mode the
+  file shows no version CodeLenses; the Feature hover, the completions and the deprecated-namespace warning still work.
+  - F-0810 PRE-2 has the lookup run whatever the trust state. A lookup asks the registries the file names, with the
+    user's stored credentials for them, so an untrusted file could make the editor contact hosts of its choosing
+    (athena on #2148; ruling `ruling-2148-lookup-trust`; spec question on remote-oss/remote-containers#133).
+
+- **"Set Label and Update devcontainer.json" refuses a configuration file that is a link to a file outside the
+  workspace, or that isn't a valid JSON object, when it would save it.** It shows an error naming the file, and
+  changes nothing.
+  - F-1103 saves the file it labels with no review step, so a repository could make it rewrite a file outside the
+    workspace through a link. The reference writes through the link (athena on #2148, after dike's review; ruling
+    `ruling-2148-write-guard`).
 
 ## Interim behaviour
 
