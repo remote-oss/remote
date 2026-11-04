@@ -650,42 +650,56 @@ export async function viewRows(
 }
 
 /**
- * Clicks the action titled `actionTitle` in the part of view `viewName` that `scope` finds, as a user's click. It fails
- * naming what it did not find.
+ * Clicks the action titled `actionTitle` in the part of view `viewName` that `scope` finds, as a user's click. A row's
+ * inline actions stay out of sight until the row is hovered, so `stage` — the hover of the scope — is made again before
+ * each re-read until the action is drawn, for up to the wait; it fails then naming what the last read did not find.
  */
 async function clickAction(
   name: string,
   viewName: string,
   scope: string,
   actionTitle: string,
+  stage: () => Promise<void>,
 ): Promise<void> {
-  const missing = await evaluate<string | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      if (pane === undefined) {
-        return 'no view ' + ${JSON.stringify(viewName)};
-      }
-      const scopes = ${scope};
-      if (scopes.length !== 1) {
-        return scopes.length + ' places for the action';
-      }
-      const action = [...scopes[0].querySelectorAll('.actions .action-label')].find(
-        label => label.getAttribute('aria-label') === ${JSON.stringify(actionTitle)},
-      );
-      if (action === undefined) {
-        return 'no action ' + ${JSON.stringify(actionTitle)};
-      }
-      action.click();
-      return null;
-    })()`,
-  );
-  if (missing !== null) {
-    throw new Error(`window ${name}, view ${viewName}: ${missing}`);
+  const deadline = Date.now() + WAIT_MILLISECONDS;
+  for (;;) {
+    const found = await evaluate<string | null>(
+      name,
+      `(() => {
+        const pane = ${paneExpression(viewName)};
+        if (pane === undefined) {
+          return 'no view ' + ${JSON.stringify(viewName)};
+        }
+        const scopes = ${scope};
+        if (scopes.length !== 1) {
+          return scopes.length + ' places for the action';
+        }
+        const action = [...scopes[0].querySelectorAll('.actions .action-label')].find(
+          label => label.getAttribute('aria-label') === ${JSON.stringify(actionTitle)},
+        );
+        if (action === undefined) {
+          return 'no action ' + ${JSON.stringify(actionTitle)};
+        }
+        action.click();
+        return null;
+      })()`,
+    );
+    if (found === null) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`window ${name}, view ${viewName}: ${found}`);
+    }
+    await stage();
+    await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
   }
 }
 
-/** Clicks the inline action `actionTitle` of the one row labelled `rowLabel` in view `viewName` of window `name`. */
+/**
+ * Clicks the inline action `actionTitle` of the one row labelled `rowLabel` in view `viewName` of window `name`. The
+ * row's actions stay out of sight until it is hovered, so the row is hovered again before each re-read until they are
+ * drawn.
+ */
 export async function rowAction(
   name: string,
   viewName: string,
@@ -697,6 +711,7 @@ export async function rowAction(
     viewName,
     `[...pane.querySelectorAll('[role="treeitem"]')].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)})`,
     actionTitle,
+    () => hoverRowIfPresent(name, viewName, rowLabel),
   );
 }
 
@@ -725,15 +740,15 @@ export async function rowActionTitles(
 }
 
 /**
- * Moves the mouse of window `name` onto the one row labelled `rowLabel` of view `viewName`, or to the corner of the
- * window when `rowLabel` is `undefined`, so that no row is hovered. It fails naming the row when the view has not one.
+ * The point of the one row labelled `rowLabel` in view `viewName` of window `name`, the centre of its box, or to the
+ * corner of the window when `rowLabel` is `undefined`, so that no row is hovered; none when the view has not one.
  */
-export async function hoverRow(
+async function rowPoint(
   name: string,
   viewName: string,
   rowLabel: string | undefined,
-): Promise<void> {
-  const point = await evaluate<{x: number; y: number} | null>(
+): Promise<{x: number; y: number} | null> {
+  return evaluate<{x: number; y: number} | null>(
     name,
     `(() => {
       if (${JSON.stringify(rowLabel ?? null)} === null) {
@@ -748,11 +763,13 @@ export async function hoverRow(
       return {x: box.x + box.width / 2, y: box.y + box.height / 2};
     })()`,
   );
-  if (point === null) {
-    throw new Error(
-      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
-    );
-  }
+}
+
+/** Moves the mouse of window `name` to the point and waits for what the hover draws. */
+async function moveMouseTo(
+  name: string,
+  point: {x: number; y: number},
+): Promise<void> {
   await dispatchInput(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
@@ -760,6 +777,40 @@ export async function hoverRow(
     },
   ]);
   await new Promise(resolve => setTimeout(resolve, 300));
+}
+
+/**
+ * Moves the mouse of window `name` onto the one row labelled `rowLabel` of view `viewName`, or to the corner of the
+ * window when `rowLabel` is `undefined`, so that no row is hovered. It fails naming the row when the view has not one.
+ */
+export async function hoverRow(
+  name: string,
+  viewName: string,
+  rowLabel: string | undefined,
+): Promise<void> {
+  const point = await rowPoint(name, viewName, rowLabel);
+  if (point === null) {
+    throw new Error(
+      `window ${name}, view ${viewName}: not one row labelled ${JSON.stringify(rowLabel)}`,
+    );
+  }
+  await moveMouseTo(name, point);
+}
+
+/**
+ * Moves the mouse of window `name` onto the one row labelled `rowLabel` of view `viewName` when the view has one, so a
+ * row that is mid-render is found again on the next try; it waits alone when the view has not one yet.
+ */
+async function hoverRowIfPresent(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<void> {
+  const point = await rowPoint(name, viewName, rowLabel);
+  if (point === null) {
+    return;
+  }
+  await moveMouseTo(name, point);
 }
 
 /** Clicks the label of the one row labelled `rowLabel` in view `viewName` of window `name` with the mouse, which selects and focuses it. */
@@ -895,6 +946,7 @@ export async function titleAction(
     viewName,
     `[...pane.querySelectorAll('.pane-header')]`,
     actionTitle,
+    () => Promise.resolve(),
   );
 }
 
