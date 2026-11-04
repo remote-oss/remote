@@ -105,14 +105,35 @@ macOS or Windows lines. Some parts are reusable:
   - **Something else already there** (a foreign file, a second link, a dangling link): F-1201 7.x's dialogs (AC-17,
     AC-51 to AC-53).
 - **macOS:** the same, with `/usr/local/bin` as the fallback (BR-4).
-  - **The fallback:** S374's notice, then the OS's administrator prompt (`osascript` with administrator privileges,
-    the two fixed paths passed as `quoted form of`).
+  - **The fallback:** S374's notice, then the OS's administrator prompt.
+  - **How the prompt runs:** `osascript -e '<a fixed on run argv script>' -- <launcher> /usr/local/bin/devcontainer`.
+    - The script builds its shell command from `quoted form of item 1 of argv` and `item 2`, and asks for
+      administrator privileges.
+    - No path is ever spliced into the script's text: a `"` or `\` would end the AppleScript string, and the rest would
+      run as administrator.
+    - The link is made with `ln -s`, never `-f`, so a foreign `/usr/local/bin/devcontainer` is never replaced.
   - **A declined or failed prompt** changes nothing (AC-24).
+  - **Other accounts:** the link is machine-wide, and it points at this user's writable launcher, so another account
+    that runs it runs code this user can change. A check inside the launcher couldn't help, because the launcher is
+    in this user's folder. The design follows BR-4 for now, and `question-2154-other-accounts` asks metis whether the
+    fallback should be kept.
   - **Rows:** `host: macOS`.
 - **Windows:** the user's `Path` environment variable gains the `cli-bin` folder (BR-5).
-  - **How:** the user environment is changed through PowerShell's `[Environment]::SetEnvironmentVariable(..., 'User')`,
-    spawned with an argument list. `setx` is never used, because it truncates long values.
-  - **Rows:** `host: windows`. Rows that need no Docker Desktop can run on the hosted `windows-2025` runner.
+  - **How:** one fixed PowerShell script, spawned with an argument list. The folder reaches it as data, in an
+    environment variable of the spawned process, never inside the `-Command` text, so a `'`, `$` or backtick in the
+    path can't change the command.
+  - **The value:**
+    - **Reading:** the user's own `Path` is read raw from `HKCU\Environment` (`DoNotExpandEnvironmentNames`), never
+      from `process.env.PATH`, which would copy the machine's entries in.
+    - **Writing:** it's written back with the same value kind, so a `REG_EXPAND_SZ` keeps its `%VAR%` entries.
+    - **Duplicates:** the folder is appended only when no entry already equals it.
+    - **The broadcast:** the change is announced to the system, as `setx` does, so new shells see it. `setx` itself
+      is never used, because it truncates long values.
+  - **Rows:** `host: windows`.
+    - Rows that need no Docker Desktop can run on the hosted `windows-2025` runner, including one for a
+      `REG_EXPAND_SZ` value.
+    - The `.cmd` launcher passes its arguments on with `%*`, and a row passes one that holds a space and a quoted
+      `&`.
 - **The dialogs and their button orders** are F-1201's (S030, S354, S381; BR-11, BR-12). No progress is shown.
 - **No telemetry** (BR-14, R-28).
 - **No uninstall hook** (BR-22): AC-54 and AC-56 accept that, and an uninstall script would be beyond the spec
