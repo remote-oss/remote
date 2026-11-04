@@ -83,7 +83,7 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
   BR-10).
   - In a virtual workspace, S174's link runs F-0812's command, which refuses there with its own message. The card
     rows that as it is, and it isn't a gap of ours.
-- **`(reading-NNNN-picker-order)`, F-0809 AC-38 and AC-51 with F-0302 §6.3 and §6.4:**
+- **`(reading-2148-picker-order)`, F-0809 AC-38 and AC-51 with F-0302 §6.3 and §6.4:**
   - **The conflict:** F-0809 lists a user-data or mirrored item first, described by its absolute path. F-0302, the
     owner of the candidate list, orders by absolute path and describes external files `~`-relative, and so does the
     product.
@@ -124,13 +124,13 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
   - **"Not found...":** an unresolvable entry gets it, with its Remove dialog (BR-17).
   - **Left out:** relative paths, HTTPS tarballs and legacy short ids (BR-16).
   - **Where:** in every location form (BR-18).
-- **`(ruling-NNNN-lookup-trust)`:** registry lookups run only in a trusted workspace.
+- **`(ruling-2148-lookup-trust)`:** registry lookups run only in a trusted workspace.
   - **The spec:** F-0810 PRE-2 needs no trust.
   - **Why:** a lookup asks the registries that the file names, with the user's stored credentials for them (BR-22).
     That would let an untrusted file make the editor contact hosts of its choosing, and core already blocks schema
     downloads in Restricted Mode for the same reason.
   - **In Restricted Mode,** no version lenses appear. The hover, the completions and S294 are unaffected (below).
-  - **The paperwork:** a Deviations entry, and the question goes to metis.
+  - **The paperwork:** a Deviations entry in `release-1-notes.md`, and the question goes to metis.
 
 ### 4.3 The hover, the completions and S294
 
@@ -146,7 +146,7 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
     for property diagnostics, not this text rule.
   - **Schemes:** F-0414's provider widens from `.devcontainer*` paths and `Uri.file` to every location form and open
     scheme (AC-25, AC-42).
-- **`(reading-NNNN-short-ids)`, F-0810 AC-20 with F-0414:**
+- **`(reading-2148-short-ids)`, F-0810 AC-20 with F-0414:**
   - **The conflict:** AC-20 says legacy short ids get no diagnostic. F-0414, the owner, flags `fish` and `homebrew` as
     legacy Features.
   - **The reading:** F-0414's rule holds. AC-20's row uses `go`, which F-0414 doesn't flag.
@@ -164,7 +164,7 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
   - **`undefined`** is the silent no-op of 7.E1 and BR-8. S276 is only for the non-UI entry point that 7.E1 names.
 - **The write** (BR-6):
   - **The key:** `portsAttributes.<exact port>.label`, also when a range key covers the port (AC-22).
-  - **`(reading-NNNN-ports-rewrite)`, F-1103 BR-6 and §16 with F-0809 BR-5:** only `portsAttributes`' value is
+  - **`(reading-2148-ports-rewrite)`, F-1103 BR-6 and §16 with F-0809 BR-5:** only `portsAttributes`' value is
     rewritten, through the JSONC writer's `setProperty`, in AC-21's key order: number-like keys ascending, then the
     others in their order. Every byte outside it stays. That meets AC-21 and keeps comments, as BR-6 observed, and
     F-0809's minimal edits hold everywhere else. The question goes to metis.
@@ -212,7 +212,7 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
 6. **Rows** for the absence lines.
 
 **Spec questions for metis** (with this brief's PR):
-- `reading-NNNN-picker-order`;
-- `reading-NNNN-short-ids`;
-- `reading-NNNN-ports-rewrite`;
-- `ruling-NNNN-lookup-trust`.
+- `reading-2148-picker-order`;
+- `reading-2148-short-ids`;
+- `reading-2148-ports-rewrite`;
+- `ruling-2148-lookup-trust`.

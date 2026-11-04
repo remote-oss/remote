@@ -88,6 +88,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     user has trusted it (F-0106; F-0201 AC-55). Ours does that read only after trust (athena on #2146, after dike's
     review; ruling `ruling-2146-trust-first`; spec question on remote-oss/remote-containers#133).
 
+- **The version lookups for Features in `devcontainer.json` run only in a trusted workspace.** In Restricted Mode the
+  file shows no version CodeLenses; the Feature hover, the completions and the deprecated-namespace warning still work.
+  - F-0810 PRE-2 has the lookup run whatever the trust state. A lookup asks the registries the file names, with the
+    user's stored credentials for them, so an untrusted file could make the editor contact hosts of its choosing
+    (athena on #2148; ruling `ruling-2148-lookup-trust`; spec question on remote-oss/remote-containers#133).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild
