@@ -46,6 +46,7 @@ import {activateContainers} from './activation.ts';
 import {refreshCliBin} from './cli-bin/cli-bin.ts';
 import {nodeCliBinFs} from './cli-bin/node-cli-bin-fs.ts';
 import {serializedUriOf, windowOriginOf} from './authority/payload.ts';
+import {canReopenInWSLOf} from './authority/reopen-in-wsl.ts';
 import {manifestStoreOf} from './features/manifest-store.ts';
 import {downloadTextOver} from './authoring/catalogue-download.ts';
 import {
@@ -2582,6 +2583,13 @@ export async function activate(
       'setContext',
       contextKeys.canReopenLocally.id,
       windowOrigin?.kind === 'local',
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      contextKeys.canReopenInWSL.id,
+      served.missing.includes('resolvers')
+        ? false
+        : canReopenInWSLOf(vscode.env.remoteAuthority),
     );
     if (served.missing.length === 0) {
       offerReopenFor(logger).catch((caught: unknown) => {
