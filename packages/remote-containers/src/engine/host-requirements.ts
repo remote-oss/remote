@@ -1,11 +1,13 @@
 /**
  * @fileoverview What a configuration asks of the Docker daemon (`hostRequirements`) and what the daemon has: reading the
  * requirements from a configuration's text, from the merged configuration the CLI gives and from a container's
- * `devcontainer.metadata` label, merging them, reading the daemon's figures from `docker info`, and the two lines of
+ * `devcontainer.metadata` label, merging them, reading the daemon's figures from `docker info`, and the detail of
  * the dialog that tells which requirements are not met. Pure: nothing here runs a process.
  */
 
 import {parseConfiguration} from '../config/configuration-text.ts';
+import type {Translate} from '../surfaces/engine-dialogs.ts';
+import {filled} from '../surfaces/filled.ts';
 
 /** What a configuration asks of the daemon; a member that is absent or unreadable is absent. */
 export interface HostRequirements {
@@ -26,12 +28,6 @@ export interface DaemonFigures {
   memory: number;
   /** Whether the daemon lists the NVIDIA runtime. */
   nvidia: boolean;
-}
-
-/** The two detail lines of the dialog. */
-export interface UnmetRequirements {
-  daemonLine: string;
-  configurationLine: string;
 }
 
 /** The key the dev container format gives the GPU requirement; shorter than a name may be, so it is only read by this constant. */
@@ -163,38 +159,58 @@ export function daemonFiguresOf(info: string): DaemonFigures | undefined {
   };
 }
 
+/** The English templates of the dialog's detail. */
+const DETAIL_TEMPLATES = {
+  S140: 'Docker daemon: {0}\ndevcontainer.json: {1}',
+  S047: 'CPUs {0}',
+  S281: 'RAM {0}',
+  S421: 'disk {0}',
+  S191: 'GPU',
+} as const;
+
 /** A size in gibibytes with one decimal at most, and the `gb` suffix. */
 function gigabytesOf(bytes: number): string {
   return `${String(Number((bytes / BYTES_PER_GIB).toFixed(1)))}gb`;
 }
 
 /**
- * The lines of the dialog when the requirements are not met: they are when the CPUs or the memory asked for are more
+ * The detail of the dialog when the requirements are not met: they are when the CPUs or the memory asked for are more
  * than the daemon has. The disk is listed and never compared, and the GPU is listed when required and never compared.
  * None when they are met.
  */
-export function unmetRequirements(
+export function unmetDetail(
   required: HostRequirements,
   daemon: DaemonFigures,
-): UnmetRequirements | undefined {
+  translate: Translate,
+): string | undefined {
   const unmet =
     (required.cpus !== undefined && required.cpus > daemon.cpus) ||
     (required.memory !== undefined && required.memory > daemon.memory);
   if (!unmet) {
     return undefined;
   }
+  function part(template: string, value: string): string {
+    return filled(translate, template, [value]);
+  }
   const asked = [
-    ...(required.cpus === undefined ? [] : [`CPUs ${String(required.cpus)}`]),
+    ...(required.cpus === undefined
+      ? []
+      : [part(DETAIL_TEMPLATES.S047, String(required.cpus))]),
     ...(required.memory === undefined
       ? []
-      : [`RAM ${gigabytesOf(required.memory)}`]),
+      : [part(DETAIL_TEMPLATES.S281, gigabytesOf(required.memory))]),
     ...(required.storage === undefined
       ? []
-      : [`disk ${gigabytesOf(required.storage)}`]),
-    ...(required.needsGpu ? ['GPU'] : []),
+      : [part(DETAIL_TEMPLATES.S421, gigabytesOf(required.storage))]),
+    ...(required.needsGpu ? [translate(DETAIL_TEMPLATES.S191)] : []),
   ];
-  return {
-    daemonLine: `Docker daemon: CPUs ${String(daemon.cpus)}, RAM ${gigabytesOf(daemon.memory)}${daemon.nvidia ? ', GPU' : ''}`,
-    configurationLine: `devcontainer.json: ${asked.join(', ')}`,
-  };
+  const available = [
+    part(DETAIL_TEMPLATES.S047, String(daemon.cpus)),
+    part(DETAIL_TEMPLATES.S281, gigabytesOf(daemon.memory)),
+    ...(daemon.nvidia ? [translate(DETAIL_TEMPLATES.S191)] : []),
+  ];
+  return filled(translate, DETAIL_TEMPLATES.S140, [
+    available.join(', '),
+    asked.join(', '),
+  ]);
 }

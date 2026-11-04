@@ -8,7 +8,7 @@ import {
   requirementsOf,
   requirementsOfLabel,
   requirementsOfText,
-  unmetRequirements,
+  unmetDetail,
 } from '../../src/engine/host-requirements.ts';
 
 const BYTES_PER_GIB = 1024 ** 3;
@@ -18,12 +18,16 @@ const DAEMON: DaemonFigures = {
   nvidia: false,
 };
 
-/** The lines of the dialog for requirements asked of a small daemon. */
-function linesOf(
+/** The detail of the dialog for requirements asked of a small daemon. */
+function detailOf(
   required: Partial<HostRequirements>,
   daemon: DaemonFigures = DAEMON,
 ) {
-  return unmetRequirements({needsGpu: false, ...required}, daemon);
+  return unmetDetail(
+    {needsGpu: false, ...required},
+    daemon,
+    template => template,
+  );
 }
 
 describe('what a configuration asks of the daemon (card containers-202, F-0206)', () => {
@@ -195,74 +199,77 @@ describe('the daemon’s figures and the dialog’s lines (card containers-202, 
   });
 
   it('F-0206 AC-3, AC-16: unmet CPUs show the daemon’s CPUs and RAM, though the configuration asks for no memory', () => {
-    deepStrictEqual(linesOf({cpus: 8}), {
-      daemonLine: 'Docker daemon: CPUs 4, RAM 16gb',
-      configurationLine: 'devcontainer.json: CPUs 8',
-    });
+    deepStrictEqual(
+      detailOf({cpus: 8}),
+      'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 8',
+    );
   });
 
   it('F-0206 AC-17: memory shows in gibibytes with one decimal: 64gb, and 68.4gb for 70000mb', () => {
     deepStrictEqual(
       [
-        linesOf({memory: 64 * BYTES_PER_GIB})?.configurationLine,
-        linesOf({memory: 70000 * 1024 ** 2})?.configurationLine,
+        detailOf({memory: 64 * BYTES_PER_GIB}),
+        detailOf({memory: 70000 * 1024 ** 2}),
       ],
-      ['devcontainer.json: RAM 64gb', 'devcontainer.json: RAM 68.4gb'],
+      [
+        'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: RAM 64gb',
+        'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: RAM 68.4gb',
+      ],
     );
   });
 
-  it('F-0206 AC-18: the line lists CPUs, RAM, disk and GPU in that order, with disk and GPU never compared', () => {
+  it('F-0206 AC-18: the configuration lists CPUs, RAM, disk and GPU in that order, with disk and GPU never compared', () => {
     deepStrictEqual(
-      linesOf({
+      detailOf({
         cpus: 16,
         memory: 64 * BYTES_PER_GIB,
         storage: 70000 * 1024 ** 2,
         needsGpu: true,
-      })?.configurationLine,
-      'devcontainer.json: CPUs 16, RAM 64gb, disk 68.4gb, GPU',
+      }),
+      'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 16, RAM 64gb, disk 68.4gb, GPU',
     );
   });
 
-  it('F-0206 AC-35: a disk that is met is listed in the configuration’s line and the daemon’s line has no disk figure', () => {
-    deepStrictEqual(linesOf({cpus: 8, storage: BYTES_PER_GIB}), {
-      daemonLine: 'Docker daemon: CPUs 4, RAM 16gb',
-      configurationLine: 'devcontainer.json: CPUs 8, disk 1gb',
-    });
+  it('F-0206 AC-35: a disk that is met is listed in the configuration’s part and the daemon’s part has no disk figure', () => {
+    deepStrictEqual(
+      detailOf({cpus: 8, storage: BYTES_PER_GIB}),
+      'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 8, disk 1gb',
+    );
   });
 
   it('F-0206 AC-21: a fraction of a CPU above the count is unmet and shown as written', () => {
     deepStrictEqual(
-      linesOf({cpus: 4.5})?.configurationLine,
-      'devcontainer.json: CPUs 4.5',
+      detailOf({cpus: 4.5}),
+      'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: CPUs 4.5',
     );
   });
 
   it('F-0206 AC-7, AC-8, AC-28: a GPU asked for alone is no unmet requirement; neither are CPUs and memory that are met', () => {
     deepStrictEqual(
       [
-        linesOf({needsGpu: true}),
-        linesOf({
+        detailOf({needsGpu: true}),
+        detailOf({
           cpus: 4,
           memory: 16 * BYTES_PER_GIB,
           storage: 100 * BYTES_PER_GIB,
         }),
-        linesOf({}),
+        detailOf({}),
       ],
       [undefined, undefined, undefined],
     );
   });
 
-  it('F-0206 AC-40: a daemon that lists the NVIDIA runtime ends its line with GPU', () => {
+  it('F-0206 AC-40: a daemon that lists the NVIDIA runtime ends its part with GPU', () => {
     deepStrictEqual(
-      linesOf({cpus: 8}, {...DAEMON, nvidia: true})?.daemonLine,
-      'Docker daemon: CPUs 4, RAM 16gb, GPU',
+      detailOf({cpus: 8}, {...DAEMON, nvidia: true}),
+      'Docker daemon: CPUs 4, RAM 16gb, GPU\ndevcontainer.json: CPUs 8',
     );
   });
 
   it('F-0206 AC-3: memory above the daemon’s is unmet by itself', () => {
     deepStrictEqual(
-      linesOf({memory: 17 * BYTES_PER_GIB})?.configurationLine,
-      'devcontainer.json: RAM 17gb',
+      detailOf({memory: 17 * BYTES_PER_GIB}),
+      'Docker daemon: CPUs 4, RAM 16gb\ndevcontainer.json: RAM 17gb',
     );
   });
 });

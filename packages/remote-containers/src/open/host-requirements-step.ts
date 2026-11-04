@@ -13,15 +13,14 @@ import {
   type HostRequirements,
   mergedRequirements,
   requirementsOfText,
-  type UnmetRequirements,
-  unmetRequirements,
+  unmetDetail,
 } from '../engine/host-requirements.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 
 /** The English templates of the dialog. */
 const REQUIREMENTS_TEMPLATES = {
   S244: 'Not all host requirements in devcontainer.json are met by the Docker daemon.',
-  S140: 'Continue',
+  S092: 'Continue',
 } as const;
 
 /** Which reading of the requirements the step makes. */
@@ -70,11 +69,6 @@ export interface RequirementsRequest {
   merged: HostRequirements | undefined;
 }
 
-/** The detail of the dialog: the daemon's line, then the configuration's. */
-function detailOf(lines: UnmetRequirements): string {
-  return `${lines.daemonLine}\n${lines.configurationLine}`;
-}
-
 /** What the configuration asks, by the stage's reading; the file's own text when the merged one is missing. */
 async function askedOf(
   ports: HostRequirementsPorts,
@@ -109,19 +103,20 @@ export async function hostRequirementsAccepted(
     askedOf(ports, request),
     ports.containerRequirements(request.base, request, cancellation),
   ]);
-  const unmet = unmetRequirements(
+  const detail = unmetDetail(
     mergedRequirements([asked, recorded ?? {needsGpu: false}]),
     daemon,
+    ports.translate,
   );
-  if (unmet === undefined) {
+  if (detail === undefined) {
     return true;
   }
   ports.logger.info(
-    `the Docker daemon does not meet the host requirements: ${unmet.daemonLine}; ${unmet.configurationLine}`,
+    `the Docker daemon does not meet the host requirements: ${detail.replace('\n', '; ')}`,
   );
   return ports.confirm(
     ports.translate(REQUIREMENTS_TEMPLATES.S244),
-    detailOf(unmet),
-    ports.translate(REQUIREMENTS_TEMPLATES.S140),
+    detail,
+    ports.translate(REQUIREMENTS_TEMPLATES.S092),
   );
 }

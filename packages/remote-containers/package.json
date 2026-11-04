@@ -710,6 +710,22 @@
           "deprecationMessage": "%setting.WorkspaceMountConsistency.deprecationMessage%",
           "markdownDeprecationMessage": "%setting.WorkspaceMountConsistency.markdownDeprecationMessage%"
         },
+        "dev.containers.gpuAvailability": {
+          "type": "string",
+          "default": "detect",
+          "scope": "machine",
+          "enum": [
+            "all",
+            "detect",
+            "none"
+          ],
+          "enumDescriptions": [
+            "%setting.GpuAvailability.all%",
+            "%setting.GpuAvailability.detect%",
+            "%setting.GpuAvailability.none%"
+          ],
+          "description": "%setting.GpuAvailability.description%"
+        },
         "dev.containers.experimentalMountGitWorktreeCommonDir": {
           "type": "boolean",
           "default": false,

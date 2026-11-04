@@ -45,6 +45,8 @@ export interface UpOptions {
   buildNoCache: boolean;
   /** The consistency of the workspace mount, as the setting has it; the CLI refuses a value it doesn't know. */
   workspaceMountConsistency: string;
+  /** `dev.containers.gpuAvailability` as the setting has it; the CLI refuses a value it doesn't know. */
+  gpuAvailability: string;
 }
 
 /** The size of the terminal a run's lifecycle commands show in, as arguments; none when the size is not known. */
@@ -113,6 +115,8 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
     ...additionalFeatures(target),
     ...(target.features.lockfile ? [] : ['--no-lockfile']),
     '--skip-post-create',
+    '--gpu-availability',
+    options.gpuAvailability,
     '--workspace-mount-consistency',
     options.workspaceMountConsistency,
     ...(options.removeExistingContainer ? ['--remove-existing-container'] : []),
