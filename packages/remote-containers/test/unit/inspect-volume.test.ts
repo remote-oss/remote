@@ -14,10 +14,45 @@ import {volumeTargetOf} from '../../src/volumes/volume-payload.ts';
 describe('the volumes Explore a Volume offers (card containers-155)', () => {
   it('F-0705 AC-2: names sort with digit runs by value and other characters by code: vol-2 before vol-10, upper case before lower case, - before . before _', () => {
     deepStrictEqual(
-      ['vol-10', 'vol_a', 'vol.a', 'vol-2', 'Vol-a', 'vol-a', 'a', 'a1'].sort(
-        compareVolumeNames,
-      ),
-      ['Vol-a', 'a', 'a1', 'vol-2', 'vol-10', 'vol-a', 'vol.a', 'vol_a'],
+      [
+        'vol-10',
+        'vol_a',
+        'vol.a',
+        'vol-2',
+        'Vol-a',
+        'vol-a',
+        'a',
+        'a1',
+        'vol-3',
+        'vol-3',
+        'vol-007',
+        'vol-7x',
+      ].sort(compareVolumeNames),
+      [
+        'Vol-a',
+        'a',
+        'a1',
+        'vol-2',
+        'vol-3',
+        'vol-3',
+        'vol-007',
+        'vol-7x',
+        'vol-10',
+        'vol-a',
+        'vol.a',
+        'vol_a',
+      ],
+    );
+  });
+
+  it('F-0705 AC-2: an empty name sorts before any other, and equal to itself', () => {
+    deepStrictEqual(
+      [
+        compareVolumeNames('', 'a'),
+        compareVolumeNames('a', ''),
+        compareVolumeNames('', ''),
+      ],
+      [-1, 1, 0],
     );
   });
 
@@ -40,6 +75,9 @@ describe('the volumes Explore a Volume offers (card containers-155)', () => {
         },
       ],
     );
+  });
+
+  it('F-0705 AC-3: no volume gives no row', () => {
     deepStrictEqual(
       inspectRowsOf([], date => date),
       [],
@@ -54,27 +92,32 @@ describe('the volumes Explore a Volume offers (card containers-155)', () => {
       -`/${INSPECT_FOLDER}`.length,
     );
     deepStrictEqual(
-      [address.endsWith('/volume'), volumeTargetOf(payload)],
-      [true, target],
+      [address.endsWith('/volume'), volumeTargetOf(payload), target],
+      [
+        true,
+        target,
+        {
+          kind: 'volume',
+          repositoryPath: '',
+          volumeName: 'data',
+          folder: 'volume',
+          inspectVolume: true,
+        },
+      ],
     );
-    deepStrictEqual(target, {
-      kind: 'volume',
-      repositoryPath: '',
-      volumeName: 'data',
-      folder: 'volume',
-      inspectVolume: true,
-    });
   });
 });
 
+/** What the ports of a scenario answer. */
+interface Scenario {
+  ready?: boolean;
+  listing?: unknown;
+  /** The volume the user picks; none for a picker that closes without a pick. */
+  pick?: string;
+}
+
 /** Runs the command over ports that answer as the scenario says, and gives what it did in order. */
-async function run(
-  scenario: {
-    ready?: boolean;
-    listing?: Error;
-    pick?: 'dismiss' | string;
-  } = {},
-): Promise<string[]> {
+async function stepsOf(scenario: Scenario = {}): Promise<string[]> {
   const steps: string[] = [];
   const ports: InspectVolumePorts = {
     engineReady: () => {
@@ -100,7 +143,7 @@ async function run(
     createdAt: date => `created at ${date}`,
     engine: () => ({}),
     reload: address => {
-      steps.push(`reload ${address.endsWith('/volume')}`);
+      steps.push(`reload ${String(address.endsWith('/volume'))}`);
       return Promise.resolve();
     },
     report: line => {
@@ -113,7 +156,7 @@ async function run(
 
 describe('Explore a Volume in a Dev Container (card containers-155)', () => {
   it('F-0705 AC-1, AC-5: with the engine ready the picker lists the volumes and the picked one opens its window in this one', async () => {
-    deepStrictEqual(await run({pick: 'two'}), [
+    deepStrictEqual(await stepsOf({pick: 'two'}), [
       'check',
       'list',
       'pick one,two',
@@ -122,42 +165,23 @@ describe('Explore a Volume in a Dev Container (card containers-155)', () => {
   });
 
   it('F-0705 AC-4, AC-33: a picker that closes without a pick changes nothing', async () => {
-    deepStrictEqual(await run({pick: 'dismiss'}), [
-      'check',
-      'list',
-      'pick one,two',
-    ]);
+    deepStrictEqual(await stepsOf(), ['check', 'list', 'pick one,two']);
   });
 
   it('F-0705 AC-16, AC-24: an engine that is not ready ends the command before any listing, and shows nothing of ours', async () => {
-    deepStrictEqual(await run({ready: false}), ['check']);
+    deepStrictEqual(await stepsOf({ready: false}), ['check']);
   });
 
-  it('F-0705 AC-3, AC-36: no volume gives a picker with no row, shown after the listing', async () => {
-    const steps: string[] = [];
-    await inspectVolume({
-      engineReady: () => Promise.resolve(true),
-      volumes: () => {
-        steps.push('list');
-        return Promise.resolve([]);
-      },
-      pick: rows => {
-        steps.push(`pick ${String(rows.length)}`);
-        return Promise.resolve(undefined);
-      },
-      createdAt: date => date,
-      engine: () => ({}),
-      reload: () => Promise.resolve(),
-      report: () => undefined,
-    });
-    deepStrictEqual(steps, ['list', 'pick 0']);
-  });
-
-  it('F-0705 7.E3: a listing that fails is logged and shows no picker', async () => {
-    deepStrictEqual(await run({listing: new Error('no daemon')}), [
-      'check',
-      'list',
-      'log the volumes could not be listed: no daemon',
-    ]);
+  it('F-0705 AC-3, AC-36: a listing that fails is logged, with a text that is not an error too, and shows no picker', async () => {
+    deepStrictEqual(
+      [
+        await stepsOf({listing: new Error('no daemon')}),
+        await stepsOf({listing: 'plain text'}),
+      ],
+      [
+        ['check', 'list', 'log the volumes could not be listed: no daemon'],
+        ['check', 'list', 'log the volumes could not be listed: plain text'],
+      ],
+    );
   });
 });

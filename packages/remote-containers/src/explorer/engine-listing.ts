@@ -29,9 +29,9 @@ export interface EngineListingHost {
 /** The queries over `host`'s engine. */
 export interface EngineListing {
   /** The stdout of `argv`; a run that doesn't end with 0 rejects with the text of a failed command. */
-  printed(argv: readonly string[]): Promise<string>;
-  containers(): Promise<ListedContainer[]>;
-  volumes(): Promise<ListedVolume[]>;
+  printed: (argv: readonly string[]) => Promise<string>;
+  containers: () => Promise<ListedContainer[]>;
+  volumes: () => Promise<ListedVolume[]>;
 }
 
 /** The names or ids a listing printed, one on a line. */

@@ -187,6 +187,34 @@ describe('the Clean Up commands over the engine (card containers-168)', () => {
     ]);
   });
 
+  it('F-0905 AC-2: a containers picker that closes without a pick removes nothing, scans no volume and shows no dialog', async () => {
+    const world: World = {commands: [], answers: scene().world.answers};
+    const events: string[] = [];
+    const commands = cleanUpCommandsOf({
+      engine: () => hostWorld(world),
+      program: () => 'docker',
+      pickMany: () => Promise.resolve(undefined),
+      showDone: detail => {
+        events.push(`done ${detail}`);
+        return Promise.resolve();
+      },
+      refresh: () => {
+        events.push('refresh');
+        return Promise.resolve();
+      },
+      report: line => {
+        events.push(`log ${line}`);
+      },
+      translate: template => template,
+      cancellation: new AbortController().signal,
+    });
+    await commands.devContainers();
+    deepStrictEqual(
+      [events, world.commands.some(command => command.startsWith('rm'))],
+      [[], false],
+    );
+  });
+
   it('F-0905 7.E2: output that is not a list of containers or of volumes is a failed command', async () => {
     const containers = scene({'inspect --type container c1': ranWith('{}')});
     const volumes = scene({'volume inspect -- v1': ranWith('{}')});

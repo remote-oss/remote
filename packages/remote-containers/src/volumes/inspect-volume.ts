@@ -1,5 +1,5 @@
 /**
- * @fileoverview Explore a Volume in a Dev Container (F-0705): the volumes the picker lists, in the order and with the
+ * @fileoverview Explore a Volume in a Dev Container: the volumes the picker lists, in the order and with the
  * dates it shows them, and the command that opens the window of the volume that was picked. Nothing here touches the
  * editor or the engine itself.
  */
@@ -32,7 +32,7 @@ export interface InspectRow {
 
 /** The pieces of a name that are compared: its digit runs, by value, and the text between them, by character code. */
 function piecesOf(name: string): string[] {
-  return name.match(/\d+|\D+/gu) ?? [];
+  return [...name.matchAll(/\d+|\D+/gu)].map(each => each[0]);
 }
 
 /** Whether `text` is a run of digits. */
@@ -40,40 +40,38 @@ function isNumber(text: string): boolean {
   return /^\d+$/u.test(text);
 }
 
+/** Compares two texts by character code: -1, 0 or 1. */
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : Number(left > right);
+}
+
 /** Compares two digit runs by value: the longer without leading zeros is the greater. */
 function compareNumbers(left: string, right: string): number {
   const first = left.replace(/^0+(?=\d)/u, '');
   const second = right.replace(/^0+(?=\d)/u, '');
-  if (first.length !== second.length) {
-    return first.length - second.length;
-  }
-  return first < second ? -1 : first > second ? 1 : 0;
+  return first.length === second.length
+    ? compareText(first, second)
+    : first.length - second.length;
 }
 
 /** Orders names with digit runs compared by numeric value and every other character by its code. */
 export function compareVolumeNames(left: string, right: string): number {
   const first = piecesOf(left);
   const second = piecesOf(right);
-  for (
-    let index = 0;
-    index < Math.min(first.length, second.length);
-    index += 1
-  ) {
-    const leftPiece = first[index] ?? '';
-    const rightPiece = second[index] ?? '';
+  for (const [index, leftPiece] of first.entries()) {
+    const rightPiece = second[index];
+    if (rightPiece === undefined) {
+      return 1;
+    }
     const order =
       isNumber(leftPiece) && isNumber(rightPiece)
         ? compareNumbers(leftPiece, rightPiece)
-        : leftPiece < rightPiece
-          ? -1
-          : leftPiece > rightPiece
-            ? 1
-            : 0;
+        : compareText(leftPiece, rightPiece);
     if (order !== 0) {
       return order;
     }
   }
-  return first.length - second.length;
+  return first.length === second.length ? 0 : -1;
 }
 
 /** The rows of the picker for `volumes`: every one of them, sorted, each with the date it was created. */
@@ -121,7 +119,7 @@ export interface InspectVolumePorts {
   /** Shows the picker over `rows` and gives the row picked, or none when it closed without a pick. */
   pick(rows: readonly InspectRow[]): Promise<InspectRow | undefined>;
   /** "created at …" with the date given, in the user's language. */
-  createdAt(date: string): string;
+  createdAt: (date: string) => string;
   /** The engine the window pins. */
   engine(): PinnedEngine;
   /** Opens `address` in this window. */
