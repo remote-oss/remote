@@ -10,6 +10,9 @@ export const EXTENSION_PATH_FILE = 'remote-containers-path';
 /** The file that holds the editor's program; the launchers read it. */
 export const EDITOR_PATH_FILE = 'vscode-path';
 
+/** The variable that tells the launcher program which editor program it runs on, which is the one to start for a folder. */
+export const EDITOR_PROGRAM_VARIABLE = 'REMOTE_OSS_EDITOR_PROGRAM';
+
 /** The launcher program, inside the extension's install folder. */
 const LAUNCHER_PROGRAM = 'dist/cli-launcher.js';
 
@@ -28,7 +31,8 @@ while [ -h "$self" ]; do
   esac
 done
 here="$(cd "$(dirname "$self")" && pwd -P)"
-ELECTRON_RUN_AS_NODE=1 exec "$(cat "$here/${EDITOR_PATH_FILE}")" "$(cat "$here/${EXTENSION_PATH_FILE}")/${LAUNCHER_PROGRAM}" "$@"
+editor="$(cat "$here/${EDITOR_PATH_FILE}")"
+${EDITOR_PROGRAM_VARIABLE}="$editor" ELECTRON_RUN_AS_NODE=1 exec "$editor" "$(cat "$here/${EXTENSION_PATH_FILE}")/${LAUNCHER_PROGRAM}" "$@"
 `;
 
 /** The Windows launcher: the arguments go on as `%*`, and nothing of them is quoted again. */
@@ -36,6 +40,7 @@ export const WINDOWS_LAUNCHER = `@echo off\r
 setlocal\r
 set /p EDITOR_PATH=<"%~dp0${EDITOR_PATH_FILE}"\r
 set /p EXTENSION_PATH=<"%~dp0${EXTENSION_PATH_FILE}"\r
+set ${EDITOR_PROGRAM_VARIABLE}=%EDITOR_PATH%\r
 set ELECTRON_RUN_AS_NODE=1\r
 "%EDITOR_PATH%" "%EXTENSION_PATH%\\dist\\cli-launcher.js" %*\r
 exit /b %ERRORLEVEL%\r

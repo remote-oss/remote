@@ -30,7 +30,7 @@ describe('the launchers of cli-bin (card containers-211)', () => {
     const editor = path.join(root, 'editor');
     writeFileSync(
       editor,
-      '#!/bin/sh\nprintf "%s\\n" "$ELECTRON_RUN_AS_NODE"\nfor each in "$@"; do printf "%s\\n" "$each"; done\n',
+      '#!/bin/sh\nprintf "%s\\n" "$ELECTRON_RUN_AS_NODE"\nprintf "%s\\n" "$REMOTE_OSS_EDITOR_PROGRAM"\nfor each in "$@"; do printf "%s\\n" "$each"; done\n',
     );
     chmodSync(editor, 0o755);
     writeFileSync(path.join(folder, EDITOR_PATH_FILE), editor);
@@ -45,11 +45,14 @@ describe('the launchers of cli-bin (card containers-211)', () => {
   });
 
   const ARGUMENTS = ['open', 'a b', 'x&y', '$HOME', "q'uote"];
-  const EXPECTED = [
-    '1',
-    '/ext/remote containers/dist/cli-launcher.js',
-    ...ARGUMENTS,
-  ];
+  function expected(): string[] {
+    return [
+      '1',
+      path.join(root, 'editor'),
+      '/ext/remote containers/dist/cli-launcher.js',
+      ...ARGUMENTS,
+    ];
+  }
 
   function output(command: string): string[] {
     return execFileSync(command, ARGUMENTS, {encoding: 'utf8'})
@@ -58,7 +61,7 @@ describe('the launchers of cli-bin (card containers-211)', () => {
   }
 
   it('F-1201 BR-15, BR-16: the POSIX launcher runs the editor’s program as a Node on the launcher program with every argument as it came', () => {
-    deepStrictEqual(output(launcher), EXPECTED);
+    deepStrictEqual(output(launcher), expected());
   });
 
   it('F-1201 AC-29: a link to the launcher, absolute or relative, in a folder of its own or a chain of links, finds the data files beside the launcher', () => {
@@ -71,7 +74,7 @@ describe('the launchers of cli-bin (card containers-211)', () => {
       ['absolute', 'relative', 'chain'].map(name =>
         output(path.join(links, name)),
       ),
-      [EXPECTED, EXPECTED, EXPECTED],
+      [expected(), expected(), expected()],
     );
   });
 

@@ -10,6 +10,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {cliPathsOf} from '../cli/cli-paths.ts';
 import {editorEnvironmentOf} from '../cli-bin/editor-environment.ts';
+import {EDITOR_PROGRAM_VARIABLE} from '../cli-bin/launcher-scripts.ts';
 import {runLauncher} from '../cli-bin/launcher.ts';
 import {decodeConfiguration} from '../config/configuration-text.ts';
 
@@ -60,11 +61,15 @@ runLauncher(process.argv.slice(2), {
       );
     }),
   launchEditor: address => {
-    spawn(process.execPath, ['--folder-uri', address], {
-      detached: true,
-      stdio: 'ignore',
-      env: editorEnvironmentOf(process.env),
-    }).unref();
+    spawn(
+      process.env[EDITOR_PROGRAM_VARIABLE] ?? process.execPath,
+      ['--folder-uri', address],
+      {
+        detached: true,
+        stdio: 'ignore',
+        env: editorEnvironmentOf(process.env),
+      },
+    ).unref();
   },
 }).then(
   status => {
