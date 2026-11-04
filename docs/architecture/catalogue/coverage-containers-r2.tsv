@@ -453,23 +453,23 @@ F-0304.AC-64	todo
 F-0304.AC-65	todo	
 F-0304.AC-66	acceptance	
 F-0304.AC-67	acceptance	
-F-0305.AC-1	todo	
-F-0305.AC-2	todo	
+F-0305.AC-1	acceptance	
+F-0305.AC-2	acceptance	
 F-0305.AC-3	core	core: the unknown-property warning comes from the editor's built-in configuration-editing schema, which we neither extend nor read; the build ignores unknown keys, which the label rows of F-0305 AC-17 show
 F-0305.AC-4	core	core: the legacy-property warnings are the editor's schema diagnostics; we contribute no schema or diagnostic for them
 F-0305.AC-5	todo	
 F-0305.AC-6	todo	
-F-0305.AC-7	todo	
+F-0305.AC-7	acceptance	
 F-0305.AC-8	todo	
 F-0305.AC-9	todo	
 F-0305.AC-10	core	core: the devcontainer.json schema, hover and diagnostics belong to the editor's built-in configuration-editing extension; our manifest contributes no jsonValidation, so disabling us changes none of them
 F-0305.AC-11	todo	
 F-0305.AC-12	core	core: the hover text is the editor's rendering of the built-in schema's descriptions; we contribute no hover provider
 F-0305.AC-13	todo	
-F-0305.AC-14	todo	
+F-0305.AC-14	acceptance	
 F-0305.AC-15	core	core: the association of devcontainer.json files with the merged schema is the editor's built-in jsonValidation; we contribute none
-F-0305.AC-16	todo	
-F-0305.AC-17	todo	
+F-0305.AC-16	acceptance	
+F-0305.AC-17	acceptance	
 F-0305.AC-18	todo	
 F-0305.AC-19	core	core: the schema download and its failure Problem are the editor's JSON language service; the build never reads the schema, which no row of ours needs to show
 F-0305.AC-20	core	core: the Problem for a top-level key is the editor's schema diagnostic; we contribute none
