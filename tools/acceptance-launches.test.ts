@@ -1147,22 +1147,38 @@ describe('the launches of the VSCodium run', () => {
     }
   });
 
-  it('tooling-96: the two parts of the containers launch list disjoint files that together are exactly the containers suite’s test files, each part’s alphabetical', () => {
+  it('tooling-96: this branch’s containers parts list the authoring-associations rows in the first part alone, no file in two parts, each part’s files alphabetical', () => {
     const parts = launches.filter(
-      launch => launch.kind === 'plain' && launch.partOf === 'containers',
+      (launch): launch is Launch & {kind: 'plain'} =>
+        launch.kind === 'plain' && launch.partOf === 'containers',
     );
+    const listed = parts.flatMap(part => part.files ?? []);
+    const present = readdirSync(
+      path.join(REPOSITORY_ROOT, 'tests', 'acceptance', 'containers'),
+    )
+      .filter(file => file.endsWith('.test.ts'))
+      .sort();
     deepStrictEqual(
       [
         parts.map(launch => launch.label),
-        partBreaches(launches, REPOSITORY_ROOT),
+        listed,
+        listed.every(file => present.includes(file)),
+        listed.filter(
+          file => listed.indexOf(file) !== listed.lastIndexOf(file),
+        ),
         parts.every(
           launch =>
-            launch.kind === 'plain' &&
             JSON.stringify(launch.files) ===
-              JSON.stringify([...(launch.files ?? [])].sort()),
+            JSON.stringify([...(launch.files ?? [])].sort()),
         ),
       ],
-      [['containers-a', 'containers-b'], [], true],
+      [
+        ['containers-a', 'containers-b'],
+        ['authoring-associations.test.ts'],
+        true,
+        [],
+        true,
+      ],
     );
   });
 

@@ -6,6 +6,7 @@ import {
   inWindow,
   isTrusted,
   variable,
+  windowEvents,
   windowState,
 } from '../windows/harness.ts';
 import {
@@ -15,8 +16,8 @@ import {
   writeMemoryFile,
 } from '../windows/folder-windows.ts';
 import {
-  clickAt,
   editorTabs,
+  problemRows,
   problemsOf,
   type Problem,
   statusBarText,
@@ -68,57 +69,8 @@ function folderWithFile(name: string, file: string, text: string): string {
 
 /** The text of the hover window `name`'s active editor shows at the token `needle`, empty when it shows none. */
 async function editorHoverOf(name: string, needle: string): Promise<string> {
-  const point = await evaluate<{x: number; y: number} | null>(
-    name,
-    `(() => {
-      const line = [...document.querySelectorAll('.view-lines .view-line')].find(
-        entry => (entry.textContent ?? '').includes(${JSON.stringify(needle)}),
-      );
-      if (line === undefined) {
-        return null;
-      }
-      const text = line.textContent ?? '';
-      const index = text.indexOf(${JSON.stringify(needle)});
-      const nodeIterator = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-      let count = 0;
-      let startNode = null;
-      let startOffset = 0;
-      let endNode = null;
-      let endOffset = 0;
-      let textNode;
-      while ((textNode = nodeIterator.nextNode()) !== null) {
-        const length = textNode.nodeValue.length;
-        if (startNode === null && count + length > index) {
-          startNode = textNode;
-          startOffset = index - count;
-        }
-        if (endNode === null && count + length >= index + 1) {
-          endNode = textNode;
-          endOffset = index + 1 - count;
-          break;
-        }
-        count += length;
-      }
-      if (startNode === null || endNode === null) {
-        return null;
-      }
-      const range = document.createRange();
-      range.setStart(startNode, startOffset);
-      range.setEnd(endNode, endOffset);
-      const rect = range.getBoundingClientRect();
-      return {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-      };
-    })()`,
-  );
-  if (point === null) {
-    throw new Error(
-      `window ${name}'s active editor shows no line holding ${JSON.stringify(needle)}`,
-    );
-  }
-  // The cursor rests on the token, and the command's hover at the cursor is read and closed.
-  await clickAt(name, point);
+  // The cursor rests on the token read from the model, so a line the editor has not rendered yet is no obstacle.
+  await inWindow(name, 'acceptance.agent.cursorOn', needle);
   await inWindow(name, 'editor.action.showHover');
   let hover = '';
   for (let tries = 0; tries < 40 && hover === ''; tries += 1) {
@@ -225,6 +177,7 @@ describe('the associations and the discontinued namespace of the authoring aids 
     throw new Error(
       `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
         `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
+        `rows ${JSON.stringify(await problemRows(name))}, ` +
         `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
     );
   }
@@ -433,24 +386,50 @@ describe('the associations and the discontinued namespace of the authoring aids 
     const inContainer = '/tmp/c208-only/devcontainer.json';
     const text =
       '{"features": {"devcontainers-contrib/features/bash-command:1": {}}}';
-    await docker(
-      'exec',
-      containerId,
-      'sh',
-      '-c',
-      `mkdir -p /tmp/c208-only && printf '%s' '${text}' > ${inContainer}`,
-    );
-    await inWindow(name, 'acceptance.agent.openUri', `file://${inContainer}`);
     let problems: Problem[];
     try {
+      await docker(
+        'exec',
+        containerId,
+        'sh',
+        '-c',
+        `mkdir -p /tmp/c208-only && printf '%s' '${text}' > ${inContainer}`,
+      );
+      await inWindow(name, 'acceptance.agent.openUri', `file://${inContainer}`);
       problems = await problemsSettled(name, 1, 120_000);
     } catch (caught) {
       const state = await windowState(name);
+      await inWindow(
+        name,
+        'acceptance.agent.extensionPresent',
+        'remote-oss.remote-containers',
+      );
+      const present = [...windowEvents(name)]
+        .reverse()
+        .find(
+          each =>
+            each.event === 'extension' &&
+            each.extensionId === 'remote-oss.remote-containers',
+        )?.present;
+      let listing: string;
+      try {
+        listing = await docker(
+          'exec',
+          containerId,
+          'ls',
+          'la',
+          '/tmp/c208-only',
+        );
+      } catch (listingFailure) {
+        listing = `docker ls failed: ${String(listingFailure)}`;
+      }
       throw new Error(
         `${String(caught)}; the window: remote ${JSON.stringify(state.remoteName)}, ` +
           `authority ${JSON.stringify(state.remoteAuthority)}, folders ${JSON.stringify(state.folders)}, ` +
           `tab ${JSON.stringify(state.activeTab?.uri ?? null)}, ` +
-          `trusted ${JSON.stringify(await isTrusted(name))}`,
+          `trusted ${JSON.stringify(await isTrusted(name))}, ` +
+          `the Dev Containers extension present ${JSON.stringify(present)}, ` +
+          `the container's ${inContainer} listed: ${JSON.stringify(listing)}`,
         {cause: caught},
       );
     }

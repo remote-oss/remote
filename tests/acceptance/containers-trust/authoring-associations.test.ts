@@ -13,7 +13,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   clickButton,
   editorTabs,
-  pageText,
+  problemRows,
   problemsOf,
   type Problem,
   statusBarText,
@@ -141,6 +141,7 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     throw new Error(
       `window ${name} holds ${String(problems.length)} problems, not ${String(count)}: ` +
         `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
+        `rows ${JSON.stringify(await problemRows(name))}, ` +
         `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
     );
   }
@@ -163,6 +164,7 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     throw new Error(
       `window ${name} holds no problem of ${JSON.stringify(message)}: ` +
         `problems ${JSON.stringify(problems.map(each => [each.file, each.message, each.severity, each.line, each.code, each.source, each.target]))}, ` +
+        `rows ${JSON.stringify(await problemRows(name))}, ` +
         `tabs ${JSON.stringify((await editorTabs(name)).map(each => each.label))}`,
     );
   }
@@ -281,7 +283,11 @@ describe('the authoring aids in Restricted Mode (card containers-208)', function
     await inWindow(window, 'workbench.trust.manage');
     await waitFor(
       `window ${window}'s trust editor`,
-      async () => (await pageText(window)).includes('Workspace Trust Editor'),
+      async () =>
+        await evaluate<boolean>(
+          window,
+          `([...document.querySelectorAll('.editor-instance .monaco-button')].some(button => (button.textContent ?? '').trim() === 'Trust'))`,
+        ),
       30_000,
     );
     await clickButton(window, 'Trust');

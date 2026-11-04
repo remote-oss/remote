@@ -1074,12 +1074,19 @@ export function launchesOf(root: string): Launch[] {
       },
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
     },
-    // This throwaway branch (never merged): the containers launch runs only the authoring-associations rows.
-    {
+    // This throwaway branch (never merged): the containers parts run only the authoring-associations rows; the
+    // dispatch selects the first alone, and the second lists no files.
+    ...(
+      [
+        ['containers-a', ['authoring-associations.test.ts']],
+        ['containers-b', []],
+      ] as Array<[string, readonly string[]]>
+    ).map(([label, files]): Launch => ({
       ...CONTAINERS_LAUNCH,
-      label: 'containers',
+      label,
       suite: 'containers',
-      files: ['authoring-associations.test.ts'],
+      files,
+      partOf: 'containers',
       registry: true,
       templates: true,
       // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
@@ -1087,7 +1094,7 @@ export function launchesOf(root: string): Launch[] {
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
-    },
+    })),
     {
       ...CONTAINERS_LAUNCH,
       label: 'containers-standdown',

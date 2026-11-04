@@ -145,14 +145,14 @@ describe('acceptance-select', () => {
     );
   });
 
-  it("the containers suite's two parts in the real table: a test of either part selects that part alone", () => {
+  it("the containers suite's parts in the real table: a part's own test selects that part alone, and a test no part lists selects every part", () => {
     const launches = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
-        'tests/acceptance/containers/attach-command.test.ts',
+        'tests/acceptance/containers/authoring-associations.test.ts',
         'tests/acceptance/containers/reuse.test.ts',
       ].map(changed => selectLaunches([changed], launches).labels),
-      [['containers-a'], ['containers-b']],
+      [['containers-a'], ['containers-a', 'containers-b']],
     );
   });
 
