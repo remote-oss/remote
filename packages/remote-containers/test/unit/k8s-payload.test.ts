@@ -6,7 +6,9 @@ import {
   k8sPayloadOf,
   k8sTargetOf,
   type K8sTarget,
+  podShaped,
 } from '../../src/attach/k8s-payload.ts';
+import {k8sPickKeyOf} from '../../src/attach/k8s-pick-record.ts';
 
 const TARGET: K8sTarget = {
   context: 'kind-lab',
@@ -195,6 +197,30 @@ describe('the payload of a Kubernetes pod window (card containers-191)', () => {
     deepStrictEqual(
       k8sLabelOf(TARGET, template => template),
       'app in web-1 (nginx:1.27)',
+    );
+  });
+
+  it('F-0604 AC-35: a payload has a pod’s shape when it names all five members, valid or not, and no other payload has', () => {
+    deepStrictEqual(
+      [
+        podShaped(k8sPayloadOf(TARGET)),
+        podShaped(k8sPayloadOf({...TARGET, namespace: '-x'})),
+        podShaped(hexOf('{"context":"c"}')),
+        podShaped(hexOf('not json')),
+        podShaped('zz'),
+      ],
+      [true, true, false, false, false],
+    );
+  });
+
+  it('F-0604 AC-35: the pick of a pod is its context, namespace, pod and container, and not the image', () => {
+    deepStrictEqual(
+      [
+        k8sPickKeyOf(TARGET),
+        k8sPickKeyOf({...TARGET, image: 'other'}) === k8sPickKeyOf(TARGET),
+        k8sPickKeyOf({...TARGET, name: 'sidecar'}) === k8sPickKeyOf(TARGET),
+      ],
+      ['["kind-lab","default","web-1","app"]', true, false],
     );
   });
 });

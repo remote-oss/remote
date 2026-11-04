@@ -48,6 +48,12 @@ on:
         description: Also run the genuine launches, VS Code 1.139.1 (the recorded version) and 1.125.0 (the floor), with our VSIX, on X64
         type: boolean
         default: false
+      launches-only:
+        description: >-
+          Run only the launches this dispatch asks for (vscodium, genuine, variants, real server): skip checks, unit,
+          coverage, slice 1 and server lifecycle, which a launch's proof does not need
+        type: boolean
+        default: false
   # Every six hours the VSCodium job ran alone on main: the backstop that shows whether main's launches are green, which
   # PR CI never runs. It ran whole on every merge until 2026-10-20, which kept one of the eight runners busy with it
   # almost all the time; since 2026-11-02 a merge runs only the launches its change reaches (post-merge-select).
@@ -144,7 +150,9 @@ jobs:
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
 
   checks:
-    if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    if: >-
+      !inputs.launches-only && ((github.event_name != 'pull_request' && github.event_name != 'schedule') ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft))
     # no Docker and no display: a GitHub runner (the user, 2026-10-20), so the self-hosted ones are left to acceptance
     runs-on: ubuntu-24.04
     timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
@@ -186,7 +194,9 @@ jobs:
   # The unit tests, in parallel on GitHub's runner (2026-10-20): in checks they ran one file at a time, 8.4 of its
   # 11 minutes.
   unit:
-    if: (github.event_name != 'pull_request' && github.event_name != 'schedule') || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    if: >-
+      !inputs.launches-only && ((github.event_name != 'pull_request' && github.event_name != 'schedule') ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -209,7 +219,8 @@ jobs:
     name: coverage ${{ matrix.shard }}/4
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' && (github.event_name != 'pull_request' ||
+      !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     strategy:
@@ -242,7 +253,7 @@ jobs:
     name: acceptance (slice 1)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
@@ -284,7 +295,7 @@ jobs:
     name: acceptance (server lifecycle)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
+      !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' && github.event_name != 'schedule' &&
       !(github.event_name == 'push' && github.ref_type == 'branch') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))

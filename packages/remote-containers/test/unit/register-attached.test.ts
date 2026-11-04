@@ -10,6 +10,8 @@ import {
 import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-editor';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {k8sPayloadOf} from '../../src/attach/k8s-payload.ts';
+import {k8sPickKeyOf} from '../../src/attach/k8s-pick-record.ts';
 import {attachedPayloadOf} from '../../src/attach/payload.ts';
 import {attachPickKeyOf} from '../../src/attach/pick-record.ts';
 import type {ContainerConnector} from '../../src/connect/connector.ts';
@@ -22,6 +24,7 @@ import {
   type AttachedFamily,
   attachedContainerFamilyOf,
   type ConnectorRegistrationHost,
+  k8sContainerFamilyOf,
   registerAttachedResolver,
 } from '../../src/connect/register-connector.ts';
 import {CONTAINERS_DOCUMENTATION} from '../../src/surfaces/recovery-presenter.ts';
@@ -30,6 +33,15 @@ import {inertRecoveryPorts} from './inert-recovery-ports.ts';
 const TARGET = {containerName: '/web', context: 'remote'};
 const PAYLOAD = attachedPayloadOf(TARGET);
 const PICK_KEY = attachPickKeyOf(TARGET);
+const POD_TARGET = {
+  context: 'kind-lab',
+  podname: 'web-1',
+  namespace: 'default',
+  name: 'app',
+  image: 'nginx',
+};
+const POD_PAYLOAD = k8sPayloadOf(POD_TARGET);
+const POD_KEY = k8sPickKeyOf(POD_TARGET);
 
 const CONNECTED: Connected = {
   address: {host: '127.0.0.1', port: 4321},
@@ -217,6 +229,16 @@ function authorityOf(
   });
 }
 
+/** Resolves the authority twice and gives the questions asked, the connects made and the picks recorded. */
+async function resolvedTwice(
+  seen: Awaited<ReturnType<typeof registeredWith>>,
+  authority: string,
+): Promise<[string[], string[], string[]]> {
+  await seen.resolve(authority, 1);
+  await seen.resolve(authority, 2);
+  return [seen.questions, seen.connects, [...seen.picks]];
+}
+
 describe('the registration of the attached families (card containers-163, ruling-2186-attach-gate)', () => {
   it('F-0601 AC-1 (c163-gate-unpicked): a target the user never picked shows the warning first, and nothing connects before the answer', async () => {
     const seen = await registeredWith({confirm: false});
@@ -229,11 +251,8 @@ describe('the registration of the attached families (card containers-163, ruling
 
   it('F-0601 AC-1 (c163-gate-confirm): confirming connects and records the target, and a second resolve asks nothing', async () => {
     const seen = await registeredWith({confirm: true});
-    const authority = authorityOf('attached-container', PAYLOAD);
-    await seen.resolve(authority, 1);
-    await seen.resolve(authority, 2);
     deepStrictEqual(
-      [seen.questions, seen.connects, [...seen.picks]],
+      await resolvedTwice(seen, authorityOf('attached-container', PAYLOAD)),
       [['warning'], ['connect', 'connect'], [PICK_KEY]],
     );
   });
@@ -364,6 +383,93 @@ describe('the registration of the attached families (card containers-163, ruling
         family.disconnectedSuffixOf(undefined),
       ],
       [undefined, PICK_KEY, undefined, undefined, undefined],
+    );
+  });
+
+  it('F-0604 AC-35 (c191-pod-gate-unpicked): a pod the user never picked shows the warning first, and nothing connects when it is declined', async () => {
+    const seen = await registeredWith({
+      confirm: false,
+      family: () => k8sContainerFamilyOf(t => t),
+    });
+    await seen.resolve(authorityOf('k8s-container', POD_PAYLOAD), 1);
+    deepStrictEqual(
+      [seen.questions, seen.connects, seen.picks.size],
+      [['warning'], [], 0],
+    );
+  });
+
+  it('F-0604 AC-35 (c191-pod-gate-confirm): confirming connects and records the pod by context, namespace, pod and container, and a second resolve asks nothing', async () => {
+    const seen = await registeredWith({
+      family: () => k8sContainerFamilyOf(t => t),
+    });
+    deepStrictEqual(
+      await resolvedTwice(seen, authorityOf('k8s-container', POD_PAYLOAD)),
+      [['warning'], ['connect', 'connect'], [POD_KEY]],
+    );
+  });
+
+  it('F-0604 AC-35 (c191-pod-gate-picked): a pod the command recorded connects with no question', async () => {
+    const seen = await registeredWith({
+      picks: [POD_KEY],
+      family: () => k8sContainerFamilyOf(t => t),
+    });
+    await seen.resolve(authorityOf('k8s-container', POD_PAYLOAD), 1);
+    deepStrictEqual([seen.questions, seen.connects], [[], ['connect']]);
+  });
+
+  it('F-0604 AC-35 (c191-pod-shapes): the pod authority decodes only a pod payload: an attached payload, a pod with a bad member and a payload that is no hex are refused with no question and the connector is never reached', async () => {
+    const seen = await registeredWith({
+      family: () => k8sContainerFamilyOf(t => t),
+    });
+    await seen.resolve(authorityOf('k8s-container', PAYLOAD), 1);
+    await seen.resolve(
+      authorityOf(
+        'k8s-container',
+        k8sPayloadOf({...POD_TARGET, namespace: '-x'}),
+      ),
+      2,
+    );
+    await seen.resolve(authorityOf('k8s-container', 'zz'), 3);
+    deepStrictEqual([seen.questions, seen.connects], [[], []]);
+  });
+
+  it('F-0604 AC-35 (c191-pod-on-attached): a pod payload on the attached authority is malformed: refused with no question, and the connector is never reached', async () => {
+    const seen = await registeredWith({});
+    await seen.resolve(authorityOf('attached-container', POD_PAYLOAD), 1);
+    deepStrictEqual([seen.questions, seen.connects], [[], []]);
+  });
+
+  it('F-0604 AC-35 (c191-pod-family): the pod family names a pick for a pod and none for another payload, and labels a disconnected window with the container, the pod and the image', () => {
+    const family = k8sContainerFamilyOf(template => template);
+    deepStrictEqual(
+      [
+        family.pickKeyOf(POD_PAYLOAD),
+        family.pickKeyOf('zz'),
+        family.disconnectedSuffixOf({
+          family: 'k8s-container',
+          target: {payload: POD_PAYLOAD},
+          rawHostString: POD_PAYLOAD,
+        }),
+        family.disconnectedSuffixOf({
+          family: 'k8s-container',
+          target: {payload: 'zz'},
+          rawHostString: 'zz',
+        }),
+        family.disconnectedSuffixOf({
+          family: 'k8s-container',
+          target: {},
+          rawHostString: 'x',
+        } as unknown as DecodedTarget),
+        family.disconnectedSuffixOf(undefined),
+      ],
+      [
+        POD_KEY,
+        undefined,
+        'app in web-1 (nginx)',
+        undefined,
+        undefined,
+        undefined,
+      ],
     );
   });
 });

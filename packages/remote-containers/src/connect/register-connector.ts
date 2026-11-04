@@ -27,6 +27,9 @@ import {
 import {attachedSuffixOf} from '../attach/label.ts';
 import {attachPickKeyOf} from '../attach/pick-record.ts';
 import {attachedTargetOf} from '../attach/payload.ts';
+import {k8sLabelOf} from '../attach/k8s-label.ts';
+import {k8sPickKeyOf} from '../attach/k8s-pick-record.ts';
+import {k8sTargetOf, podShaped} from '../attach/k8s-payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
 import type {Forwarder} from '../ports/forwarder.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
@@ -156,13 +159,15 @@ export async function registerContainerResolver(
       );
     },
   );
-  /** The connector for the `dev-container` authority, which decodes only its own payloads: one that reads as an attached container is malformed here. */
+  /** The connector for the `dev-container` authority, which decodes only its own payloads: one that reads as an attached container or a pod is malformed here. */
   const decoding: ContainerConnector = {
     ...connector,
-    connect: input =>
-      'malformed' in attachedTargetOf((input.target as ContainerTarget).payload)
+    connect: input => {
+      const {payload} = input.target as ContainerTarget;
+      return 'malformed' in attachedTargetOf(payload) && !podShaped(payload)
         ? connector.connect(input)
-        : Promise.resolve(malformedAuthority()),
+        : Promise.resolve(malformedAuthority());
+    },
   };
   const registration = await registerResolver(
     host.resolverEditor,
@@ -309,6 +314,26 @@ export function attachedContainerFamilyOf(
         target,
         translate,
       );
+    },
+  };
+}
+
+/** The Kubernetes pod family: the label of the container the payload names, which it carries itself. */
+export function k8sContainerFamilyOf(translate: Translate): AttachedFamily {
+  return {
+    family: 'k8s-container',
+    pickKeyOf: payload => {
+      const target = k8sTargetOf(payload);
+      return 'malformed' in target ? undefined : k8sPickKeyOf(target);
+    },
+    disconnectedSuffixOf: decoded => {
+      const target =
+        decoded !== undefined && 'payload' in decoded.target
+          ? k8sTargetOf(decoded.target.payload)
+          : undefined;
+      return target === undefined || 'malformed' in target
+        ? undefined
+        : k8sLabelOf(target, translate);
     },
   };
 }

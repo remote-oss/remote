@@ -97,6 +97,7 @@ import {openHostRelay} from './connect/host-relay.ts';
 import {recentLabelPortsOf} from './connect/recent-editor.ts';
 import {
   attachedContainerFamilyOf,
+  k8sContainerFamilyOf,
   registerAttachedResolver,
   registerContainerResolver,
   RESOLVER_EDITOR_OPTIONS,
@@ -185,6 +186,7 @@ import {
   type K8sPicker,
 } from './attach/k8s-command.ts';
 import {kubectlHostOf} from './engine/kubectl-host.ts';
+import {k8sWindowOpenerOf} from './attach/k8s-window.ts';
 import {idRecordOf} from './attach/id-record.ts';
 import {wslRootOf} from './attach/payload.ts';
 import type {Translate} from './surfaces/engine-dialogs.ts';
@@ -1046,6 +1048,12 @@ export async function activate(
       variant,
     );
   }
+  const kubectl = kubectlHostOf({
+    kubectl: nodeEngineHost('kubectl'),
+    shell: nodeEngineHost('/bin/sh'),
+    platform: process.platform,
+    environment: process.env,
+  });
   const {openInformationAboutMountPerformance, ...activationCommands} =
     commands;
   const result = await activateContainers({
@@ -1867,12 +1875,6 @@ export async function activate(
         translate,
         logger: served.logger,
       });
-      const kubectl = kubectlHostOf({
-        kubectl: nodeEngineHost('kubectl'),
-        shell: nodeEngineHost('/bin/sh'),
-        platform: process.platform,
-        environment: process.env,
-      });
       const kubernetes = k8sAttachCommandsOf({
         warning: () => attachWarningAsked(context.globalState),
         listPods: kubectl.listPods,
@@ -1893,12 +1895,26 @@ export async function activate(
         revealLog: () => {
           logChannel?.show(true);
         },
-        attach: selection => {
-          served.logger.info(
-            `Kubernetes container picked: ${selection.container.name} in ${selection.podName} (${selection.namespace}, ${selection.context})`,
-          );
-          return Promise.resolve();
-        },
+        attach: k8sWindowOpenerOf({
+          registerLabel: (decoded, suffix) => {
+            context.subscriptions.push(
+              registerAuthorityLabel(vscode.workspace, decoded, suffix),
+            );
+          },
+          recordPick: key => recordAttachPick(context.globalState, key),
+          openWindow: authority =>
+            openRemote(
+              {
+                executeCommand: (command, ...parameters) =>
+                  vscode.commands.executeCommand(command, ...parameters),
+                addressOf: parts => vscode.Uri.from(parts),
+              },
+              authority,
+              {pathKind: 'folder', target: 'new'},
+            ),
+          translate,
+          logger: served.logger,
+        }),
         translate,
         logger: served.logger,
       });
@@ -2129,14 +2145,18 @@ export async function activate(
       SHUTDOWN_CLIENT_WAITS,
       process.platform,
     );
+    const gate = {
+      picks: {
+        includes: (key: string) => attachPicked(context.globalState, key),
+        record: (key: string) => recordAttachPick(context.globalState, key),
+      },
+      confirm: () =>
+        attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
+    };
     const connector = containerConnectorOf({
+      pods: {...gate, kubectl: kubectl.engine},
       attached: {
-        picks: {
-          includes: key => attachPicked(context.globalState, key),
-          record: key => recordAttachPick(context.globalState, key),
-        },
-        confirm: () =>
-          attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
+        ...gate,
         record: idRecordOf(context.globalState),
         configFileOf: container =>
           applicableConfigOf(
@@ -2617,6 +2637,20 @@ export async function activate(
       },
       attachedContainerFamilyOf(connector, translate),
     );
+    const registeredPods = await registerAttachedResolver(
+      registrationHost,
+      connector,
+      registrationServed,
+      {
+        chooseContainer: () =>
+          vscode.commands.executeCommand(commands.attachToK8sContainer.id),
+        picked: key => attachPicked(context.globalState, key),
+        record: key => recordAttachPick(context.globalState, key),
+        confirm: () =>
+          attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
+      },
+      k8sContainerFamilyOf(translate),
+    );
     resolved.lastResolve = () => registered.lastResolve();
     const configWatch =
       registered.registration === 'registered'
@@ -2892,6 +2926,7 @@ export async function activate(
         dispose: () => {
           registered.dispose();
           registeredAttached.dispose();
+          registeredPods.dispose();
         },
       },
       {

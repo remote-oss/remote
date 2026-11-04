@@ -154,10 +154,11 @@ export function partsOf(
 export const PULL_REQUEST_LAUNCHES = 6;
 
 /**
- * The time limit of a pull request's acceptance job, whatever it runs: one launch alone (containers-a, containers-b,
- * explorer-folders) takes about an hour on the runners, so a selection of one or two of them outgrew 60 minutes.
+ * The time limit of a pull request's acceptance job, whatever it runs: 360 minutes, the most a job may run on GitHub's
+ * runners. One launch alone (containers-a) takes close to three hours there, so a selection of two of them outgrew
+ * 180; no shared runner is held by a long job any more.
  */
-export const PULL_REQUEST_MINUTES = 180;
+export const PULL_REQUEST_MINUTES = 360;
 
 /** What a pull request's acceptance job does for its selection. */
 export interface PullRequestPlan {

@@ -603,6 +603,20 @@ export function sceneOf(
       scene.stopped += 1;
     },
   };
+  /** The profile's picks and the attach warning, which the scene records and answers. */
+  const gate = {
+    picks: {
+      includes: (key: string) => scene.attachPicks.includes(key),
+      record: (key: string) => {
+        scene.attachPicks.push(key);
+        return Promise.resolve();
+      },
+    },
+    confirm: () => {
+      scene.confirmations += 1;
+      return Promise.resolve(scene.confirmAnswer);
+    },
+  };
   let connections = 0;
   const dependencies: ContainerConnectorDependencies = {
     noEngineProgram: noEngineProgramOf(FIXTURE_STORAGE),
@@ -637,24 +651,16 @@ export function sceneOf(
       scene.backgroundStages.push(stage);
       return lifecycle;
     },
-    ...(options.pods === undefined ? {} : {pods: {kubectl: options.pods}}),
+    ...(options.pods === undefined
+      ? {}
+      : {pods: {...gate, kubectl: options.pods}}),
     ...(options.volumes === true
       ? {volumes: volumeDependenciesOf(scene, bridge)}
       : {}),
     ...(options.attached === true
       ? {
           attached: {
-            picks: {
-              includes: key => scene.attachPicks.includes(key),
-              record: key => {
-                scene.attachPicks.push(key);
-                return Promise.resolve();
-              },
-            },
-            confirm: () => {
-              scene.confirmations += 1;
-              return Promise.resolve(scene.confirmAnswer);
-            },
+            ...gate,
             record: {
               read: payload => scene.attachedIds[payload],
               write: (payload, containerId) => {
