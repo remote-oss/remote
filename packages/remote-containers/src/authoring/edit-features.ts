@@ -5,6 +5,7 @@
  */
 
 import {applyEdits, modify, parseTree, type Node} from 'jsonc-parser';
+import {indentStepOf, lineEndsOf} from '../config/jsonc-edit.ts';
 import type {CatalogueFeature} from './catalogue.ts';
 import {featureKeyOf} from './select-features.ts';
 
@@ -23,17 +24,6 @@ export interface FeaturePicks {
 /** What the edit gives: the file's new text, no change, or a `features` value that is not an object. */
 export type FeatureEdit =
   {kind: 'edited'; text: string} | {kind: 'unchanged'} | {kind: 'notAnObject'};
-
-/** The line ends of the text: CRLF when present, else LF. */
-function lineEndsOf(text: string): string {
-  return text.includes('\r\n') ? '\r\n' : '\n';
-}
-
-/** The file's own indentation: the first indented line's, two spaces when it has none. */
-function indentStepOf(text: string): string {
-  const match = /^([ \t]+)\S/m.exec(text);
-  return match?.[1] ?? '  ';
-}
 
 /** The indentation of level `n` of the file: its step, repeated. */
 function indentedOf(step: string, level: number): string {
