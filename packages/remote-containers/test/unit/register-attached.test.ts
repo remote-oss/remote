@@ -29,7 +29,7 @@ import {inertRecoveryPorts} from './inert-recovery-ports.ts';
 
 const TARGET = {containerName: '/web', context: 'remote'};
 const PAYLOAD = attachedPayloadOf(TARGET);
-const KEY = attachPickKeyOf(TARGET);
+const PICK_KEY = attachPickKeyOf(TARGET);
 
 const CONNECTED: Connected = {
   address: {host: '127.0.0.1', port: 4321},
@@ -200,7 +200,9 @@ async function registeredWith(
     resolve,
     /** Lets the quick pick that a dialog queued run to its end. */
     settle: () => new Promise(resolve => setImmediate(resolve)),
-    dispose: () => result.dispose(),
+    dispose: () => {
+      result.dispose();
+    },
   };
 }
 
@@ -232,19 +234,19 @@ describe('the registration of the attached families (card containers-163, ruling
     await seen.resolve(authority, 2);
     deepStrictEqual(
       [seen.questions, seen.connects, [...seen.picks]],
-      [['warning'], ['connect', 'connect'], [KEY]],
+      [['warning'], ['connect', 'connect'], [PICK_KEY]],
     );
   });
 
   it('F-0601 AC-1 (c163-gate-picked): a target the command recorded connects with no question', async () => {
-    const seen = await registeredWith({picks: [KEY]});
+    const seen = await registeredWith({picks: [PICK_KEY]});
     await seen.resolve(authorityOf('attached-container', PAYLOAD), 1);
     deepStrictEqual([seen.questions, seen.connects], [[], ['connect']]);
   });
 
   it('F-0601 AC-1 (c163-gate-key): the pick is the container’s name and its engine, whatever the working folder, and a payload of another shape is malformed here: refused with no question, and the connector is never reached', async () => {
     const walked = attachedPayloadOf({...TARGET, cwd: '//wsl$/distro'});
-    const seen = await registeredWith({picks: [KEY]});
+    const seen = await registeredWith({picks: [PICK_KEY]});
     await seen.resolve(authorityOf('attached-container', walked), 1);
     await seen.resolve(authorityOf('attached-container', 'zz'), 2);
     deepStrictEqual([seen.questions, seen.connects], [[], ['connect']]);
@@ -272,14 +274,14 @@ describe('the registration of the attached families (card containers-163, ruling
 
   it('F-0601 AC-33 (c163-disconnected-label): a failure that leaves an attached window disconnected labels it with the container the attempt found, and with nothing when the payload names none', async () => {
     const found = await registeredWith({
-      picks: [KEY],
+      picks: [PICK_KEY],
       answer: attachFailed(),
       button: 'More Actions...',
       container: {image: 'nginx:1', name: 'web'},
     });
     await found.resolve(authorityOf('attached-container', PAYLOAD), 1);
     const absent = await registeredWith({
-      picks: [KEY],
+      picks: [PICK_KEY],
       answer: attachFailed(),
       button: 'More Actions...',
     });
@@ -309,7 +311,7 @@ describe('the registration of the attached families (card containers-163, ruling
     ];
     for (const [answer, button, pickAnswers] of cases) {
       const seen = await registeredWith({
-        picks: [KEY],
+        picks: [PICK_KEY],
         answer,
         button,
         pickAnswers,
@@ -361,7 +363,7 @@ describe('the registration of the attached families (card containers-163, ruling
         }),
         family.disconnectedSuffixOf(undefined),
       ],
-      [undefined, KEY, undefined, undefined, undefined],
+      [undefined, PICK_KEY, undefined, undefined, undefined],
     );
   });
 });

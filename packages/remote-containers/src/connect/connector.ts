@@ -294,8 +294,8 @@ interface AttachedConnectDependencies {
   configFileOf: (container: ListedContainer) => Promise<string | undefined>;
   /** The targets the user picked: the attach command records one before it opens its window. */
   picks: {
-    has: (key: string) => boolean;
-    add: (key: string) => Promise<void>;
+    includes: (key: string) => boolean;
+    record: (key: string) => Promise<void>;
   };
   /** The attach warning, asked whatever was answered before; whether the user confirmed. */
   confirm: () => Promise<boolean>;
@@ -1985,12 +1985,12 @@ export function containerConnectorOf(
     attemptIdentity = undefined;
     attachedFound = undefined;
     const pickKey = attachPickKeyOf(target);
-    if (!attached.picks.has(pickKey)) {
+    if (!attached.picks.includes(pickKey)) {
       if (!(await attached.confirm())) {
         logger.info('the attach warning was not confirmed');
         return attachWarningRefused();
       }
-      await attached.picks.add(pickKey);
+      await attached.picks.record(pickKey);
     }
     const prepared = await pinnedEngineChecked(target, cancellation);
     if ('kind' in prepared) {

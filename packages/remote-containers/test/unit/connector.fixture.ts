@@ -637,8 +637,8 @@ export function sceneOf(
       ? {
           attached: {
             picks: {
-              has: key => scene.attachPicks.includes(key),
-              add: key => {
+              includes: key => scene.attachPicks.includes(key),
+              record: key => {
                 scene.attachPicks.push(key);
                 return Promise.resolve();
               },

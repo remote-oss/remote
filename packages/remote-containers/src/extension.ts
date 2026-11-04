@@ -2129,8 +2129,8 @@ export async function activate(
     const connector = containerConnectorOf({
       attached: {
         picks: {
-          has: key => attachPicked(context.globalState, key),
-          add: key => recordAttachPick(context.globalState, key),
+          includes: key => attachPicked(context.globalState, key),
+          record: key => recordAttachPick(context.globalState, key),
         },
         confirm: () =>
           attachWarningConfirmed(attachWarningPortsOf(context.globalState)),

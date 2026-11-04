@@ -6,18 +6,18 @@ import {exits, inspectedJson} from './attach.fixture.ts';
 import {inputOf, type Scene, sceneOf} from './connector.fixture.ts';
 
 const PAYLOAD = attachedPayloadOf({containerName: '/web'});
-const ID = 'a'.repeat(64);
-const KEY = attachPickKeyOf({containerName: '/web'});
+const CONTAINER_ID = 'a'.repeat(64);
+const PICK_KEY = attachPickKeyOf({containerName: '/web'});
 
 /** A scene whose engine knows the container `web` in `state` and answers the Alpine step by `alpine`. */
 function attachedScene(state: string | undefined, alpine = 1): Scene {
   const scene = sceneOf({}, {attached: true});
-  scene.attachPicks.push(KEY);
+  scene.attachPicks.push(PICK_KEY);
   scene.bootstrapAnswer = (argv): EngineRunOutcome | undefined => {
     if (argv[0] === 'inspect') {
       return state === undefined || argv[3] !== 'web'
         ? {kind: 'ran', status: 1, stdout: '', stderr: 'No such container'}
-        : exits(0, inspectedJson('web', ID, state));
+        : exits(0, inspectedJson('web', CONTAINER_ID, state));
     }
     if (argv[0] === 'exec') {
       return exits(alpine);
@@ -41,7 +41,7 @@ describe('the connector of an attached container (card containers-163, #2030)', 
       {
         connected: false,
         failure: 'attachFailed',
-        setUps: [ID],
+        setUps: [CONTAINER_ID],
         found: 'web',
       },
     );
@@ -140,7 +140,7 @@ describe('the connector of an attached container (card containers-163, #2030)', 
         refused: 'attachWarningRefused',
         engineAsked: 0,
         recorded: [],
-        confirmedPicks: [KEY],
+        confirmedPicks: [PICK_KEY],
         questions: 1,
         setUps: 2,
       },
