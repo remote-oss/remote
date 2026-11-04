@@ -24,7 +24,7 @@ const REQUIREMENTS_TEMPLATES = {
 } as const;
 
 /** Which reading of the requirements the step makes. */
-export type RequirementsStage = 'file' | 'merged';
+type RequirementsStage = 'file' | 'merged';
 
 /** What the step needs of the engine, the file system and the editor. */
 export interface HostRequirementsPorts {
