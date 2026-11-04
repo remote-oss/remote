@@ -41,11 +41,14 @@ files), `brief-logs-and-configuration-file.md` (F-0812's `openDevContainerFile`)
    - **`diskUnlessOpen`:**
      - **Open in a tab:** the edit goes to that buffer, which stays unsaved. That's how F-0809 treats an open
        global-storage file or mirror file (BR-4).
-     - **Not open:** the file is written on disk, under a temporary name and renamed.
+     - **Not open:** the file is written on disk, under a temporary name and renamed. This policy is only for our own
+       global-storage files and the mirror files.
    - **`diskOrSaveIfClean`** (F-1103's decision Q4):
      - **A dirty tab:** the edit goes to the buffer, which stays unsaved (AC-24).
      - **A clean tab:** the edit goes to the buffer, then `TextDocument.save` runs (AC-25).
-     - **No tab:** the file is written on disk.
+     - **No tab:** the document is opened without a tab (`openTextDocument`), edited with `applyEdit` and saved, all
+       through the editor. It's never a temporary file and a rename: a rename would replace a symlinked
+       `devcontainer.json`, and it would bypass a `vscode-remote` or virtual file system provider.
    - **The result** says when the edit is durable, so a caller's notification can follow it (F-1103 AC-15, AC-25).
 3. **The target resolver** (pure over the window's facts, F-0809 BR-7): it gives the file and its policy, checked
    in BR-7's order:
