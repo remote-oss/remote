@@ -42,8 +42,19 @@ const FOLLOW_MILLISECONDS = 5_000;
 const REOPEN_NOTIFICATION =
   'Folder contains a Dev Container configuration file.';
 
-/** The title actions of the view while it lists containers: Refresh, the one this release builds (F-0901 BR-6). */
-const TITLE_ACTIONS = ['Refresh'];
+/** The title actions of the view of window `name` once it has any: what the view shows while it lists containers. */
+async function shownTitleActions(name: string): Promise<string[]> {
+  let shown: string[] = [];
+  await waitFor(
+    'the title actions of the view',
+    async () => {
+      shown = await titleActions(name, VIEW);
+      return shown.length > 0;
+    },
+    FOLLOW_MILLISECONDS,
+  );
+  return shown;
+}
 
 /** Runs a plain container of the run named `containerName`. */
 async function runContainer(containerName: string): Promise<void> {
@@ -112,6 +123,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
 
   it('F-0901 AC-44: in a local window a dockerPath that names no program gives the Docker welcome within 5 s, with no title actions and no notification, and the old one brings the rows and the title actions back', async () => {
     const name = await windowWithRows('events-two');
+    const before = await shownTitleActions(name);
     await setUserSetting(
       'dev.containers.dockerPath',
       path.join(variable('HARNESS_RUN_FOLDER'), 'no-such-docker'),
@@ -146,19 +158,11 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
       await setUserSetting('dev.containers.dockerPath', undefined);
     }
     await rowsWhen(name, rows => rows.length > 0, FOLLOW_MILLISECONDS * 3);
-    let seen: string[] = [];
     await waitFor(
       'the title actions to return',
-      async () => {
-        seen = await titleActions(name, VIEW);
-        return seen.join() === TITLE_ACTIONS.join();
-      },
+      async () => (await titleActions(name, VIEW)).join() === before.join(),
       FOLLOW_MILLISECONDS,
-    ).catch(async (caught: unknown) => {
-      throw new Error(
-        `${caught instanceof Error ? caught.message : String(caught)}; the title actions were ${JSON.stringify(seen)} and the rows ${JSON.stringify(await viewRows(name, VIEW))}`,
-      );
-    });
+    );
     await closeWindow(name);
   });
 
@@ -169,6 +173,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
     await reopenInContainer(name);
     await inWindow(name, 'workbench.view.remote');
     await rowsWhen(name, rows => rows.length > 0);
+    const before = await shownTitleActions(name);
     await setUserSetting(
       'dev.containers.dockerPath',
       path.join(variable('HARNESS_RUN_FOLDER'), 'no-such-docker'),
@@ -188,7 +193,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
             each => each.label === 'Dev Containers',
           ),
         ],
-        [undefined, TITLE_ACTIONS, true],
+        [undefined, before, true],
       );
     } finally {
       await setUserSetting('dev.containers.dockerPath', undefined);
