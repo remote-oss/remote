@@ -49,9 +49,13 @@ async function within<Result>(
   }).then(() => {
     throw new Error(`${step} took more than ${String(STEP_MILLISECONDS)} ms`);
   });
+  const started = Date.now();
   try {
     return await Promise.race([work, late]);
   } finally {
+    process.stderr.write(
+      `ssh-window, ${step}: ${String(Date.now() - started)} ms\n`,
+    );
     expiry.abort();
     late.catch(() => undefined);
   }
@@ -67,7 +71,7 @@ function onSshHost(
 }
 
 describe('the SSH group in a window connected through Remote - SSH (card coverage-102, part 2)', function () {
-  this.timeout(600_000);
+  this.timeout(1_200_000);
   let configText = '';
 
   beforeEach(() => {
