@@ -160,6 +160,7 @@ async function registered(
         get: key => memento[key],
         update: (key, value) => {
           if ('updateRejection' in options) {
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a row rejects with a text on purpose, as a port of the editor may
             return Promise.reject(options.updateRejection);
           }
           memento[key] = value;
