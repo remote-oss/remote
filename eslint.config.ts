@@ -192,9 +192,11 @@ const DEFAULT_EXPORT_BAN = {
   message: 'No default exports (style guide: exports).',
 };
 
-// ESLint, Prettier and @vscode/test-cli read these files' default export, so DEFAULT_EXPORT_BAN skips them.
+// ESLint (its own config and the quick one), Prettier and @vscode/test-cli read these files' default
+// export, so DEFAULT_EXPORT_BAN skips them.
 const DEFAULT_EXPORT_FILES = [
   'eslint.config.ts',
+  'eslint.quick.config.ts',
   'prettier.config.ts',
   '.vscode-test.mjs',
   'tests/acceptance/vscode-test.mjs',
@@ -236,7 +238,7 @@ const SYNTAX_BANS = [
   },
 ];
 
-export default defineConfig(
+export const config = defineConfig(
   {
     ignores: [
       '**/node_modules/',
@@ -468,3 +470,5 @@ export default defineConfig(
     },
   },
 );
+
+export default config;
