@@ -281,7 +281,11 @@ importers:
 
   packages/lib-standdown: {}
 
-  packages/lib-wsl: {}
+  packages/lib-wsl:
+    dependencies:
+      lib-host:
+        specifier: workspace:*
+        version: link:../lib-host
 
   packages/remote-containers:
     dependencies:
