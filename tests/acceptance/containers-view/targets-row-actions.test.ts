@@ -397,10 +397,19 @@ describe('the Dev Containers rows’ menus, and Start, Stop and Remove Container
       count: number,
     ): Promise<unknown> {
       const toasts = await notified('local', count);
+      const state = await stateOf(container);
+      // The row follows the container's state by an event of the engine, which can come after the error.
+      await waitFor(
+        `the icon of the row ${label} to follow the state ${state}`,
+        async () =>
+          (await iconOf('local', label)) ===
+          (state === 'running' ? 'vm-running' : 'vm'),
+        20_000,
+      );
       return {
         messages: toasts.map(toast => toast.message),
         buttons: toasts.map(toast => toast.buttons),
-        state: await stateOf(container),
+        state,
         icon: await iconOf('local', label),
       };
     }
