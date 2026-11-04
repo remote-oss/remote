@@ -40,7 +40,7 @@ F-0106.AC-12	todo
 F-0106.AC-13	acceptance	
 F-0106.AC-14	todo	
 F-0106.AC-15	todo	
-F-0106.AC-16	todo	
+F-0106.AC-16	acceptance	
 F-0106.AC-17	acceptance	
 F-0106.AC-18	core	core: the Workspace Trust dialog's docs link
 F-0106.AC-19	core	core: the Manage Workspace Trust editor and its effect
@@ -124,7 +124,7 @@ F-0201.AC-53	todo
 F-0201.AC-54	todo	
 F-0201.AC-55	acceptance	
 F-0201.AC-56	acceptance	
-F-0205.AC-1	todo	
+F-0205.AC-1	acceptance	
 F-0205.AC-2	todo	
 F-0205.AC-2a	todo	
 F-0205.AC-3	todo	
@@ -145,18 +145,18 @@ F-0205.AC-11	todo
 F-0205.AC-12	todo	
 F-0205.AC-12a	todo	
 F-0205.AC-13	todo	
-F-0205.AC-14	todo	
+F-0205.AC-14	acceptance	
 F-0205.AC-14a	todo	
 F-0205.AC-14b	acceptance	
 F-0205.AC-14c	acceptance	
 F-0205.AC-14d	acceptance	
 F-0205.AC-15	acceptance	
-F-0205.AC-15a	todo	
+F-0205.AC-15a	acceptance	
 F-0205.AC-16	acceptance	
 F-0205.AC-17	core	core: the Docker CLI keeps a context under the HOME it was made in (BR-2); the extension passes no HOME of its own
-F-0205.AC-18	todo	
+F-0205.AC-18	acceptance	
 F-0205.AC-19	todo	
-F-0205.AC-20	todo	
+F-0205.AC-20	acceptance	
 F-0205.AC-21	todo	
 F-0205.AC-22	todo	
 F-0205.AC-23	todo	
@@ -1413,7 +1413,7 @@ F-1101.AC-19	acceptance
 F-1101.AC-20	acceptance	
 F-1101.AC-21	acceptance	
 F-1101.AC-22	acceptance	
-F-1101.AC-23	todo	
+F-1101.AC-23	acceptance	
 F-1101.AC-24	acceptance	
 F-1101.AC-25	acceptance	
 F-1101.AC-26	acceptance	

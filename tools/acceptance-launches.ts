@@ -214,6 +214,9 @@ export const ENGINE_HOST_ADDRESS = 'tcp://127.0.0.1:23760';
 /** The context that the editor of `containers-env-host` has as `DOCKER_CONTEXT`, which its rows make. */
 export const ENGINE_HOST_CONTEXT = 'c133-env-conflict';
 
+/** The address that the editor of `containers-ssh-env-host` has as `DOCKER_HOST`: the SSH Docker host its row publishes there. */
+export const SSH_ENGINE_HOST_ADDRESS = 'ssh://engine@127.0.0.1:23722';
+
 /** The context that the editor of `containers-env-ctx` has as `DOCKER_CONTEXT`, which its row makes. */
 export const ENGINE_CONTEXT_NAME = 'c133-env-dead';
 
@@ -1354,6 +1357,40 @@ export function launchesOf(root: string): Launch[] {
       environment: {
         DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
         DOCKER_CONTEXT: ENGINE_CONTEXT_NAME,
+      },
+    },
+    // A Docker daemon reached over SSH (tooling-123): a Docker configuration of its own for the contexts its rows make,
+    // and the run's own `ssh` first on the editor's PATH, which reads the run's ssh_config and known hosts file, never the
+    // account's ~/.ssh. The rows start the host and write that `ssh` (tests/acceptance/windows/engine-fixture.ts).
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-engine',
+      suite: 'containers-ssh-engine',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the SSH Docker host's address as the editor's DOCKER_HOST, which its row publishes there.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-env-host',
+      suite: 'containers-ssh-env-host',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        DOCKER_HOST: SSH_ENGINE_HOST_ADDRESS,
+        PATH: `${RUN_FOLDER_TOKEN}/ssh-engine-bin:${RUN_PATH_TOKEN}`,
+      },
+    },
+    // The same with the editor's PATH holding `docker` alone and no `ssh`: the engine settings' PATH is ignored, so only
+    // the editor's own PATH can lack `ssh`.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ssh-noclient',
+      suite: 'containers-ssh-noclient',
+      environment: {
+        DOCKER_CONFIG: `${RUN_FOLDER_TOKEN}/docker-config`,
+        PATH: `${RUN_FOLDER_TOKEN}/docker-only-bin`,
       },
     },
     // The pack from its VSIX beside its two members, installed in that order, with no gallery to reach.
