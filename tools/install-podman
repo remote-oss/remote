@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# install-podman: rootless Podman 5 for the containers-podman launch, as the job's own user, on a Linux CI machine.
+#
+#   tools/install-podman    install Podman when the machine's is older than release 5, set rootless Podman up for the
+#                           user, and print what `podman info` reports
+#
+# A machine whose podman is release 5 or later keeps it. Otherwise (Ubuntu 24.04 has 4.9.3) podman-static's build at
+# the version pinned below is checked against its pinned sha256, unpacked and copied into /usr/local and /etc/containers,
+# which come first on the PATH and replace the machine's configuration. Its runc is left out: one in /usr/local/bin
+# would come before Docker's own. Rootless Podman then needs newuidmap and newgidmap setuid and subordinate ids for the
+# user. On Ubuntu, the job lifts the restriction on unprivileged user namespaces first (the workflow's AppArmor step).
+# A version change here is the only way the pin moves.
+set -euo pipefail
+
+PODMAN_VERSION=5.8.8
+PODMAN_SHA256_AMD64=e0e12f9de61bdb054d19a77df0e84ddd51cadfee13688e0fb607d61b6833e8cd
+PODMAN_SHA256_ARM64=816bc5b97dc62396838d825aaccd9d3eb841167a2d31968efc1e6a3e6a0a463b
+
+# the major release of the podman on the PATH, or nothing when there is none
+podman_major() {
+  podman --version 2>/dev/null | sed -n 's/^podman version \([0-9][0-9]*\)\..*/\1/p'
+}
+
+major=$(podman_major)
+if [ -z "$major" ] || [ "$major" -lt 5 ]; then
+  case "$(uname -m)" in
+    x86_64) arch=amd64 sha256=$PODMAN_SHA256_AMD64 ;;
+    aarch64 | arm64) arch=arm64 sha256=$PODMAN_SHA256_ARM64 ;;
+    *)
+      echo "install-podman: no pinned Podman for $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  archive="$work/podman-linux-$arch.tar.gz"
+  curl -fsSL -o "$archive" \
+    "https://github.com/mgoltzsche/podman-static/releases/download/v$PODMAN_VERSION/podman-linux-$arch.tar.gz"
+  echo "$sha256  $archive" | sha256sum -c - >/dev/null
+  tar -xzf "$archive" -C "$work"
+  rm -f "$work/podman-linux-$arch/usr/local/bin/runc"
+  sudo cp -r "$work/podman-linux-$arch/usr" "$work/podman-linux-$arch/etc" /
+  hash -r
+  major=$(podman_major)
+  [ "${major:-0}" -ge 5 ] || {
+    echo "install-podman: the podman on the PATH is still $(podman --version 2>&1)" >&2
+    exit 1
+  }
+fi
+
+command -v newuidmap >/dev/null || {
+  echo "install-podman: newuidmap is needed and not installed (the uidmap or shadow-utils package)" >&2
+  exit 1
+}
+sudo chmod u+s "$(command -v newuidmap)" "$(command -v newgidmap)"
+grep -q "^$(id -un):" /etc/subuid ||
+  sudo usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$(id -un)"
+podman --version
+# a machine restarted since podman last ran keeps a run folder podman refuses ("boot ID differs from cached boot ID"):
+# the two folders that error names are removed, and only for that error
+if ! out=$(podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}' 2>&1); then
+  printf '%s\n' "$out"
+  printf '%s' "$out" | grep -q 'boot ID differs from cached boot ID' || exit 1
+  rm -rf "/tmp/storage-run-$(id -u)/containers" "/tmp/storage-run-$(id -u)/libpod/tmp"
+fi
+podman info --format '{{.Host.Security.Rootless}} {{.Store.GraphDriverName}}'
