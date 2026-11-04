@@ -40,16 +40,20 @@ const ADDED = 'c102-written-locally';
 /** How long one step of the row may take, in milliseconds. */
 const STEP_MILLISECONDS = 90_000;
 
-/** The result of `work`, or the error that names `step` once it takes longer than a step may. */
+/** How long the view of the SSH window is given to list the host that New Remote wrote, in milliseconds. */
+const LISTING_MILLISECONDS = 300_000;
+
+/** The result of `work`, or the error that names `step` once it takes longer than `milliseconds`, a step's time by default. */
 async function within<Result>(
   step: string,
   work: Promise<Result>,
+  milliseconds = STEP_MILLISECONDS,
 ): Promise<Result> {
   const expiry = new AbortController();
-  const late = delay(STEP_MILLISECONDS, undefined, {
+  const late = delay(milliseconds, undefined, {
     signal: expiry.signal,
   }).then(() => {
-    throw new Error(`${step} took more than ${String(STEP_MILLISECONDS)} ms`);
+    throw new Error(`${step} took more than ${String(milliseconds)} ms`);
   });
   process.stderr.write(`ssh-window, ${step}: started\n`);
   const started = Date.now();
@@ -168,13 +172,24 @@ describe('the SSH group in a window connected through Remote - SSH (card coverag
         'choosing the file to write',
         chooseQuickPickRow(window, config),
       );
+      // The write is waited for in the file itself; the view of the SSH window follows it by its own refresh, which on a
+      // slow runner took more than a minute, so the listing is given five.
+      await within(
+        `the local file holding ${ADDED}`,
+        waitFor(
+          `the local file to hold ${ADDED}`,
+          () => Promise.resolve(readFileSync(config, 'utf8').includes(ADDED)),
+          60_000,
+        ),
+      );
       await within(
         `window ${window} listing ${ADDED}`,
         waitFor(
           `window ${window} to list ${ADDED}`,
           async () => (await hostLabels(window)).includes(ADDED),
-          20_000,
+          LISTING_MILLISECONDS,
         ),
+        LISTING_MILLISECONDS + STEP_MILLISECONDS,
       );
       deepStrictEqual(
         [
