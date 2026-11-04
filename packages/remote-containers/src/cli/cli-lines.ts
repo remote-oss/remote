@@ -337,6 +337,17 @@ export function readUpResult(
   };
 }
 
+/**
+ * The results of `run-user-commands` that mean it did what it was asked: it ran every command (`done`), or stopped
+ * where `--skip-non-blocking-commands` (`skipNonBlocking`) or `--stop-for-personalization` (`stopForPersonalization`)
+ * says. `prebuild` is none of them: the extension never passes `--prebuild`.
+ */
+const FINISHED_RESULTS: ReadonlySet<string> = new Set([
+  'done',
+  'skipNonBlocking',
+  'stopForPersonalization',
+]);
+
 /** What `run-user-commands` gave. */
 export function readRunUserCommandsResult(
   result: string | undefined,
@@ -350,7 +361,8 @@ export function readRunUserCommandsResult(
   if (fields.outcome === 'error') {
     return errorOf(fields);
   }
-  return fields.result === 'done'
+  return typeof fields.result === 'string' &&
+    FINISHED_RESULTS.has(fields.result)
     ? {kind: 'done'}
     : {kind: 'malformedResult', field: 'result'};
 }
