@@ -55,16 +55,19 @@ async function loggedIn(
   }
 }
 
-/** What `docker info` over the stand-in prints with the askpass `answers`: the daemon's OS type, `refused` or `other`. */
+/**
+ * What `docker version` over the stand-in prints with the askpass `answers`: the daemon's OS, `refused` or `other`. Not
+ * `docker info`: with `--format`, clients before 28.3 print an empty line and exit 0 when the daemon can't be reached.
+ */
 async function standInAnswer(
   remote: Readonly<Record<string, string>>,
   answers: Readonly<Record<string, string>>,
 ): Promise<string> {
   return dockerWith(
     {...remote, ...answers},
-    'info',
+    'version',
     '--format',
-    '{{.OSType}}',
+    '{{.Server.Os}}',
   ).then(
     printed => printed,
     (error: unknown) =>
