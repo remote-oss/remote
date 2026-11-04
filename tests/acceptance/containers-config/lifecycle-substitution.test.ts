@@ -1,31 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
-import {closeWindow, waitFor} from '../windows/harness.ts';
+import {closeWindow} from '../windows/harness.ts';
 import {connectedWindow, removeContainers} from '../windows/folder-windows.ts';
 import {statusItemText} from '../windows/renderer.ts';
 import {docker} from '../windows/dev-containers-view.ts';
-
-/** How long a file written by a lifecycle command is waited for in the container, in milliseconds. */
-const FILE_MILLISECONDS = 90_000;
+import {textOfFile} from './support.ts';
 
 /** The shortest time the indicator is given to follow a connect, in milliseconds. */
 const INDICATOR_MILLISECONDS = 30_000;
-
-/** The text of `file` in container `containerId`, once it exists. */
-async function textOfFile(containerId: string, file: string): Promise<string> {
-  await waitFor(
-    `${file} to exist in the container`,
-    async () =>
-      (await docker(
-        'exec',
-        containerId,
-        'sh',
-        '-c',
-        `test -f ${file} && echo y`,
-      ).catch(() => '')) === 'y',
-    FILE_MILLISECONDS,
-  );
-  return docker('exec', containerId, 'cat', file);
-}
 
 /** The command that writes the text of a reference to /tmp/`file`. */
 function probe(file: string, text: string): string {
