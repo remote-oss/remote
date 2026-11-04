@@ -629,6 +629,14 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.openLink',
+      async (given: string) => {
+        const text = given.replace('{scheme}', vscode.env.uriScheme);
+        report(agentFolder, name, {event: 'linkOpened', value: text});
+        await vscode.env.openExternal(vscode.Uri.parse(text));
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.openUri',
       async (address: string) => {
         await vscode.window.showTextDocument(

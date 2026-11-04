@@ -18,6 +18,12 @@ import {
   takeOptionScreen,
 } from '../windows/authoring-support.ts';
 import {
+  clonedVolumes,
+  containersWith,
+  dockerLines,
+  removeClone,
+} from '../windows/volume-clones.ts';
+import {
   acceptQuickPick,
   answerDialog,
   chooseQuickPickRow,
@@ -57,29 +63,6 @@ const CLONE_URI = `vscode-remote://dev-container+${hexOf({
   inspectVolume: false,
 })}/workspaces/${FOLDER}`;
 
-/** The lines `docker` prints for `argv`, without empty ones. */
-async function dockerLines(...argv: string[]): Promise<string[]> {
-  const {stdout} = await execFileAsync('docker', argv);
-  return stdout.split('\n').filter(line => line !== '');
-}
-
-/** The volumes of the clone of `repository`, as `<name> <unique label>` lines. */
-function clonedVolumes(repository: string): Promise<string[]> {
-  return dockerLines(
-    'volume',
-    'ls',
-    '--filter',
-    `label=vsch.local.repository=${repository}`,
-    '--format',
-    '{{.Name}} {{.Label "vsch.local.repository.unique"}}',
-  );
-}
-
-/** The containers, in any state, that carry `label`, as their ids. */
-function containersWith(label: string): Promise<string[]> {
-  return dockerLines('ps', '-a', '-q', '--filter', `label=${label}`);
-}
-
 /** The bootstrap containers, in any state, by the image they run. */
 function bootstrapContainers(): Promise<string[]> {
   return dockerLines(
@@ -89,24 +72,6 @@ function bootstrapContainers(): Promise<string[]> {
     '--filter',
     'ancestor=vsc-volume-bootstrap:latest',
   );
-}
-
-/** Removes what a clone of `repository` left: its dev containers, then its volumes. */
-async function removeClone(repository: string): Promise<void> {
-  const containers = await containersWith(
-    `vsch.local.repository=${repository}`,
-  );
-  if (containers.length > 0) {
-    await execFileAsync('docker', ['rm', '-f', ...containers]);
-  }
-  for (const line of await clonedVolumes(repository)) {
-    await execFileAsync('docker', [
-      'volume',
-      'rm',
-      '-f',
-      String(line.split(' ')[0]),
-    ]);
-  }
 }
 
 /**
