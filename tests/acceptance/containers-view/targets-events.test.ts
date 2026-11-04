@@ -146,12 +146,19 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
       await setUserSetting('dev.containers.dockerPath', undefined);
     }
     await rowsWhen(name, rows => rows.length > 0, FOLLOW_MILLISECONDS * 3);
+    let seen: string[] = [];
     await waitFor(
       'the title actions to return',
-      async () =>
-        (await titleActions(name, VIEW)).join() === TITLE_ACTIONS.join(),
+      async () => {
+        seen = await titleActions(name, VIEW);
+        return seen.join() === TITLE_ACTIONS.join();
+      },
       FOLLOW_MILLISECONDS,
-    );
+    ).catch(async (caught: unknown) => {
+      throw new Error(
+        `${caught instanceof Error ? caught.message : String(caught)}; the title actions were ${JSON.stringify(seen)} and the rows ${JSON.stringify(await viewRows(name, VIEW))}`,
+      );
+    });
     await closeWindow(name);
   });
 
