@@ -375,6 +375,7 @@ const CONTAINERS_A_FILES: readonly string[] = [
   'created-container.test.ts',
   'details.test.ts',
   'dev-port.test.ts',
+  'docker-availability.test.ts',
   'docker-context.test.ts',
   'dockerfile.test.ts',
   'edit-session-dormant.test.ts',
