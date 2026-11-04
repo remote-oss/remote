@@ -42,6 +42,7 @@ import {
   FEATURES_PLACEHOLDER,
   screenWith,
 } from '../windows/authoring-support.ts';
+import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -97,6 +98,7 @@ describe('Configure Container Features: after the write (card containers-150, pa
   });
 
   it('F-0807 AC-21 (c150-rebuild): Rebuild on that notification recreates the container in the same window and writes devcontainer-lock.json beside the configuration', async () => {
+    await runTemplatesReady();
     const folder = devContainerFolder('c150-rebuild', {name: 'C150 Rebuild'});
     const window = await connectedWindow(folder);
     try {
@@ -174,6 +176,7 @@ describe('Configure Container Features: in a dev container window and with two m
   this.timeout(900_000);
 
   it('F-0807 AC-28 (c150-majors): a configuration with two majors of the same Feature builds, and both are separate entries in the container’s metadata', async () => {
+    await runTemplatesReady();
     const reference = `${variable('HARNESS_TEMPLATE_REGISTRY')}/remote-oss-run/features/lab-majors`;
     const folder = devContainerFolder('c150-majors', {
       name: 'C150 Majors',
