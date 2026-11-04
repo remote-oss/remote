@@ -40,6 +40,8 @@
   },
   "activationEvents": [
     "onResolveRemoteAuthority:dev-container",
+    "onResolveRemoteAuthority:attached-container",
+    "onResolveRemoteAuthority:k8s-container",
     "onStartupFinished"
   ],
   "enabledApiProposals": [
