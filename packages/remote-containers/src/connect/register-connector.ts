@@ -36,7 +36,7 @@ import {
   recoveryPresenterOf,
 } from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
-import {attachWarningRefused} from './failures.ts';
+import {attachWarningRefused, malformedAuthority} from './failures.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
 import {volumeTargetOf} from '../volumes/volume-payload.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
@@ -156,11 +156,19 @@ export async function registerContainerResolver(
       );
     },
   );
+  /** The connector for the `dev-container` authority, which decodes only its own payloads: one that reads as an attached container is malformed here. */
+  const decoding: ContainerConnector = {
+    ...connector,
+    connect: input =>
+      'malformed' in attachedTargetOf((input.target as ContainerTarget).payload)
+        ? connector.connect(input)
+        : Promise.resolve(malformedAuthority()),
+  };
   const registration = await registerResolver(
     host.resolverEditor,
     {
       family: 'dev-container',
-      connector,
+      connector: decoding,
       presenter: {
         present: async failed => {
           dialogs += 1;
@@ -360,7 +368,10 @@ export async function registerAttachedResolver(
     connect: async input => {
       const payload = (input.target as ContainerTarget).payload;
       const key = family.pickKeyOf(payload);
-      if (key !== undefined && !attached.picked(key)) {
+      if (key === undefined) {
+        return malformedAuthority();
+      }
+      if (!attached.picked(key)) {
         if (!(await attached.confirm())) {
           served.logger.info('the attach warning was not confirmed');
           return attachWarningRefused();

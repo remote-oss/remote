@@ -242,15 +242,12 @@ describe('the registration of the attached families (card containers-163, ruling
     deepStrictEqual([seen.questions, seen.connects], [[], ['connect']]);
   });
 
-  it('F-0601 AC-1 (c163-gate-key): the pick is the container’s name and its engine, whatever the working folder, and a payload that names no target connects to be refused by the connector, with no question', async () => {
+  it('F-0601 AC-1 (c163-gate-key): the pick is the container’s name and its engine, whatever the working folder, and a payload of another shape is malformed here: refused with no question, and the connector is never reached', async () => {
     const walked = attachedPayloadOf({...TARGET, cwd: '//wsl$/distro'});
     const seen = await registeredWith({picks: [KEY]});
     await seen.resolve(authorityOf('attached-container', walked), 1);
     await seen.resolve(authorityOf('attached-container', 'zz'), 2);
-    deepStrictEqual(
-      [seen.questions, seen.connects],
-      [[], ['connect', 'connect']],
-    );
+    deepStrictEqual([seen.questions, seen.connects], [[], ['connect']]);
   });
 
   it('F-0604 AC-1 (c163-family): another family registers its own authority, names its picks and labels its disconnected window by its own rules', async () => {

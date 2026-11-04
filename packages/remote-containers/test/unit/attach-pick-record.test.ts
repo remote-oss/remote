@@ -5,25 +5,7 @@ import {
   recordAttachPick,
 } from '../../src/attach/pick-record.ts';
 import {pickSetAdd, pickSetHas} from '../../src/state/pick-set.ts';
-
-/** A memento over a map, recording what it was asked to write. */
-function mementoOf(initial?: unknown): {
-  get(key: string): unknown;
-  update(key: string, value: unknown): Promise<void>;
-  writes: unknown[];
-} {
-  const values = new Map<string, unknown>();
-  const writes: unknown[] = [];
-  return {
-    get: key => (values.size === 0 ? initial : values.get(key)),
-    update: (key, value) => {
-      values.set(key, value);
-      writes.push(value);
-      return Promise.resolve();
-    },
-    writes,
-  };
-}
+import {mementoOf} from './memento.fixture.ts';
 
 describe('the picked attach targets (card containers-163, ruling-2186-attach-gate)', () => {
   it('F-0601 AC-1 (c163-pick-key): the pick is the container’s name and the engine its payload pins, whatever the working folder', () => {

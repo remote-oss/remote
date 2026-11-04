@@ -30,6 +30,7 @@ import {
 } from '../volumes/bootstrap.ts';
 import type {BuildContext} from '../volumes/bootstrap-start.ts';
 import {attachedContainerStep} from '../attach/connect-step.ts';
+import {attachPickKeyOf} from '../attach/pick-record.ts';
 import {type IdRecord, startAttachedContainer} from '../attach/find.ts';
 import {type AttachedTarget, attachedTargetOf} from '../attach/payload.ts';
 import type {ListedContainer} from '../explorer/listed-containers.ts';
@@ -121,6 +122,7 @@ import {
 import {
   cancelled,
   attachFailed,
+  attachWarningRefused,
   cloneConsentRefused,
   configurationInvalid,
   containerGone,
@@ -290,6 +292,13 @@ interface AttachedConnectDependencies {
   record: IdRecord;
   /** The attach configuration file that applies to the container; none when there is none. */
   configFileOf: (container: ListedContainer) => Promise<string | undefined>;
+  /** The targets the user picked: the attach command records one before it opens its window. */
+  picks: {
+    has: (key: string) => boolean;
+    add: (key: string) => Promise<void>;
+  };
+  /** The attach warning, asked whatever was answered before; whether the user confirmed. */
+  confirm: () => Promise<boolean>;
 }
 
 /** What the connector is made from. */
@@ -1975,6 +1984,14 @@ export function containerConnectorOf(
     failedContainer = undefined;
     attemptIdentity = undefined;
     attachedFound = undefined;
+    const pickKey = attachPickKeyOf(target);
+    if (!attached.picks.has(pickKey)) {
+      if (!(await attached.confirm())) {
+        logger.info('the attach warning was not confirmed');
+        return attachWarningRefused();
+      }
+      await attached.picks.add(pickKey);
+    }
     const prepared = await pinnedEngineChecked(target, cancellation);
     if ('kind' in prepared) {
       return prepared;

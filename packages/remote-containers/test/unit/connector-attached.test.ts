@@ -1,15 +1,18 @@
 import {deepStrictEqual} from 'node:assert';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {attachedPayloadOf} from '../../src/attach/payload.ts';
+import {attachPickKeyOf} from '../../src/attach/pick-record.ts';
 import {exits, inspectedJson} from './attach.fixture.ts';
 import {inputOf, type Scene, sceneOf} from './connector.fixture.ts';
 
 const PAYLOAD = attachedPayloadOf({containerName: '/web'});
 const ID = 'a'.repeat(64);
+const KEY = attachPickKeyOf({containerName: '/web'});
 
 /** A scene whose engine knows the container `web` in `state` and answers the Alpine step by `alpine`. */
 function attachedScene(state: string | undefined, alpine = 1): Scene {
   const scene = sceneOf({}, {attached: true});
+  scene.attachPicks.push(KEY);
   scene.bootstrapAnswer = (argv): EngineRunOutcome | undefined => {
     if (argv[0] === 'inspect') {
       return state === undefined || argv[3] !== 'web'
@@ -112,6 +115,35 @@ describe('the connector of an attached container (card containers-163, #2030)', 
     deepStrictEqual(
       ['kind' in result ? result.kind : undefined, scene.setUps],
       ['cancelled', []],
+    );
+  });
+
+  it('F-0601 AC-1 (c163-connector-gate): a target the user never picked meets the attach warning inside the connector, whichever registration called it: Cancel connects nothing and asks the engine nothing, and confirming records it and goes on', async () => {
+    const cancelled = attachedScene('running');
+    cancelled.attachPicks.length = 0;
+    cancelled.confirmAnswer = false;
+    const first = await cancelled.connector.connect(inputOf(PAYLOAD));
+    const confirmed = attachedScene('running');
+    confirmed.attachPicks.length = 0;
+    await confirmed.connector.connect(inputOf(PAYLOAD));
+    await confirmed.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      {
+        refused: 'kind' in first ? first.kind : undefined,
+        engineAsked: cancelled.engineCalls.length,
+        recorded: cancelled.attachPicks,
+        confirmedPicks: confirmed.attachPicks,
+        questions: confirmed.confirmations,
+        setUps: confirmed.setUps.length,
+      },
+      {
+        refused: 'attachWarningRefused',
+        engineAsked: 0,
+        recorded: [],
+        confirmedPicks: [KEY],
+        questions: 1,
+        setUps: 2,
+      },
     );
   });
 });

@@ -235,6 +235,10 @@ export interface Scene {
   setUps: string[];
   /** The ids the attached record holds, by payload. */
   attachedIds: Record<string, string>;
+  /** The targets the user picked, how many times the attach warning was asked, and what it is answered. */
+  attachPicks: string[];
+  confirmations: number;
+  confirmAnswer: boolean;
 }
 
 /** What a probe that worked prints: noise, the markers and two variables. */
@@ -432,6 +436,9 @@ export function sceneOf(
     setUpResult: {kind: 'setUp', mergedConfiguration: {}},
     setUps: [],
     attachedIds: {},
+    attachPicks: [],
+    confirmations: 0,
+    confirmAnswer: true,
     ...overrides,
   };
   const kills = fakeEngine(
@@ -629,6 +636,17 @@ export function sceneOf(
     ...(options.attached === true
       ? {
           attached: {
+            picks: {
+              has: key => scene.attachPicks.includes(key),
+              add: key => {
+                scene.attachPicks.push(key);
+                return Promise.resolve();
+              },
+            },
+            confirm: () => {
+              scene.confirmations += 1;
+              return Promise.resolve(scene.confirmAnswer);
+            },
             record: {
               read: payload => scene.attachedIds[payload],
               write: (payload, containerId) => {

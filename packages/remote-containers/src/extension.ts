@@ -2128,6 +2128,12 @@ export async function activate(
     );
     const connector = containerConnectorOf({
       attached: {
+        picks: {
+          has: key => attachPicked(context.globalState, key),
+          add: key => recordAttachPick(context.globalState, key),
+        },
+        confirm: () =>
+          attachWarningConfirmed(attachWarningPortsOf(context.globalState)),
         record: idRecordOf(context.globalState),
         configFileOf: container =>
           applicableConfigOf(
