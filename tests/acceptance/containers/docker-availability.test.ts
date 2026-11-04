@@ -188,6 +188,9 @@ describe('Docker availability rows (card containers-200, part B)', function () {
     docker.steer({delay: '10'});
     const folder = devContainerFolder('c200-cancel', {name: 'C200 Cancel'});
     const name = await openFolderWindow(folder);
+    // The notice that the folder holds a configuration is the editor's own and stays until it is dismissed.
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    await inWindow(name, 'notifications.clearAll');
     const running = inWindow(name, 'remote-containers.reopenInContainer');
     running.catch(() => undefined);
     await toastShown(name, STARTING);
