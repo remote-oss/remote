@@ -80,7 +80,7 @@ nowhere (BR-3; 3.2's rule). The spec requires that, so it isn't a switch beyond 
     (AC-53, AC-59, AC-60).
 - One timer module serves both notifications, with the threshold as an argument.
 
-### 2.3 `(reading-NNNN-second-trigger)`, F-0202 AC-45 and AC-51 with F-0401 AC-20
+### 2.3 `(reading-2146-second-trigger)`, F-0202 AC-45 and AC-51 with F-0401 AC-20
 
 - **The conflict:** F-0202 has a second trigger during a running check run its own check, so two failures give two
   dialogs. F-0401 BR-7a absorbs a second invocation "before the first connect finishes". Today `reopen.ts` and
@@ -161,7 +161,7 @@ nowhere (BR-3; 3.2's rule). The spec requires that, so it isn't a switch beyond 
 - **The dialog:** S244 + S140, modal. The buttons are "Continue" (primary) and "Cancel", in the platform's order.
   Escape is Cancel. "Continue" goes on unchanged, with no limits applied (BR-4). "Cancel" leaves the calling window
   as it was (6.2, 6.11a). Nothing is remembered (BR-10).
-- **`(reading-NNNN-requirements-lookup)`:** the spec doesn't say what happens when the merged read fails (for
+- **`(reading-2146-requirements-lookup)`:** the spec doesn't say what happens when the merged read fails (for
   example, an offline registry for a non-local image).
   - **The reading:** the check falls back to the configuration file's own `hostRequirements` (BR-11a's parse), with a
     log line. The open then goes on, and the connect fails or succeeds as it would.
@@ -209,5 +209,5 @@ nowhere (BR-3; 3.2's rule). The spec requires that, so it isn't a switch beyond 
 4. **Rows and tags.**
 
 **Spec questions for metis** (with this brief's PR):
-- `reading-NNNN-second-trigger`;
-- `reading-NNNN-requirements-lookup`.
+- `reading-2146-second-trigger`;
+- `reading-2146-requirements-lookup`.
