@@ -41,7 +41,7 @@ this brief settles **the rules and the gaps**.
     AC-15, AC-25; AC-25 reads `globalValue` only);
   - `experimentalMountGitWorktreeCommonDir` gets `tags: ["experimental"]` and a markdown description;
   - `repositoryConfigurationPaths`'s text follows §3.2 (AC-3's halves for built keys).
-- **`(reading-NNNN-git-scheme)`, F-0102 AC-28 against F-0302:**
+- **`(reading-2135-git-scheme)`, F-0102 AC-28 against F-0302:**
   - **The conflict:** AC-28 says a `git://` remote maps to no mirrored folder, while F-0302 (the owner of the lookup,
     its Q2 and 7.E3) maps it on purpose.
   - **The reading:** the owner's spec wins, and `mirrored-paths.ts` stays as it is. The question goes to metis to
@@ -57,7 +57,7 @@ this brief settles **the rules and the gaps**.
 - **Turkish** is the one real language a criterion renders (AC-4, AC-10). Card 2 writes `tr` translations of **our own**
   strings, which are ours to translate, so no licence question arises. The other locales stay English copies, falling
   back per string as AC-5 and AC-6 accept.
-- **Reading `(reading-NNNN-key-counts)`:** the 159 manifest keys and 437 bundle keys of F-0103 AC-1 and AC-2 are the
+- **Reading `(reading-2135-key-counts)`:** the 159 manifest keys and 437 bundle keys of F-0103 AC-1 and AC-2 are the
   reference's counts. Ours are ours, and the rows assert our tables are complete and consistent, not those numbers.
 
 ## 4. Command availability and context keys (F-0107)
@@ -73,7 +73,7 @@ this brief settles **the rules and the gaps**.
   - `remote-containers:needsSSHCredentials` by group 16 part A's relay.
 
   `hideConnectCommands` and `hideRebuildCommands` are never set by us (BR-6, BR-7).
-- **`(reading-NNNN-failure-dialog)`, F-0107 AC-13 and AC-15:** where they describe the failure dialog and its pick
+- **`(reading-2135-failure-dialog)`, F-0107 AC-13 and AC-15:** where they describe the failure dialog and its pick
   differently from F-0410, the dialog's owner, F-0410's text holds and the built dialog is right. The F-0107 lines
   assert availability only, and the conflict goes to metis.
 
