@@ -238,5 +238,9 @@
   "Choose which repository to clone": "Choose which repository to clone",
   "Clone a repository from {0} in a Container Volume": "Clone a repository from {0} in a Container Volume",
   "GitHub": "GitHub",
-  "remote sources": "remote sources"
+  "remote sources": "remote sources",
+  "Select stopped dev containers to delete": "Select stopped dev containers to delete",
+  "Select unused dev volumes to delete": "Select unused dev volumes to delete",
+  "There are no stopped dev containers or unused dev volumes to delete.": "There are no stopped dev containers or unused dev volumes to delete.",
+  "There are no unused dev volumes to delete.": "There are no unused dev volumes to delete."
 }

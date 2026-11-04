@@ -202,6 +202,18 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.cleanUpDevContainers",
+        "title": "%commands.cleanUpDevContainers.title%",
+        "category": "Dev Containers",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "remote-containers.pruneVolumes",
+        "title": "%commands.pruneVolumes.title%",
+        "category": "Dev Containers",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "remote-containers.openRepositoryInUniqueVolume",
         "title": "%commands.Openrepositoryinuniquevolume.title%",
         "category": "Dev Containers"
@@ -329,6 +341,14 @@
           "when": "!remote-containers:standingDown"
         },
         {
+          "command": "remote-containers.cleanUpDevContainers",
+          "when": "!remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.pruneVolumes",
+          "when": "!remote-containers:standingDown"
+        },
+        {
           "command": "remote-containers.openRepositoryInUniqueVolume",
           "when": "!hideConnectCommands && remoteName =~ /^(dev-container|attached-container|exec|k8s-container|apple-container|wsl|ssh-remote|tunnel)?$/ && !remote-containers:standingDown"
         },
@@ -353,6 +373,11 @@
         {
           "command": "remote-containers.explorerTargetsRefresh",
           "group": "navigation@3",
+          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.cleanUpDevContainers",
+          "group": "navigation@2",
           "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
         },
         {

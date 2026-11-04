@@ -194,6 +194,10 @@ import {
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
 import {mountPerformanceHintApplies} from './explorer/details-model.ts';
+import {
+  type CleanUpCommands,
+  cleanUpCommandsOf,
+} from './explorer/clean-up-commands.ts';
 import {containerLogOf} from './explorer/container-log.ts';
 import {inspectOf} from './explorer/inspect.ts';
 import {
@@ -678,6 +682,7 @@ export async function activate(
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
   let rowActions: RowActions | undefined;
+  let cleanUp: CleanUpCommands | undefined;
   let inspectRow: ((argument: unknown) => Promise<void>) | undefined;
   let showContainerLog: ((argument: unknown) => Promise<void>) | undefined;
   function bridgeFor(
@@ -1785,6 +1790,8 @@ export async function activate(
         startContainer: {execute: argument => rowActions?.start(argument)},
         stopContainer: {execute: argument => rowActions?.stop(argument)},
         removeContainer: {execute: argument => rowActions?.remove(argument)},
+        cleanUpDevContainers: {execute: () => cleanUp?.devContainers()},
+        pruneVolumes: {execute: () => cleanUp?.volumes()},
         showDetails: {
           execute: async argument => {
             const target = containerRowOf(argument);
@@ -2442,6 +2449,28 @@ export async function activate(
       },
       refresh: async () => {
         await targetsView?.refresh();
+      },
+      translate,
+      cancellation: rowActionsStop.signal,
+    });
+    cleanUp = cleanUpCommandsOf({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      program: () => executableOf(windowEngine.dockerPath(), undefined).written,
+      pickMany: async (placeholder, items) => {
+        const picked = await vscode.window.showQuickPick([...items], {
+          canPickMany: true,
+          placeHolder: placeholder,
+        });
+        return picked?.map(item => items.indexOf(item));
+      },
+      showDone: async detail => {
+        await vscode.window.showInformationMessage('', {modal: true, detail});
+      },
+      refresh: async () => {
+        await targetsView?.refresh();
+      },
+      report: line => {
+        logger.info(line);
       },
       translate,
       cancellation: rowActionsStop.signal,
