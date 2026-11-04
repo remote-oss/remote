@@ -256,15 +256,28 @@ describe('the associations and the discontinued namespace of the authoring aids 
       'devcontainer-feature.json',
       0,
     );
-    await settledStatusOf(window, SCHEMA_VALIDATED);
-    const hover = await editorHoverOf(window, '"id"');
+    // The hover names the schema's description only once the schema the file points at has loaded, so the read
+    // retries for it; the status bar's hover opens only after the read, since its hover holds the window's
+    // hover slot and the editor's hover then shows none.
+    let hover = '';
+    for (
+      let tries = 0;
+      tries < 5 && !hover.includes(ID_DESCRIPTION);
+      tries += 1
+    ) {
+      hover = await editorHoverOf(window, '"id"');
+      if (!hover.includes(ID_DESCRIPTION)) {
+        await new Promise(resolve => setTimeout(resolve, 2_000));
+      }
+    }
+    const count = (await problemsOf(window)).length;
     const status = await languageStatusOf(window);
     deepStrictEqual(
       [
         status.item,
         status.entries.includes(SCHEMA_VALIDATED),
         hover.includes(ID_DESCRIPTION),
-        (await problemsOf(window)).length,
+        count,
       ],
       ['JSON with Comments', true, true, 0],
       `the hover ${JSON.stringify(hover)} at ${JSON.stringify(window)}`,
