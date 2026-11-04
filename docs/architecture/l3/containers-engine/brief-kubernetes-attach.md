@@ -107,8 +107,21 @@ no new memory-hungry fixture without telling hermes first):
 - it runs only inside its own launch, never beside another heavy run, and is torn down when the launch ends;
 - the cards' unit rows don't need it.
 
-It's a `kind` cluster in the lab, reached through a kubeconfig of the run's own (never the person's `~/.kube`, as the
+**It depends on the move to GitHub-hosted runners** (the user via hermes, 2026-11-04: the lab's self-hosted runners are
+being decommissioned). The cluster's CI rows run once proteus's hosted-runner workflow exists, inside a hosted job's own
+Docker, and never on a lab host. Until then its acceptance rows stay `todo`, and the unit rows run as usual.
+
+It's a `kind` cluster, reached through a kubeconfig of the run's own (never the person's `~/.kube`, as the
 SSH host fixture of #2098). It holds:
 - a single-container pod and a multi-container pod with init containers;
 - a pod as root and one with `runAsUser`;
 - a `Pending` pod.
+
+## 7. Amendments carried by this PR (the hosted-runner move, 2026-11-04)
+
+Two merged briefs assume lab fixtures. The open-PR freeze keeps them in this PR:
+1. **`brief-remote-docker-hosts.md` §4:** the SSH Docker host (#2098, privileged, its own engine) runs in a GitHub-hosted
+   job once proteus's workflow exists. Its acceptance rows depend on that move.
+2. **`brief-remote-ssh-engines.md` §6:** the SSH host with Docker and a CLI build runs the same way. F-1302's CI rows
+   depend on both that move and the user's `REMOTE_OSS_CLI_ARCHIVES_TOKEN`.
+
